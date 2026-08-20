@@ -113,18 +113,14 @@ static bool xaot_target_uses_x86_vector_islands(const XaotTarget *target) {
            (target->simd_features & (XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_AVX512)) != 0;
 }
 
-bool xaot_target_profile_codegen_facts(const XaotTarget *target,
-                                       XrTargetCodegenFacts *out) {
+bool xaot_target_profile_codegen_facts(const XaotTarget *target, XrTargetCodegenFacts *out) {
     if (!target || !out)
         return false;
     XrTargetCodegenFacts facts = {0};
     uint32_t features = target->simd_features;
-    const uint32_t all_features = XAOT_SIMD_FEATURE_NEON |
-                                  XAOT_SIMD_FEATURE_SSE2 |
-                                  XAOT_SIMD_FEATURE_AVX2 |
-                                  XAOT_SIMD_FEATURE_VSX |
-                                  XAOT_SIMD_FEATURE_AVX512 |
-                                  XAOT_SIMD_FEATURE_LSX |
+    const uint32_t all_features = XAOT_SIMD_FEATURE_NEON | XAOT_SIMD_FEATURE_SSE2 |
+                                  XAOT_SIMD_FEATURE_AVX2 | XAOT_SIMD_FEATURE_VSX |
+                                  XAOT_SIMD_FEATURE_AVX512 | XAOT_SIMD_FEATURE_LSX |
                                   XAOT_SIMD_FEATURE_SVE;
     if ((features & ~all_features) != 0)
         return false;
@@ -168,15 +164,13 @@ static bool xaot_target_profile_matches_options(const XaotBuildOptions *options)
     if (!options || !options->target || !options->target_profile ||
         !xr_target_profile_verify(options->target_profile, NULL, 0))
         return false;
-    const XrTargetMachineFacts *machine =
-        xr_target_profile_machine_facts(options->target_profile);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(options->target_profile);
     XrTargetCodegenFacts codegen;
     if (!xaot_target_profile_codegen_facts(options->target, &codegen))
         return false;
-    uint8_t runtime_profile =
-        options->profile == XAOT_BUILD_PROFILE_FREESTANDING
-            ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
-            : XR_TARGET_RUNTIME_PROFILE_HOSTED;
+    uint8_t runtime_profile = options->profile == XAOT_BUILD_PROFILE_FREESTANDING
+                                  ? XR_TARGET_RUNTIME_PROFILE_FREESTANDING
+                                  : XR_TARGET_RUNTIME_PROFILE_HOSTED;
     return machine && machine->runtime_profile == runtime_profile &&
            memcmp(&machine->data_layout, &options->target->data_layout,
                   sizeof(machine->data_layout)) == 0 &&
@@ -1638,8 +1632,7 @@ static bool xaot_c90_link_manifest_supported(const XaotLinkManifest *manifest) {
            manifest->n_native_inputs == 0;
 }
 
-static void xaot_module_emission_plans_free(XrCEmissionPlan **plans,
-                                            uint32_t count) {
+static void xaot_module_emission_plans_free(XrCEmissionPlan **plans, uint32_t count) {
     if (!plans)
         return;
     for (uint32_t i = 0; i < count; i++)
@@ -1654,14 +1647,11 @@ static XrCacheFingerprint xaot_target_plan_optimization_budget(void) {
     return fingerprint;
 }
 
-static const XrSemanticEntityRecord *xaot_semantic_module_entity(
-    const XrSemanticPlan *plan) {
+static const XrSemanticEntityRecord *xaot_semantic_module_entity(const XrSemanticPlan *plan) {
     const XrSemanticEntityRecord *module = NULL;
-    uint32_t count =
-        plan ? (uint32_t) xr_semantic_plan_entity_count(plan) : 0;
+    uint32_t count = plan ? (uint32_t) xr_semantic_plan_entity_count(plan) : 0;
     for (uint32_t i = 0; i < count; i++) {
-        const XrSemanticEntityRecord *entity =
-            xr_semantic_plan_entity(plan, i);
+        const XrSemanticEntityRecord *entity = xr_semantic_plan_entity(plan, i);
         if (!entity || entity->kind != XR_SEM_ENTITY_MODULE)
             continue;
         if (module)
@@ -1671,40 +1661,35 @@ static const XrSemanticEntityRecord *xaot_semantic_module_entity(
     return module;
 }
 
-static bool xaot_resolve_semantic_dependencies(
-    const XaotBundle *bundle, const XrSemanticPlan *semantic,
-    const XrSemanticPlan ***out_dependencies, uint32_t *out_count) {
+static bool xaot_resolve_semantic_dependencies(const XaotBundle *bundle,
+                                               const XrSemanticPlan *semantic,
+                                               const XrSemanticPlan ***out_dependencies,
+                                               uint32_t *out_count) {
     if (out_dependencies)
         *out_dependencies = NULL;
     if (out_count)
         *out_count = 0;
     if (!bundle || !semantic || !out_dependencies || !out_count)
         return false;
-    uint32_t count =
-        (uint32_t) xr_semantic_plan_dependency_count(semantic);
+    uint32_t count = (uint32_t) xr_semantic_plan_dependency_count(semantic);
     if (count == 0)
         return true;
-    if (count > bundle->nmodules ||
-        count > SIZE_MAX / sizeof(const XrSemanticPlan *))
+    if (count > bundle->nmodules || count > SIZE_MAX / sizeof(const XrSemanticPlan *))
         return false;
-    const XrSemanticPlan **dependencies = (const XrSemanticPlan **) xr_calloc(
-        count, sizeof(*dependencies));
+    const XrSemanticPlan **dependencies =
+        (const XrSemanticPlan **) xr_calloc(count, sizeof(*dependencies));
     if (!dependencies)
         return false;
     bool valid = true;
     for (uint32_t row = 0; valid && row < count; row++) {
-        const XrSemanticDependencyRecord *record =
-            xr_semantic_plan_dependency(semantic, row);
+        const XrSemanticDependencyRecord *record = xr_semantic_plan_dependency(semantic, row);
         uint32_t matches = 0;
-        for (uint32_t candidate = 0; candidate < bundle->nmodules;
-             candidate++) {
+        for (uint32_t candidate = 0; candidate < bundle->nmodules; candidate++) {
             const XiModule *module = bundle->modules[candidate];
             const XrSemanticPlan *plan =
                 module && module->init ? module->init->semantic_plan : NULL;
-            const XrSemanticEntityRecord *entity =
-                xaot_semantic_module_entity(plan);
-            if (!record || !entity ||
-                !xr_stable_id_equal(record->module, entity->id) ||
+            const XrSemanticEntityRecord *entity = xaot_semantic_module_entity(plan);
+            if (!record || !entity || !xr_stable_id_equal(record->module, entity->id) ||
                 !xr_fingerprint_equal(record->semantic_fingerprint,
                                       xr_semantic_plan_fingerprint(plan)))
                 continue;
@@ -1722,40 +1707,36 @@ static bool xaot_resolve_semantic_dependencies(
     return true;
 }
 
-static bool xaot_build_module_target_plans(
-    XaotBundle *bundle, XrTargetProfile *profile, XrCacheStore *cache_store,
-    bool rebuild, bool verbose, uint32_t worker_limit,
-    XrTargetPlanCancellationToken *cancellation,
-    XaotTargetPlanCacheStats *stats) {
-    if (!bundle || !profile || !bundle->modules ||
-        bundle->nmodules == 0 || !stats ||
+static bool xaot_build_module_target_plans(XaotBundle *bundle, XrTargetProfile *profile,
+                                           XrCacheStore *cache_store, bool rebuild, bool verbose,
+                                           uint32_t worker_limit,
+                                           XrTargetPlanCancellationToken *cancellation,
+                                           XaotTargetPlanCacheStats *stats) {
+    if (!bundle || !profile || !bundle->modules || bundle->nmodules == 0 || !stats ||
         bundle->nmodules > SIZE_MAX / sizeof(XrTargetPlanTaskInput) ||
         bundle->nmodules > SIZE_MAX / sizeof(XrTargetPlanTaskResult) ||
         !xr_target_profile_verify(profile, NULL, 0))
         return false;
-    XrTargetPlanTaskInput *inputs = (XrTargetPlanTaskInput *) xr_calloc(
-        bundle->nmodules, sizeof(*inputs));
-    XrTargetPlanTaskResult *results = (XrTargetPlanTaskResult *) xr_calloc(
-        bundle->nmodules, sizeof(*results));
+    XrTargetPlanTaskInput *inputs =
+        (XrTargetPlanTaskInput *) xr_calloc(bundle->nmodules, sizeof(*inputs));
+    XrTargetPlanTaskResult *results =
+        (XrTargetPlanTaskResult *) xr_calloc(bundle->nmodules, sizeof(*results));
     const XrSemanticPlan ***dependencies =
-        (const XrSemanticPlan ***) xr_calloc(
-            bundle->nmodules, sizeof(*dependencies));
+        (const XrSemanticPlan ***) xr_calloc(bundle->nmodules, sizeof(*dependencies));
     if (!inputs || !results || !dependencies) {
         xr_free(dependencies);
         xr_free(results);
         xr_free(inputs);
         return false;
     }
-    for (uint32_t module_index = 0; module_index < bundle->nmodules;
-         module_index++) {
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         XiModule *module = bundle->modules[module_index];
         inputs[module_index].semantic_plan =
             module && module->init ? module->init->semantic_plan : NULL;
         if (!inputs[module_index].semantic_plan ||
-            !xaot_resolve_semantic_dependencies(
-                bundle, inputs[module_index].semantic_plan,
-                &dependencies[module_index],
-                &inputs[module_index].semantic_dependency_count)) {
+            !xaot_resolve_semantic_dependencies(bundle, inputs[module_index].semantic_plan,
+                                                &dependencies[module_index],
+                                                &inputs[module_index].semantic_dependency_count)) {
             for (uint32_t i = 0; i <= module_index; i++)
                 xr_free(dependencies[i]);
             xr_free(dependencies);
@@ -1763,8 +1744,7 @@ static bool xaot_build_module_target_plans(
             xr_free(inputs);
             return false;
         }
-        inputs[module_index].semantic_dependencies =
-            dependencies[module_index];
+        inputs[module_index].semantic_dependencies = dependencies[module_index];
     }
 
     XrTargetPlanTaskStats task_stats = {0};
@@ -1780,8 +1760,7 @@ static bool xaot_build_module_target_plans(
         .cancellation = cancellation,
         .results = results,
     };
-    bool planned = xr_target_plan_tasks_run(
-        &batch, &task_stats, error, sizeof(error));
+    bool planned = xr_target_plan_tasks_run(&batch, &task_stats, error, sizeof(error));
     stats->workers = task_stats.worker_count;
     stats->hits = task_stats.hits;
     stats->misses = task_stats.misses;
@@ -1790,12 +1769,12 @@ static bool xaot_build_module_target_plans(
     stats->cancelled = task_stats.cancelled;
     if (!planned) {
         uint32_t failed = task_stats.first_failed_index;
-        const char *name = failed < bundle->nmodules && bundle->modules[failed] &&
-                                   bundle->modules[failed]->name
-                               ? bundle->modules[failed]->name
-                               : "?";
-        fprintf(stderr, "Error: module TargetPlan task failed for '%s': %s\n",
-                name, error[0] ? error : "unknown error");
+        const char *name =
+            failed < bundle->nmodules && bundle->modules[failed] && bundle->modules[failed]->name
+                ? bundle->modules[failed]->name
+                : "?";
+        fprintf(stderr, "Error: module TargetPlan task failed for '%s': %s\n", name,
+                error[0] ? error : "unknown error");
         xr_target_plan_task_results_release(results, bundle->nmodules);
         for (uint32_t i = 0; i < bundle->nmodules; i++)
             xr_free(dependencies[i]);
@@ -1806,8 +1785,7 @@ static bool xaot_build_module_target_plans(
     }
 
     bool installed = true;
-    for (uint32_t module_index = 0; module_index < bundle->nmodules;
-         module_index++) {
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         XiModule *module = bundle->modules[module_index];
         XrTargetPlanTaskResult *task = &results[module_index];
         const char *name = module && module->name ? module->name : "?";
@@ -1817,28 +1795,21 @@ static bool xaot_build_module_target_plans(
             else if (task->rebuild_requested)
                 fprintf(stderr, "[target-plan-cache] rebuild %s\n", name);
             else
-                fprintf(stderr, "[target-plan-cache] miss %s status=%d\n",
-                        name, (int) task->load_status);
-            if (task->cache_publish_attempted &&
-                task->publish_status == XR_CACHE_PUBLISH_IO_ERROR)
-                fprintf(stderr, "[target-plan-cache] publish unavailable %s\n",
-                        name);
+                fprintf(stderr, "[target-plan-cache] miss %s status=%d\n", name,
+                        (int) task->load_status);
+            if (task->cache_publish_attempted && task->publish_status == XR_CACHE_PUBLISH_IO_ERROR)
+                fprintf(stderr, "[target-plan-cache] publish unavailable %s\n", name);
         }
-        if (!task->plan ||
-            !xaot_bundle_set_target_plan(bundle, module_index, task->plan)) {
-            fprintf(stderr, "Error: module TargetPlan install failed for '%s': %s\n",
-                    name, bundle->error_msg ? bundle->error_msg : "unknown error");
+        if (!task->plan || !xaot_bundle_set_target_plan(bundle, module_index, task->plan)) {
+            fprintf(stderr, "Error: module TargetPlan install failed for '%s': %s\n", name,
+                    bundle->error_msg ? bundle->error_msg : "unknown error");
             installed = false;
             break;
         }
-        const XrTargetPlan *bound =
-            xaot_bundle_target_plan_for_module(bundle, module_index);
-        if (!bound ||
-            !xr_target_profile_require_exact(profile,
-                                             xr_target_plan_profile(bound),
-                                             error, sizeof(error))) {
-            fprintf(stderr,
-                    "Error: module TargetPlan profile mismatch for '%s': %s\n",
+        const XrTargetPlan *bound = xaot_bundle_target_plan_for_module(bundle, module_index);
+        if (!bound || !xr_target_profile_require_exact(profile, xr_target_plan_profile(bound),
+                                                       error, sizeof(error))) {
+            fprintf(stderr, "Error: module TargetPlan profile mismatch for '%s': %s\n",
                     module->name ? module->name : "?",
                     error[0] ? error : "missing exact profile authority");
             installed = false;
@@ -1865,17 +1836,14 @@ static bool xaot_build_module_target_plans(
 static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
     if (!bundle || !bundle->modules || bundle->nmodules == 0)
         return false;
-    for (uint32_t module_index = 0; module_index < bundle->nmodules;
-         module_index++) {
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_target_plan_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_module(bundle, module_index);
         XrAotRefinementPlan *refinement = NULL;
         XrAotRefinementDiagnostic diag = {0};
         if (!module || !target_plan ||
             !xr_aot_refinement_direct_call_authority_build(
-                target_plan, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement,
-                &diag)) {
+                target_plan, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement, &diag)) {
             fprintf(stderr,
                     "Error: module direct-call validation failed for '%s': "
                     "%s record=%u target-call=%u\n",
@@ -1892,17 +1860,15 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
             fprintf(stderr,
                     "Error: module direct-call authority rejected for '%s': "
                     "%s record=%u target-call=%u\n",
-                    module->name ? module->name : "?",
-                    xr_aot_refinement_issue_name(diag.issue), diag.record_index,
-                    diag.target_call_index);
+                    module->name ? module->name : "?", xr_aot_refinement_issue_name(diag.issue),
+                    diag.record_index, diag.target_call_index);
             xr_aot_refinement_plan_free(refinement);
             return false;
         }
         XrAotTailCallConformance tail_conformance = {0};
         XrAotTailCallDiagnostic tail_diag = {0};
-        if (!module->init || !xr_aot_tail_call_conformance_verify(
-                                 module->init, target_plan, &view,
-                                 &tail_conformance, &tail_diag)) {
+        if (!module->init || !xr_aot_tail_call_conformance_verify(module->init, target_plan, &view,
+                                                                  &tail_conformance, &tail_diag)) {
             fprintf(stderr,
                     "Error: module tail-call conformance failed for '%s': "
                     "%s operation=%u target-call=%u function=%u value=%u\n",
@@ -1918,48 +1884,41 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
     return true;
 }
 
-static bool xaot_install_module_representation_refinements(
-    XaotBundle *bundle, const XiRepPolicy *policy) {
-    if (!bundle || !policy || !bundle->modules ||
-        bundle->nmodules == 0)
+static bool xaot_install_module_representation_refinements(XaotBundle *bundle,
+                                                           const XiRepPolicy *policy) {
+    if (!bundle || !policy || !bundle->modules || bundle->nmodules == 0)
         return false;
-    for (uint32_t module_index = 0; module_index < bundle->nmodules;
-         module_index++) {
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_target_plan_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_module(bundle, module_index);
         XrAotRefinementPlan *refinement = NULL;
         XrAotRefinementDiagnostic diag = {0};
         if (!module || !module->init || !target_plan ||
-            !xr_aot_representation_refinement_build_from_authority(
-                target_plan, policy, &refinement, &diag)) {
+            !xr_aot_representation_refinement_build_from_authority(target_plan, policy, &refinement,
+                                                                   &diag)) {
             fprintf(stderr,
                     "Error: module representation authority build failed for '%s': "
                     "%s value=%u operation=%u\n",
                     module && module->name ? module->name : "?",
-                    xr_aot_refinement_issue_name(diag.issue),
-                    diag.semantic_value, diag.semantic_operation);
-            xr_aot_refinement_plan_free(refinement);
-            return false;
-        }
-        XrAotRefinementPlanView view =
-            xr_aot_refinement_plan_view(refinement);
-        if (!xr_aot_representation_materialization_verify(
-                &view, module->init, target_plan, policy, &diag)) {
-            fprintf(stderr,
-                    "Error: module representation materialization failed for '%s': "
-                    "%s record=%u value=%u operation=%u\n",
-                    module->name ? module->name : "?",
-                    xr_aot_refinement_issue_name(diag.issue),
-                    diag.record_index, diag.semantic_value,
+                    xr_aot_refinement_issue_name(diag.issue), diag.semantic_value,
                     diag.semantic_operation);
             xr_aot_refinement_plan_free(refinement);
             return false;
         }
-        if (!xaot_bundle_install_representation_refinement(
-                bundle, module_index, refinement, policy)) {
+        XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
+        if (!xr_aot_representation_materialization_verify(&view, module->init, target_plan, policy,
+                                                          &diag)) {
             fprintf(stderr,
-                    "Error: module representation authority install failed for '%s': %s\n",
+                    "Error: module representation materialization failed for '%s': "
+                    "%s record=%u value=%u operation=%u\n",
+                    module->name ? module->name : "?", xr_aot_refinement_issue_name(diag.issue),
+                    diag.record_index, diag.semantic_value, diag.semantic_operation);
+            xr_aot_refinement_plan_free(refinement);
+            return false;
+        }
+        if (!xaot_bundle_install_representation_refinement(bundle, module_index, refinement,
+                                                           policy)) {
+            fprintf(stderr, "Error: module representation authority install failed for '%s': %s\n",
                     module->name ? module->name : "?",
                     bundle->error_msg ? bundle->error_msg : "unknown error");
             xr_aot_refinement_plan_free(refinement);
@@ -1969,35 +1928,29 @@ static bool xaot_install_module_representation_refinements(
     return true;
 }
 
-static bool xaot_build_module_emission_plans(
-    const XaotBundle *bundle, const XrTargetProfile *profile,
-    XrCEmissionPlan ***out_emission_plans) {
+static bool xaot_build_module_emission_plans(const XaotBundle *bundle,
+                                             const XrTargetProfile *profile,
+                                             XrCEmissionPlan ***out_emission_plans) {
     XrCEmissionPlan **emission_plans;
     XrFingerprint profile_fingerprint;
 
     if (out_emission_plans)
         *out_emission_plans = NULL;
-    if (!bundle || !profile || !out_emission_plans || !bundle->modules ||
-        bundle->nmodules == 0)
+    if (!bundle || !profile || !out_emission_plans || !bundle->modules || bundle->nmodules == 0)
         return false;
-    emission_plans = (XrCEmissionPlan **) xr_calloc(
-        bundle->nmodules, sizeof(*emission_plans));
+    emission_plans = (XrCEmissionPlan **) xr_calloc(bundle->nmodules, sizeof(*emission_plans));
     if (!emission_plans)
         return false;
     profile_fingerprint = xr_target_profile_fingerprint(profile);
-    for (uint32_t module_index = 0; module_index < bundle->nmodules;
-         module_index++) {
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan =
-            xaot_bundle_target_plan_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_module(bundle, module_index);
         char error[512] = {0};
         if (!target_plan ||
             !xr_c_emission_plan_build(target_plan, profile_fingerprint,
-                                      &emission_plans[module_index], error,
-                                      sizeof(error)) ||
+                                      &emission_plans[module_index], error, sizeof(error)) ||
             !xr_c_emission_plan_is_verified(emission_plans[module_index])) {
-            fprintf(stderr,
-                    "Error: module C emission plan build failed for '%s': %s\n",
+            fprintf(stderr, "Error: module C emission plan build failed for '%s': %s\n",
                     module && module->name ? module->name : "?",
                     error[0] ? error : "unverified emission plan");
             xaot_module_emission_plans_free(emission_plans, bundle->nmodules);
@@ -2091,8 +2044,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     xr_compiler_session_set_native_package_plan(session, options->native_package_plan);
-    if (!xr_compiler_session_set_target_profile(session,
-                                                options->target_profile)) {
+    if (!xr_compiler_session_set_target_profile(session, options->target_profile)) {
         fprintf(stderr, "Error: failed to install exact TargetProfile in compiler session\n");
         xray_vm_delete(X);
         return 1;
@@ -2104,11 +2056,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             .max_entry_bytes = XR_XTP_MAX_ARTIFACT_SIZE,
             .stale_temp_age_ns = UINT64_C(24) * 60u * 60u * 1000000000u,
         };
-        if (!xr_compiler_session_open_incremental_cache(session,
-                                                        &cache_config) &&
+        if (!xr_compiler_session_open_incremental_cache(session, &cache_config) &&
             evidence_cache_verbose) {
-            fprintf(stderr,
-                    "[target-plan-cache] store unavailable; recomputing plans\n");
+            fprintf(stderr, "[target-plan-cache] store unavailable; recomputing plans\n");
         }
     }
 
@@ -2495,9 +2445,8 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
 
-    if (!xaot_publish_module_summaries(
-            session, graph, modules, nmodules, options,
-            evidence_cache_verbose, &result->module_summary_cache))
+    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, options,
+                                       evidence_cache_verbose, &result->module_summary_cache))
         goto fail_free_ir;
 
     /* Xi values and AOT plans retain pointers into the analyzer-owned type
@@ -2517,8 +2466,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     aot_bundle_initialized = true;
     if (!xaot_bundle_require_representation_refinements(&aot_bundle)) {
-        fprintf(stderr,
-                "Error: failed to require immutable representation authorities\n");
+        fprintf(stderr, "Error: failed to require immutable representation authorities\n");
         goto fail_free_ir;
     }
     aot_bundle.artifact_kind = artifact_kind;
@@ -2544,16 +2492,20 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     if (!xaot_build_module_target_plans(
-            &aot_bundle, options->target_profile,
-            xr_compiler_session_cache_store(session), evidence_cache_rebuild,
-            evidence_cache_verbose, options->target_plan_workers,
-            options->target_plan_cancellation,
-            &result->target_plan_cache))
+            &aot_bundle, options->target_profile, xr_compiler_session_cache_store(session),
+            evidence_cache_rebuild, evidence_cache_verbose, options->target_plan_workers,
+            options->target_plan_cancellation, &result->target_plan_cache))
         goto fail_free_ir;
     if (!xaot_validate_module_direct_calls(&aot_bundle))
         goto fail_free_ir;
-    if (!xaot_install_module_representation_refinements(
-            &aot_bundle, &cfg.rep_policy))
+    if (!xaot_install_module_representation_refinements(&aot_bundle, &cfg.rep_policy))
+        goto fail_free_ir;
+    /* Built before prepare, not after. The plans depend only on the retained
+     * TargetPlans and the target profile -- neither of which prepare produces
+     * -- and prepare has no dependency of its own on them. Building them here
+     * lets the passes that follow read one ABI model instead of rebuilding a
+     * second per-function one. */
+    if (!xaot_build_module_emission_plans(&aot_bundle, options->target_profile, &emission_plans))
         goto fail_free_ir;
     if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
         if (emit_global_evidence_dump && global_evidence_dump)
@@ -2593,10 +2545,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     if (!reject_profile_static_data_plans(&aot_bundle))
         goto fail_free_ir;
-    if (!xaot_build_module_emission_plans(&aot_bundle,
-                                          options->target_profile,
-                                          &emission_plans))
-        goto fail_free_ir;
     if (emit_local_evidence_dump) {
         local_evidence_dump = xaot_dump_local_evidence(&aot_bundle, ir_funcs, nmodules);
         if (!local_evidence_dump) {
@@ -2630,8 +2578,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     has_explicit_vector_ops = xaot_bundle_has_explicit_vector_ops(modules, nmodules);
     xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
     if (!xi_cgen_ctx_set_value_emission_plans(
-            cg_ctx, (const XrCEmissionPlan *const *) emission_plans,
-            (uint32_t) nmodules)) {
+            cg_ctx, (const XrCEmissionPlan *const *) emission_plans, (uint32_t) nmodules)) {
         fprintf(stderr, "Error: failed to install module C emission authorities\n");
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
