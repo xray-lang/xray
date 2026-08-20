@@ -1013,7 +1013,12 @@ static bool semantic_array_shared_read_is_exact_verify(const XrSemanticPlan *sem
                                                        uint32_t semantic_value,
                                                        uint32_t semantic_type,
                                                        uint32_t semantic_function) {
-    return semantic_direct_local_array_type_is_exact_verify(semantic, semantic_type, false, NULL) &&
+    /* Opts in to the class instance exactly as the builder's producer does.
+     * The shared judgement mirrors the builder including which call sites opt
+     * in, so a site that opts in on one side and takes the default on the other
+     * makes the builder bind a row this pass then cannot re-derive. */
+    return semantic_direct_local_array_type_is_exact_verify_ex(semantic, semantic_type, false,
+                                                               /*admits_instance=*/true, NULL) &&
            xr_semantic_shared_read_operation_is_exact(operation) &&
            operation->result_value == semantic_value && operation->result_type == semantic_type &&
            operation->function == semantic_function;
