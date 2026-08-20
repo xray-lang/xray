@@ -12396,9 +12396,6 @@ static bool cg_hosted_vm_signature_supported(const XiFunc *f) {
 static bool cg_c_export_xray_func_signature_supported(XiCgenCtx *ctx, const XiFunc *f) {
     if (!f || f->is_vararg)
         return false;
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (!plan)
-        return false;
     if (!cg_cfn_value_type_supported(f->return_type, true) &&
         !cg_c_export_slot_is_struct_aggregate(ctx, f, 0))
         return false;
@@ -12406,8 +12403,7 @@ static bool cg_c_export_xray_func_signature_supported(XiCgenCtx *ctx, const XiFu
         const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
         if (cg_cfn_value_type_supported(pt, false))
             continue;
-        if (i >= plan->abi.nparams || !plan->abi.params ||
-            !cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (i + 1u)))
+        if (!cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (i + 1u)))
             return false;
     }
     return true;
@@ -12474,9 +12470,10 @@ static void emit_c_export_return_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc 
         fprintf(out, "%s", scalar_type);
         return;
     }
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (plan && cg_c_export_slot_is_struct_aggregate(ctx, f, 0) && plan->abi.ret.c_type) {
-        fprintf(out, "%s", plan->abi.ret.c_type);
+    XrCFunctionAbiEmissionView return_view;
+    if (cg_c_export_slot_is_struct_aggregate(ctx, f, 0) &&
+        cg_func_return_abi_emission(ctx, f, &return_view) && return_view.c_type) {
+        fprintf(out, "%s", return_view.c_type);
         return;
     }
     emit_c_export_value_c_type(ctx, out, f, prefix, f ? f->return_type : NULL, true);
@@ -12490,11 +12487,10 @@ static void emit_c_export_param_c_type(XiCgenCtx *ctx, FILE *out, const XiFunc *
         fprintf(out, "%s", scalar_type);
         return;
     }
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-    if (plan && index < plan->abi.nparams && plan->abi.params &&
-        cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (index + 1u)) &&
-        plan->abi.params[index].c_type) {
-        fprintf(out, "%s", plan->abi.params[index].c_type);
+    XrCFunctionAbiEmissionView param_view;
+    if (cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (index + 1u)) &&
+        cg_func_param_abi_emission(ctx, f, index, &param_view) && param_view.c_type) {
+        fprintf(out, "%s", param_view.c_type);
         return;
     }
     emit_c_export_value_c_type(ctx, out, f, prefix, pt, false);
@@ -12600,15 +12596,13 @@ static void cg_c_export_collect_signature_typedefs(XiCgenCtx *ctx, const XiFunc 
         return;
     if (f->export_plan && f->export_plan->header && cg_func_can_have_c_export_stub(ctx, f)) {
         const char *prefix = cg_c_export_func_prefix(ctx, f);
-        const XaotFuncPlan *plan = cg_func_plan(ctx, f);
-        if (plan && cg_c_export_slot_is_struct_aggregate(ctx, f, 0)) {
+        if (cg_c_export_slot_is_struct_aggregate(ctx, f, 0)) {
             const XrAggregateLayout *layout =
                 cg_c_export_struct_layout_for_type(ctx, f->return_type);
             cg_c_export_collect_struct_typedef(prefix, layout, items, count);
         }
-        for (uint16_t i = 0; plan && i < f->nparams && i < plan->abi.nparams; i++) {
-            if (!plan->abi.params ||
-                !cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (i + 1u)))
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            if (!cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (i + 1u)))
                 continue;
             const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
             const XrAggregateLayout *layout = cg_c_export_struct_layout_for_type(ctx, pt);
@@ -12716,12 +12710,10 @@ static void emit_c_export_target_call_expr(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const char *prefix) {
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(NULL");
-    const XaotFuncPlan *plan = cg_func_plan(ctx, f);
     for (uint16_t i = 0; i < f->nparams; i++) {
         const XrType *pt = f->params && f->params[i] ? f->params[i]->type : NULL;
         fprintf(out, ", ");
-        if (plan && i < plan->abi.nparams && plan->abi.params &&
-            cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (i + 1u))) {
+        if (cg_c_export_slot_is_struct_aggregate(ctx, f, (uint16_t) (i + 1u))) {
             fprintf(out, "p%u", i);
             continue;
         }
