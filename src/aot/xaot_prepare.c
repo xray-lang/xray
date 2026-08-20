@@ -4786,7 +4786,7 @@ static void prepare_target_vector_value_plans(XaotBundle *bundle) {
         XaotValuePlan *plan = &bundle->value_plans[i];
         const XiValue *value = plan->value;
         const XaotFuncPlan *func_plan = xaot_bundle_find_func_plan(bundle, plan->func);
-        if (!func_plan || func_plan->abi.kind == XAOT_ABI_CORO)
+        if (!func_plan || xaot_func_plan_carries_coroutine_ops(func_plan))
             continue;
         if (prepare_vector_op_has_vector_result(value) &&
             prepare_vector_native_op_supported(bundle->target_simd_features, value))

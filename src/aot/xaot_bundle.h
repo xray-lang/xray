@@ -1798,6 +1798,13 @@ typedef struct XaotBundle {
 
 /* The verified C emission plan for one module, once installed. NULL before
  * the driver installs them, and for any module whose plan failed to build. */
+/* Whether this function's own body carries coroutine operations, read from
+ * the plan that states it. Asked by the passes that must not vectorise across
+ * a coroutine boundary. Distinct from being able to suspend and from having
+ * coroutine state entities: a function that merely calls a coroutine has both
+ * and is not one itself. */
+XR_FUNC bool xaot_func_plan_carries_coroutine_ops(const XaotFuncPlan *plan);
+
 XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBundle *bundle,
                                                                     uint32_t module_index);
 

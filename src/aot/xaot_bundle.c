@@ -406,6 +406,14 @@ static void dump_slot(FILE *out, const char *prefix, const XaotAbiSlot *slot) {
             xaot_value_kind_name(slot->rep.kind), rep_name(slot->rep.rep), safe_str(slot->c_type));
 }
 
+XR_FUNC bool xaot_func_plan_carries_coroutine_ops(const XaotFuncPlan *plan) {
+    if (!plan || !plan->func || !plan->func->semantic_plan)
+        return false;
+    const XrSemanticFunctionRecord *record = xr_semantic_plan_function(
+        plan->func->semantic_plan, plan->func->semantic_plan_function_index);
+    return record && record->carries_coroutine_ops != 0u;
+}
+
 XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBundle *bundle,
                                                                     uint32_t module_index) {
     if (!bundle || !bundle->module_emission_plans || module_index >= bundle->nmodules)

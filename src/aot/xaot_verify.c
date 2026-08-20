@@ -379,7 +379,7 @@ static bool verify_vector_rep(const XaotBundle *bundle, const XaotValuePlan *pla
 
     if (!verify_vector_result_op(value))
         return set_error(errbuf, errbuf_len, "AOT vector value plan has non-vector producer");
-    if (!func_plan || func_plan->abi.kind == XAOT_ABI_CORO)
+    if (!func_plan || xaot_func_plan_carries_coroutine_ops(func_plan))
         return set_error(errbuf, errbuf_len, "AOT vector value plan crosses coroutine ABI");
     if (!lane_bytes || !rep->vector_lanes || rep->vector_width_bytes != width ||
         (width != 16 && width != 32 && width != 64))
