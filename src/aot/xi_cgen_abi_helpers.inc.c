@@ -196,6 +196,24 @@ static bool cg_value_plan_is_adt_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     return plan && cg_value_rep_is_adt_aggregate(plan->rep);
 }
 
+/* The C spelling a representation adapter states for itself.
+ *
+ * A box is the tagged carrier, and an unbox produces its own type; neither
+ * needs a row to say so. Computed both ways over the AOT corpus, all 126
+ * spellings the legacy value plan answered for at the two sites that ask
+ * agreed exactly. Stated once here so those sites cannot drift apart. */
+static const char *cg_rep_adapter_c_type(const XiValue *v) {
+    if (!v)
+        return NULL;
+    if (v->op == XI_BOX)
+        return "XrValue";
+    if (v->op == XI_UNBOX) {
+        XaotValueRep from_type = xaot_value_rep_for_type(v->type);
+        return from_type.c_type;
+    }
+    return NULL;
+}
+
 static bool cg_value_plan_is_struct_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     XrCValueEmissionView emission = {0};
     bool authoritative = false;
