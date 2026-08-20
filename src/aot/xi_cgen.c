@@ -4834,12 +4834,10 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
         return emission.c_type;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return "XrValue";
+    const char *adapter_c_type = cg_rep_adapter_c_type(v);
+    if (adapter_c_type)
+        return adapter_c_type;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
-    {
-        const char *adapter_c_type = cg_rep_adapter_c_type(v);
-        if (adapter_c_type)
-            return adapter_c_type;
-    }
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
     return local_ctype_str(ctx, v);
@@ -7077,12 +7075,10 @@ static const char *cg_debug_value_ctype(XiCgenCtx *ctx, const XiFunc *f, const X
         return emission.c_type;
     if (emission_status == CG_VALUE_EMISSION_ERROR)
         return "XrValue";
+    const char *adapter_c_type = cg_rep_adapter_c_type(v);
+    if (adapter_c_type)
+        return adapter_c_type;
     const XaotValuePlan *plan = cg_value_plan_require_legacy(ctx, v);
-    {
-        const char *adapter_c_type = cg_rep_adapter_c_type(v);
-        if (adapter_c_type)
-            return adapter_c_type;
-    }
     if (plan && plan->rep.c_type)
         return plan->rep.c_type;
     return local_ctype_str(ctx, v);
