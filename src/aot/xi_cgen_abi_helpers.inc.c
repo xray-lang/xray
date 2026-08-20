@@ -1116,7 +1116,13 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
         emit_conversion_suffix(out, conv_suffix);
         return;
     }
-    const XaotValuePlan *plan = (ctx && v) ? cg_value_plan_require_legacy(ctx, v) : NULL;
+    /* Only the aggregate branches below read this row, and a representation
+     * adapter is never an aggregate -- a box is the tagged carrier and an
+     * unbox is the scalar it produces. Skipping the lookup for them keeps the
+     * legacy plan out of a path whose answer it cannot change. */
+    const XaotValuePlan *plan = (ctx && v && v->op != XI_BOX && v->op != XI_UNBOX)
+                                    ? cg_value_plan_require_legacy(ctx, v)
+                                    : NULL;
     if (v && v->op == XI_CONST) {
         XrRep from_rep = cg_value_plan_storage_rep(ctx, v);
         if (v->type && v->aux_kind == XI_AUX_KIND_ENUM_NAMESPACE) {
