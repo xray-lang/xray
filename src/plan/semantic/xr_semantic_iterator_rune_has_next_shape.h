@@ -13,13 +13,13 @@
 
 #include "xr_semantic_string_runes_shape.h"
 
-static inline bool xr_semantic_iterator_rune_has_next_is_exact(
-    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
-    uint32_t *receiver_value) {
+static inline bool
+xr_semantic_iterator_rune_has_next_is_exact(const XrSemanticPlan *plan,
+                                            const XrSemanticOperationRecord *operation,
+                                            uint32_t *receiver_value) {
     uint32_t operand_count = 0;
     uint32_t metadata_count = 0;
-    const XrSemanticOperandRecord *operands =
-        xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     if (!plan || !operation || !operands || !metadata ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_ITERATOR_RUNE_HAS_NEXT ||
@@ -33,15 +33,20 @@ static inline bool xr_semantic_iterator_rune_has_next_is_exact(
         operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
         operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
         operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
-        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        /* The tail bit records where the call sits, not what it is: lowering
+         * sets it on any `return <method call>`, so demanding the bare default
+         * made the very same operation refused for its surroundings. The
+         * sibling slice judgement already accepts both spellings; every other
+         * field still has to match exactly. */
+        (operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) &&
+         operation->flags != (xi_generated_op_default_flags(XI_CALL_METHOD) | XI_FLAG_TAIL)) ||
         operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
         operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
         operation->transfer_mode != XR_TRANSFER_SHARE ||
         operation->parameter_mode != XR_PARAM_READ ||
-        operation->parameter_ownership != XI_OWN_NONE ||
-        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
-        operation->return_provenance != XR_SEM_RETURN_NONE || operation->return_complete != 0 ||
-        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_NONE ||
+        operation->return_complete != 0 || operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
         operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
         operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
         operation->view_origin != XI_VIEW_ORIGIN_NONE || operation->view_capability != 0 ||
@@ -49,10 +54,8 @@ static inline bool xr_semantic_iterator_rune_has_next_is_exact(
         operation->reserved_view[0] != 0 || operation->reserved_view[1] != 0)
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
-    const XrSemanticTypeRecord *receiver_type =
-        xr_semantic_plan_type(plan, receiver->type);
-    const XrSemanticTypeRecord *result_type =
-        xr_semantic_plan_type(plan, operation->result_type);
+    const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(plan, receiver->type);
+    const XrSemanticTypeRecord *result_type = xr_semantic_plan_type(plan, operation->result_type);
     XrStableId zero = {{0}};
     const char expected_bool[] = "type-v3:3:0:0:0:0:0:0:0:0:255:0:";
     if (!xr_semantic_string_runes_result_type_is_exact(plan, receiver_type) || !result_type ||
@@ -64,14 +67,13 @@ static inline bool xr_semantic_iterator_rune_has_next_is_exact(
         result_type->scalar_rep != XR_SCALAR_REP_NONE || result_type->aggregate_extent != 0 ||
         result_type->aggregate_align != 0 || result_type->enum_layout_id != 0 ||
         result_type->enum_member_count != 0 || result_type->enum_flags != 0 ||
-        result_type->reserved_enum != 0 || result_type->flags != 0 ||
-        !result_type->canonical_key || strcmp(result_type->canonical_key, expected_bool) != 0 ||
+        result_type->reserved_enum != 0 || result_type->flags != 0 || !result_type->canonical_key ||
+        strcmp(result_type->canonical_key, expected_bool) != 0 ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
         receiver->transfer_mode != XR_TRANSFER_SHARE ||
-        receiver->ownership_action != XR_SEM_OPERAND_BORROW ||
-        receiver->parameter_mode != 0 || receiver->access != 0 || receiver->origin != 0 ||
-        receiver->lifetime != 0 || receiver->escape != 0 ||
-        receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW || receiver->parameter_mode != 0 ||
+        receiver->access != 0 || receiver->origin != 0 || receiver->lifetime != 0 ||
+        receiver->escape != 0 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
         return false;
     if (receiver_value)
         *receiver_value = receiver->value;
