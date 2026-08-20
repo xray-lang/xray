@@ -960,9 +960,26 @@ static void emit_one_enum_native_typedef(XiCgenCtx *ctx, FILE *out, const XaotEn
     fprintf(out, "#endif\n");
 }
 
+/* The one comparison both models feed: an ADT enum names the same C type as
+ * the plan. Each caller decides separately whether its slot is a typed ADT
+ * aggregate, because that is the part the two models spell differently. */
+static bool cg_enum_plan_names_c_type(const char *c_type, const XaotEnumPlan *plan) {
+    return plan && plan->c_type && c_type && strcmp(c_type, plan->c_type) == 0;
+}
+
 static bool cg_enum_plan_rep_matches(XaotValueRep rep, const XaotEnumPlan *plan) {
-    return plan && plan->c_type && cg_value_rep_is_typed_adt_aggregate(rep) && rep.c_type &&
-           strcmp(rep.c_type, plan->c_type) == 0;
+    return cg_value_rep_is_typed_adt_aggregate(rep) && cg_enum_plan_names_c_type(rep.c_type, plan);
+}
+
+/* Same question asked of a signature row.
+ *
+ * Note this path has no coverage: every enum-declaring case in the corpus
+ * fails to compile before reaching it, so the migration below is reasoned from
+ * the two models' fields rather than demonstrated by a passing case. */
+static bool cg_enum_plan_abi_matches(const XrCFunctionAbiEmissionView *view,
+                                     const XaotEnumPlan *plan) {
+    return view && view->aggregate_class == XR_C_ABI_AGGREGATE_ADT_ENUM &&
+           cg_enum_plan_names_c_type(view->c_type, plan);
 }
 
 static bool cg_enum_native_typedef_is_reachable(XiCgenCtx *ctx, const XaotEnumPlan *plan,
@@ -974,10 +991,13 @@ static bool cg_enum_native_typedef_is_reachable(XiCgenCtx *ctx, const XaotEnumPl
         const XaotFuncPlan *func = &ctx->aot_bundle->func_plans[i];
         if (func->module_index != module_index)
             continue;
-        if (cg_enum_plan_rep_matches(xaot_abi_slot_value_rep(&func->abi.ret), plan))
+        XrCFunctionAbiEmissionView view;
+        if (cg_func_return_abi_emission(ctx, func->func, &view) &&
+            cg_enum_plan_abi_matches(&view, plan))
             return true;
-        for (uint16_t p = 0; p < func->abi.nparams; p++) {
-            if (cg_enum_plan_rep_matches(xaot_abi_slot_value_rep(&func->abi.params[p]), plan))
+        for (uint16_t p = 0; func->func && p < func->func->nparams; p++) {
+            if (cg_func_param_abi_emission(ctx, func->func, p, &view) &&
+                cg_enum_plan_abi_matches(&view, plan))
                 return true;
         }
     }
@@ -1046,6 +1066,26 @@ static void cg_emit_imported_enum_native_typedef_for_rep(XiCgenCtx *ctx, FILE *o
     emitted[enum_index] = true;
 }
 
+/* The signature-row form of the same emission. Shares the lookup and the
+ * emitted-set bookkeeping with the value-plan form above by name only; the
+ * difference is which model states that the slot is a typed ADT aggregate. */
+static void cg_emit_imported_enum_native_typedef_for_abi(XiCgenCtx *ctx, FILE *out,
+                                                         const XrCFunctionAbiEmissionView *view,
+                                                         uint32_t module_index, bool *emitted) {
+    uint32_t enum_index = 0;
+    if (!ctx || !out || !emitted || !view || view->aggregate_class != XR_C_ABI_AGGREGATE_ADT_ENUM)
+        return;
+    if (!cg_enum_plan_index_for_ctype(ctx, view->c_type, &enum_index))
+        return;
+    if (enum_index >= ctx->aot_bundle->nenum_plans || emitted[enum_index])
+        return;
+    const XaotEnumPlan *plan = &ctx->aot_bundle->enum_plans[enum_index];
+    if (plan->module_index == module_index)
+        return;
+    emit_one_enum_native_typedef(ctx, out, plan);
+    emitted[enum_index] = true;
+}
+
 static void cg_emit_imported_enum_native_typedefs_for_func(XiCgenCtx *ctx, FILE *out,
                                                            const XiFunc *func,
                                                            uint32_t module_index, bool *emitted) {
@@ -1055,11 +1095,12 @@ static void cg_emit_imported_enum_native_typedefs_for_func(XiCgenCtx *ctx, FILE 
     func_plan = xaot_bundle_find_func_plan(ctx->aot_bundle, func);
     if (!func_plan)
         return;
-    cg_emit_imported_enum_native_typedef_for_rep(
-        ctx, out, xaot_abi_slot_value_rep(&func_plan->abi.ret), module_index, emitted);
-    for (uint16_t p = 0; p < func_plan->abi.nparams; p++)
-        cg_emit_imported_enum_native_typedef_for_rep(
-            ctx, out, xaot_abi_slot_value_rep(&func_plan->abi.params[p]), module_index, emitted);
+    XrCFunctionAbiEmissionView view;
+    if (cg_func_return_abi_emission(ctx, func, &view))
+        cg_emit_imported_enum_native_typedef_for_abi(ctx, out, &view, module_index, emitted);
+    for (uint16_t p = 0; p < func->nparams; p++)
+        if (cg_func_param_abi_emission(ctx, func, p, &view))
+            cg_emit_imported_enum_native_typedef_for_abi(ctx, out, &view, module_index, emitted);
 }
 
 static void emit_imported_enum_native_typedefs(XiCgenCtx *ctx, FILE *out) {
