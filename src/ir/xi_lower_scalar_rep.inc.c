@@ -223,5 +223,12 @@ static int64_t xi_array_cfield_from_type(struct XrType *type) {
 static uint8_t xi_array_intrinsic_storage_from_type(struct XrType *type) {
     if (!type || !XR_TYPE_IS_ARRAY(type) || !type->container.element_type)
         return XR_ELEM_ANY;
+    /* A nullable element owns no bare scalar slot: the null case has no scalar
+     * to put there, so the array carries tagged values and states no element
+     * storage of its own. Reading the tid alone answers about the payload and
+     * loses that, which made `[1, null, 3]` claim an i64 element store the
+     * plan then refused. */
+    if (type->container.element_type->is_nullable)
+        return XR_ELEM_ANY;
     return (uint8_t) xr_tid_to_elem_type(xr_type_to_tid(type->container.element_type));
 }
