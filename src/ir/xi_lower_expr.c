@@ -5186,8 +5186,8 @@ static bool lower_apply_call_writebacks(XiLower *l, const XiCallPlan *plan,
  * direct named call we consult the resolved function symbol's published bit;
  * otherwise we fall back to the static callee function type (which defaults to
  * the fail-closed MAY_THROW). */
-static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
-                                        struct XrType *callee_type) {
+XR_FUNC bool xi_lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
+                                            struct XrType *callee_type) {
     struct XrType *fn_type = NULL;
     if (l && l->analyzer && call && call->callee && call->callee->type == AST_VARIABLE) {
         XaSymbol *sym =
@@ -5229,7 +5229,7 @@ static bool lower_call_callee_may_throw(XiLower *l, CallExprNode *call,
 static void lower_call_emit_err_check(XiLower *l, XiValue *call_v, AstNode *node,
                                       CallExprNode *call, struct XrType *callee_type) {
     (void) call_v;
-    xi_lower_insert_err_check(l, node, lower_call_callee_may_throw(l, call, callee_type));
+    xi_lower_insert_err_check(l, node, xi_lower_call_callee_may_throw(l, call, callee_type));
 }
 
 static XaSymbolLinks *lower_call_return_ownership_links(XiLower *l, CallExprNode *call) {

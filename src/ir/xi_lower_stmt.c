@@ -4000,7 +4000,19 @@ static void lower_return(XiLower *l, AstNode *node) {
          * XI_CALL with callee typed as function → safe.
          * Other XI_CALL (class constructors, etc.) → NOT safe; OP_TAILCALL
          * only handles closures and would fail on class objects. */
+        /* A tail call to a callee that may raise cannot stand inside a try
+         * body. The tail call replaces the current frame, so the error check
+         * that follows it -- the one that hands a pending error to this
+         * frame's catch -- never runs, and the error escapes past a catch
+         * that would have taken it. A callee proven NO_THROW keeps its tail
+         * call: the check could never fire, and dropping the tail call there
+         * grows the frame chain instead. This is unreachable while a
+         * module-level function is bound as `any`, because that makes the
+         * callee type test fail; giving the binding its signature exposes it. */
         bool is_direct_call = !return_is_unit && (ret->values[0]->type == AST_CALL_EXPR);
+        if (is_direct_call && l->try_depth != 0 &&
+            xi_lower_call_callee_may_throw(l, &ret->values[0]->as.call_expr, NULL))
+            is_direct_call = false;
         /* A `T(args)` construction lowers to an XI_CALL_METHOD whose aux is
          * "constructor". Constructors must materialize and return the new
          * object, so they are never tail calls (and AOT has no TAIL_CALL). */

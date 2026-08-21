@@ -166,6 +166,18 @@ XR_FUNC struct XrType *xi_lower_type_or_any(XiLower *l, struct XrType *type, con
     return type ? type : (l ? l->type_any : NULL);
 }
 
+/* The type the analyzer computed for a symbol, or NULL when it has none. A
+ * declaration whose node carries no type of its own reads it from here. */
+static struct XrType *xi_lower_declared_symbol_type(XiLower *l, uint32_t symbol_id) {
+    if (!l || !l->analyzer || symbol_id == 0)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, symbol_id);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(l->analyzer, sym) : NULL;
+    if (!links || !links->type || XR_TYPE_IS_UNKNOWN(links->type))
+        return NULL;
+    return links->type;
+}
+
 static struct XrType *xi_lower_param_type(XiLower *l, XrParamNode *param) {
     if (l && l->analyzer && param && param->symbol_id != 0) {
         XaSymbol *sym = xa_scope_lookup_by_id(l->analyzer->global_scope, param->symbol_id);
@@ -1868,7 +1880,14 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
         case AST_FUNCTION_DECL:
             *out_name = s->as.function_decl.name;
             *out_sid = s->as.function_decl.symbol_id;
-            *out_type = xi_lower_node_type(l, s);
+            /* The analyzer keeps a function's signature on its symbol, not on
+             * the declaration node, so asking the node yields nothing and the
+             * binding falls back to `any`. A call through an untyped binding
+             * cannot name its target, which surfaces layers later as a call
+             * with no target authority. */
+            *out_type = xi_lower_declared_symbol_type(l, *out_sid);
+            if (!*out_type)
+                *out_type = xi_lower_node_type(l, s);
             break;
         case AST_CLASS_DECL:
             *out_name = s->as.class_decl.name;

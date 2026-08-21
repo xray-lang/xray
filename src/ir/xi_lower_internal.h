@@ -24,6 +24,7 @@
 #include <string.h>
 
 struct AstNode;
+struct CallExprNode;
 struct ImportMember;
 struct XrType;
 struct XaSymbol;
@@ -286,6 +287,12 @@ XR_FUNC XiValue *xi_lower_checktype_for_type(XiLower *l, struct AstNode *node, X
  * behaves as before — inside a try block it branches to the current catch
  * target; otherwise it propagates by writing the error and returning. */
 XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node, bool producer_may_throw);
+
+/* Whether a call's callee may raise into the error channel. Fail-closed: only a
+ * callee proven NO_THROW reports false. `callee_type` may be NULL when the
+ * caller has no static callee type to offer. */
+XR_FUNC bool xi_lower_call_callee_may_throw(XiLower *l, struct CallExprNode *call,
+                                            struct XrType *callee_type);
 
 /* Re-propagate a materialized error value through the value channel,
  * running any finally blocks it escapes (see xi_lower_stmt.c). */
