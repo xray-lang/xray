@@ -4723,9 +4723,13 @@ static bool note_direct_local_array_boundary_storage(
 
 static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuilder *builder,
                                                                 char *error, size_t error_size) {
+    if (getenv("XRAY_ASR_PROBE"))
+        fprintf(stderr, "ASR family entered\n");
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE,
                               error, error_size))
         return false;
+    if (getenv("XRAY_ASR_PROBE"))
+        fprintf(stderr, "ASR family began\n");
     XrTargetValueStorageAnalysis analysis = {0};
     bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
     for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
@@ -4747,6 +4751,16 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
     for (uint32_t i = 0; valid && i < read_count; i++) {
         const XrSemanticOperationRecord *read =
             xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (getenv("XRAY_ASR_PROBE") && read && read->opcode == XI_GET_SHARED)
+            fprintf(stderr, "ASR op=%u val=%u defined=%d exact=%d\n", i, read->result_value,
+                    (read->result_value < analysis.total_values &&
+                     analysis.defined_values[read->result_value])
+                        ? 1
+                        : 0,
+                    semantic_array_shared_read_is_exact(builder->semantic_plan, read->result_value,
+                                                        read->result_type, read->function)
+                        ? 1
+                        : 0);
         if (!read || read->result_value == XR_SEMANTIC_INDEX_NONE ||
             read->result_value >= analysis.total_values ||
             analysis.defined_values[read->result_value] ||
@@ -4759,6 +4773,8 @@ static bool builder_add_direct_local_array_ref_argument_storage(XrTargetPlanBuil
             builder, &analysis, read->result_value, read->result_type, read->function, i,
             XR_TARGET_SLOT_TEMPORARY, XR_TARGET_ARRAY_CARRIER_REF_PLACE_LOAD, read->id, error,
             error_size);
+        if (getenv("XRAY_ASR_PROBE"))
+            fprintf(stderr, "ASR noted val=%u ok=%d\n", read->result_value, valid ? 1 : 0);
     }
     /* An Array a direct-local call hands back. The result is a transfer, so it
      * is the one Array carrier in this family that owns what it holds. */
@@ -12690,7 +12706,10 @@ bool xr_target_plan_build_module_set(const XrSemanticPlan *semantic_plan,
     uint32_t refused_families = 0;
     for (size_t i = 0; i < sizeof(k_target_families) / sizeof(k_target_families[0]); i++) {
         char family_error[512] = {0};
-        if (k_target_families[i].build(builder, family_error, sizeof(family_error)))
+        bool ok_p = k_target_families[i].build(builder, family_error, sizeof(family_error));
+        if (getenv("XRAY_FAM_PROBE"))
+            fprintf(stderr, "FAM %s=%d\n", k_target_families[i].name, ok_p ? 1 : 0);
+        if (ok_p)
             continue;
         if (refused_families == 0) {
             survey = target_survey_enabled();

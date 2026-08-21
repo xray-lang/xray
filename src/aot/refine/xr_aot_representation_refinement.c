@@ -7945,7 +7945,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                  * family bound -- a Slice keeps its VIEW pair, an Array its
                  * tagged value.  The emitter reads it directly, so demanding
                  * the tagged default here would ask a borrowed window to be
-                 * boxed into something it has no tagged form for. */
+                 * boxed into something it has no tagged form for.
+                 *
+                 * The machine query answers only for scalars: it refuses a type
+                 * carrying children, which every container has. An Array read
+                 * out of a shared cell is bound and does have a carrier, so
+                 * asking the scalar question about it reported "no storage" for
+                 * a value that had one. The borrowed carrier question is the
+                 * one this branch means, and the plain carrier covers the reads
+                 * that own what they hold. */
+                if (oracle_array_borrowed_tagged_carrier_storage(ctx, source_value, out_storage,
+                                                                 &ignored_kind))
+                    return true;
+                if (oracle_array_tagged_carrier_storage(ctx, source_value, out_storage,
+                                                        &ignored_kind))
+                    return true;
                 return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
             }
             if (operand_index == 0 &&
