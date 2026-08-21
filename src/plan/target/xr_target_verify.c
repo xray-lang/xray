@@ -52,6 +52,7 @@
 #include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
+#include "../semantic/xr_semantic_local_call_target_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -1604,11 +1605,7 @@ static bool semantic_function_suspendability_is_exact(const XrSemanticPlan *plan
             valid = false;
             break;
         }
-        if ((target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-             target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) &&
-            target->function < function_count &&
-            (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
-             operation->opcode == XI_CALL_METHOD)) {
+        if (xr_semantic_call_target_names_local_function(target, operation, function_count)) {
             next[i] = head[target->function];
             head[target->function] = i;
         }

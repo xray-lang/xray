@@ -50,6 +50,7 @@
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_const_variant_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
+#include "../semantic/xr_semantic_local_call_target_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -9806,10 +9807,18 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             target && target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
         bool builtin_instance =
             target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
+        /* A source instance method resolved to one body in this module names a
+         * function exactly as a direct local call does, and the plan verifier
+         * already builds its suspendability edge. Consume it here on the same
+         * terms, or a target the semantic layer proved is refused as uncovered. */
+        bool instance_method_local =
+            target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+        bool names_local_function =
+            xr_semantic_call_target_names_local_function(target, operation, function_count);
         if (!target || !operation ||
-            (!direct && !source && !native_namespace && !class_construction && !builtin_instance) ||
-            (direct && target->function >= function_count) ||
-            (direct && operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+            (!direct && !source && !native_namespace && !class_construction && !builtin_instance &&
+             !instance_method_local) ||
+            ((direct || instance_method_local) && !names_local_function) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL) ||
@@ -9830,8 +9839,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
                 fprintf(stderr,
                         "[target] refused in call target coverage: SemanticPlan proved a call "
                         "target of kind %s, and this family consumes only DIRECT_LOCAL, "
-                        "SOURCE_EXPORT, NATIVE_NAMESPACE_YIELDABLE, BUILTIN_INSTANCE_YIELDABLE "
-                        "and SOURCE_CLASS_CONSTRUCTOR\n",
+                        "SOURCE_EXPORT, NATIVE_NAMESPACE_YIELDABLE, BUILTIN_INSTANCE_YIELDABLE, "
+                        "SOURCE_INSTANCE_METHOD_LOCAL and SOURCE_CLASS_CONSTRUCTOR\n",
                         target_trace_call_target_kind_name(target ? target->kind : 0u));
                 fprintf(stderr,
                         "[target]   call target=%u    kind=%s (%u), names function %u, dependency "
@@ -9900,7 +9909,7 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         }
         target_by_operation[target->operation] = i;
         reverse_next[i] = XR_SEMANTIC_INDEX_NONE;
-        if (direct) {
+        if (names_local_function) {
             reverse_next[i] = reverse_head[target->function];
             reverse_head[target->function] = i;
         } else if (!class_construction && state_by_operation[target->operation] != 0 &&
@@ -9950,10 +9959,22 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             } else if (target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE) {
                 valid = collect_builtin_instance_yieldable_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0, error, error_size);
+            } else if (target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT) {
+                valid = collect_source_export_call_intent(
+                    builder, target_index, target, state_by_operation[i] != 0, error, error_size);
             } else {
-                valid = target && collect_source_export_call_intent(builder, target_index, target,
-                                                                    state_by_operation[i] != 0,
-                                                                    error, error_size);
+                /* Every kind this dispatch covers is named above. Falling
+                 * through to one of those collectors would make it refuse on
+                 * its own kind check and report a gap in the wrong family; name
+                 * the kind that has no collector instead. */
+                valid = fail(error, error_size, "XR_TARGET_1003",
+                             "call target kind has no intent collector");
+                if (target_trace_enabled())
+                    fprintf(stderr,
+                            "[target] refused in call intent: the adapter family consumed a "
+                            "target of kind %s, but no collector builds an intent for that "
+                            "kind\n",
+                            target_trace_call_target_kind_name(target ? target->kind : 0u));
             }
         } else if (semantic_operation_is_exact_channel_close(plan, operation, NULL)) {
             valid = collect_channel_close_call_intent(builder, i, operation, error, error_size);
