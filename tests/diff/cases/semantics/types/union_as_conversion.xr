@@ -1,0 +1,14 @@
+// anchor: union-as-conversion
+// A checked conversion out of a union. The value it produces carries the
+// compiler's own untyped reference type -- source can neither write nor name
+// it -- so nothing but the family that answers for that type can bind its
+// storage, and until that family admitted the conversion the value had none.
+//
+// Verified to reach only that path: removing the conversion from the family's
+// roster refuses this case outright.
+var a: int | string = 7
+var b: int | string = "q"
+print("a=${a as int} b=${b as string}")
+
+var c: i32 | float = 3
+print("c=${c as i32}")

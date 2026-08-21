@@ -65,7 +65,8 @@ xr_semantic_dynamic_value_carrier_type_is_exact(const XrSemanticTypeRecord *type
  * whatever the opcode: it results in a value, it is not a call, not an import,
  * not an intrinsic, not a view, and does not alias an operand or a parameter.
  * What differs between producers -- whether a constant backs the value, whether
- * metadata describes it -- is left to the roster below. */
+ * metadata describes it, whether an immediate names where it lives, whether it
+ * resolves an import -- is left to the roster below. */
 static inline bool
 xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
                                           const XrSemanticOperationRecord *operation) {
@@ -73,7 +74,6 @@ xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
     return plan && operation && operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->function < xr_semantic_plan_function_count(plan) &&
            operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
-           operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
            operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
 
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
@@ -119,24 +119,35 @@ xr_semantic_dynamic_value_allocates_nothing(const XrSemanticOperationRecord *ope
  *              coroutine boundary as one XrValue whatever its type -- so like a
  *              slot read it is judged by the carrier rather than by the type.
  * XI_CELL_NEW  a fresh cell holding a captured binding.  It allocates, which
- *              every other producer here does not, and says so. */
+ *              every other producer here does not, and says so.
+ * XI_AS        a checked conversion whose target the plan records as one piece
+ *              of metadata; the immediate names which type.
+ * XI_IMPORT_REF a reference to something another module owns.  It is the one
+ *              producer here that resolves an import, and it borrows what the
+ *              other module owns rather than owning it.
+ * XI_CORO_OP   a coroutine primitive's result, which leaves the coroutine the
+ *              same way an awaited value does -- so it too is judged by the
+ *              carrier rather than by the type. */
 static inline bool
 xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *operation) {
     if (!operation)
         return false;
     switch (operation->opcode) {
         case XI_PHI:
-            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
                    operation->metadata_count == 0 && operation->semantic_immediate == 0 &&
                    operation->constant == XR_SEMANTIC_INDEX_NONE &&
                    xr_semantic_dynamic_value_allocates_nothing(operation);
         case XI_CONST:
-            return operation->auxiliary_kind == XI_AUX_KIND_ENUM_NAMESPACE &&
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_ENUM_NAMESPACE &&
                    operation->metadata_count != 0 && operation->semantic_immediate == 0 &&
                    operation->constant != XR_SEMANTIC_INDEX_NONE &&
                    xr_semantic_dynamic_value_allocates_nothing(operation);
         case XI_GET_SHARED:
-            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
                    operation->metadata_count == 0 && operation->operand_count == 0 &&
                    operation->semantic_immediate <= UINT16_MAX &&
                    operation->constant == XR_SEMANTIC_INDEX_NONE &&
@@ -145,7 +156,8 @@ xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *ope
                    operation->return_complete == 1 &&
                    xr_semantic_dynamic_value_allocates_nothing(operation);
         case XI_AWAIT:
-            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
                    operation->metadata_count == 0 && operation->operand_count == 1 &&
                    operation->constant == XR_SEMANTIC_INDEX_NONE &&
                    operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
@@ -153,7 +165,8 @@ xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *ope
                    operation->return_complete == 1 &&
                    xr_semantic_dynamic_value_allocates_nothing(operation);
         case XI_CELL_NEW:
-            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
                    operation->metadata_count == 0 && operation->operand_count == 1 &&
                    operation->semantic_immediate == 0 &&
                    operation->constant == XR_SEMANTIC_INDEX_NONE &&
@@ -161,6 +174,33 @@ xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *ope
                    operation->return_provenance == XR_SEM_RETURN_OWNED &&
                    operation->return_complete == 1 &&
                    xr_semantic_dynamic_value_allocates(operation);
+        case XI_AS:
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                   operation->metadata_count == 1 && operation->operand_count == 1 &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                   operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                   operation->return_complete == 1 &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
+        case XI_IMPORT_REF:
+            return operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                   operation->metadata_count == 2 && operation->operand_count == 0 &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+                   operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+                   operation->return_complete == 1 &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
+        case XI_CORO_OP:
+            return operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+                   operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                   operation->metadata_count == 0 && operation->operand_count == 0 &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                   operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                   operation->return_complete == 1 &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
         default:
             return false;
     }
@@ -194,7 +234,8 @@ static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan
     /* A slot read is tagged because of the slot; the other producers are tagged
      * because of the type they carry, and only they are held to the narrow
      * test. */
-    return (operation->opcode == XI_GET_SHARED || operation->opcode == XI_AWAIT)
+    return (operation->opcode == XI_GET_SHARED || operation->opcode == XI_AWAIT ||
+            operation->opcode == XI_CORO_OP)
                ? xr_semantic_dynamic_value_carrier_type_is_exact(type)
                : xr_semantic_dynamic_value_type_is_exact(type);
 }
