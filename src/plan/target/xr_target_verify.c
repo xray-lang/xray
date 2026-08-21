@@ -2201,7 +2201,11 @@ static bool verifier_direct_local_callee_type_is_exact(const XrSemanticPlan *sem
         caller_ancestor != lexical_owner ||
         (type->kind != XR_KIND_FUNCTION && type->kind != XR_KIND_UNKNOWN) ||
         type->scalar_rep != XR_SCALAR_REP_NONE || type->aggregate_extent != 0 ||
-        type->aggregate_align != 0 || type->child_count != 0 ||
+        type->aggregate_align != 0 ||
+        /* Mirrors the builder's judgement: a function type states its signature
+         * in children, the untyped spelling has none, and requiring zero of
+         * both admits only the untyped one. */
+        (type->kind == XR_KIND_UNKNOWN && type->child_count != 0) ||
         target->parameter_begin > xr_semantic_plan_parameter_count(semantic) ||
         target->parameter_count >
             xr_semantic_plan_parameter_count(semantic) - target->parameter_begin ||

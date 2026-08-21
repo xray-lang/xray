@@ -2583,15 +2583,21 @@ static bool semantic_direct_local_callee_type_is_exact(const XrSemanticPlan *pla
         caller_ancestor != lexical_owner ||
         (type->kind != XR_KIND_FUNCTION && type->kind != XR_KIND_UNKNOWN) ||
         type->scalar_rep != XR_SCALAR_REP_NONE || type->aggregate_extent != 0 ||
-        type->aggregate_align != 0 || type->child_count != 0 ||
+        type->aggregate_align != 0 ||
+        /* A function type states its signature in children; the untyped
+         * spelling has none. Requiring zero children of both admits only the
+         * untyped one, which is what a module-level function used to be bound
+         * as. */
+        (type->kind == XR_KIND_UNKNOWN && type->child_count != 0) ||
         target->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
         target->parameter_count >
             xr_semantic_plan_parameter_count(plan) - target->parameter_begin ||
         (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
                         XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
         (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
-            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) {
         return false;
+    }
     return true;
 }
 
