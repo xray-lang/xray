@@ -18,6 +18,7 @@
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_iterator_rune_nth_shape.h"
+#include "xr_semantic_rune_to_string_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
@@ -2958,6 +2959,18 @@ static bool xi_rune_to_uint32_exact(const XiValue *value) {
            value->type->scalar_rep == XR_NATIVE_U32 && xi_iterator_rune_source_exact(receiver);
 }
 
+/* `r.toString()` on a rune from a `String.runes()` iterator: the one-rune
+ * string. Sits beside toUInt32 -- same receiver family, different result. */
+static bool xi_rune_to_string_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
+    return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
+           strcmp((const char *) value->aux, "toString") == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
+           value->type->kind == XR_KIND_STRING && !value->type->is_nullable &&
+           xi_iterator_rune_source_exact(receiver);
+}
+
 static bool xi_rune_is_whitespace_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
@@ -3876,6 +3889,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_TO_UINT32;
         if (!xr_semantic_rune_to_uint32_is_exact(ctx->plan, record, NULL))
             return fail(ctx, "XR_SEM_0019", "rune.toUInt32 authority is not exact");
+    }
+    if (xi_rune_to_string_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_TO_STRING;
+        if (!xr_semantic_rune_to_string_is_exact(ctx->plan, record, NULL))
+            return fail(ctx, "XR_SEM_0019", "rune.toString authority is not exact");
     }
     if (xi_rune_is_whitespace_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_IS_WHITESPACE;
