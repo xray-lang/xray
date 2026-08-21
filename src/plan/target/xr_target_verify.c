@@ -54,6 +54,7 @@
 #include "../semantic/xr_semantic_direct_callee_shape.h"
 #include "../semantic/xr_semantic_local_call_target_shape.h"
 #include "../semantic/xr_semantic_class_seal_shape.h"
+#include "xr_target_scalar_rep_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -712,89 +713,14 @@ static bool verifier_raw_pointer_type_is_exact(const XrSemanticTypeRecord *type)
            !type->source_enum_key && xr_stable_id_equal(type->source_enum_identity, zero);
 }
 
+/* The mapping is shared with the builder so the two cannot name different
+ * representations for one type. The raw-pointer test stays local and derives
+ * its answer by re-parsing the frozen canonical key, which is an independent
+ * route to the same fact and the reason this verifier catches a record whose
+ * fields and key disagree. */
 static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t *out_kind) {
-    if ((type->flags & XR_SEM_TYPE_NULLABLE) != 0)
-        return 0;
-    switch (type->kind) {
-        case XR_KIND_INT:
-            switch (type->scalar_rep) {
-                case XR_NATIVE_I8:
-                    *out_kind = XR_MACHINE_REP_I8;
-                    return 1;
-                case XR_NATIVE_I16:
-                    *out_kind = XR_MACHINE_REP_I16;
-                    return 1;
-                case XR_NATIVE_I32:
-                    *out_kind = XR_MACHINE_REP_I32;
-                    return 1;
-                case XR_NATIVE_I64:
-                    *out_kind = XR_MACHINE_REP_I64;
-                    return 1;
-                case XR_NATIVE_U8:
-                    *out_kind = XR_MACHINE_REP_U8;
-                    return 1;
-                case XR_NATIVE_U16:
-                    *out_kind = XR_MACHINE_REP_U16;
-                    return 1;
-                case XR_NATIVE_U32:
-                    *out_kind = XR_MACHINE_REP_U32;
-                    return 1;
-                case XR_NATIVE_U64:
-                    *out_kind = XR_MACHINE_REP_U64;
-                    return 1;
-                case XR_NATIVE_ISIZE:
-                    *out_kind = XR_MACHINE_REP_ISIZE;
-                    return 1;
-                case XR_NATIVE_USIZE:
-                    *out_kind = XR_MACHINE_REP_USIZE;
-                    return 1;
-                default:
-                    return -1;
-            }
-        case XR_KIND_FLOAT:
-            if (type->scalar_rep == XR_NATIVE_F32) {
-                *out_kind = XR_MACHINE_REP_F32;
-                return 1;
-            }
-            if (type->scalar_rep == XR_NATIVE_F64) {
-                *out_kind = XR_MACHINE_REP_F64;
-                return 1;
-            }
-            return -1;
-        case XR_KIND_BOOL:
-            /* Bool is canonical in the semantic schema and carries no native scalar spelling. */
-            if (type->scalar_rep != XR_SCALAR_REP_NONE)
-                return -1;
-            *out_kind = XR_MACHINE_REP_I1;
-            return 1;
-        case XR_KIND_RUNE:
-            if (type->scalar_rep != XR_SCALAR_REP_NONE)
-                return -1;
-            *out_kind = XR_MACHINE_REP_RUNE;
-            return 1;
-        case XR_KIND_UNIT:
-        case XR_KIND_NEVER:
-            if (type->scalar_rep != XR_SCALAR_REP_NONE)
-                return -1;
-            *out_kind = XR_MACHINE_REP_VOID;
-            return 1;
-        case XR_KIND_POINTER:
-            if (!verifier_raw_pointer_type_is_exact(type))
-                return -1;
-            *out_kind = XR_MACHINE_REP_RAW_PTR;
-            return 1;
-        case XR_KIND_ENUM:
-            /* A unit enum is the ordinal it carries -- no payload, no
-             * allocation, nothing a tagged value would hold. An enum with
-             * payloads is a different shape and answers through the families
-             * that bind tagged values, so only the unit form resolves here. */
-            if (!xr_semantic_unit_enum_type_is_exact(type))
-                return 0;
-            *out_kind = XR_MACHINE_REP_ENUM_ORDINAL;
-            return 1;
-        default:
-            return 0;
-    }
+    return (int) xr_target_scalar_rep_for_type(
+        type, type && verifier_raw_pointer_type_is_exact(type), out_kind);
 }
 
 /* Rebuilt here from the frozen semantic rows, not read back from the builder.

@@ -52,6 +52,7 @@
 #include "../semantic/xr_semantic_direct_callee_shape.h"
 #include "../semantic/xr_semantic_local_call_target_shape.h"
 #include "../semantic/xr_semantic_class_seal_shape.h"
+#include "xr_target_scalar_rep_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -528,80 +529,19 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     memset(materialized, 0, sizeof(*materialized));
 }
 
+/* The mapping itself is shared with the verifier; only the raw-pointer test
+ * stays local, because the two sides derive that one by independent routes and
+ * a disagreement between them is exactly what it is there to catch. */
 static XrTargetScalarEligibility classify_scalar_type(const XrSemanticTypeRecord *type,
                                                       uint16_t *out_kind) {
-    if (!type || !out_kind)
-        return XR_TARGET_SCALAR_INVALID;
-    if ((type->flags & XR_SEM_TYPE_NULLABLE) != 0)
-        return XR_TARGET_SCALAR_NOT_APPLICABLE;
-    switch (type->kind) {
-        case XR_KIND_INT:
-            switch (type->scalar_rep) {
-                case XR_NATIVE_I8:
-                    *out_kind = XR_MACHINE_REP_I8;
-                    break;
-                case XR_NATIVE_U8:
-                    *out_kind = XR_MACHINE_REP_U8;
-                    break;
-                case XR_NATIVE_I16:
-                    *out_kind = XR_MACHINE_REP_I16;
-                    break;
-                case XR_NATIVE_U16:
-                    *out_kind = XR_MACHINE_REP_U16;
-                    break;
-                case XR_NATIVE_I32:
-                    *out_kind = XR_MACHINE_REP_I32;
-                    break;
-                case XR_NATIVE_U32:
-                    *out_kind = XR_MACHINE_REP_U32;
-                    break;
-                case XR_NATIVE_I64:
-                    *out_kind = XR_MACHINE_REP_I64;
-                    break;
-                case XR_NATIVE_U64:
-                    *out_kind = XR_MACHINE_REP_U64;
-                    break;
-                case XR_NATIVE_ISIZE:
-                    *out_kind = XR_MACHINE_REP_ISIZE;
-                    break;
-                case XR_NATIVE_USIZE:
-                    *out_kind = XR_MACHINE_REP_USIZE;
-                    break;
-                default:
-                    return XR_TARGET_SCALAR_INVALID;
-            }
+    switch (xr_target_scalar_rep_for_type(type, type && xr_semantic_raw_pointer_type_is_exact(type),
+                                          out_kind)) {
+        case XR_TARGET_SCALAR_REP_EXACT:
             return XR_TARGET_SCALAR_VALUE;
-        case XR_KIND_FLOAT:
-            if (type->scalar_rep == XR_NATIVE_F32)
-                *out_kind = XR_MACHINE_REP_F32;
-            else if (type->scalar_rep == XR_NATIVE_F64)
-                *out_kind = XR_MACHINE_REP_F64;
-            else
-                return XR_TARGET_SCALAR_INVALID;
-            return XR_TARGET_SCALAR_VALUE;
-        case XR_KIND_BOOL:
-            if (type->scalar_rep != XR_SCALAR_REP_NONE)
-                return XR_TARGET_SCALAR_INVALID;
-            *out_kind = XR_MACHINE_REP_I1;
-            return XR_TARGET_SCALAR_VALUE;
-        case XR_KIND_RUNE:
-            if (type->scalar_rep != XR_SCALAR_REP_NONE)
-                return XR_TARGET_SCALAR_INVALID;
-            *out_kind = XR_MACHINE_REP_RUNE;
-            return XR_TARGET_SCALAR_VALUE;
-        case XR_KIND_UNIT:
-        case XR_KIND_NEVER:
-            if (type->scalar_rep != XR_SCALAR_REP_NONE)
-                return XR_TARGET_SCALAR_INVALID;
-            *out_kind = XR_MACHINE_REP_VOID;
-            return XR_TARGET_SCALAR_VALUE;
-        case XR_KIND_POINTER:
-            if (!xr_semantic_raw_pointer_type_is_exact(type))
-                return XR_TARGET_SCALAR_INVALID;
-            *out_kind = XR_MACHINE_REP_RAW_PTR;
-            return XR_TARGET_SCALAR_VALUE;
-        default:
+        case XR_TARGET_SCALAR_REP_NOT_APPLICABLE:
             return XR_TARGET_SCALAR_NOT_APPLICABLE;
+        default:
+            return XR_TARGET_SCALAR_INVALID;
     }
 }
 
