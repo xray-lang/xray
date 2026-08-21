@@ -49,6 +49,7 @@
 #include "../semantic/xr_semantic_array_member_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
+#include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_phi_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -3314,6 +3315,9 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     /* A copy that only renames its operand carries the source's binding, so the
      * result having one is expected rather than unexplained. Same statement of
      * the shape the builder used to give it that binding. */
+    uint32_t owner_forward_source = XR_SEMANTIC_INDEX_NONE;
+    bool exact_owner_forward =
+        xr_semantic_owner_forward_is_exact(plan->semantic_plan, operation, &owner_forward_source);
     uint32_t identity_copy_source = XR_SEMANTIC_INDEX_NONE;
     bool exact_identity_copy =
         xr_semantic_identity_copy_is_exact(plan->semantic_plan, operation, &identity_copy_source);
@@ -3451,10 +3455,10 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_bigint_value || exact_string_concat || exact_string_convert ||
                 exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
                 exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
-                exact_identity_copy || exact_string_runes || exact_string_slice_range ||
-                exact_json_namespace_value || exact_panic_info_constructor ||
-                exact_array_member_result || exact_direct_callee || exact_go_callee ||
-                exact_go_task || exact_channel || exact_source_namespace ||
+                exact_identity_copy || exact_owner_forward || exact_string_runes ||
+                exact_string_slice_range || exact_json_namespace_value ||
+                exact_panic_info_constructor || exact_array_member_result || exact_direct_callee ||
+                exact_go_callee || exact_go_task || exact_channel || exact_source_namespace ||
                 exact_native_module_namespace || exact_string_byte_view || exact_range_slice_view ||
                 exact_string_byte_parameter || exact_unit_enum || exact_nullable_scalar ||
                 exact_adt_enum || exact_array_ref_parameter || exact_array_value_parameter ||
@@ -3504,6 +3508,21 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             expected_layout >= 0 && plan->layouts[expected_layout].kind == XR_TARGET_LAYOUT_DYNAMIC
                 ? 1
                 : -1;
+    } else if (exact_owner_forward) {
+        /* A transfer holds what its source held, so the expected kind is the
+         * source's. An unclaimed source leaves it unclaimed rather than
+         * ineligible, matching what the builder does. */
+        const XrTargetValueRepRecord *forward_source =
+            owner_forward_source != XR_SEMANTIC_INDEX_NONE
+                ? xr_target_plan_value_rep(plan, owner_forward_source)
+                : NULL;
+        if (forward_source) {
+            expected_kind = plan->machine_reps[forward_source->register_rep].kind;
+            expected_layout = target_plan_layout_for_type(plan, semantic_type);
+            eligibility = 1;
+        } else {
+            eligibility = 0;
+        }
     } else if (exact_identity_copy) {
         /* A rename holds what its source holds, so the expected kind is the
          * source's rather than one derived from this value's type. A source

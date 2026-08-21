@@ -46,6 +46,7 @@
 #include "../semantic/xr_semantic_native_module_shape.h"
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
+#include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_phi_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -6158,6 +6159,89 @@ static bool note_dynamic_phi_storage_value(XrTargetPlanBuilder *builder,
  * an allocation like any other this family binds -- the note function above
  * states the whole row, and this sweep only names which operations to ask it
  * about. */
+/* An owner transfer takes the representation its source already proved, the
+ * same way an identity copy does: the two differ in who owns the result, not
+ * in what is held. Propagates rather than decides, so it runs after the
+ * families that determine storage and declines a transfer whose source nothing
+ * claimed. */
+static bool builder_add_owner_forward_storage(XrTargetPlanBuilder *builder, char *error,
+                                              size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE, error, error_size))
+        return false;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    bool valid = true;
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+        if (!operation ||
+            !xr_semantic_owner_forward_is_exact(builder->semantic_plan, operation, &source_value))
+            continue;
+        const XrTargetValueIntent *source_intent = NULL;
+        bool result_claimed = false;
+        for (uint32_t v = 0; v < builder->value_intent_count; v++) {
+            uint32_t claimed = builder->value_intents[v].semantic_value;
+            if (claimed == operation->result_value)
+                result_claimed = true;
+            if (claimed == source_value)
+                source_intent = &builder->value_intents[v];
+        }
+        if (result_claimed || !source_intent)
+            continue;
+        /* The result names its own semantic type, which need not be the one the
+         * source named even though both hold the same thing. A binding without
+         * a layout for its type is refused downstream, so the transfer states
+         * one, carrying the source's memory representation. */
+        if (!append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0,
+                                  &source_intent->memory_rep, error, error_size)) {
+            valid = false;
+            break;
+        }
+        XrStableId slot_identity;
+        if (!make_slot_identity(builder->semantic_plan, operation->function,
+                                XR_TARGET_SLOT_TEMPORARY, operation->id, XR_SEMANTIC_INDEX_NONE,
+                                &slot_identity)) {
+            valid = fail(error, error_size, "XR_TARGET_1001",
+                         "owner forward slot identity is incomplete");
+            break;
+        }
+        XrTargetSlotIntent slot = {
+            .identity = slot_identity,
+            .function = operation->function,
+            .semantic_value = operation->result_value,
+            .semantic_operation = i,
+            .logical_slot = XR_SEMANTIC_INDEX_NONE,
+            .register_rep = source_intent->register_rep,
+            .memory_rep = source_intent->memory_rep,
+            .role = XR_TARGET_SLOT_TEMPORARY,
+            .root_kind = source_intent->memory_rep.root_kind,
+            .ownership = source_intent->memory_rep.ownership,
+            .debug_variable = XR_SEMANTIC_INDEX_NONE,
+        };
+        if (!append_slot_intent(builder, &slot, error, error_size)) {
+            valid = false;
+            break;
+        }
+        XrTargetValueIntent intent = {
+            .semantic_value = operation->result_value,
+            .semantic_function = operation->function,
+            .semantic_type = operation->result_type,
+            .register_rep = source_intent->register_rep,
+            .memory_rep = source_intent->memory_rep,
+            .slot_identity = slot_identity,
+            .has_slot = true,
+            .resolve_type_rep = false,
+        };
+        valid = append_value_intent(builder, &intent, error, error_size);
+    }
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_OWNER_FORWARD_STORAGE;
+    return true;
+}
+
 static bool builder_add_identity_copy_storage(XrTargetPlanBuilder *builder, char *error,
                                               size_t error_size) {
     if (!builder_begin_family(builder, XR_TARGET_FAMILY_IDENTITY_COPY_STORAGE, error, error_size))
@@ -12682,6 +12766,7 @@ static const XrTargetFamily k_target_families[] = {
     /* Propagates, so it runs after every family that decides storage and
      * before the call family that reads the result. */
     {"identity_copy_storage", builder_add_identity_copy_storage},
+    {"owner_forward_storage", builder_add_owner_forward_storage},
     {"calls_and_adapters", builder_add_calls_and_adapters},
     {"coroutine_state_calls", builder_add_coroutine_state_calls},
     {"dynamic_entry_expectations", builder_add_dynamic_entry_expectations},
