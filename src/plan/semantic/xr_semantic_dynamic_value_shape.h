@@ -71,14 +71,30 @@ xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
            operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
            operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
            operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
-           operation->allocation_key == NULL &&
-           xr_stable_id_equal(operation->allocation_id, zero) &&
+
            operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
            operation->view_source_value == XR_SEMANTIC_INDEX_NONE &&
            operation->view_element_type == XR_SEMANTIC_INDEX_NONE &&
            operation->view_source_operand == -1 && operation->view_source_parameter == -1 &&
            operation->view_origin == XI_VIEW_ORIGIN_NONE && operation->view_capability == 0 &&
            operation->view_lifetime == 0 && operation->view_complete == 0;
+}
+
+/* Whether the producer allocated what it holds.  A producer that allocates
+ * carries the identity of its allocation and a producer that does not carries
+ * none, and the roster states which of the two each one is rather than letting
+ * either pass unexamined. */
+static inline bool xr_semantic_dynamic_value_allocates(const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    return operation && operation->allocation_key != NULL &&
+           !xr_stable_id_equal(operation->allocation_id, zero);
+}
+
+static inline bool
+xr_semantic_dynamic_value_allocates_nothing(const XrSemanticOperationRecord *operation) {
+    XrStableId zero = {{0}};
+    return operation && operation->allocation_key == NULL &&
+           xr_stable_id_equal(operation->allocation_id, zero);
 }
 
 /* The roster of producers admitted to this family, and what each must state.
@@ -94,7 +110,12 @@ xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
  * XI_GET_SHARED a read of a module-level slot, which holds a tagged value and
  *              nothing else.  Its immediate names which slot, so unlike the
  *              other producers it is expected to carry one, and the read
- *              borrows what the slot owns rather than owning it. */
+ *              borrows what the slot owns rather than owning it.
+ * XI_AWAIT     the value a finished task handed back, which crosses the
+ *              coroutine boundary as one XrValue whatever its type -- so like a
+ *              slot read it is judged by the carrier rather than by the type.
+ * XI_CELL_NEW  a fresh cell holding a captured binding.  It allocates, which
+ *              every other producer here does not, and says so. */
 static inline bool
 xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *operation) {
     if (!operation)
@@ -103,11 +124,13 @@ xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *ope
         case XI_PHI:
             return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
                    operation->metadata_count == 0 && operation->semantic_immediate == 0 &&
-                   operation->constant == XR_SEMANTIC_INDEX_NONE;
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
         case XI_CONST:
             return operation->auxiliary_kind == XI_AUX_KIND_ENUM_NAMESPACE &&
                    operation->metadata_count != 0 && operation->semantic_immediate == 0 &&
-                   operation->constant != XR_SEMANTIC_INDEX_NONE;
+                   operation->constant != XR_SEMANTIC_INDEX_NONE &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
         case XI_GET_SHARED:
             return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
                    operation->metadata_count == 0 && operation->operand_count == 0 &&
@@ -115,7 +138,25 @@ xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *ope
                    operation->constant == XR_SEMANTIC_INDEX_NONE &&
                    operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
                    operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
-                   operation->return_complete == 1;
+                   operation->return_complete == 1 &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
+        case XI_AWAIT:
+            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                   operation->metadata_count == 0 && operation->operand_count == 1 &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                   operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                   operation->return_complete == 1 &&
+                   xr_semantic_dynamic_value_allocates_nothing(operation);
+        case XI_CELL_NEW:
+            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                   operation->metadata_count == 0 && operation->operand_count == 1 &&
+                   operation->semantic_immediate == 0 &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                   operation->return_provenance == XR_SEM_RETURN_OWNED &&
+                   operation->return_complete == 1 &&
+                   xr_semantic_dynamic_value_allocates(operation);
         default:
             return false;
     }
@@ -149,7 +190,7 @@ static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan
     /* A slot read is tagged because of the slot; the other producers are tagged
      * because of the type they carry, and only they are held to the narrow
      * test. */
-    return operation->opcode == XI_GET_SHARED
+    return (operation->opcode == XI_GET_SHARED || operation->opcode == XI_AWAIT)
                ? xr_semantic_dynamic_value_carrier_type_is_exact(type)
                : xr_semantic_dynamic_value_type_is_exact(type);
 }

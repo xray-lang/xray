@@ -134,7 +134,6 @@ tests/diff/cases/semantics/coro/task_result_failed_error_value.xr
 tests/diff/cases/semantics/coro/task_transfer_already_taken.xr
 tests/diff/cases/semantics/coro/task_transfer_return_local.xr
 tests/diff/cases/semantics/coro/task_transfer_return_map_set.xr
-tests/diff/cases/semantics/coro/task_transfer_return_native_class.xr
 tests/diff/cases/semantics/coro/work_queue_native_methods.xr
 tests/diff/cases/semantics/default_params/default_evaluated_per_call.xr
 tests/diff/cases/semantics/default_params/explicit_null_does_not_use_default.xr

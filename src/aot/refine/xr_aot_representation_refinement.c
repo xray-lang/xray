@@ -7525,8 +7525,6 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 xr_semantic_bigint_value_is_exact(ctx->semantic, operation))
                 return oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage,
                                                            out_machine_kind);
-            if (oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind))
-                return true;
             break;
         case XI_CALL_METHOD:
             if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
@@ -7624,7 +7622,14 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
      * storage class -- every object, code, dynamic, aggregate, vector and view
      * kind, and every nullable or aggregate type -- is refused here exactly as
      * before. The families that do carry those name their own storage above,
-     * and keep their priority. */
+     * and keep their priority.
+     *
+     * A value the plan bound as an untyped reference is one of the facts the
+     * plan already carries, so it is answered on the same terms: asking the
+     * family here rather than once per defining opcode is what keeps an opcode
+     * nobody has written a branch for from refusing a value the plan names. */
+    if (oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind))
+        return true;
     return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
 }
 
