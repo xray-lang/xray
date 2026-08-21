@@ -1,0 +1,57 @@
+// anchor: semantics-sealed-class-instance-method-call
+// VM/AOT differential coverage for calling an instance method on a class that
+// is not declared final but carries no override anywhere in the module graph.
+//
+// A module binding such a call states an obligation rather than a conclusion:
+// the binding holds provided nothing in the final graph subclasses the class.
+// A module can never check that -- it sees what it depends on, never what
+// depends on it -- so the semantic layer records the obligation and the layer
+// holding every plan in the graph discharges it. Neither class below is named
+// as any class's parent, so the graph seals both and their calls bind directly
+// rather than dispatching.
+//
+// A class that IS subclassed keeps its virtual dispatch; that path stays
+// refused for an unrelated reason (allocating an inheriting class has no exact
+// source-class authority yet), so it is not exercised here.
+
+class Plain {
+    n: int = 7
+
+    value() -> int {
+        return this.n
+    }
+
+    plus(k: int) -> int {
+        return this.n + k
+    }
+
+    relay() -> int {
+        return this.plus(1)
+    }
+}
+
+class Tally {
+    total: int = 2
+
+    add(k: int) -> int {
+        return this.total + k
+    }
+
+    twice(k: int) -> int {
+        return this.add(k) + this.add(k)
+    }
+}
+
+fn main() {
+    var p = Plain()
+    print(p.value())
+    print(p.plus(5))
+    print(p.relay())
+
+    var t = Tally()
+    print(t.add(9))
+    print(t.twice(3))
+    print(p.value() + t.add(1))
+}
+
+main()

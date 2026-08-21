@@ -217,7 +217,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     } while (0)
     /* Exact fixed-width bytes plus the four-byte length prefix for each possibly-empty string. */
     XR_MINIMUM_PAYLOAD(entities, 36u);
-    XR_MINIMUM_PAYLOAD(source_classes, 52u);
+    XR_MINIMUM_PAYLOAD(source_classes, 56u);
     XR_MINIMUM_PAYLOAD(source_methods, 40u);
     XR_MINIMUM_PAYLOAD(types, 64u);
     XR_MINIMUM_PAYLOAD(type_children, 4u);
@@ -417,6 +417,9 @@ static void decode_source_classes(XrXsmReader *reader, XrSemanticPlan *plan) {
         xr_xsm_take_bytes(reader, record->module.bytes, sizeof(record->module.bytes));
         record->module_path = take_plan_string(reader, plan, false);
         record->name = take_plan_string(reader, plan, false);
+        /* Optional: an empty name on the wire means the class declares no
+         * parent, and reads back as no edge rather than as a class named "". */
+        record->super_name = take_plan_string(reader, plan, true);
         record->ordinal = xr_xsm_take_u32(reader);
         record->method_count = xr_xsm_take_u16(reader);
         record->flags = xr_xsm_take_u8(reader);

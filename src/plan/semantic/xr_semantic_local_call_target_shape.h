@@ -31,7 +31,12 @@ xr_semantic_call_target_names_local_function(const XrSemanticCallTargetRecord *t
         return false;
     if (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL)
         return operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL;
-    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL)
+    /* A sealed candidate has the same operand shape as a proven local binding --
+     * receiver in operand 0, filling parameter 0. The two differ in whether the
+     * binding is proven or owed, which is a question for the layer holding the
+     * module graph, not for the shape. */
+    if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+        target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE)
         return operation->opcode == XI_CALL_METHOD;
     return false;
 }
@@ -44,7 +49,10 @@ xr_semantic_call_target_names_local_function(const XrSemanticCallTargetRecord *t
  * needs this same number. */
 static inline uint32_t
 xr_semantic_local_call_operand_shift(const XrSemanticCallTargetRecord *target) {
-    return (target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) ? 0u : 1u;
+    return (target && (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL ||
+                       target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE))
+               ? 0u
+               : 1u;
 }
 
 #endif /* XR_SEMANTIC_LOCAL_CALL_TARGET_SHAPE_H */

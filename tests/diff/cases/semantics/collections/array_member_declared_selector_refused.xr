@@ -1,18 +1,24 @@
 // anchor: array-member-declared-selector-refused
-// diff-backends: vm
-// diff-aot-reject: selector=fill intrinsic=0
 // A declared member that happens to spell one of the frozen container
 // selectors never reaches the container authority. `Box.fill` presents the same
 // selector, the same frozen method immediate and the same operand count as
 // `Array<T>.fill`, yet its receiver record carries the instance kind and its own
 // class authority instead of the array kind, so the operation is stamped with
-// no intrinsic identity (intrinsic=0) and the native backend refuses the module
-// rather than dispatching it as a container member.
+// no intrinsic identity (intrinsic=0).
+//
+// The native backend used to refuse the module outright. It now binds the call
+// to the body `Box` declares -- the class is named as no class's parent, so the
+// module graph seals it -- and the results below prove the binding reached that
+// body rather than any container operation: a container `fill` returns no sum
+// of its arguments, and a container `contains` does not compare against a
+// field.
 class Box {
-    total: int
+    total: int = 4
+
     fill(value: int, start: int, end: int) -> int {
         return this.total + value + start + end
     }
+
     contains(value: int) -> bool {
         return this.total == value
     }
@@ -27,7 +33,10 @@ fn holds(box: Box) -> bool {
 }
 
 fn main() {
-    print(7)
+    var b = Box()
+    print(spread(b))
+    print(holds(b))
+    print(b.contains(4))
 }
 
 main()

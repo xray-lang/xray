@@ -1001,6 +1001,11 @@ static bool build_source_classes(XrSemanticBuildContext *ctx, const XiFunc *root
         record->module = module_id;
         record->module_path = module_path;
         record->name = xr_semantic_plan_copy_string(ctx->plan, source->class_name);
+        record->super_name = source->super_name && source->super_name[0]
+                                 ? xr_semantic_plan_copy_string(ctx->plan, source->super_name)
+                                 : NULL;
+        if (source->super_name && source->super_name[0] && !record->super_name)
+            return fail(ctx, "XR_SEM_0019", "source-class parent name is incomplete");
         record->ordinal = c;
         record->method_count = source->nmethod;
         record->flags =
@@ -1011,14 +1016,16 @@ static bool build_source_classes(XrSemanticBuildContext *ctx, const XiFunc *root
                             ? XR_SEM_SOURCE_CLASS_GENERIC
                             : 0u));
         XrTextBuilder key = {0};
-        bool valid = record->name &&
-                     text_append_format(
-                         &key, "source-class-v1:schema=%u:module=", XR_SEMANTIC_SCHEMA_VERSION) &&
-                     text_append_stable_id(&key, record->module) && text_append(&key, ":path=") &&
-                     text_append_path_component(&key, record->module_path) &&
-                     text_append(&key, ":name=") && text_append_component(&key, record->name) &&
-                     text_append_format(&key, ":ordinal=%u:methods=%u:flags=%u", record->ordinal,
-                                        record->method_count, record->flags);
+        bool valid =
+            record->name &&
+            text_append_format(&key,
+                               "source-class-v1:schema=%u:module=", XR_SEMANTIC_SCHEMA_VERSION) &&
+            text_append_stable_id(&key, record->module) && text_append(&key, ":path=") &&
+            text_append_path_component(&key, record->module_path) && text_append(&key, ":name=") &&
+            text_append_component(&key, record->name) && text_append(&key, ":super=") &&
+            text_append_component(&key, record->super_name ? record->super_name : "") &&
+            text_append_format(&key, ":ordinal=%u:methods=%u:flags=%u", record->ordinal,
+                               record->method_count, record->flags);
         if (valid)
             record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
         text_dispose(&key);
@@ -2484,7 +2491,8 @@ static bool append_builtin_instance_yieldable_call_target(XrSemanticBuildContext
 
 static int resolve_source_instance_method_local(const XrSemanticBuildContext *ctx,
                                                 const XiValue *value, uint32_t operation,
-                                                uint32_t *receiver_type_out) {
+                                                uint32_t *receiver_type_out,
+                                                uint8_t *out_class_flags) {
     if (!value || value->op != XI_CALL_METHOD || value->nargs == 0 || !value->args[0] ||
         !value->aux || (value->aux_int & 1) != 0 || operation >= ctx->plan->operation_count)
         return -1;
@@ -2508,10 +2516,15 @@ static int resolve_source_instance_method_local(const XrSemanticBuildContext *ct
         return -1;
     const XrSemanticSourceClassRecord *source_class =
         &ctx->plan->source_classes[source_class_index];
-    uint8_t required = XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
-    if ((source_class->flags & required) != required ||
-        (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0)
+    /* A runtime type and a non-generic declaration are what make one body
+     * nameable at all. Being final is a different question: it is what makes
+     * binding that body safe without seeing the whole graph. Report it instead
+     * of requiring it, so the caller can record an obligation for the layer
+     * that does see the graph. */
+    if (!xr_semantic_source_class_can_name_one_method(source_class->flags))
         return -1;
+    if (out_class_flags)
+        *out_class_flags = source_class->flags;
     int match = -1;
     for (uint32_t f = 0; f < ctx->function_count; f++) {
         const XrFunctionMapEntry *candidate = &ctx->functions[f];
@@ -2534,7 +2547,9 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
                                                             const XiValue *value,
                                                             uint32_t operation) {
     uint32_t receiver_type = XR_SEMANTIC_INDEX_NONE;
-    int function = resolve_source_instance_method_local(ctx, value, operation, &receiver_type);
+    uint8_t class_flags = 0;
+    int function =
+        resolve_source_instance_method_local(ctx, value, operation, &receiver_type, &class_flags);
     if (function < 0)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
@@ -2554,7 +2569,11 @@ static bool append_source_instance_method_local_call_target(XrSemanticBuildConte
     record->source_export = XR_SEMANTIC_INDEX_NONE;
     record->callee_function = ctx->plan->functions[function].id;
     record->callable_type = receiver_type;
-    record->kind = XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+    /* Final says no subclass can exist anywhere, so the binding stands on its
+     * own. Without it the binding holds only if the final graph carries no
+     * override, which this module cannot know -- the row states that
+     * obligation and the graph-holding layer discharges it. */
+    record->kind = xr_semantic_source_instance_method_call_kind(class_flags);
     XrTextBuilder key = {0};
     bool valid =
         text_append_format(&key,

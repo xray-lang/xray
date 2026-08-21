@@ -312,6 +312,28 @@ static inline uint32_t xr_semantic_class_argument_source_class(const XrSemanticP
         plan, xr_semantic_plan_type(plan, parameter->type));
 }
 
+/* The class-level conditions for a method call to name one body, and which
+ * call-target kind that binding takes.
+ *
+ * A runtime type and a non-generic declaration are what make a body nameable at
+ * all. Being final is a different question: it says no subclass can exist
+ * anywhere, so the binding stands without seeing the whole module graph. A
+ * class that is not final can still name one body -- it just names it under an
+ * obligation the graph-holding layer has to discharge. So final does not gate
+ * the binding; it selects between stating a conclusion and stating an
+ * obligation. Both the builder and the verifier ask here, or one would refuse
+ * rows the other produces. */
+static inline bool xr_semantic_source_class_can_name_one_method(uint8_t flags) {
+    return (flags & XR_SEM_SOURCE_CLASS_RUNTIME_TYPE) != 0 &&
+           (flags & XR_SEM_SOURCE_CLASS_GENERIC) == 0;
+}
+
+static inline uint16_t xr_semantic_source_instance_method_call_kind(uint8_t flags) {
+    return (flags & XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL) != 0
+               ? (uint16_t) XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL
+               : (uint16_t) XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE;
+}
+
 /* One judgement for every way a class instance crosses a parameter boundary:
  * the receiver a constructor builds, the receiver an instance method borrows,
  * and an ordinary parameter declared with the class as its type. All three bind

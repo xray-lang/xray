@@ -1031,15 +1031,18 @@ static bool verify_source_classes(const XrSemanticPlan *plan, char *error, size_
         char expected[768];
         char module_id[XR_STABLE_ID_BYTES * 2 + 1];
         xr_stable_id_hex(source_class->module, module_id);
-        int length = snprintf(expected, sizeof(expected),
-                              "source-class-v1:schema=%u:module=%s:path=%zu:%s:name=%zu:%s:ordinal="
-                              "%u:methods=%u:flags=%u",
-                              XR_SEMANTIC_SCHEMA_VERSION, module_id,
-                              source_class->module_path ? strlen(source_class->module_path) : 0u,
-                              source_class->module_path ? source_class->module_path : "",
-                              source_class->name ? strlen(source_class->name) : 0u,
-                              source_class->name ? source_class->name : "", source_class->ordinal,
-                              source_class->method_count, source_class->flags);
+        int length =
+            snprintf(expected, sizeof(expected),
+                     "source-class-v1:schema=%u:module=%s:path=%zu:%s:name=%zu:%s:super="
+                     "%zu:%s:ordinal=%u:methods=%u:flags=%u",
+                     XR_SEMANTIC_SCHEMA_VERSION, module_id,
+                     source_class->module_path ? strlen(source_class->module_path) : 0u,
+                     source_class->module_path ? source_class->module_path : "",
+                     source_class->name ? strlen(source_class->name) : 0u,
+                     source_class->name ? source_class->name : "",
+                     source_class->super_name ? strlen(source_class->super_name) : 0u,
+                     source_class->super_name ? source_class->super_name : "",
+                     source_class->ordinal, source_class->method_count, source_class->flags);
         uint8_t allowed = XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE |
                           XR_SEM_SOURCE_CLASS_GENERIC;
         if (!module || !source_class->module_path || !source_class->module_path[0] ||
@@ -3402,10 +3405,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                 uint32_t source_class_index = plan->types[receiver->type].source_class;
                 const XrSemanticSourceClassRecord *source_class =
                     &plan->source_classes[source_class_index];
-                uint8_t required =
-                    XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL | XR_SEM_SOURCE_CLASS_RUNTIME_TYPE;
-                if ((source_class->flags & required) == required &&
-                    (source_class->flags & XR_SEM_SOURCE_CLASS_GENERIC) == 0) {
+                if (xr_semantic_source_class_can_name_one_method(source_class->flags)) {
                     const char *selector = plan->metadata[source_call->metadata_begin];
                     for (uint32_t f = 0; selector && f < plan->function_count; f++) {
                         const XrSemanticFunctionRecord *candidate = &plan->functions[f];
@@ -3547,7 +3547,9 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             source_instance_function != XR_SEMANTIC_INDEX_NONE && !source_namespace &&
             !native_namespace && !builtin_instance && direct_function == XR_SEMANTIC_INDEX_NONE &&
             !native_yieldable && indirect_type == XR_SEMANTIC_INDEX_NONE &&
-            target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL &&
+            source_instance_class < plan->source_class_count &&
+            target->kind == xr_semantic_source_instance_method_call_kind(
+                                plan->source_classes[source_instance_class].flags) &&
             target->function == source_instance_function &&
             target->dependency == XR_SEMANTIC_INDEX_NONE &&
             target->source_export == XR_SEMANTIC_INDEX_NONE &&

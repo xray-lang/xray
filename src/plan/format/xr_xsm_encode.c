@@ -68,6 +68,7 @@ static void encode_source_classes(XrXsmWriter *writer, const XrSemanticPlan *pla
         xr_xsm_put_bytes(writer, record->module.bytes, sizeof(record->module.bytes));
         xr_xsm_put_string(writer, record->module_path);
         xr_xsm_put_string(writer, record->name);
+        xr_xsm_put_string(writer, record->super_name ? record->super_name : "");
         xr_xsm_put_u32(writer, record->ordinal);
         xr_xsm_put_u16(writer, record->method_count);
         xr_xsm_put_u8(writer, record->flags);

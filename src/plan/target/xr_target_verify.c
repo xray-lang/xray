@@ -53,6 +53,7 @@
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
 #include "../semantic/xr_semantic_local_call_target_shape.h"
+#include "../semantic/xr_semantic_class_seal_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -5065,7 +5066,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 ? xr_semantic_plan_operation(semantic, target->operation)
                 : NULL;
         bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-                                 target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
+                                 xr_semantic_call_target_binds_instance_method(
+                                     target, semantic, plan->semantic_dependencies,
+                                     plan->semantic_dependency_count));
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
@@ -5125,12 +5128,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(semantic, call->semantic_operation);
         bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-                                 target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
+                                 xr_semantic_call_target_binds_instance_method(
+                                     target, semantic, plan->semantic_dependencies,
+                                     plan->semantic_dependency_count));
         /* The receiver fills parameter 0, so a method call's operands line up
          * with the parameter list one to one while a direct call's run one
          * ahead. Both the head-operand check and the loop below need to know
          * which. */
-        bool method = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+        bool method = xr_semantic_local_call_operand_shift(target) == 0u;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;

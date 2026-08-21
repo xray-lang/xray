@@ -51,6 +51,7 @@
 #include "../semantic/xr_semantic_const_variant_shape.h"
 #include "../semantic/xr_semantic_direct_callee_shape.h"
 #include "../semantic/xr_semantic_local_call_target_shape.h"
+#include "../semantic/xr_semantic_class_seal_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -365,6 +366,8 @@ static const char *target_trace_call_target_kind_name(uint8_t kind) {
             return "BUILTIN_INSTANCE_YIELDABLE";
         case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL:
             return "SOURCE_INSTANCE_METHOD_LOCAL";
+        case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE:
+            return "SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE";
         case XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN:
             return "SOURCE_INSTANCE_METHOD_OPEN";
         case XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR:
@@ -9214,7 +9217,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
      * it. The two therefore differ by exactly one position: the method's
      * operands line up with the parameters one-to-one, while a direct call's
      * are shifted by the callee operand, which fills no parameter. */
-    bool method = target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+    bool method = xr_semantic_local_call_operand_shift(target) == 0u;
     uint32_t operand_shift = xr_semantic_local_call_operand_shift(target);
     if (!operation || !callee ||
         !xr_semantic_call_target_names_local_function(target, operation,
@@ -9850,8 +9853,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
          * function exactly as a direct local call does, and the plan verifier
          * already builds its suspendability edge. Consume it here on the same
          * terms, or a target the semantic layer proved is refused as uncovered. */
-        bool instance_method_local =
-            target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+        bool instance_method_local = xr_semantic_call_target_binds_instance_method(
+            target, plan, builder->semantic_dependencies, builder->semantic_dependency_count);
         bool names_local_function =
             xr_semantic_call_target_names_local_function(target, operation, function_count);
         if (!target || !operation ||
@@ -9985,7 +9988,9 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
             const XrSemanticCallTargetRecord *target =
                 xr_semantic_plan_call_target(plan, target_index);
             if (target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-                           target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL)) {
+                           xr_semantic_call_target_binds_instance_method(
+                               target, plan, builder->semantic_dependencies,
+                               builder->semantic_dependency_count))) {
                 valid = collect_direct_local_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0,
                     target->function < function_count && suspendable[target->function] != 0, error,

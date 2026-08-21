@@ -113,6 +113,14 @@ typedef enum XrSemanticCallTargetKind {
      * reaches that body through the declaration rather than through this row.
      * A construction whose call may suspend is outside this kind. */
     XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR,
+    /* A method call that resolves to one body in this module, on a class that
+     * is not declared final. The row states an obligation rather than a
+     * conclusion: this call reaches that body PROVIDED no class in the final
+     * module graph overrides the method. A module cannot check that -- it sees
+     * what it depends on, never what depends on it -- so the layer holding the
+     * whole graph decides, and consumes this the way it consumes the local kind
+     * once it has. Unconsumed, the row binds nothing. */
+    XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_SEALED_CANDIDATE,
     XR_SEM_CALL_TARGET_KIND_COUNT,
 } XrSemanticCallTargetKind;
 
@@ -285,6 +293,14 @@ typedef struct XrSemanticSourceClassRecord {
     XrStableId module;
     const char *module_path;
     const char *name;
+    /* The declared parent's name, or NULL when the class declares none. The
+     * inheritance edge is a property of the module itself, so it belongs in
+     * this frozen snapshot; deciding whether a class has any subclass needs the
+     * whole module graph and belongs to the layer that holds one. Names rather
+     * than identities: a subclass names the parent it was compiled against, and
+     * a graph carrying two classes of one name cannot answer the question at
+     * all, so the reader refuses instead of guessing. */
+    const char *super_name;
     uint32_t ordinal;
     uint16_t method_count;
     uint8_t flags;
