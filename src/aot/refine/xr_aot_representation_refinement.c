@@ -8073,10 +8073,16 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             }
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_AWAIT:
+            /* The semantic plan decides whether this operand is the task being
+             * awaited; the storage question left over is only which family
+             * bound it. A task the caller spawned is one answer, a task read
+             * out of a shared slot is another, and both reach the await in the
+             * one tagged carrier the wait takes. */
             if (!xr_semantic_await_task_operand_is_exact(ctx->semantic, operation, operand_index,
                                                          source_value) ||
-                !oracle_dynamic_direct_local_go_task_storage(ctx, source_value, out_storage,
-                                                             &ignored_kind))
+                (!oracle_dynamic_direct_local_go_task_storage(ctx, source_value, out_storage,
+                                                              &ignored_kind) &&
+                 !oracle_dynamic_value_storage(ctx, source_value, out_storage, &ignored_kind)))
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
