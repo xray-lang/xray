@@ -50,7 +50,7 @@
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_owner_forward_shape.h"
-#include "../semantic/xr_semantic_dynamic_phi_shape.h"
+#include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
 #include "../semantic/xr_semantic_panic_info_shape.h"
@@ -1675,7 +1675,8 @@ static bool reconstruct_value_slot_identity(const XrTargetPlan *plan,
         if (!operation || operation->function != semantic_function ||
             operation->result_value != semantic_value || operation->opcode == XI_PARAM)
             return false;
-        expected_role = operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI : XR_TARGET_SLOT_TEMPORARY;
+        expected_role = xr_semantic_dynamic_value_is_join(operation) ? XR_TARGET_SLOT_PHI
+                                                                     : XR_TARGET_SLOT_TEMPORARY;
         source = operation->id;
     }
     if (slot->role != expected_role)
@@ -3168,7 +3169,7 @@ static bool collect_exact_dynamic_types(
                                                     NULL) ||
             operation_is_exact_json_namespace_value(plan->semantic_plan, operation, NULL) ||
             xr_semantic_panic_info_constructor_is_exact(plan->semantic_plan, operation, NULL) ||
-            xr_semantic_dynamic_phi_is_exact(plan->semantic_plan, operation) ||
+            xr_semantic_dynamic_value_is_exact(plan->semantic_plan, operation) ||
             exact_array_member_result ||
             (exact_direct_callees && exact_direct_callees[operation->result_value] != 0) ||
             (exact_go_callees && exact_go_callees[operation->result_value] != 0) ||
@@ -3242,10 +3243,10 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                              operation->result_value == semantic_value &&
                              operation->result_type == semantic_type &&
                              operation->function == semantic_function;
-    bool exact_dynamic_phi = xr_semantic_dynamic_phi_is_exact(plan->semantic_plan, operation) &&
-                             operation->result_value == semantic_value &&
-                             operation->result_type == semantic_type &&
-                             operation->function == semantic_function;
+    bool exact_dynamic_value = xr_semantic_dynamic_value_is_exact(plan->semantic_plan, operation) &&
+                               operation->result_value == semantic_value &&
+                               operation->result_type == semantic_type &&
+                               operation->function == semantic_function;
     bool exact_array_allocation =
         semantic_array_allocation_is_exact(plan->semantic_plan, operation);
     bool exact_array_intrinsic =
@@ -3450,7 +3451,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     if (scalar_channel_receive && !exact_channel_receive)
         XR_VALUE_BINDING_FAIL(10);
     int eligibility =
-        operation_result_void || exact_heap_closure || exact_panic_catch || exact_dynamic_phi ||
+        operation_result_void || exact_heap_closure || exact_panic_catch || exact_dynamic_value ||
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
                 exact_container_copy || exact_array_fill || exact_array_shared_read ||
                 exact_string_shared_read || exact_array_ref_place_load || exact_class_object ||
@@ -3492,7 +3493,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             ? semantic_aggregate_eligibility(plan->semantic_plan, semantic_type, aggregate_stack, 0)
             : 0;
     int expected_layout = -1;
-    if (exact_heap_closure || exact_panic_catch || exact_dynamic_phi || exact_array_allocation ||
+    if (exact_heap_closure || exact_panic_catch || exact_dynamic_value || exact_array_allocation ||
         exact_class_object || exact_array_intrinsic || exact_array_hof_result ||
         exact_container_copy || exact_array_shared_read || exact_string_shared_read ||
         exact_array_ref_place_load || exact_array_fill || exact_class_instance ||

@@ -47,7 +47,7 @@
 #include "../semantic/xr_semantic_container_copy_shape.h"
 #include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_owner_forward_shape.h"
-#include "../semantic/xr_semantic_dynamic_phi_shape.h"
+#include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
 #include "../semantic/xr_semantic_panic_info_shape.h"
@@ -6112,18 +6112,17 @@ static bool builder_add_json_namespace_value_storage(XrTargetPlanBuilder *builde
     return true;
 }
 
-static bool note_dynamic_phi_storage_value(XrTargetPlanBuilder *builder,
-                                           XrTargetValueStorageAnalysis *analysis,
-                                           uint32_t semantic_operation, char *error,
-                                           size_t error_size) {
+static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
+                                             XrTargetValueStorageAnalysis *analysis,
+                                             uint32_t semantic_operation, char *error,
+                                             size_t error_size) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
-    if (!xr_semantic_dynamic_phi_is_exact(builder->semantic_plan, operation) ||
+    if (!xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation) ||
         operation->result_value >= analysis->total_values)
-        return fail(error, error_size, "XR_TARGET_1001",
-                    "dynamic merge result authority is incomplete");
+        return fail(error, error_size, "XR_TARGET_1001", "dynamic value authority is incomplete");
     /* A value an earlier family already bound is not this family's to claim:
-     * a merge some other judgement could narrow belongs to that judgement. */
+     * a producer some other judgement could narrow belongs to that judgement. */
     if (analysis->defined_values[operation->result_value])
         return true;
     XrTargetMachineRepRecord rep;
@@ -6131,11 +6130,13 @@ static bool note_dynamic_phi_storage_value(XrTargetPlanBuilder *builder,
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
                     "target profile cannot materialize a dynamic merge result");
+    XrTargetSlotRole role = xr_semantic_dynamic_value_is_join(operation) ? XR_TARGET_SLOT_PHI
+                                                                         : XR_TARGET_SLOT_TEMPORARY;
     XrStableId slot_identity;
-    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_PHI,
-                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+    if (!make_slot_identity(builder->semantic_plan, operation->function, role, operation->id,
+                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "dynamic merge result slot identity is incomplete");
+                    "dynamic value slot identity is incomplete");
     XrTargetSlotIntent slot = {
         .identity = slot_identity,
         .function = operation->function,
@@ -6144,7 +6145,7 @@ static bool note_dynamic_phi_storage_value(XrTargetPlanBuilder *builder,
         .logical_slot = XR_SEMANTIC_INDEX_NONE,
         .register_rep = rep,
         .memory_rep = rep,
-        .role = XR_TARGET_SLOT_PHI,
+        .role = role,
         .root_kind = XR_TARGET_ROOT_DYNAMIC,
         .ownership = XR_TARGET_OWNERSHIP_OWNED,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
@@ -6362,9 +6363,9 @@ static bool builder_add_container_copy_result_storage(XrTargetPlanBuilder *build
     return true;
 }
 
-static bool builder_add_dynamic_phi_storage(XrTargetPlanBuilder *builder, char *error,
-                                            size_t error_size) {
-    if (!builder_begin_family(builder, XR_TARGET_FAMILY_DYNAMIC_PHI_STORAGE, error, error_size))
+static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char *error,
+                                              size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE, error, error_size))
         return false;
     XrTargetValueStorageAnalysis analysis = {0};
     bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
@@ -6379,15 +6380,15 @@ static bool builder_add_dynamic_phi_storage(XrTargetPlanBuilder *builder, char *
     for (uint32_t i = 0; valid && i < count; i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
-        if (xr_semantic_dynamic_phi_is_exact(builder->semantic_plan, operation))
-            valid = note_dynamic_phi_storage_value(builder, &analysis, i, error, error_size);
+        if (xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation))
+            valid = note_dynamic_value_storage_value(builder, &analysis, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
     if (!valid) {
         builder->poisoned = true;
         return false;
     }
-    builder->completed_family_mask |= XR_TARGET_FAMILY_DYNAMIC_PHI_STORAGE;
+    builder->completed_family_mask |= XR_TARGET_FAMILY_DYNAMIC_VALUE_STORAGE;
     return true;
 }
 
@@ -12773,7 +12774,7 @@ static const XrTargetFamily k_target_families[] = {
     {"stringbuilder_append_string_storage", builder_add_stringbuilder_append_string_storage},
     {"json_namespace_value_storage", builder_add_json_namespace_value_storage},
     {"panic_info_constructor_storage", builder_add_panic_info_constructor_storage},
-    {"dynamic_phi_storage", builder_add_dynamic_phi_storage},
+    {"dynamic_value_storage", builder_add_dynamic_value_storage},
     {"container_copy_result_storage", builder_add_container_copy_result_storage},
     {"direct_local_string_boundary_storage", builder_add_direct_local_string_boundary_storage},
     {"adt_enum_storage", builder_add_adt_enum_storage},

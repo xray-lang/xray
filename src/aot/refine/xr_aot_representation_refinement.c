@@ -38,7 +38,7 @@
 #include "../../plan/semantic/xr_semantic_native_module_shape.h"
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../plan/semantic/xr_semantic_container_copy_shape.h"
-#include "../../plan/semantic/xr_semantic_dynamic_phi_shape.h"
+#include "../../plan/semantic/xr_semantic_dynamic_value_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_catch_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../plan/semantic/xr_semantic_scalar_copy_shape.h"
@@ -4280,8 +4280,8 @@ static bool oracle_dynamic_array_fill_scalar_storage(const VerifyAuthority *ctx,
 
 /* The tagged carrier a dynamic merge hands out.  Rebuilt from the frozen row
  * rather than read off it, on the same terms as every other dynamic family. */
-static bool oracle_dynamic_phi_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
-                                       XrRep *out_storage, uint16_t *out_machine_kind) {
+static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                         XrRep *out_storage, uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
         return false;
     uint32_t operation_index = ctx->operation_by_value[semantic_value];
@@ -4290,7 +4290,7 @@ static bool oracle_dynamic_phi_storage(const VerifyAuthority *ctx, uint32_t sema
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
     if (!operation || operation->result_value != semantic_value ||
-        !xr_semantic_dynamic_phi_is_exact(ctx->semantic, operation))
+        !xr_semantic_dynamic_value_is_exact(ctx->semantic, operation))
         return false;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
@@ -4311,7 +4311,9 @@ static bool oracle_dynamic_phi_storage(const VerifyAuthority *ctx, uint32_t sema
         register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
         memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
         slot->semantic_value != semantic_value || slot->semantic_operation != operation_index ||
-        slot->function != operation->function || slot->role != XR_TARGET_SLOT_PHI ||
+        slot->function != operation->function ||
+        slot->role != (xr_semantic_dynamic_value_is_join(operation) ? XR_TARGET_SLOT_PHI
+                                                                    : XR_TARGET_SLOT_TEMPORARY) ||
         slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC || slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
         return false;
@@ -5653,8 +5655,9 @@ static bool oracle_nullable_scalar_storage(const VerifyAuthority *ctx, uint32_t 
         slot->semantic_operation != (parameter ? XR_SEMANTIC_INDEX_NONE : operation_index) ||
         slot->function != (parameter ? parameter->function : operation->function) ||
         slot->role != (parameter ? XR_TARGET_SLOT_PARAMETER
-                                 : (operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI
-                                                                : XR_TARGET_SLOT_TEMPORARY)) ||
+                                 : (xr_semantic_dynamic_value_is_join(operation)
+                                        ? XR_TARGET_SLOT_PHI
+                                        : XR_TARGET_SLOT_TEMPORARY)) ||
         slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
         slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
@@ -7503,7 +7506,7 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
                 return true;
             }
-            if (oracle_dynamic_phi_storage(ctx, semantic_value, out_storage, out_machine_kind))
+            if (oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind))
                 return true;
             break;
         case XI_BOX:
@@ -7515,6 +7518,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 xr_semantic_bigint_value_is_exact(ctx->semantic, operation))
                 return oracle_dynamic_heap_literal_storage(ctx, semantic_value, out_storage,
                                                            out_machine_kind);
+            if (oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind))
+                return true;
             break;
         case XI_CALL_METHOD:
             if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
@@ -8732,7 +8737,7 @@ static bool oracle_tagged_reference_carrier_storage(const VerifyAuthority *ctx,
            oracle_dynamic_closure_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
            oracle_dynamic_container_copy_storage(ctx, semantic_value, out_storage,
                                                  out_machine_kind) ||
-           oracle_dynamic_phi_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
            oracle_dynamic_panic_catch_storage(ctx, semantic_value, out_storage, out_machine_kind) ||
            oracle_dynamic_stringbuilder_storage(ctx, semantic_value, out_storage,
                                                 out_machine_kind) ||
