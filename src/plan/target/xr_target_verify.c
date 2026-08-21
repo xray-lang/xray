@@ -6428,7 +6428,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->flags == 0 &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
                     call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
-                    call->result_ownership == XR_TARGET_CALL_NONE && result &&
+                    /* A member handing its receiver back claims nothing, while one that
+                     * builds a string returns a fresh value the caller releases. Both
+                     * bind the same dynamic owned slot, so the ownership word is what
+                     * tells them apart. */
+                    (array_member_receiver_result
+                         ? (call->result_ownership == XR_TARGET_CALL_NONE ||
+                            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED)
+                         : call->result_ownership == XR_TARGET_CALL_NONE) &&
+                    result &&
                     (array_member_receiver_result
                          ? result->slot < plan->slots_count &&
                                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
