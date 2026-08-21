@@ -4,20 +4,24 @@
 // line up with the parameter list one to one -- unlike a plain call, whose
 // operand 0 is the callee and fills no parameter at all. The receiver crosses
 // the boundary as a borrow: the caller keeps the allocation and answers for
-// it, while the method reads through the same tagged value.
+// it, while the method reads through the same instance.
 //
 // Before the direct-local call family bound this shape, the semantic layer
 // proved the target and each layer below refused it in turn -- no adapter
 // consumed the kind, no collector built an intent, and no boundary described
 // the owning-to-borrowing hand-over.
 //
-// The class declares no explicit constructor on purpose. One makes the emitter
-// build the instance on the stack as a bare object pointer while the plan
-// states the outer tagged value, and that representation split belongs to the
-// emitter cutover rather than to this call family.
+// Both construction paths are covered. A declared constructor lets the emitter
+// inline it and keep the object in a C local as a bare pointer; a class with
+// none is allocated and boxed. The call site has to spell the receiver the way
+// the emitter actually built it, not the way the plan names its storage.
 
 final class Counter {
-    n: int = 7
+    n: int
+
+    constructor(n: int) {
+        this.n = n
+    }
 
     value() -> int {
         return this.n
@@ -40,14 +44,30 @@ final class Counter {
     }
 }
 
+final class Boxed {
+    m: int = 4
+
+    value() -> int {
+        return this.m
+    }
+
+    plus(k: int) -> int {
+        return this.m + k
+    }
+}
+
 fn main() {
-    var c = Counter()
+    var c = Counter(7)
     print(c.value())
     print(c.twice())
     print(c.plus(5))
     print(c.scaled(3, 2))
     print(c.relay())
     print(c.value() + c.plus(1))
+
+    var b = Boxed()
+    print(b.value())
+    print(b.plus(6))
 }
 
 main()
