@@ -7494,6 +7494,11 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (oracle_dynamic_source_class_instance_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind))
                 return true;
+            /* A slot whose value has no narrower type holds the tagged value
+             * the family bound for it; the machine judgement below answers only
+             * for slots some narrower family already typed. */
+            if (oracle_dynamic_value_storage(ctx, semantic_value, out_storage, out_machine_kind))
+                return true;
             XrRep machine_storage = XR_REP_TAGGED;
             if (!oracle_machine_storage(ctx, semantic_value, &machine_storage, out_machine_kind))
                 return false;
