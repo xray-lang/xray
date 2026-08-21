@@ -617,8 +617,26 @@ vmcase(OP_TAILCALL) {
     size_t stack_max = vm_ctx->stack_capacity;
 
     if (required_stack_size > stack_max) {
-        VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: need %zu, max %zu",
-                         required_stack_size, stack_max);
+        /* A tail call reuses this frame, so it adds no call depth -- but the
+         * callee's register window can be wider than the caller's. Grow the
+         * coroutine stack rather than refuse: the coroutine stack starts small
+         * and is meant to grow on demand, and refusing here would reject a
+         * call that costs no depth at all. Only a real depth limit
+         * (XR_STACK_MAX) still refuses. */
+        XrCoroutine *grow_coro = (XrCoroutine *) VMCTX_CORO(vm_ctx);
+        size_t stack_used = (size_t) (VM_STACK_TOP - VM_STACK);
+        int grow_by = (int) (required_stack_size - stack_max) + 64;
+        if (!grow_coro || required_stack_size > (size_t) XR_STACK_MAX ||
+            !xr_coro_grow_stack(grow_coro, grow_by)) {
+            VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: need %zu, max %zu",
+                             required_stack_size, stack_max);
+        }
+        /* Growing reallocates both the value stack and the frame array; every
+         * pointer derived from either is stale from here on. */
+        ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
+        frame = ci;
+        base = VM_STACK + ci->base_offset;
+        VM_SET_STACK_TOP(VM_STACK + stack_used);
     }
 
     /* Step 1: move arguments to base position
