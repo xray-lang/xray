@@ -1,0 +1,53 @@
+// anchor: semantics-final-class-instance-method-call
+// VM/AOT differential coverage for calling an instance method on a final
+// class. The receiver is the callee's first parameter, so the call's operands
+// line up with the parameter list one to one -- unlike a plain call, whose
+// operand 0 is the callee and fills no parameter at all. The receiver crosses
+// the boundary as a borrow: the caller keeps the allocation and answers for
+// it, while the method reads through the same tagged value.
+//
+// Before the direct-local call family bound this shape, the semantic layer
+// proved the target and each layer below refused it in turn -- no adapter
+// consumed the kind, no collector built an intent, and no boundary described
+// the owning-to-borrowing hand-over.
+//
+// The class declares no explicit constructor on purpose. One makes the emitter
+// build the instance on the stack as a bare object pointer while the plan
+// states the outer tagged value, and that representation split belongs to the
+// emitter cutover rather than to this call family.
+
+final class Counter {
+    n: int = 7
+
+    value() -> int {
+        return this.n
+    }
+
+    twice() -> int {
+        return this.n + this.n
+    }
+
+    plus(k: int) -> int {
+        return this.n + k
+    }
+
+    scaled(a: int, b: int) -> int {
+        return this.n * a + b
+    }
+
+    relay() -> int {
+        return this.twice()
+    }
+}
+
+fn main() {
+    var c = Counter()
+    print(c.value())
+    print(c.twice())
+    print(c.plus(5))
+    print(c.scaled(3, 2))
+    print(c.relay())
+    print(c.value() + c.plus(1))
+}
+
+main()

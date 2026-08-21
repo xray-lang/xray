@@ -5064,7 +5064,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             target && target->operation < semantic_operations
                 ? xr_semantic_plan_operation(semantic, target->operation)
                 : NULL;
-        bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+        bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                                 target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
@@ -5074,8 +5075,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             target && target->kind == XR_SEM_CALL_TARGET_BUILTIN_INSTANCE_YIELDABLE;
         if (!target || !operation ||
             (!direct && !source && !native_namespace && !class_construction && !builtin_instance) ||
-            (direct && target->function >= semantic_functions) ||
-            (direct && operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+            (direct && !xr_semantic_call_target_names_local_function(target, operation,
+                                                                     semantic_functions)) ||
             (source && operation->opcode != XI_CALL_METHOD && operation->opcode != XI_CALL) ||
             (native_namespace && operation->opcode != XI_CALL_METHOD) ||
             (class_construction && operation->opcode != XI_CALL) ||
@@ -5123,7 +5124,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                             : NULL;
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(semantic, call->semantic_operation);
-        bool direct = target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL;
+        bool direct = target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                                 target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
+        /* The receiver fills parameter 0, so a method call's operands line up
+         * with the parameter list one to one while a direct call's run one
+         * ahead. Both the head-operand check and the loop below need to know
+         * which. */
+        bool method = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
         bool source = target && target->kind == XR_SEM_CALL_TARGET_SOURCE_EXPORT;
         bool native_namespace =
             target && target->kind == XR_SEM_CALL_TARGET_NATIVE_NAMESPACE_YIELDABLE;
@@ -5382,11 +5389,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         if (direct) {
             valid =
                 target && callee && target->operation == call->semantic_operation &&
-                target->function < semantic_functions &&
-                target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
-                (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL) &&
+                xr_semantic_call_target_names_local_function(target, operation,
+                                                             semantic_functions) &&
                 suspends == expected_suspend && operation->result_type == callee->return_type &&
-                operation->operand_count == (uint32_t) callee->parameter_count + 1u &&
+                operation->operand_count == (uint32_t) callee->parameter_count +
+                                                xr_semantic_local_call_operand_shift(target) &&
                 callee->parameter_begin <= xr_semantic_plan_parameter_count(semantic) &&
                 callee->parameter_count <=
                     xr_semantic_plan_parameter_count(semantic) - callee->parameter_begin &&
@@ -5418,14 +5425,18 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                   plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL));
             if (!valid)
                 break;
+            /* Only a direct call has a head operand outside the parameter list;
+             * the method's receiver is checked in the loop like every other
+             * argument, under the parameter it fills. */
             const XrSemanticOperandRecord *callee_operand = &operands[operation->operand_begin];
-            valid = callee_operand->role == XR_SEM_OPERAND_CALLEE &&
-                    callee_operand->parameter == -1 &&
-                    (callee_operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0;
+            valid = method || (callee_operand->role == XR_SEM_OPERAND_CALLEE &&
+                               callee_operand->parameter == -1 &&
+                               (callee_operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0);
             for (uint32_t ordinal = 0; valid && ordinal < call->argument_count; ordinal++) {
                 const XrTargetCallArgumentRecord *argument = &plan->call_arguments[next_argument];
                 uint32_t parameter_index = callee->parameter_begin + ordinal;
-                uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
+                uint32_t semantic_operand = operation->operand_begin + ordinal +
+                                            xr_semantic_local_call_operand_shift(target);
                 const XrSemanticParameterRecord *parameter =
                     xr_semantic_plan_parameter(semantic, parameter_index);
                 const XrSemanticOperandRecord *operand = &operands[semantic_operand];
@@ -5500,9 +5511,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 /* Recomputed through the same shared judgement the callee's own
                  * storage family uses, so an argument this verifier admits can
                  * never be a parameter that family refused. */
+                /* A receiver is a class instance crossing a parameter boundary
+                 * just as a declared class parameter is; the shared judgement
+                 * covers both, plus the constructor receiver. Asking only about
+                 * the declared-parameter form would refuse every `this`, whose
+                 * type row is the anonymous instance naming no declaration. */
                 bool argument_class_instance =
                     parameter && parameter->type == operand->type &&
-                    xr_semantic_class_argument_source_class(semantic, parameter_index) !=
+                    xr_semantic_class_instance_parameter_source_class(semantic, parameter_index) !=
                         XR_SEMANTIC_INDEX_NONE;
                 uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
                                         ? XR_TARGET_CALL_CONSUME
@@ -5559,6 +5575,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                                                    argument_string_callee_owns
                                                                ? XR_TARGET_OWNERSHIP_OWNED
                                                                : XR_TARGET_OWNERSHIP_BORROWED);
+                /* A receiver hands its instance to the method as a borrow: the
+                 * caller keeps the allocation and answers for it, the method
+                 * only reads through the same tagged value. One carrier under
+                 * two ownerships -- the shape this boundary describes. */
+                bool class_instance_borrow_boundary =
+                    argument_class_instance &&
+                    verify_tagged_container_value_boundary(plan, caller_value, callee_value,
+                                                           XR_TARGET_OWNERSHIP_BORROWED);
                 const char *argument_identity_domain =
                     argument_array_ref ? "xray-target-direct-array-ref-argument-v1"
                                        : "xray-target-call-argument-v1";
@@ -5571,9 +5595,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     xr_semantic_raw_pointer_argument_satisfies_parameter(
                         xr_semantic_plan_type(semantic, operand->type),
                         xr_semantic_plan_type(semantic, parameter->type));
+                bool receiver_slot = method && ordinal == 0;
                 valid =
-                    parameter && operand->role == XR_SEM_OPERAND_ARGUMENT &&
-                    operand->parameter == (int16_t) ordinal &&
+                    parameter &&
+                    operand->role ==
+                        (receiver_slot ? XR_SEM_OPERAND_RECEIVER : XR_SEM_OPERAND_ARGUMENT) &&
+                    operand->parameter ==
+                        (method ? (int16_t) ((int32_t) ordinal - 1) : (int16_t) ordinal) &&
                     (operand->type == parameter->type || argument_pointer_weakens) &&
                     operand->parameter_mode == parameter->mode &&
                     operand->transfer_mode == parameter->transfer_mode &&
@@ -5611,7 +5639,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     ((caller_value->register_rep == callee_value->register_rep &&
                       caller_value->memory_rep == callee_value->memory_rep) ||
                      adt_enum_borrow_boundary || array_ref_borrow_boundary ||
-                     container_value_borrow_boundary) &&
+                     container_value_borrow_boundary || class_instance_borrow_boundary) &&
                     plan->machine_reps[argument->register_rep].kind ==
                         (argument_u8_slice         ? XR_MACHINE_REP_VIEW
                          : argument_unit_enum      ? XR_MACHINE_REP_ENUM_ORDINAL
@@ -6439,8 +6467,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
     }
     for (uint32_t i = 0; valid && i < semantic_operations; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
-        if (operation_is_call_shaped(semantic, operation) && !covered[i])
+        if (operation_is_call_shaped(semantic, operation) && !covered[i]) {
             valid = false;
+        }
     }
     valid = valid && next_argument == plan->call_arguments_count &&
             next_adapter == plan->adapters_count;

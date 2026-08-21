@@ -9206,21 +9206,33 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(plan, target->operation);
     const XrSemanticFunctionRecord *callee = xr_semantic_plan_function(plan, target->function);
-    if (!operation || !callee || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+    /* Two spellings reach this family. A direct local call puts the callee in
+     * operand 0 and the declared parameters in the rest. A source instance
+     * method resolved to one body puts the receiver in operand 0, and that
+     * receiver IS the callee's first parameter -- `this` is declared like any
+     * other, carrying the same type, mode and transfer as the operand filling
+     * it. The two therefore differ by exactly one position: the method's
+     * operands line up with the parameters one-to-one, while a direct call's
+     * are shifted by the callee operand, which fills no parameter. */
+    bool method = target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL;
+    uint32_t operand_shift = xr_semantic_local_call_operand_shift(target);
+    if (!operation || !callee ||
+        !xr_semantic_call_target_names_local_function(target, operation,
+                                                      xr_semantic_plan_function_count(plan)) ||
         operation->function >= xr_semantic_plan_function_count(plan) ||
         operation->operand_count == 0 || operation->operand_begin > operand_table_count ||
         operation->operand_count > operand_table_count - operation->operand_begin)
         return fail(error, error_size, "XR_TARGET_1003",
-                    "only exact DIRECT_LOCAL call operations are supported");
-    bool expected_suspend = (operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 ||
-                            operation->opcode == XI_GO ||
-                            (operation->opcode == XI_CALL && callee_suspendable);
+                    "only exact local call operations are supported");
+    bool expected_suspend =
+        (operation->effects & XI_EFFECT_MAY_SUSPEND) != 0 || operation->opcode == XI_GO ||
+        ((operation->opcode == XI_CALL || operation->opcode == XI_CALL_METHOD) &&
+         callee_suspendable);
     if (expected_suspend != suspends)
         return fail(error, error_size, "XR_TARGET_1003",
                     "coroutine call lacks exact suspension-state authority");
     if (callee->parameter_count == UINT16_MAX ||
-        operation->operand_count != (uint32_t) callee->parameter_count + 1u ||
+        operation->operand_count != (uint32_t) callee->parameter_count + operand_shift ||
         callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
         callee->parameter_count >
             xr_semantic_plan_parameter_count(plan) - callee->parameter_begin ||
@@ -9242,7 +9254,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                     "[target]   callee function=%u, declares %u parameters from parameter %u\n",
                     target->function, callee->parameter_count, callee->parameter_begin);
             target_trace_equality("operand count vs declared arity plus callee",
-                                  (unsigned long long) callee->parameter_count + 1u,
+                                  (unsigned long long) callee->parameter_count + operand_shift,
                                   operation->operand_count);
             target_trace_equality("call result type vs callee return type", callee->return_type,
                                   operation->result_type);
@@ -9279,9 +9291,13 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local signature or result storage is incomplete");
     }
+    /* Only a direct call has a head operand outside the parameter list. The
+     * method's receiver fills parameter 0, so the loop below checks it under
+     * the same contract every other argument gets. */
     const XrSemanticOperandRecord *callee_operand = &operands[operation->operand_begin];
-    if (callee_operand->role != XR_SEM_OPERAND_CALLEE || callee_operand->parameter != -1 ||
-        (callee_operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0)
+    if (!method &&
+        (callee_operand->role != XR_SEM_OPERAND_CALLEE || callee_operand->parameter != -1 ||
+         (callee_operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0))
         return fail(error, error_size, "XR_TARGET_1003",
                     "direct-local callee operand is not exact");
 
@@ -9318,7 +9334,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         uint32_t parameter_index = callee->parameter_begin + ordinal;
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(plan, parameter_index);
-        uint32_t semantic_operand = operation->operand_begin + ordinal + 1u;
+        uint32_t semantic_operand = operation->operand_begin + ordinal + operand_shift;
         const XrSemanticOperandRecord *operand = &operands[semantic_operand];
         bool exact_scalar = call_type_is_exact_scalar(plan, operand->type);
         /* A raw pointer argument may state a mutability the parameter does not
@@ -9354,8 +9370,13 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         /* A class instance is admitted as an argument through the same shared
          * judgement that binds its storage on the callee side, so a parameter
          * this call passes can never be one the callee's own family refused. */
+        /* A receiver is a class instance crossing a parameter boundary just as
+         * a declared class parameter is; the shared judgement covers both, plus
+         * the constructor receiver. Asking only about the declared-parameter
+         * form would refuse every `this`, whose type row is the anonymous
+         * instance that names no declaration. */
         bool exact_class_instance = parameter && parameter->type == operand->type &&
-                                    xr_semantic_class_argument_source_class(
+                                    xr_semantic_class_instance_parameter_source_class(
                                         plan, parameter_index) != XR_SEMANTIC_INDEX_NONE;
         /* An Array handed over by value. It travels the plain argument path a
          * scalar takes -- the tagged value is copied, the allocation is shared
@@ -9388,8 +9409,15 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             operand->ownership_action ==
                 (string_callee_owns ? XR_SEM_OPERAND_CONSUME : XR_SEM_OPERAND_BORROW) &&
             operand->transfer_mode == XR_TRANSFER_SHARE;
-        if (!parameter || operand->role != XR_SEM_OPERAND_ARGUMENT ||
-            operand->parameter != (int16_t) ordinal ||
+        /* The receiver sits at parameter 0 and is spelled as a receiver, not
+         * an argument, and it names no argument ordinal of its own. Every
+         * later operand states the argument ordinal it fills, counted without
+         * the receiver. */
+        bool receiver_slot = method && ordinal == 0;
+        uint8_t expected_role = receiver_slot ? XR_SEM_OPERAND_RECEIVER : XR_SEM_OPERAND_ARGUMENT;
+        int16_t expected_parameter = method ? (int16_t) ((int32_t) ordinal - 1) : (int16_t) ordinal;
+        if (!parameter || operand->role != expected_role ||
+            operand->parameter != expected_parameter ||
             (operand->type != parameter->type && !pointer_weakens) ||
             operand->parameter_mode != parameter->mode ||
             operand->transfer_mode != parameter->transfer_mode ||
@@ -9436,10 +9464,12 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                     target_trace_equality("operand transfer vs parameter transfer",
                                           parameter->transfer_mode, operand->transfer_mode);
                 }
-                target_trace_equality("operand parameter ordinal", ordinal,
+                target_trace_equality("operand parameter ordinal",
+                                      (unsigned long long) (int64_t) expected_parameter,
                                       (unsigned long long) (int64_t) operand->parameter);
-                target_trace_judgement("operand role is argument",
-                                       operand->role == XR_SEM_OPERAND_ARGUMENT);
+                target_trace_judgement(receiver_slot ? "operand role is receiver"
+                                                     : "operand role is argument",
+                                       operand->role == expected_role);
                 target_trace_judgement("operand carries the call contract flag",
                                        (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0);
                 fprintf(stderr,
@@ -9451,7 +9481,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                 target_trace_judgement("argument is an exact u8 slice", exact_u8_slice);
                 target_trace_judgement("argument is an exact unit enum", exact_unit_enum);
                 target_trace_judgement("argument is an exact ADT enum", exact_adt_enum);
-                target_trace_judgement("argument is an exact class instance", exact_class_instance);
+                target_trace_judgement(receiver_slot ? "receiver is an exact class instance"
+                                                     : "argument is an exact class instance",
+                                       exact_class_instance);
                 target_trace_judgement("argument is an exact Array by reference", exact_array_ref);
                 target_trace_judgement("argument is an exact Array by value", exact_array_value);
                 target_trace_judgement("argument is an exact String by value", exact_string_value);
@@ -9472,11 +9504,18 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                             "(as OWNED) or a reference-capable family (as BORROWED) may carry; a "
                             "plain scalar must state none\n",
                             parameter->ownership);
-                fprintf(stderr,
-                        "[target]   read it as: ordinal %u is the argument position, not an "
-                        "operand index -- the operand it names is operand[%u] above, because "
-                        "operand[0] is the callee.\n",
-                        ordinal, ordinal + 1u);
+                if (method)
+                    fprintf(stderr,
+                            "[target]   read it as: ordinal %u is a parameter position and "
+                            "operand[%u] fills it -- the receiver fills parameter 0, so operands "
+                            "and parameters line up one to one here.\n",
+                            ordinal, ordinal);
+                else
+                    fprintf(stderr,
+                            "[target]   read it as: ordinal %u is the argument position, not an "
+                            "operand index -- the operand it names is operand[%u] above, because "
+                            "operand[0] is the callee.\n",
+                            ordinal, ordinal + 1u);
             }
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
@@ -9945,7 +9984,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         if (target_index != XR_SEMANTIC_INDEX_NONE) {
             const XrSemanticCallTargetRecord *target =
                 xr_semantic_plan_call_target(plan, target_index);
-            if (target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL) {
+            if (target && (target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+                           target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL)) {
                 valid = collect_direct_local_call_intent(
                     builder, target_index, target, state_by_operation[i] != 0,
                     target->function < function_count && suspendable[target->function] != 0, error,
@@ -12202,6 +12242,19 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 tagged_container_value_boundary(materialized, caller, callee,
                                                 string_callee_owns ? XR_TARGET_OWNERSHIP_OWNED
                                                                    : XR_TARGET_OWNERSHIP_BORROWED);
+            /* A receiver hands its instance to the method as a borrow: the
+             * caller keeps the allocation and answers for it, the method only
+             * reads through the same tagged value. That is one carrier under
+             * two ownerships, which is exactly what this boundary describes --
+             * and the caller's own ownership is deliberately left open, since a
+             * fresh construction owns its instance while a borrowed local does
+             * not. */
+            bool class_instance_borrow_boundary =
+                parameter &&
+                xr_semantic_class_instance_parameter_source_class(
+                    callee_semantic, argument_intent->callee_parameter) != XR_SEMANTIC_INDEX_NONE &&
+                tagged_container_value_boundary(materialized, caller, callee,
+                                                XR_TARGET_OWNERSHIP_BORROWED);
             if (array_intrinsic || array_fill || array_hof) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
@@ -12231,11 +12284,12 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
             }
             if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                 !parameter || !caller || caller->slot == XR_SEMANTIC_INDEX_NONE ||
-                (!source_export && (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
-                                    ((caller->register_rep != callee->register_rep ||
-                                      caller->memory_rep != callee->memory_rep) &&
-                                     !adt_enum_borrow_boundary && !array_ref_borrow_boundary &&
-                                     !container_value_borrow_boundary)))) {
+                (!source_export &&
+                 (!callee || callee->slot == XR_SEMANTIC_INDEX_NONE ||
+                  ((caller->register_rep != callee->register_rep ||
+                    caller->memory_rep != callee->memory_rep) &&
+                   !adt_enum_borrow_boundary && !array_ref_borrow_boundary &&
+                   !container_value_borrow_boundary && !class_instance_borrow_boundary)))) {
                 if (target_trace_enabled()) {
                     fprintf(stderr,
                             "[target] refused in call argument materialization: argument %u of "
@@ -12261,6 +12315,8 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                            array_ref_borrow_boundary);
                     target_trace_judgement("tagged container by value boundary",
                                            container_value_borrow_boundary);
+                    target_trace_judgement("class instance borrow boundary",
+                                           class_instance_borrow_boundary);
                     fprintf(stderr,
                             "[target]   read it as: matching reps need no boundary at all. A "
                             "boundary is what lets the two sides hold the same carrier under "

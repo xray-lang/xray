@@ -36,4 +36,15 @@ xr_semantic_call_target_names_local_function(const XrSemanticCallTargetRecord *t
     return false;
 }
 
+/* How many leading operands of a local call precede the parameters they fill.
+ * A direct call spends operand 0 on the callee, which fills no parameter, so
+ * its operands run one ahead of the parameter list. A method call spends
+ * operand 0 on the receiver, which fills parameter 0, so the two lists line up
+ * one to one. Every layer that relates an operand index to a parameter index
+ * needs this same number. */
+static inline uint32_t
+xr_semantic_local_call_operand_shift(const XrSemanticCallTargetRecord *target) {
+    return (target && target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL) ? 0u : 1u;
+}
+
 #endif /* XR_SEMANTIC_LOCAL_CALL_TARGET_SHAPE_H */
