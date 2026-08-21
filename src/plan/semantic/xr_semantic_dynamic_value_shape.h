@@ -70,7 +70,6 @@ xr_semantic_dynamic_value_carrier_type_is_exact(const XrSemanticTypeRecord *type
 static inline bool
 xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
                                           const XrSemanticOperationRecord *operation) {
-    XrStableId zero = {{0}};
     return plan && operation && operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->function < xr_semantic_plan_function_count(plan) &&
            operation->callable_function == XR_SEMANTIC_INDEX_NONE &&

@@ -48,6 +48,7 @@
 #include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
+#include "../semantic/xr_semantic_const_variant_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -2729,6 +2730,17 @@ direct_local_go_find_store(XrDirectLocalGoCalleeStorageAnalysis *analysis, int64
     return &analysis->stores[slot];
 }
 
+/* The store that puts the callee in its slot must run before anything can
+ * activate the coroutine, which is what the entry-block position establishes.
+ *
+ * It does not also have to be the first thing the block does. An earlier guard
+ * here refused any call before the store, on the reasoning that a call might
+ * change the slot -- but the analysis that calls this already tracks, across
+ * the whole module, whether the slot is written more than once, and refuses
+ * when it is. A slot written exactly once cannot be changed by anything, so
+ * the scan was refusing programs for a hazard the ambiguity check had already
+ * ruled out: `const c = Channel<int>(1)` before a function declaration was
+ * enough to lose every `go` in the module. */
 static bool direct_local_go_store_precedes_activation(const XrSemanticPlan *plan,
                                                       uint32_t function_index,
                                                       uint32_t store_index) {
@@ -2741,11 +2753,7 @@ static bool direct_local_go_store_precedes_activation(const XrSemanticPlan *plan
         store_index >= entry->operation_begin + entry->operation_count)
         return false;
     for (uint32_t i = entry->operation_begin; i < store_index; i++) {
-        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
-        if (!operation || operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
-            operation->opcode == XI_CALL_METHOD || operation->opcode == XI_CALL_METHOD_DIRECT ||
-            operation->opcode == XI_CALL_BUILTIN || operation->opcode == XI_GO ||
-            operation->opcode == XI_THREAD_SPAWN)
+        if (!xr_semantic_plan_operation(plan, i))
             return false;
     }
     return true;
@@ -2834,7 +2842,8 @@ static bool semantic_direct_local_go_use_is_exact(const XrSemanticPlan *plan,
         const XrSemanticOperandRecord *argument = &operands[use->operand_begin + i];
         const XrSemanticParameterRecord *parameter =
             xr_semantic_plan_parameter(plan, target->parameter_begin + i - 1u);
-        if (!parameter || argument->type != parameter->type ||
+        if (!parameter ||
+            !xr_semantic_type_is_const_variant(plan, argument->type, parameter->type) ||
             argument->role != XR_SEM_OPERAND_VALUE || argument->parameter != -1 ||
             argument->parameter_mode != XR_PARAM_READ || argument->access != XR_CALL_ARG_PLAIN ||
             argument->origin != XI_PLACE_ORIGIN_NONE ||
