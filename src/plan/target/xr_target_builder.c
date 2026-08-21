@@ -49,6 +49,7 @@
 #include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
 #include "../semantic/xr_semantic_const_variant_shape.h"
+#include "../semantic/xr_semantic_direct_callee_shape.h"
 #include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
@@ -2550,57 +2551,6 @@ direct_local_callee_storage_analysis_dispose(XrDirectLocalCalleeStorageAnalysis 
     memset(analysis, 0, sizeof(*analysis));
 }
 
-static bool semantic_direct_local_callee_type_is_exact(const XrSemanticPlan *plan,
-                                                       const XrSemanticOperationRecord *operation,
-                                                       uint32_t target_function) {
-    if (!plan || !operation || operation->opcode != XI_GET_SHARED ||
-        operation->semantic_immediate < 0 || operation->semantic_immediate > UINT16_MAX ||
-        operation->operand_count != 0 || operation->allocation_key ||
-        operation->constant != XR_SEMANTIC_INDEX_NONE ||
-        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
-        operation->result_ownership != xi_generated_op_result_ownership(XI_GET_SHARED) ||
-        operation->effects != xi_generated_op_effects(XI_GET_SHARED) ||
-        operation->return_provenance != XR_SEM_RETURN_BORROWED_STATIC ||
-        operation->return_complete != 1 || operation->return_parameter != -1 ||
-        target_function >= xr_semantic_plan_function_count(plan))
-        return false;
-    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
-        if (operation->allocation_id.bytes[i] != 0)
-            return false;
-    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, operation->result_type);
-    const XrSemanticFunctionRecord *target = xr_semantic_plan_function(plan, target_function);
-    uint32_t lexical_owner = target ? target->parent : XR_SEMANTIC_INDEX_NONE;
-    uint32_t caller_ancestor = operation->function;
-    for (uint32_t depth = 0;
-         caller_ancestor != XR_SEMANTIC_INDEX_NONE && caller_ancestor != lexical_owner &&
-         depth < xr_semantic_plan_function_count(plan);
-         depth++) {
-        const XrSemanticFunctionRecord *ancestor = xr_semantic_plan_function(plan, caller_ancestor);
-        caller_ancestor = ancestor ? ancestor->parent : XR_SEMANTIC_INDEX_NONE;
-    }
-    if (!type || !target || lexical_owner == XR_SEMANTIC_INDEX_NONE ||
-        caller_ancestor != lexical_owner ||
-        (type->kind != XR_KIND_FUNCTION && type->kind != XR_KIND_UNKNOWN) ||
-        type->scalar_rep != XR_SCALAR_REP_NONE || type->aggregate_extent != 0 ||
-        type->aggregate_align != 0 ||
-        /* A function type states its signature in children; the untyped
-         * spelling has none. Requiring zero children of both admits only the
-         * untyped one, which is what a module-level function used to be bound
-         * as. */
-        (type->kind == XR_KIND_UNKNOWN && type->child_count != 0) ||
-        target->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
-        target->parameter_count >
-            xr_semantic_plan_parameter_count(plan) - target->parameter_begin ||
-        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_BORROW_VIEW |
-                        XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
-        (type->flags & (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) !=
-            (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT)) {
-        return false;
-    }
-    return true;
-}
-
 static bool direct_local_callee_storage_analysis_init(const XrSemanticPlan *plan,
                                                       const XrTargetValueStorageAnalysis *values,
                                                       XrDirectLocalCalleeStorageAnalysis *analysis,
@@ -2712,7 +2662,7 @@ direct_local_callee_storage_value_is_exact(const XrSemanticPlan *plan,
         analysis->use_count_by_value[operation->result_value] == 0 ||
         analysis->target_by_value[operation->result_value] == XR_SEMANTIC_INDEX_NONE)
         return false;
-    return semantic_direct_local_callee_type_is_exact(
+    return xr_semantic_direct_local_callee_type_is_exact(
         plan, operation, analysis->target_by_value[operation->result_value]);
 }
 
@@ -2871,7 +2821,7 @@ static bool semantic_direct_local_go_use_is_exact(const XrSemanticPlan *plan,
             argument->escape != XI_PLACE_ESCAPE_NONE || argument->flags != 0)
             return false;
     }
-    return semantic_direct_local_callee_type_is_exact(plan, source, target_function);
+    return xr_semantic_direct_local_callee_type_is_exact(plan, source, target_function);
 }
 
 static bool direct_local_go_callee_storage_analysis_init(
@@ -3020,7 +2970,7 @@ direct_local_go_callee_storage_value_is_exact(const XrSemanticPlan *plan,
            !analysis->invalid_value[operation->result_value] &&
            analysis->use_count_by_value[operation->result_value] != 0 &&
            analysis->target_by_value[operation->result_value] != XR_SEMANTIC_INDEX_NONE &&
-           semantic_direct_local_callee_type_is_exact(
+           xr_semantic_direct_local_callee_type_is_exact(
                plan, operation, analysis->target_by_value[operation->result_value]);
 }
 
