@@ -11,7 +11,7 @@
 #ifndef XR_SEMANTIC_RUNE_IS_WHITESPACE_SHAPE_H
 #define XR_SEMANTIC_RUNE_IS_WHITESPACE_SHAPE_H
 
-#include "xr_semantic_iterator_rune_next_shape.h"
+#include "xr_semantic_iterator_rune_nth_shape.h"
 
 static inline bool
 xr_semantic_rune_is_whitespace_receiver_is_exact(const XrSemanticPlan *plan,
@@ -30,7 +30,7 @@ xr_semantic_rune_is_whitespace_receiver_is_exact(const XrSemanticPlan *plan,
         definition = candidate;
     }
     return definition && definition->function == operation->function &&
-           xr_semantic_iterator_rune_next_is_exact(plan, definition, NULL);
+           xr_semantic_iterator_rune_source_is_exact(plan, definition);
 }
 
 static inline bool

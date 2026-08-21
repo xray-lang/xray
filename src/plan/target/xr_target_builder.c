@@ -38,6 +38,7 @@
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
+#include "../semantic/xr_semantic_iterator_rune_nth_shape.h"
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
@@ -8527,6 +8528,53 @@ static bool collect_iterator_rune_next_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
+/* Same shape as the next call above, plus the index it projects by. The
+ * argument is carried as an ordinary call argument so the storage families
+ * decide how it is held, exactly as they would for any other scalar operand. */
+static bool collect_iterator_rune_nth_call_intent(XrTargetPlanBuilder *builder,
+                                                  uint32_t operation_index,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  char *error, size_t error_size) {
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t index_value = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_iterator_rune_nth_is_exact(builder->semantic_plan, operation, &receiver,
+                                                &index_value))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Iterator<rune>.nth dispatch authority is incomplete");
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    uint32_t argument_begin = builder->call_argument_intent_count;
+    XrTargetCallArgumentIntent argument = {
+        .semantic_value = index_value,
+        .ordinal = 0,
+        .mode = XR_TARGET_CALL_VALUE,
+        .ownership = XR_TARGET_CALL_NONE,
+    };
+    if (!append_call_argument_intent(builder, &argument, error, error_size))
+        return false;
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = argument_begin,
+        .argument_count = 1,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = XR_TARGET_CALL_NONE,
+        .calling_convention = XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NTH,
+        .target_kind = XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH,
+    };
+    if (!result_type ||
+        !stable_identity_from_pair("xray-target-iterator-rune-nth-v1", operation->id,
+                                   result_type->id, receiver, &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Iterator<rune>.nth call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 static bool collect_rune_to_uint32_call_intent(XrTargetPlanBuilder *builder,
                                                uint32_t operation_index,
                                                const XrSemanticOperationRecord *operation,
@@ -9677,6 +9725,8 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (xr_semantic_iterator_rune_has_next_is_exact(plan, operation, NULL)) {
             valid = collect_iterator_rune_has_next_call_intent(builder, i, operation, error,
                                                                error_size);
+        } else if (xr_semantic_iterator_rune_nth_is_exact(plan, operation, NULL, NULL)) {
+            valid = collect_iterator_rune_nth_call_intent(builder, i, operation, error, error_size);
         } else if (xr_semantic_iterator_rune_next_is_exact(plan, operation, NULL)) {
             valid =
                 collect_iterator_rune_next_call_intent(builder, i, operation, error, error_size);

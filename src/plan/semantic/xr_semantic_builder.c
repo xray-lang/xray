@@ -17,6 +17,7 @@
 #include "xr_semantic_string_runes_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
+#include "xr_semantic_iterator_rune_nth_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
@@ -2918,6 +2919,35 @@ static bool xi_iterator_rune_next_exact(const XiValue *value) {
            xi_string_runes_exact(receiver);
 }
 
+/* `s.runes().nth(i)` -- the same receiver as `next`, with an index argument.
+ * Unlike `next` it does not advance the iterator, so it is a pure projection
+ * of the string by rune index, which is what makes it answerable at all. The
+ * index is required to be a plain int value; nothing else about it is assumed
+ * here, and the target layer decides how it is held. */
+static bool xi_iterator_rune_nth_exact(const XiValue *value) {
+    const XiValue *receiver = value && value->nargs == 2 ? value->args[0] : NULL;
+    const XiValue *index = value && value->nargs == 2 ? value->args[1] : NULL;
+    const XrType *receiver_type = receiver ? receiver->type : NULL;
+    const XrType *element = receiver_type && receiver_type->kind == XR_KIND_INSTANCE &&
+                                    receiver_type->instance.type_arg_count == 1
+                                ? receiver_type->instance.type_args[0]
+                                : NULL;
+    return value && value->op == XI_CALL_METHOD && receiver && index && value->aux &&
+           strcmp((const char *) value->aux, "nth") == 0 && value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int > 0 && (value->aux_int & 1) == 0 && receiver_type &&
+           xr_type_is_named_class(receiver_type, "Iterator") && element &&
+           element->kind == XR_KIND_RUNE && value->type && value->type->kind == XR_KIND_RUNE &&
+           index->type && index->type->kind == XR_KIND_INT && xi_string_runes_exact(receiver);
+}
+
+/* A rune obtained from a `String.runes()` iterator, by either spelling: `next`
+ * steps through and `nth` projects by index, but both hand back exactly the
+ * same thing, and every consumer of such a rune accepts either. Stated once so
+ * adding the second spelling did not mean revisiting each consumer. */
+static bool xi_iterator_rune_source_exact(const XiValue *value) {
+    return xi_iterator_rune_next_exact(value) || xi_iterator_rune_nth_exact(value);
+}
+
 static bool xi_rune_to_uint32_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
@@ -2925,7 +2955,7 @@ static bool xi_rune_to_uint32_exact(const XiValue *value) {
            value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
            receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_INT && !value->type->is_nullable &&
-           value->type->scalar_rep == XR_NATIVE_U32 && xi_iterator_rune_next_exact(receiver);
+           value->type->scalar_rep == XR_NATIVE_U32 && xi_iterator_rune_source_exact(receiver);
 }
 
 static bool xi_rune_is_whitespace_exact(const XiValue *value) {
@@ -2934,7 +2964,7 @@ static bool xi_rune_is_whitespace_exact(const XiValue *value) {
            strcmp((const char *) value->aux, "isWhitespace") == 0 &&
            value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
            receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
-           value->type->kind == XR_KIND_BOOL && xi_iterator_rune_next_exact(receiver);
+           value->type->kind == XR_KIND_BOOL && xi_iterator_rune_source_exact(receiver);
 }
 
 static bool xi_string_slice_range_exact(const XiValue *value) {
@@ -3836,6 +3866,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_NEXT;
         if (!xr_semantic_iterator_rune_next_is_exact(ctx->plan, record, NULL))
             return fail(ctx, "XR_SEM_0019", "Iterator<rune>.next authority is not exact");
+    }
+    if (xi_iterator_rune_nth_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_NTH;
+        if (!xr_semantic_iterator_rune_nth_is_exact(ctx->plan, record, NULL, NULL))
+            return fail(ctx, "XR_SEM_0019", "Iterator<rune>.nth authority is not exact");
     }
     if (xi_rune_to_uint32_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_TO_UINT32;
