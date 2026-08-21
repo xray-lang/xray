@@ -4484,12 +4484,8 @@ static bool operation_is_exact_array_member_scalar(const XrSemanticPlan *semanti
         const XrSemanticOperandRecord *argument = receiver + i;
         const XrSemanticTypeRecord *argument_type = xr_semantic_plan_type(semantic, argument->type);
         bool is_element = i == shape->element_operand;
-        if (!argument_type || argument->role != XR_SEM_OPERAND_ARGUMENT ||
-            argument->parameter != (int16_t) (i - 1) ||
-            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
-            (is_element ? argument->type != element_type_index
-                        : !xr_semantic_array_member_i64_type_is_exact(argument_type)))
+        if (!xr_semantic_array_member_argument_is_exact(shape, argument, argument_type, i,
+                                                        element_type_index))
             return false;
         if (is_element)
             element = argument->value;
@@ -4499,7 +4495,11 @@ static bool operation_is_exact_array_member_scalar(const XrSemanticPlan *semanti
     if (element_value)
         *element_value = element;
     if (receiver_result)
-        *receiver_result = shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER;
+        /* Both spellings need the same dynamic owned binding: one hands the
+         * receiver back, the other builds a string, and neither is a scalar
+         * the row states outright. */
+        *receiver_result = shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER ||
+                           shape->result_shape == XR_ARRAY_MEMBER_RESULT_STRING;
     return true;
 }
 

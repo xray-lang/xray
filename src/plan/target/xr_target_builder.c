@@ -1394,7 +1394,11 @@ static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
     if (element_value)
         *element_value = element;
     if (receiver_result)
-        *receiver_result = shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER;
+        /* Both spellings need the same dynamic owned binding: one hands the
+         * receiver back, the other builds a string, and neither is a scalar
+         * the row states outright. */
+        *receiver_result = shape->result_shape == XR_ARRAY_MEMBER_RESULT_RECEIVER ||
+                           shape->result_shape == XR_ARRAY_MEMBER_RESULT_STRING;
     return true;
 }
 
@@ -5078,10 +5082,23 @@ static bool builder_add_array_member_result_storage(XrTargetPlanBuilder *builder
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
         bool receiver_result = false;
-        bool scalar_member = operation &&
-                             semantic_array_member_scalar_is_exact(
-                                 builder->semantic_plan, operation, NULL, &receiver_result) &&
-                             receiver_result;
+        bool member_exact =
+            operation && semantic_array_member_scalar_is_exact(builder->semantic_plan, operation,
+                                                               NULL, &receiver_result);
+        /* A member that builds a string needs the same dynamic owned slot a
+         * receiver-returning one gets: both hand back a value held in the
+         * carrier rather than a scalar the row states outright. */
+        uint32_t member_metadata_count = 0;
+        const char *const *member_metadata =
+            xr_semantic_plan_metadata(builder->semantic_plan, &member_metadata_count);
+        const XrArrayMemberShape *member_shape =
+            member_exact && member_metadata && operation->metadata_begin < member_metadata_count
+                ? xr_array_member_shape(member_metadata[operation->metadata_begin],
+                                        operation->operand_count)
+                : NULL;
+        bool string_member =
+            member_shape && member_shape->result_shape == XR_ARRAY_MEMBER_RESULT_STRING;
+        bool scalar_member = member_exact && (receiver_result || string_member);
         bool scalar_fill = operation && semantic_array_fill_scalar_is_exact(
                                             builder->semantic_plan, operation, NULL, NULL, NULL);
         if (!scalar_member && !scalar_fill)
