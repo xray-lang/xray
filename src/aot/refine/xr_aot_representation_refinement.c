@@ -8496,6 +8496,12 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 xr_semantic_panic_catch_field_read_is_exact(ctx->semantic, operation))
                 return oracle_dynamic_panic_catch_storage(ctx, source_value, out_storage,
                                                           &ignored_kind);
+            /* A read whose receiver is an untyped reference -- an enum
+             * namespace, a shared slot -- takes it in the storage that family
+             * bound, the same tagged carrier every other reader of one takes. */
+            if (operand_index == 0 &&
+                oracle_dynamic_value_storage(ctx, source_value, out_storage, &ignored_kind))
+                return true;
             if (operand_index != 0 || xr_semantic_class_field_read_source_class(
                                           ctx->semantic, operation) == XR_SEMANTIC_INDEX_NONE)
                 return false;
