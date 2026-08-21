@@ -80,6 +80,14 @@ static inline bool xr_semantic_task_type_is_exact(const XrSemanticPlan *plan,
  * supplies the independently rebuilt callee identity; this judgement then
  * proves that the operation produces exactly one borrowed runtime-owned
  * Task<T> handle and returns the frozen callee operand identity. */
+/* Whether a spawn's result is the one a direct local spawn produces.
+ *
+ * The fire-and-forget mark is admitted and everything else in the flag word is
+ * required to match: that mark says the result is not user-visible, which is a
+ * fact about the caller and not about the storage the spawn needs. Demanding
+ * the whole word equal the opcode default refused every spawn the optimiser had
+ * marked, which is most of them in a module that spawns anything it does not
+ * await. */
 static inline bool xr_semantic_direct_local_go_task_result_is_exact(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     bool callee_identity_exact, uint32_t *callee_value) {
@@ -109,15 +117,17 @@ static inline bool xr_semantic_direct_local_go_task_result_is_exact(
         operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE || operation->semantic_immediate < 0 ||
         ((uint64_t) operation->semantic_immediate & ~allowed_aux) != 0 ||
         operation->effects != xi_generated_op_effects(XI_GO) ||
-        operation->flags != xi_generated_op_default_flags(XI_GO) ||
+        (uint8_t) (operation->flags & ~(uint8_t) XI_FLAG_FIRE_AND_FORGET) !=
+            xi_generated_op_default_flags(XI_GO) ||
         operation->ownership_use != xi_generated_op_own_use(XI_GO) ||
         operation->result_ownership != xi_generated_op_result_ownership(XI_GO) ||
         operation->transfer_mode != 0 || operation->parameter_mode != 0 ||
         operation->parameter_ownership != 0 || operation->result_alias_operand != -1 ||
         operation->return_provenance != XR_SEM_RETURN_NONE || operation->return_parameter != -1 ||
         operation->return_complete != 0 || operation->view_complete != 0 ||
-        operation->view_source_operand != -1 || operation->view_source_parameter != -1)
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1) {
         return false;
+    }
     const XrSemanticOperandRecord *callee = &operands[operation->operand_begin];
     if (callee->role != XR_SEM_OPERAND_VALUE || callee->parameter != -1 ||
         callee->transfer_mode != XR_TRANSFER_SHARE ||
