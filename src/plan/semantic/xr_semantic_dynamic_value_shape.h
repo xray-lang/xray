@@ -39,6 +39,24 @@ static inline bool xr_semantic_dynamic_value_type_is_exact(const XrSemanticTypeR
            type->enum_member_count == 0 && type->enum_flags == 0 && type->reserved_enum == 0;
 }
 
+/* The wider type test, for a producer whose storage fact does not come from the
+ * value's type at all.  A module-level slot is one XrValue whatever it holds,
+ * so a read of one is tagged because of where it was read, not because of what
+ * was in it -- a Task, a Json, a nullable String all come out of the same slot
+ * the same way.
+ *
+ * A native scalar is excluded: an int in a slot has machine storage of its own
+ * and the families that name it answer first.  So are borrowed views and exact
+ * aggregates, whose storage is a shape rather than a carrier. */
+static inline bool
+xr_semantic_dynamic_value_carrier_type_is_exact(const XrSemanticTypeRecord *type) {
+    return type && type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
+           (type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
+           (type->flags & (XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0 &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0;
+}
+
 /* The facts every producer of an untyped reference must state the same way,
  * whatever the opcode: it results in a value, it is not a call, not an import,
  * not an intrinsic, not a view, and does not alias an operand or a parameter.
@@ -123,10 +141,17 @@ static inline bool xr_semantic_dynamic_value_is_join(const XrSemanticOperationRe
 
 static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan,
                                                       const XrSemanticOperationRecord *operation) {
-    return xr_semantic_dynamic_value_producer_is_exact(operation) &&
-           xr_semantic_dynamic_value_common_is_exact(plan, operation) &&
-           xr_semantic_dynamic_value_type_is_exact(
-               xr_semantic_plan_type(plan, operation->result_type));
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!xr_semantic_dynamic_value_producer_is_exact(operation) ||
+        !xr_semantic_dynamic_value_common_is_exact(plan, operation))
+        return false;
+    /* A slot read is tagged because of the slot; the other producers are tagged
+     * because of the type they carry, and only they are held to the narrow
+     * test. */
+    return operation->opcode == XI_GET_SHARED
+               ? xr_semantic_dynamic_value_carrier_type_is_exact(type)
+               : xr_semantic_dynamic_value_type_is_exact(type);
 }
 
 #endif /* XR_SEMANTIC_DYNAMIC_VALUE_SHAPE_H */

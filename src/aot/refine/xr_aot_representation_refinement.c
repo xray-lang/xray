@@ -8553,6 +8553,13 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
      * families that carry those answer above. */
     if (oracle_dynamic_heap_literal_storage(ctx, source_value, out_storage, &ignored_kind))
         return true;
+    /* An untyped reference occupies the tagged carrier its family bound, and
+     * the rule above is about the storage the operand is already in, whatever
+     * froze it. Leaving this out refused a native operation reading one for
+     * want of a branch naming the opcode -- the very spelling-per-opcode the
+     * rule replaced. */
+    if (oracle_dynamic_value_storage(ctx, source_value, out_storage, &ignored_kind))
+        return true;
     return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
 }
 
