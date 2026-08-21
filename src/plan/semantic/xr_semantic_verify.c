@@ -2342,8 +2342,9 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
                 argument->parameter == (int16_t) (i - 1) &&
                 argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
                 argument->ownership_action == XR_SEM_OPERAND_CONSUME &&
-                (i == shape->element_operand
-                     ? argument->type == element_type_index
+                (i == shape->element_operand ? argument->type == element_type_index
+                 : (shape->string_operand != 0 && i == shape->string_operand)
+                     ? xr_semantic_array_member_string_type_is_exact(argument_type)
                      : xr_semantic_array_member_i64_type_is_exact(argument_type));
     }
     return exact ||

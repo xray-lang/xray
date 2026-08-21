@@ -3155,7 +3155,11 @@ static bool xi_array_member_scalar_exact(const XiValue *value) {
         value && value->op == XI_CALL_METHOD && value->aux && value->aux_kind == XI_AUX_KIND_NONE
             ? xr_array_member_shape((const char *) value->aux, value->nargs)
             : NULL;
-    if (!shape || !receiver || !receiver_type || value->aux_int <= 0 || (value->aux_int & 1) != 0 ||
+    /* The tail bit records where the call sits, not what it is: lowering sets it
+     * on any `return <method call>`, so demanding the bare default refused the
+     * very same member for its surroundings. `return out.join("|")` in the
+     * stdlib probe is exactly that shape. */
+    if (!shape || !receiver || !receiver_type || value->aux_int <= 0 ||
         (value->flags & XI_FLAG_MAY_SUSPEND) != 0 || receiver_type->kind != XR_KIND_ARRAY ||
         !receiver_type->container.element_type || !value->type)
         return false;
@@ -3170,6 +3174,10 @@ static bool xi_array_member_scalar_exact(const XiValue *value) {
             return value->type->kind == XR_KIND_INT;
         case XR_ARRAY_MEMBER_RESULT_BOOL:
             return value->type->kind == XR_KIND_BOOL;
+        case XR_ARRAY_MEMBER_RESULT_STRING:
+            /* The default arm below is the receiver-returning one, which would
+             * demand the result be the array itself. */
+            return value->type->kind == XR_KIND_STRING && !value->type->is_nullable;
         default:
             return value->type == receiver_type;
     }
@@ -3460,7 +3468,9 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
             argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
             argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
             (element ? argument->type != element_type_index
-                     : !xr_semantic_array_member_i64_type_is_exact(argument_type)))
+             : (shape->string_operand != 0 && i == shape->string_operand)
+                 ? !xr_semantic_array_member_string_type_is_exact(argument_type)
+                 : !xr_semantic_array_member_i64_type_is_exact(argument_type)))
             return false;
     }
     return true;

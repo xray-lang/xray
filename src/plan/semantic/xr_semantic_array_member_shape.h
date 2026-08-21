@@ -39,6 +39,7 @@ typedef enum XrArrayMemberResultShape {
     XR_ARRAY_MEMBER_RESULT_INT,
     XR_ARRAY_MEMBER_RESULT_BOOL,
     XR_ARRAY_MEMBER_RESULT_RECEIVER,
+    XR_ARRAY_MEMBER_RESULT_STRING,
 } XrArrayMemberResultShape;
 
 typedef struct XrArrayMemberShape {
@@ -53,18 +54,26 @@ typedef struct XrArrayMemberShape {
      * untouched. One that stores an element into the container does change it,
      * and those stay restricted to elements that own nothing. */
     uint8_t permits_reference_elements;
+    /* Which operand, if any, is a plain string rather than the i64 bound every
+     * other non-element argument is. Zero means none, since operand 0 is always
+     * the receiver. */
+    uint16_t string_operand;
 } XrArrayMemberShape;
 
 /* Operand 0 is always the receiver, so element_operand 0 means the member
  * takes no element of its own. */
 static const XrArrayMemberShape xr_array_member_shapes[] = {
-    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0},
-    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0},
-    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1, 0},
-    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1, 0},
-    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1, 0},
-    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1},
-    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1},
+    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0, 0},
+    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0, 0},
+    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1, 0, 0},
+    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1, 0, 0},
+    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1, 0, 0},
+    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1, 0},
+    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1, 0},
+    /* Reads every element and builds a string from them: it stores nothing
+     * into the container, so reference-capable elements are fine, and the
+     * string it returns is freshly owned rather than a borrow of anything. */
+    {"join", 2, 2, XR_ARRAY_MEMBER_RESULT_STRING, 0, 1, 1},
 };
 
 static inline const XrArrayMemberShape *xr_array_member_shape(const char *selector,
@@ -114,6 +123,12 @@ static inline bool xr_semantic_array_member_bool_type_is_exact(const XrSemanticT
            type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == 0;
 }
 
+static inline bool xr_semantic_array_member_string_type_is_exact(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_STRING && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
+}
+
 static inline bool xr_semantic_array_member_result_is_exact(
     const XrSemanticOperationRecord *operation, const XrArrayMemberShape *shape,
     const XrSemanticTypeRecord *result_type, uint32_t receiver_type_index) {
@@ -133,6 +148,16 @@ static inline bool xr_semantic_array_member_result_is_exact(
                         operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC;
         return operation->result_type == receiver_type_index &&
                operation->result_alias_operand == 0 && (owned || borrowed) &&
+               operation->return_parameter == -1 && operation->return_complete == 1;
+    }
+    if (shape->result_shape == XR_ARRAY_MEMBER_RESULT_STRING) {
+        /* A freshly built string, owned outright: unlike the scalar results
+         * below it is a value the caller has to release, so it states an owned
+         * return rather than the call-result placeholder those use. */
+        return xr_semantic_array_member_string_type_is_exact(result_type) &&
+               operation->result_alias_operand == -1 &&
+               operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+               operation->return_provenance == XR_SEM_RETURN_OWNED &&
                operation->return_parameter == -1 && operation->return_complete == 1;
     }
     bool typed = shape->result_shape == XR_ARRAY_MEMBER_RESULT_UNIT
