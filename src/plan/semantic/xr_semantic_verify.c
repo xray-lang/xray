@@ -2338,14 +2338,8 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
         const XrSemanticOperandRecord *argument = receiver + i;
         const XrSemanticTypeRecord *argument_type =
             argument->type < plan->type_count ? &plan->types[argument->type] : NULL;
-        exact = argument_type && argument->role == XR_SEM_OPERAND_ARGUMENT &&
-                argument->parameter == (int16_t) (i - 1) &&
-                argument->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-                argument->ownership_action == XR_SEM_OPERAND_CONSUME &&
-                (i == shape->element_operand ? argument->type == element_type_index
-                 : (shape->string_operand != 0 && i == shape->string_operand)
-                     ? xr_semantic_array_member_string_type_is_exact(argument_type)
-                     : xr_semantic_array_member_i64_type_is_exact(argument_type));
+        exact = xr_semantic_array_member_argument_is_exact(shape, argument, argument_type, i,
+                                                           element_type_index);
     }
     return exact ||
            report(error, error_size, "XR_SEM_0019", "Array member scalar authority is not exact");

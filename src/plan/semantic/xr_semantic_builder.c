@@ -3462,15 +3462,8 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
         const XrSemanticOperandRecord *argument = receiver + i;
         const XrSemanticTypeRecord *argument_type =
             argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
-        bool element = i == shape->element_operand;
-        if (!argument_type || argument->role != XR_SEM_OPERAND_ARGUMENT ||
-            argument->parameter != (int16_t) (i - 1) ||
-            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
-            (element ? argument->type != element_type_index
-             : (shape->string_operand != 0 && i == shape->string_operand)
-                 ? !xr_semantic_array_member_string_type_is_exact(argument_type)
-                 : !xr_semantic_array_member_i64_type_is_exact(argument_type)))
+        if (!xr_semantic_array_member_argument_is_exact(shape, argument, argument_type, i,
+                                                        element_type_index))
             return false;
     }
     return true;

@@ -1385,12 +1385,8 @@ static bool semantic_array_member_scalar_is_exact(const XrSemanticPlan *plan,
         const XrSemanticOperandRecord *argument = receiver + i;
         const XrSemanticTypeRecord *argument_type = xr_semantic_plan_type(plan, argument->type);
         bool is_element = i == shape->element_operand;
-        if (!argument_type || argument->role != XR_SEM_OPERAND_ARGUMENT ||
-            argument->parameter != (int16_t) (i - 1) ||
-            argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-            argument->ownership_action != XR_SEM_OPERAND_CONSUME ||
-            (is_element ? argument->type != element_type_index
-                        : !xr_semantic_array_member_i64_type_is_exact(argument_type)))
+        if (!xr_semantic_array_member_argument_is_exact(shape, argument, argument_type, i,
+                                                        element_type_index))
             return false;
         if (is_element)
             element = argument->value;

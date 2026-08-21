@@ -129,6 +129,28 @@ static inline bool xr_semantic_array_member_string_type_is_exact(const XrSemanti
            type->scalar_rep == XR_SCALAR_REP_NONE && (type->flags & XR_SEM_TYPE_NULLABLE) == 0;
 }
 
+/* The clause every non-receiver operand of a member must satisfy.
+ *
+ * Four layers reconstruct this -- the Xi guard, the semantic judgement, its
+ * verifier, and the target builder -- and each used to spell the argument rule
+ * itself, which is why teaching the family one member with a string argument
+ * meant finding all four. The rule lives here now so the table stays the only
+ * place a member is described. */
+static inline bool xr_semantic_array_member_argument_is_exact(
+    const XrArrayMemberShape *shape, const XrSemanticOperandRecord *argument,
+    const XrSemanticTypeRecord *argument_type, uint16_t ordinal, uint32_t element_type_index) {
+    if (!shape || !argument || !argument_type || argument->role != XR_SEM_OPERAND_ARGUMENT ||
+        argument->parameter != (int16_t) (ordinal - 1) ||
+        argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        argument->ownership_action != XR_SEM_OPERAND_CONSUME)
+        return false;
+    if (ordinal == shape->element_operand)
+        return argument->type == element_type_index;
+    if (shape->string_operand != 0 && ordinal == shape->string_operand)
+        return xr_semantic_array_member_string_type_is_exact(argument_type);
+    return xr_semantic_array_member_i64_type_is_exact(argument_type);
+}
+
 static inline bool xr_semantic_array_member_result_is_exact(
     const XrSemanticOperationRecord *operation, const XrArrayMemberShape *shape,
     const XrSemanticTypeRecord *result_type, uint32_t receiver_type_index) {
