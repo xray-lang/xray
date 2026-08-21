@@ -22,6 +22,7 @@
 #include "../../plan/semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
+#include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../ir/xi.h"
@@ -286,6 +287,27 @@ static bool function_states_own_boundary(const XrSemanticFunctionRecord *functio
     return function && (function->flags & XR_SEM_FUNCTION_EXTERN) == 0;
 }
 
+/* The C spelling of the address of a local: untyped, because the plan records
+ * the subject's type on the address itself and a spelling taken from that type
+ * would name what the address points at. Each read and write through it states
+ * the width it wants at the access.
+ *
+ * The projection is decided in one pass and checked in another, and the two
+ * ask through different functions. Both call here so the answer cannot differ
+ * between them. */
+static const char *emission_local_address_c_type(const XrTargetPlan *target_plan,
+                                                 uint32_t semantic_value) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    for (uint32_t i = 0; semantic && i < (uint32_t) xr_semantic_plan_operation_count(semantic);
+         i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != semantic_value)
+            continue;
+        return xr_semantic_local_addr_is_exact(semantic, candidate, NULL) ? "void *" : NULL;
+    }
+    return NULL;
+}
+
 static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan, uint32_t semantic_value,
                                   uint16_t kind, XrCValueRep *out, const char **c_type) {
     if (!out || !c_type)
@@ -372,6 +394,8 @@ static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan, uint32_t sema
                 if (exact_direct_local_array_ref_parameter_recipe(target_plan, binding, &storage))
                     *c_type = "XrValue *";
             }
+            if (!*c_type)
+                *c_type = emission_local_address_c_type(target_plan, semantic_value);
             return *c_type != NULL;
         default:
             return false;
@@ -454,6 +478,37 @@ static bool c_rep_is_addressable_scalar(uint16_t kind) {
  * is derived only from SemanticPlan operation/value identities and TargetPlan
  * machine rows.  Raw/direct projections, aggregates, views, pointers, code and
  * vectors are deliberately outside this family. */
+/* The address of a local. The subject it points at is the one operand, and the
+ * emitter needs its identity rather than its type: the plan records the
+ * subject's type on the address too, so the recipe carries the value and lets
+ * each access state its own width. */
+static bool exact_local_address_recipe(const XrTargetPlan *target_plan,
+                                       const XrTargetValueRepRecord *binding,
+                                       uint32_t *out_source_value) {
+    if (out_source_value)
+        *out_source_value = UINT32_MAX;
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *address = binding_operation(target_plan, binding);
+    const XrSemanticOperandRecord *source = NULL;
+    if (!semantic || !binding || !out_source_value ||
+        !xr_semantic_local_addr_is_exact(semantic, address, &source) ||
+        address->result_value != binding->semantic_value)
+        return false;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!register_rep || !memory_rep || register_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        memory_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        register_rep->root_kind != XR_TARGET_ROOT_NONE ||
+        memory_rep->root_kind != XR_TARGET_ROOT_NONE)
+        return false;
+    *out_source_value = source->value;
+    return true;
+}
+
 static bool exact_scalar_addressable_alias_recipe(const XrTargetPlan *target_plan,
                                                   const XrTargetValueRepRecord *binding,
                                                   uint32_t *out_source_value) {
@@ -3251,6 +3306,16 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_argument_value == UINT32_MAX &&
                        value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
                        value->recipe_symbol == NULL;
+    if (value->materialization == XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS)
+        recipe_valid = value->rep == XR_C_VALUE_REP_RAW_PTR &&
+                       value->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+                       value->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+                       value->literal_byte_length == 0 && value->literal_bytes == NULL &&
+                       value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_operand_value != value->semantic_value &&
+                       value->recipe_argument_value == UINT32_MAX &&
+                       value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
+                       value->recipe_symbol == NULL;
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS)
         recipe_valid = c_rep_is_addressable_scalar(value->target_register_kind) &&
                        value->target_register_kind == value->target_memory_kind &&
@@ -3530,6 +3595,8 @@ static bool verify_target_kind_projection(const XrTargetPlan *target_plan, uint3
                 if (exact_direct_local_array_ref_parameter_recipe(target_plan, binding, &storage))
                     *out_c_type = "XrValue *";
             }
+            if (!*out_c_type)
+                *out_c_type = emission_local_address_c_type(target_plan, semantic_value);
             return *out_c_type != NULL;
         default:
             return false;
@@ -3714,8 +3781,12 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         XrCArrayHofDirectRecipe expected_array_hof = {0};
         bool expected_array_hof_direct =
             exact_array_hof_direct_recipe(target_plan, binding, &expected_array_hof);
+        uint32_t expected_local_address_source = UINT32_MAX;
+        bool expected_local_address =
+            exact_local_address_recipe(target_plan, binding, &expected_local_address_source);
         uint8_t expected_recipe =
-            expected_scalar_alias ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
+            expected_scalar_alias    ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
+            : expected_local_address ? XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS
             : expected_direct_array_ref_parameter
                 ? XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER
             : expected_adt_enum               ? XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR
@@ -3738,6 +3809,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
                                      : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand =
             expected_scalar_alias             ? expected_scalar_source
+            : expected_local_address          ? expected_local_address_source
             : expected_adt_enum               ? expected_enum.receiver_value
             : expected_channel                ? expected_capacity
             : expected_receive_symbol         ? expected_receiver
@@ -4107,9 +4179,11 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                   "TargetPlan value binding has no exact C projection");
         }
         uint8_t direct_array_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        uint32_t local_address_source = UINT32_MAX;
         if (register_rep->kind == XR_MACHINE_REP_RAW_PTR &&
             !exact_direct_local_array_ref_parameter_recipe(target_plan, binding,
                                                            &direct_array_ref_storage) &&
+            !exact_local_address_recipe(target_plan, binding, &local_address_source) &&
             !emission_source_ref_place_c_type(target_plan, binding->semantic_value) &&
             !emission_raw_pointer_c_type(target_plan, binding->semantic_value))
             return emission_error(error, error_size, "XR_TARGET_1001",
@@ -4334,9 +4408,15 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint32_t string_slice_end = UINT32_MAX;
         bool string_slice_range = exact_string_slice_range_recipe(
             target_plan, binding, &string_slice_receiver, &string_slice_start, &string_slice_end);
+        uint32_t local_address_source = UINT32_MAX;
+        bool local_address =
+            exact_local_address_recipe(target_plan, binding, &local_address_source);
         if (scalar_addressable_alias) {
             value->materialization = XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS;
             value->recipe_operand_value = scalar_alias_source;
+        } else if (local_address) {
+            value->materialization = XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS;
+            value->recipe_operand_value = local_address_source;
         } else if (direct_array_ref_parameter) {
             value->materialization = XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER;
             value->recipe_discriminant = direct_array_ref_storage;

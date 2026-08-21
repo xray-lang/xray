@@ -42,8 +42,8 @@ mutates each forbidden adapter kind and a valid source-export entry
 expectation's identity adapter. Every mutation reaches the structural verifier
 rather than passing because of stale fingerprint bytes.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 6d907cf5103320d03c9fe2e3c3b3e1dc09d5d14206c15f4499b378823d83278a
-anchor-sha256: src/plan/target/xr_target_builder.c 134fa41113051008a31d0fbf9ebf2fe7e39e84166a16f031de96d001f78f22e8
+anchor-sha256: src/plan/target/xr_target_plan.h 1f44a60860526a33ea0a585d3a14530abc40f6280625c5fcc0145d95eabf684e
+anchor-sha256: src/plan/target/xr_target_builder.c ab65684ce677e2c29615d1380c6564111fa92e9f730b35551b31082473c63b3d
 anchor-sha256: src/plan/target/xr_target_verify.c f2026037814930904a94611d8c0ddc06952ec8709f2d3c546fd8c1bbf00af948
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d6cff74156a07c9a7751f3e7d5857f65d3d6d05ca1dbc862605f6cc4fa2c5c16
 anchor-sha256: src/vm/xr_typed_frame.h fa468887f8d87a5ff1fdf6c82b863cb7a62a204b4a30542f9fd0c62693486196

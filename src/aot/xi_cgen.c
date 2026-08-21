@@ -2934,6 +2934,12 @@ static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
                view->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
                view->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
                strcmp(view->c_type, "XrValue *") == 0;
+    if (view->materialization == XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS)
+        /* The address of a local: untyped, because each access through it
+         * states its own width rather than reading one off the pointer. */
+        return view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+               view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+               view->recipe_operand_value != UINT32_MAX && strcmp(view->c_type, "void *") == 0;
     return view->materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
            (strcmp(view->c_type, "const void *") == 0 || strcmp(view->c_type, "void *") == 0 ||
             strcmp(view->c_type, "const void * *") == 0 || strcmp(view->c_type, "void * *") == 0);

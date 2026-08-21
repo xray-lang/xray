@@ -55,15 +55,12 @@ tests/diff/cases/match/adt_enum_nonpayload_variant.xr
 tests/diff/cases/match/adt_enum_payload_tostring.xr
 tests/diff/cases/match/struct_destructure.xr
 tests/diff/cases/semantics/cleanup/defer_async_await.xr
-tests/diff/cases/semantics/cleanup/defer_block_assignment.xr
 tests/diff/cases/semantics/cleanup/defer_block_scope_exits.xr
 tests/diff/cases/semantics/cleanup/defer_builtin_method_mix.xr
 tests/diff/cases/semantics/cleanup/defer_conditional_early_return.xr
 tests/diff/cases/semantics/cleanup/defer_coroutine.xr
 tests/diff/cases/semantics/cleanup/defer_coroutine_local_panic_handler.xr
 tests/diff/cases/semantics/cleanup/defer_error_absorbed_inside_body.xr
-tests/diff/cases/semantics/cleanup/defer_late_binding.xr
-tests/diff/cases/semantics/cleanup/defer_loop_scope.xr
 tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr
 tests/diff/cases/semantics/cleanup/defer_receiver_late_binding.xr
 tests/diff/cases/semantics/cleanup/resource_release_order.xr
