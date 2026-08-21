@@ -8962,7 +8962,20 @@ static bool collect_array_member_scalar_call_intent(XrTargetPlanBuilder *builder
                     "Array member dispatch authority is incomplete");
     uint32_t receiver_type_index = operands[operation->operand_begin].type;
     bool receiver_result = operation->result_type == receiver_type_index;
-    if (!receiver_result &&
+    /* A member that builds a string hands back a fresh heap value rather than
+     * a scalar the row states outright, so it claims the return and the caller
+     * releases it. The shape table says which members those are. */
+    uint32_t member_metadata_count = 0;
+    const char *const *member_metadata =
+        xr_semantic_plan_metadata(builder->semantic_plan, &member_metadata_count);
+    const XrArrayMemberShape *result_shape =
+        member_metadata && operation->metadata_begin < member_metadata_count
+            ? xr_array_member_shape(member_metadata[operation->metadata_begin],
+                                    operation->operand_count)
+            : NULL;
+    bool string_result =
+        result_shape && result_shape->result_shape == XR_ARRAY_MEMBER_RESULT_STRING;
+    if (!receiver_result && !string_result &&
         !call_type_is_exact_scalar(builder->semantic_plan, operation->result_type))
         return fail(error, error_size, "XR_TARGET_1003",
                     "Array member result storage is incomplete");
@@ -8979,7 +8992,7 @@ static bool collect_array_member_scalar_call_intent(XrTargetPlanBuilder *builder
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = 0,
         .result_mode = XR_TARGET_CALL_VALUE,
-        .result_ownership = XR_TARGET_CALL_NONE,
+        .result_ownership = string_result ? XR_TARGET_CALL_RETURN_OWNED : XR_TARGET_CALL_NONE,
         .calling_convention = XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR,
         .target_kind = XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR,
     };
