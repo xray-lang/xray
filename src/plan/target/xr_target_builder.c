@@ -48,6 +48,7 @@
 #include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
+#include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
 #include "../semantic/xr_semantic_panic_info_shape.h"
@@ -4150,6 +4151,13 @@ static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
         }
         if (semantic_heap_closure_is_exact(builder->semantic_plan, operation))
             continue;
+        /* An address is the one result whose semantic type describes the wrong
+         * value: the plan records the subject's type on both sides, because
+         * source cannot write "pointer to int". Binding it from that type gives
+         * the subject's storage to the address, so the family that knows an
+         * address is an address answers for it instead. */
+        if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL))
+            continue;
         if (operation->opcode == XI_CHAN_TRY_RECV) {
             uint16_t receive_kind = XR_MACHINE_REP_COUNT;
             if (classify_scalar_type(
@@ -6364,6 +6372,99 @@ static bool builder_add_container_copy_result_storage(XrTargetPlanBuilder *build
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_CONTAINER_COPY_RESULT_STORAGE;
+    return true;
+}
+
+/* The address of a local is a borrowed raw pointer to the subject's storage.
+ * It is bound here rather than by the scalar family because its semantic type
+ * describes the subject, not the address -- see the shape header. The layout it
+ * records is the pointer's own, not the subject's: what the address points at
+ * is a fact the emitter reads from the source value, which keeps its own row. */
+static bool note_local_address_storage_value(XrTargetPlanBuilder *builder,
+                                             XrTargetValueStorageAnalysis *analysis,
+                                             uint32_t semantic_operation, char *error,
+                                             size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    if (!xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) ||
+        operation->result_value >= analysis->total_values)
+        return fail(error, error_size, "XR_TARGET_1001", "local address authority is incomplete");
+    if (analysis->defined_values[operation->result_value])
+        return true;
+    XrTargetMachineRepRecord rep;
+    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), XR_MACHINE_REP_RAW_PTR,
+                          &rep))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize a local address");
+    /* The address is a bare pointer into a frame the function already owns: it
+     * roots nothing, frees nothing, and outlives nothing. The borrowed spelling
+     * is reserved for a ref parameter, whose lifetime the caller proves. */
+    rep.ownership = XR_TARGET_OWNERSHIP_TRIVIAL;
+    rep.root_kind = XR_TARGET_ROOT_NONE;
+    if (!append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "target profile cannot materialize a local address");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "local address slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_NONE,
+        .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
+static bool builder_add_local_address_storage(XrTargetPlanBuilder *builder, char *error,
+                                              size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE, error, error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL))
+            valid = note_local_address_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_LOCAL_ADDRESS_STORAGE;
     return true;
 }
 
@@ -12789,6 +12890,7 @@ static const XrTargetFamily k_target_families[] = {
     {"source_namespace_storage", builder_add_source_namespace_storage},
     {"native_module_namespace_storage", builder_add_native_module_namespace_storage},
     {"dynamic_value_storage", builder_add_dynamic_value_storage},
+    {"local_address_storage", builder_add_local_address_storage},
     {"aggregates", builder_add_aggregates},
     /* After the aggregate family, whose slots it states the authority for, and
      * before the call family, which reads that authority to give the call row

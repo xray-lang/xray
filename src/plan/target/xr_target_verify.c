@@ -51,6 +51,7 @@
 #include "../semantic/xr_semantic_identity_copy_shape.h"
 #include "../semantic/xr_semantic_owner_forward_shape.h"
 #include "../semantic/xr_semantic_dynamic_value_shape.h"
+#include "../semantic/xr_semantic_local_addr_shape.h"
 #include "../semantic/xr_semantic_panic_catch_shape.h"
 #include "../semantic/xr_semantic_type_admission_shape.h"
 #include "../semantic/xr_semantic_panic_info_shape.h"
@@ -3243,6 +3244,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                              operation->result_value == semantic_value &&
                              operation->result_type == semantic_type &&
                              operation->function == semantic_function;
+    bool exact_local_address =
+        xr_semantic_local_addr_is_exact(plan->semantic_plan, operation, NULL);
     bool exact_dynamic_value = xr_semantic_dynamic_value_is_exact(plan->semantic_plan, operation) &&
                                operation->result_value == semantic_value &&
                                operation->result_type == semantic_type &&
@@ -3547,7 +3550,11 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
              * the builder never produces. */
             eligibility = 0;
         }
-    } else if (exact_array_ref_parameter) {
+    } else if (exact_array_ref_parameter || exact_local_address) {
+        /* An address is a pointer whatever it points at, and the plan records
+         * the subject's type on both sides of the operation because source has
+         * no way to write "pointer to int". So the expected kind here cannot
+         * come from the type -- asking it answers for the subject. */
         expected_kind = XR_MACHINE_REP_RAW_PTR;
         eligibility = 1;
     } else if (exact_string_byte_view || exact_string_byte_parameter || exact_range_slice_view) {

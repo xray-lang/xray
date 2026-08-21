@@ -9,6 +9,7 @@
  */
 
 #include "xaot_prepare.h"
+#include "../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "emit_c/xr_c_emission_plan.h"
 #include "xaot_boundary.h"
 #include "xaot_class_native.h"
@@ -118,6 +119,20 @@ static const char *prepare_exact_raw_pointer_c_type(const XrTargetPlan *target_p
     const XrSemanticPlan *semantic = target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
     if (!semantic || !binding)
         return NULL;
+    /* The address of a local is spelled as an untyped pointer: the plan records
+     * the subject's type on this operation, so asking the type for a pointer
+     * spelling answers for the subject and produces `int64_t` for something
+     * that holds an address. Each read and write through it states the width it
+     * wants at the access, which is where the subject's type belongs. */
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != binding->semantic_value)
+            continue;
+        if (!xr_semantic_local_addr_is_exact(semantic, candidate, NULL))
+            break;
+        const XaotRepInfo *pointer_info = xaot_rep_info(XAOT_REP_RAWPTR);
+        return pointer_info ? pointer_info->c_type : NULL;
+    }
     const XrSemanticParameterRecord *parameter = NULL;
     uint32_t parameter_index = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_parameter_count(semantic); i++) {

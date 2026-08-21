@@ -522,12 +522,12 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h a3eb62ba8726e71cd244b70bd3a49cd2fc65576ceeb114f121b3f544d83c141a
+anchor-sha256: src/plan/target/xr_target_plan.h 6d907cf5103320d03c9fe2e3c3b3e1dc09d5d14206c15f4499b378823d83278a
 anchor-sha256: src/plan/target/xr_target_plan.c 3a4b6829d499a6acf01ae4ec13357ff461b83cf1b88430990ea387724984a6ea
-anchor-sha256: src/plan/target/xr_target_builder.c cc9d9ee2d72f2cccb5dd1ec3fe9af688edb4d13350b4cc2247f4f43f33176907
+anchor-sha256: src/plan/target/xr_target_builder.c 134fa41113051008a31d0fbf9ebf2fe7e39e84166a16f031de96d001f78f22e8
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
-anchor-sha256: src/plan/target/xr_target_verify.c 1841136a43b7c21b5841f3b421fdba8f0e7c8e219c8979ffc851f035f8ddf51e
+anchor-sha256: src/plan/target/xr_target_verify.c f2026037814930904a94611d8c0ddc06952ec8709f2d3c546fd8c1bbf00af948
 anchor-sha256: src/plan/format/xr_xtp_schema.h e452a27b2149e30bbafded2799a0a3e2a51fa9df7ffcdbcd41556bde2f230601
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29

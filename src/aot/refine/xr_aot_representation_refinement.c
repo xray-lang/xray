@@ -39,6 +39,7 @@
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../plan/semantic/xr_semantic_dynamic_value_shape.h"
+#include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_catch_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../plan/semantic/xr_semantic_scalar_copy_shape.h"
@@ -7246,22 +7247,10 @@ static bool oracle_resolve_identity_rename(const VerifyAuthority *ctx, uint32_t 
 static bool oracle_raw_pointer_local_addr(const VerifyAuthority *ctx, uint32_t operation_index) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(ctx ? ctx->semantic : NULL, operation_index);
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands =
-        xr_semantic_plan_operands(ctx ? ctx->semantic : NULL, &operand_count);
-    if (!ctx || !operation || !operands || operation->opcode != XI_LOCAL_ADDR ||
-        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
-        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
-        operation->result_value >= ctx->value_count || operation->function >= ctx->function_count)
-        return false;
-    const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
-    if (source->value >= ctx->value_count || source->type != operation->result_type ||
-        source->role != XR_SEM_OPERAND_VALUE || source->parameter != -1 ||
-        source->transfer_mode != XR_TRANSFER_SHARE ||
-        source->ownership_action != XR_SEM_OPERAND_BORROW ||
-        source->parameter_mode != XR_PARAM_READ || source->access != XR_CALL_ARG_PLAIN ||
-        source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
-        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0)
+    const XrSemanticOperandRecord *source = NULL;
+    if (!ctx || !xr_semantic_local_addr_is_exact(ctx ? ctx->semantic : NULL, operation, &source) ||
+        source->value >= ctx->value_count || operation->result_value >= ctx->value_count ||
+        operation->function >= ctx->function_count)
         return false;
     /* Taking an address yields a pointer to the subject, so the two sides are
      * not the same storage and were never meant to be: the result is the raw
