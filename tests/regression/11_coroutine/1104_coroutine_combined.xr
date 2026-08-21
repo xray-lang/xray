@@ -32,7 +32,7 @@ fn test_combined() {
     print("=== 协程综合测试 ===")
 
     // 1. 创建缓冲 Channel
-    const ch = Channel(5)
+    const ch = Channel<int>(5)
 
     // 2. defer 清理
     defer { cleanup() }

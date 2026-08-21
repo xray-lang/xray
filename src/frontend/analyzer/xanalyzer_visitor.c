@@ -5238,7 +5238,22 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             if (ctx->expected_type && (ctx->expected_type->kind == XR_KIND_CHANNEL)) {
                 result = ctx->expected_type;
             } else {
-                result = xr_type_new_channel(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
+                /* No context to take the payload type from. Producing
+                 * Channel<unknown> here is what an empty array literal is
+                 * refused for, and it is refused for the reason that applies
+                 * equally well here: the type is not recoverable later, it just
+                 * stops being visible. Downstream that erasure reappears as a
+                 * spawn argument whose Channel<unknown> does not match the
+                 * Channel<int> its parameter declares, and the diagnostic
+                 * points at the argument rather than at the construction that
+                 * lost the type. */
+                XrLocation chan_loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                XaInferVar *chan_var = xa_infer_var_new(ctx, "channel payload", &chan_loc);
+                result = xa_infer_var_report_unsolved(
+                    ctx, chan_var,
+                    "cannot infer payload type for channel; add an explicit Channel<T> "
+                    "annotation or contextual type");
             }
             break;
         case AST_MOVE_EXPR:

@@ -1,5 +1,5 @@
-const maps = Channel(256)
-const done = Channel(8)
+const maps = Channel<Map<int, int>>(256)
+const done = Channel<int>(8)
 
 var PRODUCERS = 4
 var SENDS_PER_PRODUCER = 5000

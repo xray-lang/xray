@@ -46,7 +46,7 @@ fn test_main() {
 
     // === 4. Channel 通信 ===
     print("=== channel ===")
-    const ch = Channel(3)
+    const ch = Channel<int>(3)
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
