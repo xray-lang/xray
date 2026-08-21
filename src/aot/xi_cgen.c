@@ -3344,31 +3344,47 @@ static void cg_emit_channel_receive_payload_expression(FILE *out, const XrCValue
     fprintf(out, ")");
 }
 
-static const XiValue *cg_string_concat_direct_u64_source(XiCgenCtx *ctx, const XiFunc *function,
-                                                         const XiValue *live_argument,
-                                                         const XrCRecipeArgumentView *argument) {
+static const XiValue *cg_string_concat_direct_scalar_source(XiCgenCtx *ctx, const XiFunc *function,
+                                                            const XiValue *live_argument,
+                                                            const XrCRecipeArgumentView *argument) {
     if (!ctx || !function || !live_argument || !argument ||
-        argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)
+        !xr_c_recipe_argument_is_direct_scalar(argument->kind))
         return NULL;
-    const XaotValuePlan *adapter = xaot_bundle_find_value_plan(ctx->aot_bundle, live_argument);
     uint32_t logical_semantic_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t source_semantic_value = XR_SEMANTIC_INDEX_NONE;
+    /* The piece reaches the concatenation either already boxed -- in which case
+     * the value being displayed is what the box holds and a representation
+     * adapter proves the pair -- or as the native value itself, when nothing
+     * along the way needed it tagged. The plan named a native width either way,
+     * and the display reads that width; which of the two shapes carries it is
+     * not something the formatter can tell apart. */
+    bool boxed = live_argument->op == XI_BOX;
+    const XaotValuePlan *adapter =
+        boxed ? xaot_bundle_find_value_plan(ctx->aot_bundle, live_argument) : NULL;
     const XiValue *source =
-        live_argument->nargs == 1u && live_argument->args ? live_argument->args[0] : NULL;
+        boxed ? (live_argument->nargs == 1u && live_argument->args ? live_argument->args[0] : NULL)
+              : live_argument;
     XrCValueEmissionView source_view = {0};
-    return adapter && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) &&
-                   live_argument->op == XI_BOX && source &&
+    /* The recipe kind states which width the plan proved, and the source row
+     * must be that width and no other: reading a signed value through the
+     * unsigned formatter would print a negative number as a very large one. */
+    bool piece_signed = argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_I64;
+    return (!boxed ||
+            (adapter && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter))) &&
+                   source &&
                    cg_value_semantic_id(ctx, function, live_argument, &logical_semantic_value) &&
                    logical_semantic_value == argument->semantic_value &&
                    cg_value_semantic_id(ctx, function, source, &source_semantic_value) &&
                    source_semantic_value == argument->source_semantic_value &&
                    cg_value_emission_view(ctx, function, source, &source_view) ==
                        CG_VALUE_EMISSION_FOUND &&
-                   source_view.rep == XR_C_VALUE_REP_U64 &&
-                   source_view.target_register_kind == XR_MACHINE_REP_U64 &&
-                   source_view.target_memory_kind == XR_MACHINE_REP_U64 &&
+                   source_view.rep == (piece_signed ? XR_C_VALUE_REP_I64 : XR_C_VALUE_REP_U64) &&
+                   source_view.target_register_kind ==
+                       (piece_signed ? XR_MACHINE_REP_I64 : XR_MACHINE_REP_U64) &&
+                   source_view.target_memory_kind ==
+                       (piece_signed ? XR_MACHINE_REP_I64 : XR_MACHINE_REP_U64) &&
                    source_view.register_bits == 64u && source_view.c_type &&
-                   strcmp(source_view.c_type, "uint64_t") == 0
+                   strcmp(source_view.c_type, piece_signed ? "int64_t" : "uint64_t") == 0
                ? source
                : NULL;
 }
@@ -3393,7 +3409,7 @@ static bool cg_string_concat_emission_view(XiCgenCtx *ctx, const XiFunc *functio
         const XrCRecipeArgumentView *argument = &out->recipe_arguments[i];
         const XiValue *live_argument = value->args[i];
         if (!live_argument || (argument->kind != XR_C_RECIPE_ARGUMENT_STRING_VALUE &&
-                               argument->kind != XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64)) {
+                               !xr_c_recipe_argument_is_direct_scalar(argument->kind))) {
             (void) cg_value_emission_fail(ctx, "string concat C recipe argument identity changed");
             return false;
         }
@@ -3407,9 +3423,9 @@ static bool cg_string_concat_emission_view(XiCgenCtx *ctx, const XiFunc *functio
                 return false;
             }
         } else {
-            if (!cg_string_concat_direct_u64_source(ctx, function, live_argument, argument)) {
-                (void) cg_value_emission_fail(ctx,
-                                              "string concat direct-u64 source authority changed");
+            if (!cg_string_concat_direct_scalar_source(ctx, function, live_argument, argument)) {
+                (void) cg_value_emission_fail(
+                    ctx, "string concat direct-scalar source authority changed");
                 return false;
             }
         }
@@ -8334,8 +8350,7 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
             XrCValueEmissionView concat = {0};
             return arg_index < user->nargs &&
                    cg_string_concat_emission_view(ctx, f, user, &concat) &&
-                   concat.recipe_arguments[arg_index].kind ==
-                       XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64;
+                   xr_c_recipe_argument_is_direct_scalar(concat.recipe_arguments[arg_index].kind);
         }
         case XI_CALL:
             if (arg_index == 0 && user->nargs >= 1 && user->args[0] && user->args[0]->type &&

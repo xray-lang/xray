@@ -17,6 +17,7 @@
 #ifndef XR_C_EMISSION_SCHEMA_H
 #define XR_C_EMISSION_SCHEMA_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef enum XrCValueRep {
@@ -80,7 +81,17 @@ typedef enum XrCRecipeArgumentKind {
     XR_C_RECIPE_ARGUMENT_ARRAY_HOF_RECEIVER = 5,
     XR_C_RECIPE_ARGUMENT_ARRAY_HOF_CALLBACK = 6,
     XR_C_RECIPE_ARGUMENT_ARRAY_HOF_SEED = 7,
+    XR_C_RECIPE_ARGUMENT_STRING_DIRECT_I64 = 8,
 } XrCRecipeArgumentKind;
+
+/* A concatenation piece the emitter formats straight from its native integer,
+ * with no tagged value in between.  Both widths reach the runtime the same way
+ * and differ only in which formatter reads them, so every site that asks "is
+ * this piece direct" asks here rather than naming the widths itself. */
+static inline bool xr_c_recipe_argument_is_direct_scalar(int kind) {
+    return kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64 ||
+           kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_I64;
+}
 
 typedef enum XrCArrayHofKind {
     XR_C_ARRAY_HOF_NONE = 0,

@@ -1099,6 +1099,25 @@ static inline XrValue xrt_uint64_to_string(uint64_t value) {
     return out;
 }
 
+static inline size_t xrt_format_int64(char *buf, size_t cap, int64_t value) {
+    int n = snprintf(buf, cap, "%lld", (long long) value);
+    if (n < 0)
+        return 0;
+    if ((size_t) n >= cap)
+        return cap ? cap - 1u : 0u;
+    return (size_t) n;
+}
+
+static inline void xrt_strpart_init_i64(xrt_strpart_t *part, int64_t value) {
+    part->a = "";
+    part->b = NULL;
+    part->alen = 0;
+    part->blen = 0;
+    part->kind = XRT_STRPART_SINGLE;
+    part->alen = xrt_format_int64(part->scratch, sizeof(part->scratch), value);
+    part->a = part->scratch;
+}
+
 static inline void xrt_strpart_init_u64(xrt_strpart_t *part, uint64_t value) {
     part->a = "";
     part->b = NULL;

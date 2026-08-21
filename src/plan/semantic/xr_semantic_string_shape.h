@@ -112,16 +112,20 @@ xr_semantic_tagged_string_shared_read_is_exact(const XrSemanticPlan *plan,
            xr_semantic_unique_value_definition(plan, operation->result_value) == operation;
 }
 
-/* One exact native unsigned display source. It owns no reference, aggregate,
- * nullable encoding, nominal identity, or child geometry; those cases require
- * different display recipes and remain unclaimed. */
+/* One exact native integer display source, of either signedness. It owns no
+ * reference, aggregate, nullable encoding, nominal identity, or child geometry;
+ * those cases require different display recipes and remain unclaimed.
+ *
+ * The two widths differ only in which formatter reads the value, and reading a
+ * signed one as unsigned would print a negative number as a very large one, so
+ * the emitter is told which it has rather than choosing for itself. */
 static inline bool
-xr_semantic_string_concat_direct_u64_type_is_exact(const XrSemanticTypeRecord *type) {
+xr_semantic_string_concat_direct_scalar_type_is_exact(const XrSemanticTypeRecord *type) {
     XrStableId zero = {{0}};
     return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
-           type->scalar_rep == XR_NATIVE_U64 && type->flags == 0 && type->child_count == 0 &&
-           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
-           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           (type->scalar_rep == XR_NATIVE_U64 || type->scalar_rep == XR_NATIVE_I64) &&
+           type->flags == 0 && type->child_count == 0 && type->aggregate_extent == 0 &&
+           type->aggregate_align == 0 && type->source_class == XR_SEMANTIC_INDEX_NONE &&
            xr_stable_id_equal(type->source_class_identity, zero) && !type->source_enum_key &&
            type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
            type->reserved_enum == 0;
@@ -129,9 +133,11 @@ xr_semantic_string_concat_direct_u64_type_is_exact(const XrSemanticTypeRecord *t
 
 /* One judgement for a string concatenation: it joins two or more exact display
  * operands into one freshly owned String. A String operand is consumed in its
- * owned tagged carrier. An exact u64 operand is consumed as a logical display
- * value whose native source remains independently frozen by TargetPlan and the
- * C-emission recipe. Every other display shape stays unclaimed. */
+ * owned tagged carrier. An exact native integer operand is consumed as a
+ * logical display value whose native source remains independently frozen by
+ * TargetPlan and the C-emission recipe -- which is what keeps `"${n}"` over an
+ * int from having to box the int first. Every other display shape stays
+ * unclaimed. */
 static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan,
                                                       const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0;
@@ -172,7 +178,7 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
             piece->lifetime != 0 || piece->escape != 0 || piece->flags != 0 ||
             !((piece->type == operation->result_type &&
                xr_semantic_tagged_string_type_is_exact(piece_type)) ||
-              xr_semantic_string_concat_direct_u64_type_is_exact(piece_type)))
+              xr_semantic_string_concat_direct_scalar_type_is_exact(piece_type)))
             return false;
     }
     return true;

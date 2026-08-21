@@ -614,6 +614,9 @@ static bool string_concat_argument_recipe(const XrTargetPlan *target_plan, uint3
         case XR_MACHINE_REP_U64:
             *kind = XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64;
             break;
+        case XR_MACHINE_REP_I64:
+            *kind = XR_C_RECIPE_ARGUMENT_STRING_DIRECT_I64;
+            break;
         default:
             return false;
     }
@@ -3217,7 +3220,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
             recipe_valid = argument->semantic_value != UINT32_MAX &&
                            argument->source_semantic_value != UINT32_MAX &&
                            (argument->kind == XR_C_RECIPE_ARGUMENT_STRING_VALUE ||
-                            argument->kind == XR_C_RECIPE_ARGUMENT_STRING_DIRECT_U64) &&
+                            xr_c_recipe_argument_is_direct_scalar(argument->kind)) &&
                            argument->reserved[0] == 0 && argument->reserved[1] == 0 &&
                            argument->reserved[2] == 0;
         }
