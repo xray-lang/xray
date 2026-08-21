@@ -3138,6 +3138,9 @@ static bool collect_exact_dynamic_types(
             semantic_direct_local_array_ref_place_load_is_exact_verify(
                 plan, operation, operation->result_value, operation->result_type,
                 operation->function) ||
+            /* A transfer carries a dynamic value onward, so its result type is
+             * exact for the same reason its source's was. */
+            xr_semantic_owner_forward_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_class_object_is_exact(plan->semantic_plan, operation) ||
             xr_semantic_class_instance_value_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_string_literal_is_exact(plan->semantic_plan, operation) ||

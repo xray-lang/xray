@@ -7204,8 +7204,16 @@ static bool oracle_resolve_identity_rename(const VerifyAuthority *ctx, uint32_t 
             operation_index != XR_SEMANTIC_INDEX_NONE
                 ? xr_semantic_plan_operation(ctx->semantic, operation_index)
                 : NULL;
-        if (!operation || operation->opcode != XI_COPY || operation->operand_count != 1 ||
-            operation->semantic_immediate != XI_COPY_KIND_IDENTITY)
+        /* An owner transfer renames its operand just as an identity copy does;
+         * Xi groups the two under one predicate for that reason. Following only
+         * the copy spelling left a transferred value looking like it had no
+         * definition to resolve back to. */
+        bool identity_copy = operation && operation->opcode == XI_COPY &&
+                             operation->operand_count == 1 &&
+                             operation->semantic_immediate == XI_COPY_KIND_IDENTITY;
+        bool owner_forward =
+            operation && operation->opcode == XI_OWNER_FORWARD && operation->operand_count == 1;
+        if (!identity_copy && !owner_forward)
             break;
         if (!operands || operation->operand_begin >= operand_count ||
             operands[operation->operand_begin].value >= semantic_value)
@@ -8264,7 +8272,18 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_COPY:
         case XI_SOURCE_MOVE:
         case XI_OWNER_FORWARD: {
+            /* The transfer's result holds what the operand held. The definition
+             * query answers only for scalars, so a transferred container --
+             * which is what ownership transfers are mostly for -- reported no
+             * storage despite having a carrier. Ask the carrier questions first
+             * and keep the scalar one for operands that really are scalars. */
             uint16_t result_kind = 0;
+            if (oracle_array_borrowed_tagged_carrier_storage(ctx, operation->result_value,
+                                                             out_storage, &result_kind))
+                return true;
+            if (oracle_array_tagged_carrier_storage(ctx, operation->result_value, out_storage,
+                                                    &result_kind))
+                return true;
             return oracle_definition_storage(ctx, operation->result_value, out_storage,
                                              &result_kind);
         }
