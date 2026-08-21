@@ -1,0 +1,20 @@
+// anchor: interpolation-display-shapes
+// Interpolation over every piece shape that has no native width to format in
+// place: a bool, a unit enum member, a float, and a null. Each reaches the
+// display through the one carrier that can hold anything, and both backends
+// must render it the same way.
+//
+// The enum piece is the reason this case exists. A shared slot holding one is
+// read the same way a slot holding anything else is, but the value carries a
+// layout and a member identity that the read cannot answer for -- and binding
+// it as if it could produced a plan the verifier rejected outright. Nothing in
+// the existing corpus read an enum out of a slot and displayed it.
+enum Color { Red, Green }
+
+var b = true
+var c = Color.Green
+var r = 1.5
+var n: int? = null
+
+print("b=${b} c=${c} r=${r} n=${n}")
+print("lit=${false} f=${0.0}")

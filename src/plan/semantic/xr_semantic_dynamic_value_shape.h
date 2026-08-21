@@ -47,10 +47,14 @@ static inline bool xr_semantic_dynamic_value_type_is_exact(const XrSemanticTypeR
  *
  * A native scalar is excluded: an int in a slot has machine storage of its own
  * and the families that name it answer first.  So are borrowed views and exact
- * aggregates, whose storage is a shape rather than a carrier. */
+ * aggregates, whose storage is a shape rather than a carrier.
+ *
+ * So is an enum.  Its layout and member identity are facts a value of it
+ * carries, and the plan verifier holds a binding for one to the family that
+ * knows them; a slot read cannot answer for those by pointing at the slot. */
 static inline bool
 xr_semantic_dynamic_value_carrier_type_is_exact(const XrSemanticTypeRecord *type) {
-    return type && type->scalar_rep == XR_SCALAR_REP_NONE &&
+    return type && type->kind != XR_KIND_ENUM && type->scalar_rep == XR_SCALAR_REP_NONE &&
            (type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
            (type->flags & XR_SEM_TYPE_OWNERSHIP_ROOT) != 0 &&
            (type->flags & (XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0 &&

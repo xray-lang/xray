@@ -1,26 +1,48 @@
-# Cases the differential net cannot compare
+
+
+
+
 #
-# A line here is a case where a backend refuses to build at all, so the run
-# produced no verdict about whether the two backends agree. That is a coverage
-# limit, not a divergence: known_failures.txt beside this file is for cases
-# where both backends ran and disagreed, and mixing the two is what made this
-# net unreadable -- 564 unfinished target authorities buried the one real
-# disagreement it had found.
 #
-# Rules, the same ratchet as known_failures.txt
-#   - The list may only shrink. A case outside this list that stops building is
+#
+#
 #     a backend regression and fails the run; a listed case that starts building
 #     must have its line deleted in the same change.
-#   - Do not add a line to make a change go green. Adding one says a case that
 #     used to be comparable no longer is, which is a regression by definition.
-#
+#   - Do not add a line to make a change go green. Adding one says a case that
+#   - The list may only shrink. A case outside this list that stops building is
+# --- Indirect call through a function-typed parameter ---------------------
+# --- cases ported ahead of their AOT support ------------------------------
+# --- ref-exposed locals and cross-module typed array fill ------------------
+# A line here is a case where a backend refuses to build at all, so the run
+# Cases the differential net cannot compare
+# Each pins a construct the VM already runs and the target plan still refuses:
 # Established 2026-08-16 during the unified target-machine work, when the AOT
-# backend went fail-closed ahead of its per-construct authorities. Every entry
-# is expected to leave as its construct gains one. The count here is the honest
-# measure of how far that migration has to go.
-#
 # One case path per line. Comments and blank lines ignored.
-
+# Rules, the same ratchet as known_failures.txt
+# The case was written to pin this exact gap: the closed-world target planner
+# Two cases written against AOT emitter defects found by running the wasm3
+# arms without a separator, derived JSON struct encoding, cross-module
+# backend went fail-closed ahead of its per-construct authorities. Every entry
+# cannot name the callee of a call made through a function-typed parameter, so
+# disagreement it had found.
+# enum payload equality, iteration through an interface-typed iterator, match
+# exist cannot be decided from here while the shallower layer refuses.
+# for it -- deleting a line here is how that work reports itself.
+# had no coverage for; whether the emitter defects they were written for still
+# is expected to leave as its construct gains one. The count here is the honest
+# it refuses with "call target has no consumable adapter authority". The VM
+# limit, not a divergence: known_failures.txt beside this file is for cases
+# measure of how far that migration has to go.
+# net unreadable -- 564 unfinished target authorities buried the one real
+# port end to end. On this branch neither reaches the emitter: the target plan
+# produced no verdict about whether the two backends agree. That is a coverage
+# refusals so the backend work that makes each one build has a case waiting
+# refuses both first, with "direct-local argument contract needs unsupported
+# runs it. Listed here rather than as a divergence because AOT never built.
+# storage or ownership". The cases are kept because they pin a gap the corpus
+# subclassing, and `is` on a generic instance. They are listed as build
+# where both backends ran and disagreed, and mixing the two is what made this
 tests/diff/cases/basic/arrays.xr
 tests/diff/cases/basic/closures.xr
 tests/diff/cases/basic/range_precedence.xr
@@ -45,11 +67,13 @@ tests/diff/cases/semantics/cleanup/defer_loop_scope.xr
 tests/diff/cases/semantics/cleanup/defer_nested_cleanup_and_local_control.xr
 tests/diff/cases/semantics/cleanup/defer_receiver_late_binding.xr
 tests/diff/cases/semantics/cleanup/resource_release_order.xr
+tests/diff/cases/semantics/closure/call_through_function_parameter.xr
 tests/diff/cases/semantics/closure/capture_forms.xr
 tests/diff/cases/semantics/closure/nested_closure_transitive_capture.xr
 tests/diff/cases/semantics/closure/shared_mutable_capture_cell.xr
 tests/diff/cases/semantics/collections/array_capacity_panic_shared_core.xr
 tests/diff/cases/semantics/collections/array_char_compact.xr
+tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr
 tests/diff/cases/semantics/collections/array_hof_shared_core.xr
 tests/diff/cases/semantics/collections/array_join_shared_core.xr
 tests/diff/cases/semantics/collections/array_join_special_object_shared_core.xr
@@ -71,6 +95,8 @@ tests/diff/cases/semantics/collections/byte_slice_load_store_endian_shared_core.
 tests/diff/cases/semantics/collections/byte_slice_signed_load_store_shared_core.xr
 tests/diff/cases/semantics/collections/byte_uint8_specialization_shared_core.xr
 tests/diff/cases/semantics/collections/container_print.xr
+tests/diff/cases/semantics/collections/enum_payload_equality.xr
+tests/diff/cases/semantics/collections/for_in_interface_iterator.xr
 tests/diff/cases/semantics/collections/hof_index_param.xr
 tests/diff/cases/semantics/collections/iterator_protocol_exhausted.xr
 tests/diff/cases/semantics/collections/json_forin_shared_core.xr
@@ -106,6 +132,7 @@ tests/diff/cases/semantics/concurrency/mutex_generic_compose.xr
 tests/diff/cases/semantics/concurrency/once_compose.xr
 tests/diff/cases/semantics/concurrency/rwlock_generic_compose.xr
 tests/diff/cases/semantics/condition/bool_nullable_explicit.xr
+tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr
 tests/diff/cases/semantics/condition/nullable_presence.xr
 tests/diff/cases/semantics/coro/await_array.xr
 tests/diff/cases/semantics/coro/await_non_rethrowing_forms_observe.xr
@@ -210,6 +237,7 @@ tests/diff/cases/semantics/json/json_decode_object_loop_reuse.xr
 tests/diff/cases/semantics/json/json_decode_type_matrix.xr
 tests/diff/cases/semantics/json/json_decode_typed_fields.xr
 tests/diff/cases/semantics/json/json_derive_decode.xr
+tests/diff/cases/semantics/json/json_derive_struct_encode.xr
 tests/diff/cases/semantics/json/json_encode_boundary.xr
 tests/diff/cases/semantics/json/json_kind_and_object_type.xr
 tests/diff/cases/semantics/json/json_parse_typed_direct.xr
@@ -230,6 +258,7 @@ tests/diff/cases/semantics/modules/xmod_coro.xr
 tests/diff/cases/semantics/modules/xmod_dead_net_helper.xr
 tests/diff/cases/semantics/modules/xmod_default_arg_class.xr
 tests/diff/cases/semantics/modules/xmod_inherit.xr
+tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr
 tests/diff/cases/semantics/modules/xmod_namespace_generic.xr
 tests/diff/cases/semantics/modules/xmod_nested_class_field.xr
 tests/diff/cases/semantics/modules/xmod_private_const_defaults.xr
@@ -313,6 +342,7 @@ tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr
 tests/diff/cases/semantics/ownership/move_into_go.xr
 tests/diff/cases/semantics/ownership/move_local_heap.xr
 tests/diff/cases/semantics/ownership/move_local_in_fn.xr
+tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr
 tests/diff/cases/semantics/ownership/shared_class_copy_go.xr
 tests/diff/cases/semantics/ownership/shared_freeze_go.xr
 tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr
@@ -451,12 +481,14 @@ tests/diff/cases/semantics/stdlib/ws_pure_protocol_direct.xr
 tests/diff/cases/semantics/stdlib/xml_pure_module_direct.xr
 tests/diff/cases/semantics/stdlib/yaml_pure_module_direct.xr
 tests/diff/cases/semantics/string/char_scalar.xr
+tests/diff/cases/semantics/string/interpolation_display_shapes.xr
 tests/diff/cases/semantics/string/multiconcat.xr
 tests/diff/cases/semantics/string/quoted_literals_variable_block.xr
 tests/diff/cases/semantics/string/string_indexof_start_shared_core.xr
 tests/diff/cases/semantics/string/string_surface_declared_methods.xr
 tests/diff/cases/semantics/string/template_nested_quotes.xr
 tests/diff/cases/semantics/string/unicode_escape.xr
+tests/diff/cases/semantics/type/is_generic_instance_target.xr
 tests/diff/cases/semantics/types/enum_type_name.xr
 tests/diff/cases/semantics/types/fixed_width_type_tests.xr
 tests/diff/cases/semantics/types/object_field_invariance.xr
@@ -532,34 +564,3 @@ tests/regression/11_coroutine/1165_result_group_native.xr
 tests/regression/11_coroutine/1166_channel_map_deep_copy_stress.xr
 tests/regression/11_coroutine/1167_channel_explicit_transfer.xr
 tests/regression/11_coroutine/1175_channel_tuple_scalar_transfer.xr
-
-# --- Indirect call through a function-typed parameter ---------------------
-# The case was written to pin this exact gap: the closed-world target planner
-# cannot name the callee of a call made through a function-typed parameter, so
-# it refuses with "call target has no consumable adapter authority". The VM
-# runs it. Listed here rather than as a divergence because AOT never built.
-tests/diff/cases/semantics/closure/call_through_function_parameter.xr
-
-# --- ref-exposed locals and cross-module typed array fill ------------------
-# Two cases written against AOT emitter defects found by running the wasm3
-# port end to end. On this branch neither reaches the emitter: the target plan
-# refuses both first, with "direct-local argument contract needs unsupported
-# storage or ownership". The cases are kept because they pin a gap the corpus
-# had no coverage for; whether the emitter defects they were written for still
-# exist cannot be decided from here while the shallower layer refuses.
-tests/diff/cases/semantics/collections/array_fill_ref_cross_module.xr
-tests/diff/cases/semantics/ownership/ref_param_write_invalidates_prior_copy.xr
-
-# --- cases ported ahead of their AOT support ------------------------------
-# Each pins a construct the VM already runs and the target plan still refuses:
-# enum payload equality, iteration through an interface-typed iterator, match
-# arms without a separator, derived JSON struct encoding, cross-module
-# subclassing, and `is` on a generic instance. They are listed as build
-# refusals so the backend work that makes each one build has a case waiting
-# for it -- deleting a line here is how that work reports itself.
-tests/diff/cases/semantics/collections/enum_payload_equality.xr
-tests/diff/cases/semantics/collections/for_in_interface_iterator.xr
-tests/diff/cases/semantics/condition/match_is_arms_no_separator.xr
-tests/diff/cases/semantics/json/json_derive_struct_encode.xr
-tests/diff/cases/semantics/modules/xmod_inherit_lib_subclass.xr
-tests/diff/cases/semantics/type/is_generic_instance_target.xr

@@ -131,6 +131,22 @@ xr_semantic_string_concat_direct_scalar_type_is_exact(const XrSemanticTypeRecord
            type->reserved_enum == 0;
 }
 
+/* A piece the runtime displays from its tagged value, whatever that value
+ * holds.  A bool, an enum member, a tuple, a null, an instance -- none of them
+ * has a native width the emitter could format in place, and all of them reach
+ * the display through the one carrier that can hold anything.
+ *
+ * The test is exactly that: a type with no native scalar representation is a
+ * type that can only be held tagged, so the display reads the carrier the plan
+ * already bound.  Borrowed views and exact aggregates are excluded because
+ * their storage is a shape rather than a carrier, and there is no single value
+ * to hand the formatter. */
+static inline bool
+xr_semantic_string_concat_tagged_display_type_is_exact(const XrSemanticTypeRecord *type) {
+    return type && type->scalar_rep == XR_SCALAR_REP_NONE &&
+           (type->flags & (XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0;
+}
+
 /* One judgement for a string concatenation: it joins two or more exact display
  * operands into one freshly owned String. A String operand is consumed in its
  * owned tagged carrier. An exact native integer operand is consumed as a
@@ -178,7 +194,8 @@ static inline bool xr_semantic_string_concat_is_exact(const XrSemanticPlan *plan
             piece->lifetime != 0 || piece->escape != 0 || piece->flags != 0 ||
             !((piece->type == operation->result_type &&
                xr_semantic_tagged_string_type_is_exact(piece_type)) ||
-              xr_semantic_string_concat_direct_scalar_type_is_exact(piece_type)))
+              xr_semantic_string_concat_direct_scalar_type_is_exact(piece_type) ||
+              xr_semantic_string_concat_tagged_display_type_is_exact(piece_type)))
             return false;
     }
     return true;
