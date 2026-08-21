@@ -1228,6 +1228,19 @@ static bool aot_array_element_storage_is_exact(const XrSemanticTypeRecord *eleme
  * indexes or rewrites elements needs one scalar element storage identity.
  * `indexes_elements` is which of the two is asking, and `storage` is the
  * element's scalar storage when the element has one and NONE otherwise. */
+/* The flag set an Array type carries, stated once for the four reconstructions
+ * in this pass that used to spell it out.
+ *
+ * Nullable and const are admitted beside the required pair: both describe the
+ * binding rather than the container, and neither changes how the array is
+ * held. Demanding the bare pair left `const xs = ...` unproven here even after
+ * the semantic layer had proved it. */
+static bool aot_array_type_flags_are_exact(const XrSemanticTypeRecord *array) {
+    const uint8_t required = XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT;
+    return array &&
+           (array->flags & ~(uint8_t) (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST)) == required;
+}
+
 static bool aot_array_type_is_exact(const XrSemanticPlan *semantic, uint32_t type_index,
                                     bool indexes_elements, uint8_t *target_storage) {
     uint32_t child_count = 0;
@@ -1237,8 +1250,7 @@ static bool aot_array_type_is_exact(const XrSemanticPlan *semantic, uint32_t typ
     if (!children || !array || array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
         array->child_count != 1 || array->child_begin >= child_count ||
         array->scalar_rep != XR_SCALAR_REP_NONE || array->aggregate_extent != 0 ||
-        array->aggregate_align != 0 ||
-        array->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        array->aggregate_align != 0 || !aot_array_type_flags_are_exact(array))
         return false;
     if (!aot_array_element_storage_is_exact(
             xr_semantic_plan_type(semantic, children[array->child_begin]), &element)) {
@@ -1355,8 +1367,7 @@ static bool aot_array_intrinsic_is_exact(const XrSemanticPlan *semantic,
     if (!array || array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
         array->child_count != 1 || array->child_begin >= child_count ||
         array->scalar_rep != XR_SCALAR_REP_NONE || array->aggregate_extent != 0 ||
-        array->aggregate_align != 0 ||
-        array->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        array->aggregate_align != 0 || !aot_array_type_flags_are_exact(array))
         return false;
     const XrSemanticTypeRecord *element =
         xr_semantic_plan_type(semantic, children[array->child_begin]);
@@ -1423,8 +1434,7 @@ static bool aot_array_fill_scalar_is_exact(const XrSemanticPlan *semantic,
     if (!array || array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
         array->child_count != 1 || array->child_begin >= child_count ||
         array->scalar_rep != XR_SCALAR_REP_NONE || array->aggregate_extent != 0 ||
-        array->aggregate_align != 0 ||
-        array->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        array->aggregate_align != 0 || !aot_array_type_flags_are_exact(array))
         return false;
     uint32_t element_index = children[array->child_begin];
     const XrSemanticTypeRecord *element = xr_semantic_plan_type(semantic, element_index);
@@ -1488,8 +1498,7 @@ static bool aot_array_hof_array_type_is_exact(const XrSemanticPlan *semantic, ui
     if (!children || !array || array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
         array->child_count != 1 || array->child_begin >= child_count ||
         array->scalar_rep != XR_SCALAR_REP_NONE || array->aggregate_extent != 0 ||
-        array->aggregate_align != 0 ||
-        array->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT))
+        array->aggregate_align != 0 || !aot_array_type_flags_are_exact(array))
         return false;
     uint32_t element_index = children[array->child_begin];
     const XrSemanticTypeRecord *element = xr_semantic_plan_type(semantic, element_index);

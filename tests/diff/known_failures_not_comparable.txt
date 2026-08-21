@@ -314,9 +314,7 @@ tests/diff/cases/semantics/ownership/loop_ref_array_pop_backedge.xr
 tests/diff/cases/semantics/ownership/move_into_go.xr
 tests/diff/cases/semantics/ownership/move_local_heap.xr
 tests/diff/cases/semantics/ownership/move_local_in_fn.xr
-tests/diff/cases/semantics/ownership/shared_binding_boundaries.xr
 tests/diff/cases/semantics/ownership/shared_class_copy_go.xr
-tests/diff/cases/semantics/ownership/shared_copy_to_shared.xr
 tests/diff/cases/semantics/ownership/shared_freeze_go.xr
 tests/diff/cases/semantics/ownership/stack_closure_cell_capture.xr
 tests/diff/cases/semantics/ownership/value_struct_alias_copy_param.xr
