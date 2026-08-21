@@ -3603,6 +3603,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
              exact_adt_enum_borrowed || exact_array_shared_read || exact_string_shared_read ||
              exact_array_ref_place_load || exact_array_value_parameter ||
              exact_string_value_parameter_borrowed ||
+             (exact_dynamic_value && xr_semantic_dynamic_value_is_borrowed(operation)) ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
                 : XR_TARGET_OWNERSHIP_OWNED;

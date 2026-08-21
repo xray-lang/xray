@@ -50,7 +50,6 @@ xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
     XrStableId zero = {{0}};
     return plan && operation && operation->result_value != XR_SEMANTIC_INDEX_NONE &&
            operation->function < xr_semantic_plan_function_count(plan) &&
-           operation->semantic_immediate == 0 &&
            operation->callable_function == XR_SEMANTIC_INDEX_NONE &&
            operation->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
            operation->intrinsic_kind == XR_SEM_INTRINSIC_NONE &&
@@ -73,7 +72,11 @@ xr_semantic_dynamic_value_common_is_exact(const XrSemanticPlan *plan,
  *              edges already carry, so it names no constant and no metadata.
  * XI_CONST     an enum declaration's namespace descriptor, marked as such by
  *              lowering.  A constant backs it and the member table describes
- *              it, so both are required to be present rather than absent. */
+ *              it, so both are required to be present rather than absent.
+ * XI_GET_SHARED a read of a module-level slot, which holds a tagged value and
+ *              nothing else.  Its immediate names which slot, so unlike the
+ *              other producers it is expected to carry one, and the read
+ *              borrows what the slot owns rather than owning it. */
 static inline bool
 xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *operation) {
     if (!operation)
@@ -81,13 +84,33 @@ xr_semantic_dynamic_value_producer_is_exact(const XrSemanticOperationRecord *ope
     switch (operation->opcode) {
         case XI_PHI:
             return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
-                   operation->metadata_count == 0 && operation->constant == XR_SEMANTIC_INDEX_NONE;
+                   operation->metadata_count == 0 && operation->semantic_immediate == 0 &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE;
         case XI_CONST:
             return operation->auxiliary_kind == XI_AUX_KIND_ENUM_NAMESPACE &&
-                   operation->metadata_count != 0 && operation->constant != XR_SEMANTIC_INDEX_NONE;
+                   operation->metadata_count != 0 && operation->semantic_immediate == 0 &&
+                   operation->constant != XR_SEMANTIC_INDEX_NONE;
+        case XI_GET_SHARED:
+            return operation->auxiliary_kind == XI_AUX_KIND_NONE &&
+                   operation->metadata_count == 0 && operation->operand_count == 0 &&
+                   operation->semantic_immediate <= UINT16_MAX &&
+                   operation->constant == XR_SEMANTIC_INDEX_NONE &&
+                   operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+                   operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+                   operation->return_complete == 1;
         default:
             return false;
     }
+}
+
+/* Whether a producer of this family owns what it holds or only borrows it.
+ * A join and a descriptor own their value; a read of a shared slot borrows the
+ * one the slot owns, and releasing it would drop a reference the reader never
+ * took.  The builder writes this into the row and both verifiers check it, so
+ * like the slot role it is answered here once. */
+static inline bool
+xr_semantic_dynamic_value_is_borrowed(const XrSemanticOperationRecord *operation) {
+    return operation && operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
 /* Which slot role a producer of this family takes.  A join is held in the slot

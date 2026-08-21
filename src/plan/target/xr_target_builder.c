@@ -6125,11 +6125,15 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
      * a producer some other judgement could narrow belongs to that judgement. */
     if (analysis->defined_values[operation->result_value])
         return true;
+    bool borrowed = xr_semantic_dynamic_value_is_borrowed(operation);
     XrTargetMachineRepRecord rep;
-    if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+    if (!(borrowed
+              ? make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
+                                                &rep)
+              : make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep)) ||
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
-                    "target profile cannot materialize a dynamic merge result");
+                    "target profile cannot materialize a dynamic value");
     XrTargetSlotRole role = xr_semantic_dynamic_value_is_join(operation) ? XR_TARGET_SLOT_PHI
                                                                          : XR_TARGET_SLOT_TEMPORARY;
     XrStableId slot_identity;
@@ -6147,7 +6151,7 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
         .memory_rep = rep,
         .role = role,
         .root_kind = XR_TARGET_ROOT_DYNAMIC,
-        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .ownership = borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED,
         .debug_variable = XR_SEMANTIC_INDEX_NONE,
     };
     XrTargetValueIntent value = {
@@ -12774,7 +12778,6 @@ static const XrTargetFamily k_target_families[] = {
     {"stringbuilder_append_string_storage", builder_add_stringbuilder_append_string_storage},
     {"json_namespace_value_storage", builder_add_json_namespace_value_storage},
     {"panic_info_constructor_storage", builder_add_panic_info_constructor_storage},
-    {"dynamic_value_storage", builder_add_dynamic_value_storage},
     {"container_copy_result_storage", builder_add_container_copy_result_storage},
     {"direct_local_string_boundary_storage", builder_add_direct_local_string_boundary_storage},
     {"adt_enum_storage", builder_add_adt_enum_storage},
@@ -12785,6 +12788,7 @@ static const XrTargetFamily k_target_families[] = {
     {"channel_receive_storage", builder_add_channel_receive_storage},
     {"source_namespace_storage", builder_add_source_namespace_storage},
     {"native_module_namespace_storage", builder_add_native_module_namespace_storage},
+    {"dynamic_value_storage", builder_add_dynamic_value_storage},
     {"aggregates", builder_add_aggregates},
     /* After the aggregate family, whose slots it states the authority for, and
      * before the call family, which reads that authority to give the call row

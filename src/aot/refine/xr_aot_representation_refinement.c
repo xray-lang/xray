@@ -4292,6 +4292,9 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
     if (!operation || operation->result_value != semantic_value ||
         !xr_semantic_dynamic_value_is_exact(ctx->semantic, operation))
         return false;
+    uint8_t expected_ownership = xr_semantic_dynamic_value_is_borrowed(operation)
+                                     ? XR_TARGET_OWNERSHIP_BORROWED
+                                     : XR_TARGET_OWNERSHIP_OWNED;
     const XrTargetValueRepRecord *binding =
         xr_target_plan_value_rep(ctx->target_plan, semantic_value);
     const XrTargetMachineRepRecord *register_rep =
@@ -4308,14 +4311,13 @@ static bool oracle_dynamic_value_storage(const VerifyAuthority *ctx, uint32_t se
         memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
         register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
         memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
-        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
-        slot->semantic_value != semantic_value || slot->semantic_operation != operation_index ||
-        slot->function != operation->function ||
+        register_rep->ownership != expected_ownership ||
+        memory_rep->ownership != expected_ownership || slot->semantic_value != semantic_value ||
+        slot->semantic_operation != operation_index || slot->function != operation->function ||
         slot->role != (xr_semantic_dynamic_value_is_join(operation) ? XR_TARGET_SLOT_PHI
                                                                     : XR_TARGET_SLOT_TEMPORARY) ||
         slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
-        slot->root_kind != XR_TARGET_ROOT_DYNAMIC || slot->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC || slot->ownership != expected_ownership)
         return false;
     *out_storage = XR_REP_TAGGED;
     *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
