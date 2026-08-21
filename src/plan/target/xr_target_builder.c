@@ -5296,6 +5296,13 @@ static bool builder_add_source_class_object_storage(XrTargetPlanBuilder *builder
             continue;
         uint32_t source_class =
             xr_semantic_class_object_source_class(builder->semantic_plan, operation);
+        /* A generic template's class object is not this family's to bind:
+         * nothing is ever an instance of the template, and each specialisation
+         * lowers its own class object which this family does bind. Declining it
+         * is not the same as failing to name it -- the check below still
+         * refuses a class object that should have landed here. */
+        if (xr_semantic_class_object_is_generic_template(builder->semantic_plan, operation))
+            continue;
         /* Every class allocation in the module must land in this family: an
          * allocation the shared judgement cannot name would otherwise leave a
          * value with no representation row at all. */

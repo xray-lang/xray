@@ -111,6 +111,49 @@ xr_semantic_class_object_source_class(const XrSemanticPlan *plan,
     return xr_semantic_class_declaration_is_frozen(plan, match) ? match : XR_SEMANTIC_INDEX_NONE;
 }
 
+/* Whether this class object belongs to a generic template rather than to a
+ * class instances can be of.
+ *
+ * A generic declaration and each of its specialisations both lower to a class
+ * object, and both reach the plan. The specialisations are ordinary frozen
+ * classes -- `Cell$i64` names one class, holds one layout, and every instance
+ * of `Cell<int>` is of it. The template is not a class in that sense: nothing
+ * is ever an instance of `Cell<T>` itself, and the storage family that binds a
+ * class object has nothing to bind for it.
+ *
+ * The family therefore has to tell "this one is not mine" apart from "this one
+ * should be mine and I cannot name it", which is the same distinction the
+ * scalar family draws when it declines an address. Both go through the same
+ * name lookup, so the two answers cannot disagree about which declaration is
+ * behind a given class object. */
+static inline bool
+xr_semantic_class_object_is_generic_template(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation) {
+    if (!plan || !xr_semantic_class_object_operation_is_exact(operation))
+        return false;
+    uint32_t metadata_count = 0;
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!metadata || operation->metadata_begin >= metadata_count)
+        return false;
+    const char *name = metadata[operation->metadata_begin];
+    if (!name || !name[0])
+        return false;
+    uint32_t class_count = (uint32_t) xr_semantic_plan_source_class_count(plan);
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < class_count; i++) {
+        const XrSemanticSourceClassRecord *record = xr_semantic_plan_source_class(plan, i);
+        if (!record || !record->name || strcmp(record->name, name) != 0)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        match = i;
+    }
+    if (match == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    const XrSemanticSourceClassRecord *record = xr_semantic_plan_source_class(plan, match);
+    return record && (record->flags & XR_SEM_SOURCE_CLASS_GENERIC) != 0;
+}
+
 static inline bool xr_semantic_class_object_is_exact(const XrSemanticPlan *plan,
                                                      const XrSemanticOperationRecord *operation) {
     return xr_semantic_class_object_source_class(plan, operation) != XR_SEMANTIC_INDEX_NONE;
