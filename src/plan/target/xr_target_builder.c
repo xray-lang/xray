@@ -2730,30 +2730,39 @@ direct_local_go_find_store(XrDirectLocalGoCalleeStorageAnalysis *analysis, int64
     return &analysis->stores[slot];
 }
 
-/* The store that puts the callee in its slot must run before anything can
- * activate the coroutine, which is what the entry-block position establishes.
+/* Whether the store that fills the callee's slot is guaranteed to have run
+ * before any read of that slot in the same function.
  *
- * It does not also have to be the first thing the block does. An earlier guard
- * here refused any call before the store, on the reasoning that a call might
- * change the slot -- but the analysis that calls this already tracks, across
- * the whole module, whether the slot is written more than once, and refuses
- * when it is. A slot written exactly once cannot be changed by anything, so
- * the scan was refusing programs for a hazard the ambiguity check had already
- * ruled out: `const c = Channel<int>(1)` before a function declaration was
- * enough to lose every `go` in the module. */
-static bool direct_local_go_store_precedes_activation(const XrSemanticPlan *plan,
-                                                      uint32_t function_index,
-                                                      uint32_t store_index) {
-    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, function_index);
+ * Dominance is the whole judgement. Two earlier spellings of it were structural
+ * and both were wrong in the same direction -- they described one shape a
+ * correct program can take rather than the property that makes it correct.
+ * Requiring the store to sit in the entry block refused a module whose function
+ * declarations lower into a later block, which is most of them; requiring no
+ * call before the store refused `const c = Channel<int>(1)` written above a
+ * declaration, on a hazard the module-wide ambiguity check has already ruled
+ * out -- a slot written exactly once cannot be changed by any call.
+ *
+ * Reads in other functions are not checked here and need not be: the callee is
+ * lexically owned by this function and the slot is written once, so every path
+ * that reaches such a read passes through a read in this function first, and
+ * that one is dominated. */
+static bool direct_local_go_store_dominates_slot_reads(const XrSemanticPlan *plan,
+                                                       const XrSemanticGraph *graph, int64_t slot,
+                                                       uint32_t store_index) {
     const XrSemanticOperationRecord *store = xr_semantic_plan_operation(plan, store_index);
-    const XrSemanticBlockRecord *entry =
-        function ? xr_semantic_plan_block(plan, function->block_begin) : NULL;
-    if (!function || !store || !entry || entry->function != function_index ||
-        store->block != function->block_begin || store_index < entry->operation_begin ||
-        store_index >= entry->operation_begin + entry->operation_count)
+    if (!plan || !graph || !store)
         return false;
-    for (uint32_t i = entry->operation_begin; i < store_index; i++) {
-        if (!xr_semantic_plan_operation(plan, i))
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticOperationRecord *read = xr_semantic_plan_operation(plan, i);
+        if (!read)
+            return false;
+        if (read->opcode != XI_GET_SHARED || read->semantic_immediate != slot ||
+            read->function != store->function)
+            continue;
+        if (read->block == store->block
+                ? i <= store_index
+                : !xr_semantic_graph_dominates(graph, store->block, read->block))
             return false;
     }
     return true;
@@ -2766,8 +2775,9 @@ static bool semantic_direct_local_go_store_target(
     if (out_target)
         *out_target = XR_SEMANTIC_INDEX_NONE;
     if (!plan || !values || !load || !entry || !out_target || entry->ambiguous ||
-        entry->operation == XR_SEMANTIC_INDEX_NONE || entry->operation >= load_index)
+        entry->operation == XR_SEMANTIC_INDEX_NONE || entry->operation >= load_index) {
         return false;
+    }
     const XrSemanticOperationRecord *store = xr_semantic_plan_operation(plan, entry->operation);
     uint32_t operand_count = 0;
     const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
@@ -2789,16 +2799,19 @@ static bool semantic_direct_local_go_store_target(
         store->callable_function != XR_SEMANTIC_INDEX_NONE ||
         store->effects != xi_generated_op_effects(XI_SET_SHARED) ||
         store->result_ownership != xi_generated_op_result_ownership(XI_SET_SHARED) ||
-        !direct_local_go_store_precedes_activation(plan, store->function, entry->operation))
+        !direct_local_go_store_dominates_slot_reads(plan, graph, store->semantic_immediate,
+                                                    entry->operation)) {
         return false;
+    }
     const XrSemanticOperandRecord *source = &operands[store->operand_begin];
     if (source->value >= values->total_values || source->role != XR_SEM_OPERAND_VALUE ||
         source->parameter != -1 || source->transfer_mode != XR_TRANSFER_SHARE ||
         source->ownership_action != XR_SEM_OPERAND_CONSUME ||
         source->parameter_mode != XR_PARAM_READ || source->access != XR_CALL_ARG_PLAIN ||
         source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
-        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0)
+        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0) {
         return false;
+    }
     uint32_t producer_index = values->value_operations[source->value];
     const XrSemanticOperationRecord *producer =
         producer_index == XR_SEMANTIC_INDEX_NONE ? NULL
@@ -2808,8 +2821,9 @@ static bool semantic_direct_local_go_store_target(
     if (!producer || producer_index >= entry->operation ||
         producer->result_value != source->value || producer->result_type != source->type ||
         producer->function != store->function || !semantic_heap_closure_is_exact(plan, producer) ||
-        !callee || callee->parent != store->function)
+        !callee || callee->parent != store->function) {
         return false;
+    }
     *out_target = producer->callable_function;
     return true;
 }
@@ -2932,18 +2946,24 @@ static bool direct_local_go_callee_storage_analysis_init(
                 source_index == XR_SEMANTIC_INDEX_NONE
                     ? NULL
                     : xr_semantic_plan_operation(plan, source_index);
-            if (!source || source->opcode != XI_GET_SHARED || use->opcode != XI_GO)
+            /* Only the spawn's callee operand is a candidate. An argument that
+             * happens to be a shared read of its own is not one, and admitting
+             * it made this pass contradict itself: it was collected here, no
+             * store could be found for it because none was looked for, and the
+             * sweep below then invalidated it for appearing in a position this
+             * one had just accepted. */
+            if (!source || source->opcode != XI_GET_SHARED || use->opcode != XI_GO || a != 0)
                 continue;
             uint32_t value = source->result_value;
             analysis->candidate_value[value] = 1;
             uint32_t target = XR_SEMANTIC_INDEX_NONE;
             XrDirectLocalGoStoreEntry *entry =
                 direct_local_go_find_store(analysis, source->semantic_immediate);
-            bool exact =
-                entry &&
-                semantic_direct_local_go_store_target(plan, values, source, source_index, entry,
-                                                      &analysis->graph, &target) &&
-                semantic_direct_local_go_use_is_exact(plan, source, use, operand, a, target);
+            bool probe_store =
+                entry && semantic_direct_local_go_store_target(plan, values, source, source_index,
+                                                               entry, &analysis->graph, &target);
+            bool exact = probe_store && semantic_direct_local_go_use_is_exact(plan, source, use,
+                                                                              operand, a, target);
             if (!exact ||
                 (analysis->target_by_value[value] != XR_SEMANTIC_INDEX_NONE &&
                  analysis->target_by_value[value] != target) ||
