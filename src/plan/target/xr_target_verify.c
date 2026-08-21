@@ -783,6 +783,15 @@ static int semantic_type_expected_rep(const XrSemanticTypeRecord *type, uint16_t
                 return -1;
             *out_kind = XR_MACHINE_REP_RAW_PTR;
             return 1;
+        case XR_KIND_ENUM:
+            /* A unit enum is the ordinal it carries -- no payload, no
+             * allocation, nothing a tagged value would hold. An enum with
+             * payloads is a different shape and answers through the families
+             * that bind tagged values, so only the unit form resolves here. */
+            if (!xr_semantic_unit_enum_type_is_exact(type))
+                return 0;
+            *out_kind = XR_MACHINE_REP_ENUM_ORDINAL;
+            return 1;
         default:
             return 0;
     }

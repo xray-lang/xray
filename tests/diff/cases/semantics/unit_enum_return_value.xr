@@ -1,0 +1,55 @@
+// anchor: semantics-unit-enum-return-value
+// VM/AOT differential coverage for returning a unit enum by value.
+//
+// A unit enum is the ordinal it carries: its layout states a zero payload, so
+// there is no allocation behind the value and nothing for a retain to count.
+// Counting it anyway cost more than the count -- reference operations were
+// emitted, every layer below had to describe an ownership the value does not
+// have, and the representation pass refused a retain whose operand is an i64.
+//
+// The argument side already bound a unit enum; only the result side was
+// missing, so a callee could take one but not return one. Both directions are
+// exercised here, from a free function and from a method.
+
+enum Color { Red, Green, Blue }
+
+fn choose(n: int) -> Color {
+    if (n == 0) { return Color.Red }
+    if (n == 1) { return Color.Green }
+    return Color.Blue
+}
+
+fn describe(c: Color) -> int {
+    if (c == Color.Red) { return 100 }
+    if (c == Color.Green) { return 200 }
+    return 300
+}
+
+fn roundtrip(n: int) -> int {
+    return describe(choose(n))
+}
+
+final class Painter {
+    favourite() -> Color {
+        return Color.Green
+    }
+
+    shifted(n: int) -> Color {
+        return choose(n)
+    }
+}
+
+fn main() {
+    print(choose(0) == Color.Red)
+    print(choose(1) == Color.Green)
+    print(choose(2) == Color.Blue)
+    print(describe(Color.Green))
+    print(roundtrip(0))
+    print(roundtrip(2))
+
+    var p = Painter()
+    print(p.favourite() == Color.Green)
+    print(describe(p.shifted(1)))
+}
+
+main()

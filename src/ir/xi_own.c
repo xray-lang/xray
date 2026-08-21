@@ -53,6 +53,18 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
     /* CFn<...> is a bare C function pointer (no closure header), not RC-managed. */
     if (XR_TYPE_IS_C_FUNCTION(type))
         return false;
+    /* An enum whose variants carry no payload is its ordinal and nothing more:
+     * the layout states a zero payload, so there is no allocation behind the
+     * value and nothing for a retain to count. Kind alone cannot tell it from
+     * the ADT form, whose variants do hold references, so the layout answers.
+     *
+     * Counting a scalar costs more than the count: the reference operations are
+     * emitted, every layer downstream has to describe an ownership the value
+     * does not have, and the representation passes refuse a retain whose
+     * operand is an i64. */
+    if (type->kind == XR_KIND_ENUM && type->enum_type.layout &&
+        type->enum_type.layout->is_zero_payload)
+        return false;
     return xr_kind_is_reference_counted(type->kind);
 }
 

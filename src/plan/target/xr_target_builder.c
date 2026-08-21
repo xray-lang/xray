@@ -9244,6 +9244,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          !semantic_direct_local_nullable_scalar_result_is_exact(plan, operation, callee) &&
          !semantic_direct_local_string_result_is_exact(plan, operation, callee) &&
          !xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) &&
+         !xr_semantic_direct_local_unit_enum_result_is_exact(plan, operation, callee) &&
          !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
          xr_semantic_class_instance_result_source_class(plan, operation) ==
              XR_SEMANTIC_INDEX_NONE &&
@@ -9277,6 +9278,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             target_trace_judgement(
                 "result is an exact ADT enum",
                 xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee));
+            target_trace_judgement(
+                "result is an exact unit enum",
+                xr_semantic_direct_local_unit_enum_result_is_exact(plan, operation, callee));
             target_trace_judgement(
                 "result is an exact Array",
                 semantic_direct_local_array_result_is_exact(plan, operation, callee));

@@ -98,6 +98,30 @@ xr_semantic_direct_local_adt_enum_result_is_exact(const XrSemanticPlan *plan,
            xr_semantic_adt_enum_type_is_exact(xr_semantic_plan_type(plan, operation->result_type));
 }
 
+/* A unit enum returned by value. It travels as the ordinal it is: no
+ * allocation, no reference, nothing to release. That is what separates it from
+ * the ADT case above, which returns an owning reference the caller has to
+ * account for -- here the two sides only have to name the same enum and agree
+ * that the result is the call's own, aliasing no operand and filling no return
+ * parameter.
+ *
+ * The argument side already binds a unit enum through the same type judgement;
+ * omitting the result side left a callee able to take one but not to return
+ * one. */
+static inline bool
+xr_semantic_direct_local_unit_enum_result_is_exact(const XrSemanticPlan *plan,
+                                                   const XrSemanticOperationRecord *operation,
+                                                   const XrSemanticFunctionRecord *callee) {
+    return plan && operation && callee &&
+           (operation->opcode == XI_CALL || operation->opcode == XI_TAIL_CALL ||
+            operation->opcode == XI_CALL_METHOD) &&
+           operation->result_type == callee->return_type &&
+           operation->result_value != XR_SEMANTIC_INDEX_NONE &&
+           operation->result_alias_operand == -1 && operation->return_parameter == -1 &&
+           callee->return_parameter == -1 &&
+           xr_semantic_unit_enum_type_is_exact(xr_semantic_plan_type(plan, operation->result_type));
+}
+
 static inline bool xr_semantic_enum_take_u32(const char *text, uint32_t *out) {
     if (!text || !text[0] || !out)
         return false;
