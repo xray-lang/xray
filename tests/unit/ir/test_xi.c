@@ -6,6 +6,8 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_import_resolve.h"
+#include "../../../src/module/xmodule_graph.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -19,6 +21,80 @@ static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
+
+static void reset_import_ref(XiImportRef *ref) {
+    ref->resolution_attempted = false;
+    ref->resolved_mod_index = -1;
+    ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
+    ref->resolved_module = NULL;
+    ref->resolved_func = NULL;
+}
+
+/* Named source imports are lookup coordinates, not durable identities.  Once
+ * stdlib canonical ids are typed, resolution must follow the importer's graph
+ * edge and its authority coordinate rather than accepting a bare canonical
+ * alias. */
+static void test_typed_named_import_resolution(void) {
+    printf("--- test_typed_named_import_resolution ---\n");
+    static char importer_path[] = "C:/checkout/stdlib/http/http.xr";
+    int dependencies[] = {1};
+    int topo_order[] = {1, 0};
+    XrModuleSpec specs[2] = {
+        {
+            .canonical = "stdlib-module-v1:module=4:http:path=12:http/http.xr",
+            .source_path = importer_path,
+            .kind = XR_MOD_STDLIB,
+            .authority = {.kind = XR_MODULE_IDENTITY_STDLIB, .namespace_id = "http"},
+            .dep_indices = dependencies,
+            .dep_count = 1,
+        },
+        {
+            .canonical = "stdlib-module-v1:module=3:net:path=10:net/net.xr",
+            .source_path = "C:/checkout/stdlib/net/net.xr",
+            .kind = XR_MOD_STDLIB,
+            .authority = {.kind = XR_MODULE_IDENTITY_STDLIB, .namespace_id = "net"},
+        },
+    };
+    XrModuleGraph graph = {
+        .specs = specs,
+        .spec_count = 2,
+        .topo_order = topo_order,
+        .topo_count = 2,
+    };
+
+    XiFunc *dependency_root = xi_func_new("net_init", &stub_null);
+    XiModule *dependency_module = xi_module_new(specs[1].source_path, "net", dependency_root);
+    XiFunc *caller = xi_func_new("http_init", &stub_null);
+    XiBlock *entry = xi_block_new(caller);
+    assert(dependency_root && dependency_module && caller && entry);
+    XiImportRef ref = {.module_path = "net", .member_name = NULL};
+    reset_import_ref(&ref);
+    XiValue *import = xi_value_new(caller, entry, XI_IMPORT_REF, &stub_null, 0);
+    assert(import != NULL);
+    import->aux = &ref;
+    xi_block_set_return(entry, NULL);
+    XiModule *modules[] = {dependency_module, NULL};
+
+    xi_resolve_imports(caller, &graph, importer_path, modules, 2);
+    assert(ref.resolution_attempted && ref.resolved_mod_index == 0 &&
+           ref.resolved_module == dependency_module);
+
+    /* A bare canonical alias cannot substitute for typed authority. */
+    reset_import_ref(&ref);
+    specs[1].canonical = "net";
+    specs[1].authority.namespace_id = "net";
+    xi_resolve_imports(caller, &graph, importer_path, modules, 2);
+    assert(ref.resolution_attempted && ref.resolved_mod_index == -1 &&
+           ref.resolved_module == NULL);
+
+    xi_func_free(caller);
+    dependency_root->module = NULL;
+    dependency_module->init = NULL;
+    xi_func_free(dependency_root);
+    xi_module_free(dependency_module);
+    printf("  PASS\n\n");
+}
 
 /* Test 1: fn add(a: int, b: int) -> int { return a + b } */
 static void test_simple_add(void) {
@@ -186,6 +262,7 @@ int main(void) {
     test_if_branch();
     test_phi_node();
     test_constants();
+    test_typed_named_import_resolution();
 
     printf("=== All Xi IR tests passed ===\n");
     return 0;

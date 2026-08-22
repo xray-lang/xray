@@ -95,6 +95,54 @@ static int graph_spec_to_topo(const XrModuleGraph *graph, int spec_index, int nm
     return -1;
 }
 
+/* Resolve a named import only through an edge already admitted by the module
+ * resolver.  The source spelling ("net" or "owner/package") is a lookup
+ * coordinate, never a durable module identity: typed stdlib/package canonical
+ * ids deliberately do not compare equal to it. */
+static int graph_named_dependency(const XrModuleGraph *graph, const char *importer_path,
+                                  const char *specifier) {
+    if (!graph || !importer_path || !specifier || !specifier[0])
+        return -1;
+    int importer = xr_module_graph_find_source(graph, importer_path);
+    if (importer < 0 || importer >= graph->spec_count)
+        return -1;
+    const XrModuleSpec *owner = &graph->specs[importer];
+    int match = -1;
+    size_t specifier_length = strlen(specifier);
+    for (int edge = 0; edge < owner->dep_count; edge++) {
+        int dependency = owner->dep_indices[edge];
+        if (dependency < 0 || dependency >= graph->spec_count)
+            return -1;
+        const XrModuleSpec *candidate = &graph->specs[dependency];
+        const char *coordinate = candidate->authority.namespace_id;
+        size_t coordinate_length = coordinate ? strlen(coordinate) : 0;
+        bool matches = candidate->kind == XR_MOD_STDLIB && coordinate &&
+                       strcmp(coordinate, specifier) == 0;
+        if (!matches && candidate->kind == XR_MOD_PACKAGE && coordinate) {
+            matches = coordinate_length > specifier_length + 1u &&
+                      strncmp(coordinate, specifier, specifier_length) == 0 &&
+                      coordinate[specifier_length] == '@' &&
+                      coordinate[specifier_length + 1] != '\0';
+        }
+        if (!matches)
+            continue;
+        XrModuleIdentityKind identity_kind = 0;
+        if (!xr_module_identity_authority_valid(&candidate->authority) ||
+            !xr_module_identity_valid(candidate->canonical, &identity_kind) ||
+            (candidate->kind == XR_MOD_STDLIB &&
+             (candidate->authority.kind != XR_MODULE_IDENTITY_STDLIB ||
+              identity_kind != XR_MODULE_IDENTITY_STDLIB)) ||
+            (candidate->kind == XR_MOD_PACKAGE &&
+             (candidate->authority.kind != XR_MODULE_IDENTITY_PACKAGE ||
+              identity_kind != XR_MODULE_IDENTITY_PACKAGE)))
+            return -1;
+        if (match >= 0)
+            return -1;
+        match = dependency;
+    }
+    return match;
+}
+
 static int resolve_reexport_source_topo(const XrModuleGraph *graph, const XiModule *module,
                                         const char *specifier, int nmodules) {
     if (!graph || !module || !specifier)
@@ -105,7 +153,7 @@ static int resolve_reexport_source_topo(const XrModuleGraph *graph, const XiModu
         if (canonical)
             spec_index = xr_module_graph_find(graph, canonical);
     } else {
-        spec_index = xr_module_graph_find(graph, specifier);
+        spec_index = graph_named_dependency(graph, module->path, specifier);
     }
     return graph_spec_to_topo(graph, spec_index, nmodules);
 }
@@ -332,14 +380,14 @@ static void resolve_func_imports(XiFunc *f, const XrModuleGraph *graph, const ch
                     continue;
                 target_spec_idx = xr_module_graph_find(graph, canonical);
             } else {
-                /* Bare (stdlib) import.  Pure-C native stdlib modules (math, os,
+                /* Named stdlib/package import. Pure-C native stdlib modules (math, os,
                  * ...) ship no compiled source and are absent from the graph, so
                  * they stay unresolved here and are emitted as native calls
-                 * downstream.  A pure-Xray stdlib module (e.g. `sync`) is
-                 * compiled into the bundle as a real graph module keyed by its
-                 * bare name, so resolve it here to link cross-module class /
-                 * function references exactly like any other module. */
-                target_spec_idx = xr_module_graph_find(graph, ref->module_path);
+                 * downstream. A source-backed stdlib/package module is reached
+                 * through the importer's resolver-admitted edge; its typed
+                 * canonical identity is never compared with source spelling. */
+                target_spec_idx =
+                    graph_named_dependency(graph, importer_path, ref->module_path);
             }
             if (target_spec_idx < 0)
                 continue;
