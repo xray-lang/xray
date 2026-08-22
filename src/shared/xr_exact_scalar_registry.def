@@ -1,0 +1,23 @@
+/*
+ * Exact public scalar registry.
+ *
+ * XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family,
+ *                 range_class, flags)
+ *
+ * Each semantic scalar representation has exactly one row and one public
+ * spelling. Stable IDs are reserved semantic identities and must not be
+ * renumbered or reused when they enter plans, caches, or artifacts.
+ */
+
+XR_EXACT_SCALAR(I8, 1, "i8", XR_NATIVE_I8, INTEGER, SIGNED, NONE)
+XR_EXACT_SCALAR(I16, 2, "i16", XR_NATIVE_I16, INTEGER, SIGNED, NONE)
+XR_EXACT_SCALAR(I32, 3, "i32", XR_NATIVE_I32, INTEGER, SIGNED, NONE)
+XR_EXACT_SCALAR(I64, 4, "i64", XR_NATIVE_I64, INTEGER, SIGNED, DEFAULT_INTEGER)
+XR_EXACT_SCALAR(U8, 5, "u8", XR_NATIVE_U8, INTEGER, UNSIGNED, BYTE_ELEMENT)
+XR_EXACT_SCALAR(U16, 6, "u16", XR_NATIVE_U16, INTEGER, UNSIGNED, NONE)
+XR_EXACT_SCALAR(U32, 7, "u32", XR_NATIVE_U32, INTEGER, UNSIGNED, NONE)
+XR_EXACT_SCALAR(U64, 8, "u64", XR_NATIVE_U64, INTEGER, UNSIGNED, NONE)
+XR_EXACT_SCALAR(F32, 9, "f32", XR_NATIVE_F32, FLOAT, FLOATING, NONE)
+XR_EXACT_SCALAR(F64, 10, "f64", XR_NATIVE_F64, FLOAT, FLOATING, DEFAULT_DECIMAL)
+XR_EXACT_SCALAR(ISIZE, 11, "isize", XR_NATIVE_ISIZE, INTEGER, SIGNED, TARGET_WIDTH)
+XR_EXACT_SCALAR(USIZE, 12, "usize", XR_NATIVE_USIZE, INTEGER, UNSIGNED, TARGET_WIDTH)

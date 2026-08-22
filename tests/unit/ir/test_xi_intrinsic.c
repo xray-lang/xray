@@ -19,6 +19,7 @@
 #include "../../src/frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../src/shared/xr_core_intrinsic.h"
+#include "../../src/shared/xr_exact_scalar_registry.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
 typedef enum {
@@ -510,6 +511,40 @@ static void test_core_intrinsic_registry(void) {
     }
 }
 
+static void test_exact_scalar_registry(void) {
+    char error[192];
+    const XrExactScalarDesc *i64 = xr_exact_scalar_by_id(XR_EXACT_SCALAR_I64);
+    const XrExactScalarDesc *u8 = xr_exact_scalar_by_native_type(XR_NATIVE_U8);
+    const XrExactScalarDesc *f64 = xr_exact_scalar_by_native_type(XR_NATIVE_F64);
+
+    ASSERT_TRUE(xr_exact_scalar_registry_validate(error, sizeof(error)),
+                "exact scalar registry must be internally consistent");
+    ASSERT_TRUE(xr_exact_scalar_count() == 12,
+                "exact scalar registry must contain twelve representations");
+    ASSERT_TRUE(XR_EXACT_SCALAR_I8 == 1 && XR_EXACT_SCALAR_I16 == 2 &&
+                    XR_EXACT_SCALAR_I32 == 3 && XR_EXACT_SCALAR_I64 == 4 &&
+                    XR_EXACT_SCALAR_U8 == 5 && XR_EXACT_SCALAR_U16 == 6 &&
+                    XR_EXACT_SCALAR_U32 == 7 && XR_EXACT_SCALAR_U64 == 8 &&
+                    XR_EXACT_SCALAR_F32 == 9 && XR_EXACT_SCALAR_F64 == 10 &&
+                    XR_EXACT_SCALAR_ISIZE == 11 && XR_EXACT_SCALAR_USIZE == 12,
+                "exact scalar stable IDs must not be renumbered or reused");
+    ASSERT_TRUE(i64 && i64->native_type == XR_NATIVE_I64 &&
+                    strcmp(i64->source_name, "i64") == 0,
+                "i64 stable identity must own the default integer representation");
+    ASSERT_TRUE(u8 && strcmp(u8->source_name, "u8") == 0 &&
+                    (u8->flags & XR_EXACT_SCALAR_FLAG_BYTE_ELEMENT) != 0,
+                "u8 must be the sole byte element spelling");
+    ASSERT_TRUE(f64 && strcmp(f64->source_name, "f64") == 0 &&
+                    (f64->flags & XR_EXACT_SCALAR_FLAG_DEFAULT_DECIMAL) != 0,
+                "f64 must own the default decimal representation");
+    ASSERT_TRUE(xr_exact_scalar_by_source_name("int", 3) == NULL,
+                "int must not have an exact scalar identity");
+    ASSERT_TRUE(xr_exact_scalar_by_source_name("byte", 4) == NULL,
+                "byte must not have an exact scalar identity");
+    ASSERT_TRUE(xr_exact_scalar_by_source_name("float", 5) == NULL,
+                "float must not have an exact scalar identity");
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -531,6 +566,7 @@ int main(void) {
     test_builtin_receiver_method_placement();
     test_semantic_intrinsic_registry();
     test_core_intrinsic_registry();
+    test_exact_scalar_registry();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;
