@@ -406,6 +406,7 @@
       "production_callers": [
         "src/aot/xi_cgen.c",
         "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c",
         "src/ir/xi_emit.c",
         "src/shared/xr_semantic_owner_ids_gen.h"
       ],
@@ -417,6 +418,8 @@
       ],
       "representation": "native",
       "signatures": [
+        "xr_codegen_fence_plan_core",
+        "xr_codegen_fence_plan_is_exact_core",
         "xr_codegen_opaque_plan_core",
         "xr_codegen_opaque_plan_is_exact_core"
       ],

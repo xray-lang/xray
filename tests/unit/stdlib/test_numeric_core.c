@@ -617,6 +617,29 @@ TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier) {
                   "xr_codegen_opaque_plan_core");
 }
 
+TEST(codegen_compiler_fence_core_freezes_only_native_compiler_order) {
+    XrCodegenFencePlan vm_plan = XR_CODEGEN_FENCE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO, XR_SEM_CONSUMER_VM);
+    XrCodegenFencePlan cgen_plan = XR_CODEGEN_FENCE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO, XR_SEM_CONSUMER_CGEN);
+
+    ASSERT(xr_codegen_fence_plan_is_exact_core(vm_plan));
+    ASSERT(xr_codegen_fence_plan_is_exact_core(cgen_plan));
+    ASSERT(vm_plan.preserves_program_state);
+    ASSERT_FALSE(vm_plan.has_runtime_memory_effect);
+    ASSERT(vm_plan.blocks_native_memory_reordering);
+    vm_plan.has_runtime_memory_effect = true;
+    ASSERT_FALSE(xr_codegen_fence_plan_is_exact_core(vm_plan));
+    cgen_plan.blocks_native_memory_reordering = false;
+    ASSERT_FALSE(xr_codegen_fence_plan_is_exact_core(cgen_plan));
+    ASSERT_STR_EQ(xr_semantic_owner_cgen_adapter(
+                      XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+                      XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO),
+                  "xr_codegen_fence_plan_core");
+}
+
 TEST(copy_core_freezes_identity_clone_and_control_variants) {
     XrCopyPlan identity = XR_COPY_OWNER_PLAN(
         XR_SEM_OWNER_ID_SHARED_COPY_HI, XR_SEM_OWNER_ID_SHARED_COPY_LO,
@@ -763,6 +786,7 @@ RUN_TEST(raw_scalar_core_float_and_pointer_access_preserve_bits);
 RUN_TEST(raw_scalar_access_owner_freezes_typed_load_store_matrix);
 RUN_TEST(owner_forward_core_freezes_value_and_ownership_transfer);
 RUN_TEST(codegen_opaque_core_freezes_value_and_optimizer_barrier);
+RUN_TEST(codegen_compiler_fence_core_freezes_only_native_compiler_order);
 RUN_TEST(copy_core_freezes_identity_clone_and_control_variants);
 RUN_TEST(static_address_core_freezes_stability_and_borrow_contract);
 RUN_TEST(reference_count_core_freezes_retain_and_release_contract);

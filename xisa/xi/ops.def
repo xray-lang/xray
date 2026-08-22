@@ -2630,7 +2630,6 @@
     xi.add
     xi.sub
     xi.mul
-    xi.codegen.compiler-fence
     xi.convert
     xi.box
     xi.unbox
@@ -2732,6 +2731,7 @@
 (define-xi-semantic-owner shared-semantic-kernel
   :operations (
     xi.codegen.opaque
+    xi.codegen.compiler-fence
     xi.copy
     xi.static.addr
     xi.atomic.load
@@ -2892,6 +2892,21 @@
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
     (vm "src/ir/xi_emit.c" "XR_CODEGEN_OPAQUE_OWNER_PLAN")
     (cgen "src/aot/xi_cgen.c" "cg_codegen_opaque_adapter_name")
+  ))
+
+(define-xi-observable-owner shared.codegen-compiler-fence
+  :category shared-semantic-kernel
+  :operations (xi.codegen.compiler-fence)
+  :consumers (
+    semantic-plan
+    vm
+    cgen
+  )
+  :cgen-adapter xr_codegen_fence_plan_core
+  :production-bindings (
+    (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
+    (vm "src/ir/xi_emit.c" "XR_CODEGEN_FENCE_OWNER_PLAN")
+    (cgen "src/aot/xi_cgen.c" "cg_codegen_fence_adapter_name")
   ))
 
 (define-xi-observable-owner shared.copy

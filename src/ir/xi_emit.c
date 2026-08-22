@@ -647,6 +647,13 @@ static void emit_codegen_opaque(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 static void emit_codegen_compiler_fence(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) v;
+    XrCodegenFencePlan plan = XR_CODEGEN_FENCE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO, XR_SEM_CONSUMER_VM);
+    if (!xr_codegen_fence_plan_is_exact_core(plan)) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
     emit_inst(ctx, CREATE_ABC(OP_LOADNULL, dst, 0, 0));
 }
 

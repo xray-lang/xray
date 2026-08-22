@@ -25,10 +25,15 @@ static uint32_t xicgen_stmt_bound_try_id(const XiFunc *f, const XiValue *v) {
 
 static bool xicgen_stmt_codegen_compiler_fence(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                const XiValue *v, const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) v;
     (void) prefix;
+    const char *adapter = cg_codegen_fence_adapter_name(ctx);
+    XrCodegenFencePlan plan = XR_CODEGEN_FENCE_OWNER_PLAN(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO, XR_SEM_CONSUMER_CGEN);
+    if (!adapter || !xr_codegen_fence_plan_is_exact_core(plan))
+        return false;
     fprintf(out, "    xrt_codegen_compiler_fence();\n");
     return true;
 }

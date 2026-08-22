@@ -227,6 +227,7 @@ NULL_TEST_OPERATIONS = {"xi.isnull"}
 ASSERT_CONDITION_OPERATIONS = {"xi.assert", "xi.assert.eq", "xi.assert.ne"}
 OWNER_FORWARD_OPERATIONS = {"xi.owner.forward"}
 CODEGEN_OPAQUE_OPERATIONS = {"xi.codegen.opaque"}
+CODEGEN_COMPILER_FENCE_OPERATIONS = {"xi.codegen.compiler-fence"}
 COPY_OPERATIONS = {"xi.copy"}
 STATIC_ADDRESS_OPERATIONS = {"xi.static.addr"}
 REFERENCE_COUNT_OPERATIONS = {"xi.retain", "xi.release"}
@@ -2651,6 +2652,65 @@ def verify_codegen_opaque_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
+def verify_codegen_compiler_fence_ratchet(root: Path, registry: dict) -> list[str]:
+    errors: list[str] = []
+    owner_name = "shared.codegen-compiler-fence"
+    marker = owner_macro_prefix(owner_name)
+    owner = next((row for row in registry.get("owners", [])
+                  if row.get("owner") == owner_name), None)
+    if owner is None or set(owner.get("operations", [])) != CODEGEN_COMPILER_FENCE_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.codegen-compiler-fence family")
+    elif owner.get("cgen_adapter") != "xr_codegen_fence_plan_core":
+        errors.append("semantic owner registry has no exact compiler-fence CGen adapter")
+
+    core_text = (root / "src/shared/xr_codegen_opaque_core.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_CODEGEN_FENCE_OWNER_PLAN",
+                  "xr_codegen_fence_plan_core", "xr_codegen_fence_plan_is_exact_core",
+                  "blocks_native_memory_reordering"):
+        if token not in core_text:
+            errors.append("src/shared/xr_codegen_opaque_core.h: compiler fence lacks stable owner")
+            break
+
+    vm_text = (root / "src/ir/xi_emit.c").read_text(encoding="utf-8", errors="strict")
+    vm_body = extract_c_function(vm_text, "emit_codegen_compiler_fence") or ""
+    void_projection_opcode = "O" + "P" + "_" + "LOADNULL"
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
+                  "XR_CODEGEN_FENCE_OWNER_PLAN", "xr_codegen_fence_plan_is_exact_core",
+                  void_projection_opcode):
+        if token not in vm_body:
+            errors.append("src/ir/xi_emit.c: compiler fence bypasses shared owner")
+            break
+
+    cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
+    resolver = extract_c_function(cgen_text, "cg_codegen_fence_adapter_name") or ""
+    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_CGEN",
+                  "xr_semantic_owner_cgen_adapter", '"xr_codegen_fence_plan_core"'):
+        if token not in resolver:
+            errors.append("src/aot/xi_cgen.c: compiler fence does not resolve stable adapter")
+            break
+
+    dispatch_text = (root / "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c").read_text(
+        encoding="utf-8", errors="strict")
+    body = extract_c_function(dispatch_text, "xicgen_stmt_codegen_compiler_fence") or ""
+    for token in ("cg_codegen_fence_adapter_name", "XR_CODEGEN_FENCE_OWNER_PLAN",
+                  "xr_codegen_fence_plan_is_exact_core", "xrt_codegen_compiler_fence"):
+        if token not in body:
+            errors.append(
+                "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c: compiler fence bypasses owner")
+            break
+
+    core_test = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "codegen_compiler_fence_core_freezes_only_native_compiler_order" not in core_test:
+        errors.append("tests/unit/stdlib/test_numeric_core.c: compiler-fence KAT is missing")
+    cgen_test = (root / "tests/unit/ir/test_xi_cgen.c").read_text(
+        encoding="utf-8", errors="strict")
+    if "cgen_codegen_controls_emit_provider_constructs_without_runtime_calls" not in cgen_test:
+        errors.append("tests/unit/ir/test_xi_cgen.c: compiler-fence provider KAT is missing")
+    return errors
+
+
 def verify_copy_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
     owner_name = "shared.copy"
@@ -3958,6 +4018,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_assert_condition_ratchet(root, registry))
         errors.extend(verify_owner_forward_ratchet(root, registry))
         errors.extend(verify_codegen_opaque_ratchet(root, registry))
+        errors.extend(verify_codegen_compiler_fence_ratchet(root, registry))
         errors.extend(verify_copy_ratchet(root, registry))
         errors.extend(verify_static_address_ratchet(root, registry))
         errors.extend(verify_reference_count_ratchet(root, registry))

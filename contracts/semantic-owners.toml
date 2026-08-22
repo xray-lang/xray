@@ -433,6 +433,21 @@ fixtures = [
 ]
 
 [[operation]]
+id = "codegen-compiler-fence"
+observable_contract = "src/shared/xr_codegen_opaque_core.h"
+semantic_kernel = "src/shared/xr_codegen_opaque_core.h"
+vm_adapter = "src/ir/xi_emit.c"
+aot_adapter = "src/aot/xi_cgen_stmt_dispatch_helpers.inc.c"
+typed_plan = "shared.codegen-compiler-fence"
+runtime_fallback = "none"
+fixtures = [
+  "tests/unit/stdlib/test_numeric_core.c",
+  "tests/unit/ir/test_xi_emit.c",
+  "tests/unit/ir/test_xi_cgen.c",
+  "tests/aot/filetests/link/freestanding_codegen_core.xr",
+]
+
+[[operation]]
 id = "copy"
 observable_contract = "src/shared/xr_copy_core.h"
 semantic_kernel = "src/shared/xr_copy_core.h"

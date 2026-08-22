@@ -5270,6 +5270,26 @@ static const char *cg_codegen_opaque_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
+static const char *cg_codegen_fence_adapter_name(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+                                        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO,
+                                        XR_SEM_CONSUMER_CGEN)) {
+        fprintf(stderr, "[xi_cgen] ERROR: codegen-compiler-fence owner has no CGen consumer\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    const char *adapter = xr_semantic_owner_cgen_adapter(
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_HI,
+        XR_SEM_OWNER_ID_SHARED_CODEGEN_COMPILER_FENCE_LO);
+    if (!adapter || strcmp(adapter, "xr_codegen_fence_plan_core") != 0) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: codegen-compiler-fence owner has no exact CGen adapter\n");
+        cg_ctx_set_error(ctx);
+        return NULL;
+    }
+    return adapter;
+}
+
 static const char *cg_copy_adapter_name(XiCgenCtx *ctx) {
     if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_COPY_HI,
                                         XR_SEM_OWNER_ID_SHARED_COPY_LO, XR_SEM_CONSUMER_CGEN)) {

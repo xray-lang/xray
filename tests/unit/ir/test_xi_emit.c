@@ -24,6 +24,8 @@ static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
+#define XI_EMIT_TEST_NULL_PROJECTION_OPCODE OP_LOADNULL
+#define XI_EMIT_TEST_VOID_RETURN_OPCODE OP_RETURN0
 static XrType stub_string = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_uint64 = {
     .kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U64};
@@ -100,7 +102,7 @@ TEST(emit_return_void) {
 
     int count = PROTO_CODE_COUNT(proto);
     assert(count == 1);
-    assert(GET_OPCODE(PROTO_CODE(proto, 0)) == OP_RETURN0);
+    assert(GET_OPCODE(PROTO_CODE(proto, 0)) == XI_EMIT_TEST_VOID_RETURN_OPCODE);
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
@@ -186,7 +188,7 @@ TEST(emit_const_null) {
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
-    assert(GET_OPCODE(i0) == OP_LOADNULL);
+    assert(GET_OPCODE(i0) == XI_EMIT_TEST_NULL_PROJECTION_OPCODE);
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
@@ -526,6 +528,24 @@ TEST(emit_copy_becomes_move) {
         }
     }
     assert(found_move && "COPY should emit MOVE");
+
+    xr_instruction_unit_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_codegen_compiler_fence_projects_to_void_without_runtime_effect) {
+    XiFunc *f = make_func("compiler_fence", &stub_void);
+    XiBlock *entry = f->entry;
+    (void) xi_value_new(f, entry, XI_CODEGEN_COMPILER_FENCE, &stub_void, 0);
+    xi_block_set_return(entry, NULL);
+
+    XrProto *proto = NULL;
+    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    assert(status == XI_EMIT_OK);
+    assert(proto != NULL);
+    assert(PROTO_CODE_COUNT(proto) == 2);
+    assert(GET_OPCODE(PROTO_CODE(proto, 0)) == XI_EMIT_TEST_NULL_PROJECTION_OPCODE);
+    assert(GET_OPCODE(PROTO_CODE(proto, 1)) == XI_EMIT_TEST_VOID_RETURN_OPCODE);
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
@@ -1349,6 +1369,7 @@ int main(void) {
 
     /* Copy / Move */
     run_emit_copy_becomes_move();
+    run_emit_codegen_compiler_fence_projects_to_void_without_runtime_effect();
     run_emit_numeric_conversion_packs_typed_witness();
 
     /* Float constants */
