@@ -175,6 +175,7 @@ typedef XrModule *(*XrNativeModuleFactory)(struct XrVMRuntime *isolate);
 
 struct XrModuleResolver;
 struct XrBytecodeModule;
+struct XrModuleIdentityAuthority;
 
 typedef AstNode *(*XrModuleParseHook)(XrCompilerSession *session, const char *source,
                                       const char *source_file);
