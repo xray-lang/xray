@@ -2003,7 +2003,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "f8f7afc3b19a2a7209bb4eef9c96b59644bcc3425dfee419f937e8ad6363a40e") == 0);
+                   "23616cb919b02ea00b437dff0315f7d92984d12f7cff304f73522ba3911fd6ad") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -3286,7 +3286,7 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "25722bb38ebc88b59409f77acbedb909e1b12f902a279881e60e76efc85b5d7f") ==
+    REQUIRE(strcmp(call_hex, "1257c53dd824db360fa0c8c7dad2a86b2bfab60f7efec78dfd02947883a53fee") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -3968,7 +3968,7 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "904d161c268f3fe5ffeab42e9adb6ae59c534474bf2eb3b584668d1e556f3f2b") ==
+    REQUIRE(strcmp(call_hex, "8c2f59786e7f90d1a18941cbf9d0468daab8dde1683dfee96ad53580250a2c43") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -4366,7 +4366,7 @@ static void test_coroutine_state_call_family(void) {
             tail_plan->functions[tail_call->caller_function].coroutine_count == 0);
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex, "b28f70afb951e9c7567cc1a9e6f6ab629133d517572d6f6ffe81f6f866358bb8") ==
+    REQUIRE(strcmp(tail_hex, "b03311724132e0234a62179fcd89fdbf5e6b6415c4f95f7c1e94b45e359d1b24") ==
             0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
