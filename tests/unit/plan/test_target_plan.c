@@ -938,6 +938,39 @@ static XrSemanticPlan *build_iterator_rune_nth_semantic(void) {
     return finish_stringbuilder_semantic(function, entry, "Iterator<rune>.nth");
 }
 
+static XrSemanticPlan *build_rune_to_string_semantic(void) {
+    XiFunc *function = xi_func_new("target_rune_to_string", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_const_str(function, entry, "target-rune-string", &stub_exact_string);
+    XiValue *runes = xi_value_new(function, entry, XI_CALL_METHOD, &stub_iterator_rune, 1);
+    XiValue *index = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *nth = xi_value_new(function, entry, XI_CALL_METHOD, &stub_rune, 2);
+    XiValue *to_string = xi_value_new(function, entry, XI_CALL_METHOD, &stub_exact_string, 1);
+    REQUIRE(source && runes && index && nth && to_string);
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = (int64_t) XI_METHOD_SYMBOL_RUNES << 1;
+    nth->args[0] = runes;
+    nth->args[1] = index;
+    nth->aux = (void *) "nth";
+    nth->aux_int = (int64_t) XI_METHOD_SYMBOL_NTH << 1;
+    nth->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+    to_string->args[0] = nth;
+    to_string->aux = (void *) "toString";
+    to_string->aux_int = (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1;
+    to_string->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+    XiValue *release_string = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *release_runes = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release_string && release_runes);
+    release_string->args[0] = to_string;
+    release_runes->args[0] = runes;
+    return finish_stringbuilder_semantic(function, entry, "rune.toString");
+}
+
 static XrSemanticPlan *build_map_entry_iterator_semantic(XiMethodSymbolId factory_symbol,
                                                          bool exact_result_types) {
     XiFunc *function = xi_func_new("target_map_entry_iterator", &stub_int);
@@ -2029,7 +2062,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "23616cb919b02ea00b437dff0315f7d92984d12f7cff304f73522ba3911fd6ad") == 0);
+                   "fdb1a0007734a83621fc09fe1377b0b3a390b96284697abaf44f2ce436724c9d") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -5450,6 +5483,114 @@ static void test_iterator_rune_nth_call_argument_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_rune_to_string_result_authority(void) {
+    XrSemanticPlan *semantic = build_rune_to_string_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "rune.toString TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan);
+    XrTargetCallRecord *call =
+        find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_RUNE_TO_STRING);
+    XrSemanticOperationRecord *operation =
+        call ? &semantic->operations[call->semantic_operation] : NULL;
+    XrSemanticOperandRecord *receiver =
+        operation && operation->operand_begin < semantic->operand_count
+            ? &semantic->operands[operation->operand_begin]
+            : NULL;
+    XrTargetValueRepRecord *result =
+        operation ? (XrTargetValueRepRecord *) xr_target_plan_value_rep(
+                        plan, operation->result_value)
+                  : NULL;
+    XrTargetSlotRecord *slot =
+        result && result->slot < plan->slots_count ? &plan->slots[result->slot] : NULL;
+    XrTargetLayoutRecord *layout = NULL;
+    for (uint32_t i = 0; operation && i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type != operation->result_type)
+            continue;
+        REQUIRE(layout == NULL);
+        layout = &plan->layouts[i];
+    }
+    REQUIRE((plan->completed_family_mask & XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE) != 0 &&
+            operation && receiver && result && slot && layout &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_RUNE_TO_STRING &&
+            operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1 &&
+            operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+            operation->return_provenance == XR_SEM_RETURN_OWNED &&
+            operation->return_complete == 1 &&
+            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+            call->target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_STRING &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && call->argument_count == 0 &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->register_rep].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->machine_reps[result->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            slot->semantic_value == operation->result_value &&
+            slot->semantic_operation == call->semantic_operation &&
+            slot->role == XR_TARGET_SLOT_TEMPORARY && slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            layout->kind == XR_TARGET_LAYOUT_DYNAMIC && layout->field_count == 0 &&
+            layout->root_field_count == 0);
+
+    uint64_t saved_mask = plan->completed_family_mask;
+    plan->completed_family_mask &= ~XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->completed_family_mask = saved_mask;
+    XrStableId saved_identity = call->identity;
+    call->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->identity = saved_identity;
+    uint8_t saved_u8 = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_u8;
+    saved_u8 = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_RUNE_TO_UINT32;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_u8;
+    saved_u8 = slot->root_kind;
+    slot->root_kind = XR_TARGET_ROOT_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->root_kind = saved_u8;
+    saved_u8 = slot->ownership;
+    slot->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->ownership = saved_u8;
+    uint32_t saved_u32 = slot->semantic_operation;
+    slot->semantic_operation = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->semantic_operation = saved_u32;
+    uint16_t saved_u16 = layout->kind;
+    layout->kind = XR_TARGET_LAYOUT_SCALAR;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    layout->kind = saved_u16;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    int64_t saved_immediate = operation->semantic_immediate;
+    operation->semantic_immediate = (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->semantic_immediate = saved_immediate;
+    saved_u8 = operation->result_ownership;
+    operation->result_ownership = XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->result_ownership = saved_u8;
+    saved_u8 = operation->return_provenance;
+    operation->return_provenance = XR_SEM_RETURN_NONE;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->return_provenance = saved_u8;
+    saved_u8 = receiver->ownership_action;
+    receiver->ownership_action = XR_SEM_OPERAND_CONSUME;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    receiver->ownership_action = saved_u8;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_map_entry_iterator_call_authority(void) {
     XrSemanticPlan *semantic = build_map_entry_iterator_semantic(
         XI_METHOD_SYMBOL_ENTRIES_ITERATOR, true);
@@ -6293,6 +6434,11 @@ int main(int argc, char **argv) {
         puts("Iterator<rune>.nth call argument authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "rune-to-string-result-authority") == 0) {
+        test_rune_to_string_result_authority();
+        puts("rune.toString result authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "source-export-ref-c-emission") == 0) {
         test_source_export_ref_argument_is_not_array_projection();
         puts("Source-export ref C emission family tests passed");
@@ -6312,6 +6458,7 @@ int main(int argc, char **argv) {
     test_iterator_rune_has_next_call_authority();
     test_iterator_rune_next_call_authority();
     test_iterator_rune_nth_call_argument_authority();
+    test_rune_to_string_result_authority();
     test_map_entry_iterator_call_authority();
     test_rune_to_uint32_call_authority();
     test_rune_is_whitespace_call_authority();

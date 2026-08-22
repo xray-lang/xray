@@ -9383,6 +9383,9 @@ static bool xicgen_runtime_method_call_is_direct_nothrow(XiCgenCtx *ctx, const X
     XrCValueEmissionView rune_to_uint32 = {0};
     if (cg_rune_to_uint32_emission_view(ctx, function, v, &rune_to_uint32))
         return true;
+    XrCValueEmissionView rune_to_string = {0};
+    if (cg_rune_to_string_emission_view(ctx, function, v, &rune_to_string))
+        return true;
     XrCValueEmissionView rune_is_whitespace = {0};
     if (cg_rune_is_whitespace_emission_view(ctx, function, v, &rune_is_whitespace))
         return true;
@@ -11438,6 +11441,16 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, "%s(", rune_to_uint32.recipe_symbol);
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
         fprintf(out, ")");
+        return;
+    }
+    XrCValueEmissionView rune_to_string = {0};
+    if (cg_rune_to_string_emission_view(ctx, f, v, &rune_to_string)) {
+        bool discard = cg_unused_call_result_emits_statement(ctx, f, v);
+        if (discard)
+            fprintf(out, "xrt_discard_owned(");
+        fprintf(out, "%s(", rune_to_string.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, discard ? "))" : ")");
         return;
     }
     XrCValueEmissionView iterator_rune_next = {0};

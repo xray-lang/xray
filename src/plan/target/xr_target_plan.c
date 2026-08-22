@@ -670,6 +670,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         bool iterator_rune_nth =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH;
         bool rune_to_uint32 = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_UINT32;
+        bool rune_to_string = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_STRING;
         bool rune_is_whitespace =
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_RUNE_IS_WHITESPACE;
         bool string_slice_range =
@@ -709,6 +710,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
         if ((!direct_local && !channel_close && !source_export && !stringbuilder_constructor &&
              !string_byte_slice_view && !stringbuilder_append_rune && !string_runes &&
              !iterator_rune_has_next && !iterator_rune_next && !iterator_rune_nth && !rune_to_uint32 &&
+             !rune_to_string &&
              !rune_is_whitespace && !string_slice_range && !stringbuilder_to_string &&
              !stringbuilder_append_string && !json_namespace_value && !array_member_scalar &&
              !native_module_scalar && !native_namespace_yieldable && !source_class_constructor &&
@@ -724,7 +726,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             ((channel_close || stringbuilder_constructor || string_byte_slice_view ||
               stringbuilder_append_rune || stringbuilder_to_string || stringbuilder_append_string ||
               string_runes || iterator_rune_has_next || iterator_rune_next || iterator_rune_nth ||
-              rune_to_uint32 ||
+              rune_to_uint32 || rune_to_string ||
               rune_is_whitespace || string_slice_range || json_namespace_value ||
               array_member_scalar || native_module_scalar || adt_enum_constructor ||
               array_intrinsic || array_fill || array_hof || panic_info_constructor || scalar_copy ||

@@ -1,0 +1,2 @@
+var value = "az".runes().nth(1).toString()
+print(value)

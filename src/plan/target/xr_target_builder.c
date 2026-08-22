@@ -3609,6 +3609,69 @@ static bool note_string_slice_range_storage_value(XrTargetPlanBuilder *builder,
     return true;
 }
 
+/* A rune conversion allocates a new immutable String. Its exact storage is the
+ * owned tagged value returned by that one operation; the Rune receiver remains
+ * independently owned by the scalar family and contributes no dynamic slot. */
+static bool note_rune_to_string_storage_value(XrTargetPlanBuilder *builder,
+                                              XrTargetValueStorageAnalysis *analysis,
+                                              uint32_t semantic_operation, char *error,
+                                              size_t error_size) {
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_rune_to_string_is_exact(builder->semantic_plan, operation, &receiver) ||
+        operation->result_value >= analysis->total_values ||
+        operation->result_type >= analysis->type_count ||
+        operation->function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
+        receiver >= analysis->total_values || analysis->defined_values[operation->result_value])
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "rune.toString result authority is incomplete");
+    XrTargetMachineRepRecord rep;
+    if (!make_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile), &rep) ||
+        !append_rep_intent(builder, &rep, error, error_size))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "target profile cannot materialize rune.toString result");
+    XrStableId slot_identity;
+    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
+                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "rune.toString result slot identity is incomplete");
+    XrTargetSlotIntent slot = {
+        .identity = slot_identity,
+        .function = operation->function,
+        .semantic_value = operation->result_value,
+        .semantic_operation = semantic_operation,
+        .logical_slot = XR_SEMANTIC_INDEX_NONE,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .role = XR_TARGET_SLOT_TEMPORARY,
+        .root_kind = XR_TARGET_ROOT_DYNAMIC,
+        .ownership = XR_TARGET_OWNERSHIP_OWNED,
+        .debug_variable = XR_SEMANTIC_INDEX_NONE,
+    };
+    XrTargetValueIntent value = {
+        .semantic_value = operation->result_value,
+        .semantic_function = operation->function,
+        .semantic_type = operation->result_type,
+        .register_rep = rep,
+        .memory_rep = rep,
+        .slot_identity = slot_identity,
+        .has_slot = true,
+    };
+    if (!append_slot_intent(builder, &slot, error, error_size) ||
+        (!analysis->used_types[operation->result_type] &&
+         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                               error, error_size)) ||
+        !append_value_intent(builder, &value, error, error_size))
+        return false;
+    analysis->defined_values[operation->result_value] = 1;
+    analysis->value_types[operation->result_value] = operation->result_type;
+    analysis->value_functions[operation->result_value] = operation->function;
+    analysis->type_rep_kinds[operation->result_type] = XR_MACHINE_REP_DYN_VALUE;
+    analysis->used_types[operation->result_type] = 1;
+    return true;
+}
+
 static bool note_stringbuilder_to_string_storage_value(XrTargetPlanBuilder *builder,
                                                        XrTargetValueStorageAnalysis *analysis,
                                                        uint32_t semantic_operation, char *error,
@@ -5910,6 +5973,38 @@ static bool builder_add_string_slice_range_storage(XrTargetPlanBuilder *builder,
         return false;
     }
     builder->completed_family_mask |= XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE;
+    return true;
+}
+
+static bool builder_add_rune_to_string_storage(XrTargetPlanBuilder *builder, char *error,
+                                               size_t error_size) {
+    if (!builder_begin_family(builder, XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE, error,
+                              error_size))
+        return false;
+    XrTargetValueStorageAnalysis analysis = {0};
+    bool valid = value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size);
+    for (uint32_t i = 0; valid && i < builder->value_intent_count; i++) {
+        const XrTargetValueIntent *value = &builder->value_intents[i];
+        if (value->semantic_value < analysis.total_values) {
+            analysis.defined_values[value->semantic_value] = 1;
+            analysis.value_types[value->semantic_value] = value->semantic_type;
+            analysis.value_functions[value->semantic_value] = value->semantic_function;
+            analysis.used_types[value->semantic_type] = 1;
+        }
+    }
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_RUNE_TO_STRING)
+            valid = note_rune_to_string_storage_value(builder, &analysis, i, error, error_size);
+    }
+    value_storage_analysis_dispose(&analysis);
+    if (!valid) {
+        builder->poisoned = true;
+        return false;
+    }
+    builder->completed_family_mask |= XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE;
     return true;
 }
 
@@ -8785,7 +8880,7 @@ static bool collect_rune_to_string_call_intent(XrTargetPlanBuilder *builder,
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = 0,
         .result_mode = XR_TARGET_CALL_VALUE,
-        .result_ownership = XR_TARGET_CALL_NONE,
+        .result_ownership = XR_TARGET_CALL_RETURN_OWNED,
         .calling_convention = XR_TARGET_CALL_CONVENTION_RUNE_TO_STRING,
         .target_kind = XR_TARGET_CALL_TARGET_RUNE_TO_STRING,
     };
@@ -12899,6 +12994,7 @@ static const XrTargetFamily k_target_families[] = {
     {"string_literal_storage", builder_add_string_literal_storage},
     {"string_runes_storage", builder_add_string_runes_storage},
     {"string_slice_range_storage", builder_add_string_slice_range_storage},
+    {"rune_to_string_storage", builder_add_rune_to_string_storage},
     {"string_byte_slice_view_storage", builder_add_string_byte_slice_view_storage},
     {"range_slice_view_storage", builder_add_range_slice_view_storage},
     {"stringbuilder_append_rune_storage", builder_add_stringbuilder_append_rune_storage},

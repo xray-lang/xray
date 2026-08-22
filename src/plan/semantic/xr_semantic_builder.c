@@ -2989,7 +2989,8 @@ static bool xi_rune_to_string_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
            strcmp((const char *) value->aux, "toString") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int == (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1 &&
            receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_STRING && !value->type->is_nullable &&
            xi_iterator_rune_source_exact(receiver);

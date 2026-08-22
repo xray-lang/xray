@@ -21,6 +21,7 @@
 #include "../../plan/semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_nth_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_to_uint32_shape.h"
+#include "../../plan/semantic/xr_semantic_rune_to_string_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
@@ -35,7 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(33)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(34)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -55,6 +56,7 @@
 #define XR_C_ITERATOR_RUNE_NEXT_SYMBOL "xrt_iterator_rune_next"
 #define XR_C_ITERATOR_RUNE_NTH_SYMBOL "xrt_iterator_rune_nth"
 #define XR_C_RUNE_TO_UINT32_SYMBOL "xrt_rune_to_uint32"
+#define XR_C_RUNE_TO_STRING_SYMBOL "xrt_rune_to_string"
 #define XR_C_RUNE_IS_WHITESPACE_SYMBOL "xrt_rune_is_whitespace"
 #define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
 #define XR_C_RELEASE_SYMBOL "xrt_release"
@@ -2569,6 +2571,85 @@ static bool exact_rune_to_uint32_recipe(const XrTargetPlan *target_plan,
     return true;
 }
 
+static bool exact_rune_to_string_recipe(const XrTargetPlan *target_plan,
+                                        const XrTargetValueRepRecord *binding,
+                                        uint32_t *receiver_value) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation = binding_operation(target_plan, binding);
+    uint32_t receiver = UINT32_MAX;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    if (!semantic || !operation || !binding || operation->result_value != binding->semantic_value ||
+        !xr_semantic_rune_to_string_is_exact(semantic, operation, &receiver))
+        return false;
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    uint32_t slot_count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetSlotRecord *slot =
+        binding->slot < slot_count ? &slots[binding->slot] : NULL;
+    const XrTargetCallRecord *match = NULL;
+    uint32_t match_index = UINT32_MAX;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->result_value != binding->semantic_value ||
+            call->calling_convention != XR_TARGET_CALL_CONVENTION_RUNE_TO_STRING)
+            continue;
+        if (match)
+            return false;
+        match = call;
+        match_index = i;
+    }
+    XrStableId expected_call;
+    if (!result_type || !register_rep || !memory_rep || !slot || !match ||
+        !emission_identity_from_pair("xray-target-rune-to-string-v1", operation->id,
+                                     result_type->id, receiver, &expected_call) ||
+        !xr_stable_id_equal(match->identity, expected_call) || match->id != match_index ||
+        match->semantic_operation >= xr_semantic_plan_operation_count(semantic) ||
+        xr_semantic_plan_operation(semantic, match->semantic_operation) != operation ||
+        match->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        match->caller_function != operation->function ||
+        match->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        match->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        match->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !emission_stable_id_is_zero(match->source_export_identity) ||
+        !emission_stable_id_is_zero(match->source_callee_identity) ||
+        match->result_slot != binding->slot ||
+        match->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        match->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        match->result_register_rep != binding->register_rep ||
+        match->result_memory_rep != binding->memory_rep || match->argument_count != 0 ||
+        match->adapter_count != 0 || match->flags != 0 ||
+        match->result_mode != XR_TARGET_CALL_VALUE ||
+        match->result_ownership != XR_TARGET_CALL_RETURN_OWNED ||
+        match->target_kind != XR_TARGET_CALL_TARGET_RUNE_TO_STRING ||
+        match->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        match->reserved8[0] != 0 || match->reserved8[1] != 0 || match->reserved8[2] != 0 ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        memory_rep->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        register_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        memory_rep->null_encoding != XR_TARGET_NULL_TAGGED ||
+        slot->function != operation->function || slot->semantic_value != binding->semantic_value ||
+        slot->semantic_operation != match->semantic_operation ||
+        slot->logical_slot != XR_SEMANTIC_INDEX_NONE || slot->role != XR_TARGET_SLOT_TEMPORARY ||
+        slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        slot->ownership != XR_TARGET_OWNERSHIP_OWNED || slot->reserved != 0 ||
+        slot->debug_variable != XR_SEMANTIC_INDEX_NONE)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver;
+    return true;
+}
+
 static bool exact_rune_is_whitespace_recipe(const XrTargetPlan *target_plan,
                                             const XrTargetValueRepRecord *binding,
                                             uint32_t *receiver_value) {
@@ -3327,6 +3408,11 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_RUNE_TO_UINT32_SYMBOL) == 0;
+    if (value->materialization == XR_C_VALUE_MATERIALIZATION_RUNE_TO_STRING)
+        recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
+                       strcmp(value->recipe_symbol, XR_C_RUNE_TO_STRING_SYMBOL) == 0;
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE)
         recipe_valid = value->rep == XR_C_VALUE_REP_BOOL && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
@@ -3826,6 +3912,9 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         uint32_t expected_rune_to_uint32_receiver = UINT32_MAX;
         bool expected_rune_to_uint32 =
             exact_rune_to_uint32_recipe(target_plan, binding, &expected_rune_to_uint32_receiver);
+        uint32_t expected_rune_to_string_receiver = UINT32_MAX;
+        bool expected_rune_to_string =
+            exact_rune_to_string_recipe(target_plan, binding, &expected_rune_to_string_receiver);
         uint32_t expected_rune_is_whitespace_receiver = UINT32_MAX;
         bool expected_rune_is_whitespace = exact_rune_is_whitespace_recipe(
             target_plan, binding, &expected_rune_is_whitespace_receiver);
@@ -3898,6 +3987,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_iterator_rune_next     ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT
             : expected_iterator_rune_nth      ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH
             : expected_rune_to_uint32         ? XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32
+            : expected_rune_to_string         ? XR_C_VALUE_MATERIALIZATION_RUNE_TO_STRING
             : expected_string_slice_range     ? XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE
             : expected_rune_is_whitespace     ? XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE
             : expected_string_runes           ? XR_C_VALUE_MATERIALIZATION_STRING_RUNES
@@ -3917,6 +4007,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_iterator_rune_next     ? expected_iterator_rune_next_receiver
             : expected_iterator_rune_nth      ? expected_iterator_rune_nth_receiver
             : expected_rune_to_uint32         ? expected_rune_to_uint32_receiver
+            : expected_rune_to_string         ? expected_rune_to_string_receiver
             : expected_string_slice_range     ? expected_string_slice_receiver
             : expected_rune_is_whitespace     ? expected_rune_is_whitespace_receiver
             : expected_string_runes           ? expected_string_runes_receiver
@@ -3938,6 +4029,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_iterator_rune_next     ? XR_C_ITERATOR_RUNE_NEXT_SYMBOL
             : expected_iterator_rune_nth      ? XR_C_ITERATOR_RUNE_NTH_SYMBOL
             : expected_rune_to_uint32         ? XR_C_RUNE_TO_UINT32_SYMBOL
+            : expected_rune_to_string         ? XR_C_RUNE_TO_STRING_SYMBOL
             : expected_string_slice_range     ? XR_C_STRING_SLICE_RANGE_SYMBOL
             : expected_rune_is_whitespace     ? XR_C_RUNE_IS_WHITESPACE_SYMBOL
             : expected_string_runes           ? XR_C_STRING_RUNES_SYMBOL
@@ -4215,6 +4307,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         XR_TARGET_FAMILY_DIRECT_LOCAL_GO_TASK_RESULT_STORAGE |
         XR_TARGET_FAMILY_PANIC_CATCH_STORAGE | XR_TARGET_FAMILY_ADT_ENUM_STORAGE |
         XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |
+        XR_TARGET_FAMILY_RUNE_TO_STRING_RESULT_STORAGE |
         XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE | XR_TARGET_FAMILY_AGGREGATE |
         XR_TARGET_FAMILY_CALL_ADAPTER;
     if ((xr_target_plan_completed_family_mask(target_plan) & required_value_families) !=
@@ -4841,6 +4934,22 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                 }
                                 memcpy(owned, XR_C_RUNE_TO_UINT32_SYMBOL, symbol_length);
                                 value->materialization = XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32;
+                                value->recipe_operand_value = receiver;
+                                value->recipe_symbol = owned;
+                            }
+                        }
+                        if (value->materialization == XR_C_VALUE_MATERIALIZATION_NONE) {
+                            uint32_t receiver = UINT32_MAX;
+                            if (exact_rune_to_string_recipe(target_plan, binding, &receiver)) {
+                                size_t symbol_length = sizeof(XR_C_RUNE_TO_STRING_SYMBOL);
+                                char *owned = (char *) xr_malloc(symbol_length);
+                                if (!owned) {
+                                    xr_c_emission_plan_free(plan);
+                                    return emission_error(error, error_size, "XR_EXEC_5003",
+                                                          "rune.toString recipe allocation failed");
+                                }
+                                memcpy(owned, XR_C_RUNE_TO_STRING_SYMBOL, symbol_length);
+                                value->materialization = XR_C_VALUE_MATERIALIZATION_RUNE_TO_STRING;
                                 value->recipe_operand_value = receiver;
                                 value->recipe_symbol = owned;
                             }
