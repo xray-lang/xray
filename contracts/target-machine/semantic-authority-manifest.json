@@ -1,0 +1,90 @@
+{
+  "checker": "target-machine-semantic-authority/1",
+  "facts": [
+    {
+      "cache_key_contribution": [
+        {
+          "cache": "incremental-module-summary",
+          "path": "src/incremental/xr_module_summary_build.c",
+          "required_regex": "descriptor\\[4\\]\\s*=\\s*\\(uint8_t\\)\\s*\\(XR_SEMANTIC_SCHEMA_VERSION\\s*&\\s*0xFFu\\)"
+        },
+        {
+          "cache": "aot-module-summary",
+          "path": "src/aot/xaot_module_summary.c",
+          "required_regex": "hash_u32\\(&ctx,\\s*XR_SEMANTIC_SCHEMA_VERSION\\)"
+        }
+      ],
+      "completion_tombstone": {
+        "condition": "retire only through an atomic semantic artifact schema amendment",
+        "status": "retained-authority"
+      },
+      "consumers": [
+        {
+          "path": "src/plan/semantic/xr_semantic_plan.c",
+          "required_regex": "plan->schema\\s*=\\s*XR_SEMANTIC_SCHEMA_VERSION",
+          "role": "initialize every semantic plan with the exact schema identity"
+        },
+        {
+          "path": "src/plan/semantic/xr_semantic_verify.c",
+          "required_regex": "plan->schema\\s*!=\\s*XR_SEMANTIC_SCHEMA_VERSION",
+          "role": "reject a frozen semantic plan whose schema identity differs"
+        },
+        {
+          "path": "src/plan/format/xr_xtp_decode.c",
+          "required_regex": "identity->semantic_schema\\s*==\\s*XR_SEMANTIC_SCHEMA_VERSION",
+          "role": "reject target-plan provenance with a different semantic schema"
+        }
+      ],
+      "definition_domain": "semantic-artifact-identity",
+      "fact_id": "semantic.schema.version",
+      "freeze_stage": "XrSemanticPlan construction before verification, freeze, serialization or target planning",
+      "independent_checker": {
+        "entrypoint": "semantic_authority_findings",
+        "path": "scripts/check_target_machine_completion.py",
+        "required_regex": "^def\\s+semantic_authority_findings\\("
+      },
+      "key_type": "uint32-exact-version",
+      "legacy_duplicate_owners": [],
+      "mutation_operator": {
+        "expected_finding": "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR",
+        "id": "replace-producer-anchor"
+      },
+      "positive_negative_oracle_coverage": {
+        "negative": "target_machine_completion_governance_self_test:semantic-authority-anchor",
+        "oracle": "the exact producer value is independently matched against plan, artifact and cache consumers",
+        "positive": "target_machine_completion_governance_self_test:semantic-authority-clean"
+      },
+      "producer": {
+        "path": "src/plan/semantic/xr_semantic_ids.h",
+        "required_regex": "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(36\\)$"
+      },
+      "semantic_meaning": "Exact semantic plan and artifact schema identity accepted by all current readers and cache identities",
+      "serialized_form": [
+        {
+          "artifact": "xsm-header-u32-little-endian",
+          "path": "src/plan/format/xr_xsm_encode.c",
+          "required_regex": "xr_xsm_put_u32\\(&artifact,\\s*XR_SEMANTIC_SCHEMA_VERSION\\)"
+        },
+        {
+          "artifact": "xsm-exact-reader",
+          "path": "src/plan/format/xr_xsm_decode.c",
+          "required_regex": "schema\\s*!=\\s*XR_SEMANTIC_SCHEMA_VERSION"
+        },
+        {
+          "artifact": "xtp-provenance-u32-little-endian",
+          "path": "src/plan/format/xr_xtp_decode.c",
+          "required_regex": "identity->semantic_schema\\s*==\\s*XR_SEMANTIC_SCHEMA_VERSION"
+        }
+      ],
+      "stable_identity": {
+        "kind": "exact-u32",
+        "value": 36
+      },
+      "trust_boundary": "XSM and XTP readers reject a semantic schema mismatch before a decoded plan can be verified, frozen or activated"
+    }
+  ],
+  "required_fact_ids": [
+    "semantic.schema.version"
+  ],
+  "schema": 1
+}

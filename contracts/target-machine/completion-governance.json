@@ -126,13 +126,6 @@
         "os\\.rename\\(staging, output\\)"
       ]
      },
-     {
-      "id": "semantic-schema-v34",
-      "path": "src/plan/semantic/xr_semantic_ids.h",
-      "required_regex": [
-        "#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(34\\)"
-      ]
-    },
     {
       "id": "immutable-target-plan",
       "path": "src/plan/target/xr_target_plan.h",
@@ -211,6 +204,7 @@
       "contracts/target-machine/legacy-product-residue.json",
       "contracts/target-machine/legacy-vm-inventory.json",
       "contracts/target-machine/object-extent-inventory.json",
+      "contracts/target-machine/semantic-authority-manifest.json",
       "contracts/target-machine/semantic-owner-inventory.json",
       "contracts/target-machine/validation-matrix.json",
       "scripts/assemble_target_machine_completion_evidence.py",
@@ -248,7 +242,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "edb5069e61a6f6ca02586e680010a2da87f827e39cb15161347e9ae13f9f5d1b"
+    "sha256": "ba7b74a32f02892c65743baf025883256d28c04f2ab16f091216594b6f43dfd1"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
@@ -357,6 +351,7 @@
       "xtp-positive": "activated-and-passed"
     }
   },
+  "semantic_authority_manifest": "contracts/target-machine/semantic-authority-manifest.json",
   "schema": 2,
   "symbols": {
     "forbidden_regex": "(?i)(?<![A-Za-z0-9_])_?(?:xray_vm_[A-Za-z0-9_]+|xr_vm_[A-Za-z0-9_]+|xr_(?:bytecode_[A-Za-z0-9_]+|detect_output_format|eval_bytecode|output_c_source|run_bytecode_file)|XrOpcode)\\b"

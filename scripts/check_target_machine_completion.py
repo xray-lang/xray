@@ -21,6 +21,10 @@ DEFAULT_MANIFEST = "contracts/target-machine/completion-governance.json"
 CHECKER = "target-machine-completion-governance/2"
 SCHEMA = 2
 EVIDENCE_SCHEMA = 1
+SEMANTIC_AUTHORITY_CHECKER = "target-machine-semantic-authority/1"
+SEMANTIC_AUTHORITY_SCHEMA = 1
+SEMANTIC_AUTHORITY_MANIFEST = \
+    "contracts/target-machine/semantic-authority-manifest.json"
 MAX_SAMPLES = 8
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 COMMIT_RE = re.compile(r"[0-9a-f]{40}")
@@ -35,6 +39,13 @@ GRAPH_KINDS = {
 FORBIDDEN_CONTROL_KEYS = {
     "allow", "allowlist", "compat", "compatibility", "fallback", "skip",
     "skip_reason", "skipped", "waiver",
+}
+SEMANTIC_AUTHORITY_FACT_FIELDS = {
+    "cache_key_contribution", "completion_tombstone", "consumers",
+    "definition_domain", "fact_id", "freeze_stage", "independent_checker",
+    "key_type", "legacy_duplicate_owners", "mutation_operator",
+    "positive_negative_oracle_coverage", "producer", "semantic_meaning",
+    "serialized_form", "stable_identity", "trust_boundary",
 }
 
 
@@ -169,6 +180,11 @@ def validate_manifest(manifest: dict[str, Any]) -> list[Finding]:
     if policy != expected_policy:
         findings.append(finding("TM-COMP-MANIFEST-POLICY", "contract",
                                 "completion policy must be fail-closed terminal zero"))
+    if manifest.get("semantic_authority_manifest") != SEMANTIC_AUTHORITY_MANIFEST:
+        findings.append(finding(
+            "TM-COMP-MANIFEST-SEMANTIC-AUTHORITY", "contract",
+            "semantic authority manifest path is not the governed exact path",
+        ))
     input_identity = manifest.get("input_identity", {})
     files = input_identity.get("files")
     if (input_identity.get("algorithm") != "sha256" or not isinstance(files, list)
@@ -228,6 +244,208 @@ def validate_manifest(manifest: dict[str, Any]) -> list[Finding]:
                        for value in headers)):
             findings.append(finding("TM-COMP-MANIFEST-INSTALLED", "contract",
                                     "installed public-header inventory is not exact"))
+    return findings
+
+
+def semantic_authority_reference_findings(
+        root: Path, fact_id: str, kind: str, reference: Any,
+        required_fields: set[str]) -> list[Finding]:
+    findings: list[Finding] = []
+    if not isinstance(reference, dict) or set(reference) != required_fields:
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+            f"semantic authority {fact_id} has an incomplete {kind} reference",
+        )]
+    if any(not isinstance(reference[field], str) or not reference[field]
+           for field in required_fields):
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+            f"semantic authority {fact_id} has an empty {kind} reference",
+        )]
+    relative = Path(reference["path"])
+    if relative.is_absolute() or ".." in relative.parts:
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-PATH", "authority",
+            f"semantic authority {fact_id} {kind} path escapes the source root",
+            samples=(reference["path"],),
+        )]
+    path = root / reference["path"]
+    if not path.is_file():
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-PATH", "authority",
+            f"semantic authority {fact_id} {kind} path is missing: {reference['path']}",
+        )]
+    try:
+        pattern = re.compile(reference["required_regex"], re.MULTILINE)
+    except re.error as error:
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+            f"semantic authority {fact_id} {kind} anchor is invalid: {error}",
+        )]
+    text = path.read_text(encoding="utf-8", errors="strict")
+    if pattern.search(text) is None:
+        findings.append(finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR", "authority",
+            f"semantic authority {fact_id} lost its {kind} anchor",
+            samples=(reference["path"], reference["required_regex"]),
+        ))
+    return findings
+
+
+def semantic_authority_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
+    relative = manifest.get("semantic_authority_manifest")
+    if not isinstance(relative, str) or not relative:
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-MANIFEST", "authority",
+            "semantic authority manifest is not configured",
+        )]
+    path = root / relative
+    if not path.is_file():
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-MANIFEST", "authority",
+            f"semantic authority manifest is missing: {relative}",
+        )]
+    try:
+        data = read_json(path)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-MANIFEST", "authority",
+            f"semantic authority manifest cannot be read: {error}",
+        )]
+    if (set(data) != {"checker", "facts", "required_fact_ids", "schema"}
+            or data.get("schema") != SEMANTIC_AUTHORITY_SCHEMA
+            or data.get("checker") != SEMANTIC_AUTHORITY_CHECKER):
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-MANIFEST", "authority",
+            "semantic authority manifest schema/checker is not exact",
+        )]
+    facts = data.get("facts")
+    required_ids = data.get("required_fact_ids")
+    if (not isinstance(facts, list) or not facts
+            or not isinstance(required_ids, list) or not required_ids
+            or any(not isinstance(value, str) or not value for value in required_ids)
+            or len(required_ids) != len(set(required_ids))):
+        return [finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-MANIFEST", "authority",
+            "semantic authority fact inventory is empty or ambiguous",
+        )]
+    findings: list[Finding] = []
+    fact_ids = [row.get("fact_id") for row in facts if isinstance(row, dict)]
+    if (len(fact_ids) != len(facts)
+            or any(not isinstance(value, str) or not value for value in fact_ids)
+            or len(fact_ids) != len(set(fact_ids))
+            or set(fact_ids) != set(required_ids)):
+        findings.append(finding(
+            "TM-COMP-SEMANTIC-AUTHORITY-MANIFEST", "authority",
+            "semantic authority required fact IDs do not match the fact rows",
+        ))
+        return findings
+    for row in facts:
+        fact_id = row["fact_id"]
+        if set(row) != SEMANTIC_AUTHORITY_FACT_FIELDS:
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} fields are incomplete or ambiguous",
+            ))
+            continue
+        scalar_fields = (
+            "definition_domain", "fact_id", "freeze_stage", "key_type",
+            "semantic_meaning", "trust_boundary",
+        )
+        if any(not isinstance(row[field], str) or not row[field]
+               for field in scalar_fields):
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} has an empty scalar field",
+            ))
+            continue
+        stable = row["stable_identity"]
+        if (not isinstance(stable, dict) or set(stable) != {"kind", "value"}
+                or stable.get("kind") != "exact-u32"
+                or not isinstance(stable.get("value"), int) or stable["value"] < 1):
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} stable identity is not exact",
+            ))
+        producer = row["producer"]
+        findings.extend(semantic_authority_reference_findings(
+            root, fact_id, "producer", producer, {"path", "required_regex"}
+        ))
+        if (fact_id == "semantic.schema.version" and isinstance(producer, dict)
+                and isinstance(producer.get("path"), str)):
+            producer_path = root / producer["path"]
+            if producer_path.is_file() and isinstance(stable, dict):
+                source = producer_path.read_text(encoding="utf-8", errors="strict")
+                versions = re.findall(
+                    r"^#define\s+XR_SEMANTIC_SCHEMA_VERSION\s+UINT32_C\((\d+)\)\s*$",
+                    source, re.MULTILINE,
+                )
+                if versions != [str(stable.get("value"))]:
+                    findings.append(finding(
+                        "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR", "authority",
+                        "semantic schema source does not match its exact stable identity",
+                        samples=(f"expected={stable.get('value')}",
+                                 f"observed={versions}"),
+                    ))
+        reference_lists = (
+            ("consumer", row["consumers"], {"path", "required_regex", "role"}),
+            ("serialized form", row["serialized_form"],
+             {"artifact", "path", "required_regex"}),
+            ("cache-key contribution", row["cache_key_contribution"],
+             {"cache", "path", "required_regex"}),
+        )
+        for kind, references, fields in reference_lists:
+            if not isinstance(references, list) or not references:
+                findings.append(finding(
+                    "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                    f"semantic authority {fact_id} has no {kind} inventory",
+                ))
+                continue
+            for reference in references:
+                findings.extend(semantic_authority_reference_findings(
+                    root, fact_id, kind, reference, fields
+                ))
+        checker = row["independent_checker"]
+        findings.extend(semantic_authority_reference_findings(
+            root, fact_id, "independent checker", checker,
+            {"entrypoint", "path", "required_regex"},
+        ))
+        mutation = row["mutation_operator"]
+        if (not isinstance(mutation, dict)
+                or set(mutation) != {"expected_finding", "id"}
+                or mutation.get("expected_finding") !=
+                "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR"
+                or not isinstance(mutation.get("id"), str) or not mutation["id"]):
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} mutation operator is incomplete",
+            ))
+        coverage = row["positive_negative_oracle_coverage"]
+        if (not isinstance(coverage, dict)
+                or set(coverage) != {"negative", "oracle", "positive"}
+                or any(not isinstance(value, str) or not value
+                       for value in coverage.values())):
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} coverage is incomplete",
+            ))
+        duplicates = row["legacy_duplicate_owners"]
+        if (not isinstance(duplicates, list)
+                or any(not isinstance(value, str) or not value for value in duplicates)
+                or len(duplicates) != len(set(duplicates))):
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} duplicate-owner inventory is ambiguous",
+            ))
+        tombstone = row["completion_tombstone"]
+        if (not isinstance(tombstone, dict)
+                or set(tombstone) != {"condition", "status"}
+                or any(not isinstance(value, str) or not value
+                       for value in tombstone.values())):
+            findings.append(finding(
+                "TM-COMP-SEMANTIC-AUTHORITY-ROW", "authority",
+                f"semantic authority {fact_id} completion tombstone is incomplete",
+            ))
     return findings
 
 
@@ -1050,6 +1268,7 @@ def audit(root: Path, manifest: dict[str, Any], evidence_root: Path) -> dict[str
     identity, identity_rows = repository_identity(root)
     findings.extend(identity_rows)
     findings.extend(authority_findings(root, manifest))
+    findings.extend(semantic_authority_findings(root, manifest))
     findings.extend(source_residue_findings(root, manifest))
     findings.extend(terminal_inventory_findings(root, manifest))
     findings.extend(dual_owner_findings(root, manifest))
@@ -1148,6 +1367,92 @@ def self_test(manifest_path: Path) -> int:
             (root / "src/clean.c").write_text("int clean(void) { return 0; }\n", encoding="utf-8")
             if source_residue_findings(root, manifest):
                 raise AssertionError("clean residue fixture was rejected")
+
+            authority_root = root / "semantic-authority"
+            authority_files = {
+                "src/semantic.h":
+                    "#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(36)\n",
+                "src/consumer.c": "SEMANTIC_SCHEMA_CONSUMER\n",
+                "src/serialize.c": "SEMANTIC_SCHEMA_SERIALIZED\n",
+                "src/cache.c": "SEMANTIC_SCHEMA_CACHE_KEY\n",
+                "scripts/checker.py": "def semantic_authority_findings():\n    pass\n",
+            }
+            for relative, content in authority_files.items():
+                path = authority_root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+            authority_data = {
+                "schema": SEMANTIC_AUTHORITY_SCHEMA,
+                "checker": SEMANTIC_AUTHORITY_CHECKER,
+                "required_fact_ids": ["semantic.schema.version"],
+                "facts": [{
+                    "fact_id": "semantic.schema.version",
+                    "semantic_meaning": "exact semantic artifact schema identity",
+                    "definition_domain": "semantic-artifact-identity",
+                    "key_type": "uint32-exact-version",
+                    "producer": {
+                        "path": "src/semantic.h",
+                        "required_regex":
+                            "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(36\\)$",
+                    },
+                    "consumers": [{
+                        "path": "src/consumer.c", "role": "plan initialization",
+                        "required_regex": "SEMANTIC_SCHEMA_CONSUMER",
+                    }],
+                    "freeze_stage": "semantic plan freeze",
+                    "stable_identity": {"kind": "exact-u32", "value": 36},
+                    "serialized_form": [{
+                        "artifact": "fixture", "path": "src/serialize.c",
+                        "required_regex": "SEMANTIC_SCHEMA_SERIALIZED",
+                    }],
+                    "cache_key_contribution": [{
+                        "cache": "fixture", "path": "src/cache.c",
+                        "required_regex": "SEMANTIC_SCHEMA_CACHE_KEY",
+                    }],
+                    "trust_boundary": "reject mismatched schema before plan use",
+                    "independent_checker": {
+                        "entrypoint": "semantic_authority_findings",
+                        "path": "scripts/checker.py",
+                        "required_regex": "def\\s+semantic_authority_findings",
+                    },
+                    "mutation_operator": {
+                        "id": "replace-producer-anchor",
+                        "expected_finding": "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR",
+                    },
+                    "positive_negative_oracle_coverage": {
+                        "positive": "semantic-authority-clean",
+                        "negative": "semantic-authority-anchor",
+                        "oracle": "exact producer and consumer anchors",
+                    },
+                    "legacy_duplicate_owners": [],
+                    "completion_tombstone": {
+                        "status": "retained-authority",
+                        "condition": "retire only through a schema contract amendment",
+                    },
+                }],
+            }
+            authority_path = authority_root / SEMANTIC_AUTHORITY_MANIFEST
+            write_json(authority_path, authority_data)
+            authority_manifest = {
+                "semantic_authority_manifest": SEMANTIC_AUTHORITY_MANIFEST,
+            }
+            rows = semantic_authority_findings(authority_root, authority_manifest)
+            if rows:
+                raise AssertionError(f"clean semantic authority fixture rejected: {rows}")
+            broken_authority = copy.deepcopy(authority_data)
+            del broken_authority["facts"][0]["cache_key_contribution"]
+            write_json(authority_path, broken_authority)
+            expect_mutation(results, "semantic-authority-row",
+                            semantic_authority_findings(authority_root, authority_manifest),
+                            "TM-COMP-SEMANTIC-AUTHORITY-ROW")
+            write_json(authority_path, authority_data)
+            (authority_root / "src/semantic.h").write_text(
+                "#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(37)\n", encoding="utf-8"
+            )
+            expect_mutation(results, "semantic-authority-anchor",
+                            semantic_authority_findings(authority_root, authority_manifest),
+                            "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR")
+
             mutations = [
                 ("xrc-source", "src/xrc_owner.c", 'const char *x = ".xrc";\n',
                  "TM-COMP-RESIDUE-LEGACY-XRC", "source"),
@@ -1480,6 +1785,7 @@ def self_test(manifest_path: Path) -> int:
 
         required_labels = {
             "xrc-source", "vm-include", "opcode-build", "tagged-frame", "xaot-plan",
+            "semantic-authority-row", "semantic-authority-anchor",
             "identity-log", "dependency-graph", "symbol", "installed-manifest",
             "installed-header", "installed", "installed-sdk", "runtime",
             "matrix", "activation-generation", "full-validation",
