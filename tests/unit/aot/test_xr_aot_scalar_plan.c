@@ -2021,6 +2021,13 @@ static void test_rune_to_uint32_c_emission_recipe_is_exact(void) {
 static void test_rune_to_string_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("rune_to_string_recipe", &scalar_unit);
     REQUIRE(root != NULL);
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=29:rune-to-string-aot-fixture-v1",
+        .path = "rune-to-string-aot-fixture.xr",
+        .name = "rune_to_string_aot_fixture",
+        .init = root,
+    };
+    root->module = &fixture_module;
     XiBlock *entry = xi_block_new(root);
     REQUIRE(entry != NULL);
     XiValue *source = xi_const_str(root, entry, "authority", &scalar_string);
@@ -2053,7 +2060,9 @@ static void test_rune_to_string_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    bool semantic_built = xr_semantic_plan_build_and_attach(root, error, sizeof(error));
+    root->module = NULL;
+    REQUIRE(semantic_built);
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();

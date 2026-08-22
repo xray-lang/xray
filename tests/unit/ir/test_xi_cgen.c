@@ -3025,6 +3025,13 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
     XiFunc *ir = xi_func_new("rune_to_string_recipe", &unit_type);
     XiBlock *entry = ir ? xi_block_new(ir) : NULL;
     TEST_REQUIRE(entry != NULL, "rune.toString recipe fixture allocated");
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=30:rune-to-string-cgen-fixture-v1",
+        .path = "rune-to-string-cgen-fixture.xr",
+        .name = "rune_to_string_cgen_fixture",
+        .init = ir,
+    };
+    ir->module = &fixture_module;
     entry->sealed = true;
     XiValue *source = xi_const_str(ir, entry, "0123456789abcdef", &string_type);
     XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
@@ -3059,6 +3066,7 @@ TEST(cgen_rune_to_string_consumes_immutable_emission_recipe) {
     xi_block_set_return(entry, NULL);
     bool had_error = false;
     char *code = generate_c_with_status(ir, "rune_to_string_recipe", &had_error);
+    ir->module = NULL;
     TEST_REQUIRE(code != NULL && !had_error, "sealed rune.toString recipe should generate");
     const char *to_string_call = strstr(code, "xrt_rune_to_string(");
     TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_rune_to_string(") == 1,

@@ -754,9 +754,19 @@ static XrSemanticPlan *finish_stringbuilder_semantic(XiFunc *function, XiBlock *
     REQUIRE(result != NULL);
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = function,
+    };
+    XiModule *saved_module = function->module;
+    if (!saved_module)
+        function->module = &fixture_module;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
     bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    function->module = saved_module;
     if (!built)
         fprintf(stderr, "%s Target semantic failed: %s\n", label, error);
     REQUIRE(built && semantic != NULL);
