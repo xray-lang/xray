@@ -42,6 +42,7 @@
 #include "xi_coro_analyze.h"
 #include "xi_value_query.h"
 #include "xi_receiver_alias.h"
+#include "xi_builtin_map_entry_iterator_shape.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
@@ -695,23 +696,27 @@ static bool arc_mem_allocator_returns_fresh_buffer(const XiFunc *f, const XiValu
  * iterator shell. Match both the exact receiver kind and the zero-argument
  * method so user-defined structural lookalikes remain alias-uncertain. */
 static bool arc_builtin_iterator_method_returns_fresh(const XiValue *v) {
+    if (xi_map_entries_iterator_is_exact(v))
+        return true;
     if (!v || (v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) || v->nargs != 1 ||
-        !v->args[0] || !v->aux)
+        !v->args[0])
         return false;
     const XrType *receiver = v->args[0]->type;
-    const char *method = (const char *) v->aux;
     if (!receiver)
         return false;
+    XiMethodSymbolId method = xi_call_method_symbol_id(v);
     switch (receiver->kind) {
         case XR_KIND_STRING:
-            return strcmp(method, "runes") == 0 || strcmp(method, "iterator") == 0 ||
-                   strcmp(method, "entriesIterator") == 0;
+            return method == XI_METHOD_SYMBOL_RUNES || method == XI_METHOD_SYMBOL_ITERATOR ||
+                   method == XI_METHOD_SYMBOL_ENTRIES_ITERATOR;
         case XR_KIND_ARRAY:
-        case XR_KIND_MAP:
         case XR_KIND_JSON:
-            return strcmp(method, "iterator") == 0 || strcmp(method, "entriesIterator") == 0;
+            return method == XI_METHOD_SYMBOL_ITERATOR ||
+                   method == XI_METHOD_SYMBOL_ENTRIES_ITERATOR;
+        case XR_KIND_MAP:
+            return method == XI_METHOD_SYMBOL_ITERATOR;
         case XR_KIND_SET:
-            return strcmp(method, "iterator") == 0;
+            return method == XI_METHOD_SYMBOL_ITERATOR;
         default:
             return false;
     }

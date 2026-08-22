@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 41 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 42 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
@@ -313,8 +313,8 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 4991783a6b65297061f062769dc5df4150f42834ddb4c72c52be664ced8cbf12
-anchor-sha256: src/vm/xr_typed_frame.h 504a12f174dc66f929776775ef00c4bab02d2ec35994b490ce50271add2ab0f3
+anchor-sha256: src/plan/target/xr_target_plan.h 80613ce736ff899e5a92d1f4fb900cefac6dcbc3955acc7cf9cf431e47ac5026
+anchor-sha256: src/vm/xr_typed_frame.h db60af4914cbd823edbc38d9005f6dc17564d178889fd78b6ba9c40f577c83e5
 anchor-sha256: src/vm/xr_typed_frame.c 397f46fa8647614c06745dc365676989abdc9e079f25a89994b96d9d34fbd405
 anchor-sha256: src/vm/xr_typed_dispatch.c d60391ef1366d9933fa19dd7f4fb30f5a2e86eeef6ca45061dba7985d9607cb4
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
@@ -326,7 +326,7 @@ anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.h 85dab081a8f11822651cc6866
 anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.c bedfd1ce971c879acacf38feb3cbc4b71c5aefd1283bcd13b36b8e7830123b62
 anchor-sha256: tests/unit/vm/test_typed_frame.c d74a298644494ab12a749dd4a0e239165bbc83f1fc8baf31b725d4e06f7e290c
 anchor-sha256: tests/unit/runtime/test_typed_lifecycle_audit.c 4770e678fcb3b588ec6ab45f3b24c83f5b82693d8c3f37dd92a714252936c2c6
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c ab0658ec1c8e618d3415dcecad4daf66df45e3f289968f4000fa0ca125ac002a
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 764004285c19abd6ef2491b3d6bdd466425e643f280e719f5833f0ddfaaaa5e1
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c eede18e3210d979c26b0adaca5c5454acdbd609514383d0e285525f69fef9883

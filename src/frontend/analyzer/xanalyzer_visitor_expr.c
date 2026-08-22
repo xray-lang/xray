@@ -406,6 +406,8 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
             return "Array<byte>";
         case XA_BUILTIN_RECEIVER_ARRAY:
             return xa_type_is_u8_array_type(receiver) ? "Array<byte>" : "Array";
+        case XA_BUILTIN_RECEIVER_MAP:
+            return "Map";
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return "Slice<byte>";
         case XA_BUILTIN_RECEIVER_POD_SLICE:
@@ -534,6 +536,10 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
             XrType *pair = xr_type_new_tuple(X, tuple_elems, 2);
             XrType *args[1] = {pair ? pair : xr_type_new_unknown(X)};
             return xr_type_new_generic_instance(X, "Iterator", NULL, args, 1);
+        }
+        case XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE: {
+            return xa_builtin_map_entries_iterator_result_type(
+                X, receiver, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
         }
         case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE: {
             XrType *elem = receiver && receiver->container.element_type

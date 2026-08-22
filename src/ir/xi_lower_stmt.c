@@ -14,6 +14,7 @@
 #include "xi_lower_internal.h"
 #include "xi.h"
 #include "xi_effect.h"
+#include "xi_builtin_map_entry_iterator_shape.h"
 #include "xi_own.h"
 #include "xi_lower_expr_helpers.h"
 #include "../analysis/xglobal_summary.h"
@@ -27,6 +28,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_ast_visitor.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
+#include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -2429,21 +2431,27 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
         return;
     }
 
-    /* Key/value iteration is a compiler-owned Map protocol.  Preserve the
-     * sealed Iterator declaration identity in Xi instead of erasing it to
-     * UNKNOWN: coroutine analysis must distinguish these synchronous native
-     * calls from unresolved user iterator methods. */
-    XrType *iterator_args[1] = {l->type_any};
-    XrType *iterator_type =
-        xr_type_new_generic_instance(l->isolate, "Iterator", NULL, iterator_args, 1);
+    /* Key/value Map iteration consumes the same generated receiver row as an
+     * explicit m.entriesIterator() call.  Its result is exactly
+     * Iterator<(K, V)> before Xi is frozen; unknown is not a fallback for a
+     * receiver proven to be Map<K, V>. */
+    if (!xa_builtin_receiver_matches_type(coll->type, XA_BUILTIN_RECEIVER_MAP))
+        return;
+    XrType *key_type = coll->type->map.key_type;
+    XrType *value_type = coll->type->map.value_type;
+    XrType *iterator_type = xa_builtin_map_entries_iterator_result_type(
+        l->isolate, coll->type, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
     if (!iterator_type)
+        return;
+    XrType *entry_type = (XrType *) xi_builtin_iterator_element_type(iterator_type);
+    if (!entry_type || !key_type || !value_type)
         return;
     XiValue *iter = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, iterator_type, 1);
     if (!iter)
         return;
     iter->args[0] = coll;
     iter->aux = (void *) "entriesIterator";
-    iter->aux_int = (int64_t) xi_lower_method_symbol(l, "entriesIterator") << 1;
+    iter->aux_int = (int64_t) XI_METHOD_SYMBOL_ENTRIES_ITERATOR << 1;
     iter->call_return_ownership = (XiReturnOwnership) {
         .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
     iter->flags |= XI_FLAG_SIDE_EFFECT;
@@ -2471,7 +2479,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
         return;
     has_next->args[0] = iter_cond;
     has_next->aux = (void *) "hasNext";
-    has_next->aux_int = (int64_t) xi_lower_method_symbol(l, "hasNext") << 1;
+    has_next->aux_int = (int64_t) XI_METHOD_SYMBOL_HAS_NEXT << 1;
     has_next->flags |= XI_FLAG_SIDE_EFFECT;
     has_next->line = line;
     xi_block_set_if(l->cur_block, has_next, body_blk, exit_blk);
@@ -2483,42 +2491,40 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
 
     l->cur_block = body_blk;
     XiValue *iter_body = xi_lower_braun_read(l, iter_var, l->cur_block);
-    XiValue *entry = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, l->type_any, 1);
+    XiValue *entry = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, entry_type, 1);
     if (!entry)
         return;
     entry->args[0] = iter_body;
     entry->aux = (void *) "next";
-    entry->aux_int = (int64_t) xi_lower_method_symbol(l, "next") << 1;
+    entry->aux_int = (int64_t) XI_METHOD_SYMBOL_NEXT << 1;
     entry->call_return_ownership = (XiReturnOwnership) {
         .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
     entry->flags |= XI_FLAG_SIDE_EFFECT;
     entry->line = line;
-
-    struct XrType *item_type = xi_lower_node_type(l, node);
 
     /* The iterator yields a (key, value) tuple per step (see
      * xr_iterator_next: Map/Json/Array/String all build XrTuple pairs).
      * Read each slot with TUPLE_GET so the access matches the runtime
      * representation; downstream peephole can fold this against a
      * fresh TUPLE_NEW when the source is inlinable. */
-    XiValue *key_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, item_type, 1);
+    XiValue *key_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, key_type, 1);
     if (key_val) {
         key_val->args[0] = entry;
         key_val->aux_int = 0;
         key_val->line = line;
     }
-    int key_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, item_type);
+    int key_var = xi_lower_var_create(l, s->item_symbol_id, s->item_name, key_type);
     if (key_val)
         xi_lower_braun_write(l, key_var, l->cur_block, key_val);
 
     if (s->value_name) {
-        XiValue *val_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, l->type_any, 1);
+        XiValue *val_val = xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, value_type, 1);
         if (val_val) {
             val_val->args[0] = entry;
             val_val->aux_int = 1;
             val_val->line = line;
         }
-        int val_var = xi_lower_var_create(l, s->value_symbol_id, s->value_name, l->type_any);
+        int val_var = xi_lower_var_create(l, s->value_symbol_id, s->value_name, value_type);
         if (val_val)
             xi_lower_braun_write(l, val_var, l->cur_block, val_val);
     }

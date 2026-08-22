@@ -23,6 +23,7 @@ typedef enum {
     XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER,
     XA_BUILTIN_RECEIVER_U8_ARRAY,
     XA_BUILTIN_RECEIVER_ARRAY,
+    XA_BUILTIN_RECEIVER_MAP,
     XA_BUILTIN_RECEIVER_U8_SLICE,
     XA_BUILTIN_RECEIVER_POD_SLICE,
 } XaBuiltinReceiverKind;
@@ -51,6 +52,7 @@ typedef enum {
     XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN,
     XA_BUILTIN_TYPE_ITERATOR_OF_RECEIVER_ELEM,
     XA_BUILTIN_TYPE_ITERATOR_OF_INDEX_RECEIVER_ELEM_TUPLE,
+    XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE,
     XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE,
     XA_BUILTIN_TYPE_SLICE_OF_RECEIVER_ELEM,
     XA_BUILTIN_TYPE_PTR_OF_RECEIVER_ELEM,
@@ -327,6 +329,9 @@ static inline bool xa_builtin_receiver_matches_type(XrType *receiver, XaBuiltinR
             return xr_type_is_u8_array(receiver);
         case XA_BUILTIN_RECEIVER_ARRAY:
             return receiver && XR_TYPE_IS_ARRAY(receiver);
+        case XA_BUILTIN_RECEIVER_MAP:
+            return receiver && receiver->kind == XR_KIND_MAP && receiver->map.key_type &&
+                   receiver->map.value_type;
         case XA_BUILTIN_RECEIVER_U8_SLICE:
             return xr_type_is_u8_slice(receiver);
         case XA_BUILTIN_RECEIVER_POD_SLICE:
@@ -334,6 +339,27 @@ static inline bool xa_builtin_receiver_matches_type(XrType *receiver, XaBuiltinR
                    xa_builtin_type_is_pod_span_elem(receiver->container.element_type);
     }
     return false;
+}
+
+/* Instantiate the exact result declared by the generated Map entry-iterator
+ * row.  Both semantic analysis and IR lowering consume this constructor, so
+ * an imported/stale method signature cannot replace (K, V) with unknown at
+ * the typed-IR boundary. */
+static inline XrType *
+xa_builtin_map_entries_iterator_result_type(XrVMRuntime *X, XrType *receiver,
+                                            XaBuiltinReceiverMethodId method_id) {
+    const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
+    if (!spec || spec->method_id != XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR ||
+        spec->receiver != XA_BUILTIN_RECEIVER_MAP ||
+        spec->result != XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE ||
+        !xa_builtin_receiver_matches_type(receiver, spec->receiver))
+        return NULL;
+    XrType *entry_elements[2] = {receiver->map.key_type, receiver->map.value_type};
+    XrType *entry = xr_type_new_tuple(X, entry_elements, 2);
+    if (!entry)
+        return NULL;
+    XrType *iterator_args[1] = {entry};
+    return xr_type_new_generic_instance(X, "Iterator", NULL, iterator_args, 1);
 }
 
 /* Does this parameter slot take a callback? Higher-order intrinsics propagate

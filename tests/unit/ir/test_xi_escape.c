@@ -16,6 +16,7 @@
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_arc.h"
 #include "../../../src/ir/xi_arc_verify.h"
+#include "../../../src/ir/xi_builtin_map_entry_iterator_shape.h"
 #include "../../../src/ir/xi_effect.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_verify.h"
@@ -1197,7 +1198,9 @@ static void test_arc_value_clone_is_fresh_owner(void) {
 }
 
 static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, uint16_t op,
-                                                       const char *method, const char *message) {
+                                                       const char *method,
+                                                       XiMethodSymbolId method_symbol,
+                                                       const char *message) {
     XiFunc *f = make_func("arc_fresh_iterator_method", &t_int);
     XiBlock *entry = f->entry;
     XiValue *receiver = xi_value_new(f, entry, XI_PARAM, receiver_type, 0);
@@ -1205,6 +1208,7 @@ static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, ui
     XiValue *iterator = xi_value_new(f, entry, op, &t_iterator, 1);
     iterator->args[0] = receiver;
     iterator->aux = (void *) method;
+    iterator->aux_int = (int64_t) method_symbol << 1;
     iterator->flags = XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
 
@@ -1216,16 +1220,85 @@ static void assert_arc_iterator_method_result_is_fresh(XrType *receiver_type, ui
 
 static void test_arc_builtin_iterator_results_are_fresh(void) {
     assert_arc_iterator_method_result_is_fresh(&t_string, XI_CALL_METHOD, "runes",
+                                               XI_METHOD_SYMBOL_RUNES,
                                                "discarded string.runes iterator must be released");
     assert_arc_iterator_method_result_is_fresh(
-        &t_array, XI_CALL_METHOD_DIRECT, "entriesIterator",
+        &t_array, XI_CALL_METHOD_DIRECT, "entriesIterator", XI_METHOD_SYMBOL_ENTRIES_ITERATOR,
         "discarded array entries iterator must be released after direct lowering");
     assert_arc_iterator_method_result_is_fresh(&t_map, XI_CALL_METHOD, "iterator",
+                                               XI_METHOD_SYMBOL_ITERATOR,
                                                "discarded map iterator must be released");
     assert_arc_iterator_method_result_is_fresh(&t_set, XI_CALL_METHOD, "iterator",
+                                               XI_METHOD_SYMBOL_ITERATOR,
                                                "discarded set iterator must be released");
     assert_arc_iterator_method_result_is_fresh(&t_json, XI_CALL_METHOD, "entriesIterator",
+                                               XI_METHOD_SYMBOL_ENTRIES_ITERATOR,
                                                "discarded Json entries iterator must be released");
+}
+
+static void test_map_entry_iterator_typed_shape(void) {
+    XrType *entry_elements[2] = {&t_string, &t_int};
+    XrType entry_type = {
+        .kind = XR_KIND_TUPLE,
+        .id = 101,
+        .frozen = true,
+        .tuple = {.element_types = entry_elements, .element_count = 2},
+    };
+    XrType *iterator_args[1] = {&entry_type};
+    XrType iterator_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 102,
+        .frozen = true,
+        .instance = {.class_name = "Iterator", .type_args = iterator_args, .type_arg_count = 1},
+    };
+    XrType map_type = {
+        .kind = XR_KIND_MAP,
+        .id = 103,
+        .frozen = true,
+        .map = {.key_type = &t_string, .value_type = &t_int},
+    };
+    XiFunc *f = make_func("map_entry_iterator_typed_shape", &t_int);
+    XiBlock *entry = f->entry;
+    XiValue *map = xi_value_new(f, entry, XI_PARAM, &map_type, 0);
+    XiValue *iterator = xi_value_new(f, entry, XI_CALL_METHOD, &iterator_type, 1);
+    XiValue *has_next = xi_value_new(f, entry, XI_CALL_METHOD, &t_bool, 1);
+    XiValue *next = xi_value_new(f, entry, XI_CALL_METHOD, &entry_type, 1);
+    iterator->args[0] = map;
+    iterator->aux = (void *) "diagnostic-only";
+    iterator->aux_int = (int64_t) XI_METHOD_SYMBOL_ENTRIES_ITERATOR << 1;
+    has_next->args[0] = iterator;
+    has_next->aux = (void *) "not-hasNext";
+    has_next->aux_int = (int64_t) XI_METHOD_SYMBOL_HAS_NEXT << 1;
+    next->args[0] = iterator;
+    next->aux = (void *) "not-next";
+    next->aux_int = (int64_t) XI_METHOD_SYMBOL_NEXT << 1;
+
+    ASSERT_EQ(xi_map_entries_iterator_is_exact(iterator), true,
+              "Map entriesIterator shape must come from stable symbol and exact K/V types");
+    ASSERT_EQ(xi_map_entry_iterator_has_next_is_exact(has_next), true,
+              "hasNext must consume the exact Map entry iterator family");
+    ASSERT_EQ(xi_map_entry_iterator_next_is_exact(next), true,
+              "next must return the exact (K,V) entry type");
+
+    iterator->aux_int = (int64_t) XI_METHOD_SYMBOL_ITERATOR << 1;
+    ASSERT_EQ(xi_map_entries_iterator_is_exact(iterator), false,
+              "an ordinary iterator symbol must not acquire Map entry authority");
+    iterator->aux_int = (int64_t) XI_METHOD_SYMBOL_ENTRIES_ITERATOR << 1;
+    iterator_args[0] = &t_any;
+    ASSERT_EQ(xi_map_entries_iterator_is_exact(iterator), false,
+              "Iterator<unknown> must fail the exact Map entry shape");
+    iterator_args[0] = &entry_type;
+    next->type = &t_any;
+    ASSERT_EQ(xi_map_entry_iterator_next_is_exact(next), false,
+              "next returning unknown must fail the exact entry family");
+    next->type = &entry_type;
+    has_next->aux_int = (int64_t) XI_METHOD_SYMBOL_NEXT << 1;
+    ASSERT_EQ(xi_map_entry_iterator_has_next_is_exact(has_next), false,
+              "next's stable symbol must not acquire hasNext authority");
+    has_next->aux_int = (int64_t) XI_METHOD_SYMBOL_HAS_NEXT << 1;
+    ASSERT_EQ(xi_map_entry_iterator_next_is_exact(next), true,
+              "restored exact Map entry shape must remain accepted");
+    xi_func_free(f);
 }
 
 static void test_arc_generator_iterator_result_is_fresh(void) {
@@ -1253,6 +1326,7 @@ static void test_arc_custom_iterator_method_stays_alias_uncertain(void) {
     XiValue *iterator = xi_value_new(f, entry, XI_CALL_METHOD, &t_iterator, 1);
     iterator->args[0] = receiver;
     iterator->aux = (void *) "iterator";
+    iterator->aux_int = (int64_t) XI_METHOD_SYMBOL_ITERATOR << 1;
     iterator->flags = XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(entry, xi_const_int(f, entry, 0, &t_int));
 
@@ -1929,6 +2003,7 @@ int main(void) {
     test_arc_stringbuilder_builtin_result_is_fresh();
     test_arc_value_clone_is_fresh_owner();
     test_arc_builtin_iterator_results_are_fresh();
+    test_map_entry_iterator_typed_shape();
     test_arc_generator_iterator_result_is_fresh();
     test_arc_custom_iterator_method_stays_alias_uncertain();
     test_arc_err_check_carries_cold_edge_cleanup();

@@ -18,6 +18,7 @@
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_iterator_rune_nth_shape.h"
+#include "xr_semantic_map_entry_iterator_shape.h"
 #include "xr_semantic_rune_to_string_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
@@ -35,6 +36,7 @@
 #include "../../ir/xi_coro_analyze.h"
 #include "../../ir/xi_module.h"
 #include "../../ir/xi_own.h"
+#include "../../ir/xi_builtin_map_entry_iterator_shape.h"
 #include "../../ir/xi_ops_gen.h"
 #include "../../ir/xi_value_query.h"
 #include "../../runtime/value/xtype.h"
@@ -3906,6 +3908,21 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->intrinsic_kind = XR_SEM_INTRINSIC_ITERATOR_RUNE_NTH;
         if (!xr_semantic_iterator_rune_nth_is_exact(ctx->plan, record, NULL, NULL))
             return fail(ctx, "XR_SEM_0019", "Iterator<rune>.nth authority is not exact");
+    }
+    if (xi_map_entries_iterator_is_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_MAP_ENTRIES_ITERATOR;
+        if (!xr_semantic_map_entries_iterator_is_exact(ctx->plan, record, NULL, NULL))
+            return fail(ctx, "XR_SEM_0019", "Map.entriesIterator authority is not exact");
+    }
+    if (xi_map_entry_iterator_has_next_is_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_HAS_NEXT;
+        if (!xr_semantic_map_entry_iterator_has_next_is_exact(ctx->plan, record, NULL))
+            return fail(ctx, "XR_SEM_0019", "Map entry iterator hasNext authority is not exact");
+    }
+    if (xi_map_entry_iterator_next_is_exact(value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT;
+        if (!xr_semantic_map_entry_iterator_next_is_exact(ctx->plan, record, NULL))
+            return fail(ctx, "XR_SEM_0019", "Map entry iterator next authority is not exact");
     }
     if (xi_rune_to_uint32_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_RUNE_TO_UINT32;

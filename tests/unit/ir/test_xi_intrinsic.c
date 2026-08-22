@@ -301,6 +301,20 @@ static void test_builtin_receiver_registry_metadata(void) {
 }
 
 static void test_builtin_receiver_method_placement(void) {
+    const XaBuiltinReceiverMethodSpec *map_entries =
+        xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
+    ASSERT_TRUE(map_entries && map_entries->receiver == XA_BUILTIN_RECEIVER_MAP &&
+                    map_entries->result == XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE &&
+                    map_entries->param_count == 0 && map_entries->min_params == 0 &&
+                    map_entries->effect == XA_BUILTIN_EFFECT_READS_RECEIVER &&
+                    map_entries->allocation == XA_BUILTIN_ALLOCATION_MAY_HEAP &&
+                    strcmp(map_entries->source_name, "entriesIterator") == 0,
+                "Map entriesIterator must have one generated exact K/V iterator row");
+    ASSERT_TRUE(find_receiver_method(XA_BUILTIN_RECEIVER_MAP, "entriesIterator") == map_entries,
+                "Map entriesIterator lookup must resolve its generated typed row");
+    ASSERT_TRUE(find_receiver_method(XA_BUILTIN_RECEIVER_U8_ARRAY, "entriesIterator") == NULL,
+                "a different receiver family must not acquire the Map entry row");
+
     const char *exact_bit_methods[] = {"rotateLeft",   "rotateRight",   "byteswap", "popcount",
                                        "leadingZeros", "trailingZeros", NULL};
     for (int i = 0; exact_bit_methods[i]; i++) {

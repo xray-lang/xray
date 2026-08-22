@@ -196,6 +196,53 @@ static XrType stub_iterator_rune = {
             .type_arg_count = 1,
         },
 };
+static XrType stub_unknown = {
+    .kind = XR_KIND_UNKNOWN,
+    .id = 130,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_map_string_string = {
+    .kind = XR_KIND_MAP,
+    .id = 131,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .map = {.key_type = &stub_exact_string, .value_type = &stub_exact_string},
+};
+static XrType *stub_map_entry_elements[] = {&stub_exact_string, &stub_exact_string};
+static XrType stub_map_entry = {
+    .kind = XR_KIND_TUPLE,
+    .id = 132,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .tuple = {.element_types = stub_map_entry_elements, .element_count = 2},
+};
+static XrType *stub_map_entry_iterator_args[] = {&stub_map_entry};
+static XrType stub_map_entry_iterator = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 133,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance =
+        {
+            .class_name = "Iterator",
+            .type_args = stub_map_entry_iterator_args,
+            .type_arg_count = 1,
+        },
+};
+static XrType *stub_unknown_iterator_args[] = {&stub_unknown};
+static XrType stub_unknown_iterator = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 134,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance =
+        {
+            .class_name = "Iterator",
+            .type_args = stub_unknown_iterator_args,
+            .type_arg_count = 1,
+        },
+};
 static XrType stub_raw_pointer = {
     .kind = XR_KIND_POINTER,
     .id = 121,
@@ -863,6 +910,67 @@ static XrSemanticPlan *build_iterator_rune_next_semantic(void) {
     REQUIRE(release != NULL);
     release->args[0] = runes;
     return finish_stringbuilder_semantic(function, entry, "Iterator<rune>.next");
+}
+
+static XrSemanticPlan *build_map_entry_iterator_semantic(XiMethodSymbolId factory_symbol,
+                                                         bool exact_result_types) {
+    XiFunc *function = xi_func_new("target_map_entry_iterator", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *map = xi_param(function, entry, 0, &stub_map_string_string);
+    REQUIRE(map != NULL);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = map;
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+
+    XrType *iterator_type =
+        exact_result_types ? &stub_map_entry_iterator : &stub_unknown_iterator;
+    XrType *entry_type = exact_result_types ? &stub_map_entry : &stub_unknown;
+    XiValue *iterator = xi_value_new(function, entry, XI_CALL_METHOD, iterator_type, 1);
+    XiValue *has_next = xi_value_new(function, entry, XI_CALL_METHOD, &stub_bool, 1);
+    XiValue *next = xi_value_new(function, entry, XI_CALL_METHOD, entry_type, 1);
+    REQUIRE(iterator && has_next && next);
+    iterator->args[0] = map;
+    iterator->aux = (void *) "diagnostic-selector-is-not-authority";
+    iterator->aux_int = (int64_t) factory_symbol << 1;
+    iterator->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+    iterator->flags |= XI_FLAG_SIDE_EFFECT;
+    has_next->args[0] = iterator;
+    has_next->aux = (void *) "diagnostic-has-next";
+    has_next->aux_int = (int64_t) XI_METHOD_SYMBOL_HAS_NEXT << 1;
+    has_next->flags |= XI_FLAG_SIDE_EFFECT;
+    next->args[0] = iterator;
+    next->aux = (void *) "diagnostic-next";
+    next->aux_int = (int64_t) XI_METHOD_SYMBOL_NEXT << 1;
+    next->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+    next->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *release_entry = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *release_iterator = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release_entry && release_iterator);
+    release_entry->args[0] = next;
+    release_iterator->args[0] = iterator;
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(result != NULL);
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "Map entry iterator semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
 }
 
 static XrSemanticPlan *build_rune_to_uint32_semantic(void) {
@@ -1895,7 +2003,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "2930ca07955f03d336a1fb9119c19ad9b010b334386a3a3c3fe959e920874a19") == 0);
+                   "f8f7afc3b19a2a7209bb4eef9c96b59644bcc3425dfee419f937e8ad6363a40e") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -3178,7 +3286,7 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "e2eccad77757f56d01f21cbba1c31bd94b35d7fd25aaec74c1f395b01ad1e214") ==
+    REQUIRE(strcmp(call_hex, "25722bb38ebc88b59409f77acbedb909e1b12f902a279881e60e76efc85b5d7f") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -3860,7 +3968,7 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "9ff26574af819e52b0647963e74b000fed328f4a3b85286e0b164967089352b4") ==
+    REQUIRE(strcmp(call_hex, "904d161c268f3fe5ffeab42e9adb6ae59c534474bf2eb3b584668d1e556f3f2b") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -4258,7 +4366,7 @@ static void test_coroutine_state_call_family(void) {
             tail_plan->functions[tail_call->caller_function].coroutine_count == 0);
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex, "fd4aa3fa437612cbcd2b1e1059eef1236bcf46bfbb7a6016f89ea6099110d685") ==
+    REQUIRE(strcmp(tail_hex, "b28f70afb951e9c7567cc1a9e6f6ab629133d517572d6f6ffe81f6f866358bb8") ==
             0);
     uint32_t tail_id = tail_call->id;
     tail_plan->calls[tail_id].flags = 0;
@@ -5205,6 +5313,127 @@ static void test_iterator_rune_next_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_map_entry_iterator_call_authority(void) {
+    XrSemanticPlan *semantic = build_map_entry_iterator_semantic(
+        XI_METHOD_SYMBOL_ENTRIES_ITERATOR, true);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "Map entry iterator TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && plan->calls_count == 3 && plan->call_arguments_count == 0);
+    XrTargetCallRecord *factory =
+        find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_MAP_ENTRIES_ITERATOR);
+    XrTargetCallRecord *has_next = find_call_by_convention(
+        plan, XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_HAS_NEXT);
+    XrTargetCallRecord *next =
+        find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_NEXT);
+    XrSemanticOperationRecord *factory_operation =
+        &semantic->operations[factory->semantic_operation];
+    XrSemanticOperationRecord *has_next_operation =
+        &semantic->operations[has_next->semantic_operation];
+    XrSemanticOperationRecord *next_operation = &semantic->operations[next->semantic_operation];
+    const XrTargetValueRepRecord *factory_result =
+        xr_target_plan_value_rep(plan, factory->result_value);
+    const XrTargetValueRepRecord *has_next_result =
+        xr_target_plan_value_rep(plan, has_next->result_value);
+    const XrTargetValueRepRecord *next_result = xr_target_plan_value_rep(plan, next->result_value);
+    REQUIRE(factory_operation->intrinsic_kind == XR_SEM_INTRINSIC_MAP_ENTRIES_ITERATOR &&
+            has_next_operation->intrinsic_kind ==
+                XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_HAS_NEXT &&
+            next_operation->intrinsic_kind == XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT &&
+            factory_operation->semantic_immediate ==
+                ((int64_t) XI_METHOD_SYMBOL_ENTRIES_ITERATOR << 1) &&
+            has_next_operation->semantic_immediate ==
+                ((int64_t) XI_METHOD_SYMBOL_HAS_NEXT << 1) &&
+            next_operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_NEXT << 1) &&
+            factory->target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRIES_ITERATOR &&
+            has_next->target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_HAS_NEXT &&
+            next->target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT &&
+            factory->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            has_next->result_ownership == XR_TARGET_CALL_NONE &&
+            next->result_ownership == XR_TARGET_CALL_RETURN_OWNED && factory_result &&
+            has_next_result && next_result &&
+            plan->machine_reps[factory_result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[factory_result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[factory_result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            plan->machine_reps[has_next_result->register_rep].kind == XR_MACHINE_REP_I1 &&
+            plan->slots[has_next_result->slot].root_kind == XR_TARGET_ROOT_NONE &&
+            plan->slots[has_next_result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+            plan->machine_reps[next_result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->slots[next_result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[next_result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XrStableId saved_identity = factory->identity;
+    factory->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    factory->identity = saved_identity;
+    uint8_t saved_kind = next->target_kind;
+    next->target_kind = XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NEXT;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    next->target_kind = saved_kind;
+    uint8_t saved_convention = has_next->calling_convention;
+    has_next->calling_convention = XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_HAS_NEXT;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    has_next->calling_convention = saved_convention;
+    uint8_t saved_ownership = next->result_ownership;
+    next->result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    next->result_ownership = saved_ownership;
+    XrTargetValueRepRecord *mutable_next_result = (XrTargetValueRepRecord *) next_result;
+    uint16_t saved_next_register_rep = mutable_next_result->register_rep;
+    mutable_next_result->register_rep = has_next_result->register_rep;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    mutable_next_result->register_rep = saved_next_register_rep;
+    uint8_t saved_next_root = plan->slots[next_result->slot].root_kind;
+    plan->slots[next_result->slot].root_kind = XR_TARGET_ROOT_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    plan->slots[next_result->slot].root_kind = saved_next_root;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    int64_t saved_immediate = factory_operation->semantic_immediate;
+    factory_operation->semantic_immediate = (int64_t) XI_METHOD_SYMBOL_ITERATOR << 1;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    factory_operation->semantic_immediate = saved_immediate;
+    XrSemanticOperandRecord *factory_receiver =
+        &semantic->operands[factory_operation->operand_begin];
+    uint8_t saved_action = factory_receiver->ownership_action;
+    factory_receiver->ownership_action = XR_SEM_OPERAND_CONSUME;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    factory_receiver->ownership_action = saved_action;
+    uint32_t saved_result_type = next_operation->result_type;
+    next_operation->result_type = factory_receiver->type;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    next_operation->result_type = saved_result_type;
+    XrSemanticTypeRecord *map_type = &semantic->types[factory_receiver->type];
+    XrSemanticTypeRecord *iterator_type = &semantic->types[factory_operation->result_type];
+    uint32_t saved_entry_type = semantic->type_children[iterator_type->child_begin];
+    semantic->type_children[iterator_type->child_begin] =
+        semantic->type_children[map_type->child_begin];
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    semantic->type_children[iterator_type->child_begin] = saved_entry_type;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    semantic = build_map_entry_iterator_semantic(XI_METHOD_SYMBOL_ITERATOR, true);
+    profile = build_profile(0);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    semantic = build_map_entry_iterator_semantic(XI_METHOD_SYMBOL_ENTRIES_ITERATOR, false);
+    profile = build_profile(0);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_rune_to_uint32_call_authority(void) {
     XrSemanticPlan *semantic = build_rune_to_uint32_semantic();
     XrTargetProfile *profile = build_profile(0);
@@ -5917,6 +6146,11 @@ int main(int argc, char **argv) {
         puts("String range-slice TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "map-entry-iterator-authority") == 0) {
+        test_map_entry_iterator_call_authority();
+        puts("Map entry iterator TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "source-export-ref-c-emission") == 0) {
         test_source_export_ref_argument_is_not_array_projection();
         puts("Source-export ref C emission family tests passed");
@@ -5935,6 +6169,7 @@ int main(int argc, char **argv) {
     test_string_slice_range_call_authority();
     test_iterator_rune_has_next_call_authority();
     test_iterator_rune_next_call_authority();
+    test_map_entry_iterator_call_authority();
     test_rune_to_uint32_call_authority();
     test_rune_is_whitespace_call_authority();
     test_string_byte_slice_view_target_authority();

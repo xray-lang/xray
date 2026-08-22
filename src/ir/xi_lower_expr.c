@@ -15,6 +15,7 @@
 #include "xi_semantic_intrinsic.h"
 #include "xi.h"
 #include "xi_effect.h"
+#include "xi_builtin_map_entry_iterator_shape.h"
 #include "xi_lower_expr_helpers.h"
 #include "xi_own.h"
 #include "../base/xchecks.h"
@@ -2800,27 +2801,6 @@ static bool xi_type_is_pod_span_elem(struct XrType *type) {
     }
 }
 
-static bool xi_lower_builtin_receiver_registry_matches(struct XrType *receiver_type,
-                                                       XaBuiltinReceiverKind kind) {
-    switch (kind) {
-        case XA_BUILTIN_RECEIVER_EXACT_INTEGER:
-            return receiver_type && receiver_type->kind == XR_KIND_INT &&
-                   !receiver_type->is_nullable;
-        case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
-            return xr_type_is_exact_unsigned_integer(receiver_type);
-        case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return xr_type_is_u8_array(receiver_type);
-        case XA_BUILTIN_RECEIVER_ARRAY:
-            return receiver_type && XR_TYPE_IS_ARRAY(receiver_type);
-        case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return xr_type_is_u8_slice(receiver_type);
-        case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return receiver_type && XR_TYPE_IS_SLICE(receiver_type) &&
-                   xi_type_is_pod_span_elem(receiver_type->container.element_type);
-    }
-    return false;
-}
-
 /* R2-2: wrappingAdd/Sub/Mul are spec-defined as "explicit default two's-
  * complement wrap" — exactly the semantics ADD/SUB/MUL already implement per
  * receiver width (§2.3: fixed-width arithmetic wraps at its width). Lowering
@@ -2868,7 +2848,7 @@ static bool xi_lower_receiver_method_call_matches(struct XrType *receiver_type, 
                                                   XaBuiltinReceiverMethodId method_id) {
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
     return spec && method && strcmp(method, spec->source_name) == 0 &&
-           xi_lower_builtin_receiver_registry_matches(receiver_type, spec->receiver) &&
+           xa_builtin_receiver_matches_type(receiver_type, spec->receiver) &&
            xi_lower_receiver_method_arg_count_matches(spec, arg_count);
 }
 
@@ -7153,6 +7133,32 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             lower_math_call_arity_ok(ma->name, n))
             result_type = lower_math_call_result_type(l, ma->name, arg_vals, n);
 
+        /* The generated receiver row is the canonical Map<K, V> iteration
+         * result owner.  Re-instantiate it here before typed IR is frozen so
+         * bootstrap bytecode cannot erase the entry tuple to unknown. */
+        bool exact_map_entries_iterator = xi_lower_receiver_method_call_matches(
+            recv->type, ma->name, n, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
+        if (exact_map_entries_iterator) {
+            result_type = xa_builtin_map_entries_iterator_result_type(
+                l->isolate, recv->type, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
+            if (!result_type)
+                return NULL;
+        }
+        XiMethodSymbolId method_symbol = (XiMethodSymbolId) xi_lower_method_symbol(l, ma->name);
+        bool exact_map_entry_iterator_has_next =
+            n == 0 && method_symbol == XI_METHOD_SYMBOL_HAS_NEXT &&
+            xi_map_entries_iterator_is_exact(recv);
+        bool exact_map_entry_iterator_next =
+            n == 0 && method_symbol == XI_METHOD_SYMBOL_NEXT &&
+            xi_map_entries_iterator_is_exact(recv);
+        if (exact_map_entry_iterator_has_next) {
+            result_type = l->type_bool;
+        } else if (exact_map_entry_iterator_next) {
+            result_type = (XrType *) xi_builtin_iterator_element_type(recv->type);
+            if (!result_type)
+                return NULL;
+        }
+
         uint16_t wrap_arith_op = xi_lower_int_wrapping_method_op(recv->type, ma->name, n);
         if (wrap_arith_op != XI_OP_COUNT && arg_vals[0] && arg_vals[0]->type &&
             XR_TYPE_IS_INT(arg_vals[0]->type)) {
@@ -7458,7 +7464,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         for (int i = 0; i < n; i++)
             v->args[i + 1] = arg_vals[i];
         v->aux = (void *) arena_strdup(l->func, ma->name);
-        v->aux_int = (int64_t) xi_lower_method_symbol(l, ma->name) << 1;
+        v->aux_int = (int64_t) method_symbol << 1;
         v->call_plan = call_plan;
         /* Namespace calls (`runtime.info()`, including module aliases) lower
          * through XI_CALL_METHOD rather than XI_CALL.  Attach the same sealed
@@ -7467,6 +7473,16 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
          * instance methods the analyzer selection supplies the summary; an
          * unresolved shape remains fail-closed. */
         v->call_return_ownership = lower_call_return_ownership(l, call, recv);
+        if (exact_map_entries_iterator) {
+            v->call_return_ownership = (XiReturnOwnership) {
+                .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+        } else if (exact_map_entry_iterator_has_next) {
+            v->call_return_ownership = (XiReturnOwnership) {
+                .kind = XI_RETURN_OWNERSHIP_UNKNOWN, .param_index = -1, .complete = false};
+        } else if (exact_map_entry_iterator_next) {
+            v->call_return_ownership = (XiReturnOwnership) {
+                .kind = XI_RETURN_OWNERSHIP_OWNED, .param_index = -1, .complete = true};
+        }
         lower_seal_member_result_alias(v, method_receiver_type, ma->name);
         /* Preserve the analyzer-backed builtin selection before the source
          * selector becomes debug-only metadata. This first authority slice is

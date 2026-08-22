@@ -38,6 +38,7 @@
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
+#include "../semantic/xr_semantic_map_entry_iterator_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_nth_shape.h"
 #include "../semantic/xr_semantic_rune_to_string_shape.h"
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
@@ -5980,14 +5981,18 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
                                              size_t error_size) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
-    if (!xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation) ||
+    bool exact_dynamic = xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation);
+    bool exact_map_iterator_result =
+        xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL, NULL) ||
+        xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation, NULL);
+    if ((!exact_dynamic && !exact_map_iterator_result) ||
         operation->result_value >= analysis->total_values)
         return fail(error, error_size, "XR_TARGET_1001", "dynamic value authority is incomplete");
     /* A value an earlier family already bound is not this family's to claim:
      * a producer some other judgement could narrow belongs to that judgement. */
     if (analysis->defined_values[operation->result_value])
         return true;
-    bool borrowed = xr_semantic_dynamic_value_is_borrowed(operation);
+    bool borrowed = exact_dynamic && xr_semantic_dynamic_value_is_borrowed(operation);
     XrTargetMachineRepRecord rep;
     if (!(borrowed
               ? make_borrowed_dynamic_value_rep(xr_target_profile_machine_facts(builder->profile),
@@ -5996,8 +6001,9 @@ static bool note_dynamic_value_storage_value(XrTargetPlanBuilder *builder,
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
                     "target profile cannot materialize a dynamic value");
-    XrTargetSlotRole role = xr_semantic_dynamic_value_is_join(operation) ? XR_TARGET_SLOT_PHI
-                                                                         : XR_TARGET_SLOT_TEMPORARY;
+    XrTargetSlotRole role = exact_dynamic && xr_semantic_dynamic_value_is_join(operation)
+                                ? XR_TARGET_SLOT_PHI
+                                : XR_TARGET_SLOT_TEMPORARY;
     XrStableId slot_identity;
     if (!make_slot_identity(builder->semantic_plan, operation->function, role, operation->id,
                             XR_SEMANTIC_INDEX_NONE, &slot_identity))
@@ -6339,7 +6345,10 @@ static bool builder_add_dynamic_value_storage(XrTargetPlanBuilder *builder, char
     for (uint32_t i = 0; valid && i < count; i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
-        if (xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation))
+        if (xr_semantic_dynamic_value_is_exact(builder->semantic_plan, operation) ||
+            xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, NULL,
+                                                      NULL) ||
+            xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation, NULL))
             valid = note_dynamic_value_storage_value(builder, &analysis, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
@@ -8601,6 +8610,60 @@ static bool collect_iterator_rune_next_call_intent(XrTargetPlanBuilder *builder,
     return append_call_intent(builder, &call, error, error_size);
 }
 
+static bool collect_map_entry_iterator_call_intent(
+    XrTargetPlanBuilder *builder, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation, char *error, size_t error_size) {
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    const char *domain = NULL;
+    uint8_t convention = XR_TARGET_CALL_CONVENTION_INVALID;
+    uint8_t target = XR_TARGET_CALL_TARGET_INVALID;
+    uint8_t ownership = XR_TARGET_CALL_NONE;
+    if (xr_semantic_map_entries_iterator_is_exact(builder->semantic_plan, operation, &receiver,
+                                                  NULL)) {
+        domain = "xray-target-map-entries-iterator-v1";
+        convention = XR_TARGET_CALL_CONVENTION_MAP_ENTRIES_ITERATOR;
+        target = XR_TARGET_CALL_TARGET_MAP_ENTRIES_ITERATOR;
+        ownership = XR_TARGET_CALL_RETURN_OWNED;
+    } else if (xr_semantic_map_entry_iterator_has_next_is_exact(builder->semantic_plan, operation,
+                                                                &receiver)) {
+        domain = "xray-target-map-entry-iterator-has-next-v1";
+        convention = XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_HAS_NEXT;
+        target = XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_HAS_NEXT;
+    } else if (xr_semantic_map_entry_iterator_next_is_exact(builder->semantic_plan, operation,
+                                                            &receiver)) {
+        domain = "xray-target-map-entry-iterator-next-v1";
+        convention = XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_NEXT;
+        target = XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT;
+        ownership = XR_TARGET_CALL_RETURN_OWNED;
+    } else {
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Map entry iterator dispatch authority is incomplete");
+    }
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    XrTargetCallIntent call = {
+        .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
+        .semantic_operation = operation_index,
+        .caller_function = operation->function,
+        .callee_function = XR_SEMANTIC_INDEX_NONE,
+        .source_dependency = XR_SEMANTIC_INDEX_NONE,
+        .source_export = XR_SEMANTIC_INDEX_NONE,
+        .result_value = operation->result_value,
+        .argument_begin = builder->call_argument_intent_count,
+        .argument_count = 0,
+        .result_mode = XR_TARGET_CALL_VALUE,
+        .result_ownership = ownership,
+        .calling_convention = convention,
+        .target_kind = target,
+    };
+    if (!result_type ||
+        !stable_identity_from_pair(domain, operation->id, result_type->id, receiver,
+                                   &call.identity))
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Map entry iterator call identity is incomplete");
+    return append_call_intent(builder, &call, error, error_size);
+}
+
 /* Same shape as the next call above, plus the index it projects by. The
  * argument is carried as an ordinary call argument so the storage families
  * decide how it is held, exactly as they would for any other scalar operand. */
@@ -9922,6 +9985,11 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (xr_semantic_iterator_rune_next_is_exact(plan, operation, NULL)) {
             valid =
                 collect_iterator_rune_next_call_intent(builder, i, operation, error, error_size);
+        } else if (xr_semantic_map_entries_iterator_is_exact(plan, operation, NULL, NULL) ||
+                   xr_semantic_map_entry_iterator_has_next_is_exact(plan, operation, NULL) ||
+                   xr_semantic_map_entry_iterator_next_is_exact(plan, operation, NULL)) {
+            valid = collect_map_entry_iterator_call_intent(builder, i, operation, error,
+                                                           error_size);
         } else if (xr_semantic_rune_to_uint32_is_exact(plan, operation, NULL)) {
             valid = collect_rune_to_uint32_call_intent(builder, i, operation, error, error_size);
         } else if (xr_semantic_rune_is_whitespace_is_exact(plan, operation, NULL)) {

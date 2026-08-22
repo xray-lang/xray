@@ -698,6 +698,12 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
             plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_PANIC_INFO_CONSTRUCTOR;
         bool container_copy = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_CONTAINER_COPY;
         bool scalar_copy = plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_SCALAR_COPY;
+        bool map_entries_iterator =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRIES_ITERATOR;
+        bool map_entry_iterator_has_next =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_HAS_NEXT;
+        bool map_entry_iterator_next =
+            plan->calls[i].target_kind == XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT;
         if ((!direct_local && !channel_close && !source_export && !stringbuilder_constructor &&
              !string_byte_slice_view && !stringbuilder_append_rune && !string_runes &&
              !iterator_rune_has_next && !iterator_rune_next && !rune_to_uint32 &&
@@ -705,7 +711,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
              !stringbuilder_append_string && !json_namespace_value && !array_member_scalar &&
              !native_module_scalar && !native_namespace_yieldable && !source_class_constructor &&
              !adt_enum_constructor && !array_intrinsic && !array_fill && !array_hof &&
-             !panic_info_constructor && !scalar_copy && !container_copy) ||
+             !panic_info_constructor && !scalar_copy && !container_copy && !map_entries_iterator &&
+             !map_entry_iterator_has_next && !map_entry_iterator_next) ||
             plan->calls[i].semantic_operation >=
                 xr_semantic_plan_operation_count(plan->semantic_plan) ||
             ((direct_local || source_export || native_namespace_yieldable ||
@@ -718,7 +725,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
               rune_is_whitespace || string_slice_range || json_namespace_value ||
               array_member_scalar || native_module_scalar || adt_enum_constructor ||
               array_intrinsic || array_fill || array_hof || panic_info_constructor || scalar_copy ||
-              container_copy) &&
+              container_copy || map_entries_iterator || map_entry_iterator_has_next ||
+              map_entry_iterator_next) &&
              plan->calls[i].semantic_call_target != XR_SEMANTIC_INDEX_NONE) ||
             plan->calls[i].result_register_rep >= plan->machine_reps_count ||
             plan->calls[i].result_memory_rep >= plan->machine_reps_count ||

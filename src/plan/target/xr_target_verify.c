@@ -1398,6 +1398,195 @@ static bool semantic_array_hof_is_exact_verify(const XrSemanticPlan *semantic,
     return true;
 }
 
+/* Independent reconstruction of the frozen Map<K, V> entry-iterator family.
+ * This verifier deliberately does not call the builder's shared shape helper:
+ * it rechecks the stable selector IDs, exact instantiated types, ownership and
+ * unique producer chain from serialized SemanticPlan rows. */
+static bool semantic_map_entry_plain_builtin_type_verify(
+    const XrSemanticTypeRecord *type, uint32_t kind, uint16_t children, uint32_t extent,
+    uint8_t flags) {
+    XrStableId zero = {{0}};
+    return type && type->kind == kind && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           xr_stable_id_equal(type->source_enum_identity, zero) && !type->source_enum_key &&
+           type->child_count == children && type->aggregate_extent == extent &&
+           type->aggregate_align == 0 && type->enum_layout_id == 0 &&
+           type->enum_member_count == 0 && type->enum_flags == 0 && type->reserved_enum == 0 &&
+           type->scalar_rep == XR_SCALAR_REP_NONE && type->flags == flags && type->canonical_key;
+}
+
+static bool semantic_map_entry_iterator_types_are_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticTypeRecord *map,
+    const XrSemanticTypeRecord *iterator, uint32_t *entry_type_index) {
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    if (!semantic || !children ||
+        !semantic_map_entry_plain_builtin_type_verify(
+            map, XR_KIND_MAP, 2, 0,
+            XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        !semantic_map_entry_plain_builtin_type_verify(
+            iterator, XR_KIND_INSTANCE, 1, 0,
+            XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        map->child_begin > child_count || map->child_count > child_count - map->child_begin ||
+        iterator->child_begin >= child_count)
+        return false;
+    uint32_t entry_index = children[iterator->child_begin];
+    const XrSemanticTypeRecord *entry = xr_semantic_plan_type(semantic, entry_index);
+    if (!semantic_map_entry_plain_builtin_type_verify(
+            entry, XR_KIND_TUPLE, 2, 2,
+            XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
+        entry->child_begin > child_count || entry->child_count > child_count - entry->child_begin ||
+        children[entry->child_begin] != children[map->child_begin] ||
+        children[entry->child_begin + 1] != children[map->child_begin + 1])
+        return false;
+    const char prefix[] = "type-v3:11:0:0:0:0:0:0:0:0:255:0:;named:8:Iterator[1;";
+    size_t prefix_length = sizeof(prefix) - 1u;
+    size_t key_length = strlen(iterator->canonical_key);
+    size_t entry_key_length = strlen(entry->canonical_key);
+    if (key_length != prefix_length + entry_key_length + 1u ||
+        strncmp(iterator->canonical_key, prefix, prefix_length) != 0 ||
+        memcmp(iterator->canonical_key + prefix_length, entry->canonical_key,
+               entry_key_length) != 0 ||
+        iterator->canonical_key[key_length - 1u] != ']')
+        return false;
+    if (entry_type_index)
+        *entry_type_index = entry_index;
+    return true;
+}
+
+static bool semantic_map_entry_iterator_common_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    XrSemanticIntrinsicKind intrinsic, XiMethodSymbolId symbol, uint8_t result_ownership,
+    uint8_t return_provenance, uint8_t return_complete, uint32_t *receiver_value) {
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(semantic, &metadata_count);
+    if (!semantic || !operation || !operands || !metadata ||
+        operation->intrinsic_kind != intrinsic || operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate != ((int64_t) symbol << 1) ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        !metadata[operation->metadata_begin] || operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        (operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) &&
+         operation->flags != (xi_generated_op_default_flags(XI_CALL_METHOD) | XI_FLAG_TAIL)) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_ownership != result_ownership ||
+        operation->transfer_mode != XR_TRANSFER_SHARE || operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_provenance != return_provenance ||
+        operation->return_complete != return_complete ||
+        operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE || operation->view_capability != 0 ||
+        operation->view_lifetime != 0 || operation->view_complete != 0 ||
+        operation->reserved_view[0] != 0 || operation->reserved_view[1] != 0)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    if (receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->transfer_mode != XR_TRANSFER_SHARE ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW || receiver->parameter_mode != 0 ||
+        receiver->access != 0 || receiver->origin != 0 || receiver->lifetime != 0 ||
+        receiver->escape != 0 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver->value;
+    return true;
+}
+
+static const XrSemanticOperationRecord *semantic_map_entry_unique_value_definition_verify(
+    const XrSemanticPlan *semantic, uint32_t value) {
+    const XrSemanticOperationRecord *definition = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != value)
+            continue;
+        if (definition)
+            return NULL;
+        definition = candidate;
+    }
+    return definition;
+}
+
+static bool semantic_map_entries_iterator_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_value, uint32_t *entry_type_index) {
+    uint32_t receiver_value_index = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_map_entry_iterator_common_is_exact_verify(
+            semantic, operation, XR_SEM_INTRINSIC_MAP_ENTRIES_ITERATOR,
+            XI_METHOD_SYMBOL_ENTRIES_ITERATOR, XI_GEN_RESULT_OWNERSHIP_OWNED,
+            XR_SEM_RETURN_OWNED, 1, &receiver_value_index))
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *map = xr_semantic_plan_type(semantic, receiver->type);
+    const XrSemanticTypeRecord *iterator =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    if (!semantic_map_entry_iterator_types_are_exact_verify(semantic, map, iterator,
+                                                            entry_type_index))
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver_value_index;
+    return true;
+}
+
+static bool semantic_map_entry_iterator_has_next_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_value) {
+    uint32_t receiver_value_index = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_map_entry_iterator_common_is_exact_verify(
+            semantic, operation, XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_HAS_NEXT,
+            XI_METHOD_SYMBOL_HAS_NEXT, XI_GEN_RESULT_OWNERSHIP_CALL_RESULT,
+            XR_SEM_RETURN_NONE, 0, &receiver_value_index))
+        return false;
+    const XrSemanticOperationRecord *factory =
+        semantic_map_entry_unique_value_definition_verify(semantic, receiver_value_index);
+    const XrSemanticTypeRecord *result =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    XrStableId zero = {{0}};
+    if (!factory || factory->function != operation->function ||
+        !semantic_map_entries_iterator_is_exact_verify(semantic, factory, NULL, NULL) || !result ||
+        result->kind != XR_KIND_BOOL || result->builtin_type != XR_TID_NULL ||
+        result->source_class != XR_SEMANTIC_INDEX_NONE ||
+        !xr_stable_id_equal(result->source_class_identity, zero) || result->child_count != 0 ||
+        result->aggregate_extent != 0 || result->aggregate_align != 0 ||
+        result->scalar_rep != XR_SCALAR_REP_NONE || result->flags != 0)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver_value_index;
+    return true;
+}
+
+static bool semantic_map_entry_iterator_next_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_value) {
+    uint32_t receiver_value_index = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic_map_entry_iterator_common_is_exact_verify(
+            semantic, operation, XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT,
+            XI_METHOD_SYMBOL_NEXT, XI_GEN_RESULT_OWNERSHIP_OWNED, XR_SEM_RETURN_OWNED, 1,
+            &receiver_value_index))
+        return false;
+    const XrSemanticOperationRecord *factory =
+        semantic_map_entry_unique_value_definition_verify(semantic, receiver_value_index);
+    uint32_t entry_type = XR_SEMANTIC_INDEX_NONE;
+    if (!factory || factory->function != operation->function ||
+        !semantic_map_entries_iterator_is_exact_verify(semantic, factory, NULL, &entry_type) ||
+        operation->result_type != entry_type)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver_value_index;
+    return true;
+}
+
 /* Rebuilt here from the frozen semantic rows, not read back from the builder.
  * `T?` is `T | null`, and the language surface requires the nullable primitives
  * to carry `null` in the tagged representation so a null renders as "null" and
@@ -3052,6 +3241,12 @@ static bool collect_exact_dynamic_types(
             xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_iterator_rune_has_next_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_iterator_rune_next_is_exact(plan->semantic_plan, operation, NULL) ||
+            semantic_map_entries_iterator_is_exact_verify(plan->semantic_plan, operation, NULL,
+                                                          NULL) ||
+            semantic_map_entry_iterator_has_next_is_exact_verify(plan->semantic_plan, operation,
+                                                                 NULL) ||
+            semantic_map_entry_iterator_next_is_exact_verify(plan->semantic_plan, operation,
+                                                             NULL) ||
             xr_semantic_rune_to_uint32_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_rune_is_whitespace_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_string_slice_range_is_exact(plan->semantic_plan, operation, NULL, NULL,
@@ -3218,6 +3413,10 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         xr_semantic_identity_copy_is_exact(plan->semantic_plan, operation, &identity_copy_source);
     bool exact_string_runes =
         xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL);
+    bool exact_map_entries_iterator = semantic_map_entries_iterator_is_exact_verify(
+        plan->semantic_plan, operation, NULL, NULL);
+    bool exact_map_entry_iterator_next =
+        semantic_map_entry_iterator_next_is_exact_verify(plan->semantic_plan, operation, NULL);
     bool exact_string_slice_range =
         xr_semantic_string_slice_range_is_exact(plan->semantic_plan, operation, NULL, NULL, NULL);
     bool exact_json_namespace_value =
@@ -3351,6 +3550,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                 exact_direct_string_result || exact_stringbuilder || exact_stringbuilder_append ||
                 exact_stringbuilder_to_string || exact_stringbuilder_append_string ||
                 exact_identity_copy || exact_owner_forward || exact_string_runes ||
+                exact_map_entries_iterator || exact_map_entry_iterator_next ||
                 exact_string_slice_range || exact_json_namespace_value ||
                 exact_panic_info_constructor || exact_array_member_result || exact_direct_callee ||
                 exact_go_callee || exact_go_task || exact_channel || exact_source_namespace ||
@@ -3375,7 +3575,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             semantic_direct_local_callee_for_operation(plan->semantic_plan, operation_index));
     bool deferred_operation =
         deferred_functions[semantic_function] ||
-        (!exact_direct_aggregate_result && operation && operation->opcode < XI_OP_COUNT &&
+        (!exact_direct_aggregate_result && operation &&
+         operation->opcode < XI_OP_COUNT &&
          (xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_CALL ||
           xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_COROUTINE));
     uint32_t aggregate_stack[64] = {0};
@@ -3391,7 +3592,9 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         exact_class_receiver || exact_string_literal || exact_bigint_value || exact_string_concat ||
         exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
         exact_stringbuilder_append || exact_stringbuilder_to_string ||
-        exact_stringbuilder_append_string || exact_string_runes || exact_string_slice_range ||
+        exact_stringbuilder_append_string || exact_string_runes || exact_map_entries_iterator ||
+        exact_map_entry_iterator_next ||
+        exact_string_slice_range ||
         exact_json_namespace_value || exact_panic_info_constructor || exact_array_member_result ||
         exact_direct_callee || exact_go_callee || exact_go_task || exact_channel ||
         exact_source_namespace || exact_native_module_namespace || exact_nullable_scalar ||
@@ -4921,6 +5124,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (semantic_map_entries_iterator_is_exact_verify(semantic, operation, NULL, NULL) ||
+            semantic_map_entry_iterator_has_next_is_exact_verify(semantic, operation, NULL) ||
+            semantic_map_entry_iterator_next_is_exact_verify(semantic, operation, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (xr_semantic_rune_to_uint32_is_exact(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -5138,6 +5350,16 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool iterator_rune_next =
             !semantic_target && xr_semantic_iterator_rune_next_is_exact(
                                     semantic, operation, &iterator_rune_next_receiver);
+        uint32_t map_entry_iterator_receiver = XR_SEMANTIC_INDEX_NONE;
+        bool map_entries_iterator =
+            !semantic_target && semantic_map_entries_iterator_is_exact_verify(
+                                    semantic, operation, &map_entry_iterator_receiver, NULL);
+        bool map_entry_iterator_has_next =
+            !semantic_target && semantic_map_entry_iterator_has_next_is_exact_verify(
+                                    semantic, operation, &map_entry_iterator_receiver);
+        bool map_entry_iterator_next =
+            !semantic_target && semantic_map_entry_iterator_next_is_exact_verify(
+                                    semantic, operation, &map_entry_iterator_receiver);
         uint32_t rune_to_uint32_receiver = XR_SEMANTIC_INDEX_NONE;
         bool rune_to_uint32 =
             !semantic_target &&
@@ -5247,6 +5469,14 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
+        if (map_entries_iterator) {
+            result_scalar = 1;
+            result_kind = XR_MACHINE_REP_DYN_VALUE;
+        }
+        if (map_entry_iterator_next) {
+            result_scalar = 1;
+            result_kind = XR_MACHINE_REP_DYN_VALUE;
+        }
         /* An array member that hands back its receiver names the container
          * again, whose one storage fact is the owned tagged outer value. */
         if (array_member_receiver_result) {
@@ -5305,6 +5535,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                          stringbuilder_to_string || stringbuilder_append_string ||
                          json_namespace_value || class_construction || adt_enum_constructor ||
                          array_intrinsic || panic_info_constructor || container_copy ||
+                         map_entries_iterator || map_entry_iterator_next ||
                          (array_hof && array_hof_kind != XR_TARGET_ARRAY_HOF_REDUCE)
                      ? XR_TARGET_CALL_RETURN_OWNED
                  : string_byte_slice_view ? XR_TARGET_CALL_BORROW
@@ -6166,6 +6397,51 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     result->slot < plan->slots_count &&
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+            if (!valid)
+                break;
+        } else if (map_entries_iterator || map_entry_iterator_has_next ||
+                   map_entry_iterator_next) {
+            const char *domain = map_entries_iterator
+                                     ? "xray-target-map-entries-iterator-v1"
+                                 : map_entry_iterator_has_next
+                                     ? "xray-target-map-entry-iterator-has-next-v1"
+                                     : "xray-target-map-entry-iterator-next-v1";
+            uint8_t convention =
+                map_entries_iterator
+                    ? XR_TARGET_CALL_CONVENTION_MAP_ENTRIES_ITERATOR
+                : map_entry_iterator_has_next
+                    ? XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_HAS_NEXT
+                    : XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_NEXT;
+            uint8_t target_kind =
+                map_entries_iterator
+                    ? XR_TARGET_CALL_TARGET_MAP_ENTRIES_ITERATOR
+                : map_entry_iterator_has_next
+                    ? XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_HAS_NEXT
+                    : XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT;
+            uint8_t expected_ownership = map_entry_iterator_has_next
+                                             ? XR_TARGET_CALL_NONE
+                                             : XR_TARGET_CALL_RETURN_OWNED;
+            uint8_t expected_root = map_entry_iterator_has_next ? XR_TARGET_ROOT_NONE
+                                                                : XR_TARGET_ROOT_DYNAMIC;
+            uint8_t expected_slot_ownership = map_entry_iterator_has_next
+                                                  ? XR_TARGET_OWNERSHIP_TRIVIAL
+                                                  : XR_TARGET_OWNERSHIP_OWNED;
+            valid = result_type && !suspends &&
+                    reconstruct_call_identity(domain, operation->id, result_type->id,
+                                              map_entry_iterator_receiver, &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    call->argument_count == 0 && call->flags == 0 &&
+                    call->calling_convention == convention && call->target_kind == target_kind &&
+                    call->result_ownership == expected_ownership && result &&
+                    result->slot < plan->slots_count &&
+                    plan->slots[result->slot].root_kind == expected_root &&
+                    plan->slots[result->slot].ownership == expected_slot_ownership;
             if (!valid)
                 break;
         } else if (rune_to_uint32) {

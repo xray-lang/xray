@@ -23,6 +23,7 @@
 #include "xr_semantic_string_runes_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
+#include "xr_semantic_map_entry_iterator_shape.h"
 #include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
@@ -1796,6 +1797,20 @@ static bool verify_iterator_rune_next(const XrSemanticPlan *plan,
            report(error, error_size, "XR_SEM_0019", "Iterator<rune>.next authority is not exact");
 }
 
+static bool verify_map_entry_iterator(const XrSemanticPlan *plan,
+                                      const XrSemanticOperationRecord *operation, char *error,
+                                      size_t error_size) {
+    bool exact = operation->intrinsic_kind == XR_SEM_INTRINSIC_MAP_ENTRIES_ITERATOR
+                     ? xr_semantic_map_entries_iterator_is_exact(plan, operation, NULL, NULL)
+                 : operation->intrinsic_kind == XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_HAS_NEXT
+                     ? xr_semantic_map_entry_iterator_has_next_is_exact(plan, operation, NULL)
+                 : operation->intrinsic_kind == XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT
+                     ? xr_semantic_map_entry_iterator_next_is_exact(plan, operation, NULL)
+                     : true;
+    return exact || report(error, error_size, "XR_SEM_0019",
+                           "Map entry iterator authority is not exact");
+}
+
 static bool verify_rune_to_uint32(const XrSemanticPlan *plan,
                                   const XrSemanticOperationRecord *operation, char *error,
                                   size_t error_size) {
@@ -2646,6 +2661,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_iterator_rune_has_next(plan, operation, error, error_size))
             return false;
         if (!verify_iterator_rune_next(plan, operation, error, error_size))
+            return false;
+        if (!verify_map_entry_iterator(plan, operation, error, error_size))
             return false;
         if (!verify_rune_to_uint32(plan, operation, error, error_size))
             return false;

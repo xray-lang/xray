@@ -334,6 +334,8 @@ add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_test(NAME test_target_array_intrinsic_authority
     COMMAND $<TARGET_FILE:test_target_plan> array-intrinsic-authority)
+add_test(NAME test_target_map_entry_iterator_authority
+    COMMAND $<TARGET_FILE:test_target_plan> map-entry-iterator-authority)
 add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xtp_resource_stress
