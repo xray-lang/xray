@@ -154,12 +154,16 @@ Caller and callee rows come from two plans, so an argument is admitted by the
 canonical type key rather than by one shared stable id. Beyond an exact key
 match and membership of a union parameter, the caller may hand a definite value
 to a parameter that only widens it to the nullable form of the same type, which
-is the language's own rule. The widening is offered only where null is already
-one of the values the representation encodes, so a reference-capable type is
-admitted and a nullable scalar, which carries a separate discriminant, is not:
-admitting one here would drop the adapter its call needs. Every remaining field
-of the two keys must match, so a difference in constness, value semantics,
-element, name or declaring class stays inadmissible.
+is the language's own rule. An explicit null argument is likewise admitted only
+when the frozen parameter is nullable, reference-capable, neither a value type
+nor unknown. The widening is offered only where null is already one of the
+values the representation encodes, so a reference-capable type is admitted and
+a nullable scalar, which carries a separate discriminant, is not: admitting one
+here would drop the adapter its call needs. Every remaining field of the two
+keys must match, so a difference in constness, value semantics, element, name
+or declaring class stays inadmissible. Semantic module-set verification and
+target planning consume this one canonical admission rule independently of any
+builder cache or planner result.
 Schema 17 also freezes one `INDIRECT_CALLABLE` row for an ordinary `XI_CALL`
 whose callee operand has an exact frozen function type but whose runtime
 function-value producer is open. The row records only that function-type stable
@@ -461,13 +465,14 @@ anchor-sha256: src/plan/semantic/xr_semantic_ids.h d61b3cb79b5782751b074b405d7ae
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 561eaae59525ba3d0b57e9adcfc3bb6e970bc9be2bac3b750af58653a237dbae
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h c5d6e19fe8d01f3e2e82113ac412f80768472b500b3380489403778c807046dc
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
+anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h b3d62a8e20b7512a08225328479b21ee99eb24c9a415796a93e71f8f20677216
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h 2b0db2abc1652ec45f6a8090ad973cd60bafe039eb4f64c7d0e38674fd388dce
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 520152cb6e93b1cdd6639e094772a652905206e97bf15677ba753eecb4d075f6
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe272bdac489c45b4411f8d9075cac07db14b76a3d62181efdac7276
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 1b14730e5b6df77073212d4af0f05c76f4d6e4a8490762dcc7fd0cf6299ec3a8
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 391a97424365c921589f14f5b956901b48692101e7030bfb2518089eba86a453
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 29dc06d191bbc72af0f664a09533b3c498e16dc1e569c8f3f86fca6bd3b4729a

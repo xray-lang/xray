@@ -61,6 +61,7 @@ CONTRACT_SPECS = (
             "src/plan/semantic/xr_semantic_ids.h",
             "src/plan/semantic/xr_semantic_plan.c",
             "src/plan/semantic/xr_semantic_plan.h",
+            "src/plan/semantic/xr_semantic_type_admission_shape.h",
             "src/plan/semantic/xr_semantic_string_runes_shape.h",
             "src/plan/semantic/xr_semantic_string_slice_shape.h",
             "src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h",

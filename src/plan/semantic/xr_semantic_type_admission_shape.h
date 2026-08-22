@@ -15,6 +15,7 @@
 #define XR_SEMANTIC_TYPE_ADMISSION_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "../../runtime/value/xtype.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -94,15 +95,28 @@ xr_semantic_type_is_nullable_widening(const XrSemanticTypeRecord *value_type,
            strcmp(value_tail, parameter_tail) == 0;
 }
 
+/* Null has no payload to convert. It may cross a call boundary only when the
+ * frozen parameter describes a nullable reference representation. Unknown and
+ * value types stay unclaimed even if a malformed row carries those flags. */
+static inline bool
+xr_semantic_null_inhabits_parameter(const XrSemanticTypeRecord *operand_type,
+                                    const XrSemanticTypeRecord *parameter_type) {
+    return operand_type && parameter_type && operand_type->kind == (uint32_t) XR_KIND_NULL &&
+           parameter_type->kind != (uint32_t) XR_KIND_UNKNOWN &&
+           (parameter_type->flags &
+            (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_VALUE | XR_SEM_TYPE_REFERENCE_CAPABLE)) ==
+               (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE);
+}
+
 /* What a declared parameter admits at a callsite that crosses a module edge.
  *
  * The three layers that check this -- the semantic module-set verifier, the
  * target builder, and the target verifier -- must ask one question, because a
  * call the semantic layer admits and the target layer refuses is reported as a
  * missing target authority, which points at the wrong thing entirely.  The two
- * widenings below are the language's own rules, not this pass's inventions:
- * a value already widens into a nullable reference, and a union parameter
- * admits each of its members. */
+ * admissions below are the language's own rules, not this pass's inventions:
+ * null inhabits a nullable reference, a value widens into a nullable
+ * reference, and a union parameter admits each of its members. */
 static inline bool
 xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
                                            const XrSemanticTypeRecord *parameter_type,
@@ -110,6 +124,8 @@ xr_semantic_parameter_type_admits_argument(const XrSemanticPlan *callee,
     if (!callee || !parameter_type || !operand_type)
         return false;
     if (xr_stable_id_equal(operand_type->id, parameter_type->id))
+        return true;
+    if (xr_semantic_null_inhabits_parameter(operand_type, parameter_type))
         return true;
     if (xr_semantic_type_is_nullable_widening(operand_type, parameter_type))
         return true;

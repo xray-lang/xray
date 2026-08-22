@@ -4384,39 +4384,11 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
     return true;
 }
 
-/* Whether an argument of this type satisfies a parameter declared with that
- * type, both rows read from the frozen callee plan.
- *
- * Identity is the ordinary answer. A union parameter also admits any one of its
- * members. `NetConn | NetListener` is the set of types the callee accepts, not
- * a type the caller can hold: a union has no representation of its own -- the
- * backend lowers one to a predicate over its members and never to a tagged
- * carrier -- so what crosses the call is always a member, with the member's
- * ABI. Demanding identity asked the caller to produce a value whose type
- * nothing can produce, which refused every direct call into the pure stdlib
- * modules that reach net.close, net.fd or net.lastError. */
+/* Keep module-set verification on the canonical cross-module admission rule. */
 static bool parameter_type_admits_argument(const XrSemanticPlan *callee,
                                            const XrSemanticTypeRecord *parameter_type,
                                            const XrSemanticTypeRecord *operand_type) {
-    if (!callee || !parameter_type || !operand_type)
-        return false;
-    if (xr_stable_id_equal(operand_type->id, parameter_type->id))
-        return true;
-    if (xr_semantic_type_is_nullable_widening(operand_type, parameter_type))
-        return true;
-    if (parameter_type->kind != (uint32_t) XR_KIND_UNION)
-        return false;
-    for (uint16_t member = 0; member < parameter_type->child_count; member++) {
-        uint32_t child = parameter_type->child_begin + member;
-        if (child >= callee->type_child_count)
-            return false;
-        uint32_t member_type = callee->type_children[child];
-        if (member_type >= callee->type_count)
-            return false;
-        if (xr_stable_id_equal(operand_type->id, callee->types[member_type].id))
-            return true;
-    }
-    return false;
+    return xr_semantic_parameter_type_admits_argument(callee, parameter_type, operand_type);
 }
 
 static bool verify_dependency_rows(const XrSemanticPlan *plan, char *error, size_t error_size) {
