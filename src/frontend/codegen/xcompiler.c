@@ -235,6 +235,12 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
             global_evidence_initialized = true;
             pipe_cfg.global_evidence = &global_evidence;
             pipe_cfg.global_evidence_module_id = module_id;
+            int spec_index = evidence_graph->topo_order[module_id - 1];
+            pipe_cfg.module_identity = evidence_graph->specs[spec_index].canonical;
+        } else {
+            XrCompileUnitIdentity identity =
+                xr_compiler_session_compile_unit_identity(ctx->compiler_session);
+            pipe_cfg.module_identity = identity.module_identity;
         }
         XiPipelineResult pipe_res =
             xi_pipeline_compile_program(ast, ctx->analyzer, ctx->X, &pipe_cfg);

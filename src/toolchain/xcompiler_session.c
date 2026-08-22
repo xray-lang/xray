@@ -9,6 +9,7 @@
  */
 
 #include "xcompiler_session.h"
+#include "../module/xmodule_identity.h"
 
 #include "../api/xrepl.h"
 #include "../base/xarena.h"
@@ -503,7 +504,7 @@ static bool begin_incremental_operation(XrCompilerSession *session) {
     if (!session || session->incremental_operation_active ||
         session->repl_declaration_active || session->current_arena ||
         session->compile_string_pool || session->module_graph ||
-        session->compile_unit_identity.canonical_module)
+        session->compile_unit_identity.module_identity)
         return false;
     session->incremental_operation_active = true;
     session->incremental_operation_failure = XR_COMPILER_SESSION_OPERATION_NONE;
@@ -1065,11 +1066,26 @@ struct XrModuleGraph *xr_compiler_session_module_graph(const XrCompilerSession *
     return session ? session->module_graph : NULL;
 }
 
-void xr_compiler_session_set_compile_unit_identity(XrCompilerSession *session,
+bool xr_compiler_session_set_compile_unit_identity(XrCompilerSession *session,
                                                    const XrCompileUnitIdentity *identity) {
     if (!session)
-        return;
-    session->compile_unit_identity = identity ? *identity : (XrCompileUnitIdentity) {0};
+        return false;
+    if (!identity) {
+        session->compile_unit_identity = (XrCompileUnitIdentity) {0};
+        return true;
+    }
+    XrModuleIdentityKind module_kind = 0;
+    if (!xr_module_identity_valid(identity->module_identity, &module_kind) ||
+        (identity->kind == XR_COMPILE_UNIT_STDLIB &&
+         (module_kind != XR_MODULE_IDENTITY_STDLIB || !identity->stdlib_module_name ||
+          !identity->stdlib_module_name[0])) ||
+        (identity->kind == XR_COMPILE_UNIT_MEMORY &&
+         module_kind != XR_MODULE_IDENTITY_MEMORY) ||
+        (identity->kind == XR_COMPILE_UNIT_USER &&
+         (module_kind == XR_MODULE_IDENTITY_STDLIB || module_kind == XR_MODULE_IDENTITY_MEMORY)))
+        return false;
+    session->compile_unit_identity = *identity;
+    return true;
 }
 
 XrCompileUnitIdentity xr_compiler_session_compile_unit_identity(const XrCompilerSession *session) {

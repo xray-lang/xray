@@ -48,8 +48,9 @@ typedef struct XrModuleSpec {
     char *logical_path;   /* Authority-root-relative path (owned, xr_free) */
     char *source_path;    /* Absolute path to source file (owned) */
     XrModuleKind kind;    /* stdlib / file / package */
-    XrModuleIdentityAuthority authority; /* Owned strings for source modules */
+    XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
+    uint64_t source_content_hash; /* Source bytes only; never a physical locator */
     XrModSpecStatus status;
 
     struct AstNode *ast; /* Parsed AST (owned; freed via xr_program_destroy) */
@@ -126,13 +127,14 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
  * Parses each discovered module and collects its import edges.
  * Returns 0 on success, -1 on error (e.g. file not found).
  * On error, *out_err is set to a descriptive message (caller frees). */
-XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char **out_err);
+XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
+                                  const XrModuleIdentityAuthority *entry_authority,
+                                  char **out_err);
 
 /* Build the graph from an in-memory entry source.
- * The synthetic entry has no filesystem source_path; relative imports are
- * resolved from cwd by the resolver, while bare stdlib imports work exactly
- * like file-backed entries. */
-XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *entry_id,
+ * The caller-supplied id is mandatory and becomes a typed memory authority.
+ * Relative imports fail because memory modules have no physical root. */
+XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *explicit_id,
                                          const char *entry_source, char **out_err);
 
 /* Run topological sort (Tarjan SCC).

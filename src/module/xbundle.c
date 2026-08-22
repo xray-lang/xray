@@ -70,7 +70,7 @@ static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleRes
     }
 
     char *err = NULL;
-    if (xr_module_graph_build(graph, entry_path, &err) != 0) {
+    if (xr_module_graph_build(graph, entry_path, NULL, &err) != 0) {
         xr_log_warning("bundle", "module graph build failed: %s", err ? err : "?");
         xr_free(err);
         xr_module_graph_free(graph);

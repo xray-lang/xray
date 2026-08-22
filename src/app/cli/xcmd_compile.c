@@ -87,7 +87,7 @@ static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
         return false;
     }
     char *graph_error = NULL;
-    if (xr_module_graph_build(graph, input_file, &graph_error) != 0) {
+    if (xr_module_graph_build(graph, input_file, NULL, &graph_error) != 0) {
         xr_cli_error("compile", "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);
         xr_module_graph_free(graph);

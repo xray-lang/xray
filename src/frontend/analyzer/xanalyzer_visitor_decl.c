@@ -166,7 +166,9 @@ static int xa_fixed_array_elem_native_lane(XrType *elem) {
 static const char *xa_intrinsic_owner_module(const XaInferContext *ctx) {
     if (!ctx || !ctx->analyzer)
         return NULL;
-    return ctx->analyzer->current_module_is_stdlib ? ctx->analyzer->current_module_canonical : NULL;
+    return ctx->analyzer->current_module_is_stdlib
+               ? ctx->analyzer->current_stdlib_module_name
+               : NULL;
 }
 
 static void xa_bind_registry_intrinsic(XaInferContext *ctx, AstNode *node, XaSymbol *symbol,

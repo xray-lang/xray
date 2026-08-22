@@ -21,8 +21,49 @@
 #include "xmodule_resolver.h"
 #include "xray_vm.h"
 #include <stdio.h>
+#include <string.h>
 
-static bool compile_to_file_impl(XrCompilerSession *session, const char *canonical_module,
+static bool stdlib_compile_authority(const char *module_name, const char *source_file,
+                                     XrModuleIdentityAuthority *authority, char **root_out,
+                                     char **identity_out) {
+    *root_out = NULL;
+    *identity_out = NULL;
+    char *source = xr_realpath(source_file);
+    char *module_dir = source ? xr_path_dirname(source) : NULL;
+    char *root = module_dir ? xr_path_dirname(module_dir) : NULL;
+    char *logical = NULL;
+    if (!source || !module_dir || !root) {
+        xr_free(source);
+        xr_free(module_dir);
+        xr_free(root);
+        return false;
+    }
+    *authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_STDLIB,
+        .namespace_id = module_name,
+        .physical_root = root,
+    };
+    bool valid = xr_module_identity_from_source(authority, source, identity_out, &logical);
+    char expected[512];
+    int expected_length = snprintf(expected, sizeof(expected), "%s/%s.xr", module_name,
+                                   module_name);
+    valid = valid && expected_length > 0 && (size_t) expected_length < sizeof(expected) &&
+            strcmp(logical, expected) == 0;
+    if (!valid) {
+        xr_free(*identity_out);
+        *identity_out = NULL;
+        xr_free(root);
+        root = NULL;
+    }
+    xr_free(logical);
+    xr_free(module_dir);
+    xr_free(source);
+    *root_out = root;
+    authority->physical_root = root;
+    return valid;
+}
+
+static bool compile_to_file_impl(XrCompilerSession *session, const char *stdlib_module_name,
                                  const char *source_file, const char *output_file, int flags) {
     if (!session) {
         xr_log_warning("compile", "compiler session is required");
@@ -61,9 +102,9 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *canonic
     // Serialize
     size_t bc_size;
     XrBootstrapContainerError bc_error = XR_BOOTSTRAP_CONTAINER_OK;
-    uint8_t *bc = canonical_module
-                      ? xr_bootstrap_container_write_stdlib(X, canonical_module, proto, flags, &bc_size,
-                                                 &bc_error)
+    uint8_t *bc = stdlib_module_name
+                      ? xr_bootstrap_container_write_stdlib(X, stdlib_module_name, proto, flags,
+                                                           &bc_size, &bc_error)
                       : xr_bootstrap_container_write(X, proto, flags, &bc_size, &bc_error);
     if (!bc) {
         xr_instruction_unit_free(proto);
@@ -110,11 +151,27 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
     XrCompilerSessionOperationScope operation_scope;
     if (!xr_compiler_session_operation_begin(session, &operation_scope))
         return false;
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    char *module_identity = NULL;
+    if (!stdlib_compile_authority(canonical_module, source_file, &authority, &authority_root,
+                                  &module_identity)) {
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        return false;
+    }
     XrCompileUnitIdentity identity = {
         .kind = XR_COMPILE_UNIT_STDLIB,
-        .canonical_module = canonical_module,
+        .module_identity = module_identity,
+        .stdlib_module_name = canonical_module,
     };
-    xr_compiler_session_set_compile_unit_identity(session, &identity);
+    if (!xr_compiler_session_set_compile_unit_identity(session, &identity)) {
+        xr_free(module_identity);
+        xr_free(authority_root);
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        return false;
+    }
 
     /* Build a dependency module graph so this stdlib module's imports of other
      * modules' declarations resolve to real symbols — including constructable
@@ -132,7 +189,7 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
         XrModuleResolver *resolver = registry ? xr_module_registry_get_resolver(registry) : NULL;
         char *graph_err = NULL;
         int build_rc = (resolver && (graph = xr_module_graph_new(session, resolver)) != NULL)
-                           ? xr_module_graph_build(graph, source_file, &graph_err)
+                           ? xr_module_graph_build(graph, source_file, &authority, &graph_err)
                            : -999;
         if (resolver && graph && build_rc == 0 && xr_module_graph_topological_sort(graph) == 0 &&
             !graph->has_cycle) {
@@ -180,6 +237,8 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
     if (graph)
         xr_module_graph_free(graph);
     xr_compiler_session_set_compile_unit_identity(session, NULL);
+    xr_free(module_identity);
+    xr_free(authority_root);
     return ok ? xr_compiler_session_operation_succeed(&operation_scope)
               : xr_compiler_session_operation_fail(
                     &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL) && false;

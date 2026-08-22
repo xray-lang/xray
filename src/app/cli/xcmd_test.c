@@ -272,7 +272,7 @@ static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
     }
 
     char *graph_err = NULL;
-    if (xr_module_graph_build(graph, filepath, &graph_err) != 0) {
+    if (xr_module_graph_build(graph, filepath, NULL, &graph_err) != 0) {
         snprintf(err_buf, err_buf_sz, "%s", graph_err ? graph_err : "module graph build failed");
         xr_free(graph_err);
         xr_module_graph_free(graph);

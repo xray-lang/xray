@@ -103,14 +103,16 @@ TEST(resolve_bare_stdlib_known) {
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_STDLIB);
-    ASSERT_STR_EQ(mid.canonical, "time");
+    ASSERT_STR_EQ(mid.canonical,
+                  "stdlib-module-v1:module=4:time:path=12:time/time.xr");
     ASSERT_NULL(mid.source_path);
     xr_module_id_cleanup(&mid);
 
     rc = xr_module_resolver_resolve(r, "math", NULL, NULL, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(mid.kind, XR_MOD_STDLIB);
-    ASSERT_STR_EQ(mid.canonical, "math");
+    ASSERT_STR_EQ(mid.canonical,
+                  "stdlib-module-v1:module=4:math:path=12:math/math.xr");
     xr_module_id_cleanup(&mid);
 
     xr_module_resolver_free(r);

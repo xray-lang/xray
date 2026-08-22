@@ -26,6 +26,7 @@
 #include "xr_semantic_native_module_shape.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
+#include "../../module/xmodule_identity.h"
 #include "../ownership/xr_ownership_obligation.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xglobal_indices.h"
@@ -4302,15 +4303,8 @@ static bool build_module_entities(XrSemanticBuildContext *ctx, const XiFunc *roo
     const char *module_name =
         root->module && root->module->name ? root->module->name : (root->name ? root->name : "");
     const char *module_identity = root->module ? root->module->identity : NULL;
-    char memory_identity[512];
-    if (!root->module && module_name[0]) {
-        int length = snprintf(memory_identity, sizeof(memory_identity), "memory-module-v1:%s",
-                              module_name);
-        if (length > 0 && (size_t) length < sizeof(memory_identity))
-            module_identity = memory_identity;
-    }
     XrTextBuilder key = {0};
-    bool valid = module_identity && module_identity[0] &&
+    bool valid = xr_module_identity_valid(module_identity, NULL) &&
                  begin_entity_key(ctx, &key, XR_SEM_ENTITY_PACKAGE,
                                   XR_SEMANTIC_INDEX_NONE) &&
                  text_append(&key, ":authority=") &&
@@ -4956,19 +4950,12 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
         return false;
     }
     XrSemanticBuildContext ctx = {0};
-    char memory_identity[512];
-    if (root->module && root->module->identity) {
-        ctx.module_identity = root->module->identity;
-    } else if (root->name) {
-        int length = snprintf(memory_identity, sizeof(memory_identity), "memory-module-v1:%s",
-                              root->name);
-        if (length <= 0 || (size_t) length >= sizeof(memory_identity)) {
-            if (error && error_size)
-                snprintf(error, error_size, "XR_SEM_0019: module identity is incomplete");
-            return false;
-        }
-        ctx.module_identity = memory_identity;
+    if (!root->module || !xr_module_identity_valid(root->module->identity, NULL)) {
+        if (error && error_size)
+            snprintf(error, error_size, "XR_SEM_0019: module identity is incomplete");
+        return false;
     }
+    ctx.module_identity = root->module->identity;
     ctx.error = error;
     ctx.error_size = error_size;
     ctx.dependency_modules = dependencies;

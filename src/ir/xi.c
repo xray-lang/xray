@@ -22,6 +22,7 @@
 #include "../runtime/value/xtype.h" /* XR_REP_TAGGED */
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
+#include "../module/xmodule_identity.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -710,15 +711,6 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
         return NULL;
     mod->path = path;
     mod->name = name;
-    if (name && name[0]) {
-        size_t length = strlen(name) + sizeof("memory-module-v1:");
-        mod->identity = (char *) xr_malloc(length);
-        if (!mod->identity) {
-            xr_free(mod);
-            return NULL;
-        }
-        snprintf(mod->identity, length, "memory-module-v1:%s", name);
-    }
     mod->init = init;
     /* Populate functions array from init's children */
     if (init->nchildren > 0) {
@@ -733,7 +725,7 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
 }
 
 XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity) {
-    if (!mod || !identity || !identity[0])
+    if (!mod || !xr_module_identity_valid(identity, NULL))
         return false;
     char *owned = xr_strdup(identity);
     if (!owned)

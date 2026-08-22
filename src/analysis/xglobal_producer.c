@@ -10,7 +10,6 @@
 
 #include "xglobal_producer.h"
 
-#include "../base/xfileio.h"
 #include "../base/xhash.h"
 #include "../base/xmalloc.h"
 #include "../os/os_fs.h"
@@ -21,7 +20,6 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
-#include "../module/xstdlib_embedded.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../shared/xobject_shape.h"
@@ -10550,25 +10548,12 @@ static uint64_t compiler_image_hash(void) {
 }
 
 static uint64_t fold_graph_module_source(uint64_t h, uint64_t module_id, const XrModuleSpec *spec) {
-    size_t len = 0;
-    char *source = NULL;
-    const char *embedded = NULL;
     h = fold_u64(h, module_id);
     if (!spec)
         return h;
-    if (spec->source_path)
-        h = fold_bytes(h, spec->source_path, strlen(spec->source_path));
-    if (spec->embedded_source && spec->canonical)
-        embedded = xr_get_embedded_stdlib(spec->canonical);
-    if (embedded) {
-        h = fold_bytes(h, embedded, strlen(embedded));
-    } else {
-        source = spec->source_path ? xr_file_read_all(spec->source_path, "rb", &len) : NULL;
-        if (source) {
-            h = fold_bytes(h, source, len);
-            xr_free(source);
-        }
-    }
+    if (spec->canonical)
+        h = fold_bytes(h, spec->canonical, strlen(spec->canonical));
+    h = fold_u64(h, spec->source_content_hash);
     return h;
 }
 
@@ -10590,15 +10575,15 @@ static uint64_t module_source_hash(const XrModuleSpec *spec) {
     h = fold_u64(h, (uint64_t) spec->kind);
     if (spec->canonical)
         h = fold_bytes(h, spec->canonical, strlen(spec->canonical));
-    if (spec->source_path)
-        h = fold_bytes(h, spec->source_path, strlen(spec->source_path));
+    h = fold_u64(h, spec->source_content_hash);
     return h ? h : 1;
 }
 
 XR_FUNC bool xg_module_summary_from_module_spec(XgModuleSummary *out_summary, XgModuleId module_id,
                                                 const XrModuleSpec *spec) {
     const char *name;
-    if (!out_summary || !spec || module_id == XG_NO_ID)
+    if (!out_summary || !spec || module_id == XG_NO_ID ||
+        !xr_module_identity_valid(spec->canonical, NULL))
         return false;
     memset(out_summary, 0, sizeof(*out_summary));
     name = spec->canonical ? spec->canonical : spec->source_path;

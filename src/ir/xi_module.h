@@ -91,7 +91,7 @@ typedef struct XiModule {
 /* Allocate a new XiModule. Caller owns the returned pointer. */
 XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init);
 
-/* Replace the durable identity. NULL/empty identities fail closed. */
+/* Replace the durable identity. Untyped, malformed, or missing identities fail closed. */
 XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity);
 
 /* Free a module and its metadata arrays (does NOT free init/functions). */

@@ -248,7 +248,7 @@ static int language_conversions(const char *input, bool json) {
     XrModuleRegistry *registry = xr_isolate_get_module_registry(isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
-    if (!graph || xr_module_graph_build(graph, input, &graph_error) != 0 ||
+    if (!graph || xr_module_graph_build(graph, input, NULL, &graph_error) != 0 ||
         xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle) {
         xr_cli_error("language", "%s", graph_error ? graph_error : "module graph build failed");
         goto cleanup;

@@ -260,9 +260,16 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
                           char **err_buf) {
     /* Check native factory registry. */
     if (r->config.native_factories && xr_hashmap_has(r->config.native_factories, name)) {
+        char logical_path[XR_PATH_MAX];
+        int logical_length =
+            snprintf(logical_path, sizeof(logical_path), "%s/%s.xr", name, name);
+        if (logical_length <= 0 || (size_t) logical_length >= sizeof(logical_path)) {
+            if (err_buf)
+                *err_buf = make_error("stdlib module '%s' has an invalid logical identity", name);
+            return -1;
+        }
+        char *stdlib_root = NULL;
         out_id->kind = XR_MOD_STDLIB;
-        out_id->canonical = xr_strdup(name);
-        out_id->logical_path = xr_strdup(name);
         out_id->source_path = NULL;
 
         /* Also check for script extension: stdlib/<name>/<name>.xr */
@@ -272,7 +279,27 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
             if (xr_fs_exists(path)) {
                 char *real = xr_realpath(path);
                 out_id->source_path = real ? real : xr_strdup(path);
+                stdlib_root = xr_realpath(r->config.stdlib_path);
             }
+        }
+        XrModuleIdentityAuthority authority = {
+            .kind = XR_MODULE_IDENTITY_STDLIB,
+            .namespace_id = name,
+            .physical_root = stdlib_root,
+        };
+        bool valid = xr_module_identity_from_logical(&authority, logical_path,
+                                                     &out_id->canonical);
+        out_id->logical_path = valid ? xr_strdup(logical_path) : NULL;
+        out_id->authority.kind = XR_MODULE_IDENTITY_STDLIB;
+        out_id->authority.namespace_id = valid ? xr_strdup(name) : NULL;
+        out_id->authority.physical_root = stdlib_root;
+        if (!valid || !out_id->logical_path || !out_id->authority.namespace_id ||
+            (out_id->source_path && !out_id->authority.physical_root)) {
+            xr_module_id_cleanup(out_id);
+            if (err_buf)
+                *err_buf = make_error("stdlib module '%s' has an incomplete identity authority",
+                                      name);
+            return -1;
         }
         return 0;
     }

@@ -1699,17 +1699,6 @@ bool xa_analyzer_path_is_stdlib(const char *file) {
     return xa_path_find_stdlib_marker(file) != NULL;
 }
 
-static const char *xa_path_next_sep(const char *p) {
-    if (!p)
-        return NULL;
-    while (*p) {
-        if (*p == '/' || *p == '\\')
-            return p;
-        p++;
-    }
-    return NULL;
-}
-
 static bool xa_path_is_stdlib_module(const char *file, const char *module_name) {
     if (!file || !module_name)
         return false;
@@ -1730,55 +1719,11 @@ static bool xa_path_is_sync_stdlib_module(const char *file) {
     return xa_path_is_stdlib_module(file, "sync");
 }
 
-static bool xa_stdlib_module_name_from_path(const char *file, char *out, size_t out_cap) {
-    if (!file || !out || out_cap == 0)
-        return false;
-
-    const char *base = xa_path_find_stdlib_marker(file);
-    if (!base)
-        return false;
-
-    const char *slash = xa_path_next_sep(base);
-    if (!slash || slash == base)
-        return false;
-
-    size_t name_len = (size_t) (slash - base);
-    if (name_len + 1 > out_cap)
-        return false;
-
-    const char *leaf = slash + 1;
-    if (strncmp(leaf, base, name_len) != 0 || strcmp(leaf + name_len, ".xr") != 0)
-        return false;
-
-    memcpy(out, base, name_len);
-    out[name_len] = '\0';
-    return true;
-}
-
 char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file) {
     if (!analyzer)
         return NULL;
-    /* A source with no file is still one module and still owns the nominal
-     * types it declares: `xray eval`, xr_isolate_dostring() and `xray run -` all
-     * compile with source_file == NULL. Returning NULL here made
-     * xa_enum_info_new() refuse to build any metadata for such a source, so
-     * every enum declared in it came out with zero variants and every member
-     * access failed with E0354 -- silently wrong rather than fail-closed, and
-     * only on the embedded path, which is why the file-based tests never saw
-     * it. "<script>" is the identity the diagnostics and proto naming already
-     * give the same source. */
-    if (!file || !file[0])
-        return analyzer->current_module_canonical && analyzer->current_module_canonical[0]
-                   ? xr_strdup(analyzer->current_module_canonical)
-                   : xr_strdup("<script>");
-
-    /* Built-in stdlib module identity is its import name, never the absolute
-     * checkout path used by a stage compiler.  Resolve this before the graph:
-     * a standalone `--stdlib-module` compile can deliberately have a file-path
-     * graph canonical while its semantic owner remains `log`, `base64`, etc. */
-    char stdlib_module[128];
-    if (xa_stdlib_module_name_from_path(file, stdlib_module, sizeof(stdlib_module)))
-        return xr_strdup(stdlib_module);
+    if (analyzer->current_module_identity && analyzer->current_module_identity[0])
+        return xr_strdup(analyzer->current_module_identity);
 
     XrModuleGraph *graph = analyzer->graph;
     for (int i = 0; graph && i < graph->spec_count; i++) {
@@ -1800,13 +1745,7 @@ char *xa_analyzer_nominal_owner_for_file(XaAnalyzer *analyzer, const char *file)
             return xr_strdup(spec->canonical);
     }
 
-    /* Tool/bootstrap graphs can analyze an embedded stdlib AST without
-     * retaining the full graph entry.  Its canonical module is encoded in the
-     * governed stdlib path, so intern that name as the deterministic fallback. */
-    if (analyzer->current_file == file && analyzer->current_module_canonical &&
-        analyzer->current_module_canonical[0])
-        return xr_strdup(analyzer->current_module_canonical);
-    return xr_strdup(file);
+    return NULL;
 }
 
 static void xa_register_native_class_symbol(XaAnalyzer *analyzer, XaScope *scope, const char *file,
@@ -1848,12 +1787,12 @@ static bool xa_stdlib_native_type_is_internal(const char *name) {
  * declarations plus explicitly public native types. */
 static void xa_register_stdlib_native_module_types(XaAnalyzer *analyzer, const char *file,
                                                    XaScope *scope) {
-    char module_name[64];
-    if (!analyzer || !scope ||
-        !xa_stdlib_module_name_from_path(file, module_name, sizeof(module_name)))
+    if (!analyzer || !scope || !analyzer->current_module_is_stdlib ||
+        !analyzer->current_stdlib_module_name)
         return;
 
-    const XaBuiltinModule *module = xa_builtin_get_module_info(module_name);
+    const XaBuiltinModule *module =
+        xa_builtin_get_module_info(analyzer->current_stdlib_module_name);
     if (!module)
         return;
 
@@ -1961,12 +1900,12 @@ static void xa_register_native_return_ownership(XaSymbolLinks *links,
 
 static void xa_register_stdlib_native_module_functions(XaAnalyzer *analyzer, const char *file,
                                                        XaScope *scope) {
-    char module_name[64];
-    if (!analyzer || !scope ||
-        !xa_stdlib_module_name_from_path(file, module_name, sizeof(module_name)))
+    if (!analyzer || !scope || !analyzer->current_module_is_stdlib ||
+        !analyzer->current_stdlib_module_name)
         return;
 
-    const XaBuiltinModule *mod = xa_builtin_get_module_info(module_name);
+    const XaBuiltinModule *mod =
+        xa_builtin_get_module_info(analyzer->current_stdlib_module_name);
     if (!mod || !mod->functions)
         return;
 
@@ -2029,8 +1968,12 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     analyzer->current_module_is_stdlib = module_spec
                                              ? module_spec->kind == XR_MOD_STDLIB
                                              : compile_identity.kind == XR_COMPILE_UNIT_STDLIB;
-    analyzer->current_module_canonical =
-        module_spec ? module_spec->canonical : compile_identity.canonical_module;
+    analyzer->current_module_identity =
+        module_spec ? module_spec->canonical : compile_identity.module_identity;
+    analyzer->current_stdlib_module_name =
+        module_spec && module_spec->kind == XR_MOD_STDLIB
+            ? module_spec->authority.namespace_id
+            : compile_identity.stdlib_module_name;
 
     // Set current file/scope for symbol ownership tracking. The root global
     // scope is reserved for builtins/prelude; source modules live in their
@@ -2053,7 +1996,8 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
 
     analyzer->current_file = NULL;
     analyzer->current_module_is_stdlib = false;
-    analyzer->current_module_canonical = NULL;
+    analyzer->current_module_identity = NULL;
+    analyzer->current_stdlib_module_name = NULL;
     analyzer->current_scope = file_scope;
 
     // Keep pool set - type_check may call xa_analyzer_infer_expr_type after analyze

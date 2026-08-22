@@ -590,7 +590,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_tagged_boundary();
-    cfg.module_identity = "memory-module-v1:pipeline";
+    cfg.module_identity = NULL;
     return cfg;
 }
 
@@ -607,7 +607,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_arc = true;
     cfg.run_emit = false;
     cfg.run_canonicalize = true;
-    cfg.module_identity = "memory-module-v1:pipeline";
+    cfg.module_identity = NULL;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_native_boundary();

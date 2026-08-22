@@ -382,7 +382,7 @@ static bool xaot_reject_freestanding_stdlib_graph(const XrModuleGraph *graph) {
         return true;
     for (int i = 0; i < graph->spec_count; i++) {
         const XrModuleSpec *spec = &graph->specs[i];
-        const char *module_name = spec->canonical;
+        const char *module_name = spec->authority.namespace_id;
         if (spec->kind != XR_MOD_STDLIB || !module_name)
             continue;
         if (xa_freestanding_stdlib_module_allowed(module_name))
@@ -2091,7 +2091,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
 
     char *build_err = NULL;
-    if (xr_module_graph_build(graph, input_path, &build_err) != 0) {
+    if (xr_module_graph_build(graph, input_path, NULL, &build_err) != 0) {
         fprintf(stderr, "Error: module graph build failed: %s\n", build_err ? build_err : "?");
         xr_free(build_err);
         xr_module_graph_free(graph);

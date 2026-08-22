@@ -19,6 +19,7 @@
 #include "../base/xchecks.h"
 #include "../base/xfileio.h"
 #include "../base/xforward_decl.h"
+#include "../base/xhash.h"
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"
 #include "../frontend/parser/xast.h"
@@ -219,10 +220,10 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     XrModuleSpec *from_spec = &g->specs[spec_idx];
     XrModuleId mid;
     char *err = NULL;
+    const XrModuleIdentityAuthority *from_authority =
+        xr_module_identity_authority_valid(&from_spec->authority) ? &from_spec->authority : NULL;
     int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path,
-                                        from_spec->authority.physical_root ? &from_spec->authority
-                                                                          : NULL,
-                                        &mid, &err);
+                                        from_authority, &mid, &err);
     if (rc != 0) {
         /* A registered native module resolves with a NULL source_path rather
          * than failing, so reaching here means the specifier names nothing. */
@@ -238,7 +239,8 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
      * layer even when no development source tree is present. */
     if (!mid.source_path && (mid.kind == XR_MOD_STDLIB || mid.kind == XR_MOD_PACKAGE)) {
         char embedded_path[XR_PATH_MAX];
-        if (graph_stdlib_embedded_path(mid.canonical, embedded_path, sizeof(embedded_path))) {
+        if (graph_stdlib_embedded_path(mid.authority.namespace_id, embedded_path,
+                                       sizeof(embedded_path))) {
             mid.source_path = xr_strdup(embedded_path);
         } else {
             xr_module_id_cleanup(&mid);
@@ -250,7 +252,9 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     int target_idx = xr_module_graph_find(g, mid.canonical);
     if (target_idx < 0) {
         target_idx = graph_add_spec(g, mid.canonical, mid.logical_path, mid.source_path, mid.kind,
-                                    mid.authority.physical_root ? &mid.authority : NULL);
+                                    xr_module_identity_authority_valid(&mid.authority)
+                                        ? &mid.authority
+                                        : NULL);
         if (target_idx >= 0 && mid.source_path &&
             strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
                     strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
@@ -297,6 +301,7 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
 
 static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
                                   const char *entry_logical_path, const char *entry_source_path,
+                                  XrModuleKind entry_kind,
                                   const XrModuleIdentityAuthority *entry_authority,
                                   const char *entry_source, char **out_err) {
     XR_DCHECK(g != NULL, "xr_module_graph_build: NULL graph");
@@ -308,7 +313,7 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
 
     /* Add entry spec */
     int entry_idx = graph_add_spec(g, entry_canonical, entry_logical_path, entry_source_path,
-                                   XR_MOD_FILE, entry_authority);
+                                   entry_kind, entry_authority);
     if (entry_idx < 0) {
         if (out_err)
             *out_err = xr_strdup("failed to add entry module");
@@ -335,10 +340,10 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
         char *owned_source = NULL;
         const char *source = entry_source;
         if (spec->embedded_source) {
-            source = xr_get_embedded_stdlib(spec->canonical);
+            source = xr_get_embedded_stdlib(spec->authority.namespace_id);
             if (!source) {
                 xr_log_warning("module_graph", "embedded stdlib source missing: %s",
-                               spec->canonical ? spec->canonical : "?");
+                               spec->authority.namespace_id ? spec->authority.namespace_id : "?");
                 continue;
             }
         } else if (!is_memory_entry) {
@@ -351,6 +356,9 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
         }
 
         struct AstNode *ast = xr_parse_with_source(g->compiler_session, source, spec->source_path);
+        spec->source_content_hash = xr_hash_bytes64(source, strlen(source));
+        if (spec->source_content_hash == 0)
+            spec->source_content_hash = 1;
         xr_free(owned_source);
 
         if (!ast) {
@@ -381,7 +389,9 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
     return 0;
 }
 
-XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char **out_err) {
+XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
+                                  const XrModuleIdentityAuthority *entry_authority,
+                                  char **out_err) {
     if (!entry_path) {
         if (out_err)
             *out_err = xr_strdup("NULL entry_path");
@@ -405,7 +415,8 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char
     char *script_root = NULL;
     char *entry_identity = NULL;
     char *entry_logical_path = NULL;
-    XrModuleIdentityAuthority authority = g->resolver->config.authority;
+    XrModuleIdentityAuthority authority =
+        entry_authority ? *entry_authority : g->resolver->config.authority;
     if (!authority.physical_root) {
         script_root = xr_path_dirname(abs_path);
         authority.kind = XR_MODULE_IDENTITY_SCRIPT;
@@ -420,8 +431,12 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char
         xr_free(abs_path);
         return -1;
     }
-    int rc = graph_build_from_entry(g, entry_identity, entry_logical_path, abs_path, &authority,
-                                    NULL, out_err);
+    XrModuleKind entry_kind = authority.kind == XR_MODULE_IDENTITY_STDLIB
+                                  ? XR_MOD_STDLIB
+                                  : (authority.kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE
+                                                                                  : XR_MOD_FILE);
+    int rc = graph_build_from_entry(g, entry_identity, entry_logical_path, abs_path, entry_kind,
+                                    &authority, NULL, out_err);
     xr_free(entry_identity);
     xr_free(entry_logical_path);
     xr_free(script_root);
@@ -429,15 +444,27 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char
     return rc;
 }
 
-XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *entry_id,
+XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *explicit_id,
                                          const char *entry_source, char **out_err) {
     if (!entry_source) {
         if (out_err)
             *out_err = xr_strdup("NULL entry_source");
         return -1;
     }
-    return graph_build_from_entry(g, entry_id ? entry_id : "<eval>", NULL, NULL, NULL,
-                                  entry_source, out_err);
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = explicit_id,
+    };
+    char *entry_identity = NULL;
+    if (!xr_module_identity_from_logical(&authority, NULL, &entry_identity)) {
+        if (out_err)
+            *out_err = xr_strdup("memory module requires an explicit valid identity");
+        return -1;
+    }
+    int rc = graph_build_from_entry(g, entry_identity, NULL, NULL, XR_MOD_MEMORY, &authority,
+                                    entry_source, out_err);
+    xr_free(entry_identity);
+    return rc;
 }
 
 /* ========== Topological Sort (Tarjan SCC) ========== */
@@ -727,7 +754,9 @@ bool xr_module_graph_preload(XrVMRuntime *X, const XrModuleGraph *g, XrModule **
         if (!spec->source_path)
             continue;
         const char *import_name =
-            (spec->kind == XR_MOD_STDLIB && spec->canonical) ? spec->canonical : spec->source_path;
+            (spec->kind == XR_MOD_STDLIB && spec->authority.namespace_id)
+                ? spec->authority.namespace_id
+                : spec->source_path;
         XrValue value = xr_module_import(X, import_name);
         if (XR_IS_NULL(value)) {
             xr_free(table);

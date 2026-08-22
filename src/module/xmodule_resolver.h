@@ -37,13 +37,13 @@ struct XrLockfile;
 
 /*
  * Canonical durable identifier for a resolved module.
- * - stdlib:  kind=STDLIB,  canonical="time" (bare name)
- * - file/package: canonical is a module-id-v1 length-framed tuple.
+ * Every kind uses a typed, versioned, length-framed identity.
  */
 typedef enum {
     XR_MOD_STDLIB,
     XR_MOD_FILE,
     XR_MOD_PACKAGE,
+    XR_MOD_MEMORY,
 } XrModuleKind;
 
 typedef struct {
@@ -52,7 +52,7 @@ typedef struct {
     char *logical_path; /* Root-relative source path (owned) */
     char *source_path; /* Absolute .xr path, or NULL for native stdlib.
                           Owned string — caller must xr_free() */
-    XrModuleIdentityAuthority authority; /* Owned strings for source modules */
+    XrModuleIdentityAuthority authority; /* Owned authority coordinate and I/O root */
 } XrModuleId;
 
 /* Free contents of an XrModuleId (does NOT free the struct itself). */

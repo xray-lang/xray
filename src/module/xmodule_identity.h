@@ -19,6 +19,8 @@ typedef enum XrModuleIdentityKind {
     XR_MODULE_IDENTITY_PROJECT = 1,
     XR_MODULE_IDENTITY_SCRIPT,
     XR_MODULE_IDENTITY_PACKAGE,
+    XR_MODULE_IDENTITY_STDLIB,
+    XR_MODULE_IDENTITY_MEMORY,
 } XrModuleIdentityKind;
 
 /* Physical roots are I/O authorities only. They never enter the identity bytes. */
@@ -31,10 +33,18 @@ typedef struct XrModuleIdentityAuthority {
 /* Validate the logical namespace grammar without consulting the filesystem. */
 XR_FUNC bool xr_module_identity_authority_valid(const XrModuleIdentityAuthority *authority);
 
+/* Derive a durable identity from an already-authoritative logical path.
+ * Memory authorities require an explicit namespace id and an empty path. */
+XR_FUNC bool xr_module_identity_from_logical(const XrModuleIdentityAuthority *authority,
+                                             const char *logical_path, char **identity_out);
+
 /* Derive one root-relative logical path and its length-framed durable identity.
  * Both outputs are xr_malloc-owned. Absolute or escaping paths fail closed. */
 XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *authority,
                                             const char *source_path, char **identity_out,
                                             char **logical_path_out);
+
+/* Validate the exact typed identity grammar and optionally return its kind. */
+XR_FUNC bool xr_module_identity_valid(const char *identity, XrModuleIdentityKind *kind_out);
 
 #endif /* XMODULE_IDENTITY_H */

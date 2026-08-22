@@ -318,7 +318,8 @@ TEST(incremental_reset_advances_identity_and_clears_transient_state) {
     ASSERT_NOT_NULL(session);
     XrCompileUnitIdentity identity = {
         .kind = XR_COMPILE_UNIT_STDLIB,
-        .canonical_module = "stdlib:probe",
+        .module_identity = "stdlib-module-v1:module=5:probe:path=14:probe/probe.xr",
+        .stdlib_module_name = "probe",
     };
     XrArena arena;
     XrCompilerSessionScope scope;
@@ -342,7 +343,7 @@ TEST(incremental_reset_advances_identity_and_clears_transient_state) {
     ASSERT_NULL(xr_compiler_session_string_pool(session));
     ASSERT_NULL(xr_compiler_session_module_graph(session));
     ASSERT_EQ_UINT(xr_compiler_session_ast_node_id(session), 0);
-    ASSERT_NULL(xr_compiler_session_compile_unit_identity(session).canonical_module);
+    ASSERT_NULL(xr_compiler_session_compile_unit_identity(session).module_identity);
     xr_compiler_session_pop_arena(&scope);
     ASSERT_NULL(xr_compiler_session_current_arena(session));
     ASSERT_NULL(xr_compiler_session_string_pool(session));
@@ -803,7 +804,8 @@ TEST(operation_abort_is_transactional_and_invalidates_old_scopes) {
     xr_compiler_session_set_module_graph(session, (struct XrModuleGraph *) (uintptr_t) 7);
     XrCompileUnitIdentity identity = {
         .kind = XR_COMPILE_UNIT_USER,
-        .canonical_module = "pkg/cancel",
+        .module_identity =
+            "module-id-v1:kind=7:project:namespace=3:pkg:path=9:cancel.xr",
     };
     xr_compiler_session_set_compile_unit_identity(session, &identity);
     XrCompilerSessionGenerationSnapshot before =

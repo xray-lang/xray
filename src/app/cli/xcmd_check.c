@@ -136,7 +136,7 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
     }
 
     char *err = NULL;
-    int rc = xr_module_graph_build(graph, entry_path, &err);
+    int rc = xr_module_graph_build(graph, entry_path, NULL, &err);
     if (rc != 0) {
         fprintf(stderr, "Error: %s\n", err ? err : "graph build failed");
         xr_free(err);

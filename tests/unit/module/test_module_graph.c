@@ -95,7 +95,7 @@ TEST(graph_single_file_no_imports) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("main.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("main.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(g->spec_count, 1);
@@ -125,7 +125,7 @@ TEST(graph_linear_deps) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("a.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("a.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(g->spec_count, 3);
@@ -157,7 +157,7 @@ TEST(graph_diamond_deps) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("main.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("main.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(g->spec_count, 4);
 
@@ -189,7 +189,7 @@ TEST(graph_cycle_self) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("self.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("self.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, 0);
 
     rc = xr_module_graph_topological_sort(g);
@@ -214,7 +214,7 @@ TEST(graph_cycle_two) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("a.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("a.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(g->spec_count, 2);
 
@@ -241,7 +241,7 @@ TEST(graph_cycle_three) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("a.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("a.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(g->spec_count, 3);
 
@@ -269,7 +269,7 @@ TEST(graph_find_by_canonical) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    xr_module_graph_build(g, abs_path("main.xr"), &err);
+    xr_module_graph_build(g, abs_path("main.xr"), NULL, &err);
 
     /* The entry's canonical is its absolute path */
     int idx = xr_module_graph_find(g, g->specs[0].canonical);
@@ -289,7 +289,7 @@ TEST(graph_entry_not_found) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, "/tmp/nonexistent_xray_file_9999.xr", &err);
+    int rc = xr_module_graph_build(g, "/tmp/nonexistent_xray_file_9999.xr", NULL, &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     xr_free(err);
@@ -307,7 +307,7 @@ TEST(graph_parse_failure_is_build_failure) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("invalid.xr"), &err);
+    int rc = xr_module_graph_build(g, abs_path("invalid.xr"), NULL, &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     ASSERT_NOT_NULL(strstr(err, "failed to parse module"));

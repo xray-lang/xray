@@ -220,7 +220,8 @@ struct XaAnalyzer {
      * derived from graph ownership by AST identity, or from the scoped
      * compile-unit identity for graph-less bootstrap compilation. */
     bool current_module_is_stdlib;
-    const char *current_module_canonical;
+    const char *current_module_identity;
+    const char *current_stdlib_module_name;
 
     /* Enum layouts replaced by the post-monomorphization re-analysis pass.
      * XrType copies (catch error types, function-signature error types, ...)

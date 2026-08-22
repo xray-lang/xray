@@ -422,7 +422,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                 xr_module_graph_new(xr_compiler_session_current_for_isolate(iso), resolver);
             if (graph) {
                 char *err = NULL;
-                if (xr_module_graph_build(graph, file, &err) == 0) {
+                if (xr_module_graph_build(graph, file, NULL, &err) == 0) {
                     xr_module_graph_topological_sort(graph);
                     if (graph->has_cycle) {
                         fprintf(stderr, "Error: %s\n",
