@@ -34,6 +34,9 @@ CONTRACT_SPECS = (
         (
             "src/frontend/analyzer/xa_intrinsic_registry.def",
             "src/shared/xr_core_intrinsic.def",
+            "contracts/capability-deletions.tsv",
+            "scripts/check_branch_hint_surface_residue.py",
+            "tests/regression/05_functions/0582_removed_builtin_names_reusable.xr",
         ),
     ),
     ContractSpec("xi-canonical-ops.md", ("xisa/xi/ops.def", "xisa/xi/lowering.def")),

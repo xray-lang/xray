@@ -2726,8 +2726,7 @@ def verify_copy_ratchet(root: Path, registry: dict) -> list[str]:
         encoding="utf-8", errors="strict")
     for token in (f"{marker}_HI", f"{marker}_LO", "XR_COPY_OWNER_PLAN",
                   "XI_COPY_KIND_VALUE_CLONE", "XI_COPY_KIND_CELL_READ",
-                  "XI_COPY_KIND_CLEANUP_RETURN", "XI_COPY_KIND_LIKELY",
-                  "XI_COPY_KIND_UNLIKELY", "XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD",
+                  "XI_COPY_KIND_CLEANUP_RETURN", "XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD",
                   "xr_copy_plan_core", "xr_copy_plan_is_exact_core"):
         if token not in core_text:
             errors.append("src/shared/xr_copy_core.h: copy variants lack stable owner")
@@ -2735,7 +2734,7 @@ def verify_copy_ratchet(root: Path, registry: dict) -> list[str]:
 
     xi_text = (root / "src/ir/xi.h").read_text(encoding="utf-8", errors="strict")
     for token in ('#include "../shared/xr_copy_core.h"', "xi_copy_is_value_clone",
-                  "xi_copy_is_identity_alias", "xi_copy_is_branch_hint"):
+                  "xi_copy_is_identity_alias"):
         if token not in xi_text:
             errors.append("src/ir/xi.h: Xi copy queries bypass shared constants")
             break
@@ -2775,7 +2774,7 @@ def verify_copy_ratchet(root: Path, registry: dict) -> list[str]:
 
     test_text = (root / "tests/unit/stdlib/test_numeric_core.c").read_text(
         encoding="utf-8", errors="strict")
-    if "copy_core_freezes_identity_clone_and_control_variants" not in test_text:
+    if "copy_core_freezes_identity_clone_and_metadata_variants" not in test_text:
         errors.append("tests/unit/stdlib/test_numeric_core.c: copy owner KAT is missing")
     return errors
 

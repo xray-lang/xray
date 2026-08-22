@@ -1061,6 +1061,29 @@ static bool analyzer_diag_contains(XaAnalyzer *analyzer, const char *needle) {
     return false;
 }
 
+TEST(analyzer_ordinary_bool_control_has_no_branch_hint_builtins) {
+    XaAnalyzer *a = xa_analyzer_new(g_session);
+    ASSERT(a != NULL);
+    ASSERT(xa_analyzer_lookup(a, "likely") == NULL);
+    ASSERT(xa_analyzer_lookup(a, "unlikely") == NULL);
+
+    AstNode *program = xr_parse(g_session,
+                                "fn likely(value: bool) -> bool { return value }\n"
+                                "fn unlikely(value: bool) -> bool { return value }\n"
+                                "fn choose(flag: bool) -> bool {\n"
+                                "    if (likely(flag)) { return unlikely(true) }\n"
+                                "    return false\n"
+                                "}\n"
+                                "var selected = choose(true)\n");
+    ASSERT(program != NULL);
+    xa_analyzer_analyze(a, "ordinary_bool_control.xr", program);
+    ASSERT(a->diagnostic_count == 0);
+
+    xr_program_destroy(program);
+    xa_analyzer_free(a);
+    setup_pool();
+}
+
 TEST(object_exact_assignment_and_width_constraint_matrix) {
     const char *a_names[] = {"name"};
     XrType *a_fields[] = {xr_type_new_string(g_isolate)};
@@ -6964,6 +6987,7 @@ int main(void) {
     RUN_TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts);
     RUN_TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows);
     RUN_TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed);
+    RUN_TEST(analyzer_ordinary_bool_control_has_no_branch_hint_builtins);
     RUN_TEST(symbol_export_metadata_reinterns_analyzer_local_sidecars);
     RUN_TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference);
     RUN_TEST(symbol_export_view_rekeys_foreign_symbol_identity);

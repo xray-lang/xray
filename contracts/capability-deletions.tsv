@@ -1,0 +1,2 @@
+capability_id	source_forms	semantic_forms	negative_fixture	replacement
+source-branch-probability-hints	likely(bool)|unlikely(bool)	XI_COPY_KIND_LIKELY|XI_COPY_KIND_UNLIKELY	tests/compile_errors/type/branch_hint_builtins_removed.xr	ordinary bool control expressions

@@ -3838,12 +3838,11 @@ static void emit_block_terminator_generated_line_reset(XiCgenCtx *ctx, FILE *out
         emit_generated_line_reset(ctx, out);
 }
 
-static void emit_likely_condition_expr(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
+static void emit_block_condition_expr(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
     /* A return edge is not inherently cold: dispatch-heavy code commonly
-     * returns directly from every case. Guessing a branch probability from
-     * CFG shape mislabels those hot paths and can inhibit loop-invariant code
-     * motion after inlining. Preserve neutral C semantics unless the source
-     * explicitly used likely(...) or unlikely(...). */
+     * returns directly from every case. Guessing probability from CFG shape
+     * can mislabel hot paths and inhibit loop-invariant code motion after
+     * inlining, so ordinary source conditions always remain neutral. */
     emit_condition_expr_ctx(ctx, out, blk ? blk->control : NULL);
 }
 
@@ -5950,12 +5949,6 @@ static const char *cg_null_test_adapter_name(XiCgenCtx *ctx) {
 }
 
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    if (xi_copy_is_branch_hint(v) && v->nargs >= 1 && v->args[0]) {
-        fprintf(out, "%s(", v->aux_int == XI_COPY_KIND_LIKELY ? "XR_LIKELY" : "XR_UNLIKELY");
-        emit_condition_expr_ctx(ctx, out, v->args[0]);
-        fprintf(out, ")");
-        return;
-    }
     const char *adapter = cg_truthiness_adapter_name(ctx);
     if (!adapter) {
         emit_codegen_abort_expr(out);
@@ -10650,7 +10643,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                 break;
             /* Emit phi copies for both branches */
             fprintf(out, "    if (");
-            emit_likely_condition_expr(ctx, out, blk);
+            emit_block_condition_expr(ctx, out, blk);
             fprintf(out, ") {\n");
             emit_phi_copies(ctx, out, f, blk->succs[0], find_pred_idx(blk->succs[0], blk));
             emit_sync_backedge_heartbeat_if_edge(ctx, out, f, blk, blk->succs[0], "        ");

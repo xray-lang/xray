@@ -263,12 +263,6 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "assert_false", fn_assert);
     register_builtin_func(analyzer, "assert_throws", fn_assert);
 
-    /* Branch-probability hints: VM observes plain bool identity; AOT can lower
-     * conditions to XR_LIKELY / XR_UNLIKELY. */
-    XrType *fn_branch_hint = xr_type_new_function(analyzer->isolate, &t_bool, 1, t_bool, false);
-    register_builtin_func(analyzer, "likely", fn_branch_hint);
-    register_builtin_func(analyzer, "unlikely", fn_branch_hint);
-
     // Type conversion: fn(any) -> T (precise return type)
     XrType *fn_to_int = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
     register_builtin_func(analyzer, "int", fn_to_int);

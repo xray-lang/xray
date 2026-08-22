@@ -3900,19 +3900,6 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         v->line = (uint32_t) line;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
-    /* likely(cond) / unlikely(cond) are semantic identity over bool.
-     * AOT consumes the copy kind when this value controls a branch; VM sees
-     * an ordinary copy, so functionality stays aligned. */
-    if ((strcmp(fname, "likely") == 0 || strcmp(fname, "unlikely") == 0) && call->arg_count == 1) {
-        XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_COPY, l->type_bool, 1);
-        if (!v)
-            return NULL;
-        v->args[0] = cond;
-        v->aux_int = (strcmp(fname, "likely") == 0) ? XI_COPY_KIND_LIKELY : XI_COPY_KIND_UNLIKELY;
-        v->line = (uint32_t) line;
-        return v;
-    }
     /* assert_eq(actual, expected) → XI_ASSERT_EQ */
     if (strcmp(fname, "assert_eq") == 0 && call->arg_count == 2) {
         XiValue *actual = xi_lower_expr(l, call->arguments[0]);

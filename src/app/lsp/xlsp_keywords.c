@@ -34,5 +34,5 @@ const char *xr_builtins[] = {
 #include "../../../stdlib/prelude/builtin_symbols.def"
     "Coro",         "CoroPool",  "__dir__",       "__file__",    "process", "assert", "assert_eq",
     "assert_false", "assert_ne", "assert_throws", "assert_true", "bool",    "chr",    "copy",
-    "dump",         "float",     "int",           "len",         "likely",  "print",  "rune",
-    "string",       "typeName",  "typeOf",        "unlikely",    NULL};
+    "dump",         "float",     "int",           "len",         "print",   "rune",
+    "string",       "typeName",  "typeOf",        NULL};

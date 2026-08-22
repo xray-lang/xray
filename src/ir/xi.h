@@ -1497,11 +1497,6 @@ static inline bool xi_copy_is_identity_alias(const XiValue *v) {
            v->enum_metadata_kind == 0;
 }
 
-static inline bool xi_copy_is_branch_hint(const XiValue *v) {
-    return v && v->op == XI_COPY &&
-           (v->aux_int == XI_COPY_KIND_LIKELY || v->aux_int == XI_COPY_KIND_UNLIKELY);
-}
-
 /*
  * Identity tracing transparency, in three widening layers.
  *

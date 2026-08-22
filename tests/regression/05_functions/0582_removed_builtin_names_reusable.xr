@@ -1,0 +1,15 @@
+// Test: deleted builtin names remain available to user declarations.
+// Expected output:
+// true
+// false
+
+fn likely(value: bool) -> bool {
+    return value
+}
+
+fn unlikely(value: bool) -> bool {
+    return value
+}
+
+print(likely(true))
+print(unlikely(false))

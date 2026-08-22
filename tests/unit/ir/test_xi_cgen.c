@@ -4124,18 +4124,14 @@ TEST(cgen_if_else) {
     xi_func_free(ir);
 }
 
-TEST(cgen_early_return_branch_stays_neutral_without_hint) {
-    const char *src = "fn guard(x: int) -> int {\n"
-                      "    var y = x\n"
-                      "    if (y < 0) {\n"
-                      "        return -1\n"
+TEST(cgen_ordinary_bool_control_has_no_probability_wrapper) {
+    const char *src = "fn choose(flag: bool) -> int {\n"
+                      "    if (flag) {\n"
+                      "        return 1\n"
                       "    }\n"
-                      "    while (y < 10) {\n"
-                      "        y = y + 1\n"
-                      "    }\n"
-                      "    return y\n"
+                      "    return 0\n"
                       "}\n"
-                      "print(guard(1))\n";
+                      "print(choose(true))\n";
 
     XiFunc *ir = compile_to_ir(src);
     if (!ir) {
@@ -4146,43 +4142,18 @@ TEST(cgen_early_return_branch_stays_neutral_without_hint) {
     char *code = generate_c(ir, "test");
     assert(code != NULL);
 
-    const char *guard = find_static_function_definition(code, "test_guard_");
-    TEST_REQUIRE(guard != NULL, "guard function should be generated");
-    const char *guard_end = next_static_after(guard);
-    const char *hint = strstr(guard, "if (XR_UNLIKELY(");
-    TEST_REQUIRE(!hint || hint >= guard_end,
-                 "an unhinted early-return branch must remain probability-neutral");
+    const char *choose = find_static_function_definition(code, "test_choose_");
+    TEST_REQUIRE(choose != NULL, "ordinary bool function should be generated");
+    const char *choose_end = next_static_after(choose);
+    const char *internal_likely = strstr(choose, "XR_LIKELY(");
+    const char *internal_unlikely = strstr(choose, "XR_UNLIKELY(");
+    TEST_REQUIRE((!internal_likely || internal_likely >= choose_end) &&
+                     (!internal_unlikely || internal_unlikely >= choose_end),
+                 "ordinary bool control must remain probability-neutral");
+    TEST_REQUIRE(count_op_in_func(ir, XI_COPY) == 0,
+                 "ordinary bool control must not retain an identity wrapper");
 
-    printf("  Generated neutral early-return branch %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_explicit_unlikely_early_return_preserves_hint) {
-    const char *src = "fn guard(x: int) -> int {\n"
-                      "    if (unlikely(x < 0)) {\n"
-                      "        return -1\n"
-                      "    }\n"
-                      "    return x\n"
-                      "}\n"
-                      "print(guard(1))\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    if (!ir) {
-        printf("  SKIP\n");
-        return;
-    }
-
-    char *code = generate_c(ir, "test");
-    assert(code != NULL);
-    const char *guard = find_static_function_definition(code, "test_guard_");
-    TEST_REQUIRE(guard != NULL, "guard function should be generated");
-    const char *guard_end = next_static_after(guard);
-    const char *hint = strstr(guard, "if (XR_UNLIKELY(");
-    TEST_REQUIRE(hint && hint < guard_end,
-                 "an explicit unlikely(...) branch must retain its native hint");
-
-    printf("  Generated explicit early-return branch hint %zu bytes of C code\n", strlen(code));
+    printf("  Generated ordinary bool control %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -14511,8 +14482,7 @@ int main(int argc, char **argv) {
     run_cgen_cancelled_builtin_generates_false();
     run_cgen_variable_and_print();
     run_cgen_if_else();
-    run_cgen_early_return_branch_stays_neutral_without_hint();
-    run_cgen_explicit_unlikely_early_return_preserves_hint();
+    run_cgen_ordinary_bool_control_has_no_probability_wrapper();
     run_cgen_multi_print();
     run_cgen_while_loop();
     run_cgen_string_literal();

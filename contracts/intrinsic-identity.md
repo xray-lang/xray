@@ -30,8 +30,17 @@ reinterpretation identities without reassigning the existing registry.
    the panic channel. Their expected channels are distinct typed facts and may
    not be inferred from display names. Grouped heterogeneous `print` output is
    direct-call-only because it requires one call-site plan.
+10. Source-level branch-probability wrappers are deleted capabilities. Their
+    spellings and former Xi copy variants remain only in governed negative
+    evidence; compiler and runtime `XR_LIKELY` / `XR_UNLIKELY` macros are
+    implementation details outside the source intrinsic surface. The deleted
+    spellings are not reserved: user declarations with those names are ordinary
+    functions and carry no compiler-owned branch-probability semantics.
 
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 3acea091929e3d062fa5183ac6b219dddb1a7df34baa8607b7fac8d5f52b6872
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
+anchor-sha256: contracts/capability-deletions.tsv 431f7a68362658563a0c090c3cf788c46025b28a55a00aeacfb969e0786d1845
+anchor-sha256: scripts/check_branch_hint_surface_residue.py 1e1950f0e6bcd58b96d56b35bf8230e95b32ee0915cf62ad10ce5b70589b99aa
+anchor-sha256: tests/regression/05_functions/0582_removed_builtin_names_reusable.xr 037941a5256838f24279cf536a83ccbbaa84af5dde8bc386343addc97b849c49

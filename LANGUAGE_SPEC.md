@@ -5996,8 +5996,6 @@ These global functions and built-in constructor/static functions are usable with
 | `typeName<T>()` | `() -> string` | returns the name of static type `T` |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
 
-The branch hints `likely(cond)` and `unlikely(cond)` accept and return the same `bool`; they inform optimization probability only and do not change evaluation or short-circuit semantics.
-
 The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 
 ```xray

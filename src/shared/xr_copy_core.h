@@ -9,9 +9,9 @@
  *
  * Xi copy values preserve the source value but do not all have the same
  * ownership or optimization meaning. The semantic immediate distinguishes
- * borrowed forwarding, independent value cloning, cell and cleanup reads,
- * and branch-hint forwarding. Enum metadata forwarding is an explicit
- * identity variant so optimizers cannot treat it as an ordinary alias.
+ * borrowed forwarding, independent value cloning, and cell and cleanup reads.
+ * Enum metadata forwarding is an explicit identity variant so optimizers
+ * cannot treat it as an ordinary alias.
  */
 
 #ifndef XR_COPY_CORE_H
@@ -25,8 +25,6 @@
 #define XI_COPY_KIND_VALUE_CLONE INT64_C(0x58434F5059434C4E)
 #define XI_COPY_KIND_CELL_READ INT64_C(0x5843454C4C524541)
 #define XI_COPY_KIND_CLEANUP_RETURN INT64_C(0x58434C4E52545552)
-#define XI_COPY_KIND_LIKELY INT64_C(0x584C494B454C5901)
-#define XI_COPY_KIND_UNLIKELY INT64_C(0x58554E4C494B5901)
 
 typedef enum XrCopySemanticKind {
     XR_COPY_SEMANTIC_INVALID = 0,
@@ -34,8 +32,6 @@ typedef enum XrCopySemanticKind {
     XR_COPY_SEMANTIC_VALUE_CLONE,
     XR_COPY_SEMANTIC_CELL_READ,
     XR_COPY_SEMANTIC_CLEANUP_RETURN,
-    XR_COPY_SEMANTIC_BRANCH_LIKELY,
-    XR_COPY_SEMANTIC_BRANCH_UNLIKELY,
     XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD
 } XrCopySemanticKind;
 
@@ -44,12 +40,11 @@ typedef struct XrCopyPlan {
     bool preserves_value;
     bool borrows_source;
     bool requires_independent_value;
-    bool carries_branch_hint;
 } XrCopyPlan;
 
 static inline XrCopyPlan xr_copy_plan_core(int64_t semantic_immediate,
                                            bool has_enum_metadata) {
-    XrCopyPlan plan = {XR_COPY_SEMANTIC_INVALID, false, false, false, false};
+    XrCopyPlan plan = {XR_COPY_SEMANTIC_INVALID, false, false, false};
     if (semantic_immediate == XI_COPY_KIND_IDENTITY) {
         plan.kind = has_enum_metadata ? XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD
                                       : XR_COPY_SEMANTIC_IDENTITY;
@@ -62,12 +57,6 @@ static inline XrCopyPlan xr_copy_plan_core(int64_t semantic_immediate,
         plan.kind = XR_COPY_SEMANTIC_CELL_READ;
     } else if (semantic_immediate == XI_COPY_KIND_CLEANUP_RETURN) {
         plan.kind = XR_COPY_SEMANTIC_CLEANUP_RETURN;
-    } else if (semantic_immediate == XI_COPY_KIND_LIKELY) {
-        plan.kind = XR_COPY_SEMANTIC_BRANCH_LIKELY;
-        plan.carries_branch_hint = true;
-    } else if (semantic_immediate == XI_COPY_KIND_UNLIKELY) {
-        plan.kind = XR_COPY_SEMANTIC_BRANCH_UNLIKELY;
-        plan.carries_branch_hint = true;
     } else {
         return plan;
     }
@@ -81,14 +70,8 @@ static inline bool xr_copy_plan_is_exact_core(XrCopyPlan plan) {
         plan.kind > XR_COPY_SEMANTIC_ENUM_METADATA_FORWARD || !plan.preserves_value)
         return false;
     if (plan.kind == XR_COPY_SEMANTIC_VALUE_CLONE)
-        return plan.requires_independent_value && !plan.borrows_source &&
-               !plan.carries_branch_hint;
-    if (plan.kind == XR_COPY_SEMANTIC_BRANCH_LIKELY ||
-        plan.kind == XR_COPY_SEMANTIC_BRANCH_UNLIKELY)
-        return plan.borrows_source && !plan.requires_independent_value &&
-               plan.carries_branch_hint;
-    return plan.borrows_source && !plan.requires_independent_value &&
-           !plan.carries_branch_hint;
+        return plan.requires_independent_value && !plan.borrows_source;
+    return plan.borrows_source && !plan.requires_independent_value;
 }
 
 #define XR_COPY_OWNER_GUARD(owner_hi, owner_lo)                                                   \

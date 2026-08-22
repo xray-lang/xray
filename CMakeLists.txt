@@ -3940,6 +3940,34 @@ if(BUILD_TESTS)
         TIMEOUT 60
     )
 
+    # Source-level branch hints were removed. This gate rejects their public
+    # bindings and Xi variants while explicitly preserving internal C hints.
+    add_test(
+        NAME branch_hint_source_residue
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_branch_hint_surface_residue.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(branch_hint_source_residue PROPERTIES
+        LABELS "meta;surface;branch-hint-removal"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME branch_hint_source_residue_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_branch_hint_surface_residue.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(branch_hint_source_residue_self_test PROPERTIES
+        LABELS "meta;surface;branch-hint-removal"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
     # Built-in symbol registry. stdlib/prelude/builtin_symbols.def is the single
     # source of truth for every name available without an import; this gate keeps
     # the generated specification registry, the specification's normative prose,

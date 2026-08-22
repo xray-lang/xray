@@ -5969,8 +5969,6 @@ fn measuredKernel(value: u64) -> u64 {
 | `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
-分支提示 `likely(cond)` / `unlikely(cond)` 接受并原样返回 `bool`；它们只向优化器提供概率提示，不改变求值或短路语义。
-
 全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
 ```xray

@@ -43,8 +43,6 @@ order: 014
 | `typeName<T>()` | `() -> string` | 返回静态类型 `T` 的名称 |
 | `x is T` | 表达式 | 运行时类型检查，分析器可做类型窄化 |
 
-分支提示 `likely(cond)` / `unlikely(cond)` 接受并原样返回 `bool`；它们只向优化器提供概率提示，不改变求值或短路语义。
-
 全局只读环境值不是函数：`process`（入口参数/文件/目录信息）、`__file__`、`__dir__`。它们由真实文件/项目入口初始化；纯 `eval` 场景中 `process` 可为 `null`。
 
 ```xray @id=builtin-typeOf-is
@@ -127,8 +125,6 @@ These global functions and built-in constructor/static functions are usable with
 | `typeName(x)` | `(value) -> string` | returns the debug/logging type-name string |
 | `typeName<T>()` | `() -> string` | returns the name of static type `T` |
 | `x is T` | expression | runtime type check; the analyzer may narrow types |
-
-The branch hints `likely(cond)` and `unlikely(cond)` accept and return the same `bool`; they inform optimization probability only and do not change evaluation or short-circuit semantics.
 
 The global read-only environment values are not functions: `process` (entry arguments/file/directory), `__file__`, and `__dir__`. They are initialized for a real file/project entry; `process` may be `null` in a pure `eval` context.
 

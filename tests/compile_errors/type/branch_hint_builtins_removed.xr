@@ -1,0 +1,2 @@
+var hot = likely(true)
+var cold = unlikely(false)
