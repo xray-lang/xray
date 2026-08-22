@@ -42,6 +42,34 @@ typedef struct XtpFixture {
     size_t size;
 } XtpFixture;
 
+static const char k_xtp_fixture_identity[] =
+    "memory-module-v1:id=21:xtp-format-fixture-v1";
+
+static bool xtp_fixture_build(XiFunc *root, XrSemanticPlan **plan, char *error,
+                              size_t error_size) {
+    XiModule fixture = {
+        .identity = (char *) k_xtp_fixture_identity,
+        .path = "xtp-format-fixture.xr",
+        .name = "xtp_format_fixture",
+        .init = root,
+    };
+    XiModule *saved_module = root ? root->module : NULL;
+    bool installed_module = root && !root->module;
+    bool installed_identity = root && root->module && !root->module->identity;
+    if (installed_module)
+        root->module = &fixture;
+    else if (installed_identity)
+        root->module->identity = (char *) k_xtp_fixture_identity;
+    bool built = xr_semantic_plan_build(root, plan, error, error_size);
+    if (installed_identity)
+        root->module->identity = NULL;
+    if (installed_module)
+        root->module = saved_module;
+    return built;
+}
+
+#define xr_semantic_plan_build xtp_fixture_build
+
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
@@ -240,6 +268,8 @@ static XrSemanticPlan *build_exported_semantic_plan(void) {
     XiModule *module = xi_module_new("fixtures/runtime_export.xr",
                                     "runtime_export", root);
     REQUIRE(module);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=29:xtp-runtime-export-fixture-v1"));
     root->module = module;
     module->nslots = 1;
     module->nexports = 1;
@@ -366,6 +396,8 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     XiModule *dependency_module =
         xi_module_new("stdlib/net/net.xr", "net", dependency_root);
     REQUIRE(dependency_module);
+    REQUIRE(xi_module_set_identity(
+        dependency_module, "stdlib-module-v1:module=3:net:path=10:net/net.xr"));
     dependency_root->module = dependency_module;
     dependency_module->nslots = 1;
     dependency_module->nexports = 1;
@@ -396,7 +428,7 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     caller_root->nchildren = caller_root->children_cap = 1;
     caller->parent_func = caller_root;
     XiImportRef import_ref = {
-        .module_path = "stdlib/net/net.xr",
+        .module_path = "stdlib-module-v1:module=3:net:path=10:net/net.xr",
         .resolved_mod_index = 0,
         .resolved_shared_slot = -1,
         .resolved_export_slot = -1,
@@ -436,6 +468,8 @@ static XrSemanticPlan *build_source_export_semantic_plan(
     XiModule *caller_module =
         xi_module_new("stdlib/http/http.xr", "http", caller_root);
     REQUIRE(caller_module);
+    REQUIRE(xi_module_set_identity(
+        caller_module, "stdlib-module-v1:module=4:http:path=12:http/http.xr"));
     caller_root->module = caller_module;
     caller_module->nslots = 1;
     XiModule *dependency_modules[] = {dependency_module};
