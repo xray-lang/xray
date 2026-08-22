@@ -334,6 +334,14 @@ add_xray_unit_test(test_target_profile plan/test_target_profile.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_target_plan plan/test_target_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_test(NAME test_target_plan_fingerprint_snapshot_determinism
+    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-snapshot-determinism)
+add_test(NAME test_target_plan_fingerprint_channel_close
+    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-channel-close)
+add_test(NAME test_target_plan_fingerprint_direct_local_call
+    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-direct-local-call)
+add_test(NAME test_target_plan_fingerprint_tail_coroutine_chain
+    COMMAND $<TARGET_FILE:test_target_plan> fingerprint-tail-coroutine-chain)
 add_test(NAME test_target_array_intrinsic_authority
     COMMAND $<TARGET_FILE:test_target_plan> array-intrinsic-authority)
 add_test(NAME test_target_map_entry_iterator_authority

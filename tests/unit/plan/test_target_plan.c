@@ -1192,6 +1192,14 @@ static void fill_foundation_capabilities(XrTargetCapabilityRecord capabilities[2
 static XrSemanticPlan *build_semantic_plan_with_string_type(XrType *string_type) {
     XiFunc *function = xi_func_new("target_plan_probe", &stub_int);
     REQUIRE(function != NULL);
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = function,
+    };
+    REQUIRE(function->module == NULL);
+    function->module = &fixture_module;
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *result = xi_const_int(function, entry, 42, &stub_int);
@@ -1213,6 +1221,7 @@ static XrSemanticPlan *build_semantic_plan_with_string_type(XrType *string_type)
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
     REQUIRE(xr_semantic_plan_type_count(plan) >= 2);
     REQUIRE(xr_semantic_plan_operation_count(plan) >= 1);
+    function->module = NULL;
     xi_func_free(function);
     return plan;
 }
@@ -2090,7 +2099,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "fdb1a0007734a83621fc09fe1377b0b3a390b96284697abaf44f2ce436724c9d") == 0);
+                   "c70141b7a70a7ff92d88d9823a454a59caccb85051cbedd2b32b0b099d68df78") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2766,6 +2775,14 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode, XrT
     XiFunc *root = xi_func_new("target_direct_call_root", value_type);
     XiFunc *child = xi_func_new("target_direct_call_child", value_type);
     REQUIRE(root != NULL && child != NULL);
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = root,
+    };
+    REQUIRE(root->module == NULL);
+    root->module = &fixture_module;
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *child_entry = xi_block_new(child);
     REQUIRE(root_entry != NULL && child_entry != NULL);
@@ -2815,6 +2832,7 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode, XrT
         fprintf(stderr, "direct-local target fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
     REQUIRE(xr_semantic_plan_call_target_count(plan) == (call_opcode == XI_CALL ? 2u : 1u));
+    root->module = NULL;
     xi_func_free(root);
     return plan;
 }
@@ -2899,6 +2917,14 @@ static XrSemanticPlan *build_channel_method_semantic(const char *selector,
                                                      bool extra_argument) {
     XiFunc *function = xi_func_new("target_channel_close", &stub_unit);
     REQUIRE(function != NULL);
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = function,
+    };
+    REQUIRE(function->module == NULL);
+    function->module = &fixture_module;
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
     XiValue *capacity = xi_const_int(function, entry, 1, &stub_int);
@@ -2926,6 +2952,7 @@ static XrSemanticPlan *build_channel_method_semantic(const char *selector,
     if (!built)
         fprintf(stderr, "channel-close semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
+    function->module = NULL;
     xi_func_free(function);
     return plan;
 }
@@ -3373,7 +3400,7 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "1257c53dd824db360fa0c8c7dad2a86b2bfab60f7efec78dfd02947883a53fee") ==
+    REQUIRE(strcmp(call_hex, "e930df98da03c079051e807c89842e952ad2bafbc201c5c71f09da7e01de8773") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -3535,6 +3562,14 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     XiFunc *wrapper = xi_func_new("target_coro_tail_wrapper", &stub_int);
     XiFunc *leaf = xi_func_new("target_coro_tail_leaf", &stub_int);
     REQUIRE(root != NULL && wrapper != NULL && leaf != NULL);
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = root,
+    };
+    REQUIRE(root->module == NULL);
+    root->module = &fixture_module;
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *wrapper_entry = xi_block_new(wrapper);
     XiBlock *leaf_entry = xi_block_new(leaf);
@@ -3597,6 +3632,7 @@ static XrSemanticPlan *build_lowered_tail_coroutine_chain(void) {
     if (!built)
         fprintf(stderr, "tail coroutine chain semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 2);
+    root->module = NULL;
     xi_func_free(root);
     return plan;
 }
@@ -4055,7 +4091,7 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "8c2f59786e7f90d1a18941cbf9d0468daab8dde1683dfee96ad53580250a2c43") ==
+    REQUIRE(strcmp(call_hex, "cc7dc7f421cde286cbfa177c1aeea49346b38aeb57d3d8c886157924dbf0679c") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -4307,6 +4343,37 @@ static void test_open_source_instance_method_target_fails_closed(void) {
     xr_semantic_plan_free(dependency);
 }
 
+static void test_tail_coroutine_chain_fingerprint(void) {
+    XrTargetProfile *profile = build_profile(0);
+    XrSemanticPlan *semantic = build_lowered_tail_coroutine_chain();
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    REQUIRE(plan->calls_count == 2 && plan->coroutines_count == 2);
+    const XrTargetCallRecord *tail_call = NULL;
+    const XrTargetCallRecord *suspend_call = NULL;
+    for (uint32_t i = 0; i < plan->calls_count; i++) {
+        if ((plan->calls[i].flags & XR_TARGET_CALL_TAIL) != 0)
+            tail_call = &plan->calls[i];
+        if ((plan->calls[i].flags & XR_TARGET_CALL_SUSPEND) != 0)
+            suspend_call = &plan->calls[i];
+    }
+    REQUIRE(tail_call != NULL && suspend_call != NULL && tail_call->flags == XR_TARGET_CALL_TAIL &&
+            plan->functions[tail_call->caller_function].coroutine_count == 0);
+    char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+    xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
+    REQUIRE(strcmp(tail_hex, "185e80cb9d394349967c31278094b56807efc25558669326d68c47fad873d488") ==
+            0);
+    uint32_t tail_id = tail_call->id;
+    plan->calls[tail_id].flags = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->calls[tail_id].flags = XR_TARGET_CALL_TAIL;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_coroutine_state_call_family(void) {
     XrTargetProfile *profile = build_profile(0);
     for (uint32_t unit_result = 0; unit_result < 2; unit_result++) {
@@ -4436,33 +4503,8 @@ static void test_coroutine_state_call_family(void) {
             sync_plan->coroutines[0].direct_call == XR_SEMANTIC_INDEX_NONE);
     xr_target_plan_free(sync_plan);
     xr_semantic_plan_free(sync_semantic);
-
-    XrSemanticPlan *tail_semantic = build_lowered_tail_coroutine_chain();
-    XrTargetPlan *tail_plan = NULL;
-    REQUIRE(xr_target_plan_build(tail_semantic, profile, &tail_plan, error, sizeof(error)));
-    REQUIRE(tail_plan->calls_count == 2 && tail_plan->coroutines_count == 2);
-    const XrTargetCallRecord *tail_call = NULL;
-    const XrTargetCallRecord *suspend_call = NULL;
-    for (uint32_t i = 0; i < tail_plan->calls_count; i++) {
-        if ((tail_plan->calls[i].flags & XR_TARGET_CALL_TAIL) != 0)
-            tail_call = &tail_plan->calls[i];
-        if ((tail_plan->calls[i].flags & XR_TARGET_CALL_SUSPEND) != 0)
-            suspend_call = &tail_plan->calls[i];
-    }
-    REQUIRE(tail_call != NULL && suspend_call != NULL && tail_call->flags == XR_TARGET_CALL_TAIL &&
-            tail_plan->functions[tail_call->caller_function].coroutine_count == 0);
-    char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
-    xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex, "b03311724132e0234a62179fcd89fdbf5e6b6415c4f95f7c1e94b45e359d1b24") ==
-            0);
-    uint32_t tail_id = tail_call->id;
-    tail_plan->calls[tail_id].flags = 0;
-    expect_verify_failure(tail_plan, "XR_TARGET_1003");
-    tail_plan->calls[tail_id].flags = XR_TARGET_CALL_TAIL;
-    REQUIRE(xr_target_plan_verify(tail_plan, error, sizeof(error)));
-    xr_target_plan_free(tail_plan);
-    xr_semantic_plan_free(tail_semantic);
     xr_target_profile_free(profile);
+    test_tail_coroutine_chain_fingerprint();
 }
 
 static void test_direct_local_future_storage_fails_closed(void) {
@@ -6506,6 +6548,26 @@ static void test_owned_string_coroutine_lifecycle_authority(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "fingerprint-snapshot-determinism") == 0) {
+        test_plan_snapshot_and_determinism();
+        puts("TargetPlan snapshot fingerprint tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "fingerprint-channel-close") == 0) {
+        test_channel_close_call_authority();
+        puts("Channel-close call fingerprint tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "fingerprint-direct-local-call") == 0) {
+        test_direct_local_call_adapter_family();
+        puts("Direct-local call fingerprint tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "fingerprint-tail-coroutine-chain") == 0) {
+        test_tail_coroutine_chain_fingerprint();
+        puts("Tail-coroutine call fingerprint tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "direct-local-class-argument-authority") == 0) {
         test_direct_local_class_argument_authority();
         puts("Direct-local class argument authority tests passed");
