@@ -344,9 +344,11 @@ static inline bool xa_builtin_receiver_matches_type(XrType *receiver, XaBuiltinR
 /* Instantiate the exact result declared by the generated Map entry-iterator
  * row.  Both semantic analysis and IR lowering consume this constructor, so
  * an imported/stale method signature cannot replace (K, V) with unknown at
- * the typed-IR boundary. */
+ * the typed-IR boundary. Type constructors allocate from the current analyzer
+ * pool; executable runtime identity is deliberately absent from this compiler
+ * authority. */
 static inline XrType *
-xa_builtin_map_entries_iterator_result_type(XrVMRuntime *X, XrType *receiver,
+xa_builtin_map_entries_iterator_result_type(XrType *receiver,
                                             XaBuiltinReceiverMethodId method_id) {
     const XaBuiltinReceiverMethodSpec *spec = xa_builtin_receiver_method_by_id(method_id);
     if (!spec || spec->method_id != XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR ||
@@ -355,11 +357,11 @@ xa_builtin_map_entries_iterator_result_type(XrVMRuntime *X, XrType *receiver,
         !xa_builtin_receiver_matches_type(receiver, spec->receiver))
         return NULL;
     XrType *entry_elements[2] = {receiver->map.key_type, receiver->map.value_type};
-    XrType *entry = xr_type_new_tuple(X, entry_elements, 2);
+    XrType *entry = xr_type_new_tuple(NULL, entry_elements, 2);
     if (!entry)
         return NULL;
     XrType *iterator_args[1] = {entry};
-    return xr_type_new_generic_instance(X, "Iterator", NULL, iterator_args, 1);
+    return xr_type_new_generic_instance(NULL, "Iterator", NULL, iterator_args, 1);
 }
 
 /* Does this parameter slot take a callback? Higher-order intrinsics propagate

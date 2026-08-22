@@ -7140,7 +7140,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             recv->type, ma->name, n, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
         if (exact_map_entries_iterator) {
             result_type = xa_builtin_map_entries_iterator_result_type(
-                l->isolate, recv->type, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
+                recv->type, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
             if (!result_type)
                 return NULL;
         }

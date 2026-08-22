@@ -2440,7 +2440,7 @@ static void lower_for_in_keyvalue(XiLower *l, AstNode *node) {
     XrType *key_type = coll->type->map.key_type;
     XrType *value_type = coll->type->map.value_type;
     XrType *iterator_type = xa_builtin_map_entries_iterator_result_type(
-        l->isolate, coll->type, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
+        coll->type, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
     if (!iterator_type)
         return;
     XrType *entry_type = (XrType *) xi_builtin_iterator_element_type(iterator_type);

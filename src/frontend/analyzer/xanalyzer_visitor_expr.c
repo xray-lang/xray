@@ -539,7 +539,7 @@ static XrType *xa_builtin_method_component_type(XaInferContext *ctx, XaBuiltinMe
         }
         case XA_BUILTIN_TYPE_ITERATOR_OF_MAP_ENTRY_TUPLE: {
             return xa_builtin_map_entries_iterator_result_type(
-                X, receiver, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
+                receiver, XA_BUILTIN_RECEIVER_METHOD_MAP_ENTRIES_ITERATOR);
         }
         case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE: {
             XrType *elem = receiver && receiver->container.element_type
