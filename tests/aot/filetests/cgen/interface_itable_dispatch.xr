@@ -1,12 +1,12 @@
 interface Shape {
-    area() -> int
+    area() -> i64
 }
 
 class A implements Shape {
     constructor() {
     }
 
-    area() -> int {
+    area() -> i64 {
         return 1
     }
 }
@@ -15,7 +15,7 @@ class B implements Shape {
     constructor() {
     }
 
-    area() -> int {
+    area() -> i64 {
         return 2
     }
 }
@@ -24,7 +24,7 @@ class C implements Shape {
     constructor() {
     }
 
-    area() -> int {
+    area() -> i64 {
         return 3
     }
 }
@@ -33,7 +33,7 @@ class D implements Shape {
     constructor() {
     }
 
-    area() -> int {
+    area() -> i64 {
         return 4
     }
 }
@@ -42,12 +42,12 @@ class E implements Shape {
     constructor() {
     }
 
-    area() -> int {
+    area() -> i64 {
         return 5
     }
 }
 
-fn score(shape: Shape) -> int {
+fn score(shape: Shape) -> i64 {
     return shape.area()
 }
 

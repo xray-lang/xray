@@ -11,7 +11,7 @@ import {
     Base64PaddingPolicy
 } from base64
 
-fn sameBytes(a: Array<byte>, b: Array<byte>) -> bool {
+fn sameBytes(a: Array<u8>, b: Array<u8>) -> bool {
     if (len(a) != len(b)) { return false }
     for (var i = 0; i < len(a); i++) {
         if (a[i] != b[i]) { return false }
@@ -19,16 +19,16 @@ fn sameBytes(a: Array<byte>, b: Array<byte>) -> bool {
     return true
 }
 
-fn nextState(state: int) -> int {
+fn nextState(state: i64) -> i64 {
     return (state * 48271) % 2147483647
 }
 
-fn fuzzBytes(length: int, seed: int) -> Array<byte> {
-    var out = Array<byte>(length)
+fn fuzzBytes(length: i64, seed: i64) -> Array<u8> {
+    var out = Array<u8>(length)
     var state = seed
     for (var i = 0; i < length; i++) {
         state = nextState(state)
-        out[i] = (state & 255) as byte
+        out[i] = (state & 255) as u8
     }
     return out
 }
@@ -47,7 +47,7 @@ fn urlDecodeOptions() -> Base64DecodeOptions {
     return options
 }
 
-fn errorCode(text: string) -> int {
+fn errorCode(text: string) -> i64 {
     try {
         var decoded = base64.decode(text)
         return -1 - len(decoded)
@@ -63,12 +63,12 @@ fn errorCode(text: string) -> int {
 
 var aggregate = 0
 for (var value = 0; value < 256; value++) {
-    var one = Array<byte>(1)
-    one[0] = value as byte
+    var one = Array<u8>(1)
+    one[0] = value as u8
     var encoded = base64.encode(one[:])
-    var encodedBytes: Slice<byte> = encoded.bytes()
+    var encodedBytes: Slice<u8> = encoded.bytes()
     for (var i = 0; i < len(encodedBytes); i++) {
-        var encodedByte: int = encodedBytes[i] as int
+        var encodedByte: i64 = encodedBytes[i] as i64
         aggregate = ((aggregate * 257) + encodedByte) % 1000000007
     }
 }

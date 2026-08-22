@@ -9,7 +9,7 @@ fn passPipe(p: Pipe) -> Pipe {
     return p
 }
 
-fn run(tag: int) {
+fn run(tag: i64) {
     var spawned = sys.Process.spawn("sh", ["-c", "exit 0"])
     if (spawned == null) {
         print("spawn-failed")

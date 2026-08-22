@@ -1,4 +1,4 @@
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 fn describeAssigned(user: User) -> string {
     var localName = ""

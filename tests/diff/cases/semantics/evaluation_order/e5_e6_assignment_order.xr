@@ -2,14 +2,14 @@
 // §3.0 E5: place subexpressions before the right-hand side.
 // §3.0 E6: every place subexpression of a compound assignment is evaluated
 // exactly once, including a complex receiver.
-fn t(tag: string, v: int) -> int { print(tag); return v }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 
 class Counter {
-    hits: int = 0
+    hits: i64 = 0
 }
 
 fn mk(tag: string) -> Counter { print(tag); return Counter() }
-fn mkArr(tag: string) -> Array<int> { print(tag); return [0, 0, 0] }
+fn mkArr(tag: string) -> Array<i64> { print(tag); return [0, 0, 0] }
 
 fn main() {
     print("-- index assign: index then value --")

@@ -1,6 +1,6 @@
 import parallel
 
-var plan = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)
 
 try {
     var result = plan.reduce(0..4, 0, (state, i) -> i, (a, b) -> {
@@ -13,7 +13,7 @@ try {
     print("caught")
 }
 
-const touched = Atomic<int>(0)
+const touched = Atomic<i64>(0)
 plan.forEach(0..4, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
 })

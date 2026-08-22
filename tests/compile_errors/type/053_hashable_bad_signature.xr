@@ -1,5 +1,5 @@
 class BadSig implements Hashable {
-    operator==(other: BadSig) -> int {
+    operator==(other: BadSig) -> i64 {
         return 1
     }
 

@@ -1,7 +1,7 @@
 import math
 import {
     PI as directPI,
-    MIN_INT as directMin,
+    MIN_I64 as directMin,
     INF as directInf,
     NAN as directNan
 } from math
@@ -10,9 +10,9 @@ print(math.PI > 3.0)
 print(directPI > 3.0)
 print(math.TAU > 6.0)
 print(math.EPSILON > 0.0)
-print(math.MIN_INT < 0)
-print(directMin == math.MIN_INT)
-print(math.INF > math.MAX_FLOAT)
-print(directInf > math.MAX_FLOAT)
+print(math.MIN_I64 < 0)
+print(directMin == math.MIN_I64)
+print(math.INF > math.MAX_F64)
+print(directInf > math.MAX_F64)
 print(math.NAN != math.NAN)
 print(directNan != directNan)

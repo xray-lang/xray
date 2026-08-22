@@ -1,5 +1,5 @@
 class Box {
-    value: float
+    value: f64
 
     constructor() {
         this.value = 5.0

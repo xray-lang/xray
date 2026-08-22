@@ -2,9 +2,9 @@
 // nothing to C, and a string argument used to reach libc as an object header.
 extern "C" {
     fn strlen(s: string) -> usize
-    fn takeArray(a: Array<int>) -> int
-    fn takeMap(m: Map<string, int>) -> int
-    fn makeArray() -> Array<int>
+    fn takeArray(a: Array<i64>) -> i64
+    fn takeMap(m: Map<string, i64>) -> i64
+    fn makeArray() -> Array<i64>
 }
 
 fn main() {

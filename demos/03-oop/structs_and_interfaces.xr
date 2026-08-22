@@ -5,10 +5,10 @@
 
 // === Struct (value type, no inheritance) ===
 struct Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    length() -> float {
+    length() -> f64 {
         return (this.x * this.x + this.y * this.y).sqrt()
     }
 
@@ -30,22 +30,22 @@ print("a + b = ${c.toString()}")
 
 // === Interface ===
 interface Shape {
-    area() -> float
+    area() -> f64
     describe() -> string
 }
 
 class Circle implements Shape {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14159 * this.radius * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14159 * this.radius * this.radius }
     describe() -> string { return "Circle(r=${this.radius})" }
 }
 
 class Rect implements Shape {
-    width: float
-    height: float
-    constructor(w: float, h: float) { this.width = w; this.height = h }
-    area() -> float { return this.width * this.height }
+    width: f64
+    height: f64
+    constructor(w: f64, h: f64) { this.width = w; this.height = h }
+    area() -> f64 { return this.width * this.height }
     describe() -> string { return "Rect(${this.width}x${this.height})" }
 }
 

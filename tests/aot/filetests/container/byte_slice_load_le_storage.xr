@@ -1,57 +1,57 @@
-fn read16(src: Slice<byte>, pos: int) -> int {
+fn read16(src: Slice<u8>, pos: i64) -> i64 {
     var value: u16 = src.load<u16>(pos, Endian.LE)
-    return int(value)
+    return (value as i64)
 }
 
-fn read32(src: Slice<byte>, pos: int) -> int {
+fn read32(src: Slice<u8>, pos: i64) -> i64 {
     var value: u32 = src.load<u32>(pos, Endian.LE)
-    return int(value)
+    return (value as i64)
 }
 
-fn read64(src: Slice<byte>, pos: int) -> int {
+fn read64(src: Slice<u8>, pos: i64) -> i64 {
     var value: u64 = src.load<u64>(pos, Endian.LE)
-    return int(value)
+    return (value as i64)
 }
 
-fn readI16(src: Slice<byte>, pos: int) -> int {
+fn readI16(src: Slice<u8>, pos: i64) -> i64 {
     var value: i16 = src.load<i16>(pos, Endian.LE)
-    return int(value)
+    return (value as i64)
 }
 
-fn readI32(src: Slice<byte>, pos: int) -> int {
+fn readI32(src: Slice<u8>, pos: i64) -> i64 {
     var value: i32 = src.load<i32>(pos, Endian.LE)
-    return int(value)
+    return (value as i64)
 }
 
-fn readF32(src: Slice<byte>, pos: int) -> f32 {
+fn readF32(src: Slice<u8>, pos: i64) -> f32 {
     var value: f32 = src.load<f32>(pos, Endian.LE)
     return value
 }
 
-fn readF64(src: Slice<byte>, pos: int) -> f64 {
+fn readF64(src: Slice<u8>, pos: i64) -> f64 {
     var value: f64 = src.load<f64>(pos, Endian.LE)
     return value
 }
 
-fn read32BE(src: Slice<byte>, pos: int) -> int {
+fn read32BE(src: Slice<u8>, pos: i64) -> i64 {
     var value: u32 = src.load<u32>(pos, Endian.BE)
-    return int(value)
+    return (value as i64)
 }
 
-fn write16(src: ref Slice<byte>, pos: int, value: u16) {
+fn write16(src: ref Slice<u8>, pos: i64, value: u16) {
     src.store<u16>(pos, value, Endian.LE)
 }
 
-fn writeI16(src: ref Slice<byte>, pos: int, value: i16) {
+fn writeI16(src: ref Slice<u8>, pos: i64, value: i16) {
     src.store<i16>(pos, value, Endian.LE)
 }
 
-fn writeF32(src: ref Slice<byte>, pos: int, value: f32) {
+fn writeF32(src: ref Slice<u8>, pos: i64, value: f32) {
     src.store<f32>(pos, value, Endian.LE)
 }
 
 fn runLoads() {
-    var bytes = Array<byte>(16, 0)
+    var bytes = Array<u8>(16, 0)
     bytes[0] = 1
     bytes[1] = 2
     bytes[2] = 3
@@ -68,7 +68,7 @@ fn runLoads() {
     print(readF32(bytes[:], 0))
     print(readF64(bytes[:], 0))
     print(read32BE(bytes[:], 0))
-    var bytesView: Slice<byte> = bytes[:]
+    var bytesView: Slice<u8> = bytes[:]
     write16(ref bytesView, 0, 0x1234)
     writeI16(ref bytesView, 2, -3)
     writeF32(ref bytesView, 4, 1.25)

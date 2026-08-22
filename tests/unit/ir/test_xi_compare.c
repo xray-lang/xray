@@ -601,7 +601,7 @@ static void run_fusion(FusionSpec spec) {
 TEST(cmp_int_const) {
     run_compare((CompareSpec) {
         .source = "var x = 42\nprint(x)",
-        .label = "int constant",
+        .label = "i64 constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
         .check_exec = true,
@@ -611,7 +611,7 @@ TEST(cmp_int_const) {
 TEST(cmp_float_const) {
     run_compare((CompareSpec) {
         .source = "var x = 3.14\nprint(x)",
-        .label = "float constant",
+        .label = "f64 constant",
         .expect_xi_success = true,
         .min_similarity = 0.3,
         .check_exec = true,
@@ -885,7 +885,7 @@ TEST(cmp_while_continue) {
 
 TEST(cmp_func_call) {
     run_compare((CompareSpec) {
-        .source = "fn add(a: int, b: int) -> int { return a + b }\n"
+        .source = "fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                   "var r = add(3, 4)\nprint(r)",
         .label = "function declaration and call",
         .expect_xi_success = true,
@@ -896,7 +896,7 @@ TEST(cmp_func_call) {
 
 TEST(cmp_func_recursive) {
     run_compare((CompareSpec) {
-        .source = "fn fib(n: int) -> int {\n"
+        .source = "fn fib(n: i64) -> i64 {\n"
                   "  if (n <= 1) { return n }\n"
                   "  return fib(n - 1) + fib(n - 2)\n"
                   "}\nprint(fib(7))",
@@ -969,7 +969,7 @@ TEST(cmp_mixed_arith) {
 
 TEST(cmp_nested_call) {
     run_compare((CompareSpec) {
-        .source = "fn add(a: int, b: int) -> int { return a + b }\n"
+        .source = "fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                   "print(add(1, add(2, 3)))",
         .label = "nested function calls",
         .expect_xi_success = true,
@@ -980,7 +980,7 @@ TEST(cmp_nested_call) {
 
 TEST(cmp_func_early_return) {
     run_compare((CompareSpec) {
-        .source = "fn abs(n: int) -> int {\n"
+        .source = "fn abs(n: i64) -> i64 {\n"
                   "  if (n < 0) { return -n }\n"
                   "  return n\n"
                   "}\nprint(abs(-5))\nprint(abs(3))",
@@ -993,7 +993,7 @@ TEST(cmp_func_early_return) {
 
 TEST(cmp_factorial) {
     run_compare((CompareSpec) {
-        .source = "fn fact(n: int) -> int {\n"
+        .source = "fn fact(n: i64) -> i64 {\n"
                   "  if (n <= 1) { return 1 }\n"
                   "  return n * fact(n - 1)\n"
                   "}\nprint(fact(6))",
@@ -1010,7 +1010,7 @@ TEST(cmp_float_arith) {
     run_compare((CompareSpec) {
         .source = "var x = 3.14\nvar y = 2.0\n"
                   "print(x + y)\nprint(x * y)",
-        .label = "float arithmetic",
+        .label = "f64 arithmetic",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1100,8 +1100,8 @@ TEST(cmp_bool_logic) {
 
 TEST(cmp_multi_func) {
     run_compare((CompareSpec) {
-        .source = "fn double(x: int) -> int { return x * 2 }\n"
-                  "fn inc(x: int) -> int { return x + 1 }\n"
+        .source = "fn double(x: i64) -> i64 { return x * 2 }\n"
+                  "fn inc(x: i64) -> i64 { return x + 1 }\n"
                   "print(inc(double(3)))",
         .label = "multiple function declarations and chained calls",
         .expect_xi_success = true,
@@ -1305,8 +1305,8 @@ TEST(cmp_for_in_range) {
 
 TEST(cmp_closure_capture) {
     run_compare((CompareSpec) {
-        .source = "fn make_adder(x: int) -> fn(int) -> int {\n"
-                  "  fn adder(y: int) -> int { return x + y }\n"
+        .source = "fn make_adder(x: i64) -> fn(i64) -> i64 {\n"
+                  "  fn adder(y: i64) -> i64 { return x + y }\n"
                   "  return adder\n"
                   "}\n"
                   "var add5 = make_adder(5)\n"
@@ -1324,9 +1324,9 @@ TEST(cmp_type_convert) {
     /* as cast: type matches -> value passes through */
     run_compare((CompareSpec) {
         .source = "var x: JSON.Value = 42\n"
-                  "var y = x as int\n"
+                  "var y = x as i64\n"
                   "print(y)",
-        .label = "as cast: JSON.Value(int) as int succeeds",
+        .label = "as cast: JSON.Value(i64) as i64 succeeds",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1350,9 +1350,9 @@ TEST(cmp_as_safe_mismatch) {
     /* as? (safe cast) -> type mismatch -> null */
     run_compare((CompareSpec) {
         .source = "var x: JSON.Value = \"hello\"\n"
-                  "var y = x as int?\n"
+                  "var y = x as i64?\n"
                   "print(y)",
-        .label = "as? safe cast: JSON.Value(string) as int? -> null",
+        .label = "as? safe cast: JSON.Value(string) as i64? -> null",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1363,9 +1363,9 @@ TEST(cmp_as_unsafe_mismatch) {
     /* as (unsafe cast) -> type mismatch -> throw (both legacy and Xi throw) */
     run_compare((CompareSpec) {
         .source = "var x: JSON.Value = \"hello\"\n"
-                  "var y = x as int\n"
+                  "var y = x as i64\n"
                   "print(y)",
-        .label = "as unsafe cast: JSON.Value(string) as int -> throw",
+        .label = "as unsafe cast: JSON.Value(string) as i64 -> throw",
         .expect_xi_success = true,
         .min_similarity = 0.2,
         .check_exec = true,
@@ -1377,10 +1377,10 @@ TEST(cmp_as_unsafe_mismatch) {
 
 TEST(cmp_nullish_coalesce) {
     run_compare((CompareSpec) {
-        .source = "var a: int? = null\n"
+        .source = "var a: i64? = null\n"
                   "var b = a ?? 42\n"
                   "print(b)\n"
-                  "var c: int? = 10\n"
+                  "var c: i64? = 10\n"
                   "var d = c ?? 99\n"
                   "print(d)",
         .label = "nullish coalesce operator",
@@ -1431,7 +1431,7 @@ TEST(cmp_slice) {
     run_compare((CompareSpec) {
         .source = "fn printSlice() {\n"
                   "  var arr = [1, 2, 3, 4, 5]\n"
-                  "  var s: Slice<int> = arr[1:3]\n"
+                  "  var s: Slice<i64> = arr[1:3]\n"
                   "  print(s)\n"
                   "}\n"
                   "printSlice()",
@@ -1446,9 +1446,9 @@ TEST(cmp_slice) {
 
 TEST(cmp_nested_func_scope) {
     run_compare((CompareSpec) {
-        .source = "fn outer() -> int {\n"
+        .source = "fn outer() -> i64 {\n"
                   "  var x = 10\n"
-                  "  fn inner() -> int { return x * 2 }\n"
+                  "  fn inner() -> i64 { return x * 2 }\n"
                   "  return inner()\n"
                   "}\nprint(outer())",
         .label = "nested function accessing outer scope",
@@ -1477,7 +1477,7 @@ TEST(cmp_func_no_return) {
 
 TEST(cmp_optional_chain) {
     run_compare((CompareSpec) {
-        .source = "var x: int? = null\n"
+        .source = "var x: i64? = null\n"
                   "var v = x ?? -1\n"
                   "print(v)",
         .label = "nullable with nullish coalesce fallback",
@@ -1518,8 +1518,8 @@ TEST(cmp_string_method) {
 
 TEST(cmp_higher_order) {
     run_compare((CompareSpec) {
-        .source = "fn makeAdder(x: int) -> fn(int) -> int {\n"
-                  "    return fn(y: int) -> int { return x + y }\n"
+        .source = "fn makeAdder(x: i64) -> fn(i64) -> i64 {\n"
+                  "    return fn(y: i64) -> i64 { return x + y }\n"
                   "}\n"
                   "var add5 = makeAdder(5)\n"
                   "print(add5(3))\n"
@@ -1570,7 +1570,7 @@ TEST(cmp_for_in_string) {
 
 TEST(cmp_array_sum_func) {
     run_compare((CompareSpec) {
-        .source = "fn sum(arr: Array<int>) -> int {\n"
+        .source = "fn sum(arr: Array<i64>) -> i64 {\n"
                   "    var total = 0\n"
                   "    for (x in arr) {\n"
                   "        total += x\n"
@@ -1590,8 +1590,8 @@ TEST(cmp_array_sum_func) {
 TEST(cmp_multi_closure) {
     run_compare((CompareSpec) {
         .source = "var x = 10\n"
-                  "var add = fn(a: int) -> int { return a + x }\n"
-                  "var mul = fn(a: int) -> int { return a * x }\n"
+                  "var add = fn(a: i64) -> i64 { return a + x }\n"
+                  "var mul = fn(a: i64) -> i64 { return a * x }\n"
                   "print(add(5))\n"
                   "print(mul(3))",
         .label = "multiple closures capturing same variable",
@@ -1605,7 +1605,7 @@ TEST(cmp_multi_closure) {
 
 TEST(cmp_fibonacci) {
     run_compare((CompareSpec) {
-        .source = "fn fib(n: int) -> int {\n"
+        .source = "fn fib(n: i64) -> i64 {\n"
                   "    if (n <= 1) { return n }\n"
                   "    return fib(n - 1) + fib(n - 2)\n"
                   "}\n"
@@ -1621,10 +1621,10 @@ TEST(cmp_fibonacci) {
 
 TEST(cmp_transitive_capture) {
     run_compare((CompareSpec) {
-        .source = "fn outer() -> int {\n"
+        .source = "fn outer() -> i64 {\n"
                   "    var x = 10\n"
-                  "    fn middle() -> int {\n"
-                  "        fn inner() -> int { return x + 1 }\n"
+                  "    fn middle() -> i64 {\n"
+                  "        fn inner() -> i64 { return x + 1 }\n"
                   "        return inner()\n"
                   "    }\n"
                   "    return middle()\n"
@@ -1641,9 +1641,9 @@ TEST(cmp_transitive_capture) {
 
 TEST(cmp_closure_counter) {
     run_compare((CompareSpec) {
-        .source = "fn counter() -> fn() -> int {\n"
+        .source = "fn counter() -> fn() -> i64 {\n"
                   "    var n = 0\n"
-                  "    return fn() -> int { n += 1; return n }\n"
+                  "    return fn() -> i64 { n += 1; return n }\n"
                   "}\n"
                   "var c = counter()\n"
                   "print(c())\n"
@@ -1660,11 +1660,11 @@ TEST(cmp_closure_counter) {
 
 TEST(cmp_compose) {
     run_compare((CompareSpec) {
-        .source = "fn compose(f: fn(int) -> int, g: fn(int) -> int) -> fn(int) -> int {\n"
-                  "    return fn(x: int) -> int { return f(g(x)) }\n"
+        .source = "fn compose(f: fn(i64) -> i64, g: fn(i64) -> i64) -> fn(i64) -> i64 {\n"
+                  "    return fn(x: i64) -> i64 { return f(g(x)) }\n"
                   "}\n"
-                  "fn add1(x: int) -> int { return x + 1 }\n"
-                  "fn mul2(x: int) -> int { return x * 2 }\n"
+                  "fn add1(x: i64) -> i64 { return x + 1 }\n"
+                  "fn mul2(x: i64) -> i64 { return x * 2 }\n"
                   "var h = compose(add1, mul2)\n"
                   "print(h(5))",
         .label = "function composition capturing two params",
@@ -1678,11 +1678,11 @@ TEST(cmp_compose) {
 
 TEST(cmp_apply_fn) {
     run_compare((CompareSpec) {
-        .source = "fn apply(f: fn(int) -> int, x: int) -> int {\n"
+        .source = "fn apply(f: fn(i64) -> i64, x: i64) -> i64 {\n"
                   "    return f(x)\n"
                   "}\n"
-                  "fn double(x: int) -> int { return x * 2 }\n"
-                  "fn square(x: int) -> int { return x * x }\n"
+                  "fn double(x: i64) -> i64 { return x * 2 }\n"
+                  "fn square(x: i64) -> i64 { return x * x }\n"
                   "print(apply(double, 5))\n"
                   "print(apply(square, 4))",
         .label = "higher-order apply with function params",
@@ -1713,11 +1713,11 @@ TEST(cmp_find_max) {
 
 TEST(cmp_mutual_recursion) {
     run_compare((CompareSpec) {
-        .source = "fn is_even(n: int) -> bool {\n"
+        .source = "fn is_even(n: i64) -> bool {\n"
                   "    if (n == 0) { return true }\n"
                   "    return is_odd(n - 1)\n"
                   "}\n"
-                  "fn is_odd(n: int) -> bool {\n"
+                  "fn is_odd(n: i64) -> bool {\n"
                   "    if (n == 0) { return false }\n"
                   "    return is_even(n - 1)\n"
                   "}\n"
@@ -1734,7 +1734,7 @@ TEST(cmp_mutual_recursion) {
 
 TEST(cmp_power) {
     run_compare((CompareSpec) {
-        .source = "fn power(base: int, exp: int) -> int {\n"
+        .source = "fn power(base: i64, exp: i64) -> i64 {\n"
                   "    if (exp == 0) { return 1 }\n"
                   "    return base * power(base, exp - 1)\n"
                   "}\n"
@@ -1750,7 +1750,7 @@ TEST(cmp_power) {
 
 TEST(cmp_gcd) {
     run_compare((CompareSpec) {
-        .source = "fn gcd(a: int, b: int) -> int {\n"
+        .source = "fn gcd(a: i64, b: i64) -> i64 {\n"
                   "    if (b == 0) { return a }\n"
                   "    return gcd(b, a % b)\n"
                   "}\n"
@@ -1769,9 +1769,9 @@ TEST(cmp_gcd) {
 TEST(cmp_class_basic) {
     run_compare((CompareSpec) {
         .source = "class Point {\n"
-                  "    x: int\n"
-                  "    y: int\n"
-                  "    constructor(x: int, y: int) {\n"
+                  "    x: i64\n"
+                  "    y: i64\n"
+                  "    constructor(x: i64, y: i64) {\n"
                   "        this.x = x\n"
                   "        this.y = y\n"
                   "    }\n"
@@ -1791,7 +1791,7 @@ TEST(cmp_class_basic) {
 TEST(cmp_class_method) {
     run_compare((CompareSpec) {
         .source = "class Box {\n"
-                  "    value: int\n"
+                  "    value: i64\n"
                   "    constructor(v) {\n"
                   "        this.value = v\n"
                   "    }\n"
@@ -1890,8 +1890,8 @@ TEST(cmp_for_in_map) {
 
 TEST(cmp_closure_adder) {
     run_compare((CompareSpec) {
-        .source = "fn make_adder(n: int) -> fn(int) -> int {\n"
-                  "    return fn(x: int) -> int { return x + n }\n"
+        .source = "fn make_adder(n: i64) -> fn(i64) -> i64 {\n"
+                  "    return fn(x: i64) -> i64 { return x + n }\n"
                   "}\n"
                   "var add5 = make_adder(5)\n"
                   "var add10 = make_adder(10)\n"
@@ -1906,9 +1906,9 @@ TEST(cmp_closure_adder) {
 
 TEST(cmp_closure_accumulator) {
     run_compare((CompareSpec) {
-        .source = "fn make_acc() -> fn(int) -> int {\n"
+        .source = "fn make_acc() -> fn(i64) -> i64 {\n"
                   "    var total = 0\n"
-                  "    return fn(n: int) -> int { total += n; return total }\n"
+                  "    return fn(n: i64) -> i64 { total += n; return total }\n"
                   "}\n"
                   "var acc = make_acc()\n"
                   "print(acc(5))\n"
@@ -1925,10 +1925,10 @@ TEST(cmp_closure_accumulator) {
 
 TEST(cmp_nested_closure) {
     run_compare((CompareSpec) {
-        .source = "fn outer() -> fn() -> fn() -> int {\n"
+        .source = "fn outer() -> fn() -> fn() -> i64 {\n"
                   "    var val = 42\n"
-                  "    return fn() -> fn() -> int {\n"
-                  "        return fn() -> int { return val }\n"
+                  "    return fn() -> fn() -> i64 {\n"
+                  "        return fn() -> i64 { return val }\n"
                   "    }\n"
                   "}\n"
                   "print(outer()()())",
@@ -1983,7 +1983,7 @@ TEST(cmp_destructure_object) {
 
 TEST(cmp_multi_var_decl) {
     run_compare((CompareSpec) {
-        .source = "fn pair() -> (int, int) { return (10, 20) }\n"
+        .source = "fn pair() -> (i64, i64) { return (10, 20) }\n"
                   "var (x, y) = pair()\n"
                   "print(x)\n"
                   "print(y)",
@@ -2091,7 +2091,7 @@ TEST(cmp_chan_new_unbuf) {
 
 TEST(cmp_chan_new_buffered) {
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = Channel(4)\nprint(typeName(ch))",
+        .source = "const ch: Channel<i64> = Channel(4)\nprint(typeName(ch))",
         .label = "Channel(N) -> buffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -2102,7 +2102,7 @@ TEST(cmp_chan_new_buffered) {
 TEST(cmp_chan_send_recv_buffered) {
     /* Buffered channel: send then recv on same coro works without scheduling */
     run_compare((CompareSpec) {
-        .source = "const ch: Channel<int> = Channel(2)\n"
+        .source = "const ch: Channel<i64> = Channel(2)\n"
                   "ch.send(10)\n"
                   "ch.send(20)\n"
                   "print(ch.recv())\n"
@@ -2115,7 +2115,7 @@ TEST(cmp_chan_send_recv_buffered) {
 }
 
 TEST(cmp_chan_recv_match_uses_raw_opcode) {
-    const char *src = "const ch: Channel<int?> = Channel(2)\n"
+    const char *src = "const ch: Channel<i64?> = Channel(2)\n"
                       "ch.send(0)\n"
                       "ch.send(null)\n"
                       "var zero = match (ch.recv()) {\n"
@@ -2161,8 +2161,8 @@ TEST(cmp_go_simple) {
 TEST(cmp_go_with_chan) {
     /* go + channel: producer/consumer pattern */
     run_compare((CompareSpec) {
-        .source = "fn producer(ch: Channel<int>) { ch.send(42) }\n"
-                  "const ch: Channel<int> = Channel(1)\n"
+        .source = "fn producer(ch: Channel<i64>) { ch.send(42) }\n"
+                  "const ch: Channel<i64> = Channel(1)\n"
                   "var task = go producer(ch)\n"
                   "print(ch.recv())\n"
                   "await task",
@@ -2201,10 +2201,10 @@ TEST(cmp_scope_basic) {
 TEST(cmp_select_recv) {
     /* select with channel recv */
     run_compare((CompareSpec) {
-        .source = "fn producer(ch: Channel<int>) {\n"
+        .source = "fn producer(ch: Channel<i64>) {\n"
                   "  ch.send(42)\n"
                   "}\n"
-                  "const ch: Channel<int> = Channel(1)\n"
+                  "const ch: Channel<i64> = Channel(1)\n"
                   "go producer(ch)\n"
                   "select {\n"
                   "  msg from ch -> {\n"
@@ -2221,7 +2221,7 @@ TEST(cmp_select_recv) {
 TEST(cmp_await_all) {
     /* await [t1, t2] — wait for all */
     run_compare((CompareSpec) {
-        .source = "fn double(x: int) -> int {\n"
+        .source = "fn double(x: i64) -> i64 {\n"
                   "  return x * 2\n"
                   "}\n"
                   "var t1 = go double(10)\n"
@@ -2238,7 +2238,7 @@ TEST(cmp_await_all) {
 TEST(cmp_await_any) {
     /* await any [t1, t2] — wait for first */
     run_compare((CompareSpec) {
-        .source = "fn double(x: int) -> int {\n"
+        .source = "fn double(x: i64) -> i64 {\n"
                   "  return x * 2\n"
                   "}\n"
                   "var t1 = go double(10)\n"
@@ -2256,7 +2256,7 @@ TEST(cmp_await_any) {
 
 TEST(fusion_addi) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x + 1 }\nprint(f(10))",
+        .source = "fn f(x: i64) -> i64 { return x + 1 }\nprint(f(10))",
         .label = "ADDI: x + small_const",
         .expect_op = OP_ADDI,
         .check_exec = true,
@@ -2265,7 +2265,7 @@ TEST(fusion_addi) {
 
 TEST(fusion_addi_commutative) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return 3 + x }\nprint(f(10))",
+        .source = "fn f(x: i64) -> i64 { return 3 + x }\nprint(f(10))",
         .label = "ADDI commutative: small_const + x",
         .expect_op = OP_ADDI,
         .check_exec = true,
@@ -2274,7 +2274,7 @@ TEST(fusion_addi_commutative) {
 
 TEST(fusion_subi) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x - 3 }\nprint(f(10))",
+        .source = "fn f(x: i64) -> i64 { return x - 3 }\nprint(f(10))",
         .label = "SUBI: x - small_const",
         .expect_op = OP_SUBI,
         .check_exec = true,
@@ -2283,7 +2283,7 @@ TEST(fusion_subi) {
 
 TEST(fusion_muli) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x * 7 }\nprint(f(5))",
+        .source = "fn f(x: i64) -> i64 { return x * 7 }\nprint(f(5))",
         .label = "MULI: x * small_const",
         .expect_op = OP_MULI,
         .check_exec = true,
@@ -2292,7 +2292,7 @@ TEST(fusion_muli) {
 
 TEST(fusion_muli_commutative) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return 7 * x }\nprint(f(5))",
+        .source = "fn f(x: i64) -> i64 { return 7 * x }\nprint(f(5))",
         .label = "MULI commutative: small_const * x",
         .expect_op = OP_MULI,
         .check_exec = true,
@@ -2301,7 +2301,7 @@ TEST(fusion_muli_commutative) {
 
 TEST(fusion_addk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x + 40000 }\nprint(f(10))",
+        .source = "fn f(x: i64) -> i64 { return x + 40000 }\nprint(f(10))",
         .label = "ADDK: x + large_const",
         .expect_op = OP_ADDK,
         .check_exec = true,
@@ -2310,7 +2310,7 @@ TEST(fusion_addk) {
 
 TEST(fusion_addk_commutative) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return 40000 + x }\nprint(f(10))",
+        .source = "fn f(x: i64) -> i64 { return 40000 + x }\nprint(f(10))",
         .label = "ADDK commutative: large_const + x",
         .expect_op = OP_ADDK,
         .check_exec = true,
@@ -2319,7 +2319,7 @@ TEST(fusion_addk_commutative) {
 
 TEST(fusion_subk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x - 40000 }\nprint(f(50000))",
+        .source = "fn f(x: i64) -> i64 { return x - 40000 }\nprint(f(50000))",
         .label = "SUBK: x - large_const",
         .expect_op = OP_SUBK,
         .check_exec = true,
@@ -2328,7 +2328,7 @@ TEST(fusion_subk) {
 
 TEST(fusion_mulk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x * 40000 }\nprint(f(3))",
+        .source = "fn f(x: i64) -> i64 { return x * 40000 }\nprint(f(3))",
         .label = "MULK: x * large_const",
         .expect_op = OP_MULK,
         .check_exec = true,
@@ -2337,7 +2337,7 @@ TEST(fusion_mulk) {
 
 TEST(fusion_mulk_commutative) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return 40000 * x }\nprint(f(3))",
+        .source = "fn f(x: i64) -> i64 { return 40000 * x }\nprint(f(3))",
         .label = "MULK commutative: large_const * x",
         .expect_op = OP_MULK,
         .check_exec = true,
@@ -2346,7 +2346,7 @@ TEST(fusion_mulk_commutative) {
 
 TEST(fusion_divk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x / 40000 }\nprint(f(80000))",
+        .source = "fn f(x: i64) -> i64 { return x / 40000 }\nprint(f(80000))",
         .label = "DIVK: x / large_const",
         .expect_op = OP_DIVK,
         .check_exec = true,
@@ -2355,7 +2355,7 @@ TEST(fusion_divk) {
 
 TEST(fusion_modk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x % 40000 }\nprint(f(123456))",
+        .source = "fn f(x: i64) -> i64 { return x % 40000 }\nprint(f(123456))",
         .label = "MODK: x % large_const",
         .expect_op = OP_MODK,
         .check_exec = true,
@@ -2364,7 +2364,7 @@ TEST(fusion_modk) {
 
 TEST(fusion_lti_branch) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) { if (x < 10) { print(1) } else { print(0) } }\nf(5)",
+        .source = "fn f(x: i64) { if (x < 10) { print(1) } else { print(0) } }\nf(5)",
         .label = "LTI: branch x < small_const",
         .expect_op = OP_LTI,
         .check_exec = true,
@@ -2373,7 +2373,7 @@ TEST(fusion_lti_branch) {
 
 TEST(fusion_eqi_branch) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) { if (x == 5) { print(1) } else { print(0) } }\nf(5)",
+        .source = "fn f(x: i64) { if (x == 5) { print(1) } else { print(0) } }\nf(5)",
         .label = "EQI: branch x == small_const",
         .expect_op = OP_EQI,
         .check_exec = true,
@@ -2382,7 +2382,7 @@ TEST(fusion_eqi_branch) {
 
 TEST(fusion_lei_branch) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) { if (x <= 10) { print(1) } else { print(0) } }\nf(10)",
+        .source = "fn f(x: i64) { if (x <= 10) { print(1) } else { print(0) } }\nf(10)",
         .label = "LEI: branch x <= small_const",
         .expect_op = OP_LEI,
         .check_exec = true,

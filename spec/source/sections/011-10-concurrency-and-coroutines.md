@@ -39,12 +39,12 @@ GoOption ::= 'name' ':' StringLiteral
 var t1 = go worker(0, channel)
 
 // 内联逻辑：lambda 也必须形成完整调用，并显式传参
-var t2 = go fn(d: JSON.Object) -> int {
+var t2 = go fn(d: JSON.Object) -> i64 {
     return d.value * 2
 }(payload)
 
 // 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法
-var t3 = go fn() -> int {
+var t3 = go fn() -> i64 {
     return compute()
 }()
 
@@ -56,7 +56,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 ```xray @id=coro-move-argument
 var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> int {
+var task = go fn(d: JSON.Object) -> i64 {
     return d.value + 1
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
@@ -65,7 +65,7 @@ var task = go fn(d: JSON.Object) -> int {
 
 ```xray
 var n = 10
-var task = go fn(x: int) -> int {
+var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
@@ -75,7 +75,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `JSON.Object` / `JSON.Value` 的复合 arm / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
+- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `JSON.Object` / `JSON.Value` 的复合 arm / `Array<u8>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
 - `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
@@ -97,10 +97,10 @@ var result = await task                    // 让出当前协程直到 task 完�
 var t1 = go compute(2)
 var t2 = go compute(3)
 var t3 = go compute(4)
-var results: Array<int> = await all [t1, t2, t3]
+var results: Array<i64> = await all [t1, t2, t3]
 // 也可直接对变量使用，无需中括号
 var tasks = [t1, t2, t3]
-var results2: Array<int> = await all tasks
+var results2: Array<i64> = await all tasks
 
 // await any：等待任一完成，返回该任务结果；其他任务继续运行
 var first = await any [t1, t2, t3]
@@ -124,7 +124,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
-- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<i64>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
 
 ### 10.4 `Task<T>` 句柄
 
@@ -137,7 +137,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 | `t.cancel()` | `() -> ()` | 请求取消任务（合作式） |
 | `t.poll()` | `() -> TaskResult<T>` | 非阻塞观察；未完成返回 `TaskResult.Pending` |
 | `t.awaitResult()` | `() -> TaskResult<T>` | 阻塞等待并返回状态结果，不重抛异常 |
-| `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
+| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
 
 ```xray @id=coro-task-handle
 var t = go fetch(url)
@@ -169,8 +169,8 @@ ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
 
 ```xray @id=channel-decl-variants
-const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
-const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
+const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
 const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
@@ -183,13 +183,13 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 | `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
 | `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | 非阻塞接收；空时返回 `Recv.Empty` |
-| `sendTimeout(v, ms)` | `(T, int) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
-| `recvTimeout(ms)` | `(int) -> Recv<T>` | 带超时接收；超时返回 `Recv.Timeout` |
+| `sendTimeout(v, ms)` | `(T, i64) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(i64) -> Recv<T>` | 带超时接收；超时返回 `Recv.Timeout` |
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray @id=channel-basic-ops
-const ch = Channel<int>(10)
+const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -219,7 +219,7 @@ var value = ch.recvOr(-1)
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
 ```xray @id=channel-param-type
-fn producer(ch: Channel<int>) {
+fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
@@ -245,8 +245,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-const ch1 = Channel<int>(2)
-const ch2 = Channel<int>(2)
+const ch1 = Channel<i64>(2)
+const ch2 = Channel<i64>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -312,9 +312,9 @@ try {
 }
 
 // scope：保留 task handle，块退出后逐个观察 outcome
-var first: Task<int>?
-var second: Task<int>?
-var third: Task<int>?
+var first: Task<i64>?
+var second: Task<i64>?
+var third: Task<i64>?
 scope {
     first = go failing("error1")
     second = go failing("error2")
@@ -342,18 +342,18 @@ MoveExpr ::= 'move' Identifier
 跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.14 的唯一性证据，而不是另一套并发专用规则。
 
 ```xray @id=coro-move-transfer
-var buf = Array<byte>(1024 * 1024)
+var buf = Array<u8>(1024 * 1024)
 
 // 移交给协程
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
 // print(len(buf))
 
 // 移交给 channel
-const ch = Channel<Array<byte>>(1)
-var payload = Array<byte>(4096)
+const ch = Channel<Array<u8>>(1)
+var payload = Array<u8>(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -370,7 +370,7 @@ xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式�
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
 | `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
-| `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
+| `Atomic<T>` | 无锁原子包装 | 对 `i64`/`f64`/`bool` 提供 C11 原子操作 |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
 
@@ -378,14 +378,14 @@ xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式�
 
 #### `Atomic<T>` — 无锁原子类型
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
+`Atomic<T>` 包装 `i64`、`f64` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
 
 **声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
 
 ```xray
-const counter = Atomic(0)         // Atomic<int>
+const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
-const rate = Atomic(3.14)         // Atomic<float>
+const rate = Atomic(3.14)         // Atomic<f64>
 ```
 
 **方法一览**（完整签名见 §14.19）：
@@ -394,7 +394,7 @@ const rate = Atomic(3.14)         // Atomic<float>
 |---|---|
 | `load(ord?)` | 原子读取 |
 | `store(val, ord?)` | 原子写入 |
-| `add(val, ord?)` / `sub(val, ord?)` | 原子加减（int/float） |
+| `add(val, ord?)` / `sub(val, ord?)` | 原子加减（i64/f64） |
 | `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | 原子加减并返回旧值 |
 | `swap(val, ord?)` | 原子交换，返回旧值 |
 | `compareExchange(expected, desired, ord?)` | CAS，返回 `(old, bool)` |
@@ -518,12 +518,12 @@ GoOption ::= 'name' ':' StringLiteral
 var t1 = go worker(0, channel)
 
 // Inline logic: a lambda must still form a complete call with explicit arguments
-var t2 = go fn(d: JSON.Object) -> int {
+var t2 = go fn(d: JSON.Object) -> i64 {
     return d.value * 2
 }(payload)
 
 // Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist
-var t3 = go fn() -> int {
+var t3 = go fn() -> i64 {
     return compute()
 }()
 
@@ -535,7 +535,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 ```xray @id=coro-move-argument
 var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> int {
+var task = go fn(d: JSON.Object) -> i64 {
     return d.value + 1
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
@@ -544,7 +544,7 @@ var task = go fn(d: JSON.Object) -> int {
 
 ```xray
 var n = 10
-var task = go fn(x: int) -> int {
+var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
@@ -554,7 +554,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Execution-local heap values (`Array` / `Map` / `Set` / `JSON.Object` / composite `JSON.Value` arms / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
+- Execution-local heap values (`Array` / `Map` / `Set` / `JSON.Object` / composite `JSON.Value` arms / `Array<u8>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
 - `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
 - An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
 - `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
@@ -576,10 +576,10 @@ var result = await task                    // yields the current coroutine until
 var t1 = go compute(2)
 var t2 = go compute(3)
 var t3 = go compute(4)
-var results: Array<int> = await all [t1, t2, t3]
+var results: Array<i64> = await all [t1, t2, t3]
 // also works on a variable directly, no brackets needed
 var tasks = [t1, t2, t3]
-var results2: Array<int> = await all tasks
+var results2: Array<i64> = await all tasks
 
 // await any: wait for the first to complete, return its result; the others keep running
 var first = await any [t1, t2, t3]
@@ -603,7 +603,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
-- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / `JSON.Value` result type.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<i64>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / `JSON.Value` result type.
 
 ### 10.4 `Task<T>` handle
 
@@ -616,7 +616,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 | `t.cancel()` | `() -> ()` | Request cooperative cancellation |
 | `t.poll()` | `() -> TaskResult<T>` | Non-blocking observation; returns `TaskResult.Pending` while incomplete |
 | `t.awaitResult()` | `() -> TaskResult<T>` | Waits and returns a status result without rethrowing |
-| `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
+| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
 
 ```xray @id=coro-task-handle
 var t = go fetch(url)
@@ -648,8 +648,8 @@ ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
 
 ```xray @id=channel-decl-variants
-const ch  = Channel<int>(10)    // buffered, capacity = 10
-const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+const ch  = Channel<i64>(10)    // buffered, capacity = 10
+const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)
 const cha = Channel(3)          // element type inferred from the first send
 ```
 
@@ -662,13 +662,13 @@ const cha = Channel(3)          // element type inferred from the first send
 | `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
 | `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
-| `sendTimeout(v, ms)` | `(T, int) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
-| `recvTimeout(ms)` | `(int) -> Recv<T>` | Receive with timeout; timeout returns `Recv.Timeout` |
+| `sendTimeout(v, ms)` | `(T, i64) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(i64) -> Recv<T>` | Receive with timeout; timeout returns `Recv.Timeout` |
 | `close()` | `() -> ()` | Close the channel; idempotent |
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray @id=channel-basic-ops
-const ch = Channel<int>(10)
+const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -698,7 +698,7 @@ var value = ch.recvOr(-1)
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 
 ```xray @id=channel-param-type
-fn producer(ch: Channel<int>) {
+fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
@@ -724,8 +724,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray @id=coro-select
-const ch1 = Channel<int>(2)
-const ch2 = Channel<int>(2)
+const ch1 = Channel<i64>(2)
+const ch2 = Channel<i64>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -791,9 +791,9 @@ try {
 }
 
 // scope: keep task handles and inspect each outcome after the block
-var first: Task<int>?
-var second: Task<int>?
-var third: Task<int>?
+var first: Task<i64>?
+var second: Task<i64>?
+var third: Task<i64>?
 scope {
     first = go failing("error1")
     second = go failing("error2")
@@ -821,18 +821,18 @@ MoveExpr ::= 'move' Identifier
 A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.14, not on a separate concurrency-only rule.
 
 ```xray @id=coro-move-transfer
-var buf = Array<byte>(1024 * 1024)
+var buf = Array<u8>(1024 * 1024)
 
 // hand off to a coroutine
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
 // print(len(buf))
 
 // hand off to a channel
-const ch = Channel<Array<byte>>(1)
-var payload = Array<byte>(4096)
+const ch = Channel<Array<u8>>(1)
+var payload = Array<u8>(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
@@ -849,7 +849,7 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
 | `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
-| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
+| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `i64`/`f64`/`bool` |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
 
@@ -857,14 +857,14 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 
 #### `Atomic<T>` — lock-free atomic type
 
-`Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
+`Atomic<T>` wraps `i64`, `f64`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
 
 **Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
 
 ```xray
-const counter = Atomic(0)         // Atomic<int>
+const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
-const rate = Atomic(3.14)         // Atomic<float>
+const rate = Atomic(3.14)         // Atomic<f64>
 ```
 
 **Method overview** (full signatures in §14.19):
@@ -873,7 +873,7 @@ const rate = Atomic(3.14)         // Atomic<float>
 |---|---|
 | `load(ord?)` | Atomic read |
 | `store(val, ord?)` | Atomic write |
-| `add(val, ord?)` / `sub(val, ord?)` | Atomic add/subtract (int/float) |
+| `add(val, ord?)` / `sub(val, ord?)` | Atomic add/subtract (i64/f64) |
 | `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | Atomic add/subtract returning old value |
 | `swap(val, ord?)` | Atomic swap, returns old value |
 | `compareExchange(expected, desired, ord?)` | CAS, returns `(old, bool)` |

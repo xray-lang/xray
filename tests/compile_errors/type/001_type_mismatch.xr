@@ -1,4 +1,4 @@
 // 001_type_mismatch.xr
 // Expected: Compile error - type mismatch
 // Error should mention: type mismatch, cannot assign
-var x: int = "hello"
+var x: i64 = "hello"

@@ -1,4 +1,4 @@
-fn child() -> int {
+fn child() -> i64 {
     print("child must not start")
     return 1
 }

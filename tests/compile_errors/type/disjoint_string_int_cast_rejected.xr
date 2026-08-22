@@ -1,2 +1,2 @@
-var value = "text" as int
+var value = "text" as i64
 print(value)

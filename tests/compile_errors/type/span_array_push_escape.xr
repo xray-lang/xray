@@ -1,7 +1,7 @@
 fn bad() {
-    var owner = Array<int>(4, 0)
-    var view: Slice<int> = owner[0:2]
-    var views: Array<Slice<int>> = []
+    var owner = Array<i64>(4, 0)
+    var view: Slice<i64> = owner[0:2]
+    var views: Array<Slice<i64>> = []
     views.push(view)
 }
 

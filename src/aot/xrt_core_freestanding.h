@@ -1776,6 +1776,45 @@ static inline double xrt_math_number(XrValue v) {
     return 0.0;
 }
 
+/* Keep exact scalar parsing separate from numeric `as` conversion. The
+ * freestanding profile has the same string-only acceptance and nullable
+ * failure behavior as the VM and hosted AOT profiles. */
+static inline XrValue xrt_i64_parse(XrValue v) {
+    if (!XR_IS_STR(v))
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+    XrStringParseIntResult parsed =
+        xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
+    if (!parsed.ok)
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+    return XR_FROM_INT(parsed.value);
+}
+
+static inline XrValue xrt_i64_try_parse(XrValue v) {
+    if (!XR_IS_STR(v))
+        return XR_NULL_VAL;
+    XrStringParseIntResult parsed =
+        xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
+    return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_f64_parse(XrValue v) {
+    if (!XR_IS_STR(v))
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+    XrStringParseFloatResult parsed =
+        xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
+    if (!parsed.ok)
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+    return XR_FROM_FLOAT(parsed.value);
+}
+
+static inline XrValue xrt_f64_try_parse(XrValue v) {
+    if (!XR_IS_STR(v))
+        return XR_NULL_VAL;
+    XrStringParseFloatResult parsed =
+        xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
+    return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+}
+
 static inline XrValue xrt_to_int(XrValue v) {
     if (XR_IS_INT(v))
         return v;
@@ -1790,7 +1829,7 @@ static inline XrValue xrt_to_int(XrValue v) {
         XrStringParseIntResult parsed =
             xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
         if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_INT_PARSE_MSG);
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
         return XR_FROM_INT(parsed.value);
     }
     return XR_FROM_INT(0);
@@ -1803,7 +1842,7 @@ static inline XrValue xrt_to_float(XrValue v) {
         XrStringParseFloatResult parsed =
             xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
         if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_FLOAT_PARSE_MSG);
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
         return XR_FROM_FLOAT(parsed.value);
     }
     return XR_FROM_FLOAT(xrt_math_number(v));
@@ -1860,9 +1899,9 @@ static inline uint8_t xrt_freestanding_value_kind(XrValue v) {
 static inline XrTypeIdentityCoreKind xrt_freestanding_type_identity_kind(XrValue v) {
     switch (xrt_freestanding_value_kind(v)) {
         case XR_TAG_I64:
-            return XR_TYPE_IDENTITY_CORE_INT;
+            return XR_TYPE_IDENTITY_CORE_I64;
         case XR_TAG_F64:
-            return XR_TYPE_IDENTITY_CORE_FLOAT;
+            return XR_TYPE_IDENTITY_CORE_F64;
         case XR_TAG_BOOL:
             return XR_TYPE_IDENTITY_CORE_BOOL;
         case XR_TAG_RUNE:

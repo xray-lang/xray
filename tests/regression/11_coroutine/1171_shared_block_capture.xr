@@ -1,7 +1,7 @@
 @test
 fn test_shared_block_capture() {
-    const payload = Atomic<int>(3)
-    var t = go fn() -> int {
+    const payload = Atomic<i64>(3)
+    var t = go fn() -> i64 {
         payload.fetchAdd(1)
         return payload.load()
     }()

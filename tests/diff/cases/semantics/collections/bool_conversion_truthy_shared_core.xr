@@ -12,18 +12,18 @@ show("nonzero-float", bool(0.25))
 show("empty-string", bool(""))
 show("nonempty-string", bool("x"))
 
-var emptyArray: Array<int> = []
-var fullArray: Array<int> = [1]
+var emptyArray: Array<i64> = []
+var fullArray: Array<i64> = [1]
 show("empty-array", bool(emptyArray))
 show("full-array", bool(fullArray))
 
-var emptyMap: Map<string, int> = #{}
-var fullMap: Map<string, int> = #{"x": 1}
+var emptyMap: Map<string, i64> = #{}
+var fullMap: Map<string, i64> = #{"x": 1}
 show("empty-map", bool(emptyMap))
 show("full-map", bool(fullMap))
 
-var emptyBoolMap: Map<bool, int> = #{}
-var fullBoolMap: Map<bool, int> = #{true: 1}
+var emptyBoolMap: Map<bool, i64> = #{}
+var fullBoolMap: Map<bool, i64> = #{true: 1}
 show("empty-boolmap", bool(emptyBoolMap))
 show("full-boolmap", bool(fullBoolMap))
 
@@ -32,7 +32,7 @@ var fullSet: Set<string> = #["x"]
 show("empty-set", bool(emptySet))
 show("full-set", bool(fullSet))
 
-var emptyTypedSet: Set<byte> = #[]
-var fullTypedSet: Set<byte> = #[7]
+var emptyTypedSet: Set<u8> = #[]
+var fullTypedSet: Set<u8> = #[7]
 show("empty-typed-set", bool(emptyTypedSet))
 show("full-typed-set", bool(fullTypedSet))

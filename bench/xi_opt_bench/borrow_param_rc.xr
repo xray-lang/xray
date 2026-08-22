@@ -1,37 +1,37 @@
 struct Pair {
-    a: int
-    b: int
+    a: i64
+    b: i64
 }
 
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
 }
 
-fn sumPair(p: Pair) -> int {
+fn sumPair(p: Pair) -> i64 {
     return p.a + p.b
 }
 
-fn wrapPair(p: Pair) -> int {
+fn wrapPair(p: Pair) -> i64 {
     return sumPair(p)
 }
 
-fn readBox(box: Box) -> int {
+fn readBox(box: Box) -> i64 {
     return box.get()
 }
 
-fn sumArray(values: Array<int>) -> int {
+fn sumArray(values: Array<i64>) -> i64 {
     return values[0] + values[1] + values[2] + values[3]
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var pair = Pair{a: 11, b: 17}
     var box = Box(23)
     var values = [3, 5, 7, 9]

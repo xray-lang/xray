@@ -6,8 +6,8 @@
 // 导致 `var err = HttpError(...)` 静默退出 1。修复：dispatcher 增加 NEXT 分支。
 
 class HttpError extends PanicInfo {
-    statusCode: int
-    constructor(msg: string, statusCode: int) {
+    statusCode: i64
+    constructor(msg: string, statusCode: i64) {
         super(msg)
         this.statusCode = statusCode
     }

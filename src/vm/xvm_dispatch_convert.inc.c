@@ -156,7 +156,7 @@ vmcase(OP_TYPENAME) {
     /* Slice and fixed-array spellings are decided once, in the shared lowering:
      * xi_lower_expr folds typeName() for those static types into a constant, so
      * a ref value cannot arrive here. The VM used to spell them a second time
-     * and disagree with that fold -- "[byte;4]" against "[byte; 4]" -- which is
+     * and disagree with that fold -- "[u8;4]" against "[u8; 4]" -- which is
      * a divergence waiting for the first value whose static type is lost. */
     XR_DCHECK(!XR_IS_SLICE_REF(val) && !XR_IS_ARRAY_REF(val),
               "typename: slice and array refs are folded during lowering");
@@ -204,6 +204,23 @@ vmcase(OP_TOINT) {
     int b = GETARG_B(i);
     uint16_t conversion = (uint16_t) GETARG_C(i);
     XrValue val = R(b);
+    if (xr_conversion_bytecode_is_parse_required(conversion) ||
+        xr_conversion_bytecode_is_parse_optional(conversion)) {
+        XrStringParseIntResult parsed = {0};
+        if (XR_IS_STRING(val)) {
+            XrString *str = XR_TO_STRING(val);
+            parsed = xr_string_parse_int64(str->data, str->length);
+        }
+        if (!parsed.ok) {
+            if (xr_conversion_bytecode_is_parse_optional(conversion)) {
+                R(a) = xr_null();
+                vmbreak;
+            }
+            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+        }
+        R(a) = xr_int((xr_Integer) parsed.value);
+        vmbreak;
+    }
     if (xr_conversion_bytecode_is_numeric(conversion)) {
         uint8_t source_rep = xr_conversion_bytecode_source_rep(conversion);
         uint8_t target_rep = xr_conversion_bytecode_target_rep(conversion);
@@ -236,7 +253,7 @@ vmcase(OP_TOINT) {
         XrString *str = XR_TO_STRING(val);
         XrStringParseIntResult parsed = xr_string_parse_int64(str->data, str->length);
         if (!parsed.ok)
-            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_INT_PARSE_MSG);
+            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
         R(a) = xr_int((xr_Integer) parsed.value);
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_int(XR_TO_BOOL(val) ? 1 : 0);
@@ -251,6 +268,23 @@ vmcase(OP_TOFLOAT) {
     int b = GETARG_B(i);
     uint16_t conversion = (uint16_t) GETARG_C(i);
     XrValue val = R(b);
+    if (xr_conversion_bytecode_is_parse_required(conversion) ||
+        xr_conversion_bytecode_is_parse_optional(conversion)) {
+        XrStringParseFloatResult parsed = {0};
+        if (XR_IS_STRING(val)) {
+            XrString *str = XR_TO_STRING(val);
+            parsed = xr_string_parse_float64(str->data, str->length);
+        }
+        if (!parsed.ok) {
+            if (xr_conversion_bytecode_is_parse_optional(conversion)) {
+                R(a) = xr_null();
+                vmbreak;
+            }
+            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+        }
+        R(a) = xr_float(parsed.value);
+        vmbreak;
+    }
     if (xr_conversion_bytecode_is_numeric(conversion)) {
         uint8_t source_rep = xr_conversion_bytecode_source_rep(conversion);
         uint8_t target_rep = xr_conversion_bytecode_target_rep(conversion);
@@ -277,7 +311,7 @@ vmcase(OP_TOFLOAT) {
         XrString *str = XR_TO_STRING(val);
         XrStringParseFloatResult parsed = xr_string_parse_float64(str->data, str->length);
         if (!parsed.ok)
-            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_FLOAT_PARSE_MSG);
+            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
         R(a) = xr_float(parsed.value);
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_float(XR_TO_BOOL(val) ? 1.0 : 0.0);

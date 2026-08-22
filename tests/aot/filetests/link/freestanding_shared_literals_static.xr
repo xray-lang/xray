@@ -1,9 +1,9 @@
 const ENABLED: bool = true
-const SCALE: float = 0.5
+const SCALE: f64 = 0.5
 const LETTER: rune = 'A'
 const NOTHING = null
 
-fn xray_shared_literals() -> int {
+fn xray_shared_literals() -> i64 {
     var score = 0
     if (ENABLED) {
         score = score + 1

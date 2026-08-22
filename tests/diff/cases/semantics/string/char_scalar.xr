@@ -36,7 +36,7 @@ for (i, ch in s) {
     print(ch)
 }
 
-var e: Array<(int, rune)> = []
+var e: Array<(i64, rune)> = []
 for (i, ch in s) { e.push((i, ch)) }
 print(len(e))
 print(e[1].0)

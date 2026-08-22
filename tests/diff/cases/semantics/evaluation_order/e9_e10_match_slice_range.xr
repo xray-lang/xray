@@ -2,7 +2,7 @@
 // §3.0 E9: the scrutinee is evaluated once, before any arm; guards only after
 // their pattern matches.
 // §3.0 E10: a[lo:hi] evaluates a -> lo -> hi; lo..hi evaluates lo -> hi.
-fn t(tag: string, v: int) -> int { print(tag); return v }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn tb(tag: string, v: bool) -> bool { print(tag); return v }
 
 fn main() {
@@ -29,7 +29,7 @@ fn main() {
 
     print("-- slice bounds --")
     var arr = [1, 2, 3, 4]
-    var view: Slice<int> = arr[t("slice-lo", 1):t("slice-hi", 3)]
+    var view: Slice<i64> = arr[t("slice-lo", 1):t("slice-hi", 3)]
     print(len(view))
 }
 

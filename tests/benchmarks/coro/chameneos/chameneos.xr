@@ -7,10 +7,10 @@ import time
 var N_MEETINGS = 600000  // 会合次数
 var N_CHAMENEOS = 4      // 变色龙数量
 if (len(process.args) > 0) {
-    N_MEETINGS = int(process.args[0]) ?? N_MEETINGS
+    N_MEETINGS = i64.tryParse(process.args[0]) ?? N_MEETINGS
 }
 if (len(process.args) > 1) {
-    N_CHAMENEOS = int(process.args[1]) ?? N_CHAMENEOS
+    N_CHAMENEOS = i64.tryParse(process.args[1]) ?? N_CHAMENEOS
 }
 if (N_CHAMENEOS < 2) {
     N_CHAMENEOS = 2
@@ -21,7 +21,7 @@ print("会合次数:", N_MEETINGS)
 print("变色龙数:", N_CHAMENEOS)
 
 // Colors: 0=blue, 1=red, 2=yellow
-fn complement(c1: int, c2: int) -> int {
+fn complement(c1: i64, c2: i64) -> i64 {
     if (c1 == c2) { return c1 }
     if (c1 == 0 && c2 == 1) { return 2 }
     if (c1 == 0 && c2 == 2) { return 1 }
@@ -36,9 +36,9 @@ fn complement(c1: int, c2: int) -> int {
 // The request channel can hold one pending request per participant so the
 // broker can stop everyone without depending on close waking blocked senders.
 const request_ch = Channel(N_CHAMENEOS)   // chameneo sends: [id, color, reply]
-const done_ch: Channel<int> = Channel(100)    // report results
+const done_ch: Channel<i64> = Channel(100)    // report results
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -46,7 +46,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // Broker: pairs up chameneos for N meetings
-fn broker(meetings: int, participants: int) {
+fn broker(meetings: i64, participants: i64) {
     for (var i = 0; i < meetings; i++) {
         var first_result = request_ch.recv()
         var second_result = request_ch.recv()
@@ -76,10 +76,10 @@ fn broker(meetings: int, participants: int) {
 }
 
 // Chameneo: repeatedly meet at the broker
-fn chameneo(id: int, initial_color: int) {
+fn chameneo(id: i64, initial_color: i64) {
     var color = initial_color
     var meetings = 0
-    const reply_ch: Channel<int> = Channel(1)
+    const reply_ch: Channel<i64> = Channel(1)
 
     while (true) {
         try {
@@ -129,7 +129,7 @@ print("预期会合次数:", N_MEETINGS * 2)
 print("正确:", total_meetings == N_MEETINGS * 2)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(total_meetings * 1000 / elapsed), "meetings/sec")
+    print("吞吐量:", (total_meetings * 1000 / elapsed as i64), "meetings/sec")
 } else {
     print("吞吐量: 太快无法测量")
 }

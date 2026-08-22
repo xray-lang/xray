@@ -1,4 +1,4 @@
-fn build_array() -> Array<int> {
+fn build_array() -> Array<i64> {
     var xs = [1, 2]
     Coro.yield()
     return xs

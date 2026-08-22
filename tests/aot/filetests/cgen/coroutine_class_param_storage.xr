@@ -1,16 +1,16 @@
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
-fn addOne(value: int) -> int {
+fn addOne(value: i64) -> i64 {
     return value + 1
 }
 
-fn readLater(box: Box, enabled: bool) -> int {
+fn readLater(box: Box, enabled: bool) -> i64 {
     if (!enabled) { return 0 }
     const snapshot: Box = copy(box)
     return await go addOne(snapshot.value)

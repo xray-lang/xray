@@ -16,7 +16,7 @@
 // so a failed parse has no null to hand back -- it raises the same structured
 // panic, with the same code and text, on every backend.
 //
-// The accepted grammar is the one strconv.parseInt / strconv.parseFloat
+// The accepted grammar is shared by i64/f64 parse and tryParse.
 // already enforce, so trailing residue such as "12abc" is a rejection rather
 // than a silent 12, and integer overflow is rejected instead of saturated.
 
@@ -25,7 +25,7 @@
 var ints: Array<string> = ["12", "  -7 ", "+42", "9223372036854775807"]
 var i = 0
 while (i < len(ints)) {
-    print(int(ints[i]))
+    print((ints[i] as i64))
     i = i + 1
 }
 
@@ -33,7 +33,7 @@ var badInts: Array<string> = ["12abc", "", "   ", "0x10", "1.5", "12 34", "+", "
 var j = 0
 while (j < len(badInts)) {
     try {
-        print(int(badInts[j]))
+        print((badInts[j] as i64))
     } catch panic (p) {
         print(string(p.code) + " " + p.message)
     }
@@ -43,7 +43,7 @@ while (j < len(badInts)) {
 var floats: Array<string> = ["1.5e3", ".5", "1.", "  2.5  ", "-0.125"]
 var k = 0
 while (k < len(floats)) {
-    print(float(floats[k]))
+    print((floats[k] as f64))
     k = k + 1
 }
 
@@ -51,7 +51,7 @@ var badFloats: Array<string> = ["1.5x", "", "1e", "1e+", ".", "inf", "nan"]
 var m = 0
 while (m < len(badFloats)) {
     try {
-        print(float(badFloats[m]))
+        print((badFloats[m] as f64))
     } catch panic (p) {
         print(string(p.code) + " " + p.message)
     }

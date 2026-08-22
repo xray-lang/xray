@@ -1,5 +1,5 @@
-fn readLocal(h: int) -> int {
-    var table = Array<int>(8, -1)
+fn readLocal(h: i64) -> i64 {
+    var table = Array<i64>(8, -1)
     table[h] = h + 10
     return table[h]
 }

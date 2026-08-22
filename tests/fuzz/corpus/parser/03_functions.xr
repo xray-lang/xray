@@ -3,7 +3,7 @@ fn add(a, b) {
     return a + b
 }
 
-fn multiply(x: int, y: int): int {
+fn multiply(x: i64, y: i64): i64 {
     return x * y
 }
 
@@ -87,7 +87,7 @@ fn greetWithDefault(name: string = "World") {
     return "Hello, ${name}!"
 }
 
-fn createPoint(x: int = 0, y: int = 0) {
+fn createPoint(x: i64 = 0, y: i64 = 0) {
     return { "x": x, "y": y }
 }
 

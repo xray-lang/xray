@@ -1,6 +1,6 @@
 // 协程系统综合示例
 
-fn recv_has_value(r: Recv<int>) -> bool {
+fn recv_has_value(r: Recv<i64>) -> bool {
     return match (r) {
         Recv.Value(_) -> true
         _ -> false
@@ -8,7 +8,7 @@ fn recv_has_value(r: Recv<int>) -> bool {
 }
 
 // 生产者-消费者模式
-fn producer(ch: Channel<int>, id: int, count: int) -> int {
+fn producer(ch: Channel<i64>, id: i64, count: i64) -> i64 {
     var i = 0
     while (i < count) {
         ch.trySend(id * 100 + i)
@@ -17,7 +17,7 @@ fn producer(ch: Channel<int>, id: int, count: int) -> int {
     return id
 }
 
-fn consumer(ch: Channel<int>, expected: int) -> int {
+fn consumer(ch: Channel<i64>, expected: i64) -> i64 {
     var received = 0
     var i = 0
     while (i < expected) {

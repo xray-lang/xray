@@ -1,8 +1,8 @@
-fn worker() -> int {
+fn worker() -> i64 {
     return 7
 }
 
-fn unused_coroutine_helper() -> int {
+fn unused_coroutine_helper() -> i64 {
     var task = go worker()
     return await task
 }

@@ -1,1 +1,1 @@
-Type 'Array<int>' is not assignable to type 'Slice<int>'
+Type 'Array<i64>' is not assignable to type 'Slice<i64>'

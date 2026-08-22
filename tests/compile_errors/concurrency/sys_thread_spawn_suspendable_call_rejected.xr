@@ -1,16 +1,16 @@
 import sys
 
-fn worker() -> int {
+fn worker() -> i64 {
     return 1
 }
 
-fn suspends() -> int {
+fn suspends() -> i64 {
     var y = await go worker()
     return y
 }
 
 fn main() {
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return suspends()
     })
     print(t)

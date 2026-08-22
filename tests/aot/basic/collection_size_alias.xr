@@ -1,11 +1,11 @@
-var values: Array<int> = []
+var values: Array<i64> = []
 values.push(1)
 values.push(2)
 print(len(values))
 print(len(values))
 print(len(values) + len(values))
 
-var seen: Set<int> = #[]
+var seen: Set<i64> = #[]
 seen.add(1)
 seen.add(2)
 seen.add(1)
@@ -13,7 +13,7 @@ print(len(seen))
 print(len(seen))
 print(len(seen) + len(seen))
 
-var scores: Map<string, int> = #{}
+var scores: Map<string, i64> = #{}
 scores.set("a", 10)
 scores.set("b", 20)
 print(len(scores))

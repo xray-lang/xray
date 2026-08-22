@@ -66,7 +66,7 @@ unavailable rather than assuming closure-creation order. The verifier rebuilds
 this relation from frozen operation, operand, function-parent, CFG-dominance,
 slot, and callable-function facts rather than trusting the builder's target row.
 Schema 23 also freezes `core.string.bytes` as an exact non-allocating borrowed
-`Slice<byte>` view. Its record binds the numeric intrinsic identity, String
+`Slice<u8>` view. Its record binds the numeric intrinsic identity, String
 source operand and semantic root, byte element type, read capability, and
 caller lifetime. Independent verification reconstructs these facts; selector
 text, aliases, analyzer-local IDs, and backend type guesses are not authority.
@@ -437,24 +437,24 @@ anchor-sha256: src/frontend/analyzer/xa_effect_db.c bbf0a9f9fd78e8daf7301437bcaa
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.h 4a2527c4da62c7238c5df9f13b4fbcf9e210bb3555745425ace07b3704e674c3
 anchor-sha256: src/frontend/analyzer/xa_memory_effect_db.c 1c3b0121cb1d9814189b615c7a5314a4dc873d1ef7ab87d86ed6deb7ba51a5e0
 anchor-sha256: src/frontend/analyzer/xanalyzer_errorset.c b9245251f4a162887f2fbfde6df0770aa5517970827e23fcfd0f86f169c4508d
-anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 9ee98106c86e153d1aee935862a2065fb24bd79036283bc26750018f120c3290
+anchor-sha256: src/frontend/analyzer/xanalyzer_allocation.c 044ac5b32c6c854f968d8e070e8e9dd0f40a5080540b635af1d738202d1b4dc7
 anchor-sha256: src/frontend/analyzer/xanalyzer_suspend.c b5447f9c3826852dea8fd79da5b09706b3c73a6e66d072af9901ef38a28b20d7
 anchor-sha256: src/frontend/analyzer/xanalyzer_memory_effect.c 19585145d88b00d1c1e4fad9fe23ac841e75c941eeaf7c18be3779befc872367
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c dc666a71819aa81f3573754e55626d8bec56766e16eed6191cbcfa293914b723
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 6d9bcf717d746da63faed8fbc0f566d431809f33f756e424a59152c884518b74
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 4f397e3aa25eda9956d045363cf91546b7763a224b49268bb600f52d8fb3db2c
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 1f1899da6d604d9a1c27c16d0c09b89950414ed8f7bca7288c35e55ffe42bf6a
-anchor-sha256: src/runtime/value/xtype.h e0f9c44c615d8a91f501d3952b1804c793abe68e3eba39744c9a000ae00f10cf
-anchor-sha256: src/ir/xi.h 43c669ce5243e6a2ca277e7f6bd0d1ab03e0785bdbd0a2d7e1f5fb0177083672
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_internal.h 151a9c5dc7d089cc1f8c16fa75c02a916d9d8bf4214074df2de4faaec4615eae
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_decl.c 6dc62e38d5ac5633a596bbc6b9eaa55afdd8d98ca880099ca8de8097ee965f2e
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_stmt.c 546f1d6daa2e46a5aaeb85703054e0170c5638836916b491a67352bb0f00f691
+anchor-sha256: src/runtime/value/xtype.h d4084248d406b13acd38b2f8dfbbd593eeda7d8868b6ca12bb301e9e2c740ba2
+anchor-sha256: src/ir/xi.h 8a42211662efe7e899de886999ec30e937f16e11d17f0bea5d4829b9fd1cc419
 anchor-sha256: src/ir/xi_lower.c 307ca6134ffa3f116d5ac6e10bb7d939f8e881370d5162b843c96291d67418e1
 anchor-sha256: src/app/cli/xcmd_verify.c 89c0d0d5f397d9acdb3098f9f5a04403004d6cf61a7f3a514e4ebf706b967ce9
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
-anchor-sha256: tests/unit/analyzer/test_analyzer.c 25b53c60642d64a7f9ea8deb2427902937bcecba48a66ab624f44075fde145a0
+anchor-sha256: tests/unit/analyzer/test_analyzer.c 080ef0a0fd3d32671212fa3af62f0a4c4123c56d1ab530c7c5945054ffc46bec
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
-anchor-sha256: tests/unit/ir/test_xi_lower.c 4c0d1d2b3b0f460b637e63a1a29b759c0170d21377503c12118c6f8164d48c5e
-anchor-sha256: src/frontend/analyzer/xanalyzer.c e0b2fcfbce1532fa91807bc434f08d4796b9cada1c08727bea713e24ac3b2bcb
+anchor-sha256: tests/unit/ir/test_xi_lower.c ca01b5a25becdca09610d5910c9775398bf9eff8363437eac8d6ec4b1ddb56a9
+anchor-sha256: src/frontend/analyzer/xanalyzer.c 9273a00f9e4dc55656e47b8d2d04acfa868e48e14ac53ba3599c7d8e6dfee2c3
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee106075efdec66d5602811f4a5cd7f82ea
-anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c 7889100f0de6c227826a3b522653f3f7690e6a4a848483fca3e0d4f1fdf1d1d7
+anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9d322e36c30d8475caa74ded9cea9f3bf7e72f002c6c91f66e153505d80cb8c2
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
 anchor-sha256: src/plan/semantic/xr_semantic_builder.c e1219cc42d502203efd06d3248fc49d0dd2aaebfad5ca3b95f8f5242df0e63f4
@@ -474,5 +474,5 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe27
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c 2bcdc8e045fd715c9b78c94d23260238ae663128a5866d4a4759ab0217fb575a
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
-anchor-sha256: src/stdlib/xstdlib_metadata.h fea5c1b87e5cf4650f62720540f9728ac71dc475fdab683ba30b6458d3e3902b
+anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 39a4accd8c8e23ca8696b8b96a445d129089d7ca18fe6458f4d14dabb3664a99

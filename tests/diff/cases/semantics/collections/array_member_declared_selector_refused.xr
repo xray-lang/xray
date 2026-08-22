@@ -13,18 +13,18 @@
 // of its arguments, and a container `contains` does not compare against a
 // field.
 class Box {
-    total: int = 4
+    total: i64 = 4
 
-    fill(value: int, start: int, end: int) -> int {
+    fill(value: i64, start: i64, end: i64) -> i64 {
         return this.total + value + start + end
     }
 
-    contains(value: int) -> bool {
+    contains(value: i64) -> bool {
         return this.total == value
     }
 }
 
-fn spread(box: Box) -> int {
+fn spread(box: Box) -> i64 {
     return box.fill(1, 2, 3)
 }
 

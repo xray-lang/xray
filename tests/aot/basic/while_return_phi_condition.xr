@@ -1,4 +1,4 @@
-fn choose(requested: int, size: int) -> int {
+fn choose(requested: i64, size: i64) -> i64 {
     var proposed = 64
     var maxSize = 65536
     while (requested > proposed) {

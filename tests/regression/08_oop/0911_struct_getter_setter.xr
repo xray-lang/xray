@@ -2,22 +2,22 @@
 // Expected: getter and setter work correctly with struct value semantics
 
 struct Temperature {
-    _celsius: float
+    _celsius: f64
 
     // Computed property: fahrenheit
-    fahrenheit: float {
+    fahrenheit: f64 {
         fn() { return this._celsius * 1.8 + 32.0 }
-        fn(v: float) { this._celsius = (v - 32.0) / 1.8 }
+        fn(v: f64) { this._celsius = (v - 32.0) / 1.8 }
     }
 }
 struct Circle {
-    radius: float
+    radius: f64
 
-    area: float {
+    area: f64 {
         fn() { return 3.14159 * this.radius * this.radius }
     }
 
-    circumference: float {
+    circumference: f64 {
         fn() { return 2.0 * 3.14159 * this.radius }
     }
 }

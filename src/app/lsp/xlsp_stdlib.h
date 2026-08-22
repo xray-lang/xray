@@ -39,7 +39,7 @@ typedef struct {
 typedef struct {
     const char *name;
     XlspSymbolKind kind;
-    const char *signature;  // e.g. "fn(ms: int): void"
+    const char *signature;  // e.g. "fn(ms: i64): void"
     const char *documentation;
     const XlspParamInfo *params;
     int param_count;

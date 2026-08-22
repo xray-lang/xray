@@ -1,6 +1,6 @@
 // Test go expressions and explicit TaskResult observation
 
-fn ok() -> int {
+fn ok() -> i64 {
     return 42
 }
 fn test_linked_go_basic() {

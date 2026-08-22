@@ -1,5 +1,5 @@
 fn main() {
-    const arrays = copy(Array<Array<byte>>(1, Array<byte>(2, 0)))
+    const arrays = copy(Array<Array<u8>>(1, Array<u8>(2, 0)))
     for (item in arrays) {
         item.appendFrom(item[:])
     }

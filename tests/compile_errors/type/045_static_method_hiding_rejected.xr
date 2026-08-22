@@ -1,11 +1,11 @@
 class Base {
-    run() -> int {
+    run() -> i64 {
         return 1
     }
 }
 
 class Child extends Base {
-    static run() -> int {
+    static run() -> i64 {
         return 2
     }
 }

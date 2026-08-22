@@ -25,7 +25,7 @@
 #include <stddef.h>
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
-#include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 
 struct XrCompilerSession;
 struct AstNode;
@@ -34,19 +34,13 @@ struct AstNode;
 
 typedef enum {
     /* Primitive keywords */
-    XR_TREF_INT,    /* int                              */
-    XR_TREF_FLOAT,  /* float                            */
+    XR_TREF_SCALAR, /* exact scalar; scalar_rep is the identity */
     XR_TREF_STRING, /* string                           */
     XR_TREF_BOOL,   /* bool                             */
     XR_TREF_RUNE,   /* char (Unicode scalar value)      */
     XR_TREF_UNIT,   /* unit `()` - the 0-arity tuple    */
     XR_TREF_NULL,   /* null                             */
     XR_TREF_ERROR,  /* compiler-only error recovery      */
-
-    /* Numeric scalars: scalar_rep is semantic; builtin_spelling is syntax-only. */
-    XR_TREF_INT_WIDTH,   /* int8 / int16 / int32 / int64 /
-                            uint8 / uint16 / uint32 / uint64 */
-    XR_TREF_FLOAT_WIDTH, /* float32 / float64                */
 
     /* Composite */
     XR_TREF_NAMED,       /* user class / enum / interface /
@@ -78,7 +72,6 @@ typedef struct XrTypeRef {
     int line;
     int column;
     uint8_t scalar_rep;                /* XrNativeType scalar representation */
-    uint8_t builtin_spelling;          /* XrSourceTypeSpelling or NONE       */
     bool requires_nothrow;             /* FUNCTION: compiler-inferred HOF specialization */
     int fixed_length;                  /* FIXED_ARRAY: literal length if known, 0 otherwise */
     struct AstNode *fixed_length_expr; /* FIXED_ARRAY: source expression for N */
@@ -97,8 +90,8 @@ typedef struct XrTypeRef {
  * ===================================================================== */
 
 /* Primitives (singletons — safe to share across an arena lifetime) */
-XR_FUNC XrTypeRef *xr_tref_int(struct XrCompilerSession *session);
-XR_FUNC XrTypeRef *xr_tref_float(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_i64(struct XrCompilerSession *session);
+XR_FUNC XrTypeRef *xr_tref_f64(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_string(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_bool(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_char(struct XrCompilerSession *session);
@@ -106,11 +99,8 @@ XR_FUNC XrTypeRef *xr_tref_unit(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_null(struct XrCompilerSession *session);
 XR_FUNC XrTypeRef *xr_tref_error(struct XrCompilerSession *session);
 
-/* Native-width scalars */
-XR_FUNC XrTypeRef *xr_tref_int_width(struct XrCompilerSession *session, uint8_t nw);
-XR_FUNC XrTypeRef *xr_tref_float_width(struct XrCompilerSession *session, uint8_t nw);
-XR_FUNC XrTypeRef *xr_tref_scalar(struct XrCompilerSession *session, XrSourceTypeSpelling spelling,
-                                  uint8_t scalar_rep, bool float_family);
+/* Exact scalars */
+XR_FUNC XrTypeRef *xr_tref_scalar(struct XrCompilerSession *session, uint8_t scalar_rep);
 
 /* Named type (class / enum / prelude name, no generic args) */
 XR_FUNC XrTypeRef *xr_tref_named(struct XrCompilerSession *session, const char *name);
@@ -179,7 +169,7 @@ static inline const char *xr_tref_head_name(const XrTypeRef *t) {
 
 /* ========== Debug / Formatting ========== */
 
-/* Return a human-readable string for a type ref (e.g. "Array<int>").
+/* Return a human-readable string for a type ref (e.g. "Array<i64>").
  * The string is arena-allocated and valid for the current parse. */
 XR_FUNC const char *xr_tref_to_string(struct XrCompilerSession *session, const XrTypeRef *t);
 

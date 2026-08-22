@@ -1,6 +1,6 @@
 // `Coro.yield()` inside a generator used to compile and inject a spurious null
 // element into the value stream, in both the VM and AOT backends.
-fn gen() -> Iterator<int> {
+fn gen() -> Iterator<i64> {
     yield 1
     Coro.yield()
     yield 2

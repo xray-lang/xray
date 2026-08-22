@@ -1,8 +1,8 @@
 // FFI: scalar descriptor matrix cases must round-trip through the same
 // compact extern ABI metadata in the VM and AOT backends.
 extern "C" {
-    fn strlen(s: Ptr<byte>) -> usize
-    fn memcmp(left: Ptr<byte>, right: Ptr<byte>, n: usize) -> i32
+    fn strlen(s: Ptr<u8>) -> usize
+    fn memcmp(left: Ptr<u8>, right: Ptr<u8>, n: usize) -> i32
     fn llabs(x: i64) -> i64
     fn labs(x: isize) -> isize
 }

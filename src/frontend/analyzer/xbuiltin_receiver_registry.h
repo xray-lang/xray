@@ -446,9 +446,9 @@ xa_builtin_receiver_documentation_group_label(XaBuiltinMethodDocumentationGroup 
         case XA_BUILTIN_DOC_GROUP_ARRAY:
             return "Array<T> collection methods";
         case XA_BUILTIN_DOC_GROUP_U8_ARRAY:
-            return "Array<byte> byte bulk methods";
+            return "Array<u8> byte bulk methods";
         case XA_BUILTIN_DOC_GROUP_U8_SLICE:
-            return "Slice<byte> byte range methods";
+            return "Slice<u8> byte range methods";
         case XA_BUILTIN_DOC_GROUP_POD_SLICE:
             return "Slice<T> POD range methods";
         case XA_BUILTIN_DOC_GROUP_GENERAL:

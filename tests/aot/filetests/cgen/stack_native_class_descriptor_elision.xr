@@ -1,35 +1,35 @@
 class Shape {
-    kind: int
+    kind: i64
 
-    constructor(kind: int) {
+    constructor(kind: i64) {
         this.kind = kind
     }
 
-    kind_plus() -> int {
+    kind_plus() -> i64 {
         return this.kind + 7
     }
 }
 
 class Rect extends Shape {
-    w: int
-    h: int
+    w: i64
+    h: i64
 
-    constructor(w: int, h: int) {
+    constructor(w: i64, h: i64) {
         super(1)
         this.w = w
         this.h = h
     }
 
-    area() -> int {
+    area() -> i64 {
         return this.w * this.h
     }
 
-    kind_plus() -> int {
+    kind_plus() -> i64 {
         return this.kind + this.w
     }
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var total = 0
     var i = 0
     while (i < n) {

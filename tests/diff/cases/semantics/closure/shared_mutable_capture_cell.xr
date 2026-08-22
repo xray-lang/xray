@@ -2,29 +2,29 @@
 // kept the raw value answered with whatever it was when its closure was built
 // -- it printed 0 here forever, identically on both backends, so the
 // differential net could not see it either.
-fn makePair() -> (fn() -> int, fn() -> int) {
+fn makePair() -> (fn() -> i64, fn() -> i64) {
     var n = 0
-    var inc = fn() -> int { n = n + 1; return n }
-    var get = fn() -> int { return n }
+    var inc = fn() -> i64 { n = n + 1; return n }
+    var get = fn() -> i64 { return n }
     return (inc, get)
 }
 
 // Declaration order must not matter: the reader is built before the writer
 // here, so the cell fact has to reach a capture that was already made.
-fn makePairReaderFirst() -> (fn() -> int, fn() -> int) {
+fn makePairReaderFirst() -> (fn() -> i64, fn() -> i64) {
     var n = 100
-    var get = fn() -> int { return n }
-    var inc = fn() -> int { n = n + 1; return n }
+    var get = fn() -> i64 { return n }
+    var inc = fn() -> i64 { n = n + 1; return n }
     return (inc, get)
 }
 
 // Three closures, two of them writers, so the shared cell carries more than one
 // mutation path.
-fn makeTriple() -> (fn() -> int, fn() -> int, fn() -> int) {
+fn makeTriple() -> (fn() -> i64, fn() -> i64, fn() -> i64) {
     var n = 10
-    var a = fn() -> int { n = n + 1; return n }
-    var b = fn() -> int { return n }
-    var c = fn() -> int { n = n * 2; return n }
+    var a = fn() -> i64 { n = n + 1; return n }
+    var b = fn() -> i64 { return n }
+    var c = fn() -> i64 { n = n * 2; return n }
     return (a, b, c)
 }
 

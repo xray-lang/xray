@@ -1,4 +1,4 @@
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 2
 }
 

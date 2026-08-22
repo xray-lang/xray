@@ -2,16 +2,16 @@
 // because its basename starts with '_').  Exercises a cross-module native class:
 // the importer constructs instances and calls methods defined here.
 export class Counter {
-    value: int
-    constructor(start: int) {
+    value: i64
+    constructor(start: i64) {
         this.value = start
     }
-    bump(n: int) -> int {
+    bump(n: i64) -> i64 {
         this.value = this.value + n
         return this.value
     }
 }
 
-export fn make_counter(start: int) -> Counter {
+export fn make_counter(start: i64) -> Counter {
     return Counter(start)
 }

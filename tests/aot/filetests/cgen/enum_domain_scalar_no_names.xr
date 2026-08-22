@@ -6,14 +6,14 @@ enum SpectrumMark {
 
 enum PacketShape {
     EmptyToken,
-    DataToken(code: int)
+    DataToken(code: i64)
 }
 
 fn firstVariant() -> EnumVariant<SpectrumMark> {
     return SpectrumMark.variants[0]
 }
 
-fn variantOrdinal(variant: EnumVariant<SpectrumMark>) -> int {
+fn variantOrdinal(variant: EnumVariant<SpectrumMark>) -> i64 {
     return variant.ordinal
 }
 
@@ -21,11 +21,11 @@ fn enumIdentity(value: SpectrumMark) -> SpectrumMark {
     return value
 }
 
-fn enumOrdinalValue(value: SpectrumMark) -> int {
+fn enumOrdinalValue(value: SpectrumMark) -> i64 {
     return value.ordinal
 }
 
-fn scoreDomains() -> int {
+fn scoreDomains() -> i64 {
     var score = 0
     for (value in SpectrumMark) {
         score += enumOrdinalValue(enumIdentity(value))

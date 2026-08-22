@@ -1,10 +1,10 @@
 import mem
 
-fn xray_no_alloc_helper_allocates(n: int) -> int {
+fn xray_no_alloc_helper_allocates(n: i64) -> i64 {
     var b = mem.alloc(n)
     return len(b)
 }
 
-fn xray_no_alloc_call_reject(n: int) -> int {
+fn xray_no_alloc_call_reject(n: i64) -> i64 {
     return xray_no_alloc_helper_allocates(n) + 1
 }

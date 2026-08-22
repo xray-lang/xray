@@ -1,9 +1,9 @@
 import sys
 
 fn run() {
-    var empty: Array<int> = []
+    var empty: Array<i64> = []
     const indices = [...empty]
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
     for (i in indices) {

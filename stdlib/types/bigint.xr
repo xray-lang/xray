@@ -2,10 +2,10 @@
 class BigInt {
     abs() -> BigInt
     toString() -> string
-    sign() -> int
+    sign() -> i64
     isZero() -> bool
     isNegative() -> bool
     isPositive() -> bool
-    toInt() -> int?
-    toFloat() -> float
+    toI64() -> i64?
+    toF64() -> f64
 }

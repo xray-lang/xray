@@ -1,6 +1,6 @@
 class Account {
-    private balance: int
-    constructor(b: int) { this.balance = b }
+    private balance: i64
+    constructor(b: i64) { this.balance = b }
 }
 var a = Account(100)
 print(a.balance)

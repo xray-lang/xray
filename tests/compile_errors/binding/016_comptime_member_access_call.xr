@@ -1,6 +1,6 @@
 struct CtPair {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 fn runtimePair() -> CtPair {

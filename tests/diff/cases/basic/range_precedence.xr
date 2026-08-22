@@ -2,7 +2,7 @@
 // Range endpoints are additive expressions, so arithmetic needs no parentheses
 // and both backends must agree on the resulting bounds.
 var n = 3
-var a: Array<int> = [10, 20, 30, 40]
+var a: Array<i64> = [10, 20, 30, 40]
 
 print((0..n + 1).toString())
 print((0..n - 1).toString())

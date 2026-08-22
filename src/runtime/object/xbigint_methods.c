@@ -33,8 +33,8 @@ void xr_bigint_register_class(XrVMRuntime *isolate) {
     xr_class_builder_add_method(b, "isZero", xr_bigint_is_zero_method, 0, 0);
     xr_class_builder_add_method(b, "isNegative", xr_bigint_is_negative_method, 0, 0);
     xr_class_builder_add_method(b, "isPositive", xr_bigint_is_positive_method, 0, 0);
-    xr_class_builder_add_method(b, "toInt", xr_bigint_to_int_method, 0, 0);
-    xr_class_builder_add_method(b, "toFloat", xr_bigint_to_float_method, 0, 0);
+    xr_class_builder_add_method(b, "toI64", xr_bigint_to_int_method, 0, 0);
+    xr_class_builder_add_method(b, "toF64", xr_bigint_to_float_method, 0, 0);
 
     XrClass *cls = xr_class_builder_finalize(b);
     XR_CHECK(cls != NULL, "bigint_register_class: finalize failed");

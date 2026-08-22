@@ -14,7 +14,7 @@ fn inferredNonU8() {
     values.appendFrom(values[:])
     values.repeatFrom(1, 1)
 
-    var view: Slice<int> = values[:]
+    var view: Slice<i64> = values[:]
     view.load<u16>(0, Endian.LE)
     view.store<u16>(0, 1, Endian.LE)
 }

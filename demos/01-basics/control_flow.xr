@@ -46,7 +46,7 @@ for (var i = 0; i < 10; i++) {
 }
 
 // === match expression ===
-fn describe(x: int) -> string {
+fn describe(x: i64) -> string {
     return match (x) {
         0     -> "zero",
         1     -> "one",
@@ -61,7 +61,7 @@ print(describe(7))
 print(describe(42))
 
 // === match with guard ===
-fn classify(n: int) -> string {
+fn classify(n: i64) -> string {
     return match (n) {
         0              -> "zero",
         n if (n < 0)   -> "negative",
@@ -80,7 +80,7 @@ enum MathError {
     DivByZero
 }
 
-fn safeDivide(a: int, b: int) -> int {
+fn safeDivide(a: i64, b: i64) -> i64 {
     if (b == 0) { throw MathError.DivByZero }
     return a / b
 }

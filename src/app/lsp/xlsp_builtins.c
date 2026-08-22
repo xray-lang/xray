@@ -104,9 +104,9 @@ static int xlsp_append_enum_metadata_completions(XrJsonValue *items, XrType *typ
 static XrType *create_type_for_builtin(XlspBuiltinType type) {
     XrType *placeholder = xr_type_new_error(NULL);
     switch (type) {
-        case XLSP_TYPE_INT:
+        case XLSP_TYPE_I64:
             return xr_type_new_int(NULL);
-        case XLSP_TYPE_FLOAT:
+        case XLSP_TYPE_F64:
             return xr_type_new_float(NULL);
         case XLSP_TYPE_STRING:
             return xr_type_new_string(NULL);
@@ -208,10 +208,10 @@ static void xlsp_receiver_label(XrType *type, const XlspReceiverMethodSpec *spec
             xlsp_type_label(type, buf, buf_size);
             return;
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            snprintf(buf, buf_size, "Array<byte>");
+            snprintf(buf, buf_size, "Array<u8>");
             return;
         case XA_BUILTIN_RECEIVER_U8_SLICE:
-            snprintf(buf, buf_size, "Slice<byte>");
+            snprintf(buf, buf_size, "Slice<u8>");
             return;
         case XA_BUILTIN_RECEIVER_ARRAY:
         case XA_BUILTIN_RECEIVER_POD_SLICE:
@@ -242,19 +242,19 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             snprintf(buf, buf_size, "bool");
             break;
         case XA_BUILTIN_TYPE_INT:
-            snprintf(buf, buf_size, "int");
+            snprintf(buf, buf_size, "i64");
             break;
         case XA_BUILTIN_TYPE_STRING:
             snprintf(buf, buf_size, "string");
             break;
         case XA_BUILTIN_TYPE_U8:
-            snprintf(buf, buf_size, "byte");
+            snprintf(buf, buf_size, "u8");
             break;
         case XA_BUILTIN_TYPE_U8_ARRAY:
-            snprintf(buf, buf_size, "Array<byte>");
+            snprintf(buf, buf_size, "Array<u8>");
             break;
         case XA_BUILTIN_TYPE_U8_SLICE:
-            snprintf(buf, buf_size, "Slice<byte>");
+            snprintf(buf, buf_size, "Slice<u8>");
             break;
         case XA_BUILTIN_TYPE_UNIT:
             snprintf(buf, buf_size, "()");
@@ -284,23 +284,23 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             break;
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_BOOL_FN:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "(%s, int) -> bool", elem);
+            snprintf(buf, buf_size, "(%s, i64) -> bool", elem);
             break;
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_UNIT_FN:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "(%s, int) -> ()", elem);
+            snprintf(buf, buf_size, "(%s, i64) -> ()", elem);
             break;
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "(%s, int) -> %s", elem, tp);
+            snprintf(buf, buf_size, "(%s, i64) -> %s", elem, tp);
             break;
         case XA_BUILTIN_TYPE_PARAM_0_RECEIVER_ELEM_INDEX_TO_PARAM_0_FN:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "(%s, %s, int) -> %s", tp, elem, tp);
+            snprintf(buf, buf_size, "(%s, %s, i64) -> %s", tp, elem, tp);
             break;
         case XA_BUILTIN_TYPE_RECEIVER_ELEM_COMPARE_FN:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "(%s, %s) -> int", elem, elem);
+            snprintf(buf, buf_size, "(%s, %s) -> i64", elem, elem);
             break;
         case XA_BUILTIN_TYPE_ITERATOR_OF_RECEIVER_ELEM:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
@@ -308,11 +308,11 @@ static void xlsp_component_label(XrType *receiver, const XlspReceiverMethodSpec 
             break;
         case XA_BUILTIN_TYPE_ITERATOR_OF_INDEX_RECEIVER_ELEM_TUPLE:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "Iterator<(int, %s)>", elem);
+            snprintf(buf, buf_size, "Iterator<(i64, %s)>", elem);
             break;
         case XA_BUILTIN_TYPE_ARRAY_OF_INDEX_RECEIVER_ELEM_TUPLE:
             xlsp_receiver_elem_label(receiver, elem, sizeof(elem));
-            snprintf(buf, buf_size, "Array<(int, %s)>", elem);
+            snprintf(buf, buf_size, "Array<(i64, %s)>", elem);
             break;
         case XA_BUILTIN_TYPE_SLICE_OF_PARAM_0:
             snprintf(buf, buf_size, "Slice<%s>", tp);
@@ -486,10 +486,10 @@ XlspBuiltinType xlsp_builtin_type_from_name(const char *name) {
         return XLSP_TYPE_SET;
     if (strcmp(name, TYPE_NAME_CHANNEL) == 0)
         return XLSP_TYPE_CHANNEL;
-    if (strcmp(name, TYPE_NAME_INT) == 0)
-        return XLSP_TYPE_INT;
-    if (strcmp(name, TYPE_NAME_FLOAT) == 0)
-        return XLSP_TYPE_FLOAT;
+    if (strcmp(name, TYPE_NAME_I64) == 0)
+        return XLSP_TYPE_I64;
+    if (strcmp(name, TYPE_NAME_F64) == 0)
+        return XLSP_TYPE_F64;
     if (strcmp(name, TYPE_NAME_BOOL) == 0)
         return XLSP_TYPE_BOOL;
     if (strcmp(name, TYPE_NAME_JSON) == 0)
@@ -644,7 +644,7 @@ XlspBuiltinType xlsp_infer_literal_type(const char *text) {
         }
     }
     if (is_number && *text) {
-        return has_dot ? XLSP_TYPE_FLOAT : XLSP_TYPE_INT;
+        return has_dot ? XLSP_TYPE_F64 : XLSP_TYPE_I64;
     }
 
     // Constructor calls

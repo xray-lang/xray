@@ -1,14 +1,14 @@
 // A closure literal is normally call-bounded, so its captures loan nothing
 // past the statement. A callee that stores the closure breaks that: the
 // closure -- and the root it captured -- outlives the call.
-fn stash(f: fn() -> int, sink: ref Array<fn() -> int>) {
+fn stash(f: fn() -> i64, sink: ref Array<fn() -> i64>) {
     sink.push(f)
 }
 
-fn main() -> int {
+fn main() -> i64 {
     var buf = [1, 2, 3]
-    var sink: Array<fn() -> int> = []
-    stash(fn() -> int { buf.push(7); return len(buf) }, ref sink)
+    var sink: Array<fn() -> i64> = []
+    stash(fn() -> i64 { buf.push(7); return len(buf) }, ref sink)
     var owned = move buf
     owned.push(99)
     return sink[0]()

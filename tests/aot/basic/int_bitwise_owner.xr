@@ -1,9 +1,9 @@
 // VM/AOT/generated-C differential KAT for shared.bitwise-binary.
 // Runtime variables keep the scalar operators out of constant-fold-only paths.
 
-var all: int = -1
-var mask: int = 85
-var min: int = -9223372036854775807 - 1
+var all: i64 = -1
+var mask: i64 = 85
+var min: i64 = -9223372036854775807 - 1
 print(all & mask)       // 85
 print(min | 1)          // -9223372036854775807
 print(all ^ min)        // 9223372036854775807

@@ -1,5 +1,5 @@
-fn bump_word(words: ref Slice<u32>, index: int, delta: u32) -> int {
+fn bump_word(words: ref Slice<u32>, index: i64, delta: u32) -> i64 {
     var old = words[index]
     words[index] = old + delta
-    return int(words[index])
+    return (words[index] as i64)
 }

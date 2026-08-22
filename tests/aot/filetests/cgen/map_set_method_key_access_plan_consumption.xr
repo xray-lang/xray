@@ -1,12 +1,12 @@
-fn methodPlan() -> int {
-    var scores: Map<int, int> = #{}
+fn methodPlan() -> i64 {
+    var scores: Map<i64, i64> = #{}
     scores.set(1, 10)
     var hasOne = scores.containsKey(1)
     var one = scores.get(1)
     scores.delete(1)
     scores.clear()
 
-    var seen: Set<int> = #[]
+    var seen: Set<i64> = #[]
     seen.add(2)
     var sawTwo = seen.contains(2)
     seen.delete(2)

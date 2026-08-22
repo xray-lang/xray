@@ -1,6 +1,6 @@
 struct Pair {
-    a: int
-    b: int
+    a: i64
+    b: i64
 }
 
 var pair = Pair{a: 7, b: 5}

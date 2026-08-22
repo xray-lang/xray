@@ -1,5 +1,5 @@
-fn run(n: int) -> float {
-    var values: Array<float> = []
+fn run(n: i64) -> f64 {
+    var values: Array<f64> = []
     var i = 0
     var x = 1.0
     while (i < n) {

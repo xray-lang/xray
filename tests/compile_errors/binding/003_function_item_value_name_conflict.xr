@@ -1,7 +1,7 @@
-fn b() -> int {
+fn b() -> i64 {
     return 1
 }
 
-const b = fn() -> int {
+const b = fn() -> i64 {
     return 2
 }

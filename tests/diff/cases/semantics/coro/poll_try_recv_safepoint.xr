@@ -3,18 +3,18 @@
 // Without the poll safepoint, deterministic single-worker AOT spins forever
 // before the producer coroutine can run.
 
-fn recv_int(ch: Channel<int>) -> int {
+fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.tryRecv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn producer(ch: Channel<int>) {
+fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 
-fn spin_until_value(ch: Channel<int>, out: Channel<int>) {
+fn spin_until_value(ch: Channel<i64>, out: Channel<i64>) {
     var got = -1
     while (got < 0) {
         got = recv_int(ch)
@@ -22,8 +22,8 @@ fn spin_until_value(ch: Channel<int>, out: Channel<int>) {
     out.send(got)
 }
 
-const data: Channel<int> = Channel(0)
-const out: Channel<int> = Channel(1)
+const data: Channel<i64> = Channel(0)
+const out: Channel<i64> = Channel(1)
 
 go spin_until_value(data, out)
 go producer(data)

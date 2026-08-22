@@ -4,13 +4,13 @@ var COUNT = 1000
 var TIMEOUT_MS = 10
 
 if (len(process.args) > 0) {
-    COUNT = int(process.args[0]) ?? COUNT
+    COUNT = i64.tryParse(process.args[0]) ?? COUNT
 }
 if (len(process.args) > 1) {
-    TIMEOUT_MS = int(process.args[1]) ?? TIMEOUT_MS
+    TIMEOUT_MS = i64.tryParse(process.args[1]) ?? TIMEOUT_MS
 }
 
-fn recv_timeout_worker(ch: Channel<int>, timeout_ms: int) -> bool {
+fn recv_timeout_worker(ch: Channel<i64>, timeout_ms: i64) -> bool {
     return match (ch.recvTimeout(timeout_ms)) {
         Recv.Timeout -> true
         Recv.Value(_) -> false
@@ -18,14 +18,14 @@ fn recv_timeout_worker(ch: Channel<int>, timeout_ms: int) -> bool {
     }
 }
 
-fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
+fn send_timeout_worker(ch: Channel<i64>, timeout_ms: i64, value: i64) -> bool {
     return match (ch.sendTimeout(value, timeout_ms)) {
         SendResult.Sent -> false
         _ -> true
     }
 }
 
-fn run_recv_storm(count: int, timeout_ms: int) -> int {
+fn run_recv_storm(count: i64, timeout_ms: i64) -> i64 {
     const ch = Channel(1)
     var tasks: Array<Task> = []
     for (var i = 0; i < count; i++) {
@@ -42,7 +42,7 @@ fn run_recv_storm(count: int, timeout_ms: int) -> int {
     return timeouts
 }
 
-fn run_send_storm(count: int, timeout_ms: int) -> int {
+fn run_send_storm(count: i64, timeout_ms: i64) -> i64 {
     const ch = Channel(1)
     ch.send(1)
 

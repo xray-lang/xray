@@ -1,4 +1,4 @@
-fn xray_match_panic(x: int) -> int {
+fn xray_match_panic(x: i64) -> i64 {
     return match (x) {
         0 -> 1
     }

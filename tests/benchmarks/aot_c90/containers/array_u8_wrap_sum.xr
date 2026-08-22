@@ -1,15 +1,15 @@
-fn run(n: int) -> int {
-    var bytes: Array<byte> = []
+fn run(n: i64) -> i64 {
+    var bytes: Array<u8> = []
     var i = 0
     while (i < n) {
-        bytes.push(i as byte)
+        bytes.push(i as u8)
         i = i + 1
     }
 
     var sum = 0
     i = 0
     while (i < len(bytes)) {
-        sum = sum + (bytes[i] as int)
+        sum = sum + (bytes[i] as i64)
         i = i + 1
     }
     return sum

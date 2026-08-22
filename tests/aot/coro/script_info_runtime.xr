@@ -1,4 +1,4 @@
-fn check() -> int {
+fn check() -> i64 {
     Coro.yield()
     if (!__file__.endsWith("script_info_runtime.xr")) {
         return 1

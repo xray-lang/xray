@@ -3,7 +3,7 @@ class LegacyHash implements Hashable {
         return true
     }
 
-    hashCode() -> int {
+    hashCode() -> i64 {
         return 1
     }
 }

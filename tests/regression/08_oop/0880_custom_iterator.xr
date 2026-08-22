@@ -5,10 +5,10 @@
 // ===== 基本范围迭代器 =====
 
 class CustomRangeIter {
-    current: int
-    end: int
+    current: i64
+    end: i64
     
-    constructor(start: int, end: int) {
+    constructor(start: i64, end: i64) {
         this.current = start
         this.end = end
     }
@@ -17,7 +17,7 @@ class CustomRangeIter {
         return this.current < this.end
     }
     
-    next() -> int {
+    next() -> i64 {
         var val = this.current
         this.current = this.current + 1
         return val
@@ -25,10 +25,10 @@ class CustomRangeIter {
 }
 
 class CustomRange {
-    start: int
-    end: int
+    start: i64
+    end: i64
     
-    constructor(start: int, end: int) {
+    constructor(start: i64, end: i64) {
         this.start = start
         this.end = end
     }
@@ -68,11 +68,11 @@ fn test_single_element_range() {
 // ===== 步长迭代器 =====
 
 class StepIterator {
-    current: int
-    end: int
-    step: int
+    current: i64
+    end: i64
+    step: i64
     
-    constructor(start: int, end: int, step: int) {
+    constructor(start: i64, end: i64, step: i64) {
         this.current = start
         this.end = end
         this.step = step
@@ -86,7 +86,7 @@ class StepIterator {
         }
     }
     
-    next() -> int {
+    next() -> i64 {
         var val = this.current
         this.current = this.current + this.step
         return val
@@ -94,11 +94,11 @@ class StepIterator {
 }
 
 class StepRange {
-    start: int
-    end: int
-    step: int
+    start: i64
+    end: i64
+    step: i64
     
-    constructor(start: int, end: int, step: int) {
+    constructor(start: i64, end: i64, step: i64) {
         this.start = start
         this.end = end
         this.step = step
@@ -111,7 +111,7 @@ class StepRange {
 
 @test
 fn test_step_range_forward() {
-    var values: Array<int> = []
+    var values: Array<i64> = []
     for (i in StepRange(0, 10, 2)) {
         values.push(i)
     }
@@ -125,7 +125,7 @@ fn test_step_range_forward() {
 
 @test
 fn test_step_range_backward() {
-    var values: Array<int> = []
+    var values: Array<i64> = []
     for (i in StepRange(10, 0, -2)) {
         values.push(i)
     }
@@ -140,12 +140,12 @@ fn test_step_range_backward() {
 // ===== 斐波那契迭代器 =====
 
 class FibIterator {
-    a: int
-    b: int
-    count: int
-    max: int
+    a: i64
+    b: i64
+    count: i64
+    max: i64
     
-    constructor(max: int) {
+    constructor(max: i64) {
         this.a = 0
         this.b = 1
         this.count = 0
@@ -156,7 +156,7 @@ class FibIterator {
         return this.count < this.max
     }
     
-    next() -> int {
+    next() -> i64 {
         var val = this.a
         var tmp = this.a + this.b
         this.a = this.b
@@ -167,9 +167,9 @@ class FibIterator {
 }
 
 class Fibonacci {
-    max: int
+    max: i64
     
-    constructor(n: int) {
+    constructor(n: i64) {
         this.max = n
     }
     
@@ -180,7 +180,7 @@ class Fibonacci {
 
 @test
 fn test_fibonacci_iterator() {
-    var values: Array<int> = []
+    var values: Array<i64> = []
     for (n in Fibonacci(8)) {
         values.push(n)
     }
@@ -199,7 +199,7 @@ fn test_fibonacci_iterator() {
 
 class CharIterator {
     str: string
-    index: int
+    index: i64
     
     constructor(s: string) {
         this.str = s

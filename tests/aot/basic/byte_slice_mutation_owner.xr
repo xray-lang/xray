@@ -1,13 +1,13 @@
 fn main() {
-    var bytes = Array<byte>(10)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(10)
+    var view: Slice<u8> = bytes[:]
     view[0] = 1
     view[1] = 2
     view[2] = 3
     view[3] = 4
     view[4] = 5
-    var dst: Slice<byte> = view[1:6]
-    var src: Slice<byte> = view[0:5]
+    var dst: Slice<u8> = view[1:6]
+    var src: Slice<u8> = view[0:5]
     dst.copyFrom(src)
     view.repeatFrom(6, 2, 4)
     print(bytes[0])
@@ -17,7 +17,7 @@ fn main() {
     print(bytes[7])
     print(bytes[8])
     print(bytes[9])
-    var empty: Slice<byte> = view[0:0]
+    var empty: Slice<u8> = view[0:0]
     empty.copyFrom(empty)
     print(len(empty))
 }

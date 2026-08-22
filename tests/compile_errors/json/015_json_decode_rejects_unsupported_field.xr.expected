@@ -1,1 +1,1 @@
-JSON.decode<T>() field 'nested' is not decodable: UNSUPPORTED_TYPE (type 'Set<int>')
+JSON.decode<T>() field 'nested' is not decodable: UNSUPPORTED_TYPE (type 'Set<i64>')

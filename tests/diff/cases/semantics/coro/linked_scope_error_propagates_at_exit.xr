@@ -7,16 +7,16 @@
 // program printed a stale return value before the error surfaced at top level.
 enum E { Boom }
 
-fn failing() -> int {
+fn failing() -> i64 {
     throw E.Boom
 }
 
-fn ok() -> int {
+fn ok() -> i64 {
     return 7
 }
 
 // Failure inside the block: nothing after the block runs.
-fn scope_fails() -> int {
+fn scope_fails() -> i64 {
     linked scope {
         go failing()
     }
@@ -37,7 +37,7 @@ fn scope_caught_here() {
 }
 
 // A linked scope whose children all succeed runs to completion.
-fn scope_succeeds() -> int {
+fn scope_succeeds() -> i64 {
     linked scope {
         go ok()
         go ok()

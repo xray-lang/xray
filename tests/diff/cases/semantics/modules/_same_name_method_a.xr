@@ -3,14 +3,14 @@
 // method-by-index lookup that confuses the twins is observable.  Skipped as a
 // standalone diff case because its basename starts with '_'.
 export class Widget {
-    v: int
-    constructor(x: int) {
+    v: i64
+    constructor(x: i64) {
         this.v = x
     }
-    kind() -> int {
+    kind() -> i64 {
         return 100
     }
-    val() -> int {
+    val() -> i64 {
         return this.v
     }
 }

@@ -8,9 +8,9 @@ int main(void) {
         return 1;
     if (xrt_typeof_id(XR_TRUE_VAL) != XR_TYPE_IDENTITY_CORE_BOOL)
         return 2;
-    if (xrt_typeof_id(XR_FROM_INT(7)) != XR_TYPE_IDENTITY_CORE_INT)
+    if (xrt_typeof_id(XR_FROM_INT(7)) != XR_TYPE_IDENTITY_CORE_I64)
         return 3;
-    if (xrt_typeof_id(XR_FROM_FLOAT(1.5)) != XR_TYPE_IDENTITY_CORE_FLOAT)
+    if (xrt_typeof_id(XR_FROM_FLOAT(1.5)) != XR_TYPE_IDENTITY_CORE_F64)
         return 4;
     if (xrt_typeof_id(XR_FROM_RUNE('X')) != XR_TYPE_IDENTITY_CORE_RUNE)
         return 5;

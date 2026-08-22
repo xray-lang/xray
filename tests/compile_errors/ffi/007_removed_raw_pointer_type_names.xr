@@ -1,4 +1,4 @@
-fn rejectRemovedPointerNames(p: RawPtr<byte>, q: RawMut<byte>) -> int {
+fn rejectRemovedPointerNames(p: RawPtr<u8>, q: RawMut<u8>) -> i64 {
     return 0
 }
 

@@ -1,7 +1,7 @@
 import mem
 
 struct Header {
-    x: byte
+    x: u8
 }
 
 var field = "x"

@@ -1,8 +1,8 @@
 extern "C" {
-    fn memchr(bytes: Ptr<byte>, value: i32, count: usize) -> Ptr<byte>
+    fn memchr(bytes: Ptr<u8>, value: i32, count: usize) -> Ptr<u8>
 }
 
-fn readUtf8Like(bytes: Ptr<byte>, length: usize) -> usize {
+fn readUtf8Like(bytes: Ptr<u8>, length: usize) -> usize {
     var cursor: usize = 0
     var checksum: usize = 0
     while (cursor < length) {

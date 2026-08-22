@@ -8,20 +8,20 @@
 // 直接形态在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
 
 class Holder {
-    handler: fn() -> int
-    constructor() { this.handler = fn() -> int { return 0 } }
+    handler: fn() -> i64
+    constructor() { this.handler = fn() -> i64 { return 0 } }
 }
 
 class Owner {
     holder: Holder
-    value: int
+    value: i64
     constructor() { this.holder = Holder(); this.value = 0 }
-    bump() -> int { this.value = this.value + 1; return this.value }
+    bump() -> i64 { this.value = this.value + 1; return this.value }
 }
 
 fn indirect_closure_cycle() {
     var o = Owner()
-    o.holder.handler = fn() -> int { return o.bump() }
+    o.holder.handler = fn() -> i64 { return o.bump() }
 }
 
 indirect_closure_cycle()

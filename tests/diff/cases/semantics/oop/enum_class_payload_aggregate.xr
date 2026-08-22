@@ -39,7 +39,7 @@ fn tagOf(node: Node) -> string {
     }
 }
 
-fn childCount(node: Node) -> int {
+fn childCount(node: Node) -> i64 {
     return match (node) {
         Node.Document(kids) -> len(kids),
         Node.Element(name, attrs, kids) -> len(kids),

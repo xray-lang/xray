@@ -1,7 +1,7 @@
 class UnsafeCloneHandle {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }

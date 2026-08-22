@@ -1,6 +1,6 @@
 type JsonBag = { items: Array<JSON.Value> }
 
-fn main() -> int {
+fn main() -> i64 {
     var data = JSON.parseValue("{\"items\":[1,true,null]}")
     var bag = JSON.decode<JsonBag>(data)
     if (bag == null) {

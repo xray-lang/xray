@@ -464,20 +464,20 @@ typedef enum {
     XI_BYTE_SLICE_COMMON_PREFIX,
     XI_BYTE_SLICE_REPEAT,
     XI_SLICE_WINDOW,   /* args[0]=Slice<T>, args[1]=start, args[2]=count; strict borrowed slice */
-    XI_SLICE_AS_BYTES, /* args[0]=Slice<T>; result Slice<byte>; aux unused */
+    XI_SLICE_AS_BYTES, /* args[0]=Slice<T>; result Slice<u8>; aux unused */
     XI_SLICE_FILL,     /* args[0]=Slice<T> dst, args[1]=T value; result dst */
     XI_SLICE_COPY,     /* args[0]=Slice<T> dst, args[1]=Slice<T> src; result dst */
     XI_SLICE_COMPARE,  /* args[0]=Slice<T> left, args[1]=Slice<T> right; result int */
-    XI_SLICE_REINTERPRET, /* args[0]=Slice<byte>; result Slice<T>; aux packs elem metadata */
+    XI_SLICE_REINTERPRET, /* args[0]=Slice<u8>; result Slice<T>; aux packs elem metadata */
     XI_SLICE_FROM_PTR, /* args[0]=Ptr<T>, args[1]=count, args[2]=owner; caller-proven unsafe view */
     XI_BUFFER_MATERIALIZE, /* args[0]=moved Buffer; exact native-output proof is analyzer-owned */
     XI_BYTE_ARRAY_COPY_WITHIN,
     XI_BYTE_ARRAY_COPY_FROM,   /* args[0]=dst, args[1]=src, args[2]=src_off,
                                 * args[3]=dst_off, args[4]=count */
-    XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<byte>, args[1]=src Slice<byte>; result dst */
-    XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<byte>, args[1]=distance, args[2]=count */
+    XI_BYTE_ARRAY_APPEND_FROM, /* args[0]=dst Array<u8>, args[1]=src Slice<u8>; result dst */
+    XI_BYTE_ARRAY_REPEAT_FROM, /* args[0]=dst Array<u8>, args[1]=distance, args[2]=count */
     XI_ARRAY_DATA_PTR,         /* args[0]=Array<T>/Slice<T>/[T;N]; result raw pointer borrow */
-    XI_STATIC_BYTES_PTR,       /* aux=exact bytes, aux_int=length; stable Ptr<byte> */
+    XI_STATIC_BYTES_PTR,       /* aux=exact bytes, aux_int=length; stable Ptr<u8> */
     XI_STATIC_ADDR,            /* aux_int=shared slot; result Ptr<T>/MutPtr<T> to static data */
     XI_LOCAL_ADDR,             /* args[0]=caller SSA slot; call-bound place address */
     XI_PLACE_LOAD,             /* args[0]=call-bound place; result pointee value */
@@ -914,7 +914,7 @@ typedef struct XiClassData {
      * lowering knows which declaration form this came from -- so it records the
      * answer here rather than leaving the backend to re-derive it. */
     bool needs_runtime_type;
-    const char **mono_type_arg_names; /* concrete type display names (e.g. ["int","string"]) */
+    const char **mono_type_arg_names; /* concrete type display names (e.g. ["i64","string"]) */
     int mono_type_arg_count;          /* element count */
     struct XrAggregateLayout *struct_layout;   /* non-NULL for VALUE_TYPE (struct) classes */
     struct XrAggregateLayout *instance_layout; /* non-NULL when class fields have native layout */

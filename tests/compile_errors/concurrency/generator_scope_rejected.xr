@@ -1,7 +1,7 @@
 // Scope exit joins linked children and is therefore a real suspension point.
-fn work() -> int { return 7 }
+fn work() -> i64 { return 7 }
 
-fn gen() -> Iterator<int> {
+fn gen() -> Iterator<i64> {
     scope {
         go work()
     }

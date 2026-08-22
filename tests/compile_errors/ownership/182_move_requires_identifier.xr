@@ -1,10 +1,10 @@
 // A field has no ownership root of its own -- its root is the container --
 // so moving one slot would leave the container partially moved.
 struct Holder {
-    n: int
+    n: i64
 }
 
-fn consume(x: move int) -> int {
+fn consume(x: move i64) -> i64 {
     return x
 }
 

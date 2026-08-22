@@ -1,4 +1,4 @@
-fn xray_no_alloc_json_stringify_reject(value: int) -> string {
+fn xray_no_alloc_json_stringify_reject(value: i64) -> string {
     return JSON.stringify(value)
 }
 

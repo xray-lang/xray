@@ -1,6 +1,6 @@
 import { VideoSummary, engagementScore } from "./model"
 
-export fn summarize(rows: Slice<VideoSummary>) -> float {
+export fn summarize(rows: Slice<VideoSummary>) -> f64 {
     var score = 0.0
     var i = 0
     while (i < len(rows)) {

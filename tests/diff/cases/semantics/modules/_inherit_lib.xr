@@ -1,14 +1,14 @@
 // Library module owning a full inheritance chain: the importing entry must
 // see inherited fields and overridden methods without redeclaring anything.
 export class Base {
-    b: int
+    b: i64
     constructor() { this.b = 1 }
     tag() -> string { return "base" }
 }
 
 export class Sub extends Base {
-    s: int
+    s: i64
     constructor() { super(); this.s = 2 }
     tag() -> string { return "sub" }
-    own() -> int { return this.s }
+    own() -> i64 { return this.s }
 }

@@ -26,7 +26,7 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-var a = identity<int>(42)
+var a = identity<i64>(42)
 var b = identity("hello")               // 推断 T=string
 
 // 泛型类
@@ -36,7 +36,7 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-var b1 = Box<int>(42)
+var b1 = Box<i64>(42)
 var b2 = Box<string>("hi")
 
 // 多参数泛型
@@ -50,14 +50,14 @@ class Pair<K, V> {
 
 // 泛型接口
 interface Comparable<T> {
-    compareTo(other: T) -> int
+    compareTo(other: T) -> i64
 }
 
 // 泛型 type alias：透明语法替换，不产生新类型
 type PairAlias<T> = { first: T, second: T }
 ```
 
-`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<int>` 等价于 `{ first: int, second: int }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `{ first: i64, second: i64 }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
@@ -84,30 +84,30 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 | 接口 | 含义 |
 |---|---|
-| `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
-| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> int`（签名见下） |
+| `Comparable` | 可用 `<` `<=` `>` `>=` 比较；i64/f64/string/Comparable 实现者 |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> i64`（签名见下） |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
 | `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map（含 `JSON.Object`）、Set、string、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`JSON.Value` 不可直接迭代。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
-`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> int`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> i64`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
 ```xray @id=generics-hashable-contract
 class Token implements Hashable {
-    value: int
+    value: i64
 
-    constructor(value: int) { this.value = value }
+    constructor(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
     operator==(other: Token) -> bool { return this.value == other.value }
 
-    hash() -> int { return this.value }
+    hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, int> = #{}
+var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
+只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
 
 #### `where` 子句
 
@@ -144,7 +144,7 @@ enum Wrap<T> where T: Comparable { ... }
 - `a == b` 蕴含 `a` 与 `b` 键等价（反之不成立）。
 - 键等价蕴含 `hash(a) == hash(b)`。
 
-内置 `float` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
+内置 `f64` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
 
 按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
 
@@ -152,7 +152,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 **当前限制**：
 - 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
-- 不支持默认类型参数（`<T = int>`）。
+- 不支持默认类型参数（`<T = i64>`）。
 - `where` 只接受与内联约束相同的表达力（`T: A & B`）；不支持对关联类型或嵌套类型的约束（`where T.Item: Hashable`），因为关联类型本身不存在。
 - 同一个类型参数列表中不得出现重名参数（`<T, T>`）。
 - 接口实现仍需**显式 `implements`**（在类声明位置，不是约束位置，详见 §5.4）。
@@ -162,9 +162,9 @@ enum Wrap<T> where T: Comparable { ... }
 #### 类型推断
 
 ```xray @id=generics-inference
-identity(42)                    // T 推断为 int
+identity(42)                    // T 推断为 i64
 Box("hello")                // T 推断为 string
-Pair("key", 100)            // K=string, V=int
+Pair("key", 100)            // K=string, V=i64
 ```
 
 推断算法是**双向推断**：
@@ -176,9 +176,9 @@ Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray @id=generics-explicit-instantiation
-var empty = Array<int>()              // 无元素可推
-var m = Map<string, int>()
-var result = identity<float>(0)            // 泛型实参提供唯一上下文，0 直接定型为 float
+var empty = Array<i64>()              // 无元素可推
+var m = Map<string, i64>()
+var result = identity<f64>(0)            // 泛型实参提供唯一上下文，0 直接定型为 f64
 ```
 
 ### 9.4 特化与 monomorphization
@@ -187,7 +187,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 
 - **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
 - **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
-- 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
+- 名字修饰（name mangling）：`identity<i64>` → `identity$i64`，`Pair<string, i64>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
 - 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
@@ -198,7 +198,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 
 | 预算 | 值 | 防什么 | 超限 |
 |---|:---:|---|---|
-| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<int>` 构造 `RouteMatch<int>` 构造 `Map<string, int>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0389` |
+| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<i64>` 构造 `RouteMatch<i64>` 构造 `Map<string, i64>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0389` |
 | `XR_MONO_MAX_INSTANCES` | 16384 | **广度**。每个实例克隆一份完整声明，因此这是编译期内存兜底，不是语言规则。取值远高于任何现实程序 | `E0387` |
 
 **超限一律是硬错误，绝不静默降级。** 把调用留在泛型状态会在 `xray verify` 的 `forbid=["box"]` 合同下面重新引入装箱，而合同刚刚"证明"了它不存在——这类不可见的去优化正是版本化 effect 合同要排除的东西。
@@ -208,7 +208,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 **性能影响**：
 - 单态化让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path。
 - 逐类型特化会增加代码和元数据体积（大致按“类型组合数 × 声明体积”增长），换来精确布局、调试类型名保真和按类型特化；体积回收由上述 AOT 共享计划按阈值完成。
-- 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
+- 内置特化容器（`Array<i64>`、`Array<u8>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
 **高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
@@ -219,7 +219,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 |---|---|---|
 | `where` 子句 | **稳定** | 见 §9.2 |
 | 声明点方差（`out T` / `in T`） | **未实现** | 有前置依赖，见 §9.6 |
-| 默认类型参数（`<T = int>`） | **未实现** | 语法当前是错误，不是被忽略 |
+| 默认类型参数（`<T = i64>`） | **未实现** | 语法当前是错误，不是被忽略 |
 | 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
 ### 9.5 协议（duck typing）与名义类型
@@ -249,7 +249,7 @@ render(Square())     // OK
 仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
 
 ```xray
-type Point = { x: float, y: float }
+type Point = { x: f64, y: f64 }
 
 fn describe(p: Point) { ... }
 
@@ -283,9 +283,9 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 class Container<T> {
     items: Array<T>
 }
-var c = Container<int>()
-print(c is Container<int>)     // true
-print(typeName(c))             // "Container<int>" when type names are enabled
+var c = Container<i64>()
+print(c is Container<i64>)     // true
+print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
 
 结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
@@ -314,7 +314,7 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-var a = identity<int>(42)
+var a = identity<i64>(42)
 var b = identity("hello")               // T inferred as string
 
 // Generic class
@@ -324,7 +324,7 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-var b1 = Box<int>(42)
+var b1 = Box<i64>(42)
 var b2 = Box<string>("hi")
 
 // Multi-parameter generic
@@ -338,7 +338,7 @@ class Pair<K, V> {
 
 // Generic interface
 interface Comparable<T> {
-    compareTo(other: T) -> int
+    compareTo(other: T) -> i64
 }
 
 // Generic type alias: transparent syntax substitution, not a new type
@@ -347,8 +347,8 @@ type PairAlias<T> = { first: T, second: T }
 
 Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
 no constraints. At each use site, the type arguments are substituted directly
-into the alias RHS, so `PairAlias<int>` is equivalent to `{ first: int, second:
-int }`. This happens at compile time and creates no runtime metadata,
+into the alias RHS, so `PairAlias<i64>` is equivalent to `{ first: i64, second:
+i64 }`. This happens at compile time and creates no runtime metadata,
 monomorphization instance, or AOT branch; cyclic aliases are rejected.
 
 ### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
@@ -376,30 +376,30 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 | Interface | Meaning |
 |---|---|
-| `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> int` (signature below) |
+| `Comparable` | usable with `<` `<=` `>` `>=`; i64/f64/string and types implementing `Comparable` |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> i64` (signature below) |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
 | `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map (including `JSON.Object`), Set, string, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `JSON.Value` is not directly iterable. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> int`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> i64`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
 ```xray @id=generics-hashable-contract
 class Token implements Hashable {
-    value: int
+    value: i64
 
-    constructor(value: int) { this.value = value }
+    constructor(value: i64) { this.value = value }
 
     // the parameter is spelled Token, not Self
     operator==(other: Token) -> bool { return this.value == other.value }
 
-    hash() -> int { return this.value }
+    hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, int> = #{}
+var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
+Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
 
 #### `where` clauses
 
@@ -436,15 +436,15 @@ Hash containers store and retrieve by a **key equivalence relation**, which is a
 - `a == b` implies `a` and `b` are key-equivalent (the converse does not hold).
 - Key equivalence implies `hash(a) == hash(b)`.
 
-Built-in `float` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
+Built-in `f64` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
 
 Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
 
-A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with float fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
+A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
 
 **Current limitations**:
 - **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.
-- Default type parameters (`<T = int>`) are not supported.
+- Default type parameters (`<T = i64>`) are not supported.
 - `where` accepts exactly the expressiveness of an inline constraint (`T: A & B`); constraints on associated or nested types (`where T.Item: Hashable`) are not supported, because associated types do not exist.
 - Duplicate names in one type-parameter list (`<T, T>`) are rejected.
 - Interface implementation still requires **explicit `implements`** at the class declaration site (not at the constraint site; see §5.4).
@@ -454,9 +454,9 @@ A user type's `operator==` serves as its own key relation, so **it must be refle
 #### Type inference
 
 ```xray @id=generics-inference
-identity(42)                    // T inferred as int
+identity(42)                    // T inferred as i64
 Box("hello")                // T inferred as string
-Pair("key", 100)            // K=string, V=int
+Pair("key", 100)            // K=string, V=i64
 ```
 
 The inference algorithm is **bidirectional**:
@@ -468,9 +468,9 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray @id=generics-explicit-instantiation
-var empty = Array<int>()              // no element to infer from
-var m = Map<string, int>()
-var result = identity<float>(0)            // the type argument supplies a unique context; 0 is directly typed as float
+var empty = Array<i64>()              // no element to infer from
+var m = Map<string, i64>()
+var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64
 ```
 
 ### 9.4 Specialization and Monomorphization
@@ -479,7 +479,7 @@ var result = identity<float>(0)            // the type argument supplies a uniqu
 
 - **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. The frontend never merges by representation, because a duck-typed generic body resolves `x.foo()` against the concrete type argument: until that resolution is done, two ABI-equivalent instances are not interchangeable.
 - **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.
-- Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
+- Name mangling: `identity<i64>` → `identity$i64`, `Pair<string, i64>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
 - Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
@@ -490,7 +490,7 @@ Two budgets guard two different risks, and they are not interchangeable:
 
 | Budget | Value | Guards | On breach |
 |---|:---:|---|---|
-| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<int>` building `RouteMatch<int>` building `Map<string, int>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0389` |
+| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<i64>` building `RouteMatch<i64>` building `Map<string, i64>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0389` |
 | `XR_MONO_MAX_INSTANCES` | 16384 | **Breadth**. Each instance clones a whole declaration, so this is a compile-time memory backstop rather than a language rule. It sits far above any realistic program | `E0387` |
 
 **Exceeding a budget is always a hard error, never a silent downgrade.** Leaving a call generic would reintroduce boxing underneath an `xray verify` `forbid=["box"]` contract that just "proved" it absent — exactly the kind of invisible de-optimization versioned effect contracts exist to rule out.
@@ -500,7 +500,7 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 **Performance impact**:
 - Monomorphization lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations.
 - Per-type specialization grows code and metadata size roughly with "type combinations x declaration size"; this buys exact layout, faithful debug type names, and per-type specialization. Size is recovered by the AOT sharing plan above, against its threshold.
-- Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
+- Built-in specialized containers (`Array<i64>`, `Array<u8>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
 **Error-effect specialization for higher-order functions**: callback parameters are effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect summary, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. Strong guarantees at higher-order call boundaries use `xray verify` contracts and reject incomplete proof.
@@ -511,7 +511,7 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 |---|---|---|
 | `where` clauses | **Stable** | see §9.2 |
 | Declaration-site variance (`out T` / `in T`) | **Unimplemented** | has a prerequisite, see §9.6 |
-| Default type parameters (`<T = int>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
+| Default type parameters (`<T = i64>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
 | Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
 
 ### 9.5 Protocols (Duck Typing) vs. Nominal Typing
@@ -541,7 +541,7 @@ render(Square())     // OK
 Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
 
 ```xray
-type Point = { x: float, y: float }
+type Point = { x: f64, y: f64 }
 
 fn describe(p: Point) { ... }
 
@@ -575,9 +575,9 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-var c = Container<int>()
-print(c is Container<int>)     // true
-print(typeName(c))             // "Container<int>" when type names are enabled
+var c = Container<i64>()
+print(c is Container<i64>)     // true
+print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.

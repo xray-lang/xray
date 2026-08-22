@@ -2,7 +2,7 @@
 // Top-level const Map/Set literals are AOT readonly static/prehashed candidates;
 // strict Map indexing must still preserve the E0431 missing-key panic.
 
-const SCORES: Map<string, int> = #{"ada": 7, "lin": 9}
+const SCORES: Map<string, i64> = #{"ada": 7, "lin": 9}
 const SEEN: Set<string> = #["ada", "lin"]
 
 print(SCORES.get("missing") == null)

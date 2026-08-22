@@ -1,1 +1,1 @@
-JSON.value() cannot encode type 'fn() -> int': FUNCTION_FIELD
+JSON.value() cannot encode type 'fn() -> i64': FUNCTION_FIELD

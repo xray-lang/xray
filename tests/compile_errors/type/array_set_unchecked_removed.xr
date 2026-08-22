@@ -1,2 +1,2 @@
-var values = Array<int>(1, 0)
+var values = Array<i64>(1, 0)
 unsafe { values.setUnchecked(0, 1) }

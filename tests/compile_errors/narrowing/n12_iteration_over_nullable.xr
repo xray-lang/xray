@@ -1,6 +1,6 @@
 // Spec §2.13 N-12: iterating a possibly-null source is rejected.
 fn main() {
-    var items: Array<int>? = [1, 2]
+    var items: Array<i64>? = [1, 2]
     for (v in items) {
         print(v)
     }

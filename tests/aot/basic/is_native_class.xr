@@ -6,15 +6,15 @@
 
 import net
 
-fn isConn(x: NetConn | int) -> bool { return x is NetConn }
-fn isListener(x: NetListener | int) -> bool { return x is NetListener }
-fn isBig(x: BigInt | int) -> bool { return x is BigInt }
-fn isSb(x: StringBuilder | int) -> bool { return x is StringBuilder }
+fn isConn(x: NetConn | i64) -> bool { return x is NetConn }
+fn isListener(x: NetListener | i64) -> bool { return x is NetListener }
+fn isBig(x: BigInt | i64) -> bool { return x is BigInt }
+fn isSb(x: StringBuilder | i64) -> bool { return x is StringBuilder }
 
-fn describeBig(x: BigInt | int) -> string {
+fn describeBig(x: BigInt | i64) -> string {
     match (x) {
         is BigInt -> { return "big" }
-        is int -> { return "int" }
+        is i64 -> { return "int" }
     }
 }
 
@@ -30,12 +30,12 @@ fn main() {
     var sb = StringBuilder()
     print(isSb(sb))
 
-    var u: NetConn | int = 42
+    var u: NetConn | i64 = 42
     var c = u as NetConn?
     print(c == null)
 
-    var wide: int = 70000
-    var small: int = 42
+    var wide: i64 = 70000
+    var small: i64 = 42
     print(small is i16)
     print(wide is i16)
     print(small is u64)

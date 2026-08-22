@@ -1,5 +1,5 @@
 struct BadFixedArray {
-    data: [4]int
+    data: [4]i64
 }
 
 fn main() {

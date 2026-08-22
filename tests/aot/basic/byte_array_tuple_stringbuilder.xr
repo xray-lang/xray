@@ -1,13 +1,13 @@
 // AOT test: Array<byte>, tuple values, rune code points, and StringBuilder.
 
-fn pair(n: int) -> (int, int) {
+fn pair(n: i64) -> (i64, i64) {
     return (n, n + 1)
 }
 
-var empty = Array<byte>()
+var empty = Array<u8>()
 print(len(empty))
 
-var sized = Array<byte>(3)
+var sized = Array<u8>(3)
 sized[0] = 65
 sized[1] = 255 + 45
 sized[2] = 0 - 1
@@ -16,18 +16,18 @@ print(sized[0])
 print(sized[1])
 print(sized[2])
 
-var filled = Array<byte>(2, 256 + 1)
+var filled = Array<u8>(2, 256 + 1)
 print(filled[0])
 print(filled[1])
 
 var raw = [72, 101, 300]
-var copied = Array<byte>(raw)
+var copied = Array<u8>(raw)
 print(len(copied))
 print(copied[0])
 print(copied[1])
 print(copied[2])
 
-var grown = Array<byte>()
+var grown = Array<u8>()
 grown.push(88)
 grown.push(255 + 45)
 print(len(grown))
@@ -53,5 +53,5 @@ print(sb.toString())
 sb.clear().append("B")
 print(len(sb))
 print(sb.toString())
-sb.clear().append("0123456789abcdef".bytes()[10] as int).append("你好".bytes()[1] as int)
+sb.clear().append("0123456789abcdef".bytes()[10] as i64).append("你好".bytes()[1] as i64)
 print(sb.toString())

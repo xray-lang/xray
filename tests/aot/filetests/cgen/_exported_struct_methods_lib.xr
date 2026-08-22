@@ -1,17 +1,17 @@
 export struct ByteState {
-    data: [byte; 4]
-    total: int
+    data: [u8; 4]
+    total: i64
 
-    static init(seed: int) -> ByteState {
+    static init(seed: i64) -> ByteState {
         return ByteState{data: [0; 4], total: seed}
     }
 
-    update(value: byte) {
+    update(value: u8) {
         this.data[0] = value
-        this.total = this.total + int(value)
+        this.total = this.total + (value as i64)
     }
 
-    digest() -> int {
-        return this.total + int(this.data[0])
+    digest() -> i64 {
+        return this.total + (this.data[0] as i64)
     }
 }

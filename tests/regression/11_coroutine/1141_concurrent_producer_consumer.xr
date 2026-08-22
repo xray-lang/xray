@@ -1,13 +1,13 @@
 // 测试生产者-消费者模型
 
-fn recv_value(r: Recv<int>) -> int {
+fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn recv_ok(r: Recv<int>) -> bool {
+fn recv_ok(r: Recv<i64>) -> bool {
     return match (r) {
         Recv.Value(_) -> true
         _ -> false
@@ -16,7 +16,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 
 @test
 fn test_main() {
-    const ch = Channel<int>(10)
+    const ch = Channel<i64>(10)
     
     // 生产者发送数据
     var i = 0

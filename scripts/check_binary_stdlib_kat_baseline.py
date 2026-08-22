@@ -79,7 +79,7 @@ BASELINES = (
         category="BASE64_TYPED_ERROR_DIFF",
         path="tests/diff/cases/semantics/stdlib/base64_property_direct.xr",
         contains=(
-            "fn errorCode(text: string) -> int",
+            "fn errorCode(text: string) -> i64",
             "aggregate == 544432900",
             'print(errorCode("A"))',
             'print(errorCode("QR=="))',
@@ -157,8 +157,8 @@ BASELINES = (
         category="ENCODING_TYPED_ERROR_DIFF",
         path="tests/diff/cases/semantics/stdlib/encoding_property_direct.xr",
         contains=(
-            "fn hexErrorCode(text: string) -> int",
-            "fn utf16ErrorCode(data: Slice<byte>) -> int",
+            "fn hexErrorCode(text: string) -> i64",
+            "fn utf16ErrorCode(data: Slice<u8>) -> i64",
             'print(hexErrorCode("abc"))',
             "print(utf16ErrorCode(invalidPair[:]))",
         ),
@@ -333,8 +333,8 @@ BASELINES = (
             'id = "high-byte-loopback"',
             'id = "native-copy-byte-boundary"',
             'diff_cases_manifest = "tests/stdlib/contracts/net/diff_cases.txt"',
-            "converged byte read: readBytes returns Array<byte>",
-            "future converged writeBytes and sendTo accept Slice<byte>",
+            "converged byte read: readBytes returns Array<u8>",
+            "future converged writeBytes and sendTo accept Slice<u8>",
         ),
     ),
     Baseline(

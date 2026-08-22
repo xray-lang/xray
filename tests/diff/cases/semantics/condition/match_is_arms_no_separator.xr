@@ -1,11 +1,11 @@
 // Consecutive `is` type-pattern arms with expression bodies and no comma:
 // the spec's §6.4 spelling. A leading `is` on a new line ends the previous
 // arm body instead of gluing on as an infix type test.
-type V = int | string
+type V = i64 | string
 
 fn f(v: V) -> string {
     return match (v) {
-        is int n -> "int: ${n}"
+        is i64 n -> "int: ${n}"
         is string -> "a string"
         _ -> "?"
     }
@@ -13,7 +13,7 @@ fn f(v: V) -> string {
 
 fn g(v: V) -> string {
     return match (v) {
-        is int n -> "i${n}"
+        is i64 n -> "i${n}"
         is string s -> "s${s}"
         _ -> "?"
     }

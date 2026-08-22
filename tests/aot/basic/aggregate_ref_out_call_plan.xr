@@ -1,21 +1,21 @@
 struct Pair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 }
 
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
-fn replaceArray(values: ref Array<int>) {
+fn replaceArray(values: ref Array<i64>) {
     values = [7, 8, 9]
 }
 
-fn fillArray(values: ref Array<int>) {
+fn fillArray(values: ref Array<i64>) {
     values = [4, 5]
 }
 
@@ -40,7 +40,7 @@ replaceArray(ref values)
 print(values[0])
 print(len(values))
 
-var outputValues: Array<int> = []
+var outputValues: Array<i64> = []
 fillArray(ref outputValues)
 print(outputValues[1])
 print(len(outputValues))

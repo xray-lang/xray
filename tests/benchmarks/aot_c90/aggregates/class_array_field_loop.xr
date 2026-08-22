@@ -1,11 +1,11 @@
 class IntBag {
-    values: Array<int>
+    values: Array<i64>
 
-    constructor(values: Array<int>) {
+    constructor(values: Array<i64>) {
         this.values = values
     }
 
-    scan(rounds: int) -> int {
+    scan(rounds: i64) -> i64 {
         var r = 0
         var sum = 0
         while (r < rounds) {
@@ -20,8 +20,8 @@ class IntBag {
     }
 }
 
-fn make_values(n: int) -> Array<int> {
-    var values: Array<int> = []
+fn make_values(n: i64) -> Array<i64> {
+    var values: Array<i64> = []
     var i = 0
     while (i < n) {
         values.push(i * 3 + 1)
@@ -30,7 +30,7 @@ fn make_values(n: int) -> Array<int> {
     return values
 }
 
-fn class_array_field_loop_run(rounds: int) -> int {
+fn class_array_field_loop_run(rounds: i64) -> i64 {
     var bag = IntBag(make_values(256))
     return bag.scan(rounds)
 }

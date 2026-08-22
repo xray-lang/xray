@@ -1,6 +1,6 @@
 var COUNTER = 1
 
-fn xrayTopVarScalarAttrs() -> int {
+fn xrayTopVarScalarAttrs() -> i64 {
     COUNTER = COUNTER + 1
     return COUNTER
 }

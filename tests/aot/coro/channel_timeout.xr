@@ -1,10 +1,10 @@
-fn send_after_yield(ch: Channel<int>, value: int) -> int {
+fn send_after_yield(ch: Channel<i64>, value: i64) -> i64 {
     Coro.yield()
     ch.send(value)
     return value
 }
 
-fn recv_after_yield(ch: Channel<int>) -> int {
+fn recv_after_yield(ch: Channel<i64>) -> i64 {
     Coro.yield()
     return match (ch.recv()) {
         Recv.Value(value) -> value
@@ -12,7 +12,7 @@ fn recv_after_yield(ch: Channel<int>) -> int {
     }
 }
 
-const buffered = Channel<int>(1)
+const buffered = Channel<i64>(1)
 print(buffered.sendTimeout(11, 0))
 var r1 = buffered.recvTimeout(0)
 print(match (r1) {
@@ -25,7 +25,7 @@ print(match (r1) {
 })
 buffered.close()
 
-const empty = Channel<int>(0)
+const empty = Channel<i64>(0)
 var r2 = empty.recvTimeout(5)
 print(match (r2) {
     Recv.Value(_) -> true
@@ -33,7 +33,7 @@ print(match (r2) {
 })
 empty.close()
 
-const rendezvous_recv = Channel<int>(0)
+const rendezvous_recv = Channel<i64>(0)
 var sender = go send_after_yield(rendezvous_recv, 33)
 var r3 = rendezvous_recv.recvTimeout(2000)
 print(match (r3) {
@@ -47,17 +47,17 @@ print(match (r3) {
 print(await sender)
 rendezvous_recv.close()
 
-const no_receiver = Channel<int>(0)
+const no_receiver = Channel<i64>(0)
 print(no_receiver.sendTimeout(44, 5))
 no_receiver.close()
 
-const rendezvous_send = Channel<int>(0)
+const rendezvous_send = Channel<i64>(0)
 var receiver = go recv_after_yield(rendezvous_send)
 print(rendezvous_send.sendTimeout(55, 2000))
 print(await receiver)
 rendezvous_send.close()
 
-const closed = Channel<int>(0)
+const closed = Channel<i64>(0)
 closed.close()
 var r4 = closed.recvTimeout(0)
 print(match (r4) {

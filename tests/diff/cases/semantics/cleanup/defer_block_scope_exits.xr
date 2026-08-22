@@ -20,7 +20,7 @@ fn plain_block() {
     print("plain-after")
 }
 
-fn return_case(n: int) -> string {
+fn return_case(n: i64) -> string {
     defer { print("return-root") }
     {
         defer { print("return-inner") }

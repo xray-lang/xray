@@ -1,16 +1,16 @@
 enum FastResult<T> {
     Ok(T),
-    Err(int)
+    Err(i64)
 }
 
-fn pick(ok: bool) -> FastResult<int> {
+fn pick(ok: bool) -> FastResult<i64> {
     if (ok) {
         return FastResult.Ok(41)
     }
     return FastResult.Err(9)
 }
 
-fn score(ok: bool) -> int {
+fn score(ok: bool) -> i64 {
     var result = pick(ok)
     match (result) {
         FastResult.Ok(value) -> {

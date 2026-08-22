@@ -427,8 +427,8 @@ static bool xa_freestanding_math_member_allowed(const char *member_name) {
            strcmp(member_name, "TAU") == 0 || strcmp(member_name, "SQRT2") == 0 ||
            strcmp(member_name, "LN2") == 0 || strcmp(member_name, "LN10") == 0 ||
            strcmp(member_name, "LOG2E") == 0 || strcmp(member_name, "LOG10E") == 0 ||
-           strcmp(member_name, "EPSILON") == 0 || strcmp(member_name, "MAX_INT") == 0 ||
-           strcmp(member_name, "MIN_INT") == 0 || strcmp(member_name, "MAX_FLOAT") == 0 ||
+           strcmp(member_name, "EPSILON") == 0 || strcmp(member_name, "MAX_I64") == 0 ||
+           strcmp(member_name, "MIN_I64") == 0 || strcmp(member_name, "MAX_F64") == 0 ||
            strcmp(member_name, "INF") == 0 || strcmp(member_name, "NAN") == 0 ||
            strcmp(member_name, "min") == 0 || strcmp(member_name, "max") == 0 ||
            strcmp(member_name, "clamp") == 0;
@@ -1466,8 +1466,8 @@ static const char *int_range_label(uint8_t scalar_rep) {
 }
 
 static const char *int_scalar_rep_label(uint8_t scalar_rep) {
-    const char *name = xr_scalar_rep_canonical_name(scalar_rep);
-    return name ? name : "int";
+    const char *name = xr_scalar_rep_name(scalar_rep);
+    return name ? name : "i64";
 }
 
 static bool int_literal_fits_scalar_rep(const XaContextualIntLiteral *value, uint8_t scalar_rep) {
@@ -2047,11 +2047,11 @@ static void xa_report_hashable_contract(XaInferContext *ctx, XrLocation *loc, co
     char missing[192];
     if (!has_eq && !has_hash) {
         snprintf(missing, sizeof(missing),
-                 "missing operator==(other: %s) -> bool and hash() -> int", name);
+                 "missing operator==(other: %s) -> bool and hash() -> i64", name);
     } else if (!has_eq) {
         snprintf(missing, sizeof(missing), "missing operator==(other: %s) -> bool", name);
     } else {
-        snprintf(missing, sizeof(missing), "missing hash() -> int");
+        snprintf(missing, sizeof(missing), "missing hash() -> i64");
     }
 
     char msg[320];
@@ -6686,7 +6686,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         char msg[288];
                         snprintf(msg, sizeof(msg),
                                  "type parameter '%s' is not iterable; constrain it with "
-                                 "'Iterable<T>' (e.g. '<%s: Iterable<int>>') or with a type "
+                                 "'Iterable<T>' (e.g. '<%s: Iterable<i64>>') or with a type "
                                  "that has an 'iterator()' method",
                                  param_name, param_name);
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -7118,7 +7118,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
                     char msg[160];
                     snprintf(msg, sizeof(msg),
-                             "Index type '%s' is not assignable to expected type 'int'",
+                             "Index type '%s' is not assignable to expected type 'i64'",
                              xr_type_to_string(index_type));
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -7169,7 +7169,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 if (index_type && !XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
                     char msg[256];
                     snprintf(msg, sizeof(msg),
-                             "Index type '%s' is not assignable to expected type 'int'",
+                             "Index type '%s' is not assignable to expected type 'i64'",
                              xr_type_to_string(index_type));
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -7191,7 +7191,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 char msg[256];
                 snprintf(msg, sizeof(msg),
-                         "Index type '%s' is not assignable to expected type 'int'",
+                         "Index type '%s' is not assignable to expected type 'i64'",
                          xr_type_to_string(index_type));
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);

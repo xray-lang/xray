@@ -7,7 +7,7 @@ import time
 
 // listen/dial now throw; restricted environments without socket access
 // should still skip the networked tests quietly instead of failing them.
-fn tryListen(port: int, backlog: int) -> NetListener? {
+fn tryListen(port: i64, backlog: i64) -> NetListener? {
     try {
         return net.listen(port, backlog)
     } catch (e) {
@@ -15,7 +15,7 @@ fn tryListen(port: int, backlog: int) -> NetListener? {
     }
 }
 
-fn tryDial(host: string, port: int) -> NetConn? {
+fn tryDial(host: string, port: i64) -> NetConn? {
     try {
         return net.dial(host, port)
     } catch (e) {
@@ -23,7 +23,7 @@ fn tryDial(host: string, port: int) -> NetConn? {
     }
 }
 
-fn readText(conn: NetConn, maxBytes: int) -> string? {
+fn readText(conn: NetConn, maxBytes: i64) -> string? {
     var bytes = net.readBytes(conn, maxBytes)
     if (bytes == null) { return null }
     return string.fromUtf8(bytes![:])
@@ -60,7 +60,7 @@ fn serveMissingUpgradeResponse(lst: NetListener) {
     net.close(lst)
 }
 
-fn startRejectingUpgradeServer(port: int, running: Atomic<bool>) {
+fn startRejectingUpgradeServer(port: i64, running: Atomic<bool>) {
     ws.serve(port, fn(conn: ref WsConn) {
         conn.close()
     }, running)
@@ -166,7 +166,7 @@ fn test_serve_rejects_missing_connection_upgrade_header() {
 
 @test
 fn test_mask_payload_and_unmasked_frame() {
-    var masked = ws.maskPayload(Array<byte>([1, 2, 3, 4, 5]), Array<byte>([1, 1, 1, 1]))
+    var masked = ws.maskPayload(Array<u8>([1, 2, 3, 4, 5]), Array<u8>([1, 1, 1, 1]))
     assert_eq(masked[0], 0)
     assert_eq(masked[1], 3)
     assert_eq(masked[2], 2)
@@ -180,7 +180,7 @@ fn test_mask_payload_and_unmasked_frame() {
     assert_eq(f[2], 72)
     assert_eq(f[3], 105)
 
-    var payload = Array<byte>(126)
+    var payload = Array<u8>(126)
     var ext = ws.frame(payload, 2, false)
     assert_eq(ext[0], 130)
     assert_eq(ext[1], 126)
@@ -190,13 +190,13 @@ fn test_mask_payload_and_unmasked_frame() {
 
 @test
 fn test_close_payload_decodes_utf8_reason() {
-    var close = ws.parseClosePayload(Array<byte>([3, 232, 79, 75]))!
+    var close = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))!
     assert_eq(close.code, 1000)
     assert_eq(close.reason, "OK")
 
-    var unicode = ws.parseClosePayload(Array<byte>([3, 232, 195, 169]))!
+    var unicode = ws.parseClosePayload(Array<u8>([3, 232, 195, 169]))!
     assert_eq(unicode.reason, "é")
-    assert(ws.parseClosePayload(Array<byte>([3, 232, 192, 175])) == null)
+    assert(ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
 }
 
 print("All pure websocket protocol tests passed")

@@ -2,13 +2,13 @@
 
 @test
 fn test_int_zero_value() {
-    var a: int
+    var a: i64
     assert_eq(a, 0)
 }
 
 @test
 fn test_float_zero_value() {
-    var b: float
+    var b: f64
     assert_eq(b, 0.0)
 }
 
@@ -20,7 +20,7 @@ fn test_bool_zero_value() {
 
 @test
 fn test_nullable_defaults_to_null() {
-    var e: int?
+    var e: i64?
     assert_eq(e, null)
 }
 
@@ -32,8 +32,8 @@ fn test_string_requires_initializer() {
 }
 
 struct DefaultPoint {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 struct DefaultBox {

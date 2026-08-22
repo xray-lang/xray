@@ -23,20 +23,20 @@
 // tests/compile_errors/type/141_for_in_unbounded_type_param.xr.
 
 interface Summing {
-    total<T: Iterable<int>>(xs: T) -> int
+    total<T: Iterable<i64>>(xs: T) -> i64
 }
 
 class Summer implements Summing {
     constructor() {}
 
     // The original bug report's exact shape.
-    total<T: Iterable<int>>(xs: T) -> int {
+    total<T: Iterable<i64>>(xs: T) -> i64 {
         var n = 0
         for (i in xs) { n = n + i }
         return n
     }
 
-    static totalStatic<T: Iterable<int>>(xs: T) -> int {
+    static totalStatic<T: Iterable<i64>>(xs: T) -> i64 {
         var n = 0
         for (i in xs) { n = n + i }
         return n
@@ -50,7 +50,7 @@ class Summer implements Summing {
     }
 
     // A bound alongside an unconstrained method parameter.
-    tagAll<T: Iterable<int>, U>(xs: T, tag: U) -> int {
+    tagAll<T: Iterable<i64>, U>(xs: T, tag: U) -> i64 {
         var n = 0
         for (i in xs) { n = n + i }
         return n
@@ -65,7 +65,7 @@ class Box<T> {
 
     get() -> T { return this.value }
 
-    sumOf<U: Iterable<int>>(xs: U) -> int {
+    sumOf<U: Iterable<i64>>(xs: U) -> i64 {
         var n = 0
         for (i in xs) { n = n + i }
         return n
@@ -98,7 +98,7 @@ fn test_bound_with_unconstrained_second_param() {
 
 @test
 fn test_method_bound_in_generic_class() {
-    var box: Box<int> = Box<int>(10)
+    var box: Box<i64> = Box<i64>(10)
     assert_eq(box.get(), 10)
     assert_eq(box.sumOf([5, 6]), 11)
 }

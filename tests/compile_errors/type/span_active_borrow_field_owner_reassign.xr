@@ -1,13 +1,13 @@
 class Pair {
-    left: Array<byte> = Array<byte>(0)
-    right: Array<byte> = Array<byte>(0)
+    left: Array<u8> = Array<u8>(0)
+    right: Array<u8> = Array<u8>(0)
 }
 
 fn main() {
     var box = Pair()
     box.left.push(1)
-    var view: Slice<byte> = box.left[:]
-    box.left = Array<byte>(0)
+    var view: Slice<u8> = box.left[:]
+    box.left = Array<u8>(0)
     print(len(view))
 }
 

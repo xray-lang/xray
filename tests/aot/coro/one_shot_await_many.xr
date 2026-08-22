@@ -1,4 +1,4 @@
-fn worker(n: int) -> int {
+fn worker(n: i64) -> i64 {
     return n + 1
 }
 

@@ -1,15 +1,15 @@
-fn take(data: move Array<int>) -> int {
+fn take(data: move Array<i64>) -> i64 {
     return len(data)
 }
 
 @test
 fn test_move_formal_accepts_consumed_fresh_and_copied_owners() {
-    var xs = Array<int>(2, 1)
+    var xs = Array<i64>(2, 1)
     assert_eq(take(move xs), 2)
 
-    var ys = Array<int>(3, 1)
+    var ys = Array<i64>(3, 1)
     assert_eq(take(copy(ys)), 3)
     assert_eq(len(ys), 3)
 
-    assert_eq(take(Array<int>(4, 1)), 4)
+    assert_eq(take(Array<i64>(4, 1)), 4)
 }

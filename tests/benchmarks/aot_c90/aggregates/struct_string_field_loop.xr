@@ -1,12 +1,12 @@
 struct Counter {
-    total: int
-    step: int
+    total: i64
+    step: i64
     name: string
 }
 
 var counter = Counter{total: 1, step: 3, name: "counter"}
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var p = counter
     var i = 0
     var sum = 0

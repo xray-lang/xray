@@ -1,8 +1,8 @@
 type SparseOptions = {
     required: string,
     method: string?,
-    headers: int?,
-    timeoutMs: int?
+    headers: i64?,
+    timeoutMs: i64?
 }
 
 var lateOnly: SparseOptions = {

@@ -7,7 +7,7 @@ print("========== 测试5：并发 memory 压力测试 ==========")
 fn test_many_short_lived_coros() {
     // 创建大量短期协程，触发内存分配/释放压力
     var count = 50
-    fn worker(id: int) -> int {
+    fn worker(id: i64) -> i64 {
         // 分配一些内存
         var arr: Array<string> = []
         for (var i = 0; i < 10; i++) {
@@ -33,7 +33,7 @@ fn test_many_short_lived_coros() {
 }
 
 fn test_nested_allocations() {
-    fn worker() -> int {
+    fn worker() -> i64 {
         // 创建嵌套数据结构
         var data: Array<JSON.Value> = []
         for (var i = 0; i < 50; i++) {

@@ -18,14 +18,14 @@
 
 class Node {
     peer: Node?
-    tag: int
+    tag: i64
     constructor(tag) { this.peer = null; this.tag = tag }
 }
 
 // Builds a two-object cycle and returns a checksum computed by walking it.
 // Nothing here breaks the cycle, so both nodes survive until the coroutine's
 // reclamation domain goes away.
-fn build_cycle_and_walk(seed: int) -> int {
+fn build_cycle_and_walk(seed: i64) -> i64 {
     var a = Node(seed)
     var b = Node(seed + 1)
     a.peer = b
@@ -44,7 +44,7 @@ fn build_cycle_and_walk(seed: int) -> int {
     return sum
 }
 
-fn worker(rounds: int) -> int {
+fn worker(rounds: i64) -> i64 {
     var total = 0
     var i = 0
     while (i < rounds) {

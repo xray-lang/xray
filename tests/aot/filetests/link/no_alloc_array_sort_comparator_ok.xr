@@ -1,11 +1,11 @@
-fn xray_no_alloc_array_sort_desc(a: int, b: int) -> int {
+fn xray_no_alloc_array_sort_desc(a: i64, b: i64) -> i64 {
     return b - a
 }
 
-fn xray_no_alloc_array_sort_comparator_ok(values: ref Array<int>) -> int {
+fn xray_no_alloc_array_sort_comparator_ok(values: ref Array<i64>) -> i64 {
     values.sort(xray_no_alloc_array_sort_desc)
     return values[0]
 }
 
-var xray_no_alloc_array_sort_values: Array<int> = [3, 1, 2]
+var xray_no_alloc_array_sort_values: Array<i64> = [3, 1, 2]
 print(xray_no_alloc_array_sort_comparator_ok(ref xray_no_alloc_array_sort_values))

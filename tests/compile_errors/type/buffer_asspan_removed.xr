@@ -1,5 +1,5 @@
 import mem
 
 var b = mem.alloc(8)
-var view: Slice<byte> = b.asSlice()
+var view: Slice<u8> = b.asSlice()
 print(len(view))

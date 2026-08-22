@@ -1,5 +1,5 @@
-fn directClosure() -> int {
-    const f = fn() -> int {
+fn directClosure() -> i64 {
+    const f = fn() -> i64 {
         return 41
     }
     return f() + 1

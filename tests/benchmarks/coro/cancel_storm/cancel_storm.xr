@@ -5,14 +5,14 @@ import time
 
 var N = 100000  // 协程数量
 if (len(process.args) > 0) {
-    N = int(process.args[0]) ?? N
+    N = i64.tryParse(process.args[0]) ?? N
 }
 
 print("=== Cancel Storm 测试 ===")
 print("协程数量:", N)
 
 // 长期等待任务：sleep 很久，期望被 cancel
-fn long_wait(id: int) -> int {
+fn long_wait(id: i64) -> i64 {
     time.sleep(60000)  // 60 秒，正常不会完成
     return id
 }
@@ -59,7 +59,7 @@ print("checksum:", cancelled)
 print("correctness:", cancelled == N)
 print("reported_time_ms:", elapsed)
 if (elapsed > 0) {
-    print("速度:", int(N * 1000 / elapsed), "cancels/sec")
+    print("速度:", (N * 1000 / elapsed as i64), "cancels/sec")
 } else {
     print("速度: 太快无法测量")
 }

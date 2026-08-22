@@ -2,26 +2,26 @@
 fn main() {
     var words = Array<u32>(2, 0)
     var wordSlice: Slice<u32> = words[:]
-    var wordBytes: Slice<byte> = wordSlice.asBytes()
+    var wordBytes: Slice<u8> = wordSlice.asBytes()
     print(len(wordBytes))
     wordBytes.fill(1)
-    print(int(words[0]))
-    print(int(words[1]))
-    var bytes = Array<byte>(6)
-    var raw: Slice<byte> = bytes[:]
+    print((words[0] as i64))
+    print((words[1] as i64))
+    var bytes = Array<u8>(6)
+    var raw: Slice<u8> = bytes[:]
     raw.fill(0)
     var pairs: Slice<u16> = raw.reinterpret<u16>()
     print(len(pairs))
     pairs[1] = 30583
     print(bytes[2])
     print(bytes[3])
-    var roundtrip: Slice<byte> = pairs.asBytes()
+    var roundtrip: Slice<u8> = pairs.asBytes()
     print(len(roundtrip))
     roundtrip.fill(9)
-    print(int(pairs[0]))
-    print(int(pairs[2]))
+    print((pairs[0] as i64))
+    print((pairs[2] as i64))
     try {
-        var badRaw: Slice<byte> = raw[0:5]
+        var badRaw: Slice<u8> = raw[0:5]
         var bad: Slice<u32> = badRaw.reinterpret<u32>()
         print(len(bad))
     } catch panic (p) {
@@ -29,7 +29,7 @@ fn main() {
         print(p.code)
     }
     try {
-        var misalignedRaw: Slice<byte> = raw[1:5]
+        var misalignedRaw: Slice<u8> = raw[1:5]
         var misaligned: Slice<u32> = misalignedRaw.reinterpret<u32>()
         print(len(misaligned))
     } catch panic (p) {

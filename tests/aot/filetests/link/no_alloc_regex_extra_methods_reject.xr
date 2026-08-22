@@ -10,7 +10,7 @@ fn xray_no_alloc_regex_find_group_reject(text: string) -> bool {
     return xray_no_alloc_regex_extra_digits.findGroup(text, 1) != null
 }
 
-fn xray_no_alloc_regex_find_all_reject(text: string) -> int {
+fn xray_no_alloc_regex_find_all_reject(text: string) -> i64 {
     return len(xray_no_alloc_regex_extra_digits.findAll(text))
 }
 
@@ -18,7 +18,7 @@ fn xray_no_alloc_regex_replace_reject(text: string) -> string {
     return xray_no_alloc_regex_extra_digits.replace(text, "n")
 }
 
-fn xray_no_alloc_regex_split_reject(text: string) -> int {
+fn xray_no_alloc_regex_split_reject(text: string) -> i64 {
     return len(xray_no_alloc_regex_extra_digits.split(text))
 }
 

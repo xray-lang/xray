@@ -1,6 +1,6 @@
 // Default type arguments are not implemented; the syntax must name the
 // feature rather than report a missing '>' at the '='.
-fn tag<T = int>(x: T) -> int {
+fn tag<T = i64>(x: T) -> i64 {
     return 1
 }
-print(tag<int>(1))
+print(tag<i64>(1))

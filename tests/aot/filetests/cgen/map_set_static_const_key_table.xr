@@ -1,5 +1,5 @@
-const NUMS: Map<int, int> = #{1: 7, 2: 9}
-const SEEN: Set<int> = #[1, 2]
+const NUMS: Map<i64, i64> = #{1: 7, 2: 9}
+const SEEN: Set<i64> = #[1, 2]
 
 print(NUMS[1])
 print(NUMS.get(2))

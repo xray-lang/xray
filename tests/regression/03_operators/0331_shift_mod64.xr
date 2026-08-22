@@ -14,32 +14,32 @@
 
 @test
 fn test_shl_count_64_is_identity() {
-    var x: int = 12345
-    var n: int = 64
+    var x: i64 = 12345
+    var n: i64 = 64
     assert_eq(x << n, 12345)   // 64 & 63 == 0
     assert_eq(x << 64, 12345)  // constant-folded path must agree
 }
 
 @test
 fn test_shl_count_65_is_shift_1() {
-    var x: int = 7
-    var n: int = 65
+    var x: i64 = 7
+    var n: i64 = 65
     assert_eq(x << n, 14)
     assert_eq(x << 65, 14)
 }
 
 @test
 fn test_shr_count_64_is_identity() {
-    var x: int = -12345
-    var n: int = 64
+    var x: i64 = -12345
+    var n: i64 = 64
     assert_eq(x >> n, -12345)
     assert_eq(x >> 64, -12345)
 }
 
 @test
 fn test_shr_count_70_is_shift_6() {
-    var x: int = 640
-    var n: int = 70
+    var x: i64 = 640
+    var n: i64 = 70
     assert_eq(x >> n, 10)
     assert_eq(x >> 70, 10)
 }
@@ -48,8 +48,8 @@ fn test_shr_count_70_is_shift_6() {
 
 @test
 fn test_shl_negative_count() {
-    var one: int = 1
-    var n: int = -1
+    var one: i64 = 1
+    var n: i64 = -1
     // 1 << 63 == INT64_MIN
     assert_eq(one << n, -9223372036854775807 - 1)
     assert_eq(one << -1, -9223372036854775807 - 1)
@@ -57,8 +57,8 @@ fn test_shl_negative_count() {
 
 @test
 fn test_shr_negative_count() {
-    var x: int = -1
-    var n: int = -1
+    var x: i64 = -1
+    var n: i64 = -1
     // -1 >> 63 == -1 (arithmetic shift keeps the sign)
     assert_eq(x >> n, -1)
 }
@@ -67,8 +67,8 @@ fn test_shr_negative_count() {
 
 @test
 fn test_shr_negative_value_sign_extends() {
-    var x: int = -8
-    var n: int = 1
+    var x: i64 = -8
+    var n: i64 = 1
     assert_eq(x >> n, -4)
     assert_eq(-8 >> 1, -4)      // constant fold must be arithmetic too
     assert_eq(-1 >> 63, -1)
@@ -79,18 +79,18 @@ fn test_shr_negative_value_sign_extends() {
 
 @test
 fn test_shl_into_sign_bit_wraps() {
-    var one: int = 1
-    var s: int = 63
+    var one: i64 = 1
+    var s: i64 = 63
     assert_eq(one << s, -9223372036854775807 - 1)
-    var three: int = 3
+    var three: i64 = 3
     // 3 << 63 wraps: only bit 63 survives
     assert_eq(three << 63, -9223372036854775807 - 1)
 }
 
 @test
 fn test_shl_negative_value_defined() {
-    var x: int = -1
-    var n: int = 1
+    var x: i64 = -1
+    var n: i64 = 1
     assert_eq(x << n, -2)
     assert_eq(-1 << 1, -2)
 }
@@ -99,9 +99,9 @@ fn test_shl_negative_value_defined() {
 
 @test
 fn test_shift_mod64_in_hot_loop() {
-    var acc: int = 0
+    var acc: i64 = 0
     for (i in 0..300) {
-        var x: int = 12345
+        var x: i64 = 12345
         acc += (x << 64) - x        // identity → contributes 0
         acc += (x >> 64) - x        // identity → contributes 0
         acc += ((-8) >> 1) + 4      // arithmetic → contributes 0
@@ -113,12 +113,12 @@ fn test_shift_mod64_in_hot_loop() {
 
 @test
 fn test_compound_shift_mod64() {
-    var x: int = 5
+    var x: i64 = 5
     x <<= 64
     assert_eq(x, 5)
     x >>= 64
     assert_eq(x, 5)
-    var y: int = -32
+    var y: i64 = -32
     y >>= 2
     assert_eq(y, -8)
 }

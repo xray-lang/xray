@@ -51,14 +51,14 @@ CROSS_TARGETS = (
     "aarch64-windows-gnu",
 )
 
-BASIC_SOURCE = "fn answer() -> int {\n    return 42\n}\n\nanswer()\n"
+BASIC_SOURCE = "fn answer() -> i64 {\n    return 42\n}\n\nanswer()\n"
 TIME_SOURCE = (
     "import time\n\n"
     "print(time.now() > 0)\n"
     "print(time.nanos() > 0)\n"
     "print(time.clock() >= 0)\n"
 )
-SHARED_SOURCE = "export fn answer() -> int {\n    return 42\n}\n"
+SHARED_SOURCE = "export fn answer() -> i64 {\n    return 42\n}\n"
 SHARED_MANIFEST = """[package]
 name = "test/windows-shared-cross"
 version = "0.1.0"

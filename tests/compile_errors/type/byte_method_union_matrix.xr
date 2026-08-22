@@ -1,7 +1,7 @@
-fn unionArray(values: Array<byte> | Array<int>, src: Slice<byte>) {
+fn unionArray(values: Array<u8> | Array<i64>, src: Slice<u8>) {
     values.appendFrom(src)
 }
 
-fn unionSlice(view: Slice<byte> | Slice<int>) -> int {
-    return int(view.load<u16>(0, Endian.LE))
+fn unionSlice(view: Slice<u8> | Slice<i64>) -> i64 {
+    return (view.load<u16>(0, Endian.LE) as i64)
 }

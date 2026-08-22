@@ -122,17 +122,17 @@ try {
 ```xray
 enum HttpErr {
     NotFound(string),
-    ServerError(int, string),
+    ServerError(i64, string),
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, int),
+    InvalidChar(string, i64),
     Overflow,
 }
 
-fn fetchUser(id: int) -> User {
+fn fetchUser(id: i64) -> User {
     if (id <= 0) { throw HttpErr.NotFound("user not found") }
     // ...
 }
@@ -205,7 +205,7 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 ```xray
 try {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // 越界 → panic
 } catch panic {
     log("runtime fault caught")
@@ -241,7 +241,7 @@ class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
     cause: PanicInfo?           // 链式 cause
-    code: int                   // 错误码
+    code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -255,7 +255,7 @@ class PanicInfo {
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])                       // 越界 → panic
     } catch panic (p) {
@@ -392,7 +392,7 @@ fn good(c: Conn) {
 | 字典查找、可选字段 | `T?` | `map.get(k) -> Value?` |
 | 运行时故障兜底 | `catch panic` | 数组越界、除零 |
 | 多分支结果 | enum | `nextEvent() -> NetEvent` |
-| 主结果 + 元数据 | tuple | `parse(s) -> (Ast, int)` |
+| 主结果 + 元数据 | tuple | `parse(s) -> (Ast, i64)` |
 
 ### 8.6 常用模式
 
@@ -461,7 +461,7 @@ var user = db.findUser(id) ?? guestUser
 #### 模式 4：catch panic 兜底运行时故障
 
 ```xray
-fn safeDivide(a: int, b: int) -> string {
+fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
     } catch panic {
@@ -479,7 +479,7 @@ fn safeDivide(a: int, b: int) -> string {
 ```xray
 enum ParseErr { Empty, BadChar(string) }
 
-fn parseDigit(s: string) -> int {
+fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar(s) }
     return 42
@@ -531,7 +531,7 @@ caught
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
@@ -663,17 +663,17 @@ Define business errors as ADT enums with context-carrying payloads:
 ```xray
 enum HttpErr {
     NotFound(string),
-    ServerError(int, string),
+    ServerError(i64, string),
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, int),
+    InvalidChar(string, i64),
     Overflow,
 }
 
-fn fetchUser(id: int) -> User {
+fn fetchUser(id: i64) -> User {
     if (id <= 0) { throw HttpErr.NotFound("user not found") }
     // ...
 }
@@ -746,7 +746,7 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 ```xray
 try {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // OOB → panic
 } catch panic {
     log("runtime fault caught")
@@ -782,7 +782,7 @@ class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
     cause: PanicInfo?           // chained cause
-    code: int                   // error code
+    code: i64                   // error code
     data: JSON.Value            // additional data; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -796,7 +796,7 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])                       // out of bounds → panic
     } catch panic (p) {
@@ -945,7 +945,7 @@ Reference table:
 | Map lookup, optional fields | `T?` | `map.get(k) -> Value?` |
 | Runtime fault fallback | `catch panic` | Array OOB, division by zero |
 | Multi-branch result | enum | `nextEvent() -> NetEvent` |
-| Primary result + metadata | tuple | `parse(s) -> (Ast, int)` |
+| Primary result + metadata | tuple | `parse(s) -> (Ast, i64)` |
 
 ### 8.6 Common patterns
 
@@ -1014,7 +1014,7 @@ var user = db.findUser(id) ?? guestUser
 #### Pattern 4: catch panic for runtime fault fallback
 
 ```xray
-fn safeDivide(a: int, b: int) -> string {
+fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
     } catch panic {
@@ -1032,7 +1032,7 @@ These are self-contained programs that run as-is and pass `xray check` (comments
 ```xray
 enum ParseErr { Empty, BadChar(string) }
 
-fn parseDigit(s: string) -> int {
+fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar(s) }
     return 42
@@ -1084,7 +1084,7 @@ caught
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {

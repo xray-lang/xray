@@ -1,5 +1,5 @@
-fn boolLookup(flag: bool) -> int {
-    var scores: Map<bool, int> = #{true: 7, false: 3}
+fn boolLookup(flag: bool) -> i64 {
+    var scores: Map<bool, i64> = #{true: 7, false: 3}
     var seen: Set<bool> = #[true, false]
     var total = scores[flag]
     if (scores.containsKey(true)) {

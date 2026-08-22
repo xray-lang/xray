@@ -1,19 +1,19 @@
-fn inc_item(x: int) -> int {
+fn inc_item(x: i64) -> i64 {
     return x + 1
 }
 
-const inc_value = fn(x: int) -> int {
+const inc_value = fn(x: i64) -> i64 {
     return x + 2
 }
 
-fn use_value(f: fn(int) -> int, x: int) -> int {
+fn use_value(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
 }
 
-fn xray_item_call(x: int) -> int {
+fn xray_item_call(x: i64) -> i64 {
     return inc_item(x)
 }
 
-fn xray_value_call(x: int) -> int {
+fn xray_value_call(x: i64) -> i64 {
     return use_value(inc_value, x)
 }

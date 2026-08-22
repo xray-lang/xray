@@ -45,7 +45,7 @@ fn run() {
     }
     var p_ro: Ptr<u8> = p
     unsafe {
-        print(int(mem.load<u32>(p_ro, 0, Endian.LE)))
+        print((mem.load<u32>(p_ro, 0, Endian.LE) as i64))
     }
     // The address-domain view is not limited to integer pointees. C APIs often pass
     // pointer slots and float buffers as raw bytes before rebuilding the typed view.

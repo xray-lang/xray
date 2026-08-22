@@ -1,1 +1,1 @@
-mem.addr expects Ptr<T> or MutPtr<T>, got 'int'
+mem.addr expects Ptr<T> or MutPtr<T>, got 'i64'

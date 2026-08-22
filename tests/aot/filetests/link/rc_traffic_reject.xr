@@ -2,15 +2,15 @@
 // barrier. The no_runtime_heap requirement itself rejects that live R7
 // residue; users do not need a second hand-written rc_traffic prohibition.
 class Holder {
-    data: Array<int>
-    n: int
+    data: Array<i64>
+    n: i64
     constructor() {
         this.data = [0]
         this.n = 0
     }
 }
 
-fn rcTrafficReject(n: int) -> int {
+fn rcTrafficReject(n: i64) -> i64 {
     var h = Holder()
     h.data = [n, n]
     h.data = [n]

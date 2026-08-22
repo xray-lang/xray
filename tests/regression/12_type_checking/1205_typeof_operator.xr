@@ -6,13 +6,13 @@
 @test
 fn test_typeof_int() {
     var x = 42
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 }
 
 @test
 fn test_typeof_float() {
     var x = 3.14
-    assert_eq(typeName(x), "float")
+    assert_eq(typeName(x), "f64")
 }
 
 @test
@@ -57,13 +57,13 @@ fn test_typeof_set() {
 
 @test
 fn test_typeof_function() {
-    fn add(a: int, b: int) -> int { return a + b }
+    fn add(a: i64, b: i64) -> i64 { return a + b }
     assert_eq(typeName(add), "function")
 }
 
 @test
 fn test_typeof_arrow() {
-    var f = (x: int) -> x * 2
+    var f = (x: i64) -> x * 2
     assert_eq(typeName(f), "function")
 }
 
@@ -84,8 +84,8 @@ class Person {
 }
 
 class Student extends Person {
-    grade: int
-    constructor(name: string, grade: int) {
+    grade: i64
+    constructor(name: string, grade: i64) {
         super(name)
         this.grade = grade
     }
@@ -108,7 +108,7 @@ fn test_typeof_subclass_instance() {
 @test
 fn test_typeof_conditional() {
     fn describe<T>(x: T) -> string {
-        if (typeName(x) == "int") {
+        if (typeName(x) == "i64") {
             return "an integer"
         } else if (typeName(x) == "string") {
             return "a string"
@@ -126,8 +126,8 @@ fn test_typeof_conditional() {
 fn test_typeof_switch() {
     fn typeLabel<T>(x: T) -> string {
         return match (typeName(x)) {
-            "int" -> "integer",
-            "float" -> "decimal",
+            "i64" -> "integer",
+            "f64" -> "decimal",
             "string" -> "text",
             "bool" -> "boolean",
             "Array" -> "list",
@@ -147,17 +147,17 @@ fn test_typeof_switch() {
 @test
 fn test_typeof_after_assignment() {
     var x = 42
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 
     // Variable can't change type in xray, but we can test with any
-    var y: int = 42
-    assert_eq(typeName(y), "int")
+    var y: i64 = 42
+    assert_eq(typeName(y), "i64")
 }
 
 @test
 fn test_typeof_expression_result() {
-    assert_eq(typeName(1 + 2), "int")
-    assert_eq(typeName(1.0 + 2.0), "float")
+    assert_eq(typeName(1 + 2), "i64")
+    assert_eq(typeName(1.0 + 2.0), "f64")
     assert_eq(typeName("a" + "b"), "string")
     assert_eq(typeName(1 < 2), "bool")
 }
@@ -166,25 +166,25 @@ fn test_typeof_expression_result() {
 
 @test
 fn test_typeof_empty_array() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     assert_eq(typeName(arr), "Array")
 }
 
 @test
 fn test_typeof_empty_map() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     assert_eq(typeName(m), "Map")
 }
 
 @test
 fn test_typeof_empty_set() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     assert_eq(typeName(s), "Set")
 }
 
 @test
 fn test_typeof_bytes() {
-    var b = Array<byte>(10)
+    var b = Array<u8>(10)
     assert_eq(typeName(b), "Array")
 }
 
@@ -218,24 +218,24 @@ fn test_typeof_nested_json() {
 
 @test
 fn test_typeof_tuple2() {
-    fn pair() -> (int, string) { return (42, "hello") }
+    fn pair() -> (i64, string) { return (42, "hello") }
     var t = pair()
     assert_eq(typeName(t), "Tuple2")
 }
 
 @test
 fn test_typeof_tuple3() {
-    fn triple() -> (int, float, string) { return (1, 2.0, "x") }
+    fn triple() -> (i64, f64, string) { return (1, 2.0, "x") }
     var t = triple()
     assert_eq(typeName(t), "Tuple3")
 }
 
 @test
 fn test_is_tuple() {
-    fn pair() -> (int, string) { return (10, "hi") }
+    fn pair() -> (i64, string) { return (10, "hi") }
     var t = pair()
-    assert(t is (int, string))
-    assert(t is (float, bool))  // arity-only check: same arity matches
+    assert(t is (i64, string))
+    assert(t is (f64, bool))  // arity-only check: same arity matches
 }
 
 // ===== Enum Types =====

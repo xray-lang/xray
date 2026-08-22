@@ -1,5 +1,3 @@
-import strconv
-
 import text as textutil
 
 // yaml - typed pure-Xray YAML parser and writer.
@@ -79,7 +77,7 @@ export class YamlMapping {
         return false
     }
 
-    size() -> int {
+    size() -> i64 {
         return len(this.keys)
     }
 }
@@ -98,10 +96,10 @@ export class YamlTagged {
 export enum YamlValue {
     Null,
     Boolean(bool),
-    Integer(int),
-    Float(float),
+    Integer(i64),
+    Float(f64),
     String(string),
-    Binary(Array<byte>),
+    Binary(Array<u8>),
     Sequence(Array<YamlValue>),
     Mapping(YamlMapping),
     Tagged(YamlTagged),
@@ -119,11 +117,11 @@ export enum YamlErrorKind {
 
 export class YamlDiagnostic {
     kind: YamlErrorKind
-    line: int
-    column: int
+    line: i64
+    column: i64
     message: string
 
-    constructor(kind: YamlErrorKind, line: int, column: int, message: string) {
+    constructor(kind: YamlErrorKind, line: i64, column: i64, message: string) {
         this.kind = kind
         this.line = line
         this.column = column
@@ -139,9 +137,9 @@ export enum YamlError {
 export class YamlParseReport {
     data: YamlValue
     diagnostics: Array<YamlDiagnostic>
-    anchors: int
+    anchors: i64
 
-    constructor(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int) {
+    constructor(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64) {
         this.data = data
         this.diagnostics = diagnostics
         this.anchors = anchors
@@ -155,7 +153,7 @@ export type YamlOptions = {
 }
 
 export type YamlWriteOptions = {
-    indent: int
+    indent: i64
 }
 
 fn _defaultOptions() -> YamlOptions {
@@ -230,14 +228,14 @@ export fn asBool(value: YamlValue) -> bool? {
     }
 }
 
-export fn asInt(value: YamlValue) -> int? {
+export fn asInt(value: YamlValue) -> i64? {
     return match (value) {
         YamlValue.Integer(n) -> n,
         _                    -> null
     }
 }
 
-export fn asFloat(value: YamlValue) -> float? {
+export fn asFloat(value: YamlValue) -> f64? {
     return match (value) {
         YamlValue.Float(f) -> f,
         _                  -> null
@@ -288,14 +286,14 @@ export fn get(value: YamlValue, key: string) -> YamlValue? {
 }
 
 // Element at `index` inside a Sequence (null when out of range / not a sequence).
-export fn at(value: YamlValue, index: int) -> YamlValue? {
+export fn at(value: YamlValue, index: i64) -> YamlValue? {
     var items = _sequenceItems(value)
     if (index < 0 || index >= len(items)) { return null }
     return items[index]
 }
 
 // Element count of a Sequence or Mapping (0 otherwise).
-export fn length(value: YamlValue) -> int {
+export fn length(value: YamlValue) -> i64 {
     match (value) {
         YamlValue.Sequence(items) -> { return len(items) }
         YamlValue.Mapping(m)      -> { return m.size() }
@@ -323,11 +321,11 @@ export fn boolValue(value: bool) -> YamlValue {
     return YamlValue.Boolean(value)
 }
 
-export fn intValue(value: int) -> YamlValue {
+export fn intValue(value: i64) -> YamlValue {
     return YamlValue.Integer(value)
 }
 
-export fn floatValue(value: float) -> YamlValue {
+export fn floatValue(value: f64) -> YamlValue {
     return YamlValue.Float(value)
 }
 
@@ -335,7 +333,7 @@ export fn stringValue(value: string) -> YamlValue {
     return YamlValue.String(value)
 }
 
-export fn binaryValue(value: Array<byte>) -> YamlValue {
+export fn binaryValue(value: Array<u8>) -> YamlValue {
     return YamlValue.Binary(value)
 }
 
@@ -389,11 +387,11 @@ fn _isHexDigit(c: string) -> bool {
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
 
-fn _hexValue(c: string) -> int {
+fn _hexValue(c: string) -> i64 {
     var o = c.runes().nth(0).toUInt32()
-    if (o >= 48 && o <= 57) { return (o - 48) as int }
-    if (o >= 65 && o <= 70) { return (o - 55) as int }
-    if (o >= 97 && o <= 102) { return (o - 87) as int }
+    if (o >= 48 && o <= 57) { return (o - 48) as i64 }
+    if (o >= 65 && o <= 70) { return (o - 55) as i64 }
+    if (o >= 97 && o <= 102) { return (o - 87) as i64 }
     return -1
 }
 
@@ -411,7 +409,7 @@ fn _lines(data: string) -> Array<string> {
     return out
 }
 
-fn _countIndent(line: string) -> int {
+fn _countIndent(line: string) -> i64 {
     var n = 0
     while (n < len(line) && line.slice(n, (n) + 1) == " ") { n = n + 1 }
     return n
@@ -450,7 +448,7 @@ fn _lineClean(line: string) -> string {
     return _stripInlineComment(_trimCR(line))
 }
 
-fn _findTopColon(s: string) -> int {
+fn _findTopColon(s: string) -> i64 {
     var quote = ""
     var escape = false
     var depth = 0
@@ -480,37 +478,37 @@ fn _findTopColon(s: string) -> int {
     return -1
 }
 
-fn _utf8Len(cp: int) -> int {
+fn _utf8Len(cp: i64) -> i64 {
     if (cp < 0x80) { return 1 }
     if (cp < 0x800) { return 2 }
     if (cp < 0x10000) { return 3 }
     return 4
 }
 
-fn _putUtf8(out: ref Array<byte>, oi: int, cp: int) -> int {
+fn _putUtf8(out: ref Array<u8>, oi: i64, cp: i64) -> i64 {
     if (cp < 0x80) {
-        out[oi] = cp as byte
+        out[oi] = cp as u8
         return oi + 1
     } else if (cp < 0x800) {
-        out[oi] = (0xC0 | (cp >> 6)) as byte
-        out[oi + 1] = (0x80 | (cp & 0x3F)) as byte
+        out[oi] = (0xC0 | (cp >> 6)) as u8
+        out[oi + 1] = (0x80 | (cp & 0x3F)) as u8
         return oi + 2
     } else if (cp < 0x10000) {
-        out[oi] = (0xE0 | (cp >> 12)) as byte
-        out[oi + 1] = (0x80 | ((cp >> 6) & 0x3F)) as byte
-        out[oi + 2] = (0x80 | (cp & 0x3F)) as byte
+        out[oi] = (0xE0 | (cp >> 12)) as u8
+        out[oi + 1] = (0x80 | ((cp >> 6) & 0x3F)) as u8
+        out[oi + 2] = (0x80 | (cp & 0x3F)) as u8
         return oi + 3
     }
-    out[oi] = (0xF0 | (cp >> 18)) as byte
-    out[oi + 1] = (0x80 | ((cp >> 12) & 0x3F)) as byte
-    out[oi + 2] = (0x80 | ((cp >> 6) & 0x3F)) as byte
-    out[oi + 3] = (0x80 | (cp & 0x3F)) as byte
+    out[oi] = (0xF0 | (cp >> 18)) as u8
+    out[oi + 1] = (0x80 | ((cp >> 12) & 0x3F)) as u8
+    out[oi + 2] = (0x80 | ((cp >> 6) & 0x3F)) as u8
+    out[oi + 3] = (0x80 | (cp & 0x3F)) as u8
     return oi + 4
 }
 
-fn _codepointString(cp: int) -> string {
+fn _codepointString(cp: i64) -> string {
     if (cp <= 0 || cp > 0x10FFFF) { return "" }
-    var out = Array<byte>(_utf8Len(cp))
+    var out = Array<u8>(_utf8Len(cp))
     _putUtf8(ref out, 0, cp)
     return string.fromUtf8(out[:])!
 }
@@ -566,7 +564,7 @@ fn _parseQuotedLiteral(raw: string) -> string {
     return body.replace("''", "'")
 }
 
-fn _parseBaseInt(raw: string, base: int, start: int, sign: int) -> int {
+fn _parseBaseInt(raw: string, base: i64, start: i64, sign: i64) -> i64 {
     var out = 0
     for (var i = start; i < len(raw); i++) {
         var d = _hexValue(raw.slice(i, (i) + 1))
@@ -622,10 +620,10 @@ fn _parsePlainScalar(rawValue: string) -> YamlValue {
     }
     if (_looksDecimalNumber(raw)) {
         if (raw.contains(".") || raw.contains("e") || raw.contains("E")) {
-            var f = strconv.parseFloat(raw)
+            var f = f64.tryParse(raw)
             if (f != null) { return YamlValue.Float(f!) }
         } else {
-            var i = strconv.parseInt(raw)
+            var i = i64.tryParse(raw)
             if (i != null) { return YamlValue.Integer(i!) }
         }
     }
@@ -646,7 +644,7 @@ fn _isTag(raw: string) -> bool {
 
 class YamlFlowParser {
     src: string
-    pos: int
+    pos: i64
     errors: Array<YamlDiagnostic>
 
     constructor(src: string, errors: Array<YamlDiagnostic>) {
@@ -806,7 +804,7 @@ class YamlFlowParser {
 
 class YamlParser {
     lines: Array<string>
-    index: int
+    index: i64
     errors: Array<YamlDiagnostic>
     anchors: YamlMapping
     root: YamlValue
@@ -843,7 +841,7 @@ class YamlParser {
         }
     }
 
-    nextIndent() -> int {
+    nextIndent() -> i64 {
         var p = this.index
         while (p < len(this.lines)) {
             var clean = _lineClean(this.lines[p])
@@ -886,7 +884,7 @@ class YamlParser {
         return _parsePlainScalar(raw)
     }
 
-    parseBlockScalar(header: string, parentIndent: int) -> string {
+    parseBlockScalar(header: string, parentIndent: i64) -> string {
         var style = header.slice(0, (0) + 1)
         var chomp = ""
         if (len(header) > 1) {
@@ -933,7 +931,7 @@ class YamlParser {
         return out.toString()
     }
 
-    parseMappingLineInto(mapping: ref YamlMapping, content: string, indent: int) {
+    parseMappingLineInto(mapping: ref YamlMapping, content: string, indent: i64) {
         var colon = _findTopColon(content)
         if (colon < 0) {
             this.addError(YamlErrorKind.InvalidMapping, "expected ':' in mapping entry")
@@ -963,7 +961,7 @@ class YamlParser {
         }
     }
 
-    parseMapping(indent: int, depth: int) -> YamlValue {
+    parseMapping(indent: i64, depth: i64) -> YamlValue {
         var mapping = YamlMapping()
         while (!this.atEnd()) {
             this.skipIgnorable()
@@ -981,7 +979,7 @@ class YamlParser {
         return YamlValue.Mapping(mapping)
     }
 
-    parseSequenceInlineMapping(afterDash: string, indent: int, depth: int) -> YamlValue {
+    parseSequenceInlineMapping(afterDash: string, indent: i64, depth: i64) -> YamlValue {
         var mapping = YamlMapping()
         var colon = _findTopColon(afterDash)
         if (colon < 0) {
@@ -1026,7 +1024,7 @@ class YamlParser {
         return YamlValue.Mapping(mapping)
     }
 
-    parseSequence(indent: int, depth: int) -> YamlValue {
+    parseSequence(indent: i64, depth: i64) -> YamlValue {
         var arr: Array<YamlValue> = []
         while (!this.atEnd()) {
             this.skipIgnorable()
@@ -1065,7 +1063,7 @@ class YamlParser {
         return YamlValue.Sequence(arr)
     }
 
-    parseBlock(indent: int, depth: int) -> YamlValue {
+    parseBlock(indent: i64, depth: i64) -> YamlValue {
         if (depth > YAML_MAX_DEPTH) {
             this.addError(YamlErrorKind.MaxDepthExceeded, "maximum nesting depth exceeded")
             return YamlValue.Null
@@ -1097,7 +1095,7 @@ fn _firstError(parser: YamlParser, strict: bool) -> YamlDiagnostic? {
 
 // ===== Serializer =====
 
-fn _indent(level: int, spaces: int) -> string {
+fn _indent(level: i64, spaces: i64) -> string {
     var out = StringBuilder()
     for (var i = 0; i < level * spaces; i++) { out.append(" ") }
     return out.toString()
@@ -1130,15 +1128,15 @@ fn _keyText(key: string) -> string {
     return key
 }
 
-fn _base64Encode(bytes: Array<byte>) -> string {
+fn _base64Encode(bytes: Array<u8>) -> string {
     var table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
     var out = StringBuilder()
     var n = len(bytes)
     var i = 0
     while (i + 3 <= n) {
-        var b0 = int(bytes[i])
-        var b1 = int(bytes[i + 1])
-        var b2 = int(bytes[i + 2])
+        var b0 = (bytes[i] as i64)
+        var b1 = (bytes[i + 1] as i64)
+        var b2 = (bytes[i + 2] as i64)
         var v = (b0 << 16) | (b1 << 8) | b2
         out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
         out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
@@ -1148,14 +1146,14 @@ fn _base64Encode(bytes: Array<byte>) -> string {
     }
     var rem = n - i
     if (rem == 1) {
-        var b0 = int(bytes[i])
+        var b0 = (bytes[i] as i64)
         var v = b0 << 16
         out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
         out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
         out.append("==")
     } else if (rem == 2) {
-        var b0 = int(bytes[i])
-        var b1 = int(bytes[i + 1])
+        var b0 = (bytes[i] as i64)
+        var b1 = (bytes[i + 1] as i64)
         var v = (b0 << 16) | (b1 << 8)
         out.append(table.slice((v >> 18) & 63, ((v >> 18) & 63) + 1))
         out.append(table.slice((v >> 12) & 63, ((v >> 12) & 63) + 1))
@@ -1174,7 +1172,7 @@ fn _aliasText(anchor: YamlAnchor) -> string {
     return "*" + anchor.name
 }
 
-fn _binaryText(bytes: Array<byte>) -> string {
+fn _binaryText(bytes: Array<u8>) -> string {
     return "!!binary " + _base64Encode(bytes)
 }
 
@@ -1206,7 +1204,7 @@ fn _isBlockValue(value: YamlValue) -> bool {
     return false
 }
 
-fn _emitSequence(items: Array<YamlValue>, level: int, indent: int) -> string {
+fn _emitSequence(items: Array<YamlValue>, level: i64, indent: i64) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(items); i++) {
         var item = items[i]
@@ -1224,7 +1222,7 @@ fn _emitSequence(items: Array<YamlValue>, level: int, indent: int) -> string {
     return out.toString()
 }
 
-fn _emitMapping(mapping: YamlMapping, level: int, indent: int) -> string {
+fn _emitMapping(mapping: YamlMapping, level: i64, indent: i64) -> string {
     var out = StringBuilder()
     for (var i = 0; i < len(mapping.keys); i++) {
         var key = mapping.keys[i]
@@ -1244,7 +1242,7 @@ fn _emitMapping(mapping: YamlMapping, level: int, indent: int) -> string {
     return out.toString()
 }
 
-fn _emitValue(value: YamlValue, level: int, indent: int) -> string {
+fn _emitValue(value: YamlValue, level: i64, indent: i64) -> string {
     var seq = asSequence(value)
     if (seq != null && len(seq!) > 0) { return _emitSequence(seq!, level, indent) }
     var mapping = asMapping(value)

@@ -1,7 +1,7 @@
 class Hidden {
-    private constructor(v: int) {}
+    private constructor(v: i64) {}
 
-    static make(v: int) -> Hidden {
+    static make(v: i64) -> Hidden {
         return Hidden(v)
     }
 }

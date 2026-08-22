@@ -4,7 +4,7 @@
 // ===== Channel<(T, U)>: tuple payload through coroutine channel =====
 @test
 fn test_channel_tuple_send_recv() {
-    const ch: Channel<(int, string)> = Channel(2)
+    const ch: Channel<(i64, string)> = Channel(2)
     ch.send((1, "hello"))
     ch.send((2, "world"))
     var t1 = match (ch.recv()) {
@@ -27,7 +27,7 @@ fn test_channel_tuple_send_recv() {
 // ===== Array<(K, V)>: indexed and destructured access =====
 @test
 fn test_array_of_tuples() {
-    var pairs: Array<(string, int)> = [("a", 1), ("b", 2), ("c", 3)]
+    var pairs: Array<(string, i64)> = [("a", 1), ("b", 2), ("c", 3)]
     assert_eq(len(pairs), 3)
     assert_eq(pairs[0].0, "a")
     assert_eq(pairs[1].1, 2)
@@ -40,7 +40,7 @@ fn test_array_of_tuples() {
 // ===== Array<(K, V)> in for-in destructure =====
 @test
 fn test_for_in_array_tuple() {
-    var pairs: Array<(string, int)> = [("a", 1), ("b", 2)]
+    var pairs: Array<(string, i64)> = [("a", 1), ("b", 2)]
     var total = 0
     var concat = ""
     for ((k, v) in pairs) {
@@ -78,7 +78,7 @@ fn test_user_generic_tuple_fn() {
 // ===== Map<K, (V1, V2)>: value is a tuple =====
 @test
 fn test_map_with_tuple_values() {
-    var m: Map<string, (int, bool)> = Map()
+    var m: Map<string, (i64, bool)> = Map()
     m.set("a", (1, true))
     m.set("b", (2, false))
     assert_eq(len(m), 2)
@@ -93,7 +93,7 @@ fn test_map_with_tuple_values() {
 // ===== Nested tuples through generics (field access path) =====
 @test
 fn test_nested_tuple_generic() {
-    var triples: Array<((int, int), string)> = []
+    var triples: Array<((i64, i64), string)> = []
     triples.push(((1, 2), "first"))
     triples.push(((3, 4), "second"))
 

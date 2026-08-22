@@ -3,23 +3,23 @@
 // whether the value is exactly representable in the target type. Both backends
 // answer from the same predicate.
 var small: JSON.Value = 7
-print("7 is i32=${small is i32} is i8=${small is i8} is byte=${small is byte}")
+print("7 is i32=${small is i32} is i8=${small is i8} is u8=${small is u8}")
 print("7 as i32=${small as i32}")
 print("7 as i8?=${small as i8?}")
 
 var big: JSON.Value = 3000000000
-print("3e9 is i32=${big is i32} is int=${big is int}")
+print("3e9 is i32=${big is i32} is i64=${big is i64}")
 print("3e9 as i32?=${big as i32?}")
 
 var negative: JSON.Value = -5
-print("-5 is byte=${negative is byte} is i16=${negative is i16}")
+print("-5 is u8=${negative is u8} is i16=${negative is i16}")
 
 var exact: JSON.Value = 1.5
-print("1.5 is f32=${exact is f32} is float=${exact is float}")
+print("1.5 is f32=${exact is f32} is f64=${exact is f64}")
 print("1.5 as f32?=${exact as f32?}")
 
 var inexact: JSON.Value = 0.1
-print("0.1 is f32=${inexact is f32} is float=${inexact is float}")
+print("0.1 is f32=${inexact is f32} is f64=${inexact is f64}")
 print("0.1 as f32?=${inexact as f32?}")
 
 var text: JSON.Value = "s"

@@ -1,5 +1,5 @@
 export struct NarrowState {
-    data: [byte; 4]
+    data: [u8; 4]
     total: u32
 
     static init(seed: u32) -> NarrowState {
@@ -12,7 +12,7 @@ export struct NarrowState {
 }
 
 export struct WideState {
-    data: [byte; 32]
+    data: [u8; 32]
     total: u64
 
     static init(seed: u64) -> WideState {

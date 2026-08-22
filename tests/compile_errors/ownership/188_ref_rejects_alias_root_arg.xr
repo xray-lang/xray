@@ -1,6 +1,6 @@
 class Node {
-    tag: int
-    constructor(tag: int) { this.tag = tag }
+    tag: i64
+    constructor(tag: i64) { this.tag = tag }
 }
 
 fn mutate_and_read(target: ref Node, snapshot: Node) {

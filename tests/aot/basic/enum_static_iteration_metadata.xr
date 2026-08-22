@@ -6,7 +6,7 @@ enum Color {
 
 enum WireEvent {
     Ready,
-    Data(bytes: string, code: int),
+    Data(bytes: string, code: i64),
     Error(message: string)
 }
 
@@ -33,4 +33,4 @@ print(schema)
 print(Color.variants.length)
 print(Color.variants[1].name)
 print(WireEvent.variants[1].payloads[1].name)
-print(GenericResult<int>.variants[0].payloads[0].type)
+print(GenericResult<i64>.variants[0].payloads[0].type)

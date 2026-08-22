@@ -8826,12 +8826,12 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
             node->type == AST_CONST_DECL ? "top-level const declaration"
                                          : "top-level var declaration",
             node->type == AST_CONST_DECL
-                ? "only int/float/bool/char/string/null consteval scalars, static string "
+                ? "only i64/f64/bool/char/string/null consteval scalars, static string "
                   "fixed-array lanes, and recursively scalar fixed-array/tuple/struct "
                   "initializers are allowed as erased or static data objects in the current "
                   "freestanding slice"
-                : "only int/float/bool/char/string/null consteval initializers, typed "
-                  "int/float/bool zero defaults, typed nullable scalar/string/null defaults, or "
+                : "only i64/f64/bool/char/string/null consteval initializers, typed "
+                  "i64/f64/bool zero defaults, typed nullable scalar/string/null defaults, or "
                   "module-local recursively scalar fixed-array/struct/union consteval "
                   "initializers are "
                   "supported as static mutable module storage in the current freestanding slice");
@@ -8920,7 +8920,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
                     .file = ctx->file_path, .line = node->line, .column = node->column};
                 xa_analyzer_add_diagnostic(
                     ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                    "Empty array '[]' requires a type annotation, e.g. var x: Array<int> = []",
+                    "Empty array '[]' requires a type annotation, e.g. var x: Array<i64> = []",
                     &loc);
             }
         }

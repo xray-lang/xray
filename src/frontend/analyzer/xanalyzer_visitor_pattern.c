@@ -31,10 +31,9 @@
 static XrTypeKind type_member_to_kind(const char *name) {
     if (!name)
         return XR_KIND_COUNT;
-    if (strcmp(name, "int") == 0)
-        return XR_KIND_INT;
-    if (strcmp(name, "float") == 0)
-        return XR_KIND_FLOAT;
+    const XrExactScalarDesc *scalar = xr_exact_scalar_by_source_name(name, strlen(name));
+    if (scalar)
+        return scalar->family == XR_EXACT_SCALAR_FAMILY_INTEGER ? XR_KIND_INT : XR_KIND_FLOAT;
     if (strcmp(name, "string") == 0)
         return XR_KIND_STRING;
     if (strcmp(name, "bool") == 0)
@@ -68,9 +67,9 @@ static XrTypeKind type_member_to_kind(const char *name) {
 static const char *kind_to_type_member(XrTypeKind kind) {
     switch (kind) {
         case XR_KIND_INT:
-            return "Type.int";
+            return "Type.i64";
         case XR_KIND_FLOAT:
-            return "Type.float";
+            return "Type.f64";
         case XR_KIND_STRING:
             return "Type.string";
         case XR_KIND_BOOL:
@@ -684,7 +683,7 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
     }
 
     // Exhaustiveness check for typeof match on union/nullable types
-    // Detects: match typeof(x) { Type.int => ..., Type.string => ... }
+    // Detects: match typeof(x) { Type.i64 => ..., Type.string => ... }
     if (!has_wildcard && match->expr) {
         const char *typeof_var = get_typeof_arg_name(match->expr);
         if (typeof_var) {

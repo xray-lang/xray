@@ -194,7 +194,7 @@ static XrValue m_repeat(XrVMRuntime *iso, XrValue self, XrValue *args, int argc)
     return string_method_owned_result(str, result);
 }
 
-/* str.copyBytes() -> Array<byte>. The receiver remains immutable; the result
+/* str.copyBytes() -> Array<u8>. The receiver remains immutable; the result
  * owns its own backing storage. Decode explicitly with string.fromUtf8(). */
 static XrValue m_to_bytes(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;

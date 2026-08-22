@@ -1,4 +1,4 @@
-fn inc(x: int) -> int {
+fn inc(x: i64) -> i64 {
     return x + 1
 }
 

@@ -66,8 +66,8 @@ fn test_n4_grouping_is_transparent() {
 
 @test
 fn test_n4_typeof_equality() {
-    var v: int | string = 7
-    if (typeOf(v) == Type.int) {
+    var v: i64 | string = 7
+    if (typeOf(v) == Type.i64) {
         assert_eq(v + 1, 8)
     } else {
         assert(false)
@@ -99,7 +99,7 @@ fn test_n5_and_chain_of_three() {
 
 @test
 fn test_n6_is_primitive_true_branch() {
-    var v: int | string = "hello"
+    var v: i64 | string = "hello"
     if (v is string) {
         assert_eq(len(v), 5)
     } else {
@@ -109,8 +109,8 @@ fn test_n6_is_primitive_true_branch() {
 
 @test
 fn test_n6_is_primitive_false_branch() {
-    var v: int | string = "hello"
-    if (v is int) {
+    var v: i64 | string = "hello"
+    if (v is i64) {
         assert(false)
     } else {
         assert_eq(len(v), 5)
@@ -119,8 +119,8 @@ fn test_n6_is_primitive_false_branch() {
 
 @test
 fn test_n6_is_negated() {
-    var v: int | string = "abcd"
-    if (!(v is int)) {
+    var v: i64 | string = "abcd"
+    if (!(v is i64)) {
         assert_eq(len(v), 4)
     } else {
         assert(false)
@@ -181,9 +181,9 @@ class N11Holder {
 
     // A method whose body ends in `return` must not leave the next method
     // analyzing under an unreachable flow.
-    first() -> int { return 1 }
+    first() -> i64 { return 1 }
 
-    show() -> int {
+    show() -> i64 {
         var local = this.name
         if (local != null) {
             return len(local)
@@ -252,7 +252,7 @@ fn test_n7_assert_false_injects_negated_fact() {
 
 // ===== N-8: early exit =====
 
-fn n8_len_or_zero(s: string?) -> int {
+fn n8_len_or_zero(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)
 }
@@ -263,7 +263,7 @@ fn test_n8_early_return() {
     assert_eq(n8_len_or_zero(null), 0)
 }
 
-fn n8_first_len(items: Array<string?>) -> int {
+fn n8_first_len(items: Array<string?>) -> i64 {
     var total = 0
     for (item in items) {
         if (item == null) { continue }

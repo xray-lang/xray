@@ -1,7 +1,7 @@
 import sys
 import sync
 
-var t = sys.Thread.spawn(fn() -> int {
-    return sync.Mutex<int>(1).lock((v) -> v)
+var t = sys.Thread.spawn(fn() -> i64 {
+    return sync.Mutex<i64>(1).lock((v) -> v)
 })
 print(t.join())

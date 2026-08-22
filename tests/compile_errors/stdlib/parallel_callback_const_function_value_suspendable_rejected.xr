@@ -1,11 +1,11 @@
 import parallel
 
-fn worker() -> int {
+fn worker() -> i64 {
     return 1
 }
 
 parallel.forEach(0..4, (i) -> {
-    const f = fn(x: int) -> int {
+    const f = fn(x: i64) -> i64 {
         var value = await go worker()
         return value + x
     }

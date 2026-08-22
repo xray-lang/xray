@@ -1,6 +1,6 @@
 union U32Bytes {
     u: u32
-    b: [byte; 4]
+    b: [u8; 4]
 }
 
 var x = U32Bytes{u: 0x01020304}
@@ -12,4 +12,4 @@ print(bytes[2])
 print(bytes[3])
 
 bytes[0] = 255
-print(int(unsafe { x.u }))
+print((unsafe { x.u } as i64))

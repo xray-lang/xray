@@ -1,9 +1,9 @@
 @derive(Clone)
 class CollectionSnapshot {
-    scores: Map<string, int>
+    scores: Map<string, i64>
     seen: Set<string>
 
-    constructor(scores: Map<string, int>, seen: Set<string>) {
+    constructor(scores: Map<string, i64>, seen: Set<string>) {
         this.scores = scores
         this.seen = seen
     }

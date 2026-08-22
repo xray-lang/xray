@@ -1,4 +1,4 @@
-type Address = { city: string, zip: int }
+type Address = { city: string, zip: i64 }
 type User = { name: string, address: Address }
 
 fn jsonNestedObjectCodecBridgePlan() -> JSON.Value {

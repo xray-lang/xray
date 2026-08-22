@@ -128,7 +128,7 @@ static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtVa
         out->kind = XR_CT_FLOAT;
         if (source_is_float) {
             if (source.kind != XR_CT_FLOAT)
-                return ct_fail(err, "numeric conversion source is not a float constant");
+                return ct_fail(err, "numeric conversion source is not a f64 constant");
             out->as.float_val =
                 xr_numeric_float_convert(source.as.float_val, conversion.target_scalar_rep);
         } else {
@@ -144,7 +144,7 @@ static bool ct_eval_numeric_as(XaAnalyzer *analyzer, const AstNode *expr, XrCtVa
     out->kind = XR_CT_INT;
     if (source_is_float) {
         if (source.kind != XR_CT_FLOAT)
-            return ct_fail(err, "numeric conversion source is not a float constant");
+            return ct_fail(err, "numeric conversion source is not a f64 constant");
         if (!xr_numeric_float_to_int(source.as.float_val, conversion.target_scalar_rep,
                                      pointer_bits, &out->as.int_val))
             return ct_fail(err, "numeric conversion is out of range");
@@ -1273,10 +1273,10 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
         return xr_type_new_error(NULL);
 
     switch ((XrTypeRefKind) t->kind) {
-        case XR_TREF_INT:
-            return xr_type_new_int(NULL);
-        case XR_TREF_FLOAT:
-            return xr_type_new_float(NULL);
+        case XR_TREF_SCALAR:
+            return xr_scalar_rep_is_float(t->scalar_rep)
+                       ? xr_type_new_float_width(X, t->scalar_rep)
+                       : xr_type_new_int_width(X, t->scalar_rep);
         case XR_TREF_STRING:
             return xr_type_new_string(NULL);
         case XR_TREF_BOOL:
@@ -1289,11 +1289,6 @@ static XrType *resolve_impl(XrVMRuntime *X, const XrTypeRef *t) {
             return xr_type_new_null(NULL);
         case XR_TREF_ERROR:
             return xr_type_new_error(NULL);
-
-        case XR_TREF_INT_WIDTH:
-            return xr_type_new_int_width(X, t->scalar_rep);
-        case XR_TREF_FLOAT_WIDTH:
-            return xr_type_new_float_width(X, t->scalar_rep);
 
         case XR_TREF_NAMED:
             return resolve_named(X, t->name);
@@ -1546,7 +1541,7 @@ static bool report_indiscriminable_union(XaAnalyzer *analyzer, const XrTypeRef *
     snprintf(msg, sizeof(msg),
              "union members '%s' and '%s' are the same type after erasure, so `is` and `match` "
              "cannot tell them apart; a union may carry at most one integer member and at most "
-             "one float member",
+             "one f64 member",
              xr_type_to_string(first), xr_type_to_string(second));
     xa_analyzer_add_diagnostic(analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_UNION_INDISCRIMINABLE,
                                msg, &loc);

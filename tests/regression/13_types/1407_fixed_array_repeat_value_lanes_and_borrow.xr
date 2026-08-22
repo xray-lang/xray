@@ -1,27 +1,27 @@
 struct Pair {
-    x: int
+    x: i64
 }
 
 struct Holder {
     names: [string; 2]
-    blocks: [[byte; 2]; 2]
+    blocks: [[u8; 2]; 2]
 }
 
-fn sum_fixed_in(xs: [byte; 4]) -> int {
-    return (xs[0] as int) + (xs[1] as int)
+fn sum_fixed_in(xs: [u8; 4]) -> i64 {
+    return (xs[0] as i64) + (xs[1] as i64)
 }
 
-fn bump_fixed_ref(xs: ref [byte; 4]) {
+fn bump_fixed_ref(xs: ref [u8; 4]) {
     xs[3] = 42
 }
 
 @test
 fn test_fixed_array_repeat_nested_value_lanes_and_borrowing() {
-    var zero: [byte; 4] = [0; 4]
+    var zero: [u8; 4] = [0; 4]
     assert(len(zero) == 4)
     assert(zero[2] == 0)
 
-    var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
+    var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
     assert(len(blocks) == 2)
     assert(blocks[1][0] == 3)
     blocks[0][1] = 9
@@ -34,18 +34,18 @@ fn test_fixed_array_repeat_nested_value_lanes_and_borrowing() {
     assert(pairs[0].x == 7)
     assert(pairs[1].x == 8)
 
-    var lists: [Array<int>; 2] = [[10], [20, 21]]
+    var lists: [Array<i64>; 2] = [[10], [20, 21]]
     assert(lists[0][0] == 10)
     assert(len(lists[1]) == 2)
 
-    var bytes: [byte; 4] = [5, 6, 7, 8]
-    var view: Slice<byte> = bytes[1:4]
+    var bytes: [u8; 4] = [5, 6, 7, 8]
+    var view: Slice<u8> = bytes[1:4]
     assert(len(view) == 3)
     assert(view[0] == 6)
     view[1] = 99
     assert(bytes[2] == 99)
 
-    var pass: [byte; 4] = [1, 2, 3, 4]
+    var pass: [u8; 4] = [1, 2, 3, 4]
     assert(sum_fixed_in(pass) == 3)
     bump_fixed_ref(ref pass)
     assert(pass[3] == 42)

@@ -5,11 +5,11 @@
 
 import runtime
 
-type NamedValue = { val: int, name: string }
-type BatchRecord = { c: int, i: int, s: string }
-type NestedValue = { nested: int }
-type MixedRecord = { arr: Array<int | string>, map_key: string }
-type ParentRecord = { id: int, children: Array<string> }
+type NamedValue = { val: i64, name: string }
+type BatchRecord = { c: i64, i: i64, s: string }
+type NestedValue = { nested: i64 }
+type MixedRecord = { arr: Array<i64 | string>, map_key: string }
+type ParentRecord = { id: i64, children: Array<string> }
 
 // --- Test 1: String pool survival under memory pressure ---
 // Bug #4 pattern: interned strings must survive heavy allocation churn
@@ -116,7 +116,7 @@ fn test_rapid_alloc_collect() {
 // Exercises: traverse completeness for Array, Map, Set, and structural objects
 @test
 fn test_mixed_container_gc() {
-    var arr: Array<Array<int | string>> = []
+    var arr: Array<Array<i64 | string>> = []
     var map: Map<string, NestedValue> = Map()
     var data: Array<MixedRecord> = []
 
@@ -203,11 +203,11 @@ fn test_string_concat_churn() {
 @test
 fn test_instance_field_gc() {
     class Node {
-        value: int
+        value: i64
         label: string
         children: Array<Node>
 
-        constructor(v: int, l: string) {
+        constructor(v: i64, l: string) {
             this.value = v
             this.label = l
             this.children = []

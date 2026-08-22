@@ -1,5 +1,5 @@
-fn clearLocal() -> int {
-    var a: Array<int> = []
+fn clearLocal() -> i64 {
+    var a: Array<i64> = []
     a.push(1)
     a.push(2)
     a.clear()

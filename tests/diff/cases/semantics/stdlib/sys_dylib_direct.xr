@@ -27,7 +27,7 @@ if (lib != null) {
     var sym = lib!.symbol(symName)
     print(sym != null)
     if (sym != null) {
-        var symPtr: Ptr<byte> = sym!
+        var symPtr: Ptr<u8> = sym!
         print(mem.addr(symPtr) != 0)
     }
 

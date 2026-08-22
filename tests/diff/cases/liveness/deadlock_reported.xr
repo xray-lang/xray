@@ -10,7 +10,7 @@
 // an AOT-standalone core cannot prove "no live threads" and stays silent
 // (documented deviation; the AOT leg follows with a neutral census).
 print("before recv")
-var ch = Channel<int>(0)
+var ch = Channel<i64>(0)
 var got = match (ch.recv()) {
     Recv.Value(v) -> v
     _ -> -1

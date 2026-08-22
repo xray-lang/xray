@@ -5,11 +5,11 @@
 // assignment was rejected with a self-contradictory "X is not assignable to X",
 // because the exact-signature check compared min_params, which the renderer
 // omits. A call through the value supplies every argument.
-fn connect(host: string, port: int = 8080) -> string { return "${host}:${port}" }
+fn connect(host: string, port: i64 = 8080) -> string { return "${host}:${port}" }
 
 fn main() {
     print(connect("a"))                       // a:8080 -- direct call fills the default
-    var f: fn(string, int) -> string = connect
+    var f: fn(string, i64) -> string = connect
     print(f("b", 9))                          // b:9 -- through the value, all args given
 }
 

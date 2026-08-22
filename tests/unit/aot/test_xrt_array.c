@@ -135,7 +135,7 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
         }                                                                                          \
         g_expect_throw = 0;                                                                        \
         XrValue _code = xrt_object_get_name(g_thrown_exc, "code");                                 \
-        ASSERT_TRUE(XR_IS_INT(_code), msg " code is int");                                         \
+        ASSERT_TRUE(XR_IS_INT(_code), msg " code is i64");                                         \
         ASSERT_EQ_INT(XR_TO_INT(_code), expected_code, msg " code");                               \
         ASSERT_XR_STR_EQ(xrt_object_get_name(g_thrown_exc, "message"), expected_message,           \
                          msg " message");                                                          \
@@ -377,26 +377,26 @@ static void test_resize_reserve_type_errors_are_structured(void) {
     if (setjmp(g_throw_jmp) == 0) {
         xrt_array_reserve_value(value, XR_TRUE_VAL);
         g_expect_throw = 0;
-        ASSERT_TRUE(false, "reserve with non-int capacity throws");
+        ASSERT_TRUE(false, "reserve with non-i64 capacity throws");
     }
     g_expect_throw = 0;
     ASSERT_XR_STR_EQ(xrt_object_get_name(g_thrown_exc, "message"),
                      XR_ERROR_CORE_ARRAY_RESERVE_EXPECTS_MSG, "reserve type error message");
     XrValue code = xrt_object_get_name(g_thrown_exc, "code");
-    ASSERT_TRUE(XR_IS_INT(code), "reserve type error code is int");
+    ASSERT_TRUE(XR_IS_INT(code), "reserve type error code is i64");
     ASSERT_EQ_INT(XR_TO_INT(code), XR_ERR_TYPE_MISMATCH, "reserve type error code");
 
     g_expect_throw = 1;
     if (setjmp(g_throw_jmp) == 0) {
         xrt_array_resize_value(value, XR_TRUE_VAL, XR_FROM_INT(0));
         g_expect_throw = 0;
-        ASSERT_TRUE(false, "resize with non-int length throws");
+        ASSERT_TRUE(false, "resize with non-i64 length throws");
     }
     g_expect_throw = 0;
     ASSERT_XR_STR_EQ(xrt_object_get_name(g_thrown_exc, "message"),
                      XR_ERROR_CORE_ARRAY_RESIZE_EXPECTS_MSG, "resize type error message");
     code = xrt_object_get_name(g_thrown_exc, "code");
-    ASSERT_TRUE(XR_IS_INT(code), "resize type error code is int");
+    ASSERT_TRUE(XR_IS_INT(code), "resize type error code is i64");
     ASSERT_EQ_INT(XR_TO_INT(code), XR_ERR_TYPE_MISMATCH, "resize type error code");
 
     free_test_array(a);
@@ -477,18 +477,18 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     EXPECT_XRT_ERROR_THROW(
         xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_WITHIN, a, a, 0, 7, 2),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_WITHIN_OOB_MSG,
-                           "Array<byte> copy-within checked helper throws on range");
+                           "Array<u8> copy-within checked helper throws on range");
     XrValue int_arr_value = xrt_array_new_typed_exact(0, XR_ELEM_I64);
     xrt_array_t *int_arr = (xrt_array_t *) int_arr_value.ptr;
     EXPECT_XRT_ERROR_THROW(
         xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_FROM, dst, int_arr, 0, 0, 1),
                            XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OPERANDS_MSG,
-                           "Array<byte> copy range checked helper throws on typed operand");
+                           "Array<u8> copy range checked helper throws on typed operand");
     EXPECT_XRT_ERROR_THROW(
         xrt_byte_array_copy_checked_raw(XR_BYTE_ARRAY_COPY_FROM, dst, a, INT64_C(4294967296), 0,
                                         1),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_ARRAY_COPY_FROM_OOB_MSG,
-                           "Array<byte> copy range preserves 64-bit offsets without wrapping");
+                           "Array<u8> copy range preserves 64-bit offsets without wrapping");
 
     XrValue rep_value = xrt_array_new_typed(0, XR_ELEM_U8, 0);
     xrt_array_t *rep = (xrt_array_t *) rep_value.ptr;
@@ -527,43 +527,43 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     xr_span_t span_all = xrt_span_from_array_slice(span_ops_value, 0, 12);
     xrt_byte_slice_fill_checked_raw(span_all, 511);
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[0], 255,
-                  "Slice<byte>.fill truncates through the shared owner");
+                  "Slice<u8>.fill truncates through the shared owner");
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[11], 255,
-                  "Slice<byte>.fill writes the final byte through the shared owner");
+                  "Slice<u8>.fill writes the final byte through the shared owner");
     xr_span_t empty_span = {NULL, 0};
     xrt_byte_slice_fill_checked_raw(empty_span, 7);
     xr_span_t invalid_span = {NULL, 1};
     EXPECT_XRT_ERROR_THROW(xrt_byte_slice_fill_checked_raw(invalid_span, 7),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_FILL_OOB_MSG,
-                           "Slice<byte>.fill rejects a positive length without storage");
+                           "Slice<u8>.fill rejects a positive length without storage");
     for (int64_t i = 0; i < 12; i++)
         ((uint8_t *) span_ops->data)[i] = (uint8_t) (65 + i);
     xrt_byte_slice_repeat_from_checked_raw(span_all, 4, 4, 4);
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[4], 65,
-                  "Slice<byte>.repeatFrom writes first repeated byte");
+                  "Slice<u8>.repeatFrom writes first repeated byte");
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[7], 68,
-                  "Slice<byte>.repeatFrom writes through overlap");
+                  "Slice<u8>.repeatFrom writes through overlap");
     xr_span_t copy_dst = xrt_span_from_array_slice(span_ops_value, 8, 12);
     xr_span_t copy_src = xrt_span_from_array_slice(span_ops_value, 4, 8);
     xrt_byte_slice_copy_checked_raw(copy_dst, copy_src);
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[8], 65,
-                  "Slice<byte>.copyFrom writes first source byte");
+                  "Slice<u8>.copyFrom writes first source byte");
     ASSERT_EQ_INT(((uint8_t *) span_ops->data)[11], 68,
-                  "Slice<byte>.copyFrom writes the final source byte");
+                  "Slice<u8>.copyFrom writes the final source byte");
     uint8_t copy_overlap_bytes[] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     xr_span_t overlap_dst = {copy_overlap_bytes + 1, 8};
     xr_span_t overlap_src = {copy_overlap_bytes, 8};
     xrt_byte_slice_copy_checked_raw(overlap_dst, overlap_src);
     ASSERT_EQ_INT(copy_overlap_bytes[1], 1,
-                  "hosted Slice<byte>.copyFrom preserves right-overlap source");
+                  "hosted Slice<u8>.copyFrom preserves right-overlap source");
     xrt_byte_slice_copy_checked_raw(empty_span, empty_span);
     EXPECT_XRT_ERROR_THROW(xrt_byte_slice_copy_checked_raw(invalid_span, invalid_span),
                            XR_ERR_INDEX_OUT_OF_BOUNDS, XR_ERROR_CORE_BYTE_SLICE_COPY_OOB_MSG,
-                           "Slice<byte>.copyFrom rejects invalid positive-length storage");
+                           "Slice<u8>.copyFrom rejects invalid positive-length storage");
     ASSERT_EQ_INT(
         xrt_byte_slice_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
                                                  xrt_span_from_array_slice(span_ops_value, 8, 12)),
-        4, "Slice<byte>.commonPrefix compares safe span slices");
+        4, "Slice<u8>.commonPrefix compares safe span slices");
     ASSERT_EQ_INT(
         xrt_byte_slice_common_prefix_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 3),
                                                  xrt_span_from_array_slice(span_ops_value, 8, 12)),
@@ -571,11 +571,11 @@ static void test_byte_array_raw_helpers_share_core_rules(void) {
     ASSERT_EQ_INT(
         xrt_byte_slice_compare_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 4),
                                            xrt_span_from_array_slice(span_ops_value, 8, 12)),
-        0, "hosted Slice<byte>.compare adapter consumes the shared owner");
+        0, "hosted Slice<u8>.compare adapter consumes the shared owner");
     ASSERT_EQ_INT(
         xrt_byte_slice_compare_checked_raw(xrt_span_from_array_slice(span_ops_value, 0, 3),
                                            xrt_span_from_array_slice(span_ops_value, 8, 12)),
-        -1, "hosted Slice<byte>.compare preserves prefix length ordering");
+        -1, "hosted Slice<u8>.compare preserves prefix length ordering");
 
     free_test_array(a);
     free_test_array(dst);
@@ -714,7 +714,7 @@ static void test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges(void
     uint64_t output_bits = 0;
     memcpy(&output_bits, &floating.f, sizeof(output_bits));
     ASSERT_TRUE(output_bits == UINT64_C(0xfff8000000001234),
-                "hosted float negation toggles only the sign bit");
+                "hosted f64 negation toggles only the sign bit");
 
     XrValue positive = xrt_bigint_from_small(INT64_C(4294967296));
     XrValue negative = xrt_neg(positive);

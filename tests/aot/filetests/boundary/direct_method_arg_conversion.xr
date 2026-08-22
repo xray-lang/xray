@@ -2,7 +2,7 @@ class Labeler {
     constructor() {
     }
 
-    mark(x: int) -> string {
+    mark(x: i64) -> string {
         if (x > 0) {
             return "pos"
         }

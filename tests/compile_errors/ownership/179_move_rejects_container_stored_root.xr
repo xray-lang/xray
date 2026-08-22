@@ -2,11 +2,11 @@
 // Function-local analysis cannot see that slot being overwritten, so the root
 // is escaped and can no longer be moved.
 class Node {
-    v: int
-    init(v: int) { this.v = v }
+    v: i64
+    init(v: i64) { this.v = v }
 }
 
-fn consume(n: move Node) -> int {
+fn consume(n: move Node) -> i64 {
     n.v = 50
     return n.v
 }

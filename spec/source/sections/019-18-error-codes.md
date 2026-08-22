@@ -8,7 +8,7 @@ order: 019
 
 ## 18. 错误码 (Error Codes)
 
-> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `int`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
+> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
 ### 18.1 Lexer 与 parser
 
@@ -188,7 +188,7 @@ order: 019
 
 ## 18. Error Codes
 
-> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `int` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
+> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
 ### 18.1 Lexer and Parser
 

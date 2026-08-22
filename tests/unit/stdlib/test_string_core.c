@@ -339,7 +339,7 @@ TEST(string_core_split_plan_and_each) {
 
 /* The parse core accepts a whole decimal number and nothing else: surrounding
  * whitespace is allowed, but any residue after the digits rejects the input,
- * so int("12abc") fails instead of quietly yielding 12. */
+ * so i64.parse("12abc") fails instead of quietly yielding 12. */
 TEST(string_parse_int64) {
     XrStringParseIntResult parsed =
         xr_string_parse_int64(" \t\r\n-123 \t", strlen(" \t\r\n-123 \t"));
@@ -399,7 +399,7 @@ TEST(string_parse_float64) {
     ASSERT_TRUE(parsed.ok);
     ASSERT_FLOAT_EQ(parsed.value, 1.25, 0.000001);
 
-    /* The forms strconv.parseFloat validates and then hands to this core. */
+    /* Exact f64 parsing accepts these whole-input decimal forms. */
     parsed = xr_string_parse_float64(".5", 2);
     ASSERT_TRUE(parsed.ok);
     ASSERT_FLOAT_EQ(parsed.value, 0.5, 0.000001);

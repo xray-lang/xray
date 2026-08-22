@@ -41,12 +41,12 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 **E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
 
 ```xray @id=eval-order-rules
-fn t(tag: string, v: int) -> int { print(tag); return v }
-fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
 
 class Counter {
-    hits: int = 0
+    hits: i64 = 0
 }
 
 fn mk(tag: string) -> Counter { print(tag); return Counter() }
@@ -114,8 +114,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
@@ -134,7 +134,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
@@ -176,13 +176,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 “可无损加宽”仅指同符号整数链和 `f32 → f64`。一个直接数值字面量可由另一已定型操作数取得唯一上下文；两个已定型操作数不存在 C 风格 usual arithmetic conversions。
 
 **特殊语义**：
-- `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
-- `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- 结果类型为 `float`/`f32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
-- `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
+- `i64 / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
+- `i64 % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
+- 结果类型为 `f64`/`f32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
+- `%` 仅接受整数操作数；静态类型包含 f64 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
-- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
+- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `i64(c)`。
 
 #### 3.3.2 位运算
 
@@ -190,9 +190,9 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 - 仅作用于整数类型。
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
-- `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
+- `>>` 是**算术右移**（保留符号位）。无符号类型使用对应的 exact 类型（`u8` / `u16` / `u32` / `u64`）。
 - bool 不参与位运算（用 `&&` `||`）。
-- `rune` 不参与位运算；需要码点时显式写 `int(c)`。
+- `rune` 不参与位运算；需要码点时显式写 `i64(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -293,7 +293,7 @@ var road = user?.address.street // 整链短路：user 为 null 时结果为 nul
 #### 强制解包 `expr!`
 
 ```xray
-var v: int = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
+var v: i64 = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
 ```
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
@@ -316,7 +316,7 @@ if (v is User) {
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
 - 适用于 union、可空、class 层级与 `JSON.Value` 运行期类别检查。
-- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
+- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is i64` / `is f64` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
 
@@ -326,8 +326,8 @@ AsExpr ::= UnaryExpr 'as' Type
 ```
 
 ```xray
-var n = v as int           // 失败抛 TypeError
-var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
+var n = v as i64           // 失败抛 TypeError
+var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
 ```
 
 | 形式 | 失败行为 | 用途 |
@@ -359,7 +359,7 @@ for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 ```
 
-- 类型 `Range`（仅 int 范围）。
+- 类型 `Range`（仅 i64 范围）。
 - **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
 - **非结合**：范围不能链式书写，`a..b..c` 是语法错误；确需嵌套时给端点加括号。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
@@ -370,7 +370,7 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 #### 展开 `...`
 
 仅在以下位置使用：
-- **函数 rest 参数声明**：`fn f(...args: int)`
+- **函数 rest 参数声明**：`fn f(...args: i64)`
 - **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
 - **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
@@ -396,8 +396,8 @@ ArrayElem ::= '...' Expr | Expr
 
 ```xray @id=expr-array-lit
 var a = [1, 2, 3]
-var empty: Array<int> = []
-var mixed = [1, "hello"]    // 类型 Array<int | string>
+var empty: Array<i64> = []
+var mixed = [1, "hello"]    // 类型 Array<i64 | string>
 ```
 
 #### Map `#{k: v, ...}` 与 `#{}`
@@ -445,14 +445,14 @@ var obj = { users }              // shorthand
 - 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
 - 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
 
-#### Array<byte> `Array<byte>(...)`
+#### Array<u8> `Array<u8>(...)`
 
 详见 §2.4.6 与 §14.5。
 
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
 详见 §10.5。
@@ -500,11 +500,11 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-var bytes: Slice<byte> = text.bytes()
+var bytes: Slice<u8> = text.bytes()
 bytes[i]                // 显式 byte 视图索引
 ```
 
-- `Array` 索引：`int`，越界抛 `E0430`。
+- `Array` 索引：`i64`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
@@ -520,7 +520,7 @@ arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全长视图（不是拷贝）
-var view: Slice<int> = arr[1:4]
+var view: Slice<i64> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
@@ -547,14 +547,14 @@ FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```xray @id=expr-lambda-forms
 // ── arrow lambda：每个参数都可独立标注或推断 ──
 arr.map(x -> x * 2)
-var add = (x: int, y) -> x + y
+var add = (x: i64, y) -> x + y
 
 // 表达式体隐式返回；ref 只授予可写借用，不会自动写回
-var calculate = (x: ref int) -> x * 2
-var doubleInPlace = (x: ref int) -> { x = x * 2 }
+var calculate = (x: ref i64) -> x * 2
+var doubleInPlace = (x: ref i64) -> { x = x * 2 }
 
 // ── fn lambda：显式返回类型、泛型或完整参数契约 ──
-var inc = fn(x: int) -> int {
+var inc = fn(x: i64) -> i64 {
     var y = x + 1
     return y
 }
@@ -569,11 +569,11 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
 
 **关键规则**：
-- arrow 参数的类型标注相互独立，可以混写 `(x: int, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
 - 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
 - arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
 - `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
-- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref int) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref int) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
 - 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
 
@@ -612,19 +612,19 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
-var arr = Array<int>()
-const ch = Channel<int>(10)
-var m = Map<string, int>()
+var arr = Array<i64>()
+const ch = Channel<i64>(10)
+var m = Map<string, i64>()
 ```
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<byte>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<u8>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
 ```xray @id=expr-literal-constructor-relation
-var a = [1, 2, 3]              // 等价 Array<int>() + push
+var a = [1, 2, 3]              // 等价 Array<i64>() + push
 var m = #{}                    // 等价 Map<...>()
 var p = Point{x: 1, y: 2}      // struct literal
 ```
@@ -718,12 +718,12 @@ This is a requirement rather than a conservative preference. Differential testin
 **E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
 
 ```xray @id=eval-order-rules
-fn t(tag: string, v: int) -> int { print(tag); return v }
-fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
 
 class Counter {
-    hits: int = 0
+    hits: i64 = 0
 }
 
 fn mk(tag: string) -> Counter { print(tag); return Counter() }
@@ -779,7 +779,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 | Operator | Applicable types | Result type | Notes |
 |--|--|--|--|
-| `-x` | numeric | same | negation; preserves float NaN |
+| `-x` | numeric | same | negation; preserves f64 NaN |
 | `+x` | numeric | same | identity, almost never useful |
 | `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
 | `~x` | integer | same | bitwise complement |
@@ -791,8 +791,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
@@ -811,7 +811,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
@@ -842,7 +842,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.1 Arithmetic Operators
 
-| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×float | string / other |
+| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×f64 | string / other |
 |--|--|--|--|--|--|
 | `+` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | `string + string` concatenates; other ❌ |
 | `-` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
@@ -853,13 +853,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 “Losslessly widenable” means only a same-signed integer chain or `f32 → f64`. A direct numeric literal may acquire the unique context of the other already-typed operand; two already-typed operands never use C-style usual arithmetic conversions.
 
 **Special semantics**:
-- `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
-- `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
-- Division whose result type is `float`/`f32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
-- `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
+- `i64 / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
+- `i64 % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
+- Division whose result type is `f64`/`f32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
+- `%` accepts integer operands only; modulo with a static type that contains f64 (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
-- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
+- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `i64(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -867,19 +867,19 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 - Apply only to integer types.
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
-- `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
+- `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding exact type (`u8`, `u16`, `u32`, or `u64`).
 - `bool` does not participate in bitwise operations (use `&&` `||`).
-- `rune` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
+- `rune` does not participate in bitwise operations; use `i64(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
 | Operator | Semantics |
 |--|--|
-| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-float and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
-**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔float promotion, or implicit signedness changes.
+**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔f64 promotion, or implicit signedness changes.
 
 #### 3.3.4 Logical Operators
 
@@ -970,7 +970,7 @@ var road = user?.address.street // whole-chain short-circuit: null when user is 
 #### Force unwrap `expr!`
 
 ```xray
-var v: int = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+var v: i64 = nullable_int!      // throws NullThrowError (E0410) at runtime when null
 ```
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
@@ -993,7 +993,7 @@ if (v is User) {
 - Result type: `bool`.
 - **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
 - Applies to unions, nullable values, class hierarchies, and runtime category checks on `JSON.Value`.
-- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is int` / `is float` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
+- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is i64` / `is f64` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
 
 #### `as` type cast
 
@@ -1003,8 +1003,8 @@ AsExpr ::= UnaryExpr 'as' Type
 ```
 
 ```xray
-var n = v as int           // throws TypeError on failure
-var n = v as int?          // returns null on failure (the "as nullable" safe form)
+var n = v as i64           // throws TypeError on failure
+var n = v as i64?          // returns null on failure (the "as nullable" safe form)
 ```
 
 | Form | Failure behavior | Use case |
@@ -1013,7 +1013,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 | `expr as T?` | returns `null` | a fallible dynamic / structural cast; not a numeric conversion |
 
 **Supported conversions**:
-- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
+- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
 - `JSON.Value →` scalar type (runtime category check); use `JSON.decode<T>` for composites.
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
@@ -1036,7 +1036,7 @@ for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
-- Type: `Range` (int ranges only).
+- Type: `Range` (i64 ranges only).
 - **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
 - **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
@@ -1047,7 +1047,7 @@ for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 #### Spread `...`
 
 Allowed in the following positions only:
-- **Function rest parameter declaration**: `fn f(...args: int)`
+- **Function rest parameter declaration**: `fn f(...args: i64)`
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
@@ -1073,8 +1073,8 @@ ArrayElem ::= '...' Expr | Expr
 
 ```xray @id=expr-array-lit
 var a = [1, 2, 3]
-var empty: Array<int> = []
-var mixed = [1, "hello"]    // type Array<int | string>
+var empty: Array<i64> = []
+var mixed = [1, "hello"]    // type Array<i64 | string>
 ```
 
 #### Map `#{k: v, ...}` and `#{}`
@@ -1122,14 +1122,14 @@ var obj = { users }              // shorthand
 - An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
 - Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
-#### Array<byte> `Array<byte>(...)`
+#### Array<u8> `Array<u8>(...)`
 
 See §2.4.6 and §14.5.
 
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
 See §10.5.
@@ -1177,11 +1177,11 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-var bytes: Slice<byte> = text.bytes()
+var bytes: Slice<u8> = text.bytes()
 bytes[i]                // explicit byte-view index
 ```
 
-- `Array` indexing: `int`; out-of-bounds throws `E0430`.
+- `Array` indexing: `i64`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
@@ -1197,7 +1197,7 @@ arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
 arr[:]                  // full-length view (not a copy)
-var view: Slice<int> = arr[1:4]
+var view: Slice<i64> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
@@ -1224,14 +1224,14 @@ FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```xray @id=expr-lambda-forms
 // ── Arrow lambda: each parameter may be annotated or inferred independently ──
 arr.map(x -> x * 2)
-var add = (x: int, y) -> x + y
+var add = (x: i64, y) -> x + y
 
 // Expression bodies return implicitly; ref only grants a writable loan
-var calculate = (x: ref int) -> x * 2
-var doubleInPlace = (x: ref int) -> { x = x * 2 }
+var calculate = (x: ref i64) -> x * 2
+var doubleInPlace = (x: ref i64) -> { x = x * 2 }
 
 // ── fn lambda: explicit return type, generics, or a full parameter contract ──
-var inc = fn(x: int) -> int {
+var inc = fn(x: i64) -> i64 {
     var y = x + 1
     return y
 }
@@ -1246,11 +1246,11 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- Arrow parameter annotations are independent, so `(x: int, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
 - Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
 - An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
 - `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
-- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref int) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref int) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
 
@@ -1289,19 +1289,19 @@ Construction has the same form as a function call: `TypeName(args)`. `new` is re
 
 ```xray @id=expr-new
 var p = Point(1.0, 2.0)
-var arr = Array<int>()
-const ch = Channel<int>(10)
-var m = Map<string, int>()
+var arr = Array<i64>()
+const ch = Channel<i64>(10)
+var m = Map<string, i64>()
 ```
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<byte>` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<u8>` / `StringBuilder`, etc.; also `TypeName(args)`).
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
 ```xray @id=expr-literal-constructor-relation
-var a = [1, 2, 3]              // equivalent to Array<int>() + push
+var a = [1, 2, 3]              // equivalent to Array<i64>() + push
 var m = #{}                    // equivalent to Map<...>()
 var p = Point{x: 1, y: 2}      // struct literal
 ```

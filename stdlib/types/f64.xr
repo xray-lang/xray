@@ -1,0 +1,15 @@
+// Built-in float type — implementation in src/runtime/value/xfloat_methods.c
+class f64 {
+    static parse(text: string) -> f64
+    static tryParse(text: string) -> f64?
+    abs() -> f64
+    toString() -> string
+    toFixed(decimals?: i64) -> string
+    toI64() -> i64
+    floor() -> i64
+    ceil() -> i64
+    round() -> i64
+    sqrt() -> f64
+    pow(exp: f64) -> f64
+    isNaN() -> bool
+}

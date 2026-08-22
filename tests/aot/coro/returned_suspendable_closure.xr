@@ -1,5 +1,5 @@
-fn make_worker() -> fn() -> int {
-    return fn() -> int {
+fn make_worker() -> fn() -> i64 {
+    return fn() -> i64 {
         Coro.yield()
         return 41
     }

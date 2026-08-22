@@ -1,5 +1,5 @@
 import mem
 
-fn xray_static_bytes_ptr_addr() -> int {
+fn xray_static_bytes_ptr_addr() -> i64 {
     return mem.addr(unsafe { b"A\0B".ptr() }) + mem.addr(unsafe { c"ok".ptr() })
 }

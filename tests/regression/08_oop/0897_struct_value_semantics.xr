@@ -2,19 +2,19 @@
 // Expected: struct assignment creates independent copy
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 struct Color {
-    r: int
-    g: int
-    b: int
+    r: i64
+    g: i64
+    b: i64
 }
 struct Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    mag_sq() -> float {
+    mag_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 }

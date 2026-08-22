@@ -9,7 +9,7 @@
  *
  * KEY POINTS:
  *   - All eight bigint methods (toString, abs, sign, isZero,
- *     isNegative, isPositive, toInt, toFloat) are thin wrappers around
+ *     isNegative, isPositive, toI64, toF64) are thin wrappers around
  *     the bigint primitives in xbigint.h. They live as `static inline`
  *     here so AOT-generated C inlines the wrapper, leaving only the
  *     actual primitive call. Taking each address inside the table
@@ -107,7 +107,7 @@ static inline XrValue xr_bigint_is_positive_method(XrVMRuntime *iso, XrValue sel
     return xr_bool(bi->sign > 0 && !xr_bigint_is_zero(bi));
 }
 
-/* bigint.toInt() -> int. Returns null on overflow. Pure, no GC. */
+/* bigint.toI64() -> int. Returns null on overflow. Pure, no GC. */
 static inline XrValue xr_bigint_to_int_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) iso;
@@ -120,7 +120,7 @@ static inline XrValue xr_bigint_to_int_method(XrVMRuntime *iso, XrValue self, Xr
     return xr_int(value);
 }
 
-/* bigint.toFloat() -> float. May lose precision. Pure, no GC. */
+/* bigint.toF64() -> float. May lose precision. Pure, no GC. */
 static inline XrValue xr_bigint_to_float_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) iso;

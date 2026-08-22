@@ -4,9 +4,9 @@
 // place; the constructor's implicit `return this` remains `return p0`.
 
 class Box {
-    n: int
+    n: i64
 
-    constructor(n: int) {
+    constructor(n: i64) {
         this.n = n
     }
 
@@ -14,13 +14,13 @@ class Box {
         return this
     }
 
-    tap() -> int {
+    tap() -> i64 {
         defer { this.n = this.n + 1 }
         return this.n
     }
 }
 
-fn run() -> int {
+fn run() -> i64 {
     var b = Box(4)
     var c = b.self()
     return c.n + b.tap()

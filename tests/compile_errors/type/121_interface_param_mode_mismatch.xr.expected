@@ -1,1 +1,1 @@
-Class 'BadWriter' method 'write' does not match signature required by interface 'Writer': expected 'fn(ref int)', found 'fn(int)'
+Class 'BadWriter' method 'write' does not match signature required by interface 'Writer': expected 'fn(ref i64)', found 'fn(i64)'

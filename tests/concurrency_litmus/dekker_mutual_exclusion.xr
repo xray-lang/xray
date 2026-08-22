@@ -9,8 +9,8 @@
 
 const ITERATIONS = 4000
 
-fn contender(mine: Atomic<bool>, theirs: Atomic<bool>, inside: Atomic<int>,
-             collisions: Atomic<int>) {
+fn contender(mine: Atomic<bool>, theirs: Atomic<bool>, inside: Atomic<i64>,
+             collisions: Atomic<i64>) {
     mine.store(true, Ordering.SeqCst)
     while (theirs.load(Ordering.SeqCst)) {
         mine.store(false, Ordering.SeqCst)

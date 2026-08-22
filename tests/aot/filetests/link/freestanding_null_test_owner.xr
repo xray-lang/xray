@@ -1,4 +1,4 @@
 @c_export
-fn xray_null_test_owner(value: int?) -> int {
+fn xray_null_test_owner(value: i64?) -> i64 {
     return value ?? 1
 }

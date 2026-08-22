@@ -6,13 +6,13 @@
 
 @test
 fn test_arrow_basic() {
-    var add = (a: int, b: int) -> a + b
+    var add = (a: i64, b: i64) -> a + b
     assert_eq(add(3, 5), 8)
 }
 
 @test
 fn test_arrow_single_param() {
-    var double = (x: int) -> x * 2
+    var double = (x: i64) -> x * 2
     assert_eq(double(5), 10)
 }
 
@@ -26,7 +26,7 @@ fn test_arrow_no_params() {
 
 @test
 fn test_arrow_block() {
-    var factorial = fn(n: int) -> int {
+    var factorial = fn(n: i64) -> i64 {
         if (n <= 1) { return 1 }
         return n * factorial(n - 1)
     }
@@ -35,7 +35,7 @@ fn test_arrow_block() {
 
 @test
 fn test_arrow_block_multiple_statements() {
-    var process = (x: int) -> {
+    var process = (x: i64) -> {
         var a = x * 2
         var b = a + 10
         return b
@@ -89,7 +89,7 @@ fn test_arrow_chained() {
 @test
 fn test_arrow_closure() {
     var multiplier = 3
-    var times = (x: int) -> x * multiplier
+    var times = (x: i64) -> x * multiplier
     
     assert_eq(times(5), 15)
     assert_eq(times(10), 30)
@@ -97,8 +97,8 @@ fn test_arrow_closure() {
 
 @test
 fn test_arrow_capture_param() {
-    fn makeMultiplier(n: int) -> fn(int) -> int {
-        return (x: int) -> x * n
+    fn makeMultiplier(n: i64) -> fn(i64) -> i64 {
+        return (x: i64) -> x * n
     }
     
     var double = makeMultiplier(2)
@@ -112,7 +112,7 @@ fn test_arrow_capture_param() {
 
 @test
 fn test_arrow_return_arrow() {
-    var makeAdder = (x: int) -> (y: int) -> x + y
+    var makeAdder = (x: i64) -> (y: i64) -> x + y
     
     var add5 = copy(makeAdder(5))
     var add10 = copy(makeAdder(10))
@@ -123,7 +123,7 @@ fn test_arrow_return_arrow() {
 
 @test
 fn test_arrow_curried() {
-    var add = (a: int) -> (b: int) -> (c: int) -> a + b + c
+    var add = (a: i64) -> (b: i64) -> (c: i64) -> a + b + c
     
     assert_eq(add(1)(2)(3), 6)
 }
@@ -144,13 +144,13 @@ fn test_arrow_foreach() {
 
 @test
 fn test_arrow_immediate_call() {
-    var result = ((x: int) -> x * 2)(5)
+    var result = ((x: i64) -> x * 2)(5)
     assert_eq(result, 10)
 }
 
 @test
 fn test_arrow_as_method_arg() {
-    fn apply(f: fn(int) -> int, x: int) -> int {
+    fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
         return f(x)
     }
     

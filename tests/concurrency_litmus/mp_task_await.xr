@@ -8,7 +8,7 @@
 
 const ITERATIONS = 3000
 
-fn publish(data: Atomic<int>) -> int {
+fn publish(data: Atomic<i64>) -> i64 {
     data.store(99, Ordering.Relaxed)
     return 1
 }

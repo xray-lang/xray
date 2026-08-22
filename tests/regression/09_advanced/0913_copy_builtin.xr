@@ -100,9 +100,9 @@ fn test_copy_range_native_body() {
 }
 
 class CopyBox {
-    value: int
+    value: i64
 
-    constructor(v: int) {
+    constructor(v: i64) {
         this.value = v
     }
 }

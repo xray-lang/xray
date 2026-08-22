@@ -13,8 +13,8 @@ print(x >> 63)                        // 1
 print(x >> 0)                         // 9223372036854775808
 
 // 非常量移位量（AOT 走 xrt_i64_shr_u 运行时助手路径）
-var n1: int = 1
-var n63: int = 63
+var n1: i64 = 1
+var n63: i64 = 63
 print(x >> n1)                        // 4611686018427387904
 print(x >> n63)                       // 1
 
@@ -33,15 +33,15 @@ h ^= h >> 29
 print(h)                              // 13740831969934771102
 
 // 有符号 int 保持算术移（不受影响）
-var s: int = -8
+var s: i64 = -8
 print(s >> 1)                         // -4
-var sn: int = 1
+var sn: i64 = 1
 print(s >> sn)                        // -4
 
 // uint32/byte 右移（零扩展 payload，语义不变回归）
 var u32top: u32 = 0x8000_0000
 print(u32top >> 31)                   // 1
-var u8top: byte = 128
+var u8top: u8 = 128
 print(u8top >> 7)                     // 1
 
 // 常量折叠路径（两操作数均编译期常量）

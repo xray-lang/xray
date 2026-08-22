@@ -2,7 +2,7 @@
 // its run result is active, not quiescent. With four workers this ping-pong
 // used to trip the global deadlock detector nondeterministically even though
 // every request had a matching reply.
-fn echo(requests: Channel<int>, replies: Channel<int>) {
+fn echo(requests: Channel<i64>, replies: Channel<i64>) {
     while (true) {
         match (requests.recv()) {
             Recv.Value(value) if (value < 0) -> { return }
@@ -12,8 +12,8 @@ fn echo(requests: Channel<int>, replies: Channel<int>) {
     }
 }
 
-var requests = Channel<int>(64)
-var replies = Channel<int>(64)
+var requests = Channel<i64>(64)
+var replies = Channel<i64>(64)
 var service = go echo(requests, replies)
 var checksum = 0
 for (var round = 0; round < 4; round++) {

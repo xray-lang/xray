@@ -1,12 +1,12 @@
-fn xray_no_alloc_array_find_allocating_callback(value: int) -> bool {
-    var scratch: Array<int> = []
+fn xray_no_alloc_array_find_allocating_callback(value: i64) -> bool {
+    var scratch: Array<i64> = []
     scratch.push(value)
     return len(scratch) > 0
 }
 
-fn xray_no_alloc_array_find_callback_reject(values: Array<int>) -> int? {
+fn xray_no_alloc_array_find_callback_reject(values: Array<i64>) -> i64? {
     return values.find(xray_no_alloc_array_find_allocating_callback)
 }
 
-var xray_no_alloc_array_find_values: Array<int> = [1, 2, 3]
+var xray_no_alloc_array_find_values: Array<i64> = [1, 2, 3]
 print(xray_no_alloc_array_find_callback_reject(xray_no_alloc_array_find_values))

@@ -1,4 +1,4 @@
-fn bump(counter: Atomic<int>, times: int) -> int {
+fn bump(counter: Atomic<i64>, times: i64) -> i64 {
     var seen = 0
     while (seen < times) {
         counter.fetchAdd(1, Ordering.Relaxed)

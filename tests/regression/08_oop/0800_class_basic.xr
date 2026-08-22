@@ -5,8 +5,8 @@
 // ===== 简单类 =====
 
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
     constructor(x, y) {
         this.x = x
@@ -34,7 +34,7 @@ fn test_class_method() {
 // ===== 方法调用 =====
 
 class Counter {
-    count: int
+    count: i64
 
     constructor() {
         this.count = 0
@@ -48,7 +48,7 @@ class Counter {
         this.count = this.count - 1
     }
 
-    getValue() -> int {
+    getValue() -> i64 {
         return this.count
     }
 }
@@ -130,7 +130,7 @@ fn test_default_values() {
 
 class Person {
     name: string
-    age: int
+    age: i64
 
     constructor(name, age) {
         this.name = name
@@ -157,11 +157,11 @@ fn test_field_write() {
 // ===== 多参数方法 =====
 
 class Calculator {
-    add(a: int, b: int) -> int {
+    add(a: i64, b: i64) -> i64 {
         return a + b
     }
 
-    multiply(a: int, b: int, c: int) -> int {
+    multiply(a: i64, b: i64, c: i64) -> i64 {
         return a * b * c
     }
 }

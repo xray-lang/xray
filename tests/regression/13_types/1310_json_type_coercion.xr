@@ -3,10 +3,10 @@
 @test
 fn test_typed_get_and_require() {
     var data = JSON.parseValue("{\"port\":8080,\"host\":\"localhost\",\"debug\":true}")
-    assert_eq(JSON.get<int>(data, ["port"]), 8080)
+    assert_eq(JSON.get<i64>(data, ["port"]), 8080)
     assert_eq(JSON.require<string>(data, ["host"]), "localhost")
     assert_eq(JSON.require<bool>(data, ["debug"]), true)
-    assert_eq(JSON.get<int>(data, ["missing"]), null)
+    assert_eq(JSON.get<i64>(data, ["missing"]), null)
 }
 
 @test
@@ -14,7 +14,7 @@ fn test_typed_require_mismatch_throws() {
     var data = JSON.parseValue("{\"name\":\"xray\"}")
     var caught = false
     try {
-        JSON.require<int>(data, ["name"])
+        JSON.require<i64>(data, ["name"])
     } catch panic (e) {
         caught = true
     }
@@ -26,5 +26,5 @@ fn test_array_narrowing() {
     var data = JSON.parseValue("{\"items\":[1,2,3]}")
     var items = JSON.asArray(JSON.require<JSON.Value>(data, ["items"]))
     assert(items != null)
-    assert_eq(int(items![2]), 3)
+    assert_eq((items![2] as i64), 3)
 }

@@ -3,7 +3,7 @@ enum Mode {
     Ready
 }
 
-fn part(n: int) -> string {
+fn part(n: i64) -> string {
     print("eval " + string(n))
     return "p" + string(n)
 }

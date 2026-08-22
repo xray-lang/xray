@@ -12,11 +12,11 @@ order: 016
 > MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 stdlib 模块清单**（28 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
+> **真实 stdlib 模块清单**（27 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`strconv`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<byte>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -45,7 +45,7 @@ order: 016
 `net` 的 TCP API 明确区分三类数据路径：
 
 - `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<byte>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<u8>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
 - `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
 
 设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
@@ -94,7 +94,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` 等；常量 `PI` / `E` / `MAX_INT` / `MIN_INT` |
+| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` 等；常量 `PI` / `E` / `MAX_I64` / `MIN_I64` |
 
 ### 15.8 文本
 
@@ -102,9 +102,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 |--|--|
 | `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.14。也支持 `/pattern/flags` 字面量 |
 | `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
-| `strconv` | `parseInt` `parseFloat` |
-
-内置转换 `int(s)` / `float(s)` / `string(n)` 仍可用于普通转换；需要带 radix / default 的解析接口时使用 `strconv`。
+十进制文本解析由 exact scalar 静态命名空间提供：`i64.parse(s)` / `i64.tryParse(s)` 与 `f64.parse(s)` / `f64.tryParse(s)`。数值间转换使用显式 `as`。
 
 ### 15.9 日志与诊断
 
@@ -150,11 +148,11 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 > MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative stdlib module list** (28 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
+> **Authoritative stdlib module list** (27 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `strconv`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<byte>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
+> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -183,7 +181,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 The `net` TCP API intentionally has three data paths:
 
 - `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<byte>` buffer path for binary protocol hot loops without per-packet temporary strings.
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<u8>` buffer path for binary protocol hot loops without per-packet temporary strings.
 - `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
 
 Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.
@@ -232,7 +230,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` etc.; constants `PI` / `E` / `MAX_INT` / `MIN_INT` |
+| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` etc.; constants `PI` / `E` / `MAX_I64` / `MIN_I64` |
 
 ### 15.8 Text
 
@@ -240,9 +238,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 |--|--|
 | `regex` | `compile(pattern)` returns `Regex`; see §14.14. The `/pattern/flags` literal form is also supported |
 | `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
-| `strconv` | `parseInt` `parseFloat` |
-
-The built-ins `int(s)` / `float(s)` / `string(n)` remain available for ordinary conversions; use `strconv` when radix/default parsing controls are needed.
+Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` / `i64.tryParse(s)` and `f64.parse(s)` / `f64.tryParse(s)`. Numeric conversions use explicit `as`.
 
 ### 15.9 Logging and Diagnostics
 

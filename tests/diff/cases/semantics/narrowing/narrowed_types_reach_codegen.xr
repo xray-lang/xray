@@ -4,15 +4,15 @@
 // block below exercises one fact operator through a value-producing path.
 
 class Leaf {
-    value: int
+    value: i64
     tag: string?
 
-    constructor(value: int, tag: string?) {
+    constructor(value: i64, tag: string?) {
         this.value = value
         this.tag = tag
     }
 
-    doubled() -> int {
+    doubled() -> i64 {
         return this.value * 2
     }
 }
@@ -44,8 +44,8 @@ print(describe(""))         // empty
 print(describe(null))       // empty
 
 // N-6: `is` in both directions over a union.
-fn render(v: int | string) -> string {
-    if (v is int) {
+fn render(v: i64 | string) -> string {
+    if (v is i64) {
         return "int:" + string(v + 1)
     }
     return "str:" + string(len(v))
@@ -70,7 +70,7 @@ assert(checked != null)
 print(len(checked))         // 4
 
 // N-8: early exit narrows the rest of the function.
-fn tail(s: string?) -> int {
+fn tail(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)
 }
@@ -79,7 +79,7 @@ print(tail("hello"))        // 5
 print(tail(null))           // 0
 
 // N-9: join of two narrowed paths.
-fn joined(flag: bool) -> int {
+fn joined(flag: bool) -> i64 {
     var a: string? = null
     if (flag) {
         a = "abc"

@@ -1,4 +1,4 @@
-fn compare_words(left: Slice<u32>, right: Slice<u32>) -> int {
+fn compare_words(left: Slice<u32>, right: Slice<u32>) -> i64 {
     return left.compare(right)
 }
 

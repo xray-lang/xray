@@ -1,4 +1,4 @@
-fn xray_no_alloc_string_copy_bytes_reject(value: string) -> int {
+fn xray_no_alloc_string_copy_bytes_reject(value: string) -> i64 {
     var bytes = value.copyBytes()
     return len(bytes)
 }

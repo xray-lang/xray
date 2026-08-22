@@ -1,10 +1,10 @@
-fn xray_no_alloc_byte_slice_methods_ok(seed: int) -> int {
-    var raw: [byte; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-    var srcRaw: [byte; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
+fn xray_no_alloc_byte_slice_methods_ok(seed: i64) -> i64 {
+    var raw: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    var srcRaw: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
     var wordsRaw: [u32; 2] = [11, 12]
 
-    var view: Slice<byte> = raw[:]
-    var src: Slice<byte> = srcRaw[:]
+    var view: Slice<u8> = raw[:]
+    var src: Slice<u8> = srcRaw[:]
     var words: Slice<u32> = wordsRaw[:]
 
     view.store<u32>(0, 0x01020304, Endian.LE)
@@ -12,19 +12,19 @@ fn xray_no_alloc_byte_slice_methods_ok(seed: int) -> int {
     var loaded32: u32 = view.load<u32>(0, Endian.LE)
     var loaded64: u64 = view.load<u64>(8, Endian.LE)
 
-    var window: Slice<byte> = view[4:12]
+    var window: Slice<u8> = view[4:12]
     window.copyFrom(src)
     var prefix = window.commonPrefix(src)
     window.fill(9)
     view.repeatFrom(12, 4, 4)
 
-    var asBytes: Slice<byte> = words.asBytes()
+    var asBytes: Slice<u8> = words.asBytes()
     var halfWords: Slice<u16> = asBytes.reinterpret<u16>()
     var copiedWordsRaw: [u32; 2] = [0, 0]
     var copiedWords: Slice<u32> = copiedWordsRaw[:]
     copiedWords.copyFrom(words)
     var cmp = copiedWords.compare(words)
 
-    return seed + int(loaded32) + int(loaded64) + prefix + len(asBytes) +
-        len(halfWords) + cmp + int(view[12])
+    return seed + (loaded32 as i64) + (loaded64 as i64) + prefix + len(asBytes) +
+        len(halfWords) + cmp + (view[12] as i64)
 }

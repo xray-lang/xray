@@ -1,5 +1,5 @@
-fn makeWildByteArray() -> Array<byte> {
-    var out = Array<byte>(4)
+fn makeWildByteArray() -> Array<u8> {
+    var out = Array<u8>(4)
     out[0] = 65
     out[1] = 66
     out[2] = 67

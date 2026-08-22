@@ -7,7 +7,7 @@
 const HEX = "0123456789ABCDEF"
 
 export enum UrlError {
-    InvalidPercentEncoding(int)
+    InvalidPercentEncoding(i64)
 }
 
 // QueryParams preserves insertion order, duplicate names, empty names, and
@@ -125,52 +125,52 @@ export class URL {
     }
 }
 
-fn hexVal(c: int) -> int {
+fn hexVal(c: i64) -> i64 {
     if (c >= 48 && c <= 57) { return c - 48 }
     if (c >= 97 && c <= 102) { return 10 + c - 97 }
     if (c >= 65 && c <= 70) { return 10 + c - 65 }
     return -1
 }
 
-fn isUnreserved(c: int) -> bool {
+fn isUnreserved(c: i64) -> bool {
     return (c >= 65 && c <= 90) ||
            (c >= 97 && c <= 122) ||
            (c >= 48 && c <= 57) ||
            c == 45 || c == 95 || c == 46 || c == 126
 }
 
-fn byteString(b: int) -> string {
-    var one = Array<byte>(1)
-    one[0] = b as byte
+fn byteString(b: i64) -> string {
+    var one = Array<u8>(1)
+    one[0] = b as u8
     return string.fromUtf8(one[:])!
 }
 
 fn encodeImpl(s: string, form: bool) -> string {
     var src = s.copyBytes()
-    var alphabet: Slice<byte> = HEX.bytes()
+    var alphabet: Slice<u8> = HEX.bytes()
     var out = ""
     for (var i = 0; i < len(src); i++) {
-        var b = src[i] as int
+        var b = src[i] as i64
         if (form && b == 32) {
             out = out + "+"
         } else if (isUnreserved(b)) {
             out = out + byteString(b)
         } else {
             out = out + "%"
-            out = out + rune(int(alphabet[(b >> 4) & 15]))!.toString()
-            out = out + rune(int(alphabet[b & 15]))!.toString()
+            out = out + rune((alphabet[(b >> 4) & 15] as i64))!.toString()
+            out = out + rune((alphabet[b & 15] as i64))!.toString()
         }
     }
     return out
 }
 
-fn decodedLen(src: Array<byte>) -> int {
+fn decodedLen(src: Array<u8>) -> i64 {
     var n = 0
     var i = 0
     while (i < len(src)) {
         if (src[i] == 37 && i + 2 < len(src)) {
-            var hi = hexVal(src[i + 1] as int)
-            var lo = hexVal(src[i + 2] as int)
+            var hi = hexVal(src[i + 1] as i64)
+            var lo = hexVal(src[i + 2] as i64)
             if (hi >= 0 && lo >= 0) { i = i + 2 }
         }
         n = n + 1
@@ -181,15 +181,15 @@ fn decodedLen(src: Array<byte>) -> int {
 
 fn decodeImpl(s: string, form: bool) -> string {
     var src = s.copyBytes()
-    var out = Array<byte>(decodedLen(src))
+    var out = Array<u8>(decodedLen(src))
     var oi = 0
     var i = 0
     while (i < len(src)) {
         if (src[i] == 37 && i + 2 < len(src)) {
-            var hi = hexVal(src[i + 1] as int)
-            var lo = hexVal(src[i + 2] as int)
+            var hi = hexVal(src[i + 1] as i64)
+            var lo = hexVal(src[i + 2] as i64)
             if (hi >= 0 && lo >= 0) {
-                out[oi] = ((hi << 4) | lo) as byte
+                out[oi] = ((hi << 4) | lo) as u8
                 oi = oi + 1
                 i = i + 3
                 continue
@@ -206,9 +206,9 @@ fn decodeImpl(s: string, form: bool) -> string {
     return string.fromUtf8(out[:])!
 }
 
-fn decodeQueryComponent(s: string, baseOffset: int) -> string {
+fn decodeQueryComponent(s: string, baseOffset: i64) -> string {
     var src = s.copyBytes()
-    var out = Array<byte>(decodedLen(src))
+    var out = Array<u8>(decodedLen(src))
     var oi = 0
     var i = 0
     while (i < len(src)) {
@@ -216,12 +216,12 @@ fn decodeQueryComponent(s: string, baseOffset: int) -> string {
             if (i + 2 >= len(src)) {
                 throw UrlError.InvalidPercentEncoding(baseOffset + i)
             }
-            var hi = hexVal(src[i + 1] as int)
-            var lo = hexVal(src[i + 2] as int)
+            var hi = hexVal(src[i + 1] as i64)
+            var lo = hexVal(src[i + 2] as i64)
             if (hi < 0 || lo < 0) {
                 throw UrlError.InvalidPercentEncoding(baseOffset + i)
             }
-            out[oi] = ((hi << 4) | lo) as byte
+            out[oi] = ((hi << 4) | lo) as u8
             oi = oi + 1
             i = i + 3
             continue
@@ -237,7 +237,7 @@ fn decodeQueryComponent(s: string, baseOffset: int) -> string {
     return string.fromUtf8(out[:])!
 }
 
-fn findChar(s: string, needle: rune, start: int, end: int) -> int {
+fn findChar(s: string, needle: rune, start: i64, end: i64) -> i64 {
     var i = start
     while (i < end) {
         if (s.runes().nth(i) == needle) { return i }
@@ -246,7 +246,7 @@ fn findChar(s: string, needle: rune, start: int, end: int) -> int {
     return -1
 }
 
-fn findAny3(s: string, a: rune, b: rune, c: rune, start: int, end: int) -> int {
+fn findAny3(s: string, a: rune, b: rune, c: rune, start: i64, end: i64) -> i64 {
     var i = start
     while (i < end) {
         var ch = s.runes().nth(i)
@@ -256,7 +256,7 @@ fn findAny3(s: string, a: rune, b: rune, c: rune, start: int, end: int) -> int {
     return -1
 }
 
-fn lastChar(s: string, needle: rune, start: int, end: int) -> int {
+fn lastChar(s: string, needle: rune, start: i64, end: i64) -> i64 {
     var i = end - 1
     while (i >= start) {
         if (s.runes().nth(i) == needle) { return i }
@@ -265,17 +265,17 @@ fn lastChar(s: string, needle: rune, start: int, end: int) -> int {
     return -1
 }
 
-fn startsWithAt(s: string, pos: int, prefix: string) -> bool {
+fn startsWithAt(s: string, pos: i64, prefix: string) -> bool {
     if (pos + len(prefix) > len(s)) { return false }
     return s.slice(pos, pos + len(prefix)) == prefix
 }
 
 fn portIsValid(port: string) -> bool {
-    var bytes: Slice<byte> = port.bytes()
+    var bytes: Slice<u8> = port.bytes()
     if (len(bytes) == 0 || len(bytes) > 5) { return false }
     var v = 0
     for (var i = 0; i < len(bytes); i++) {
-        var c = int(bytes[i])
+        var c = (bytes[i] as i64)
         if (c < 48 || c > 57) { return false }
         v = v * 10 + (c - 48)
     }

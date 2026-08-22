@@ -1,4 +1,4 @@
 class Config {
-    final maxRetries: int = 3
+    final maxRetries: i64 = 3
 }
 var c = Config()

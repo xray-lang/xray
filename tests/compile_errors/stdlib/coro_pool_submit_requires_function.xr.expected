@@ -1,1 +1,1 @@
-CoroPool.submit expects fn(): T, got 'int'
+CoroPool.submit expects fn(): T, got 'i64'

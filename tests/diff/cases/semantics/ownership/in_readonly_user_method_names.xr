@@ -1,20 +1,20 @@
 class PureCounter {
-    value: int
+    value: i64
 
     constructor(v) {
         this.value = v
     }
 
-    push() -> int {
+    push() -> i64 {
         return this.value + 1
     }
 
-    callPush() -> int {
+    callPush() -> i64 {
         return this.push()
     }
 }
 
-fn view(counter: PureCounter) -> int {
+fn view(counter: PureCounter) -> i64 {
     return counter.push() + counter.callPush()
 }
 

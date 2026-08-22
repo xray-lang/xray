@@ -6,7 +6,7 @@ class Iterator<T> {
     // @lowered
     next() -> T
     // @lowered
-    nth(index: int) -> T
+    nth(index: i64) -> T
     // An iterator is its own iterable; ownership is compiler-owned contract
     // data rather than part of this signature-only source.
     iterator() -> Iterator<T>

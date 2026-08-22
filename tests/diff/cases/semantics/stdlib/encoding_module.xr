@@ -4,7 +4,7 @@ import encoding
 import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
 
 fn hexEncodeText(data: string) -> string {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return encoding.hexEncode(view)
 }
 
@@ -23,7 +23,7 @@ fn hexDecodeFails(hex: string) -> bool {
 }
 
 fn utf8ValidText(data: string) -> bool {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return encoding.utf8Valid(view)
 }
 
@@ -40,7 +40,7 @@ fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
     return options
 }
 
-fn utf16DecodeFails(data: Slice<byte>) -> bool {
+fn utf16DecodeFails(data: Slice<u8>) -> bool {
     try {
         var decoded = encoding.utf16Decode(data)
         return len(decoded) < 0
@@ -62,7 +62,7 @@ print(hb[0])
 print(hb[4])
 
 print(utf8ValidText("你好"))
-var invalidUtf8 = Array<byte>(2)
+var invalidUtf8 = Array<u8>(2)
 invalidUtf8[0] = 0xC0
 invalidUtf8[1] = 0x80
 print(encoding.utf8Valid(invalidUtf8[:]))
@@ -84,5 +84,5 @@ var cjk = encoding.utf16Encode("你好世界")
 var empty = encoding.utf16Encode("")
 print(encoding.utf16Decode(cjk[:]))
 print(encoding.utf16Decode(empty[:]))
-var odd = Array<byte>(1)
+var odd = Array<u8>(1)
 print(utf16DecodeFails(odd[:]))

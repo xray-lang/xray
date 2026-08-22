@@ -3,10 +3,10 @@ import mem
 fn main() {
     var buffer = mem.allocZeroed(1)
     {
-        var bytes: Slice<byte> = buffer.asMutBytes()
+        var bytes: Slice<u8> = buffer.asMutBytes()
         bytes[0] = 7
     }
-    var readonly: Slice<byte> = buffer.asBytes()
+    var readonly: Slice<u8> = buffer.asBytes()
     readonly[0] = 9
     print("unreachable")
 }

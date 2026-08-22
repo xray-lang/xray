@@ -5,7 +5,7 @@
 > 一门轻量级静态类型语言，提供显式并发、字节码 VM 与原生 AOT 两种执行路径。
 
 ```xray
-fn count(xs: Array<int>) -> int {
+fn count(xs: Array<i64>) -> i64 {
     var total = 0
     for (x in xs) {
         total += x
@@ -135,7 +135,7 @@ print(greet(user.name))
 由堆对象组成的 execution-local 值不会隐式跨越协程或 Channel 边界。需要独立引用图时使用 `copy(value)`，需要转移推断为唯一的根时使用 `move value`。内联值、已发布的 `const` 数据，以及 Channel、Task、Atomic 等受审计同步句柄可以直接跨越边界。
 
 ```xray
-const ch = Channel<int>(2)
+const ch = Channel<i64>(2)
 go fn() {
     ch.send(42)
 }()
@@ -160,7 +160,7 @@ Xray 不使用任何形式的垃圾回收——既没有并发 tracing GC，也�
 
 可导入的标准库模块包括：
 
-`base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`strconv`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+`base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 
 Prelude 提供以下无需显式导入的类型：
 

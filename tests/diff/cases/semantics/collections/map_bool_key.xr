@@ -4,7 +4,7 @@
 // keys()/values()/for-in, interop through a generic-typed parameter, float32
 // narrowing) must be byte-identical across backends.
 
-fn dump_int(m: Map<bool, int>) {
+fn dump_int(m: Map<bool, i64>) {
     print("size=" + len(m).toString())
     print("has true=" + m.containsKey(true).toString() + " has false=" + m.containsKey(false).toString())
     for (k, v in m) { print("pair " + k.toString() + "=" + v.toString()) }
@@ -13,14 +13,14 @@ fn dump_int(m: Map<bool, int>) {
 }
 
 print("-- insert false then true --")
-var a: Map<bool, int> = #{}
+var a: Map<bool, i64> = #{}
 a.set(false, 34)
 a.set(true, 21)
 dump_int(a)
 print("get true=" + a.get(true)!.toString() + " get false=" + a.get(false)!.toString())
 
 print("-- insert true then false --")
-var b: Map<bool, int> = #{}
+var b: Map<bool, i64> = #{}
 b.set(true, 7)
 b.set(false, 9)
 dump_int(b)
@@ -48,17 +48,17 @@ print("cget true=" + c.get(true)!.toString() + " cget false=" + c.get(false)!.to
 for (k, v in c) { print("cf " + k.toString() + "=" + v.toString()) }
 
 class BoolIntMapBag {
-    values: Map<bool, int>
+    values: Map<bool, i64>
     constructor() {
-        var values: Map<bool, int> = #{}
+        var values: Map<bool, i64> = #{}
         this.values = values
     }
-    fill() -> int {
+    fill() -> i64 {
         this.values.set(true, 21)
         this.values.set(false, 34)
         return len(this.values)
     }
-    probe() -> int {
+    probe() -> i64 {
         var sum = 0
         if (this.values.containsKey(true)) { sum = sum + this.values.get(true)! }
         if (this.values.containsKey(false)) { sum = sum + this.values.get(false)! }

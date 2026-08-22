@@ -5,7 +5,7 @@ enum Hue {
 
 enum State {
     Idle,
-    Busy(int)
+    Busy(i64)
 }
 
 type ErasedVariant = EnumVariant<Hue> | EnumVariant<State>

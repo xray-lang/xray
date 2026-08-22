@@ -5,7 +5,7 @@ enum BoundaryHue {
 
 enum BoundaryState {
     Idle,
-    Busy(int)
+    Busy(i64)
 }
 
 type BoundaryVariant = EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>
@@ -22,7 +22,7 @@ fn isHueBoundary(value: EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>) -
     return value is EnumVariant<BoundaryHue>
 }
 
-fn hueOrdinalBoundary(value: EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>) -> int {
+fn hueOrdinalBoundary(value: EnumVariant<BoundaryHue> | EnumVariant<BoundaryState>) -> i64 {
     if (value is EnumVariant<BoundaryHue>) {
         return value.ordinal
     }

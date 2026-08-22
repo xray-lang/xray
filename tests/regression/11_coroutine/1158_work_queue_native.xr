@@ -1,5 +1,5 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-const q: WorkQueue<int> = WorkQueue<int>(4, 2)
+const q: WorkQueue<i64> = WorkQueue<i64>(4, 2)
 
 @test
 fn test_native_work_queue() {

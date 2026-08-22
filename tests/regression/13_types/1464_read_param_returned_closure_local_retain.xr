@@ -1,9 +1,9 @@
-fn make(data: Array<int>) -> fn() -> int {
-    return fn() -> int {
+fn make(data: Array<i64>) -> fn() -> i64 {
+    return fn() -> i64 {
         return len(data)
     }
 }
 
-var values: Array<int> = [1, 2, 3]
+var values: Array<i64> = [1, 2, 3]
 var f = make(values)
 print(f())

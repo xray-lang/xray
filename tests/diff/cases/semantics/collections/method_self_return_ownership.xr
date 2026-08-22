@@ -60,7 +60,7 @@ fn aliased_mutators() {
     var f = a.fill(5)
     print("f " + string(f[0]) + " " + string(a[1]))
 
-    var bytes = Array<byte>(4)
+    var bytes = Array<u8>(4)
     bytes.fill(9)
     var r = bytes.fill(3)
     print("r0 " + string(r[0]))
@@ -82,13 +82,13 @@ fn discarded_owned_results() {
     var rows = [[1, 2], [3, 4], [5, 6]]
     rows.pop()
     rows.shift()
-    rows.filter(fn(row: Array<int>) -> bool { return len(row) > 0 })
+    rows.filter(fn(row: Array<i64>) -> bool { return len(row) > 0 })
     print("rows " + string(len(rows)))
     print("rows0-after-filter " + string(rows[0][0]))
 
     var a = [3, 1, 2]
-    a.map(fn(x: int) -> int { return x * 2 })
-    a.filter(fn(x: int) -> bool { return x > 1 })
+    a.map(fn(x: i64) -> i64 { return x * 2 })
+    a.filter(fn(x: i64) -> bool { return x > 1 })
 
     var s = "a,b,c"
     s.split(",")
@@ -116,7 +116,7 @@ fn discarded_owned_iterator_result() {
 
 // Generator frames release their slots on teardown, which is what turns a
 // borrowed self-return into a use-after-free rather than a harmless alias.
-fn frames(n: int) -> Iterator<int> {
+fn frames(n: i64) -> Iterator<i64> {
     var a = [1, 2, 3]
     var b = a.reverse()
     for (x in b) {

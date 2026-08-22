@@ -5,7 +5,7 @@
 // queued. A genuine channel-wait timeout after a sleep must still surface.
 import time
 
-const ch = Channel<int>(1)
+const ch = Channel<i64>(1)
 
 // Leftover sleep timeout vs untimed send/recv.
 time.sleep(5)

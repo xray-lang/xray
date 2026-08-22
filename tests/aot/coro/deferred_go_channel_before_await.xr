@@ -1,18 +1,18 @@
-fn recvInt(ch: Channel<int>) -> int {
+fn recvInt(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn worker(ch: Channel<int>, value: int) -> int {
+fn worker(ch: Channel<i64>, value: i64) -> i64 {
     ch.send(value)
     return value + 1
 }
 
-fn run() -> int {
-    const ch: Channel<int> = Channel(1)
-    var tasks: Array<Task<int>> = []
+fn run() -> i64 {
+    const ch: Channel<i64> = Channel(1)
+    var tasks: Array<Task<i64>> = []
     tasks.push(go worker(ch, 41))
     var received = recvInt(ch)
     var results = await all tasks

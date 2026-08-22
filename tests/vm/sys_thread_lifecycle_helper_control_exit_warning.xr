@@ -1,6 +1,6 @@
 import sys
 
-fn skipJoinTry(t: Thread<int>) {
+fn skipJoinTry(t: Thread<i64>) {
     try {
         return
     } catch (e) {
@@ -9,7 +9,7 @@ fn skipJoinTry(t: Thread<int>) {
     print(t.join())
 }
 
-fn skipJoinMatch(t: Thread<int>) {
+fn skipJoinMatch(t: Thread<i64>) {
     match (0) {
         0 -> {
             return
@@ -19,13 +19,13 @@ fn skipJoinMatch(t: Thread<int>) {
     print(t.join())
 }
 
-var t0 = sys.Thread.spawn(fn() -> int {
+var t0 = sys.Thread.spawn(fn() -> i64 {
     return 42
 })
 skipJoinTry(t0)
 print("try-after")
 
-var t1 = sys.Thread.spawn(fn() -> int {
+var t1 = sys.Thread.spawn(fn() -> i64 {
     return 42
 })
 skipJoinMatch(t1)

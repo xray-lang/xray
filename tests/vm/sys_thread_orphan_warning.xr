@@ -1,6 +1,6 @@
 import sys
 
-sys.Thread.spawn(fn() -> int {
+sys.Thread.spawn(fn() -> i64 {
     return 1
 })
 print("orphan")

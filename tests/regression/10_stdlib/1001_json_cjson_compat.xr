@@ -21,13 +21,13 @@ fn test_nested_document() {
         "{\"glossary\":{\"title\":\"example\",\"entries\":[{\"id\":1},{\"id\":2}]}}"
     )
     assert_eq(JSON.require<string>(doc, ["glossary", "title"]), "example")
-    assert_eq(JSON.require<int>(doc, ["glossary", "entries", 1, "id"]), 2)
+    assert_eq(JSON.require<i64>(doc, ["glossary", "entries", 1, "id"]), 2)
 }
 
 @test
 fn test_unicode_and_number_roundtrip() {
     var value = JSON.parseValue("{\"text\":\"你好 🎉\",\"n\":-1.25e2}")
     assert_eq(JSON.require<string>(value, ["text"]), "你好 🎉")
-    assert_eq(JSON.require<float>(value, ["n"]), -125.0)
+    assert_eq(JSON.require<f64>(value, ["n"]), -125.0)
     assert(JSON.isValid(JSON.stringify(value)))
 }

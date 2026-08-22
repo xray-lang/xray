@@ -1,18 +1,18 @@
 // AOT test: ARC lifecycle with class objects and control flow
 class Pair {
-    a: int
-    b: int
-    constructor(a: int, b: int) {
+    a: i64
+    b: i64
+    constructor(a: i64, b: i64) {
         this.a = a
         this.b = b
     }
 }
 
-fn make_pair(x: int) -> Pair {
+fn make_pair(x: i64) -> Pair {
     return Pair(x, x * 2)
 }
 
-fn sum_pair(p: Pair) -> int {
+fn sum_pair(p: Pair) -> i64 {
     return p.a + p.b
 }
 

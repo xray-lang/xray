@@ -8,8 +8,8 @@ struct NativeSizeHeader {
 }
 
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 fn main() {

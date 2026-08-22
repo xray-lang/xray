@@ -1,7 +1,7 @@
-fn xray_no_alloc_map_entries_reject(values: Map<int, int>) -> int {
+fn xray_no_alloc_map_entries_reject(values: Map<i64, i64>) -> i64 {
     return len(values.entries())
 }
 
-var values: Map<int, int> = #{}
+var values: Map<i64, i64> = #{}
 values.set(1, 2)
 print(xray_no_alloc_map_entries_reject(values))

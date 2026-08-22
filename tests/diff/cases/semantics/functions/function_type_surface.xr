@@ -9,21 +9,21 @@
 // Calling a function value held in an upvalue (the composition combinator) is
 // task 264 D9 and is pinned separately -- AOT native cannot lower it yet.
 
-type Mapper = fn(int) -> int
+type Mapper = fn(i64) -> i64
 
-fn applyM(f: Mapper, x: int) -> int { return f(x) }
-fn mapInt(xs: Array<int>, f: Mapper) -> Array<int> {
-    var out: Array<int> = []
+fn applyM(f: Mapper, x: i64) -> i64 { return f(x) }
+fn mapInt(xs: Array<i64>, f: Mapper) -> Array<i64> {
+    var out: Array<i64> = []
     for (x in xs) { out.push(f(x)) }
     return out
 }
-fn double(x: int) -> int { return x * 2 }
-fn negate(x: int) -> int { return 0 - x }
+fn double(x: i64) -> i64 { return x * 2 }
+fn negate(x: i64) -> i64 { return 0 - x }
 
 class Registry {
     handler: Mapper
     constructor(h: Mapper) { this.handler = h }
-    run(v: int) -> int { var h = this.handler
+    run(v: i64) -> i64 { var h = this.handler
                          return h(v) }
 }
 

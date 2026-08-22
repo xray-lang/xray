@@ -1,4 +1,4 @@
-const SCORES: Map<string, int> = #{"ada": 7, "lin": 9}
+const SCORES: Map<string, i64> = #{"ada": 7, "lin": 9}
 const SEEN: Set<string> = #["ada", "lin"]
 
 print(SCORES["ada"])

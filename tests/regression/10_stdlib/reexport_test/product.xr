@@ -6,6 +6,6 @@ export fn getProduct() -> string {
     return "iPhone"
 }
 
-export fn getPrice() -> int {
+export fn getPrice() -> i64 {
     return 999
 }

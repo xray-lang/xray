@@ -42,7 +42,7 @@ vmcase(OP_UNBOX_I64) {
     } else if (XR_IS_FLOAT(src)) {
         VM_RUNTIME_ERROR(
             XR_ERR_TYPE_MISMATCH,
-            "cannot implicitly convert float to int (use int() for explicit conversion)");
+            "cannot implicitly convert f64 to i64 (use `as i64` for explicit conversion)");
     } else {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "cannot assign non-int value to int variable");
     }
@@ -62,7 +62,7 @@ vmcase(OP_UNBOX_F64) {
     } else {
         // non-numeric → float is not allowed (second gate: runtime)
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "cannot implicitly convert non-numeric value to float");
+                         "cannot implicitly convert non-numeric value to f64");
     }
     vmbreak;
 }

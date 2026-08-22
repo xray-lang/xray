@@ -1,3 +1,3 @@
-var xs: Array<int> = [1, 2]
+var xs: Array<i64> = [1, 2]
 const ys = copy(xs)
 print(len(ys))

@@ -1,6 +1,6 @@
 // anchor: lowerer-match-arms-over-32
 // Match lowering used to silently ignore arms after the first 32.
-fn pick(x: int) -> int {
+fn pick(x: i64) -> i64 {
     return match (x) {
         0 -> 100
         1 -> 101

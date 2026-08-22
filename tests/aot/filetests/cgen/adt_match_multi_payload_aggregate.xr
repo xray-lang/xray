@@ -1,5 +1,5 @@
 enum PairResult {
-    Pair(int, int),
+    Pair(i64, i64),
     Empty
 }
 
@@ -7,7 +7,7 @@ fn make_pair() -> PairResult {
     return PairResult.Pair(10, 32)
 }
 
-fn score() -> int {
+fn score() -> i64 {
     var result = make_pair()
     match (result) {
         PairResult.Pair(left, right) -> {

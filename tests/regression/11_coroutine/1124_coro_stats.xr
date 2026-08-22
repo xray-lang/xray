@@ -19,15 +19,15 @@ fn test_coro_stats() {
 
     // 测试 2：创建协程后统计变化
     print("test2: stats after creating coroutines")
-    const ch1 = Channel<int>(1)
-    const ch2 = Channel<int>(1)
+    const ch1 = Channel<i64>(1)
+    const ch2 = Channel<i64>(1)
 
-    var t1 = go(name: "worker-1") fn() -> int {
+    var t1 = go(name: "worker-1") fn() -> i64 {
         ch1.recv()  // 阻塞
         return 1
     }()
 
-    var t2 = go(name: "worker-2") fn() -> int {
+    var t2 = go(name: "worker-2") fn() -> i64 {
         ch2.recv()  // 阻塞
         return 2
     }()

@@ -8,19 +8,19 @@
 //    of the receiver check; only the receiver place itself (or an ancestor)
 //    conflicts.
 
-fn snapshot_len(data: Array<int>) -> int {
+fn snapshot_len(data: Array<i64>) -> i64 {
     return len(data)
 }
 
-fn push_n(target: ref Array<int>, n: int) {
+fn push_n(target: ref Array<i64>, n: i64) {
     target.push(n)
 }
 
 class Counter {
-    hits: Array<int>
+    hits: Array<i64>
     constructor() { this.hits = [] }
 
-    bump(slot: ref Array<int>) {
+    bump(slot: ref Array<i64>) {
         slot.push(1)
     }
 
@@ -32,7 +32,7 @@ class Counter {
 
 @test
 fn test_nested_read_before_call_is_legal() {
-    var a: Array<int> = [1, 2]
+    var a: Array<i64> = [1, 2]
     push_n(ref a, snapshot_len(a))
     assert(len(a) == 3)
     assert(a[2] == 2)

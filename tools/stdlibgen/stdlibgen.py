@@ -400,7 +400,7 @@ def parse_function_signature_shape(signature: str) -> tuple[list[str], str]:
 
 
 _NON_RC_RETURN_RE = re.compile(
-    r"^(?:\(\)|unit|bool|byte|char|u?int(?:8|16|32|64|128)?|float(?:16|32|64)?)(?:\?)?$"
+    r"^(?:\(\)|unit|bool|rune|i(?:8|16|32|64)|u(?:8|16|32|64)|f(?:32|64)|isize|usize)(?:\?)?$"
 )
 
 

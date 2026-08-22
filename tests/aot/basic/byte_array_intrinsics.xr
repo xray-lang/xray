@@ -1,5 +1,5 @@
 fn runByteArrayIntrinsics() {
-    var b = Array<byte>(16)
+    var b = Array<u8>(16)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -9,13 +9,13 @@ fn runByteArrayIntrinsics() {
     b[6] = 7
     b[7] = 8
 
-    var view: Slice<byte> = b[:]
+    var view: Slice<u8> = b[:]
     var word32: u32 = view.load<u32>(0, Endian.LE)
     var word64: u64 = view.load<u64>(0, Endian.LE)
-    print(int(word32))
-    print(int(word64))
+    print((word32 as i64))
+    print((word64 as i64))
 
-    var dst: Array<byte> = Array.withCapacity(6)
+    var dst: Array<u8> = Array.withCapacity(6)
     print(len(dst))
     print(dst.capacity)
     dst.appendFrom(view[1:4])
@@ -23,8 +23,8 @@ fn runByteArrayIntrinsics() {
     print(dst[1])
     print(dst[2])
 
-    var rep: Array<byte> = Array.withCapacity(9)
-    var seed = Array<byte>(3)
+    var rep: Array<u8> = Array.withCapacity(9)
+    var seed = Array<u8>(3)
     seed[0] = 65
     seed[1] = 66
     seed[2] = 67
@@ -37,7 +37,7 @@ fn runByteArrayIntrinsics() {
     print(rep[7])
     print(rep[8])
 
-    var xs = Array<int>(4, 9)
+    var xs = Array<i64>(4, 9)
     print(len(xs))
     print(xs[0])
     print(xs[3])
@@ -49,7 +49,7 @@ fn runByteArrayIntrinsics() {
     var assigned: u32 = 4294967295 + 1
     print(assigned)
 
-    var octet: byte = 255
+    var octet: u8 = 255
     var byte_wrapped = octet + 1
     print(byte_wrapped)
 }

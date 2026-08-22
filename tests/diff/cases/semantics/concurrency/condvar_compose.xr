@@ -10,7 +10,7 @@ import { Condvar, CountdownLatch } from sync
 // coroutine is scheduled first, because the consumer checks the predicate first.
 
 const cv = Condvar()
-const box = Atomic<int>(-1)   // -1 = empty; guarded by cv's monitor lock
+const box = Atomic<i64>(-1)   // -1 = empty; guarded by cv's monitor lock
 const consumed = CountdownLatch(1)
 
 go fn() {
@@ -35,7 +35,7 @@ consumed.wait()
 
 const cv2 = Condvar()
 const ready = Atomic<bool>(false)
-const woke = Atomic<int>(0)
+const woke = Atomic<i64>(0)
 const all = CountdownLatch(3)
 
 for (i in 0..3) {

@@ -1,20 +1,20 @@
 // Built-in ResultGroup type; implemented by the runtime.
 // First VM prototype supports integer associative reduction.
 class ResultGroup {
-    readyCount: int
-    pendingCount: int
-    batchSize: int
+    readyCount: i64
+    pendingCount: i64
+    batchSize: i64
     isClosed: bool
     // @receiver_write
-    add(value: int) -> bool
+    add(value: i64) -> bool
     // @receiver_write
     flush()
     // @receiver_write
-    reset(count: int) -> bool
+    reset(count: i64) -> bool
     // @receiver_write
-    recv(): int?
+    recv(): i64?
     // @receiver_write
-    tryRecv(): (int?, bool)
+    tryRecv(): (i64?, bool)
     // @receiver_write
     close()
 }

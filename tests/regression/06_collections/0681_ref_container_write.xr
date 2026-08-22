@@ -10,8 +10,8 @@ fn test_array_push_json_objects() {
         arr.push(JSON.value({ id: i, name: "item" + string(i) }))
     }
     assert_eq(len(arr), 100)
-    assert_eq(JSON.require<int>(arr[0], ["id"]), 0)
-    assert_eq(JSON.require<int>(arr[99], ["id"]), 99)
+    assert_eq(JSON.require<i64>(arr[0], ["id"]), 0)
+    assert_eq(JSON.require<i64>(arr[99], ["id"]), 99)
 }
 
 @test
@@ -37,7 +37,7 @@ fn test_array_push_mixed_types() {
     assert_eq(len(arr), 200)
     assert_eq(arr[0], 0)
     assert_eq(arr[1], "s0")
-    assert_eq(JSON.require<int>(arr[2], ["v"]), 0)
+    assert_eq(JSON.require<i64>(arr[2], ["v"]), 0)
     assert_eq(arr[3], true)
 }
 
@@ -50,15 +50,15 @@ fn test_array_set_overwrites() {
         arr[i] = JSON.value({ index: i, data: "value_" + string(i) })
     }
     for (i in 0..5) {
-        assert_eq(JSON.require<int>(arr[i], ["index"]), i)
+        assert_eq(JSON.require<i64>(arr[i], ["index"]), i)
     }
 }
 
 @test
 fn test_nested_array_push() {
-    var outer: Array<Array<int>> = []
+    var outer: Array<Array<i64>> = []
     for (i in 0..20) {
-        var inner: Array<int> = []
+        var inner: Array<i64> = []
         for (j in 0..10) {
             inner.push(i * 10 + j)
         }
@@ -78,7 +78,7 @@ fn first_json(xs: Array<JSON.Value>) -> JSON.Value {
 fn test_array_self_assignment_keeps_element_alive() {
     var arr: Array<JSON.Value> = [JSON.value({ id: 1 })]
     arr[0] = arr[0]
-    assert_eq(JSON.require<int>(arr[0], ["id"]), 1)
+    assert_eq(JSON.require<i64>(arr[0], ["id"]), 1)
 }
 
 @test
@@ -86,6 +86,6 @@ fn test_returned_array_element_survives_replacement() {
     var arr: Array<JSON.Value> = [JSON.value({ id: 7 })]
     var saved = first_json(arr)
     arr[0] = JSON.value({ id: 9 })
-    assert_eq(JSON.require<int>(saved, ["id"]), 7)
-    assert_eq(JSON.require<int>(arr[0], ["id"]), 9)
+    assert_eq(JSON.require<i64>(saved, ["id"]), 7)
+    assert_eq(JSON.require<i64>(arr[0], ["id"]), 9)
 }

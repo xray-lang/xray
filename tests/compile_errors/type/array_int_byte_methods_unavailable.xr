@@ -1,7 +1,7 @@
-fn checkAppend(values: Array<int>, src: Slice<int>) {
+fn checkAppend(values: Array<i64>, src: Slice<i64>) {
     values.appendFrom(src)
 }
 
-fn checkRepeat(values: Array<int>) {
+fn checkRepeat(values: Array<i64>) {
     values.repeatFrom(1, 1)
 }

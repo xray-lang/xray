@@ -1,5 +1,5 @@
 class Box {
-    constructor(x: ref int = 0) {
+    constructor(x: ref i64 = 0) {
         x = x + 1
     }
 }

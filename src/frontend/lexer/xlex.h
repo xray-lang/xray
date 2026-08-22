@@ -145,23 +145,19 @@ typedef enum {
     TK_SCOPE,   // scope - structured concurrency
     TK_UNSAFE,  // unsafe - FFI / raw-pointer escape hatch block
 
-    // Type keywords. Public scalar spellings are generated/audited from
-    // shared/xr_scalar_type.def; byte has its own token so the formatter can
-    // preserve the author's deliberate byte/u8 choice.
+    // Type keywords. Exact scalar spellings are generated and audited from
+    // shared/xr_exact_scalar_registry.def.
     TK_STRING,  // string
     TK_BOOL,    // bool
     TK_RUNE,    // rune (Unicode scalar value)
-    TK_INT,     // int (= i64)
     TK_I8,
     TK_I16,
     TK_I32,
     TK_I64,
-    TK_BYTE,  // byte (= u8)
     TK_U8,
     TK_U16,
     TK_U32,
     TK_U64,
-    TK_FLOAT,  // float (= f64)
     TK_F32,
     TK_F64,
     TK_ISIZE,
@@ -206,8 +202,8 @@ typedef enum {
     TK_LITERAL_FLOAT,        // float literal
     TK_LITERAL_BIGINT,       // bigint literal 123n
     TK_LITERAL_STRING,       // string literal
-    TK_LITERAL_BYTE_STRING,  // b"..." fixed [byte; N] literal
-    TK_LITERAL_C_STRING,     // c"..." fixed [byte; N+1] literal with trailing NUL
+    TK_LITERAL_BYTE_STRING,  // b"..." fixed [u8; N] literal
+    TK_LITERAL_C_STRING,     // c"..." fixed [u8; N+1] literal with trailing NUL
     TK_LITERAL_RUNE,         // rune literal: 'a', '\n', '\u{1F600}'
     TK_LITERAL_REGEX,        // regex literal /pattern/flags
     TK_NAME,                 // identifier

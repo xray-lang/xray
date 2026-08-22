@@ -1,4 +1,4 @@
-fn takeByte(value: byte) {
+fn takeByte(value: u8) {
     print(value)
 }
 

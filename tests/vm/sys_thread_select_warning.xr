@@ -1,9 +1,9 @@
 import sys
 
-const ch = Channel<int>(1)
+const ch = Channel<i64>(1)
 
 fn closeOnlyInOneSelectCase() {
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
     select {

@@ -1,4 +1,4 @@
-fn byte_slice_counted_guard_bounds(bytes: Slice<byte>) -> u32 {
+fn byte_slice_counted_guard_bounds(bytes: Slice<u8>) -> u32 {
     var offset = 0
     var total: u32 = 0
     while (offset <= len(bytes) - 16) {
@@ -9,7 +9,7 @@ fn byte_slice_counted_guard_bounds(bytes: Slice<byte>) -> u32 {
     return total
 }
 
-fn byte_slice_chained_tail_bounds(bytes: Slice<byte>) -> u64 {
+fn byte_slice_chained_tail_bounds(bytes: Slice<u8>) -> u64 {
     var offset = 0
     var total: u64 = 0
     while (offset <= len(bytes) - 8) {
@@ -29,6 +29,6 @@ fn byte_slice_chained_tail_bounds(bytes: Slice<byte>) -> u64 {
     return total
 }
 
-var countedBytes = Array<byte>(32, 0)
+var countedBytes = Array<u8>(32, 0)
 print(byte_slice_counted_guard_bounds(countedBytes[:]))
 print(byte_slice_chained_tail_bounds(countedBytes[:]))

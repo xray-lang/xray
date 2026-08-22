@@ -1,5 +1,5 @@
 var words: Array<u32> = [305419896]
-var counts: Array<int> = [9]
+var counts: Array<i64> = [9]
 var halves: Array<i16> = [4660]
 var queryWords: Array<u16> = [256]
 var wideWords: Array<u64> = [0, 2]

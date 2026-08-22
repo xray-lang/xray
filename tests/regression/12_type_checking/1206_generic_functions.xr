@@ -92,7 +92,7 @@ fn test_array_first() {
     }
     assert_eq(first([1, 2, 3]), 1)
     assert_eq(first(["a", "b"]), "a")
-    assert_eq(first(Array<int>()), null)
+    assert_eq(first(Array<i64>()), null)
 }
 
 @test
@@ -105,12 +105,12 @@ fn test_array_last() {
     }
     assert_eq(last([1, 2, 3]), 3)
     assert_eq(last(["x", "y", "z"]), "z")
-    assert_eq(last(Array<int>()), null)
+    assert_eq(last(Array<i64>()), null)
 }
 
 @test
 fn test_array_swap_elements() {
-    fn swapElements<T>(arr: ref Array<T>, i: int, j: int) {
+    fn swapElements<T>(arr: ref Array<T>, i: i64, j: i64) {
         var temp = copy(arr[i])
         arr[i] = copy(arr[j])
         arr[j] = temp
@@ -143,7 +143,7 @@ fn test_array_contains() {
 
 @test
 fn test_array_find_index() {
-    fn findIndex<T>(arr: Array<T>, target: T) -> int {
+    fn findIndex<T>(arr: Array<T>, target: T) -> i64 {
         for (var i = 0; i < len(arr); i++) {
             if (arr[i] == target) {
                 return i
@@ -172,7 +172,7 @@ fn test_wrap_in_array() {
 
 @test
 fn test_repeat_value() {
-    fn repeat<T>(x: T, n: int) -> Array<T> {
+    fn repeat<T>(x: T, n: i64) -> Array<T> {
         var result = Array<T>()
         for (var i = 0; i < n; i++) {
             result.push(x)
@@ -224,7 +224,7 @@ fn test_generic_transform() {
 // ===== Generic with Optional Return =====
 @test
 fn test_safe_get() {
-    fn safeGet<T>(arr: Array<T>, index: int) -> T? {
+    fn safeGet<T>(arr: Array<T>, index: i64) -> T? {
         if (index >= 0 && index < len(arr)) {
             return arr[index]
         }
@@ -245,11 +245,11 @@ fn test_find_element() {
         }
         return null
     }
-    var result: int? = find([1, 2, 3, 4, 5], fn(x) {
+    var result: i64? = find([1, 2, 3, 4, 5], fn(x) {
         return x > 3
     })
     assert_eq(result, 4)
-    var notFound: int? = find([1, 2, 3], fn(x) {
+    var notFound: i64? = find([1, 2, 3], fn(x) {
         return x > 10
     })
     assert_eq(notFound, null)

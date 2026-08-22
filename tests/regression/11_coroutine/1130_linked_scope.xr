@@ -6,13 +6,13 @@
 // surface through the value channel so `catch (e)` catches them and
 // `match` recovers the payload.
 
-enum WorkerErr { Failed(code: int) }
+enum WorkerErr { Failed(code: i64) }
 
-fn failing_worker() -> int {
+fn failing_worker() -> i64 {
     throw WorkerErr.Failed(1)
     return 0
 }
-fn ok_worker() -> int {
+fn ok_worker() -> i64 {
     return 42
 }
 fn test_linked_scope_error() {

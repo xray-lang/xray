@@ -1,8 +1,8 @@
 enum AppErr {
-    Bad(code: int)
+    Bad(code: i64)
 }
 
-fn worker() -> int {
+fn worker() -> i64 {
     var result = 0
     try {
         Coro.yield()

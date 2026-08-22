@@ -2,17 +2,17 @@
 // AOT should keep native class pointers instead of falling back to dynamic getprop.
 
 class Chain {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    step(amount: int) -> Chain {
+    step(amount: i64) -> Chain {
         return Chain(this.value + amount)
     }
 
-    delta(other: Chain) -> int {
+    delta(other: Chain) -> i64 {
         return this.value - other.value
     }
 

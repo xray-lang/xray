@@ -1,8 +1,8 @@
 import { addSeedNarrow, addSeedWide } from "./_simd_cross_module_inline_lib"
 
-var source: [byte; 32] = [1; 32]
-var destination: [byte; 32] = [0; 32]
-var narrow: [byte; 16] = [0; 16]
+var source: [u8; 32] = [1; 32]
+var destination: [u8; 32] = [0; 32]
+var narrow: [u8; 16] = [0; 16]
 print(addSeedNarrow(ref narrow, source[:16], 7))
 print(narrow[0])
 print(addSeedWide(ref destination, source[:], 7))

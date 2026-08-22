@@ -1,15 +1,15 @@
 // AOT ParamContract: local direct ref/out calls must write back caller slots.
-fn bump(value: ref int) -> int {
+fn bump(value: ref i64) -> i64 {
     value = value + 1
     return value
 }
 
-fn fill(value: ref int) -> int {
+fn fill(value: ref i64) -> i64 {
     value = 9
     return value
 }
 
-fn initialize(value: ref int) {
+fn initialize(value: ref i64) {
     value = 42
 }
 

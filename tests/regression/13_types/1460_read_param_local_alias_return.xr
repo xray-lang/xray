@@ -1,7 +1,7 @@
-fn leak(data: Array<int>) -> Array<int> {
+fn leak(data: Array<i64>) -> Array<i64> {
     var alias = data
     return alias
 }
 
-var values: Array<int> = [1, 2]
+var values: Array<i64> = [1, 2]
 print(len(leak(values)))

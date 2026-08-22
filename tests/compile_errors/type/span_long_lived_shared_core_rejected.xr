@@ -1,20 +1,20 @@
-fn keepBytes(bytes: Array<byte>) -> Slice<byte> {
-    var view: Slice<byte> = bytes[1:4]
+fn keepBytes(bytes: Array<u8>) -> Slice<u8> {
+    var view: Slice<u8> = bytes[1:4]
     return view
 }
 
-fn keepInts(values: Array<int>) -> Slice<int> {
-    var view: Slice<int> = values[1:3]
+fn keepInts(values: Array<i64>) -> Slice<i64> {
+    var view: Slice<i64> = values[1:3]
     return view
 }
 
-var bytes = Array<byte>(0)
+var bytes = Array<u8>(0)
 bytes.push(1)
 bytes.push(2)
 bytes.push(3)
 bytes.push(4)
 
-var bv: Slice<byte> = bytes[1:4]
+var bv: Slice<u8> = bytes[1:4]
 print(len(bv))
 print(bv[0])
 bv[1] = 8
@@ -27,12 +27,12 @@ var keptBytes = keepBytes(bytes)
 print(len(keptBytes))
 print(keptBytes[0])
 
-var snapshot: Array<byte> = copy(bv)
+var snapshot: Array<u8> = copy(bv)
 print(len(snapshot))
 print(snapshot[1])
 
-var values: Array<int> = [10, 20, 30, 40]
-var iv: Slice<int> = values[1:3]
+var values: Array<i64> = [10, 20, 30, 40]
+var iv: Slice<i64> = values[1:3]
 print(len(iv))
 print(iv[0])
 iv[1] = 300

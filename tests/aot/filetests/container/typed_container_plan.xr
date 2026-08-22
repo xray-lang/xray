@@ -1,8 +1,8 @@
-var bytes: Array<byte> = []
+var bytes: Array<u8> = []
 bytes.push(7)
 bytes.push(9)
 
-var values: Map<byte, i32> = #{}
+var values: Map<u8, i32> = #{}
 values.set(1, 11)
 values.set(2, 22)
 
@@ -15,13 +15,13 @@ chars.push('A')
 chars.push('中')
 
 class ArrayBag {
-    values: Array<int>
+    values: Array<i64>
 
-    constructor(items: Array<int>) {
+    constructor(items: Array<i64>) {
         this.values = items
     }
 
-    scan() -> int {
+    scan() -> i64 {
         var arr = this.values
         var total = 0
         var i = 0
@@ -32,8 +32,8 @@ class ArrayBag {
         return total
     }
 
-    refill(n: int) -> int {
-        var next_values: Array<int> = []
+    refill(n: i64) -> i64 {
+        var next_values: Array<i64> = []
         this.values = next_values
 
         var i = 0
@@ -53,28 +53,28 @@ class ArrayBag {
     }
 }
 
-fn local_arrays() -> int {
-    var values: Array<int> = []
+fn local_arrays() -> i64 {
+    var values: Array<i64> = []
     values.push(1)
     values.push(2)
     values.push(3)
 
     var bag = ArrayBag(values)
 
-    var mid: Slice<int> = values[0:2]
-    var mapped = values.map(fn(x: int) -> int { return x + 10 })
-    var kept = values.filter(fn(x: int) -> bool { return x > 1 })
+    var mid: Slice<i64> = values[0:2]
+    var mapped = values.map(fn(x: i64) -> i64 { return x + 10 })
+    var kept = values.filter(fn(x: i64) -> bool { return x > 1 })
 
-    var bytes = Array<byte>(3)
+    var bytes = Array<u8>(3)
     bytes[0] = 4
     bytes[1] = 5
     bytes[2] = 6
 
-    return mid[0] + mapped[0] + kept[0] + (bytes[2] as int) + bag.scan() + bag.refill(4)
+    return mid[0] + mapped[0] + kept[0] + (bytes[2] as i64) + bag.scan() + bag.refill(4)
 }
 
-fn loop_sum(n: int) -> int {
-    var values: Array<int> = []
+fn loop_sum(n: i64) -> i64 {
+    var values: Array<i64> = []
     var i = 0
     while (i < n) {
         values.push(i)
@@ -90,33 +90,33 @@ fn loop_sum(n: int) -> int {
     return total
 }
 
-fn bytes_index(n: int) -> int {
-    var bytes = Array<byte>(n)
+fn bytes_index(n: i64) -> i64 {
+    var bytes = Array<u8>(n)
     var i = 0
     while (i < len(bytes)) {
-        bytes[i] = (i * 3 + 1) as byte
+        bytes[i] = (i * 3 + 1) as u8
         i = i + 1
     }
 
     var total = 0
     i = 0
     while (i < len(bytes)) {
-        total = total + (bytes[i] as int)
+        total = total + (bytes[i] as i64)
         i = i + 1
     }
     return total
 }
 
-fn char_ord_sum() -> int {
+fn char_ord_sum() -> i64 {
     var chars: Array<rune> = []
     chars.push('A')
     chars.push('中')
     chars[0] = 'B'
-    return int(chars[0]) + int(chars[1])
+    return (chars[0] as i64) + (chars[1] as i64)
 }
 
 class Bag {
-    values: Map<byte, i32>
+    values: Map<u8, i32>
     seen: Set<u16>
 
     constructor() {
@@ -124,7 +124,7 @@ class Bag {
         this.seen = #[]
     }
 
-    fill() -> int {
+    fill() -> i64 {
         this.values.set(1, 11)
         this.seen.add(1)
         if (this.values.containsKey(1)) {
@@ -135,5 +135,5 @@ class Bag {
 }
 
 var bag = Bag()
-print((bytes[0] as int) + values.get(1)! + len(seen) + len(chars) + bag.fill() +
+print((bytes[0] as i64) + values.get(1)! + len(seen) + len(chars) + bag.fill() +
     local_arrays() + loop_sum(4) + bytes_index(4) + char_ord_sum())

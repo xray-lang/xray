@@ -14,7 +14,7 @@ export const probeSeed = 148
 
 // --- module-level functions (gap B: slot_funcs direct call) ---
 
-export fn probeAdd(a: int, b: int) -> int {
+export fn probeAdd(a: i64, b: i64) -> i64 {
     return a + b
 }
 
@@ -23,7 +23,7 @@ export fn probeConcat(a: string, b: string) -> string {
 }
 
 // --- variadic function (gap A: rest-parameter ABI) ---
-export fn probeSum(...nums: int) -> int {
+export fn probeSum(...nums: i64) -> i64 {
     var total = 0
     for (var i = 0; i < len(nums); i++) {
         total = total + nums[i]
@@ -33,7 +33,7 @@ export fn probeSum(...nums: int) -> int {
 
 // --- closure and static cleanup in exported module functions (T3.4 permanent guard) ---
 
-export fn probeDeferValue(base: int) -> int {
+export fn probeDeferValue(base: i64) -> i64 {
     var total = base
     {
         defer { total = total + 7 }
@@ -42,13 +42,13 @@ export fn probeDeferValue(base: int) -> int {
     return total
 }
 
-export fn probeMakeAdder(base: int) -> fn(int) -> int {
-    return fn(v: int) -> int {
+export fn probeMakeAdder(base: i64) -> fn(i64) -> i64 {
+    return fn(v: i64) -> i64 {
         return base + v
     }
 }
 
-export fn probeApply(value: int, body: fn(int) -> int) -> int {
+export fn probeApply(value: i64, body: fn(i64) -> i64) -> i64 {
     return body(value)
 }
 
@@ -56,9 +56,9 @@ export fn probeApply(value: int, body: fn(int) -> int) -> int {
 
 export class ProbeBox {
     label: string
-    count: int
+    count: i64
 
-    constructor(label: string, count: int) {
+    constructor(label: string, count: i64) {
         this.label = label
         this.count = count
     }
@@ -67,12 +67,12 @@ export class ProbeBox {
         return this.label + ":" + this.count.toString()
     }
 
-    static tagged(label: string, count: int) -> ProbeBox {
+    static tagged(label: string, count: i64) -> ProbeBox {
         return ProbeBox("tag:" + label, count)
     }
 }
 
-export fn probeMakeBox(label: string, count: int) -> ProbeBox {
+export fn probeMakeBox(label: string, count: i64) -> ProbeBox {
     return ProbeBox(label, count)
 }
 

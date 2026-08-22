@@ -1,4 +1,4 @@
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var keys: Array<string> = []
     var i = 0
     while (i < n) {
@@ -6,7 +6,7 @@ fn run(n: int) -> int {
         i = i + 1
     }
 
-    var counts: Map<string, int> = #{}
+    var counts: Map<string, i64> = #{}
     i = 0
     while (i < n) {
         var k = keys[i]

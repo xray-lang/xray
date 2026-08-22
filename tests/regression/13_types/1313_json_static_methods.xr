@@ -1,6 +1,6 @@
 // JSON is a prelude namespace; JSON.Value and JSON.Object are its public data types.
 
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 @test
 fn test_parse_and_stringify() {
@@ -15,7 +15,7 @@ fn test_typed_parse_and_value() {
     assert_eq(user.name, "Bob")
     var encoded = JSON.value(user)
     assert_eq(typeName(encoded), "Map")
-    assert_eq(JSON.require<int>(encoded, ["age"]), 42)
+    assert_eq(JSON.require<i64>(encoded, ["age"]), 42)
 }
 
 @test

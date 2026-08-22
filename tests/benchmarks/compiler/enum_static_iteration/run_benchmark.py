@@ -52,7 +52,7 @@ def enum_decl(count: int, *, payload: bool = False) -> str:
     members = []
     for index in range(count):
         name = variant_name(index)
-        members.append(f"    {name}(field{index:04d}: int)" if payload else f"    {name}")
+        members.append(f"    {name}(field{index:04d}: i64)" if payload else f"    {name}")
     return "enum BenchEnum {\n" + ",\n".join(members) + "\n}\n"
 
 

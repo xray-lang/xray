@@ -1,5 +1,5 @@
 export enum ReexportError {
-    Invalid(int, int)
+    Invalid(i64, i64)
 }
 
 export fn failReexportError() {

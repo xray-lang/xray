@@ -1,13 +1,13 @@
-fn wrap(data: Array<int>, out: ref Array<Array<int>>) {
+fn wrap(data: Array<i64>, out: ref Array<Array<i64>>) {
     stash(copy(data), ref out)
 }
 
-fn stash(value: Array<int>, out: ref Array<Array<int>>) {
+fn stash(value: Array<i64>, out: ref Array<Array<i64>>) {
     out.push(value)
 }
 
-var values: Array<int> = [1, 2, 3]
-var out: Array<Array<int>> = []
+var values: Array<i64> = [1, 2, 3]
+var out: Array<Array<i64>> = []
 wrap(values, ref out)
 values.push(4)
 print(len(out[0]))

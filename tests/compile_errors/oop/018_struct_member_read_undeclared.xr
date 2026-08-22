@@ -1,8 +1,8 @@
 // A declared struct has a closed member set, so reading an undeclared name is
 // a compile error rather than a runtime panic.
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 var p = Point{x: 1, y: 2}

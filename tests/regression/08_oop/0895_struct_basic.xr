@@ -4,14 +4,14 @@
 // === Basic struct with fields ===
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 struct Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    magnitude_sq() -> float {
+    magnitude_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 
@@ -23,23 +23,23 @@ struct Vec2 {
     }
 }
 struct Color {
-    r: int
-    g: int
-    b: int
-    a: int
+    r: i64
+    g: i64
+    b: i64
+    a: i64
 }
 struct Rect {
-    x: float
-    y: float
-    width: float
-    height: float
+    x: f64
+    y: f64
+    width: f64
+    height: f64
 
-    area() -> float {
+    area() -> f64 {
         return this.width * this.height
     }
 }
 struct MathHelper {
-    static pi() -> float {
+    static pi() -> f64 {
         return 3.14159
     }
 }
@@ -101,8 +101,8 @@ fn test_struct_basic() {
     var points: Array<Point> = []
     for (var i = 0; i < 5; i++) {
         var pt = Point()
-        pt.x = float(i)
-        pt.y = float(i * 2)
+        pt.x = (i as f64)
+        pt.y = (i * 2 as f64)
         points.push(pt)
     }
     assert(len(points) == 5)

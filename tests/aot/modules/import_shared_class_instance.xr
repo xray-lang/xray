@@ -1,6 +1,6 @@
 import { SharedBag } from "./shared_bag_lib"
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var bag = SharedBag()
     return bag.fill(8, rounds)
 }

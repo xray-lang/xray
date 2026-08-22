@@ -1,10 +1,10 @@
-fn consume(ch: Channel<Array<int>>, data: move Array<int>) {
+fn consume(ch: Channel<Array<i64>>, data: move Array<i64>) {
     ch.send(move data)
 }
 
-fn main_value() -> int {
-    const ch: Channel<Array<int>> = Channel(1)
-    var data = Array<int>(2, 0)
+fn main_value() -> i64 {
+    const ch: Channel<Array<i64>> = Channel(1)
+    var data = Array<i64>(2, 0)
     data[0] = 41
     data[1] = 1
     consume(ch, move data)

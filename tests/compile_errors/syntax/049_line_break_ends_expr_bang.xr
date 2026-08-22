@@ -1,4 +1,4 @@
-var a: int? = null
+var a: i64? = null
 var b = true
 var x = a
 !b

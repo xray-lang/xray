@@ -7,20 +7,20 @@
 
 import runtime
 
-type InnerRecord = { key: string, idx: int }
+type InnerRecord = { key: string, idx: i64 }
 type NestedContainer = {
     map: InnerRecord,
-    arr: Array<int>,
+    arr: Array<i64>,
     name: string,
 }
-type PhaseRecord = { id: int, data: string }
-type CycleRecord = { cycle: int, idx: int }
+type PhaseRecord = { id: i64, data: string }
+type CycleRecord = { cycle: i64, idx: i64 }
 
 class ChainNode {
-    value: int
+    value: i64
     next: ChainNode?
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
         this.next = null
     }
@@ -107,7 +107,7 @@ fn test_high_churn_with_live_roots() {
     }
 
     for (var round = 0; round < 20; round++) {
-        var temp: Array<Array<int>> = []
+        var temp: Array<Array<i64>> = []
         for (var j = 0; j < 200; j++) {
             temp.push([j, j + 1, j + 2])
         }

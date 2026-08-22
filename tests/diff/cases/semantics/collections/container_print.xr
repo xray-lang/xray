@@ -13,15 +13,15 @@ var xs = [10, 20, 30]
 print(xs)
 var nested = [["x"], ["y", "z"]]
 print(nested)
-var m: Map<int, int> = #{1: 10, 2: 20, 3: 30}
+var m: Map<i64, i64> = #{1: 10, 2: 20, 3: 30}
 print(m)
-var st: Set<int> = #[1, 2, 3]
+var st: Set<i64> = #[1, 2, 3]
 print(st)
-var sm: Map<string, int> = #{"a": 1, "b": 2}
+var sm: Map<string, i64> = #{"a": 1, "b": 2}
 print(sm)
-var nm: Map<int, Array<int>> = #{1: [1, 2], 2: [3, 4]}
+var nm: Map<i64, Array<i64>> = #{1: [1, 2], 2: [3, 4]}
 print(nm)
-var em: Map<int, int> = #{}
+var em: Map<i64, i64> = #{}
 print(em)
 var ss: Set<string> = #["x", "y"]
 print(ss)

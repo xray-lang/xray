@@ -1,1 +1,1 @@
-go argument transfer of type 'Array<int>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value
+go argument transfer of type 'Array<i64>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value

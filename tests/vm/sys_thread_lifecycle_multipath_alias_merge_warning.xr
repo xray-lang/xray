@@ -4,14 +4,14 @@ enum ThreadAliasMergeErr {
     Msg(s: string)
 }
 
-const aliasMergeCh = Channel<int>(1)
+const aliasMergeCh = Channel<i64>(1)
 aliasMergeCh.trySend(1)
 
 fn mergeInTry() {
-    var target = sys.Thread.spawn(fn() -> int {
+    var target = sys.Thread.spawn(fn() -> i64 {
         return 1
     })
-    var oldTry = sys.Thread.spawn(fn() -> int {
+    var oldTry = sys.Thread.spawn(fn() -> i64 {
         return 2
     })
     var handle = oldTry
@@ -24,10 +24,10 @@ fn mergeInTry() {
 }
 
 fn mergeInMatch() {
-    var target = sys.Thread.spawn(fn() -> int {
+    var target = sys.Thread.spawn(fn() -> i64 {
         return 3
     })
-    var oldMatch = sys.Thread.spawn(fn() -> int {
+    var oldMatch = sys.Thread.spawn(fn() -> i64 {
         return 4
     })
     var handle = oldMatch
@@ -43,10 +43,10 @@ fn mergeInMatch() {
 }
 
 fn mergeInSelect() {
-    var target = sys.Thread.spawn(fn() -> int {
+    var target = sys.Thread.spawn(fn() -> i64 {
         return 5
     })
-    var oldSelect = sys.Thread.spawn(fn() -> int {
+    var oldSelect = sys.Thread.spawn(fn() -> i64 {
         return 6
     })
     var handle = oldSelect

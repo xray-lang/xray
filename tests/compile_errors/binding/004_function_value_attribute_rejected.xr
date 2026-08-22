@@ -1,4 +1,4 @@
 @c_export("bad")
-const f = fn() -> int {
+const f = fn() -> i64 {
     return 1
 }

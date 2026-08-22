@@ -1,12 +1,12 @@
-fn xray_no_alloc_byte_array_constructor_reject() -> Array<byte> {
-    return Array<byte>(4)
+fn xray_no_alloc_byte_array_constructor_reject() -> Array<u8> {
+    return Array<u8>(4)
 }
 
-fn xray_no_alloc_map_literal_reject() -> Map<string, int> {
+fn xray_no_alloc_map_literal_reject() -> Map<string, i64> {
     return #{"a": 1}
 }
 
-fn xray_no_alloc_set_literal_reject() -> Set<int> {
+fn xray_no_alloc_set_literal_reject() -> Set<i64> {
     return #[1, 2]
 }
 
@@ -14,15 +14,15 @@ fn xray_no_alloc_json_literal_reject() -> JSON.Value {
     return JSON.value({ answer: 42 })
 }
 
-fn xray_no_alloc_copy_builtin_reject(values: Array<int>) -> Array<int> {
+fn xray_no_alloc_copy_builtin_reject(values: Array<i64>) -> Array<i64> {
     return copy(values)
 }
 
-fn xray_no_alloc_atomic_constructor_reject() -> Atomic<int> {
+fn xray_no_alloc_atomic_constructor_reject() -> Atomic<i64> {
     return Atomic(1)
 }
 
-var xray_no_alloc_copy_source: Array<int> = [1, 2, 3]
+var xray_no_alloc_copy_source: Array<i64> = [1, 2, 3]
 
 print(len(xray_no_alloc_byte_array_constructor_reject()))
 print(len(xray_no_alloc_map_literal_reject()))

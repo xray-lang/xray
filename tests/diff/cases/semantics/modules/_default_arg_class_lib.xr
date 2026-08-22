@@ -4,11 +4,11 @@
 // exports: a class construction and a computed value built from an exported
 // function and constant.  Callers must be able to omit these arguments
 // without importing any of the referenced names themselves.
-export const BASE_RETRIES: int = 2
+export const BASE_RETRIES: i64 = 2
 export const DEFAULT_LABEL: string = "def"
 
 export class Options {
-    retries: int = BASE_RETRIES
+    retries: i64 = BASE_RETRIES
     label: string = DEFAULT_LABEL
 
     constructor() {
@@ -16,18 +16,18 @@ export class Options {
         this.label = DEFAULT_LABEL
     }
 
-    static withRetries(n: int) -> Options {
+    static withRetries(n: i64) -> Options {
         var opts = Options()
         opts.retries = n
         return opts
     }
 }
 
-export fn defaultPort() -> int {
+export fn defaultPort() -> i64 {
     return 8000
 }
 
-export fn connect(port: int, opts: Options = Options()) -> int {
+export fn connect(port: i64, opts: Options = Options()) -> i64 {
     return port + opts.retries
 }
 
@@ -38,7 +38,7 @@ export fn describe(opts: Options = Options()) -> string {
     return opts.label
 }
 
-export fn bind(port: int = defaultPort() + 25) -> int {
+export fn bind(port: i64 = defaultPort() + 25) -> i64 {
     return port
 }
 
@@ -46,7 +46,7 @@ export fn bind(port: int = defaultPort() + 25) -> int {
 // argument expands `bind()`, whose own `port` default expands in turn. The
 // expansion guard must unwind both frames and still resolve each layer in its
 // declaring module.
-export fn wrap(base: int = bind()) -> int {
+export fn wrap(base: i64 = bind()) -> i64 {
     return base + 1
 }
 
@@ -55,7 +55,7 @@ export fn wrap(base: int = bind()) -> int {
 // import ref for `Options()` must fall back to the declaring module's canonical
 // identity for the callee's unit to resolve it in AOT separate compilation.
 export class Gateway {
-    static open(opts: Options = Options()) -> int {
+    static open(opts: Options = Options()) -> i64 {
         return 9000 + opts.retries
     }
 }

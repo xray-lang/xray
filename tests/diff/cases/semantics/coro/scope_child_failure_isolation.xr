@@ -1,17 +1,17 @@
 enum DiffScopeErr { Msg(string) }
 
-fn ok(ch: Channel<int>) -> int {
+fn ok(ch: Channel<i64>) -> i64 {
     ch.send(1)
     return 11
 }
 
-fn fail(ch: Channel<int>) -> int {
+fn fail(ch: Channel<i64>) -> i64 {
     ch.send(10)
     throw DiffScopeErr.Msg("diff_fail")
     return 0
 }
 
-fn recv_sum(ch: Channel<int>, count: int) -> int {
+fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
@@ -22,7 +22,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
     return sum
 }
 
-const ch = Channel<int>(2)
+const ch = Channel<i64>(2)
 scope {
     go ok(ch)
     go fail(ch)

@@ -1,4 +1,4 @@
-fn xray_bigint_literal_scalar_methods() -> int {
+fn xray_bigint_literal_scalar_methods() -> i64 {
     var a = 12345678901234567890n
     var b = -42n
     var z = 0n
@@ -12,14 +12,14 @@ fn xray_bigint_literal_scalar_methods() -> int {
     if (!a.isZero()) {
         score = score + 30
     }
-    score = score + (b.toInt() ?? 0)
-    if (a.toFloat() > 0.0) {
+    score = score + (b.toI64() ?? 0)
+    if (a.toF64() > 0.0) {
         score = score + 40
     }
     if (z.isZero()) {
         score = score + 50
     }
-    score = score + (9223372036854775808n.toInt() ?? 70)
+    score = score + (9223372036854775808n.toI64() ?? 70)
     if (123n == 123n) {
         score = score + 80
     }

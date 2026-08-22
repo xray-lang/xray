@@ -1,13 +1,13 @@
-fn bump(value: ref int) -> int {
+fn bump(value: ref i64) -> i64 {
     return value + 1
 }
 
-fn fill(value: ref int) -> int {
+fn fill(value: ref i64) -> i64 {
     value = 7
     return value
 }
 
-fn observe(values: ref Array<int>) -> int {
+fn observe(values: ref Array<i64>) -> i64 {
     return len(values)
 }
 
@@ -20,6 +20,6 @@ fn test_writable_places_accept_ref() {
     assert_eq(fill(ref slot), 7)
     assert_eq(slot, 7)
 
-    var values = Array<int>(0)
+    var values = Array<i64>(0)
     assert_eq(observe(ref values), 0)
 }

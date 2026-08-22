@@ -9,10 +9,10 @@ emit("rfc6455-accept-key", ws.acceptKey(key) == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
 var request = "GET /chat HTTP/1.1\r\nHost: example.com\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: " + key + "\r\nSec-WebSocket-Version: 13\r\n\r\n"
 var parsed = ws.parseUpgradeRequest(request, null, false, null)
 emit("upgrade-handshake", parsed != null && parsed!.target == "/chat" && ws.upgradeResponse(key).contains("101 Switching Protocols"))
-var close = ws.parseClosePayload(Array<byte>([3, 232, 79, 75]))
-emit("close-payload-utf8", close != null && close!.code == 1000 && close!.reason == "OK" && ws.parseClosePayload(Array<byte>([3, 232, 192, 175])) == null)
+var close = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))
+emit("close-payload-utf8", close != null && close!.code == 1000 && close!.reason == "OK" && ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
 emit("close-reason-array-render", close != null && close!.reason == "[79, 75]")
-var payload = Array<byte>([0, 1, 127, 128, 255])
+var payload = Array<u8>([0, 1, 127, 128, 255])
 var framed = ws.frame(payload, 2, false)
 var frame = ws.parseFrame(framed, false)!
 emit("frame-byte-roundtrip", frame.opcode == 2 && len(frame.payload) == 5 && frame.payload[0] == 0 && frame.payload[3] == 128 && frame.payload[4] == 255 && frame.consumedBytes == len(framed))

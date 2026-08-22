@@ -5,7 +5,7 @@
 // 最终汇总所有叶节点的值
 import time
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -13,12 +13,12 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 递归创建协程树
-fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
+fn skynet(result_ch: Channel<i64>, num: i64, size: i64, div: i64) {
     if (size == 1) {
         result_ch.send(num)
         return
     }
-    const child_size = int(size / div)
+    const child_size = (size / div as i64)
     const ch = Channel(10)
     var sum = 0
     scope {
@@ -35,12 +35,12 @@ fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
     result_ch.send(sum)
 }
 
-fn skynet_child(result_ch: Channel<int>, num: int, size: int, div: int) {
+fn skynet_child(result_ch: Channel<i64>, num: i64, size: i64, div: i64) {
     skynet(result_ch, num, size, div)
 }
 
 // 计算总协程数
-fn calc_total(depth: int) -> int {
+fn calc_total(depth: i64) -> i64 {
     var total = 0
     var n = 1
     for (var i = 0; i <= depth; i++) {
@@ -51,7 +51,7 @@ fn calc_total(depth: int) -> int {
 }
 
 // 主程序
-const depth = len(process.args) > 0 ? (int(process.args[0]) ?? 6) : 6
+const depth = len(process.args) > 0 ? (i64.tryParse(process.args[0]) ?? 6) : 6
 print("=== Skynet 测试 ===")
 print("深度:", depth)
 print("预计协程数:", calc_total(depth))

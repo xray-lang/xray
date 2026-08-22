@@ -4,7 +4,7 @@
 // Run: xray demos/01-basics/functions.xr
 
 // === Named functions ===
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 print("3 + 4 = ${add(3, 4)}")
@@ -17,20 +17,20 @@ print(greet("Alice"))
 print(greet("Bob", "Hi"))
 
 // === Multiple return values ===
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 var (q, r) = divmod(17, 5)
 print("17 / 5 = ${q} remainder ${r}")
 
 // === Arrow functions (must have type annotations) ===
-var double = fn(x: int) -> int { return x * 2 }
-var square = fn(x: int) -> int { return x * x }
+var double = fn(x: i64) -> i64 { return x * 2 }
+var square = fn(x: i64) -> i64 { return x * x }
 print("double(5) = ${double(5)}")
 print("square(6) = ${square(6)}")
 
 // Arrow function with body
-var clamp = fn(x: int, lo: int, hi: int) -> int {
+var clamp = fn(x: i64, lo: i64, hi: i64) -> i64 {
     if (x < lo) { return lo }
     if (x > hi) { return hi }
     return x
@@ -38,13 +38,13 @@ var clamp = fn(x: int, lo: int, hi: int) -> int {
 print("clamp(15, 0, 10) = ${clamp(15, 0, 10)}")
 
 // === Higher-order functions ===
-fn apply(f: fn(int) -> int, x: int) -> int {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
 }
 print("apply(square, 7) = ${apply(square, 7)}")
 
 // === Rest parameters (no type annotation on rest param) ===
-fn sum(...nums) -> int {
+fn sum(...nums) -> i64 {
     var total = 0
     for (var i = 0; i < len(nums); i++) {
         total = total + nums[i]
@@ -54,7 +54,7 @@ fn sum(...nums) -> int {
 print("sum(1,2,3,4,5) = ${sum(1, 2, 3, 4, 5)}")
 
 // === Recursion ===
-fn factorial(n: int) -> int {
+fn factorial(n: i64) -> i64 {
     if (n <= 1) { return 1 }
     return n * factorial(n - 1)
 }
@@ -63,7 +63,7 @@ print("10! = ${factorial(10)}")
 // === Function hoisting (fn declarations can be used before definition) ===
 print("fib(10) = ${fib(10)}")
 
-fn fib(n: int) -> int {
+fn fib(n: i64) -> i64 {
     if (n <= 1) { return n }
     return fib(n - 1) + fib(n - 2)
 }

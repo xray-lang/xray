@@ -263,4 +263,4 @@ var obj = {
     p259: 259,
     p260: 260,
 }
-print(int(obj.p255) + int(obj.p256) + int(obj.p260))
+print((obj.p255 as i64) + (obj.p256 as i64) + (obj.p260 as i64))

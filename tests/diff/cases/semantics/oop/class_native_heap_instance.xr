@@ -1,25 +1,25 @@
 class Counter {
-    value: int
+    value: i64
 
-    constructor(init: int) {
+    constructor(init: i64) {
         this.value = init
     }
 
-    bump(n: int) -> int {
+    bump(n: i64) -> i64 {
         this.value = this.value + n
         return this.value
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
 }
 
-fn make(n: int) -> Counter {
+fn make(n: i64) -> Counter {
     return Counter(n)
 }
 
-fn touch(c: ref Counter) -> int {
+fn touch(c: ref Counter) -> i64 {
     c.value = c.value + 1
     return c.get()
 }

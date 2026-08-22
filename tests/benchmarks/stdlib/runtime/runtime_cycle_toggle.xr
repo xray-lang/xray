@@ -6,7 +6,7 @@
 // and stable across runs.
 import runtime
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var i = 0
     while (i < n) {
         runtime.disableCycleCollection()

@@ -1,7 +1,7 @@
 // anchor: pass-loop-inv-branch-unswitch
 // A branch on a loop-invariant condition can be hoisted out of the loop, leaving
 // two loops with unconditional bodies. Both answers must survive the rewrite.
-fn run(mode: bool) -> int {
+fn run(mode: bool) -> i64 {
     var acc = 0
     for (var i = 0; i < 10; i++) {
         if (mode) {

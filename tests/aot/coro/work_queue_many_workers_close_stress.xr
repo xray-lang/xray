@@ -1,7 +1,7 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-var WORKERS = len(process.args) > 0 ? (int(process.args[0]) ?? 8) : 8
-var TASKS = len(process.args) > 1 ? (int(process.args[1]) ?? 320) : 320
-var ITERS = len(process.args) > 2 ? (int(process.args[2]) ?? 10) : 10
+var WORKERS = len(process.args) > 0 ? (i64.tryParse(process.args[0]) ?? 8) : 8
+var TASKS = len(process.args) > 1 ? (i64.tryParse(process.args[1]) ?? 320) : 320
+var ITERS = len(process.args) > 2 ? (i64.tryParse(process.args[2]) ?? 10) : 10
 
 if (WORKERS < 1) {
     WORKERS = 1
@@ -13,9 +13,9 @@ if (ITERS < 0) {
     ITERS = 0
 }
 
-const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 64)
+const queue: WorkQueue<i64> = WorkQueue<i64>(WORKERS, 64)
 
-fn worker(id: int) -> int {
+fn worker(id: i64) -> i64 {
     var sum = 0
     while (true) {
         var item = queue.pop(id)
@@ -28,7 +28,7 @@ fn worker(id: int) -> int {
     return sum
 }
 
-var workers: Array<Task<int>> = []
+var workers: Array<Task<i64>> = []
 var w = 0
 while (w < WORKERS) {
     workers.push(go worker(w))
@@ -52,7 +52,7 @@ queue.close()
 var actual = 0
 w = 0
 while (w < len(workers)) {
-    var subtotal: int = await workers[w]
+    var subtotal: i64 = await workers[w]
     actual = actual + subtotal
     w = w + 1
 }

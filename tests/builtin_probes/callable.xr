@@ -1,2 +1,2 @@
-fn use(f: Callable<int>) -> bool { return true }
+fn use(f: Callable<i64>) -> bool { return true }
 print(true)

@@ -4,7 +4,7 @@
 import net
 import { NetError } from net
 
-fn tryListen(backlog: int) -> NetListener? {
+fn tryListen(backlog: i64) -> NetListener? {
     try {
         return net.listen(0, backlog)
     } catch (e: NetError) {
@@ -23,10 +23,10 @@ fn serveReadUntilEof(c: NetConn) {
     }
     if (total == 4) {
         // "done"
-        net.writeBytes(c, Array<byte>([100, 111, 110, 101]))
+        net.writeBytes(c, Array<u8>([100, 111, 110, 101]))
     } else {
         // "bad"
-        net.writeBytes(c, Array<byte>([98, 97, 100]))
+        net.writeBytes(c, Array<u8>([98, 97, 100]))
     }
     net.close(c)
 }
@@ -42,7 +42,7 @@ fn serveUpstreamEcho(lst: NetListener) {
     net.close(c)
 }
 
-fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
+fn serveProxyOnce(lst: NetListener, upstreamPort: i64) {
     var client = net.accept(lst)!
     var upstream = net.dial("127.0.0.1", upstreamPort)
     var stats = net.copyBidirectional(client, upstream)
@@ -62,10 +62,10 @@ fn test_shutdown_write_allows_response() {
 
     var c = net.dial("127.0.0.1", port)
     // "body"
-    assert_eq(net.writeBytes(c, Array<byte>([98, 111, 100, 121])), 4)
+    assert_eq(net.writeBytes(c, Array<u8>([98, 111, 100, 121])), 4)
     assert_true(net.shutdownWrite(c))
 
-    var resp = Array<byte>(8)
+    var resp = Array<u8>(8)
     var n = net.readInto(c, ref resp)
     assert_eq(n, 4)
     // "done"
@@ -97,8 +97,8 @@ fn test_copy_bidirectional_proxy_echo() {
 
     var c = net.dial("127.0.0.1", proxyPort)
     // "ping"
-    assert_eq(net.writeBytes(c, Array<byte>([112, 105, 110, 103])), 4)
-    var resp = Array<byte>(8)
+    assert_eq(net.writeBytes(c, Array<u8>([112, 105, 110, 103])), 4)
+    var resp = Array<u8>(8)
     var n = net.readInto(c, ref resp)
     assert_eq(n, 4)
     assert_eq(resp[0], 112)

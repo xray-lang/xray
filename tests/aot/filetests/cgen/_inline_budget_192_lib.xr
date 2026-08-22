@@ -1,4 +1,4 @@
-fn mediumLeaf(value: int) -> int {
+fn mediumLeaf(value: i64) -> i64 {
     var acc = value
     acc = acc + 1
     acc = acc + 2
@@ -73,6 +73,6 @@ fn mediumLeaf(value: int) -> int {
     return acc
 }
 
-export fn runMediumLeaf(value: int) -> int {
+export fn runMediumLeaf(value: i64) -> i64 {
     return mediumLeaf(value)
 }

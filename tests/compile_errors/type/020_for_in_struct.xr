@@ -4,8 +4,8 @@
 // genuinely want for-in support on their type.
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 
 var p = Point{ x: 1.0, y: 2.0 }

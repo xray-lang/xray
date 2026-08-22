@@ -2,10 +2,10 @@
 enum PayloadErr {
     Boom,
     Other,
-    Payload(code: int)
+    Payload(code: i64)
 }
 
-fn fail(kind: int) {
+fn fail(kind: i64) {
     if (kind == 0) {
         throw PayloadErr.Boom
     }
@@ -17,7 +17,7 @@ fn fail(kind: int) {
     }
 }
 
-fn classify(kind: int) -> string {
+fn classify(kind: i64) -> string {
     var tag = "ok"
     try {
         fail(kind)
@@ -31,7 +31,7 @@ fn classify(kind: int) -> string {
     return tag
 }
 
-fn classify_all(kind: int) -> string {
+fn classify_all(kind: i64) -> string {
     var tag = "ok"
     try {
         fail(kind)

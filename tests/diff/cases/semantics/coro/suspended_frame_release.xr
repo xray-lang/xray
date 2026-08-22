@@ -20,7 +20,7 @@
 import runtime
 import time
 
-fn counts(n: int) -> Iterator<int> {
+fn counts(n: i64) -> Iterator<i64> {
     // Generator whose frame holds a live Array across every yield.
     var payload = [n, n + 1, n + 2]
     var i = 0
@@ -30,7 +30,7 @@ fn counts(n: int) -> Iterator<int> {
     }
 }
 
-fn drop_generators(rounds: int) -> int {
+fn drop_generators(rounds: i64) -> i64 {
     var acc = 0
     var r = 0
     while (r < rounds) {
@@ -46,7 +46,7 @@ fn drop_generators(rounds: int) -> int {
     return acc
 }
 
-fn sleeper(ch: Channel<int>) -> int {
+fn sleeper(ch: Channel<i64>) -> i64 {
     // Frame parks a container across a suspend, then blocks forever;
     // the only way out is cancellation.
     var held = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -57,11 +57,11 @@ fn sleeper(ch: Channel<int>) -> int {
     return len(held) + got
 }
 
-fn drop_cancelled(rounds: int) -> int {
+fn drop_cancelled(rounds: i64) -> i64 {
     var done = 0
     var r = 0
     while (r < rounds) {
-        var ch = Channel<int>(1)
+        var ch = Channel<i64>(1)
         var t = go sleeper(ch)
         time.sleep(1)
         t.cancel()
@@ -79,12 +79,12 @@ fn drop_cancelled(rounds: int) -> int {
     return done
 }
 
-fn fire_and_forget(n: int) -> int {
+fn fire_and_forget(n: i64) -> i64 {
     var data = [n, n, n]
     return len(data)
 }
 
-fn drop_tasks(rounds: int) -> int {
+fn drop_tasks(rounds: i64) -> i64 {
     var r = 0
     while (r < rounds) {
         // Handle dropped without await: release is deferred to handle

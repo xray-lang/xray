@@ -1,4 +1,4 @@
-type Envelope = { nested: Set<int> }
+type Envelope = { nested: Set<i64> }
 
 var data = JSON.parseValue("{\"nested\": [1, 2, 3]}")
 var envelope = JSON.decode<Envelope>(data)

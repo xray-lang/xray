@@ -1,5 +1,5 @@
-fn copyRepeated(matchLen: int) -> Array<byte> {
-    var out: Array<byte> = []
+fn copyRepeated(matchLen: i64) -> Array<u8> {
+    var out: Array<u8> = []
     out.push(65)
     var matchPos = 0
     var i = 0

@@ -1,10 +1,10 @@
 struct StaticPair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 }
 
-fn run() -> int {
-    const table: [int; 3] = comptime [1, 2, 3]
+fn run() -> i64 {
+    const table: [i64; 3] = comptime [1, 2, 3]
     const pair = comptime StaticPair{left: table[0], right: 4}
     const value = comptime 7
     return value + pair.right

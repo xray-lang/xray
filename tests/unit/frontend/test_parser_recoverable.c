@@ -533,7 +533,7 @@ TEST(removed_oop_member_modifier_drops_invalid_member) {
                                      "    override bad() { return 1; }\n"
                                      "    abstract gone() { return 2; }\n"
                                      "    virtual nope() { return 3; }\n"
-                                     "    ok() -> int { return 4; }\n"
+                                     "    ok() -> i64 { return 4; }\n"
                                      "}\n",
                                      &parser, &sink, 0, &arena);
 
@@ -562,7 +562,7 @@ TEST(removed_top_level_oop_modifier_drops_invalid_class) {
                                      "    ghost() { return 1; }\n"
                                      "}\n"
                                      "class Good {\n"
-                                     "    ok() -> int { return 2; }\n"
+                                     "    ok() -> i64 { return 2; }\n"
                                      "}\n",
                                      &parser, &sink, 0, &arena);
 

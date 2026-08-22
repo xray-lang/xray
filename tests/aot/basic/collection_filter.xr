@@ -14,13 +14,13 @@ nums.push(70)
 print(len(nums))
 
 // Map: double each element
-var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
 print(len(doubled))
 print(doubled[0])
 print(doubled[3])
 
 // Filter: keep elements > 30
-var big = nums.filter(fn(x: int) -> bool { return x > 30 })
+var big = nums.filter(fn(x: i64) -> bool { return x > 30 })
 print(len(big))
 print(big[0])
 print(big[2])

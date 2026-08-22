@@ -1,4 +1,4 @@
-fn byte_slice_counted_guard_bounds_reject(bytes: Slice<byte>) -> u32 {
+fn byte_slice_counted_guard_bounds_reject(bytes: Slice<u8>) -> u32 {
     var offset = 0
     var total: u32 = 0
     while (offset <= len(bytes) - 16) {
@@ -9,5 +9,5 @@ fn byte_slice_counted_guard_bounds_reject(bytes: Slice<byte>) -> u32 {
     return total
 }
 
-var rejectedBytes = Array<byte>(32, 0)
+var rejectedBytes = Array<u8>(32, 0)
 print(byte_slice_counted_guard_bounds_reject(rejectedBytes[:]))

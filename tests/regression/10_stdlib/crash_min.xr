@@ -1,8 +1,8 @@
 // Test: just define and use a class
 
 class Box {
-    value: int
-    constructor(v: int) {
+    value: i64
+    constructor(v: i64) {
         this.value = v
     }
 }

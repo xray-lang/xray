@@ -1,20 +1,20 @@
 class Box {
-    value: int
+    value: i64
 
     constructor(v) {
         this.value = v
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
 
-    set(v: int) {
+    set(v: i64) {
         this.value = v
     }
 }
 
-fn sum(data: Array<int>) -> int {
+fn sum(data: Array<i64>) -> i64 {
     var total = 0
     for (item in data) {
         total = total + item
@@ -22,28 +22,28 @@ fn sum(data: Array<int>) -> int {
     return total
 }
 
-fn put(table: ref Map<string, int>, key: string, value: int) {
+fn put(table: ref Map<string, i64>, key: string, value: i64) {
     table.set(key, value)
 }
 
-fn hasKey(table: Map<string, int>, key: string) -> bool {
+fn hasKey(table: Map<string, i64>, key: string) -> bool {
     return table.containsKey(key)
 }
 
-fn setBox(box: ref Box, value: int) {
+fn setBox(box: ref Box, value: i64) {
     box.set(value)
 }
 
-fn readBox(box: Box) -> int {
+fn readBox(box: Box) -> i64 {
     return box.get()
 }
 
-var values: Array<int> = [1, 2, 3]
+var values: Array<i64> = [1, 2, 3]
 print(sum(values))
 values.push(4)
 print(sum(values))
 
-var table: Map<string, int> = #{}
+var table: Map<string, i64> = #{}
 put(ref table, "x", 7)
 print(hasKey(table, "x"))
 print(table["x"])

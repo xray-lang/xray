@@ -1,12 +1,12 @@
 class Holder {
-    items: Array<int>
+    items: Array<i64>
 
     constructor() {
         this.items = []
     }
 }
 
-fn mutate(data: ref Array<int>) {
+fn mutate(data: ref Array<i64>) {
     data.push(1)
 }
 

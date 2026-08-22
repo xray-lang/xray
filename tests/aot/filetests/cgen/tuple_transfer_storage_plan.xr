@@ -1,4 +1,4 @@
-fn pair() -> (int, int) {
+fn pair() -> (i64, i64) {
     return (10, 20)
 }
 

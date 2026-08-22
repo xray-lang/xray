@@ -5,13 +5,13 @@
 // ===== 静态字段 =====
 
 class Counter {
-    static count: int = 0
+    static count: i64 = 0
     
     static increment() {
         Counter.count = Counter.count + 1
     }
     
-    static getCount() -> int {
+    static getCount() -> i64 {
         return Counter.count
     }
 }
@@ -35,8 +35,8 @@ fn test_static_method() {
 // ===== 静态常量 =====
 
 class MathConstants {
-    static PI: float = 3.14159
-    static E: float = 2.71828
+    static PI: f64 = 3.14159
+    static E: f64 = 2.71828
 }
 
 @test
@@ -48,8 +48,8 @@ fn test_static_constants() {
 // ===== 工厂模式 =====
 
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
     
     constructor(x, y) {
         this.x = x
@@ -60,7 +60,7 @@ class Point {
         return Point(0, 0)
     }
     
-    static fromPolar(r: float, theta: float) -> Point {
+    static fromPolar(r: f64, theta: f64) -> Point {
         // 简化：只返回近似值
         return Point(r, 0)
     }
@@ -76,8 +76,8 @@ fn test_factory_method() {
 // ===== 混合静态和实例 =====
 
 class Item {
-    static nextId: int = 1
-    id: int
+    static nextId: i64 = 1
+    id: i64
     name: string
     
     constructor(name) {
@@ -105,11 +105,11 @@ fn test_mixed_static_instance() {
 // ===== 静态方法调用静态方法 =====
 
 class Calculator {
-    static add(a: int, b: int) -> int {
+    static add(a: i64, b: i64) -> i64 {
         return a + b
     }
     
-    static addThree(a: int, b: int, c: int) -> int {
+    static addThree(a: i64, b: i64, c: i64) -> i64 {
         return Calculator.add(Calculator.add(a, b), c)
     }
 }

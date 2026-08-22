@@ -46,8 +46,8 @@ fn test_skip_multiple() {
 fn test_flat_nested_value() {
     var [a, b, c] = [10, [11, 12], 13]
     assert_eq(a, 10)
-    assert(b is Array<int>)
-    var nested = b as Array<int>
+    assert(b is Array<i64>)
+    var nested = b as Array<i64>
     assert_eq(nested[0], 11)
     assert_eq(nested[1], 12)
     assert_eq(c, 13)

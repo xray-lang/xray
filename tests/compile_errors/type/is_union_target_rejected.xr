@@ -1,6 +1,6 @@
 // A union is a static classification; test each member type separately.
 fn main() {
     var v: JSON.Value = 1
-    print(v is int | string)
+    print(v is i64 | string)
 }
 main()

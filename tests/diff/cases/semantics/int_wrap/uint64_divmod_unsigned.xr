@@ -45,10 +45,10 @@ print(cfold_div)                      // 108510259257115009
 print(cfold_mod)                      // 43
 
 // 有符号 int 除模保持算术语义（不受影响）
-var s: int = -85
+var s: i64 = -85
 print(s / 2)                          // -42
 print(s % 2)                          // -1
-var sd: int = 2
+var sd: i64 = 2
 print(s / sd)                         // -42
 print(s % sd)                         // -1
 print(-8 / 3)                         // -2（有符号常量折叠）
@@ -58,6 +58,6 @@ print(-8 % 3)                         // -2
 var u32top: u32 = 0x8000_0000
 print(u32top / 7)                     // 306783378
 print(u32top % 7)                     // 2
-var u8v: byte = 200
+var u8v: u8 = 200
 print(u8v / 7)                        // 28
 print(u8v % 7)                        // 4

@@ -5,10 +5,10 @@
 
 enum CoroErr { Msg(string) }
 
-fn success() -> int {
+fn success() -> i64 {
     return 42
 }
-fn failing() -> int {
+fn failing() -> i64 {
     throw CoroErr.Msg("error")
     return 0
 }

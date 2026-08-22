@@ -17,41 +17,41 @@
 // the emitter actually built it, not the way the plan names its storage.
 
 final class Counter {
-    n: int
+    n: i64
 
-    constructor(n: int) {
+    constructor(n: i64) {
         this.n = n
     }
 
-    value() -> int {
+    value() -> i64 {
         return this.n
     }
 
-    twice() -> int {
+    twice() -> i64 {
         return this.n + this.n
     }
 
-    plus(k: int) -> int {
+    plus(k: i64) -> i64 {
         return this.n + k
     }
 
-    scaled(a: int, b: int) -> int {
+    scaled(a: i64, b: i64) -> i64 {
         return this.n * a + b
     }
 
-    relay() -> int {
+    relay() -> i64 {
         return this.twice()
     }
 }
 
 final class Boxed {
-    m: int = 4
+    m: i64 = 4
 
-    value() -> int {
+    value() -> i64 {
         return this.m
     }
 
-    plus(k: int) -> int {
+    plus(k: i64) -> i64 {
         return this.m + k
     }
 }

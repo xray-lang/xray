@@ -1,2 +1,2 @@
-const xs = Array<int>()
+const xs = Array<i64>()
 xs.push(1)

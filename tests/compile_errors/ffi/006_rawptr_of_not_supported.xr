@@ -1,6 +1,6 @@
-fn badPtrOf() -> int {
+fn badPtrOf() -> i64 {
     var value = 1
-    var p = Ptr<int>.of(value)
+    var p = Ptr<i64>.of(value)
     return 0
 }
 

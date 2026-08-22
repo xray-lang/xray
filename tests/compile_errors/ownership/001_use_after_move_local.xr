@@ -1,5 +1,5 @@
 fn main() {
-    var source: Array<int> = [1, 2, 3]
+    var source: Array<i64> = [1, 2, 3]
     var moved = move source
     print(len(moved))
     print(len(source))

@@ -1,2 +1,2 @@
-var local = Coro.Local<int>()
+var local = Coro.Local<i64>()
 local.set("wrong")

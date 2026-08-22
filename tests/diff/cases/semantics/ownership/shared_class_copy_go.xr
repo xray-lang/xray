@@ -3,15 +3,15 @@
 // feeding a typed goroutine entry across VM/JIT/AOT.
 class Config {
     host: string
-    port: int
+    port: i64
 
-    constructor(h: string, p: int) {
+    constructor(h: string, p: i64) {
         this.host = h
         this.port = p
     }
 }
 
-fn serve(c: Config) -> int {
+fn serve(c: Config) -> i64 {
     return c.port
 }
 

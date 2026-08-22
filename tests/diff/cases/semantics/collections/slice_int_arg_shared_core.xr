@@ -3,8 +3,8 @@ fn main() {
     var dyn: JSON.Object = JSON.parseObject("{\"badStart\":true,\"end\":2}")
     var arr = [10, 20, 30]
     print("before-slice")
-    var view: Slice<int> = arr[
-        JSON.require<int>(dyn, ["badStart"]):JSON.require<int>(dyn, ["end"])
+    var view: Slice<i64> = arr[
+        JSON.require<i64>(dyn, ["badStart"]):JSON.require<i64>(dyn, ["end"])
     ]
     print(len(view))
     print("unreachable")

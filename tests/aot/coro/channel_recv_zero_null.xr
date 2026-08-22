@@ -1,4 +1,4 @@
-fn read_zero(ch: Channel<int>) -> int {
+fn read_zero(ch: Channel<i64>) -> i64 {
     match (ch.recv()) {
         Recv.Value(value) -> {
             return value
@@ -9,7 +9,7 @@ fn read_zero(ch: Channel<int>) -> int {
     }
 }
 
-fn read_closed(ch: Channel<int>) -> int {
+fn read_closed(ch: Channel<i64>) -> i64 {
     match (ch.recv()) {
         Recv.Closed -> {
             return 1
@@ -20,12 +20,12 @@ fn read_closed(ch: Channel<int>) -> int {
     }
 }
 
-const zero_ch = Channel<int>(1)
+const zero_ch = Channel<i64>(1)
 zero_ch.send(0)
 var zero_task = go read_zero(zero_ch)
 print(await zero_task)
 
-const closed_ch = Channel<int>(0)
+const closed_ch = Channel<i64>(0)
 closed_ch.close()
 var closed_task = go read_closed(closed_ch)
 print(await closed_task)

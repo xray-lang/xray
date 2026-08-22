@@ -37,8 +37,8 @@ def inventory_with_signature(signature: str) -> dict[str, object]:
 
 class ApiInventoryDiffTest(unittest.TestCase):
     def test_param_mode_signature_change_is_breaking(self) -> None:
-        old_inventory = inventory_with_signature("(value: int): ()")
-        new_inventory = inventory_with_signature("(value: ref int): ()")
+        old_inventory = inventory_with_signature("(value: i64): ()")
+        new_inventory = inventory_with_signature("(value: ref i64): ()")
 
         report = api_inventory.compare_api_inventories(old_inventory, new_inventory)
 
@@ -53,22 +53,22 @@ class ApiInventoryDiffTest(unittest.TestCase):
                 "name": "update",
                 "qualified": "modes.update",
                 "kind": "function",
-                "old_signature": "(value: int): ()",
-                "new_signature": "(value: ref int): ()",
+                "old_signature": "(value: i64): ()",
+                "new_signature": "(value: ref i64): ()",
                 "reason": "API signature changed",
             },
             report["changes"][0],
         )
 
     def test_move_param_mode_signature_change_is_breaking(self) -> None:
-        old_inventory = inventory_with_signature("(slot: ref int): ()")
+        old_inventory = inventory_with_signature("(slot: ref i64): ()")
         new_inventory = inventory_with_signature("(slot: move Buffer): ()")
 
         report = api_inventory.compare_api_inventories(old_inventory, new_inventory)
 
         self.assertEqual(1, report["counts"]["breaking"])
         self.assertEqual("signature_changed", report["changes"][0]["change"])
-        self.assertEqual("(slot: ref int): ()", report["changes"][0]["old_signature"])
+        self.assertEqual("(slot: ref i64): ()", report["changes"][0]["old_signature"])
         self.assertEqual("(slot: move Buffer): ()", report["changes"][0]["new_signature"])
 
 

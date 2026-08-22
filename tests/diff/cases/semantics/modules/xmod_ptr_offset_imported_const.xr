@@ -10,10 +10,10 @@ extern "C" {
     fn malloc(n: usize) -> MutPtr<u8>
 }
 
-fn step(base: MutPtr<u8>) -> int {
-    var q = base.offset(PAGE as int)
+fn step(base: MutPtr<u8>) -> i64 {
+    var q = base.offset(PAGE as i64)
     // Address-only: never dereferenced, so the out-of-range offset is fine.
-    return (mem.addr(q) as int) - (mem.addr(base) as int)
+    return (mem.addr(q) as i64) - (mem.addr(base) as i64)
 }
 
 fn main() {

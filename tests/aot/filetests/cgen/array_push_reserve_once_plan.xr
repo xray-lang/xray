@@ -1,5 +1,5 @@
-fn build(n: int) -> int {
-    var xs: Array<int> = []
+fn build(n: i64) -> i64 {
+    var xs: Array<i64> = []
     for (i in 0..n) {
         xs.push(n)
     }

@@ -1,4 +1,4 @@
-fn run(n: int) -> float {
+fn run(n: i64) -> f64 {
     var acc = 0.0
     var x = 1.0
     var i = 0

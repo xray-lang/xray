@@ -4,4 +4,4 @@ print("error dependency body")
 defer { print("error dependency cleanup") }
 throw InitError.Failed
 
-export fn unreachable_value() -> int { return 1 }
+export fn unreachable_value() -> i64 { return 1 }

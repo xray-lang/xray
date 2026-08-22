@@ -5,7 +5,7 @@ import net
 import { DialOptions } from net
 import time
 
-fn readFull(conn: NetConn, buf: ref Array<byte>, size: int) -> bool {
+fn readFull(conn: NetConn, buf: ref Array<u8>, size: i64) -> bool {
     var received = 0
     while (received < size) {
         var n = net.readInto(conn, ref buf, size - received)
@@ -17,7 +17,7 @@ fn readFull(conn: NetConn, buf: ref Array<byte>, size: int) -> bool {
     return true
 }
 
-fn tryDialTLS(host: string, port: int) -> NetConn? {
+fn tryDialTLS(host: string, port: i64) -> NetConn? {
     try {
         return net.dial(host, port, DialOptions(30000, true))
     } catch (e) {
@@ -25,7 +25,7 @@ fn tryDialTLS(host: string, port: int) -> NetConn? {
     }
 }
 
-fn echoOnce(conn: NetConn, payload: Array<byte>, scratch: ref Array<byte>) -> bool {
+fn echoOnce(conn: NetConn, payload: Array<u8>, scratch: ref Array<u8>) -> bool {
     var n = net.writeBytes(conn, payload)
     if (n != len(payload)) {
         return false
@@ -37,7 +37,7 @@ fn printResult(name: string, fields: string) {
     print("RESULT " + name + " " + fields)
 }
 
-fn benchHandshake(host: string, port: int, count: int) {
+fn benchHandshake(host: string, port: i64, count: i64) {
     var ok = 0
     var start = time.micros()
     for (var i = 0; i < count; i++) {
@@ -48,8 +48,8 @@ fn benchHandshake(host: string, port: int, count: int) {
         }
     }
     var elapsed_us = time.micros() - start
-    var elapsed_sec = float(elapsed_us) / 1000000.0
-    var rate = float(ok) / elapsed_sec
+    var elapsed_sec = (elapsed_us as f64) / 1000000.0
+    var rate = (ok as f64) / elapsed_sec
     printResult("tls_handshake_rate",
         "handshakes=" + string(ok)
         + " elapsed_sec=" + string(elapsed_sec)
@@ -57,7 +57,7 @@ fn benchHandshake(host: string, port: int, count: int) {
         + " complete=" + string(ok == count))
 }
 
-fn benchLatency(host: string, port: int, iterations: int) {
+fn benchLatency(host: string, port: i64, iterations: i64) {
     var conn = tryDialTLS(host, port)
     if (conn == null) {
         printResult("tls_latency", "complete=false error=dial")
@@ -65,7 +65,7 @@ fn benchLatency(host: string, port: int, iterations: int) {
     }
 
     var payload = "L".repeat(64).copyBytes()
-    var scratch = Array<byte>(65536)
+    var scratch = Array<u8>(65536)
     for (var i = 0; i < 20; i++) {
         if (!echoOnce(conn!, payload, ref scratch)) {
             printResult("tls_latency", "complete=false error=warmup")
@@ -74,7 +74,7 @@ fn benchLatency(host: string, port: int, iterations: int) {
         }
     }
 
-    var latencies: Array<int> = []
+    var latencies: Array<i64> = []
     var total = 0
     for (var i = 0; i < iterations; i++) {
         var start = time.micros()
@@ -101,7 +101,7 @@ fn benchLatency(host: string, port: int, iterations: int) {
         + " complete=true")
 }
 
-fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
+fn benchThroughput(host: string, port: i64, iterations: i64, msgSize: i64) {
     var conn = tryDialTLS(host, port)
     if (conn == null) {
         printResult("tls_throughput", "complete=false error=dial")
@@ -109,7 +109,7 @@ fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
     }
 
     var payload = "T".repeat(msgSize).copyBytes()
-    var scratch = Array<byte>(65536)
+    var scratch = Array<u8>(65536)
     for (var i = 0; i < 50; i++) {
         if (!echoOnce(conn!, payload, ref scratch)) {
             printResult("tls_throughput", "complete=false error=warmup")
@@ -129,9 +129,9 @@ fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
     var elapsed_us = time.micros() - start
     net.close(conn!)
 
-    var elapsed_sec = float(elapsed_us) / 1000000.0
-    var msg_per_sec = float(iterations) / elapsed_sec
-    var mb_per_sec = (float(msgSize) * float(iterations) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
+    var elapsed_sec = (elapsed_us as f64) / 1000000.0
+    var msg_per_sec = (iterations as f64) / elapsed_sec
+    var mb_per_sec = ((msgSize as f64) * (iterations as f64) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
     printResult("tls_throughput",
         "msg_size=" + string(msgSize)
         + " iterations=" + string(iterations)
@@ -141,7 +141,7 @@ fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
         + " complete=true")
 }
 
-fn benchLarge(host: string, port: int, sizeMb: int) {
+fn benchLarge(host: string, port: i64, sizeMb: i64) {
     var conn = tryDialTLS(host, port)
     if (conn == null) {
         printResult("tls_large", "complete=false error=dial")
@@ -150,14 +150,14 @@ fn benchLarge(host: string, port: int, sizeMb: int) {
 
     var size = sizeMb * 1024 * 1024
     var payload = "G".repeat(size).copyBytes()
-    var scratch = Array<byte>(65536)
+    var scratch = Array<u8>(65536)
     var start = time.micros()
     var ok = echoOnce(conn!, payload, ref scratch)
     var elapsed_us = time.micros() - start
     net.close(conn!)
 
-    var elapsed_sec = float(elapsed_us) / 1000000.0
-    var mb_per_sec = (float(size) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
+    var elapsed_sec = (elapsed_us as f64) / 1000000.0
+    var mb_per_sec = ((size as f64) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
     printResult("tls_large",
         "size_mb=" + string(sizeMb)
         + " elapsed_sec=" + string(elapsed_sec)
@@ -172,7 +172,7 @@ if (len(process.args) > 0) {
 
 var port = 9443
 if (len(process.args) > 1) {
-    port = int(process.args[1]) ?? 9443
+    port = i64.tryParse(process.args[1]) ?? 9443
 }
 
 var mode = "all"

@@ -268,7 +268,7 @@ ownership, and direct-local argument/return relations. Call-argument rows bind
 distinct caller and callee physical representations while requiring the same
 tagged ABI. It grants no mutable Xi type/name/arity inference, generic method
 dispatch, object-body, root, cleanup, or fallback boxing authority.
-Schema 17 added an exact borrowed `Slice<byte>` view of String storage.
+Schema 17 added an exact borrowed `Slice<u8>` view of String storage.
 The view binds the frozen Semantic intrinsic and source root to the exact
 `xray-target-string-byte-slice-view-v1` call identity; it grants no generic
 String method or slice construction authority. Schema 18 adds a sealed
@@ -554,13 +554,13 @@ anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8ea
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 764004285c19abd6ef2491b3d6bdd466425e643f280e719f5833f0ddfaaaa5e1
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
-anchor-sha256: tests/unit/ir/test_xi_cgen.c 3b26c20fc6b2edcbe97ab6e45aafb2b25505334d8999821f509de9d013471694
-anchor-sha256: tests/unit/ir/test_xi_opt.c bffbaaff1b3d6df205eb05ffc4ef3566faff16ff3ac1cd757072c3ee561410cc
+anchor-sha256: tests/unit/ir/test_xi_cgen.c 9cff88ecd1a77cebc32a9df5e24b3534716d0dd2ee82458be7352307e2971bb3
+anchor-sha256: tests/unit/ir/test_xi_opt.c 07885fc6373b6d9f6ae734065320c446d685ce396089e40a99d31bcc63729a4f
 anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22f5eec9a7889b25380fa99e070c807c19580569ac081a0f0558545eb8e3
 anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff52d516714b47c3331f6ce82fbc33c05d0
 anchor-sha256: src/runtime/xr_module_generation.c a07ba16736dd26135e4256d01092ad7f1be71e29787ef68504cd3f61eb979305
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 98a80d0e5d24ffafaca415fd5c07abde8f560a239e76b6b2d321b629e55fd355
-anchor-sha256: CMakeLists.txt 55e6923a37226f3a892ccfe4afef6b1146033b397f36151fa12789d05419dcb1
+anchor-sha256: CMakeLists.txt a028d30f872079c097f9f77bf706f5c65d3b7fd87da5e16202433f7cb6109227
 anchor-sha256: xisa/target/vm_ops.def ab542edb35da796d4bf1f5f196c7b45d521ebb877edbc448d517d62bdfaeb2cb
 anchor-sha256: tools/xisagen/xisagen.py 155662b2800e5fe08bba80d96681f666cf6e36f3a26919660e6d2fe06ca9e06e
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea

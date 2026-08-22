@@ -1,9 +1,9 @@
 // AOT module test: math library with exports
-export fn square(x: int) -> int {
+export fn square(x: i64) -> i64 {
     return x * x
 }
 
-export fn cube(x: int) -> int {
+export fn cube(x: i64) -> i64 {
     return x * x * x
 }
 

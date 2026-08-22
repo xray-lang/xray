@@ -4,17 +4,17 @@ enum ScalarColor {
     Blue
 }
 
-type ScalarBoundary = ScalarColor | int
+type ScalarBoundary = ScalarColor | i64
 
 fn identityColor(value: ScalarColor) -> ScalarColor {
     return value
 }
 
-fn eraseColor(value: ScalarColor) -> ScalarColor | int {
+fn eraseColor(value: ScalarColor) -> ScalarColor | i64 {
     return value
 }
 
-fn restoreColor(value: ScalarColor | int) -> ScalarColor {
+fn restoreColor(value: ScalarColor | i64) -> ScalarColor {
     if (value is ScalarColor) {
         return value as ScalarColor
     }
@@ -32,7 +32,7 @@ var restored = restoreColor(erased)
 print(restored.name)
 print(restored.ordinal)
 print(restored == ScalarColor.Blue)
-var boundaries: Array<ScalarColor | int> = [eraseColor(ScalarColor.Green), 41, eraseColor(ScalarColor.Red)]
+var boundaries: Array<ScalarColor | i64> = [eraseColor(ScalarColor.Green), 41, eraseColor(ScalarColor.Red)]
 print(restoreColor(boundaries[0]).name)
 print(restoreColor(boundaries[1]).name)
 print(restoreColor(boundaries[2]).ordinal)

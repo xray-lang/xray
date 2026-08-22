@@ -53,9 +53,9 @@ static const XaBuiltinMember *find_member(const XaBuiltinMember *members, int co
 
 TEST(parses_signature_only_and_fails_closed) {
     const char *source = "export fn readText(path: string): string\n"
-                         "export fn now(): int\n"
-                         "type NativeBox = { const id: int }\n"
-                         "fn NativeBox.run(): int\n";
+                         "export fn now(): i64\n"
+                         "type NativeBox = { const id: i64 }\n"
+                         "fn NativeBox.run(): i64\n";
     char path[128];
     ASSERT(write_temp_xrd(path, source));
 
@@ -98,7 +98,7 @@ TEST(rejects_every_textual_metadata_suffix) {
     };
     for (size_t i = 0; i < sizeof(suffixes) / sizeof(suffixes[0]); i++) {
         char source[256];
-        snprintf(source, sizeof(source), "export fn bad(): int %s\n", suffixes[i]);
+        snprintf(source, sizeof(source), "export fn bad(): i64 %s\n", suffixes[i]);
         char path[128];
         ASSERT(write_temp_xrd(path, source));
         ASSERT(xa_xrd_load_file(path) == NULL);

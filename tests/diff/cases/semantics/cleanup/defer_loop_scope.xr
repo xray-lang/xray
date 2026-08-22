@@ -18,7 +18,7 @@ fn loop_call() {
     print("loop-call-end")
 }
 
-fn log(n: int) { print("call " + string(n)) }
+fn log(n: i64) { print("call " + string(n)) }
 
 loop_block()
 loop_call()

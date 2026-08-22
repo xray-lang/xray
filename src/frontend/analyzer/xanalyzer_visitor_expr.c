@@ -403,15 +403,15 @@ static const char *xa_builtin_receiver_display_name(const XaBuiltinReceiverMetho
         case XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER:
             return "unsigned integer";
         case XA_BUILTIN_RECEIVER_U8_ARRAY:
-            return "Array<byte>";
+            return "Array<u8>";
         case XA_BUILTIN_RECEIVER_ARRAY:
-            return xa_type_is_u8_array_type(receiver) ? "Array<byte>" : "Array";
+            return xa_type_is_u8_array_type(receiver) ? "Array<u8>" : "Array";
         case XA_BUILTIN_RECEIVER_MAP:
             return "Map";
         case XA_BUILTIN_RECEIVER_U8_SLICE:
-            return "Slice<byte>";
+            return "Slice<u8>";
         case XA_BUILTIN_RECEIVER_POD_SLICE:
-            return xa_type_is_u8_slice_type(receiver) ? "Slice<byte>" : "Slice";
+            return xa_type_is_u8_slice_type(receiver) ? "Slice<u8>" : "Slice";
     }
     return "receiver";
 }
@@ -1903,9 +1903,8 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
     if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
         ma->name &&
         (strcmp(ma->object->as.variable.name, "string") == 0 ||
-         xr_source_type_spelling_lookup(ma->object->as.variable.name,
-                                        strlen(ma->object->as.variable.name)) !=
-             XR_SOURCE_TYPE_NONE)) {
+         xr_exact_scalar_by_source_name(ma->object->as.variable.name,
+                                        strlen(ma->object->as.variable.name)) != NULL)) {
         XrType *static_member = xa_builtin_static_member_type(
             ctx->analyzer->isolate, ma->object->as.variable.name, ma->name);
         if (static_member)
@@ -2507,7 +2506,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         snprintf(msg, sizeof(msg), "%s.%s() must be inside an unsafe block",
                  obj_type->kind == XR_KIND_FIXED_ARRAY
                      ? "Fixed array"
-                     : (xa_type_is_u8_slice_type(obj_type) ? "Slice<byte>" : "Slice"),
+                     : (xa_type_is_u8_slice_type(obj_type) ? "Slice<u8>" : "Slice"),
                  ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
@@ -2764,7 +2763,7 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[160];
         snprintf(msg, sizeof(msg), "%s has no member '%s'",
-                 xa_type_is_u8_array_type(obj_type) ? "Array<byte>" : "Array", ma->name);
+                 xa_type_is_u8_array_type(obj_type) ? "Array<u8>" : "Array", ma->name);
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_NOT_CALLABLE,
                                    msg, &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -2964,7 +2963,7 @@ XrType *xa_visit_index_get(XaInferContext *ctx, AstNode *node) {
      * A borrowed view used only as the immediate operand of an index expression
      * has an unambiguous, non-escaping lifetime.  Give lowered view constructors
      * that context so the canonical `s.bytes()[i]` spelling does not require a
-     * throw-away Slice<byte> binding.
+     * throw-away Slice<u8> binding.
      */
     bool saved_view_context = ctx->allow_view_expr_for_copy;
     if (ig->array && ig->array->type == AST_CALL_EXPR) {
@@ -3420,7 +3419,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
                               .column = arr->repeat_count->column};
             xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                        XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "fixed array repeat count must have type int", &loc);
+                                       "fixed array repeat count must have type i64", &loc);
         }
 
         if (elem_expected && elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
@@ -4890,7 +4889,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
             return xr_type_new_unknown(NULL);
         }
 
-        // Built-in methods on primitive/container types (e.g. string?.toInt())
+        // Built-in methods on primitive/container types (e.g. string?.toI64())
         if (xa_builtin_is_method(base_type, prop_name)) {
             const char *sig = xa_builtin_get_member_signature(base_type, prop_name);
             if (sig) {

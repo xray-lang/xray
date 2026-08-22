@@ -1,6 +1,6 @@
-struct Pair { a: int; b: int }
+struct Pair { a: i64; b: i64 }
 
-fn bump_alias(p: Pair) -> int {
+fn bump_alias(p: Pair) -> i64 {
     var alias = p
     alias.a = alias.a + 10
     return alias.a + alias.b

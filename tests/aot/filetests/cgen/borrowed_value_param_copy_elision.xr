@@ -1,6 +1,6 @@
-struct Pair { a: int; b: int }
+struct Pair { a: i64; b: i64 }
 
-export fn sum(p: Pair) -> int {
+export fn sum(p: Pair) -> i64 {
     return p.a + p.b
 }
 

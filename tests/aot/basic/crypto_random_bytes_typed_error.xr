@@ -1,6 +1,6 @@
 import crypto
 
-fn invalidRandomBytesError(n: int) -> string {
+fn invalidRandomBytesError(n: i64) -> string {
     try {
         crypto.randomBytes(n)
         return "no-error"

@@ -7,10 +7,10 @@ var N = 1000
 var TASKS = 100000
 // 任务数量
 if (len(process.args) > 0) {
-    N = int(process.args[0]) ?? N
+    N = i64.tryParse(process.args[0]) ?? N
 }
 if (len(process.args) > 1) {
-    TASKS = int(process.args[1]) ?? TASKS
+    TASKS = i64.tryParse(process.args[1]) ?? TASKS
 }
 print("=== Fanout 测试 ===")
 print("工作协程:", N)
@@ -19,7 +19,7 @@ const task_ch = Channel(100)
 // 任务队列
 const result_ch = Channel(100)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -28,7 +28,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 
 // 结果队列
 // 工作协程：从任务队列取任务，处理后发送结果
-fn worker(id: int) {
+fn worker(id: i64) {
     while (true) {
         match (task_ch.recv()) {
             Recv.Value(task) -> {
@@ -43,7 +43,7 @@ fn worker(id: int) {
 }
 
 // 收集器：收集所有结果
-fn collector(expected_count: int) -> int {
+fn collector(expected_count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < expected_count; i++) {
         sum = sum + recv_int(result_ch, 0)
@@ -80,7 +80,7 @@ print("预期:", expected)
 print("正确:", result == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+    print("吞吐量:", (TASKS * 1000 / elapsed as i64), "tasks/sec")
 } else {
     print("吞吐量: 太快无法测量")
 }

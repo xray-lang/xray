@@ -1,9 +1,9 @@
 // anchor: eval-order-literals
 // §3.0 E7: literal elements in source order; key before value in each
 // Map/object entry; a spread is evaluated in place.
-fn t(tag: string, v: int) -> int { print(tag); return v }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn ts(tag: string, v: string) -> string { print(tag); return v }
-fn three(a: int, b: int, c: int) -> int { return a + b + c }
+fn three(a: i64, b: i64, c: i64) -> i64 { return a + b + c }
 
 fn main() {
     print("-- array --")

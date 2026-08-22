@@ -4,7 +4,7 @@ fn xray_codegen_opaque_u64(value: u64) -> u64 {
     return codegen.opaque(value)
 }
 
-fn xray_codegen_opaque_i64(value: int) -> int {
+fn xray_codegen_opaque_i64(value: i64) -> i64 {
     return codegen.opaque(value)
 }
 

@@ -1,4 +1,4 @@
-fn choose(flag: bool, x: int, y: int) -> int {
+fn choose(flag: bool, x: i64, y: i64) -> i64 {
     var a = (x * 31 + y * 17) - (x / 3)
     if (flag) {
         return a + 1
@@ -7,7 +7,7 @@ fn choose(flag: bool, x: int, y: int) -> int {
     return b - 1
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var total = 0
     for (var i = 1; i < rounds; i++) {
         total = total + choose(i % 3 == 0, i, i + 7)

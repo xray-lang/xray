@@ -14,7 +14,7 @@ fn test_object_keys_and_values() {
     assert_eq(len(keys), 3)
     assert_eq(len(values), 3)
     assert(obj.containsKey("a"))
-    assert_eq(JSON.require<int>(obj, ["c"]), 3)
+    assert_eq(JSON.require<i64>(obj, ["c"]), 3)
 }
 
 @test

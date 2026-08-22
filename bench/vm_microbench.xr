@@ -6,7 +6,7 @@
 // Run: time xray bench/vm_microbench.xr
 
 // ---------- 1. Arithmetic + control loop (arith + compare + jump) ----------
-fn bench_arith(iters: int) -> int {
+fn bench_arith(iters: i64) -> i64 {
     var acc = 0
     for (var i = 0; i < iters; i++) {
         acc = acc + i * 3 - 1
@@ -18,7 +18,7 @@ fn bench_arith(iters: int) -> int {
 }
 
 // ---------- 2. Bitwise (bitwise) ----------
-fn bench_bitwise(iters: int) -> int {
+fn bench_bitwise(iters: i64) -> i64 {
     var acc = 0
     for (var i = 0; i < iters; i++) {
         acc = (acc ^ i) | ((i & 0xFF) << 3)
@@ -28,8 +28,8 @@ fn bench_bitwise(iters: int) -> int {
 }
 
 // ---------- 3. Array push + index + length (collection + invoke-IC) ----------
-fn bench_array(iters: int) -> int {
-    var arr: Array<int> = []
+fn bench_array(iters: i64) -> i64 {
+    var arr: Array<i64> = []
     for (var i = 0; i < iters; i++) {
         arr.push(i)
     }
@@ -41,8 +41,8 @@ fn bench_array(iters: int) -> int {
 }
 
 // ---------- 4. Map insert + lookup (collection + INVOKE_BUILTIN) ----------
-fn bench_map(iters: int) -> int {
-    var m: Map<int, int> = #{}
+fn bench_map(iters: i64) -> i64 {
+    var m: Map<i64, i64> = #{}
     for (var i = 0; i < iters; i++) {
         m.set(i, i * 2)
     }
@@ -54,7 +54,7 @@ fn bench_map(iters: int) -> int {
 }
 
 // ---------- 5. String methods (invoke-IC monomorphic site) ----------
-fn bench_string(iters: int) -> int {
+fn bench_string(iters: i64) -> i64 {
     var s = "abcdefghijklmnop"
     var total = 0
     for (var i = 0; i < iters; i++) {
@@ -67,11 +67,11 @@ fn bench_string(iters: int) -> int {
 }
 
 // ---------- 6. Function calls (call include) ----------
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
-fn bench_calls(iters: int) -> int {
+fn bench_calls(iters: i64) -> i64 {
     var acc = 0
     for (var i = 0; i < iters; i++) {
         acc = add(acc, i)
@@ -81,11 +81,11 @@ fn bench_calls(iters: int) -> int {
 
 // ---------- 7. Object field IC (object include) ----------
 class Point {
-    x: int = 0
-    y: int = 0
+    x: i64 = 0
+    y: i64 = 0
 }
 
-fn bench_field_ic(iters: int) -> int {
+fn bench_field_ic(iters: i64) -> i64 {
     var p = Point()
     for (var i = 0; i < iters; i++) {
         p.x = p.x + i
@@ -96,15 +96,15 @@ fn bench_field_ic(iters: int) -> int {
 
 // ---------- 8. Method dispatch (object invoke + invoke-IC) ----------
 class Counter {
-    n: int = 0
+    n: i64 = 0
 
-    bump() -> int {
+    bump() -> i64 {
         this.n = this.n + 1
         return this.n
     }
 }
 
-fn bench_method(iters: int) -> int {
+fn bench_method(iters: i64) -> i64 {
     var c = Counter()
     var last = 0
     for (var i = 0; i < iters; i++) {

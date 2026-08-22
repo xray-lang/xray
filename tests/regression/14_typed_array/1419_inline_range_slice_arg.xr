@@ -6,7 +6,7 @@
  * (arr[a:b] / arr[:b]) crashed the bytecode emitter with an internal error,
  * while full slices (arr[:]) and named `Slice<byte>` bindings were unaffected. */
 
-fn sumSlice(s: Slice<byte>) -> int {
+fn sumSlice(s: Slice<u8>) -> i64 {
     var total = 0
     var i = 0
     while (i < len(s)) {
@@ -18,7 +18,7 @@ fn sumSlice(s: Slice<byte>) -> int {
 
 @test
 fn test_inline_bounded_range_slice_native_method_arg() {
-    var raw: Array<byte> = [104, 105, 33, 65, 66] // h i ! A B
+    var raw: Array<u8> = [104, 105, 33, 65, 66] // h i ! A B
 
     // arr[a:b] inline as a native builtin method argument
     print(string.fromUtf8Lossy(raw[0:2])) // hi
@@ -36,7 +36,7 @@ fn test_inline_bounded_range_slice_native_method_arg() {
 
 @test
 fn test_inline_range_slice_arg_in_if() {
-    var raw: Array<byte> = [104, 105]
+    var raw: Array<u8> = [104, 105]
     var end = 2
     if (end >= 0) {
         print(string.fromUtf8Lossy(raw[0:end])) // hi
@@ -46,7 +46,7 @@ fn test_inline_range_slice_arg_in_if() {
 
 @test
 fn test_inline_range_slice_arg_in_while() {
-    var raw: Array<byte> = [104, 105, 33] // h i !
+    var raw: Array<u8> = [104, 105, 33] // h i !
     var i = 1
     while (i <= 3) {
         print(string.fromUtf8Lossy(raw[0:i]))
@@ -61,7 +61,7 @@ fn test_inline_range_slice_arg_in_while() {
 fn test_inline_range_slice_user_fn_arg_unaffected() {
     // A user function argument already resolves the Slice target; this guards
     // that the lowering recovery did not disturb the pre-existing path.
-    var raw: Array<byte> = [1, 2, 3, 4]
+    var raw: Array<u8> = [1, 2, 3, 4]
     print(sumSlice(raw[1:3])) // 2 + 3 = 5
     // expect: 5
 }

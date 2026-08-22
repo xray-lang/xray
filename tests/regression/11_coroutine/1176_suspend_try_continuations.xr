@@ -1,6 +1,6 @@
 enum SuspendError { Raised }
 
-fn normal_after_suspend() -> int {
+fn normal_after_suspend() -> i64 {
     var value = 0
     try {
         Coro.yield()
@@ -11,7 +11,7 @@ fn normal_after_suspend() -> int {
     return value
 }
 
-fn error_after_suspend() -> int {
+fn error_after_suspend() -> i64 {
     var value = 0
     try {
         Coro.yield()
@@ -22,7 +22,7 @@ fn error_after_suspend() -> int {
     return value
 }
 
-fn panic_after_suspend() -> int {
+fn panic_after_suspend() -> i64 {
     var value = 0
     try {
         Coro.yield()
@@ -34,7 +34,7 @@ fn panic_after_suspend() -> int {
     return value
 }
 
-fn blocked_inside_panic_handler(ready: Channel<int>, blocked: Channel<int>) -> int {
+fn blocked_inside_panic_handler(ready: Channel<i64>, blocked: Channel<i64>) -> i64 {
     ready.send(1)
     try {
         match (blocked.recv()) {
@@ -52,8 +52,8 @@ fn test_suspend_try_continuations() {
     assert_eq(error_after_suspend(), 42)
     assert_eq(panic_after_suspend(), 43)
 
-    const ready = Channel<int>(1)
-    const blocked = Channel<int>(0)
+    const ready = Channel<i64>(1)
+    const blocked = Channel<i64>(0)
     var task = go blocked_inside_panic_handler(ready, blocked)
     match (ready.recv()) {
         Recv.Value(value) -> { assert_eq(value, 1) }

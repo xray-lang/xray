@@ -2837,9 +2837,8 @@ static bool hash_eq_kind_valid(uint8_t kind) {
 }
 
 static bool map_shape_value_type_supports_bool_direct(uint32_t value_type_key) {
-    return value_type_key == xg_synthetic_type_key(XR_TREF_INT) ||
-           value_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_I64) ||
-           value_type_key == xg_synthetic_width_type_key(XR_TREF_FLOAT_WIDTH, XR_NATIVE_F32);
+    return value_type_key == xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_I64) ||
+           value_type_key == xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_F32);
 }
 
 static bool map_shape_supports_bool_direct(const XgMapShapeSummary *shape) {
@@ -3405,9 +3404,9 @@ static bool bulk_op_kind_valid(uint8_t kind) {
 
 static bool bulk_elem_type_is_memset_byte(uint32_t elem_type_key) {
     return elem_type_key == xg_synthetic_type_key(XR_TREF_BOOL) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_BOOL) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_I8) ||
-           elem_type_key == xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_U8);
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_BOOL) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_I8) ||
+           elem_type_key == xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U8);
 }
 
 static uint8_t bulk_action_for(const XgBulkOpSummary *bulk) {

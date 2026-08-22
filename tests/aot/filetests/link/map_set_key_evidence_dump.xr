@@ -1,4 +1,4 @@
-fn readScore() -> int {
+fn readScore() -> i64 {
     var scores = #{"ada": 7, "lin": 9}
     var seen: Set<string> = #["ada"]
     var score = scores["ada"]

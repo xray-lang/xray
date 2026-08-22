@@ -1,4 +1,4 @@
-fn takes(n: int) {}
+fn takes(n: i64) {}
 
 var x = 1
 takes(x++)

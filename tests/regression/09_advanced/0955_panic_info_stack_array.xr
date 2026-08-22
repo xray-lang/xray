@@ -7,7 +7,7 @@
 // 调用链，由 `catch panic (p)` 捕获，p.stack 暴露 Array<string>。
 // 用户错误（`throw <enum>`）走值返回通道，不携带栈轨迹。
 
-fn mkzero() -> int { return 0 }
+fn mkzero() -> i64 { return 0 }
 
 @test
 fn test_new_exception_stack_is_array() {
@@ -24,7 +24,7 @@ fn test_new_exception_stack_initially_empty() {
 
 @test
 fn test_panic_stack_is_array() {
-    fn inner() -> int {
+    fn inner() -> i64 {
         var z = mkzero()
         return 100 / z  // div-by-zero -> panic
     }
@@ -39,11 +39,11 @@ fn test_panic_stack_is_array() {
 
 @test
 fn test_panic_stack_has_frames() {
-    fn level2() -> int {
+    fn level2() -> i64 {
         var z = mkzero()
         return 100 / z
     }
-    fn level1() -> int {
+    fn level1() -> i64 {
         return level2()
     }
     var frames = 0
@@ -58,7 +58,7 @@ fn test_panic_stack_has_frames() {
 
 @test
 fn test_panic_stack_frames_are_strings() {
-    fn inner() -> int {
+    fn inner() -> i64 {
         var z = mkzero()
         return 100 / z
     }

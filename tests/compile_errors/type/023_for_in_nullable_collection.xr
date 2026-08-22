@@ -3,7 +3,7 @@
 // check this reached lowering and panicked at runtime with
 // "value does not implement Lengthable".
 fn main() {
-    var a: Array<int>? = [1, 2, 3]
+    var a: Array<i64>? = [1, 2, 3]
     for (i in a) {
         print(i)
     }

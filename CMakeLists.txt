@@ -1045,7 +1045,6 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/base64/*.c"
     "stdlib/url/*.c"
     "stdlib/text/*.c"
-    "stdlib/strconv/*.c"
 )
 set(STDLIB_SRC ${STDLIB_CORE_SRC})
 
@@ -3698,7 +3697,7 @@ if(BUILD_TESTS)
 
     # A bounded inline range slice used directly as a call argument
     # (string.fromUtf8Lossy(raw[0:end])) must lower to the same Slice value a
-    # named `Slice<byte>` binding produces, rather than crashing the emitter.
+    # named `Slice<u8>` binding produces, rather than crashing the emitter.
     add_test(
         NAME regression_inline_range_slice_arg
         COMMAND $<TARGET_FILE:xray> test
@@ -3964,6 +3963,35 @@ if(BUILD_TESTS)
     )
     set_tests_properties(branch_hint_source_residue_self_test PROPERTIES
         LABELS "meta;surface;branch-hint-removal"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    # Exact scalar spellings are registry-owned. This gate rejects the former
+    # type, conversion, ABI, and module owners while allowing ordinary user
+    # declarations that happen to reuse the retired identifier spellings.
+    add_test(
+        NAME exact_scalar_surface_residue
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_exact_scalar_surface.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(exact_scalar_surface_residue PROPERTIES
+        LABELS "meta;surface;exact-scalar"
+        PROCESSORS 1
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME exact_scalar_surface_residue_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_exact_scalar_surface.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(exact_scalar_surface_residue_self_test PROPERTIES
+        LABELS "meta;surface;exact-scalar"
         PROCESSORS 1
         TIMEOUT 30
     )

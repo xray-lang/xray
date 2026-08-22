@@ -1,4 +1,4 @@
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var user = { name: "Ada", age: 37, active: true }
     var i = 0
     var total = 0

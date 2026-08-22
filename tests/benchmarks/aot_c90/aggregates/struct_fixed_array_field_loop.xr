@@ -1,20 +1,20 @@
 struct Buf {
-    data: [byte; 4]
-    bias: int
+    data: [u8; 4]
+    bias: i64
 }
 
 var buf = Buf{data: [1, 2, 3, 4], bias: 5}
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var i = 0
     while (i < n) {
-        buf.data[0] = i as byte
+        buf.data[0] = i as u8
         buf.data[1] = buf.data[0]
         buf.data[2] = buf.data[1]
         buf.data[3] = buf.data[2]
         i = i + 1
     }
-    return buf.data[3] as int
+    return buf.data[3] as i64
 }
 
 print(run(2000000))

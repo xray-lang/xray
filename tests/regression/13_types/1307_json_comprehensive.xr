@@ -1,6 +1,6 @@
 // A realistic inbound-payload workflow: inspect, transform, and emit.
 
-type Request = { action: string, userId: int }
+type Request = { action: string, userId: i64 }
 
 @test
 fn test_typed_boundary_rejects_unknown_by_default() {

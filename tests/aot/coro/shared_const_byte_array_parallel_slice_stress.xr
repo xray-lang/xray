@@ -1,8 +1,8 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
-var WORKERS = len(process.args) > 0 ? (int(process.args[0]) ?? 8) : 8
-var SIZE = len(process.args) > 1 ? (int(process.args[1]) ?? 1048576) : 1048576
-var ITERS = len(process.args) > 2 ? (int(process.args[2]) ?? 10) : 10
-var BLOCK = len(process.args) > 3 ? (int(process.args[3]) ?? 32768) : 32768
+var WORKERS = len(process.args) > 0 ? (i64.tryParse(process.args[0]) ?? 8) : 8
+var SIZE = len(process.args) > 1 ? (i64.tryParse(process.args[1]) ?? 1048576) : 1048576
+var ITERS = len(process.args) > 2 ? (i64.tryParse(process.args[2]) ?? 10) : 10
+var BLOCK = len(process.args) > 3 ? (i64.tryParse(process.args[3]) ?? 32768) : 32768
 
 if (WORKERS < 1) {
     WORKERS = 1
@@ -17,24 +17,24 @@ if (BLOCK < 1) {
     BLOCK = 1
 }
 
-fn makeByteArray(n: int) -> Array<byte> {
-    var out = Array<byte>(0)
+fn makeByteArray(n: i64) -> Array<u8> {
+    var out = Array<u8>(0)
     var i = 0
     while (i < n) {
-        out.push(((i * 31 + (i >> 3) + 17) & 0xFF) as byte)
+        out.push(((i * 31 + (i >> 3) + 17) & 0xFF) as u8)
         i = i + 1
     }
     return out
 }
 
-fn blockCountFor(size: int, blockSize: int) -> int {
+fn blockCountFor(size: i64, blockSize: i64) -> i64 {
     if (size <= 0) {
         return 0
     }
     return (size + blockSize - 1) / blockSize
 }
 
-fn blockLenAt(size: int, blockSize: int, index: int) -> int {
+fn blockLenAt(size: i64, blockSize: i64, index: i64) -> i64 {
     var start = index * blockSize
     var count = size - start
     if (count > blockSize) {
@@ -43,13 +43,13 @@ fn blockLenAt(size: int, blockSize: int, index: int) -> int {
     return count
 }
 
-fn checksum(span: Slice<byte>) -> int {
+fn checksum(span: Slice<u8>) -> i64 {
     var h = 2166136261
     var i = 0
     while (i < len(span)) {
         var b = 0
         unsafe {
-            b = int(span.get(i))
+            b = (span.get(i) as i64)
         }
         h = ((h ^ b) * 16777619) & 0xFFFFFFFF
         i = i + 1
@@ -57,19 +57,19 @@ fn checksum(span: Slice<byte>) -> int {
     return h
 }
 
-fn pack(sum: int, count: int) -> int {
+fn pack(sum: i64, count: i64) -> i64 {
     return (sum << 32) | (count & 0xFFFFFFFF)
 }
 
-fn unpackSum(bits: int) -> int {
+fn unpackSum(bits: i64) -> i64 {
     return bits >> 32
 }
 
-fn unpackCount(bits: int) -> int {
+fn unpackCount(bits: i64) -> i64 {
     return bits & 0xFFFFFFFF
 }
 
-fn worker(src: Array<byte>, queue: WorkQueue<int>, id: int, blockSize: int) -> int {
+fn worker(src: Array<u8>, queue: WorkQueue<i64>, id: i64, blockSize: i64) -> i64 {
     var sum = 0
     var count = 0
     while (true) {
@@ -80,7 +80,7 @@ fn worker(src: Array<byte>, queue: WorkQueue<int>, id: int, blockSize: int) -> i
         var index = item
         var start = index * blockSize
         var chunkLen = blockLenAt(len(src), blockSize, index)
-        var chunk: Slice<byte> = src[start:start + chunkLen]
+        var chunk: Slice<u8> = src[start:start + chunkLen]
         sum = (sum + checksum(chunk)) & 0xFFFFFFFF
         count = count + 1
     }
@@ -90,9 +90,9 @@ fn worker(src: Array<byte>, queue: WorkQueue<int>, id: int, blockSize: int) -> i
 var src = makeByteArray(SIZE)
 var blocks = blockCountFor(len(src), BLOCK)
 const sharedSrc = copy(src)
-const queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+const queue: WorkQueue<i64> = WorkQueue<i64>(WORKERS, 1024)
 
-var tasks: Array<Task<int>> = []
+var tasks: Array<Task<i64>> = []
 var w = 0
 while (w < WORKERS) {
     tasks.push(go worker(sharedSrc, queue, w, BLOCK))
@@ -116,7 +116,7 @@ var actualCount = 0
 var actualSum = 0
 w = 0
 while (w < len(tasks)) {
-    var packedBits: int = await tasks[w]
+    var packedBits: i64 = await tasks[w]
     actualCount = actualCount + unpackCount(packedBits)
     actualSum = (actualSum + unpackSum(packedBits)) & 0xFFFFFFFF
     w = w + 1

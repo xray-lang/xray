@@ -1,9 +1,9 @@
 var iterations = 1000000
 if (len(process.args) > 0) {
-    iterations = int(process.args[0]) ?? iterations
+    iterations = i64.tryParse(process.args[0]) ?? iterations
 }
 
-fn run_cleanup_loop(count: int) -> int {
+fn run_cleanup_loop(count: i64) -> i64 {
     var observed = 0
     for (var i = 0; i < count; i = i + 1) {
         defer {

@@ -27,7 +27,7 @@ for (key in scores.keys()) {
 }
 
 // Empty map
-var empty: Map<string, int> = #{}
+var empty: Map<string, i64> = #{}
 print("empty map length: ${len(empty)}")
 
 // === Set (unique elements) ===

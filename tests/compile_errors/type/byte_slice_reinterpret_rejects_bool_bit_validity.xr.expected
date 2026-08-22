@@ -1,1 +1,1 @@
-Slice<byte>.reinterpret<T>() requires a statically laid out target for which every bit pattern is valid
+Slice<u8>.reinterpret<T>() requires a statically laid out target for which every bit pattern is valid

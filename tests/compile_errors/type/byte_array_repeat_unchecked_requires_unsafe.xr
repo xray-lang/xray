@@ -1,4 +1,4 @@
-var out: Array<byte> = Array.withCapacity(2)
+var out: Array<u8> = Array.withCapacity(2)
 unsafe {
     out.push(1)
 }

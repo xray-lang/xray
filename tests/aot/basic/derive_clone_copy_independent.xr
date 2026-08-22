@@ -1,18 +1,18 @@
 @derive(Clone)
 class CloneChild {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
 @derive(Clone)
 class CloneSnapshot {
-    values: Array<int>
+    values: Array<i64>
     child: CloneChild
 
-    constructor(values: Array<int>, child: CloneChild) {
+    constructor(values: Array<i64>, child: CloneChild) {
         this.values = values
         this.child = child
     }

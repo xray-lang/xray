@@ -1,6 +1,6 @@
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 2
 }
 
-var values: [int; 2] = comptime [1, runtimeOnly()]
+var values: [i64; 2] = comptime [1, runtimeOnly()]
 print(values[0])

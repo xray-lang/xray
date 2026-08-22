@@ -1,1 +1,1 @@
-mem.load<T>() endian must have type Endian, got 'int'
+mem.load<T>() endian must have type Endian, got 'i64'

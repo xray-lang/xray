@@ -1,8 +1,8 @@
 import sys
 
 fn run() {
-    var empty: Array<int> = []
-    var t = sys.Thread.spawn(fn() -> int {
+    var empty: Array<i64> = []
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
     for (i in [...empty]) {

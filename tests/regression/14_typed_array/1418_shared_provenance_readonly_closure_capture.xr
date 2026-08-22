@@ -1,12 +1,12 @@
 class SharedCaptureBox {
-    items: Array<int> = Array<int>(2, 5)
+    items: Array<i64> = Array<i64>(2, 5)
 }
 
 @test
 fn test_shared_provenance_readonly_closure_capture() {
     const box = SharedCaptureBox()
     var items = box.items
-    const read = fn() -> int {
+    const read = fn() -> i64 {
         return items[0] + len(items)
     }
     assert_eq(read(), 7)

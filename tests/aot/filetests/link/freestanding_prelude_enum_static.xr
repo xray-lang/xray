@@ -1,4 +1,4 @@
-fn probe_endian_ordinal(flag: int) -> int {
+fn probe_endian_ordinal(flag: i64) -> i64 {
     var e = Endian.LE
     if (flag != 0) {
         e = Endian.BE
@@ -6,7 +6,7 @@ fn probe_endian_ordinal(flag: int) -> int {
     return e.ordinal
 }
 
-fn probe_ordering_ordinal(flag: int) -> int {
+fn probe_ordering_ordinal(flag: i64) -> i64 {
     var o = Ordering.Relaxed
     if (flag != 0) {
         o = Ordering.SeqCst

@@ -9,7 +9,7 @@ fn main() {
     for (var i = 0; i < iterations; i++) {
         var iterator = text.runes()
         while (iterator.hasNext()) {
-            checksum += int(iterator.next().toUInt32())
+            checksum += (iterator.next().toUInt32() as i64)
         }
     }
     var elapsed = time.nanos() - start

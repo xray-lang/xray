@@ -4,11 +4,11 @@
 // backend used to prune the panic-catch block (reached only via the unwind
 // edge, invisible to SCCP reachability), leaving a dangling `goto` that failed
 // to compile. VM and AOT must agree on which faults are caught and the result.
-fn divide(a: int, b: int) -> int {
+fn divide(a: i64, b: i64) -> i64 {
     return a / b
 }
 
-fn run(b: int) -> string {
+fn run(b: i64) -> string {
     try {
         var r = divide(10, b)
         return "ok:" + string(r)

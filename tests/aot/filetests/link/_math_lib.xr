@@ -1,7 +1,7 @@
-export fn triple(x: int) -> int {
+export fn triple(x: i64) -> i64 {
     return x * 3
 }
 
-export fn add_one(x: int) -> int {
+export fn add_one(x: i64) -> i64 {
     return x + 1
 }

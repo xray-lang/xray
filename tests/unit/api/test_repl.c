@@ -250,7 +250,7 @@ TEST(repl_eval_function_registers_symbol) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *proto = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
-                               "fn double(n: int) -> int { return n * 2 }\n");
+                               "fn double(n: i64) -> i64 { return n * 2 }\n");
     ASSERT_NOT_NULL(proto);
 
     XrReplSymbolTable *t = xr_repl_symbols_of(iso);
@@ -324,7 +324,7 @@ TEST(repl_cross_input_function_call) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
-                            "fn inc(n: int) -> int { return n + 1 }\n");
+                            "fn inc(n: i64) -> i64 { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
 
     XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = inc(10)\n");
@@ -358,7 +358,7 @@ TEST(repl_cross_input_function_reads_shared) {
     ASSERT_NOT_NULL(p1);
 
     XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
-                            "fn getx() -> int { return x }\n");
+                            "fn getx() -> i64 { return x }\n");
     ASSERT_NOT_NULL(p2);
 
     XrProto *p3 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = getx()\n");
@@ -388,7 +388,7 @@ TEST(repl_cross_input_function_mutates_shared) {
     ASSERT_NOT_NULL(p1);
 
     XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
-                            "fn bump() -> int { counter = counter + 1; return counter }\n");
+                            "fn bump() -> i64 { counter = counter + 1; return counter }\n");
     ASSERT_NOT_NULL(p2);
 
     XrProto *p3 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r1 = bump()\n");
@@ -453,11 +453,11 @@ TEST(repl_function_calls_function_cross_input) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
-                            "fn b() -> int { return 100 }\n");
+                            "fn b() -> i64 { return 100 }\n");
     ASSERT_NOT_NULL(p1);
 
     XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
-                            "fn a() -> int { return b() + 1 }\n");
+                            "fn a() -> i64 { return b() + 1 }\n");
     ASSERT_NOT_NULL(p2);
 
     XrProto *p3 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var r = a()\n");
@@ -481,7 +481,7 @@ TEST(repl_function_recursive_self_reference) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    const char *src = "fn fact(n: int) -> int {\n"
+    const char *src = "fn fact(n: i64) -> i64 {\n"
                       "  if (n <= 1) { return 1 }\n"
                       "  return n * fact(n - 1)\n"
                       "}\n";
@@ -510,7 +510,7 @@ TEST(repl_function_mutates_array_cross_input) {
     ASSERT_NOT_NULL(iso);
 
     XrProto *p1 =
-        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var arr: Array<int> = []\n");
+        eval_repl(xr_compiler_session_current_for_isolate(iso), iso, "var arr: Array<i64> = []\n");
     ASSERT_NOT_NULL(p1);
 
     XrProto *p2 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso,
@@ -553,8 +553,8 @@ TEST(repl_class_instantiation_cross_input) {
 
     const char *cls =
         "class Point {\n"
-        "  var x: int; var y: int\n"
-        "  constructor(x: int, y: int) { this.x = x; this.y = y }\n"
+        "  var x: i64; var y: i64\n"
+        "  constructor(x: i64, y: i64) { this.x = x; this.y = y }\n"
         "}\n";
     XrProto *p1 = eval_repl(xr_compiler_session_current_for_isolate(iso), iso, cls);
     ASSERT_NOT_NULL(p1);
@@ -694,7 +694,7 @@ TEST(repl_it_reference_is_a_typed_snapshot) {
 
     XrProto *p1 = eval_repl(session, iso, "1\n");
     ASSERT_NOT_NULL(p1);
-    XrProto *p2 = eval_repl(session, iso, "fn previous() -> int { return it }\n");
+    XrProto *p2 = eval_repl(session, iso, "fn previous() -> i64 { return it }\n");
     ASSERT_NOT_NULL(p2);
     XrProto *p3 = eval_repl(session, iso, "\"later\"\n");
     ASSERT_NOT_NULL(p3);
@@ -810,7 +810,7 @@ TEST(repl_auto_echo_evaluates_expression_once) {
 
     XrProto *p1 = eval_repl(session, iso,
                             "var counter = 0\n"
-                            "fn next() -> int { counter = counter + 1; return counter }\n");
+                            "fn next() -> i64 { counter = counter + 1; return counter }\n");
     ASSERT_NOT_NULL(p1);
     XrProto *p2 = eval_repl(session, iso, "next()\n");
     ASSERT_NOT_NULL(p2);
@@ -883,7 +883,7 @@ TEST(repl_print_type_simple_expression) {
 
     char buf[64];
     read_tmp_output(out, buf, sizeof(buf));
-    ASSERT_NOT_NULL(strstr(buf, "int"));
+    ASSERT_NOT_NULL(strstr(buf, "i64"));
     fclose(out);
     xray_vm_delete(iso);
 }

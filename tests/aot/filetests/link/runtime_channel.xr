@@ -1,4 +1,4 @@
-const ch = Channel<int>(2)
+const ch = Channel<i64>(2)
 
 select {
     1 to ch -> { print("sent") }

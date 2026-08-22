@@ -68,7 +68,7 @@ print("  最大: " + string(max_count))
 /* 计算公平性指标 */
 var ratio = 1
 if (min_count > 0) {
-    ratio = float(max_count) / float(min_count)
+    ratio = (max_count as f64) / (min_count as f64)
 }
 print("  最大/最小比: " + string(ratio))
 /* 验证公平性：比例不应超过 10 倍 */

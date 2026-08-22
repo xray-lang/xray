@@ -6,8 +6,8 @@
 // range known to be non-empty); pulling an exhausted iterator is E0432 and is
 // covered by its own case.
 
-fn drain(r: Range) -> Array<int> {
-    var out: Array<int> = []
+fn drain(r: Range) -> Array<i64> {
+    var out: Array<i64> = []
     var it = r.iterator()
     while (it.hasNext()) {
         out.push(it.next())
@@ -63,7 +63,7 @@ print(emptyCount)
 // `for (i in rangeVar)`: the static type is Range (a variable, not a literal
 // `a..b`), so this lowers through the counted len/index loop; the sum matches
 // the same range's toArray().
-fn forInSum(rng: Range) -> int {
+fn forInSum(rng: Range) -> i64 {
     var acc = 0
     for (i in rng) {
         acc = acc + i
@@ -79,8 +79,8 @@ print(forInSum(-3..2))
 // iterator(). A nested (non-monomorphized) parameter keeps T into lowering, so
 // a Range flows through iterator() dynamically — the exact path this change
 // makes answerable (it previously panicked with E0405 iterator-not-found).
-fn wrapper() -> int {
-    fn nestedTotal<T: Iterable<int>>(xs: T) -> int {
+fn wrapper() -> i64 {
+    fn nestedTotal<T: Iterable<i64>>(xs: T) -> i64 {
         var n = 0
         for (i in xs) {
             n = n + i

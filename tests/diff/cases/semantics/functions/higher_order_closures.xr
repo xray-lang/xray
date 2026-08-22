@@ -3,12 +3,12 @@
 // lower to a `void` C function under AOT (dropping the returned value -> null/0
 // at every call site), while the VM was unaffected. See task 147 §0.7.
 
-fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
-fn applyTwice(f: fn(int) -> int, x: int) -> int { return f(f(x)) }
-fn toStr(f: fn(int) -> string, x: int) -> string { return f(x) }
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 { return f(x) }
+fn applyTwice(f: fn(i64) -> i64, x: i64) -> i64 { return f(f(x)) }
+fn toStr(f: fn(i64) -> string, x: i64) -> string { return f(x) }
 
-fn mapInt(xs: Array<int>, f: fn(int) -> int) -> Array<int> {
-    var out: Array<int> = []
+fn mapInt(xs: Array<i64>, f: fn(i64) -> i64) -> Array<i64> {
+    var out: Array<i64> = []
     for (x in xs) { out.push(f(x)) }
     return out
 }
@@ -32,7 +32,7 @@ print(r[1])   // 4
 print(r[2])   // 9
 
 // generic class method taking a closure (inferred method type param U)
-var c = Cell<int>(10)
+var c = Cell<i64>(10)
 print(c.map((v) -> v + 100))   // 110
 print(c.update((v) -> v * 2))  // 20
 print(c.value)                  // 20

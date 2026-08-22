@@ -1,6 +1,6 @@
 // anchor: eval-order-short-circuit
 // §3.0 E4: &&, ||, ??, ?:, ?. and ?[ are the only short-circuit points.
-fn t(tag: string, v: int) -> int { print(tag); return v }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 fn tb(tag: string, v: bool) -> bool { print(tag); return v }
 fn ts(tag: string, v: string?) -> string? { print(tag); return v }
 

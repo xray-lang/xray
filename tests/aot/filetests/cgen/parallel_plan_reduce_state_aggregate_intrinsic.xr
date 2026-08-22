@@ -1,11 +1,11 @@
 import { Plan, Options } from parallel
 
 struct Totals {
-    bytes: int
-    checksum: int
+    bytes: i64
+    checksum: i64
 }
 
-var plan = Plan<int>(Options(2), (lane) -> lane + 10)
+var plan = Plan<i64>(Options(2), (lane) -> lane + 10)
 
 var totals = plan.reduce(
     0..4,

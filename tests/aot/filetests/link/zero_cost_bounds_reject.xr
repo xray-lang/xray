@@ -2,7 +2,7 @@
 // evidence (an unconstrained parameter) keeps a bounds-panic branch (R4) in the
 // generated C.  Recursion forces a standalone emission so the contract is
 // verified on the function body itself.
-fn zeroCostBoundsReject(data: Slice<int>, i: int) -> int {
+fn zeroCostBoundsReject(data: Slice<i64>, i: i64) -> i64 {
     if (i <= 0) {
         return 0
     }

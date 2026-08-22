@@ -1,7 +1,7 @@
 // anchor: eval-order-interpolation
 // §3.0 E8: interpolated fragments are evaluated left to right.
 fn ts(tag: string, v: string) -> string { print(tag); return v }
-fn t(tag: string, v: int) -> int { print(tag); return v }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 
 fn main() {
     print("-- two fragments --")

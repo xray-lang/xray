@@ -13,7 +13,7 @@ class Animal {
         return this.name + " says ..."
     }
 
-    legs() -> int {
+    legs() -> i64 {
         return 0
     }
 }
@@ -27,7 +27,7 @@ class Dog extends Animal {
         return this.name + " says woof"
     }
 
-    legs() -> int {
+    legs() -> i64 {
         return 4
     }
 }
@@ -41,7 +41,7 @@ class Cat extends Animal {
         return this.name + " says meow"
     }
 
-    legs() -> int {
+    legs() -> i64 {
         return 4
     }
 }
@@ -55,7 +55,7 @@ class Bird extends Animal {
         return this.name + " says tweet"
     }
 
-    legs() -> int {
+    legs() -> i64 {
         return 2
     }
 }

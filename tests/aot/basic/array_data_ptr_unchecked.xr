@@ -1,27 +1,27 @@
-fn fill(out: ref Array<byte>, src: ref Array<byte>) -> int {
+fn fill(out: ref Array<u8>, src: ref Array<u8>) -> i64 {
     out.resize(4, 0)
     unsafe {
         var p = out.mutPtr()
         var sp = src.ptr()
         p.copyFromNonOverlapping(sp, 4)
     }
-    return out[2] as int
+    return out[2] as i64
 }
 
-var src = Array<byte>(4)
+var src = Array<u8>(4)
 src[0] = 10
 src[1] = 20
 src[2] = 30
 src[3] = 40
 
-var bytes: Array<byte> = Array.withCapacity(4)
+var bytes: Array<u8> = Array.withCapacity(4)
 print(fill(ref bytes, ref src))
 
-fn second(out: ref Array<byte>) -> int {
-    var view: Slice<byte> = out[:]
+fn second(out: ref Array<u8>) -> i64 {
+    var view: Slice<u8> = out[:]
     unsafe {
         var p = view.ptr()
-        return int(p[1])
+        return (p[1] as i64)
     }
 }
 

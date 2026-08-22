@@ -1,7 +1,7 @@
 export struct ReturnedValue {
-    value: int
+    value: i64
 }
 
-export fn makeReturnedValue(value: int) -> ReturnedValue {
+export fn makeReturnedValue(value: i64) -> ReturnedValue {
     return ReturnedValue{value: value}
 }

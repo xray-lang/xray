@@ -333,7 +333,7 @@ static const XgBodySummary *evidence_find_body_by_func(const XgGlobalEvidence *e
 }
 
 static void assert_byte_u8_sequence_type_keys_canonical(const XgGlobalEvidence *ev) {
-    uint32_t expected_u8_key = xg_synthetic_width_type_key(XR_TREF_INT_WIDTH, XR_NATIVE_U8);
+    uint32_t expected_u8_key = xg_synthetic_width_type_key(XR_TREF_SCALAR, XR_NATIVE_U8);
     uint32_t array_receiver_key = 0;
     uint32_t slice_receiver_key = 0;
     uint32_t array_count = 0;
@@ -990,30 +990,30 @@ TEST(global_evidence_cache_payload_preserves_source_node_identity) {
 
 TEST(global_evidence_param_modes_participate_in_signature_keys) {
     const char *function_sources[] = {
-        "fn gate(value: Array<int>) -> int { return value.length }\n",
-        "fn gate(value: ref Array<int>) -> int { return value.length }\n",
-        "fn gate(value: move Array<int>) -> int { return value.length }\n",
+        "fn gate(value: Array<i64>) -> i64 { return value.length }\n",
+        "fn gate(value: ref Array<i64>) -> i64 { return value.length }\n",
+        "fn gate(value: move Array<i64>) -> i64 { return value.length }\n",
     };
     const char *method_sources[] = {
         "class Box {\n"
-        "    touch(value: Array<int>) -> int { return value.length }\n"
+        "    touch(value: Array<i64>) -> i64 { return value.length }\n"
         "}\n",
         "class Box {\n"
-        "    touch(value: ref Array<int>) -> int { return value.length }\n"
+        "    touch(value: ref Array<i64>) -> i64 { return value.length }\n"
         "}\n",
         "class Box {\n"
-        "    touch(value: move Array<int>) -> int { return value.length }\n"
+        "    touch(value: move Array<i64>) -> i64 { return value.length }\n"
         "}\n",
     };
     const char *interface_sources[] = {
         "interface Sink {\n"
-        "    touch(value: Array<int>) -> int\n"
+        "    touch(value: Array<i64>) -> i64\n"
         "}\n",
         "interface Sink {\n"
-        "    touch(value: ref Array<int>) -> int\n"
+        "    touch(value: ref Array<i64>) -> i64\n"
         "}\n",
         "interface Sink {\n"
-        "    touch(value: move Array<int>) -> int\n"
+        "    touch(value: move Array<i64>) -> i64\n"
         "}\n",
     };
     uint32_t function_keys[3] = {0};
@@ -6583,7 +6583,7 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
                          "    speak() -> string { return \"base\" }\n"
                          "}\n"
                          "class Solo {\n"
-                         "    ping() -> int { return 1 }\n"
+                         "    ping() -> i64 { return 1 }\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -6693,8 +6693,8 @@ TEST(global_evidence_build_key_uses_explicit_imported_summary_hash) {
 
 TEST(global_evidence_build_skips_imported_package_module_rows) {
     setup_parser_session();
-    const char *package_source = "fn package_value() -> int { return 1 }\n";
-    const char *entry_source = "fn local_value() -> int { return 2 }\n";
+    const char *package_source = "fn package_value() -> i64 { return 1 }\n";
+    const char *entry_source = "fn local_value() -> i64 { return 2 }\n";
     AstNode *package_ast = xr_parse(g_session, package_source);
     AstNode *entry_ast = xr_parse(g_session, entry_source);
     ASSERT_NOT_NULL(package_ast);
@@ -6740,8 +6740,8 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
 
 TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     setup_parser_session();
-    const char *source = "fn callee(x: int) -> int { return x + 1 }\n"
-                         "fn caller() -> int { return callee(41) }\n";
+    const char *source = "fn callee(x: i64) -> i64 { return x + 1 }\n"
+                         "fn caller() -> i64 { return callee(41) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -6783,8 +6783,8 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
 
 TEST(global_evidence_producer_uses_stable_source_identity) {
     setup_parser_session();
-    const char *source = "fn callee(x: int) -> int { return x + 1 }\n"
-                         "fn caller() -> int { return callee(1) + callee(2) }\n";
+    const char *source = "fn callee(x: i64) -> i64 { return x + 1 }\n"
+                         "fn caller() -> i64 { return callee(1) + callee(2) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     ASSERT_EQ_UINT(ast->as.program.count, 2);
@@ -6858,8 +6858,8 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
 
 TEST(global_evidence_producer_disambiguates_same_location_callsites) {
     setup_parser_session();
-    const char *source = "fn caller(a: u32, b: u64, c: i16) -> int {\n"
-                         "    return int(a) + int(b) + int(c)\n"
+    const char *source = "fn caller(a: u32, b: u64, c: i16) -> i64 {\n"
+                         "    return i64(a) + i64(b) + i64(c)\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -6905,10 +6905,10 @@ TEST(global_evidence_producer_disambiguates_same_location_callsites) {
 
 TEST(global_evidence_source_identity_survives_body_only_change) {
     setup_parser_session();
-    const char *source_a = "fn id(x: int) -> int { return x }\n"
-                           "fn main() -> int { return id(7) }\n";
-    const char *source_b = "fn id(x: int) -> int { return x + 1 }\n"
-                           "fn main() -> int { return id(7) }\n";
+    const char *source_a = "fn id(x: i64) -> i64 { return x }\n"
+                           "fn main() -> i64 { return id(7) }\n";
+    const char *source_b = "fn id(x: i64) -> i64 { return x + 1 }\n"
+                           "fn main() -> i64 { return id(7) }\n";
     AstNode *ast_a = xr_parse(g_session, source_a);
     AstNode *ast_b = xr_parse(g_session, source_b);
     ASSERT_NOT_NULL(ast_a);
@@ -6964,7 +6964,7 @@ TEST(global_evidence_source_identity_survives_body_only_change) {
 TEST(global_evidence_producer_records_generic_instantiation_roots) {
     setup_parser_session();
     const char *source = "fn id<T>(x: T) -> T { return x }\n"
-                         "fn wrapper() -> int { return id<int>(41) }\n";
+                         "fn wrapper() -> i64 { return id<i64>(41) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7446,7 +7446,7 @@ TEST(xaot_verifier_rejects_stale_enum_scalar_plan) {
 
 TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     setup_parser_session();
-    const char *source = "fn caller() -> int { return unknown(41) }\n";
+    const char *source = "fn caller() -> i64 { return unknown(41) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7480,7 +7480,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
 
 TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics) {
     setup_parser_session();
-    const char *source = "fn caller(x: u32) -> int { return int(x) }\n";
+    const char *source = "fn caller(x: u32) -> i64 { return i64(x) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7503,7 +7503,7 @@ TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics)
     ASSERT_EQ_UINT(ev.nbodies, 1);
     ASSERT_EQ_UINT(ev.ncallsites, 1);
     ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
-    ASSERT_EQ_UINT(ev.callsites[0].method_name_id, xg_name_id("int"));
+    ASSERT_EQ_UINT(ev.callsites[0].method_name_id, xg_name_id("i64"));
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL) != 0);
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
 
@@ -7568,7 +7568,7 @@ TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundar
 
 TEST(global_evidence_composes_recursive_direct_call_effects) {
     setup_parser_session();
-    const char *source = "fn fib(n: int) -> int {\n"
+    const char *source = "fn fib(n: i64) -> i64 {\n"
                          "    if (n < 2) { return n }\n"
                          "    return fib(n - 1)\n"
                          "}\n";
@@ -7859,9 +7859,9 @@ TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_met
 TEST(global_evidence_seeds_xi_ids_during_lowering) {
     setup_parser_session();
     const char *source = "class Sink {\n"
-                         "    push(v: int) -> int { return v }\n"
+                         "    push(v: i64) -> i64 { return v }\n"
                          "}\n"
-                         "fn use(s: Sink) -> int { return s.push(1) }\n";
+                         "fn use(s: Sink) -> i64 { return s.push(1) }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7955,19 +7955,19 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
 TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     setup_parser_session();
     const char *source = "class Shape {\n"
-                         "    kind: int\n"
-                         "    constructor(kind: int) { this.kind = kind }\n"
+                         "    kind: i64\n"
+                         "    constructor(kind: i64) { this.kind = kind }\n"
                          "}\n"
                          "class Rect extends Shape {\n"
-                         "    w: int\n"
-                         "    h: int\n"
-                         "    constructor(w: int, h: int) {\n"
+                         "    w: i64\n"
+                         "    h: i64\n"
+                         "    constructor(w: i64, h: i64) {\n"
                          "        super(1)\n"
                          "        this.w = w\n"
                          "        this.h = h\n"
                          "    }\n"
                          "}\n"
-                         "fn makeRect() -> int {\n"
+                         "fn makeRect() -> i64 {\n"
                          "    var r = Rect(2, 3)\n"
                          "    return r.w\n"
                          "}\n";
@@ -8055,7 +8055,7 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
 TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
     setup_parser_session();
     const char *source = "class Router {\n"
-                         "    value: int\n"
+                         "    value: i64\n"
                          "    constructor() { this.value = 1 }\n"
                          "}\n"
                          "var router = Router()\n";
@@ -8164,11 +8164,11 @@ TEST(global_evidence_producer_names_go_lambda_body_anonymous) {
 TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
     setup_parser_session();
     const char *source = "class Sink {\n"
-                         "    pushInt(v: int) -> int { return v }\n"
-                         "    pushString(v: string) -> int { return 1 }\n"
+                         "    pushInt(v: i64) -> i64 { return v }\n"
+                         "    pushString(v: string) -> i64 { return 1 }\n"
                          "}\n"
-                         "fn use(s: Sink, x: int, y: string) -> int {\n"
-                         "    var z: int = 2\n"
+                         "fn use(s: Sink, x: i64, y: string) -> i64 {\n"
+                         "    var z: i64 = 2\n"
                          "    s.pushInt(x)\n"
                          "    s.pushString(y)\n"
                          "    s.pushInt(z)\n"
@@ -8242,7 +8242,7 @@ TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
 
 TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) {
     setup_parser_session();
-    const char *source = "fn clampScore(x: int) -> int {\n"
+    const char *source = "fn clampScore(x: i64) -> i64 {\n"
                          "    return math.min(x, 10)\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -8287,23 +8287,23 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
 TEST(global_evidence_producer_marks_body_escape_bits) {
     setup_parser_session();
     const char *source = "class Box {\n"
-                         "    value: int\n"
+                         "    value: i64\n"
                          "    constructor() { this.value = 0 }\n"
-                         "    set(v: int) { this.value = v }\n"
+                         "    set(v: i64) { this.value = v }\n"
                          "}\n"
-                         "fn touch(items: Array<int>) -> int {\n"
+                         "fn touch(items: Array<i64>) -> i64 {\n"
                          "    items[0] = 1\n"
                          "    return items[0]\n"
                          "}\n"
                          "fn spawnIt() {\n"
                          "    go touch([1, 2, 3])\n"
                          "}\n"
-                         "fn makeAdder(base: int) -> fn(int) -> int {\n"
+                         "fn makeAdder(base: i64) -> fn(i64) -> i64 {\n"
                          "    var bias = 1\n"
-                         "    return fn(v: int) -> int { return base + bias + v }\n"
+                         "    return fn(v: i64) -> i64 { return base + bias + v }\n"
                          "}\n"
-                         "fn makeIdentity() -> fn(int) -> int {\n"
-                         "    return fn(v: int) -> int { return v }\n"
+                         "fn makeIdentity() -> fn(i64) -> i64 {\n"
+                         "    return fn(v: i64) -> i64 { return v }\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -8347,10 +8347,10 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
 
 TEST(global_evidence_producer_marks_read_mem_effect) {
     setup_parser_session();
-    const char *source = "fn add(x: int, y: int) -> int {\n"
+    const char *source = "fn add(x: i64, y: i64) -> i64 {\n"
                          "    return x + y\n"
                          "}\n"
-                         "fn readIndex(items: Array<int>) -> int {\n"
+                         "fn readIndex(items: Array<i64>) -> i64 {\n"
                          "    return items[0]\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -8399,20 +8399,20 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
                          "    acc--\n"
                          "    return acc\n"
                          "}\n"
-                         "fn sliceRead(data: Slice<byte>) -> u32 {\n"
+                         "fn sliceRead(data: Slice<u8>) -> u32 {\n"
                          "    return data.load<u32>(0, Endian.LE)\n"
                          "}\n"
-                         "fn rebindArray(items: Array<int>, other: Array<int>) -> int {\n"
+                         "fn rebindArray(items: Array<i64>, other: Array<i64>) -> i64 {\n"
                          "    var current = items\n"
                          "    current = other\n"
                          "    return 0\n"
                          "}\n"
-                         "fn writeRef(value: ref int) {\n"
+                         "fn writeRef(value: ref i64) {\n"
                          "    value = 7\n"
                          "}\n"
-                         "fn makeCounter() -> fn() -> int {\n"
+                         "fn makeCounter() -> fn() -> i64 {\n"
                          "    var count = 0\n"
-                         "    return fn() -> int { count += 1; return count }\n"
+                         "    return fn() -> i64 { count += 1; return count }\n"
                          "}\n";
 
     AstNode *ast = xr_parse(g_session, source);
@@ -8475,10 +8475,10 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
 
 TEST(global_evidence_producer_marks_call_effect) {
     setup_parser_session();
-    const char *source = "fn add(x: int, y: int) -> int {\n"
+    const char *source = "fn add(x: i64, y: i64) -> i64 {\n"
                          "    return x + y\n"
                          "}\n"
-                         "fn callAdd(x: int, y: int) -> int {\n"
+                         "fn callAdd(x: i64, y: i64) -> i64 {\n"
                          "    return add(x, y)\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -8518,7 +8518,7 @@ TEST(global_evidence_producer_marks_call_effect) {
 
 TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     setup_parser_session();
-    const char *source = "fn read(h: Atomic<int>) -> int {\n"
+    const char *source = "fn read(h: Atomic<i64>) -> i64 {\n"
                          "    return h.load()\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -8555,7 +8555,7 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
 
 TEST(global_evidence_producer_marks_native_methods_bodyless) {
     setup_parser_session();
-    const char *source = "fn read(h: Atomic<int>) -> int { return h.load() }\n";
+    const char *source = "fn read(h: Atomic<i64>) -> i64 { return h.load() }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -8609,18 +8609,18 @@ TEST(global_evidence_producer_marks_native_methods_bodyless) {
 TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     setup_parser_session();
     const char *source = "interface Shape {\n"
-                         "    area() -> float\n"
+                         "    area() -> f64\n"
                          "}\n"
                          "class Circle implements Shape {\n"
-                         "    area() -> float { return 1.0 }\n"
+                         "    area() -> f64 { return 1.0 }\n"
                          "}\n"
                          "class Square implements Shape {\n"
-                         "    area() -> float { return 2.0 }\n"
+                         "    area() -> f64 { return 2.0 }\n"
                          "}\n"
-                         "fn describe(shape: Shape) -> float {\n"
+                         "fn describe(shape: Shape) -> f64 {\n"
                          "    return shape.area()\n"
                          "}\n"
-                         "fn describeLocal(circle: Circle) -> float {\n"
+                         "fn describeLocal(circle: Circle) -> f64 {\n"
                          "    var shape: Shape = circle\n"
                          "    return shape.area()\n"
                          "}\n";
@@ -8719,13 +8719,13 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
 TEST(global_evidence_producer_records_interface_object_storage_uses) {
     setup_parser_session();
     const char *source = "interface Drawable {\n"
-                         "    draw() -> int\n"
+                         "    draw() -> i64\n"
                          "}\n"
                          "class Sprite implements Drawable {\n"
-                         "    draw() -> int { return 1 }\n"
+                         "    draw() -> i64 { return 1 }\n"
                          "}\n"
                          "class Icon implements Drawable {\n"
-                         "    draw() -> int { return 2 }\n"
+                         "    draw() -> i64 { return 2 }\n"
                          "}\n"
                          "class Scene {\n"
                          "    root: Drawable\n"
@@ -8889,10 +8889,10 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
                          "    Dark\n"
                          "}\n"
                          "interface Face {\n"
-                         "    ping() -> int\n"
+                         "    ping() -> i64\n"
                          "}\n"
                          "class TailParent {\n"
-                         "    wide: int\n"
+                         "    wide: i64\n"
                          "    flag: bool\n"
                          "}\n"
                          "class TailChild extends TailParent {\n"
@@ -8902,11 +8902,11 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
                          "    later: Later\n"
                          "    face: Face\n"
                          "    label: string\n"
-                         "    values: Array<int>\n"
-                         "    lookup: Map<string, int>\n"
+                         "    values: Array<i64>\n"
+                         "    lookup: Map<string, i64>\n"
                          "    keys: Set<string>\n"
                          "    tone: Tone\n"
-                         "    static total: int = 0\n"
+                         "    static total: i64 = 0\n"
                          "}\n"
                          "class Later {\n"
                          "    self: Later?\n"
@@ -9215,7 +9215,7 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
 TEST(global_evidence_producer_rejects_error_class_field_type) {
     setup_parser_session();
     const char *source = "class Bad {\n"
-                         "    value: int\n"
+                         "    value: i64\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -9353,14 +9353,14 @@ TEST(global_evidence_class_layout_uses_selected_target_abi) {
 TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     setup_parser_session();
     const char *source = "interface Shape {\n"
-                         "    area() -> float\n"
+                         "    area() -> f64\n"
                          "}\n"
                          "interface Drawable extends Shape {\n"
                          "}\n"
                          "class Circle implements Drawable {\n"
-                         "    area() -> float { return 1.0 }\n"
+                         "    area() -> f64 { return 1.0 }\n"
                          "}\n"
-                         "fn describe(shape: Drawable) -> float {\n"
+                         "fn describe(shape: Drawable) -> f64 {\n"
                          "    return shape.area()\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -9440,10 +9440,10 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
 TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
     setup_parser_session();
     const char *source = "interface Left {\n"
-                         "    draw() -> int\n"
+                         "    draw() -> i64\n"
                          "}\n"
                          "interface Right {\n"
-                         "    draw() -> int\n"
+                         "    draw() -> i64\n"
                          "}\n"
                          "interface Drawable extends Left, Right {\n"
                          "}\n";
@@ -9500,17 +9500,17 @@ TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
 TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     setup_parser_session();
     const char *source = "interface Shape {\n"
-                         "    area() -> float\n"
+                         "    area() -> f64\n"
                          "}\n"
                          "interface Drawable extends Shape {\n"
                          "}\n"
                          "class Circle implements Drawable {\n"
-                         "    area() -> float { return 1.0 }\n"
+                         "    area() -> f64 { return 1.0 }\n"
                          "}\n"
                          "class Square implements Drawable, Shape {\n"
-                         "    area() -> float { return 2.0 }\n"
+                         "    area() -> f64 { return 2.0 }\n"
                          "}\n"
-                         "fn describe(shape: Shape) -> float {\n"
+                         "fn describe(shape: Shape) -> f64 {\n"
                          "    return shape.area()\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -9658,9 +9658,9 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
     setup_parser_session();
     const char *source = "@derive(Inspect)\n"
                          "class User {\n"
-                         "    value: int\n"
+                         "    value: i64\n"
                          "}\n"
-                         "fn userTypeName(x: int) -> string {\n"
+                         "fn userTypeName(x: i64) -> string {\n"
                          "    return typeName(x)\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -9719,7 +9719,7 @@ TEST(global_evidence_producer_records_derive_rows) {
     setup_parser_session();
     const char *source = "@derive(JSON, Inspect)\n"
                          "class User {\n"
-                         "    id: int\n"
+                         "    id: i64\n"
                          "    name: string\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -9829,16 +9829,16 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     setup_parser_session();
     const char *source = "@derive(Eq, Hash)\n"
                          "class Key {\n"
-                         "    id: int\n"
+                         "    id: i64\n"
                          "    name: string\n"
-                         "    constructor(id: int, name: string) {\n"
+                         "    constructor(id: i64, name: string) {\n"
                          "        this.id = id\n"
                          "        this.name = name\n"
                          "    }\n"
                          "}\n"
-                         "fn derivedKeyPlan() -> int {\n"
+                         "fn derivedKeyPlan() -> i64 {\n"
                          "    var key = Key(7, \"alpha\")\n"
-                         "    var values: Map<Key, int> = #{}\n"
+                         "    var values: Map<Key, i64> = #{}\n"
                          "    var seen: Set<Key> = #[]\n"
                          "    values.set(key, 99)\n"
                          "    seen.add(key)\n"
@@ -10005,7 +10005,7 @@ TEST(global_evidence_producer_records_derived_clone_plan) {
     setup_parser_session();
     const char *source = "@derive(Clone)\n"
                          "class Payload {\n"
-                         "    id: int\n"
+                         "    id: i64\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -10079,15 +10079,15 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
     setup_parser_session();
     const char *source = "@derive(Clone)\n"
                          "class Scalar {\n"
-                         "    static total: int = 0\n"
-                         "    id: int\n"
+                         "    static total: i64 = 0\n"
+                         "    id: i64\n"
                          "}\n"
                          "@derive(Clone)\n"
                          "class Deep {\n"
-                         "    values: Array<int>\n"
+                         "    values: Array<i64>\n"
                          "}\n"
                          "class Handle {\n"
-                         "    id: int\n"
+                         "    id: i64\n"
                          "}\n"
                          "@derive(Clone)\n"
                          "class Unsafe {\n"
@@ -10101,19 +10101,19 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
                          "class Empty {\n"
                          "}\n"
                          "class Base {\n"
-                         "    base: int\n"
+                         "    base: i64\n"
                          "}\n"
                          "@derive(Clone)\n"
                          "class ChildWithoutCloneBase extends Base {\n"
-                         "    child: int\n"
+                         "    child: i64\n"
                          "}\n"
                          "@derive(Clone)\n"
                          "class CloneBase {\n"
-                         "    base: int\n"
+                         "    base: i64\n"
                          "}\n"
                          "@derive(Clone)\n"
                          "class CloneChild extends CloneBase {\n"
-                         "    child: int\n"
+                         "    child: i64\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
@@ -10773,14 +10773,14 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
     setup_parser_session();
     const char *source =
         "class Token implements Hashable {\n"
-        "    value: int\n"
-        "    constructor(value: int) { this.value = value }\n"
+        "    value: i64\n"
+        "    constructor(value: i64) { this.value = value }\n"
         "    operator==(other: Token) -> bool { return this.value == other.value }\n"
-        "    hash() -> int { return this.value }\n"
+        "    hash() -> i64 { return this.value }\n"
         "}\n"
-        "fn userHashEqPlan() -> int {\n"
+        "fn userHashEqPlan() -> i64 {\n"
         "    var token = Token(7)\n"
-        "    var values: Map<Token, int> = #{}\n"
+        "    var values: Map<Token, i64> = #{}\n"
         "    values.set(token, 99)\n"
         "    if (values.containsKey(token)) { return values.get(token) }\n"
         "    return 0\n"
@@ -11099,8 +11099,8 @@ TEST(capacity_plan_requires_no_clobber_for_counted_loop_reserve_once) {
 
 TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     setup_parser_session();
-    const char *source = "fn touch(xs: Array<int>, b: Array<byte>, refs: Array<string>, s: string, "
-                         "span: Slice<byte>, sb: StringBuilder) -> int {\n"
+    const char *source = "fn touch(xs: Array<i64>, b: Array<u8>, refs: Array<string>, s: string, "
+                         "span: Slice<u8>, sb: StringBuilder) -> i64 {\n"
                          "    xs.push(1)\n"
                          "    var first = xs[0]\n"
                          "    var part = xs[0:1]\n"
@@ -11223,14 +11223,14 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
 
 TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked) {
     setup_parser_session();
-    const char *source = "fn direct(n: int) -> int {\n"
-                         "    var xs: Array<int> = []\n"
+    const char *source = "fn direct(n: i64) -> i64 {\n"
+                         "    var xs: Array<i64> = []\n"
                          "    for (i in 0..n) { xs.push(i) }\n"
                          "    return len(xs)\n"
                          "}\n"
-                         "fn aliased(n: int) -> int {\n"
-                         "    var xs: Array<int> = []\n"
-                         "    var alias: Array<int> = xs\n"
+                         "fn aliased(n: i64) -> i64 {\n"
+                         "    var xs: Array<i64> = []\n"
+                         "    var alias: Array<i64> = xs\n"
                          "    for (i in 0..n) { xs.push(i) }\n"
                          "    return len(alias)\n"
                          "}\n";
@@ -11372,7 +11372,7 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
 TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys) {
     setup_parser_session();
     const char *source =
-        "fn touch(b: Array<byte>, u: Array<u8>, bs: Slice<byte>, us: Slice<u8>) -> int {\n"
+        "fn touch(b: Array<u8>, u: Array<u8>, bs: Slice<u8>, us: Slice<u8>) -> i64 {\n"
         "    var a = b[0]\n"
         "    var c = u[0]\n"
         "    var d = bs[0]\n"
@@ -11414,7 +11414,7 @@ TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys) {
 TEST(global_evidence_producer_records_json_codec_calls) {
     setup_parser_session();
     const char *source =
-        "type User = { name: string, age: int }\n"
+        "type User = { name: string, age: i64 }\n"
         "fn main() {\n"
         "    var data: JSON.Value = JSON.parseValue(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\")\n"
         "    var user: User = JSON.decode<User>(data)!\n"
@@ -11509,9 +11509,9 @@ TEST(global_evidence_producer_records_json_codec_calls) {
 
 TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     setup_parser_session();
-    const char *source = "fn readCapturedObject() -> int {\n"
+    const char *source = "fn readCapturedObject() -> i64 {\n"
                          "    var user = { name: \"ada\", age: 7 }\n"
-                         "    const read = fn() -> int {\n"
+                         "    const read = fn() -> i64 {\n"
                          "        return user.age\n"
                          "    }\n"
                          "    return read()\n"
@@ -11565,14 +11565,14 @@ TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
 
 TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) {
     setup_parser_session();
-    const char *source = "type User = { name: string, age: int }\n"
+    const char *source = "type User = { name: string, age: i64 }\n"
                          "fn makeUser() -> User {\n"
                          "    return { name: \"ada\", age: 7 }\n"
                          "}\n"
-                         "fn readReturnedObject() -> int {\n"
+                         "fn readReturnedObject() -> i64 {\n"
                          "    return makeUser().age\n"
                          "}\n"
-                         "fn readReturnedObjectLocal() -> int {\n"
+                         "fn readReturnedObjectLocal() -> i64 {\n"
                          "    var user = makeUser()\n"
                          "    return user.age\n"
                          "}\n"
@@ -11580,7 +11580,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
                          "    var user: User = { name: \"ada\", age: 7 }\n"
                          "    return user\n"
                          "}\n"
-                         "fn readReturnedObjectIndirect() -> int {\n"
+                         "fn readReturnedObjectIndirect() -> i64 {\n"
                          "    return makeUserIndirect().age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -11646,8 +11646,8 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
 
 TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
     setup_parser_session();
-    const char *source = "type User = { name: string, age: int }\n"
-                         "fn readParamObject(user: User) -> int {\n"
+    const char *source = "type User = { name: string, age: i64 }\n"
+                         "fn readParamObject(user: User) -> i64 {\n"
                          "    return user.age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -11695,17 +11695,17 @@ TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
 
 TEST(global_evidence_producer_propagates_object_shape_through_field_and_container_receivers) {
     setup_parser_session();
-    const char *source = "type User = { name: string, age: int }\n"
+    const char *source = "type User = { name: string, age: i64 }\n"
                          "class Holder {\n"
                          "    user: User\n"
                          "    constructor(user: User) {\n"
                          "        this.user = user\n"
                          "    }\n"
-                         "    readField() -> int {\n"
+                         "    readField() -> i64 {\n"
                          "        return this.user.age\n"
                          "    }\n"
                          "}\n"
-                         "fn readContainer(users: Array<User>) -> int {\n"
+                         "fn readContainer(users: Array<User>) -> i64 {\n"
                          "    return users[0].age\n"
                          "}\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -11765,7 +11765,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_field_and_containe
 
 TEST(global_evidence_producer_records_object_shape_access) {
     setup_parser_session();
-    const char *source = "fn readX() -> int {\n"
+    const char *source = "fn readX() -> i64 {\n"
                          "    var p = { x: 1, y: 2 }\n"
                          "    return p.x\n"
                          "}\n";
@@ -11825,7 +11825,7 @@ TEST(global_evidence_producer_records_object_shape_access) {
 
 TEST(global_evidence_producer_records_map_literal_and_key_access) {
     setup_parser_session();
-    const char *source = "fn readScore() -> int {\n"
+    const char *source = "fn readScore() -> i64 {\n"
                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                          "    return scores[\"ada\"]\n"
                          "}\n";
@@ -11897,9 +11897,9 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
 
 TEST(global_evidence_producer_records_verified_readonly_static_map_set_tables) {
     setup_parser_session();
-    const char *source = "const SCORES: Map<string, int> = #{\"ada\": 7, \"lin\": 9}\n"
+    const char *source = "const SCORES: Map<string, i64> = #{\"ada\": 7, \"lin\": 9}\n"
                          "const SEEN: Set<string> = #[\"ada\", \"lin\"]\n"
-                         "fn localOnly() -> int {\n"
+                         "fn localOnly() -> i64 {\n"
                          "    const LOCAL = #{\"ada\": 1}\n"
                          "    return LOCAL[\"ada\"]\n"
                          "}\n";
@@ -11972,8 +11972,8 @@ TEST(global_evidence_producer_records_verified_readonly_static_map_set_tables) {
 
 TEST(global_evidence_producer_records_non_string_readonly_static_map_set_tables) {
     setup_parser_session();
-    const char *source = "const NUMS: Map<int, int> = #{1: 7, 2: 9}\n"
-                         "const SEEN: Set<int> = #[1, 2]\n"
+    const char *source = "const NUMS: Map<i64, i64> = #{1: 7, 2: 9}\n"
+                         "const SEEN: Set<i64> = #[1, 2]\n"
                          "print(NUMS[1])\n"
                          "print(NUMS.get(2))\n"
                          "print(SEEN.contains(1))\n";
@@ -12053,9 +12053,9 @@ TEST(global_evidence_producer_records_non_string_readonly_static_map_set_tables)
 
 TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     setup_parser_session();
-    const char *source = "fn denseLookup() -> int {\n"
+    const char *source = "fn denseLookup() -> i64 {\n"
                          "    var scores = #{0: 10, 1: 11, 2: 12, 3: 13, 4: 14}\n"
-                         "    var seen: Set<int> = #[0, 1, 2, 3, 4]\n"
+                         "    var seen: Set<i64> = #[0, 1, 2, 3, 4]\n"
                          "    var fromIndex = scores[2]\n"
                          "    var viaGet = scores.get(4)\n"
                          "    if (scores.containsKey(3)) {\n"
@@ -12127,7 +12127,7 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
 TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
     setup_parser_session();
     const char *source = "enum Color { Red, Green, Blue, Yellow, Purple }\n"
-                         "fn denseEnumLookup() -> int {\n"
+                         "fn denseEnumLookup() -> i64 {\n"
                          "    var scores = #{ Color.Red: 10, Color.Green: 11, Color.Blue: 12, "
                          "Color.Yellow: 13, Color.Purple: 14 }\n"
                          "    var seen: Set<Color> = #[Color.Red, Color.Green, Color.Blue, "
@@ -12205,8 +12205,8 @@ TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
 
 TEST(global_evidence_producer_records_bool_direct_map_shape) {
     setup_parser_session();
-    const char *source = "fn boolLookup(flag: bool) -> int {\n"
-                         "    var scores: Map<bool, int> = #{true: 7, false: 3}\n"
+    const char *source = "fn boolLookup(flag: bool) -> i64 {\n"
+                         "    var scores: Map<bool, i64> = #{true: 7, false: 3}\n"
                          "    var seen: Set<bool> = #[true, false]\n"
                          "    var total = scores[flag]\n"
                          "    if (scores.containsKey(true)) {\n"
@@ -12310,11 +12310,11 @@ TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map) {
 
 TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     setup_parser_session();
-    const char *source = "fn readAlias() -> int {\n"
+    const char *source = "fn readAlias() -> i64 {\n"
                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                          "    var alias = (scores)\n"
                          "    (alias)[\"ada\"] = 8\n"
-                         "    var assigned: Map<string, int> = #{}\n"
+                         "    var assigned: Map<string, i64> = #{}\n"
                          "    assigned = (alias)\n"
                          "    return (assigned)[\"ada\"]\n"
                          "}\n";
@@ -12365,8 +12365,8 @@ TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
 
 TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     setup_parser_session();
-    const char *source = "fn makeEmpty() -> int {\n"
-                         "    var scores: Map<string, int> = #{}\n"
+    const char *source = "fn makeEmpty() -> i64 {\n"
+                         "    var scores: Map<string, i64> = #{}\n"
                          "    var seen: Set<u8> = #[]\n"
                          "    return 0\n"
                          "}\n";
@@ -12439,7 +12439,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
 
 TEST(global_evidence_producer_records_map_set_method_key_access) {
     setup_parser_session();
-    const char *source = "fn touch() -> int {\n"
+    const char *source = "fn touch() -> i64 {\n"
                          "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                          "    var seen: Set<string> = #[\"ada\"]\n"
                          "    scores.get(\"ada\")\n"
@@ -12536,12 +12536,12 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
 
 TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) {
     setup_parser_session();
-    const char *source = "fn readCaptured(value: int) -> int {\n"
-                         "    var scores: Map<int, int> = #{}\n"
+    const char *source = "fn readCaptured(value: i64) -> i64 {\n"
+                         "    var scores: Map<i64, i64> = #{}\n"
                          "    scores.set(1, value)\n"
-                         "    var seen: Set<int> = #[]\n"
+                         "    var seen: Set<i64> = #[]\n"
                          "    seen.add(1)\n"
-                         "    const read = fn() -> int {\n"
+                         "    const read = fn() -> i64 {\n"
                          "        var one = scores.get(1) ?? 0\n"
                          "        if (seen.contains(1)) {\n"
                          "            return one + scores[1]\n"
@@ -12624,7 +12624,7 @@ TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) 
 
 TEST(global_evidence_producer_marks_static_data_reachability) {
     setup_parser_session();
-    const char *source = "fn useTable() -> int {\n"
+    const char *source = "fn useTable() -> i64 {\n"
                          "    const table = comptime [1, 2, 3]\n"
                          "    const value = comptime 7\n"
                          "    return value\n"
@@ -12672,7 +12672,7 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
 
 TEST(global_evidence_publishes_allocation_contracts) {
     setup_parser_session();
-    const char *source = "export fn scalar(x: int) -> int { return x + 1 }\n"
+    const char *source = "export fn scalar(x: i64) -> i64 { return x + 1 }\n"
                          "fn allocates() { var values = [1, 2, 3] }\n"
                          "fn unknown(cb: fn()) { cb() }\n";
     AstNode *ast = xr_parse(g_session, source);
@@ -12719,7 +12719,7 @@ TEST(global_evidence_publishes_allocation_contracts) {
 
 TEST(global_evidence_producer_marks_static_data_runtime_init) {
     setup_parser_session();
-    const char *source = "fn useDynamicStatic() -> int {\n"
+    const char *source = "fn useDynamicStatic() -> i64 {\n"
                          "    const table = comptime #{\"a\": 1}\n"
                          "    return 1\n"
                          "}\n";
@@ -12770,20 +12770,20 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     setup_parser_session();
     const char *source =
         "import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync\n"
-        "fn inc(x: int) -> int { return x + 1 }\n"
+        "fn inc(x: i64) -> i64 { return x + 1 }\n"
         "fn caps() {\n"
-        "    var ch = Channel<int>(1)\n"
+        "    var ch = Channel<i64>(1)\n"
         "    var task = go inc(1)\n"
         "    var got = await task\n"
         "    scope { cancelled() }\n"
         "    var atom = Atomic(0)\n"
-        "    var queue: WorkQueue<int> = WorkQueue<int>(2, 1)\n"
+        "    var queue: WorkQueue<i64> = WorkQueue<i64>(2, 1)\n"
         "    var rg: ResultGroup = ResultGroup(1)\n"
         "    var latch = CountdownLatch(1)\n"
         "    var sem = Semaphore(1)\n"
         "    var event = EventCount(0)\n"
         "}\n"
-        "fn gen(n: int) -> Iterator<int> {\n"
+        "fn gen(n: i64) -> Iterator<i64> {\n"
         "    for (var i = 0; i < n; i++) {\n"
         "        yield i\n"
         "    }\n"
@@ -12887,8 +12887,8 @@ TEST(global_evidence_producer_marks_coro_module_runtime_capability) {
 
 TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit) {
     setup_parser_session();
-    const char *source = "var local = Coro.Local<int>()\n"
-                         "var task = CoroPool.submit(fn() -> int {\n"
+    const char *source = "var local = Coro.Local<i64>()\n"
+                         "var task = CoroPool.submit(fn() -> i64 {\n"
                          "    local.set(1)\n"
                          "    return local.get() ?? -1\n"
                          "})\n";
@@ -13039,7 +13039,7 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     setup_parser_session();
     const char *source = "import sys\n"
                          "fn launch() {\n"
-                         "    var t = sys.Thread.spawn(fn() -> int {\n"
+                         "    var t = sys.Thread.spawn(fn() -> i64 {\n"
                          "        return 42\n"
                          "    })\n"
                          "    t.detach()\n"
@@ -13156,9 +13156,9 @@ TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links) {
 TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities) {
     setup_parser_session();
     const char *source = "class Fake {\n"
-                         "    Semaphore() -> int { return 1 }\n"
+                         "    Semaphore() -> i64 { return 1 }\n"
                          "}\n"
-                         "fn useFake() -> int {\n"
+                         "fn useFake() -> i64 {\n"
                          "    var fake = Fake()\n"
                          "    return fake.Semaphore()\n"
                          "}\n";
@@ -13198,7 +13198,7 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
     setup_parser_session();
     const char *source = "class Barrier {\n"
                          "    _latch: CountdownLatch\n"
-                         "    constructor(parties: int) {\n"
+                         "    constructor(parties: i64) {\n"
                          "        this._latch = CountdownLatch(parties)\n"
                          "    }\n"
                          "    wait() -> bool {\n"
@@ -13255,8 +13255,8 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
 
 TEST(global_evidence_producer_marks_module_init_body) {
     setup_parser_session();
-    const char *source = "fn inc(x: int) -> int { return x + 1 }\n"
-                         "const ch = Channel<int>(1)\n"
+    const char *source = "fn inc(x: i64) -> i64 { return x + 1 }\n"
+                         "const ch = Channel<i64>(1)\n"
                          "var task = go inc(41)\n"
                          "print(await task)\n";
     AstNode *ast = xr_parse(g_session, source);

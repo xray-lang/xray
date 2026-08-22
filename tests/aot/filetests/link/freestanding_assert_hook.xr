@@ -1,4 +1,4 @@
-fn xray_assert_hook_shape(x: int) -> int {
+fn xray_assert_hook_shape(x: i64) -> i64 {
     assert(x >= 0)
     assert_eq(x, x)
     assert_ne(x, x + 1)

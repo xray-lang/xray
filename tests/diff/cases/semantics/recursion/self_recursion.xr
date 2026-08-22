@@ -5,32 +5,32 @@
 // entry, call_closure preserved).  Regression for the historic JIT recursion
 // miscompile where the null callee dispatched through xr_jit_call_func and
 // returned garbage from fib(2) on.
-fn fib(n: int) -> int {
+fn fib(n: i64) -> i64 {
     if (n < 2) { return n }
     return fib(n - 1) + fib(n - 2)
 }
 
-fn fact(n: int) -> int {
+fn fact(n: i64) -> i64 {
     if (n <= 1) { return 1 }
     return n * fact(n - 1)
 }
 
-fn gcd(a: int, b: int) -> int {
+fn gcd(a: i64, b: i64) -> i64 {
     if (b == 0) { return a }
     return gcd(b, a % b)
 }
 
-fn fpow(base: float, n: int) -> float {
+fn fpow(base: f64, n: i64) -> f64 {
     if (n <= 0) { return 1.0 }
     return base * fpow(base, n - 1)
 }
 
-fn isEven(n: int) -> bool {
+fn isEven(n: i64) -> bool {
     if (n == 0) { return true }
     return isOdd(n - 1)
 }
 
-fn isOdd(n: int) -> bool {
+fn isOdd(n: i64) -> bool {
     if (n == 0) { return false }
     return isEven(n - 1)
 }

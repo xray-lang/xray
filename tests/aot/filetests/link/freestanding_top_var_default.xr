@@ -1,11 +1,11 @@
-var COUNTER: int
-var SCALE: float
+var COUNTER: i64
+var SCALE: f64
 var ENABLED: bool
-var MAYBE: int?
+var MAYBE: i64?
 var MAYBE_LABEL: string?
 var MAYBE_CHAR: rune?
 
-fn xray_top_var_default() -> int {
+fn xray_top_var_default() -> i64 {
     COUNTER = COUNTER + 7
     if (SCALE == 0.0 && ENABLED == false && MAYBE == null && MAYBE_LABEL == null &&
         MAYBE_CHAR == null) {

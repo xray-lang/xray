@@ -1,4 +1,4 @@
 import mem
 
-var p = mem.ptr<byte>(0)
+var p = mem.ptr<u8>(0)
 unsafe { mem.store<u32>(p, 0, 1) }

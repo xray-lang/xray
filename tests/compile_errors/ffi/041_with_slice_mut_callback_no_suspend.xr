@@ -1,11 +1,11 @@
 import mem
 
-fn value() -> int { return 1 }
+fn value() -> i64 { return 1 }
 
 var guard = 0
-var p = mem.mutPtr<byte>(0)
+var p = mem.mutPtr<u8>(0)
 unsafe {
-    mem.withSliceMut<byte>(p, 0, ref guard, fn(view: ref Slice<byte>) {
+    mem.withSliceMut<u8>(p, 0, ref guard, fn(view: ref Slice<u8>) {
         var task = go value()
         print(await task)
     })

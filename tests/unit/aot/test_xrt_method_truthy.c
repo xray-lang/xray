@@ -132,10 +132,10 @@ static void test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings(void) {
     ASSERT_BOOL(xrt_to_bool(XR_NULL_VAL), false, "null is falsy");
     ASSERT_BOOL(xrt_to_bool(XR_FALSE_VAL), false, "false is falsy");
     ASSERT_BOOL(xrt_to_bool(XR_TRUE_VAL), true, "true is truthy");
-    ASSERT_BOOL(xrt_to_bool(XR_FROM_INT(0)), false, "zero int is falsy");
-    ASSERT_BOOL(xrt_to_bool(XR_FROM_INT(-1)), true, "nonzero int is truthy");
-    ASSERT_BOOL(xrt_to_bool(XR_FROM_FLOAT(0.0)), false, "zero float is falsy");
-    ASSERT_BOOL(xrt_to_bool(XR_FROM_FLOAT(-0.25)), true, "nonzero float is truthy");
+    ASSERT_BOOL(xrt_to_bool(XR_FROM_INT(0)), false, "zero i64 is falsy");
+    ASSERT_BOOL(xrt_to_bool(XR_FROM_INT(-1)), true, "nonzero i64 is truthy");
+    ASSERT_BOOL(xrt_to_bool(XR_FROM_FLOAT(0.0)), false, "zero f64 is falsy");
+    ASSERT_BOOL(xrt_to_bool(XR_FROM_FLOAT(-0.25)), true, "nonzero f64 is truthy");
 
     XrValue empty = xrt_str_alloc(0);
     ASSERT_BOOL(xrt_to_bool(empty), false, "empty string is falsy");
@@ -168,8 +168,8 @@ static void test_xrt_to_bool_reuses_truthy_core_for_sized_containers(void) {
 static void test_xrt_type_identity_uses_stable_owner_adapter(void) {
     ASSERT_TRUE_MSG(xrt_typeof_id(XR_NULL_VAL) == XR_TID_NULL, "null type id");
     ASSERT_TRUE_MSG(xrt_typeof_id(XR_TRUE_VAL) == XR_TID_BOOL, "bool type id");
-    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_INT(7)) == XR_TID_INT, "int type id");
-    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_FLOAT(1.5)) == XR_TID_FLOAT, "float type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_INT(7)) == XR_TID_I64, "i64 type id");
+    ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_FLOAT(1.5)) == XR_TID_F64, "f64 type id");
     ASSERT_TRUE_MSG(xrt_typeof_id(XR_FROM_RUNE('X')) == XR_TID_RUNE, "rune type id");
 
     XrValue string = xrt_str_alloc(0);
@@ -221,11 +221,11 @@ static void test_xrt_type_metadata_uses_hot_name_and_derive_tables(void) {
     ASSERT_TRUE_MSG(derive->derive_flags == 0 && derive->inspect_field_count == 0,
                     "derive row starts empty");
 
-    static const char *args[] = {"int"};
+    static const char *args[] = {"i64"};
     xrt_type_set_generic_origin(tid, tid);
-    xrt_type_set_generic_name(tid, "Box<int>", args, 1);
+    xrt_type_set_generic_name(tid, "Box<i64>", args, 1);
     ASSERT_TRUE_MSG(hot->generic_origin == tid, "generic origin stays in hot row");
-    ASSERT_CSTR(xrt_type_display_name(tid), "Box<int>", "display name comes from name row");
+    ASSERT_CSTR(xrt_type_display_name(tid), "Box<i64>", "display name comes from name row");
     ASSERT_TRUE_MSG(name->mono_type_argc == 1 && name->mono_type_arg_names == args,
                     "generic type args stay in name row");
 

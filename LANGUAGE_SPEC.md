@@ -113,7 +113,7 @@ Error codes use the `E0xxx` format (e.g., `E0101`); the full list is in [Chapter
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 66 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (52 general keywords), `src/shared/xr_exact_scalar_registry.def` (12 exact scalar keywords), and `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -127,7 +127,7 @@ Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as ho
 
 **Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics.
 
-**The one whitespace-sensitive rule**: whether `<` opens a generic argument list depends on whether whitespace **precedes** it. `f<T>(x)` is a call with explicit type arguments; `f < T` is a comparison. Splitting consecutive `>` does **not** depend on whitespace: `Array<Array<int>>` and `Array<Array<int> >` are exactly equivalent, decided by grammatical position rather than spacing.
+**The one whitespace-sensitive rule**: whether `<` opens a generic argument list depends on whether whitespace **precedes** it. `f<T>(x)` is a call with explicit type arguments; `f < T` is a comparison. Splitting consecutive `>` does **not** depend on whitespace: `Array<Array<i64>>` and `Array<Array<i64> >` are exactly equivalent, decided by grammatical position rather than spacing.
 
 #### 1.2.1 Statement Boundaries
 
@@ -257,14 +257,14 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
-`float` `f32` `f64` `bool` `string` `rune`
+`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
+`f32` `f64` `bool` `string` `rune`
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; `stdlib/prelude/builtin_symbols.def` introduces them automatically:
 > `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
-> `Array<byte>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
+> `Array<u8>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 > These names **cannot be redeclared**: `class Array {}`, `enum TaskResult {}` and `interface Stringable {}` are all compile errors.
 > The reserved set is every entry in that registry -- types, enums and constraint interfaces -- not only the prelude types listed above.
 > The standard library's own declarations of them are the **definitions** of those names and are exempt.
@@ -302,9 +302,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
-- An integer literal without a unique numeric context defaults to `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
-- Range: the default `int` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `int` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
+- An integer literal without a unique numeric context defaults to `i64`. The `n` suffix promotes to `BigInt` (see §1.6.3).
+- Range: the default `i64` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `i64` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
 
 ```xray
 42
@@ -323,7 +323,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-Literal type is `float` (= `f64`, IEEE-754 double precision).
+Literal type is `f64` (IEEE-754 double precision).
 
 ```xray
 3.14
@@ -418,7 +418,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
-- `b/br` produces `[byte; L]`; `c/cr` produces `[byte; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
+- `b/br` produces `[u8; L]`; `c/cr` produces `[u8; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
 - `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
 - The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
 - `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
@@ -426,9 +426,9 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
-b"\\x89PNG"              // escaped [byte; 4]
+b"\\x89PNG"              // escaped [u8; 4]
 br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
-c"puts"                   // [byte; 5], ending in the appended NUL
+c"puts"                   // [u8; 5], ending in the appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
 
@@ -555,7 +555,7 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `?[` | optional chain index (`arr?[0]`) |
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
-| `\|` | union type (`int \| string`) / bitwise or |
+| `\|` | union type (`i64 \| string`) / bitwise or |
 | `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |
@@ -610,10 +610,10 @@ Xray is statically typed; every expression has a determined type at compile time
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
-| Sized integers | `i8`, `i16`, `i32`, `i64`, `byte`..`u64` |
+| Primitive | `i64`, `f64`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
+| Sized integers | `i8`, `i16`, `i32`, `i64`, `u8`..`u64` |
 | Sized floats | `f32`, `f64` |
-| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
 | Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
 | Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
@@ -720,33 +720,33 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 #### 2.3.1 Integer Types
 
-| Type | Range | Alias |
+| Type | Range | Default role |
 |--|--|--|
 | `i8` | `[-128, 127]` | — |
 | `i16` | `[-32768, 32767]` | — |
 | `i32` | `[-2³¹, 2³¹-1]` | — |
-| `i64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
-| `byte`..`u64` | unsigned counterparts | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | default integer type |
+| `u8`..`u64` | unsigned counterparts | — |
 
-- An integer literal without a unique numeric context defaults to `int`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
-- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`byte + byte -> byte`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
-- Values with static type `byte`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
-- `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
+- An integer literal without a unique numeric context defaults to `i64`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`u8 + u8 -> u8`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
+- Values with static type `u8`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
-- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 
 | Type | Standard |
 |--|--|
 | `f32` | IEEE-754 single precision |
-| `f64` | IEEE-754 double precision; alias of `float` |
+| `f64` | IEEE-754 double precision; default floating type |
 
-Literals default to `float`.
+Literals default to `f64`.
 
 #### 2.3.3 `bool`
 
-`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: int = true` or `var b: bool = 1`).
+`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: i64 = true` or `var b: bool = 1`).
 
 **Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
@@ -755,7 +755,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
+| `i64` / `f64` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -798,7 +798,7 @@ print(smile.toUInt32())   // 128512
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
 - `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
-- Explicit conversions: `int(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
 #### 2.3.6 Unit `()` (no return value)
@@ -830,8 +830,8 @@ Raw pointer values may be stored, passed, compared, and offset with `offset(i)` 
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(4) }
@@ -855,8 +855,8 @@ unsafe {
 Ordered mutable array. See §14.7.
 
 ```xray
-var a: Array<int> = [1, 2, 3]
-var b = [1, 2, 3]                // inferred as Array<int>
+var a: Array<i64> = [1, 2, 3]
+var b = [1, 2, 3]                // inferred as Array<i64>
 var c: Array<string> = []         // explicit empty array
 ```
 
@@ -871,10 +871,10 @@ The `T` in `Array<T>` must be determinable at compile time. An empty `[]` withou
 Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and reference-container element types, so fixed arrays compose recursively:
 
 ```xray
-var bytes: [byte; 4] = [1, 2, 3, 4]
-var zero: [byte; 64] = [0; 64]
+var bytes: [u8; 4] = [1, 2, 3, 4]
+var zero: [u8; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
@@ -882,21 +882,21 @@ A target-typed array literal that initializes `[T; N]` must have the exact lengt
 Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
 
 ```xray
-var data: [byte; 4] = [5, 6, 7, 8]
-var view: Slice<byte> = data[1:4]
+var data: [u8; 4] = [5, 6, 7, 8]
+var view: Slice<u8> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [byte; 4]
-    payload: [byte; 128]
+    magic: [u8; 4]
+    payload: [u8; 128]
 }
 
-var key: [byte; 4] = [1, 2, 3, 4]
+var key: [u8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> byte {
+fn first(packet: Packet) -> u8 {
     return packet.magic[0]
 }
 ```
@@ -923,19 +923,19 @@ A view can only arise from the three sources below, and it **requires an explici
 |--|--|--|
 | `array[start:end]` | `Slice<T>` | the owner is an `Array<T>` |
 | `fixedArray[start:end]` | `Slice<T>` | the owner is a `[T; N]` |
-| `str.bytes()` | `Slice<byte>` | the owner is the string's UTF-8 byte storage |
+| `str.bytes()` | `Slice<u8>` | the owner is the string's UTF-8 byte storage |
 
 ```xray
-var arr: Array<int> = [10, 20, 30, 40]
-var view: Slice<int> = arr[1:3]      // OK: borrows arr
-var all: Slice<int> = arr[:]         // full-length view, not a copy
+var arr: Array<i64> = [10, 20, 30, 40]
+var view: Slice<i64> = arr[1:3]      // OK: borrows arr
+var all: Slice<i64> = arr[:]         // full-length view, not a copy
 var bad = arr[1:3]                   // E0365: a slice result needs an explicit target type
 ```
 
 The owner must be a **named local, a parameter, or a field path rooted at one**. Temporaries cannot be borrowed:
 
 ```xray
-var view: Slice<byte> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
+var view: Slice<u8> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
 ```
 
 ##### Capabilities
@@ -947,13 +947,13 @@ var view: Slice<byte> = makeBytes()[0:2]   // E0384: cannot create a view from a
 
 ```xray
 fn main() {
-    var arr: Array<int> = [10, 20, 30, 40]
-    var view: Slice<int> = arr[1:3]        // borrowed view, not a copy
+    var arr: Array<i64> = [10, 20, 30, 40]
+    var view: Slice<i64> = arr[1:3]        // borrowed view, not a copy
     view[1] = 31
     print(arr[2])                          // 31 — the write goes through to the owner
     arr[1] = 21
     print(view[0])                         // 21 — element writes on the owner are visible here
-    var owned: Array<int> = copy(arr[1:3]) // an independent Array<T>
+    var owned: Array<i64> = copy(arr[1:3]) // an independent Array<T>
     arr.push(50)                           // OK: no view is live at this point
     print(len(owned))
 }
@@ -972,15 +972,15 @@ Let view `v` borrow owner `o`. While `v` is **live**:
 
 ```xray
 fn ok() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     print(len(view))                 // last use of view
     bytes.push(3)                    // OK: the borrow already ended (rule 3)
 }
 
 fn rejected() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     bytes.push(3)                    // E0382: view is still live
     print(len(view))
 }
@@ -993,19 +993,19 @@ A function may return `Slice<T>` **if and only if** the returned view has a **un
 A non-unique source, or a view borrowed from one of the function's own locals, is a compile error (`E0384`):
 
 ```xray
-fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
     return data[start:]              // OK: the unique source is the parameter data
 }
 
-fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
     if (useA) {
         return a
     }
     return b                         // E0384: multiple sources
 }
 
-fn alsoBad() -> Slice<int> {
-    var local: Array<int> = [1, 2]
+fn alsoBad() -> Slice<i64> {
+    var local: Array<i64> = [1, 2]
     return local[:]                  // E0384: borrowed from a local
 }
 ```
@@ -1015,7 +1015,7 @@ fn alsoBad() -> Slice<int> {
 When the data must outlive the owner, or must go into long-lived storage, use `copy` to materialize the view into an independent owner:
 
 ```xray
-var owned: Array<int> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
+var owned: Array<i64> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
 ```
 
 `copy(slice)` has result type `Array<T>`, not `Slice<T>`; it is the only construct that turns borrowed data into owned data.
@@ -1031,7 +1031,7 @@ Hash table that **preserves insertion order**. See §14.8.
 **Map literals** must use the `#{ ... }` prefix with `:` separators; `JSON.Object` uses the same Map literal:
 
 ```xray
-var m: Map<string, int> = #{"a": 1, "b": 2}
+var m: Map<string, i64> = #{"a": 1, "b": 2}
 var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // empty Map
 
@@ -1048,14 +1048,14 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> int` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> i64` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.4 `Set<T>`
 
 Deduplicated collection. See §14.9.
 
 ```xray
-var s: Set<int> = #[1, 2, 3]
+var s: Set<i64> = #[1, 2, 3]
 ```
 
 #### 2.4.5 `Channel<T>`
@@ -1063,16 +1063,16 @@ var s: Set<int> = #[1, 2, 3]
 Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
-#### 2.4.6 `Array<byte>`
+#### 2.4.6 `Array<u8>`
 
-Typed byte buffer. Semantically equivalent to `Array<byte>`, but stored as contiguous memory.
+Typed byte buffer. Semantically equivalent to `Array<u8>`, but stored as contiguous memory.
 
 ```xray
-var buf = Array<byte>(1024)
-var init = Array<byte>([72, 101, 108, 108, 111])
+var buf = Array<u8>(1024)
+var init = Array<u8>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.7 Static Structural Objects, `JSON.Value`, and Object Literals
@@ -1094,7 +1094,7 @@ var age = 30
 var user = { name, age }                  // equivalent to { name: name, age: age }
 
 // Map literal: `#{}` prefix + `:`
-var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // type: Map<string, i64>
 var data: JSON.Object = #{"name": "Alice", "age": 30}
 data["traceId"] = "req-1"               // only Map has dynamic keys
 ```
@@ -1112,7 +1112,7 @@ data["traceId"] = "req-1"               // only Map has dynamic keys
 **Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. Structural width exists only in generic constraint satisfaction: `T: { name: string }` means that T contains at least that field, while each call is still monomorphized for the argument's concrete exact shape. A trailing `...` is not type syntax.
 
 ```xray
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
@@ -1180,14 +1180,14 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 `T?` is sugar for `T | null`.
 
 ```xray
-var x: int? = null      // OK
-var y: int? = 42        // OK
-var z: int = null       // compile error: null is not int
+var x: i64? = null      // OK
+var y: i64? = 42        // OK
+var z: i64 = null       // compile error: null is not i64
 ```
 
 `JSON.Value` intrinsically includes `null`, so `JSON.Value?` and `JSON.Value | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
 
-**Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
+**Nullable primitives are first-class**: `i64?` / `f64?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
 > `bool?` is tri-state (`true` / `false` / `null`). It is legal but **cannot be used directly as a condition** (a bare `if (b)` where `b: bool?` is a compile error; see §5 / task 128); write `b == true` / `b != null` / `b ?? false`.
 
@@ -1201,13 +1201,13 @@ var v = x ?? 0
 var city = user?.address.city
 
 // 3. Force unwrap
-var v: int = x!           // panics with NullError at runtime if x is null
+var v: i64 = x!           // panics with NullError at runtime if x is null
 
 // 4. Flow-sensitive narrowing (full rules in §2.13)
 if (x != null) {
-    print(x + 1)          // x is narrowed to int in this branch
+    print(x + 1)          // x is narrowed to i64 in this branch
 }
-if (x is int) {
+if (x is i64) {
     print(x + 1)
 }
 ```
@@ -1215,20 +1215,20 @@ if (x is int) {
 ### 2.6 Union Types
 
 ```xray
-var v: int | string = 42
+var v: i64 | string = 42
 v = "hello"             // OK
 ```
 
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
 - Members must not be subtypes of each other (otherwise normalized).
-- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one float-family member**. `i16 | i32` and `f32 | float` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
+- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
 ```xray
-var v: int | string = ...
+var v: i64 | string = ...
 match v {
-    is int    -> print("int: ${v}"),
+    is i64    -> print("i64: ${v}"),
     is string -> print("str: ${v}"),
 }
 ```
@@ -1237,20 +1237,20 @@ match v {
 
 - The source type is **exactly** one member → that member is selected.
 - Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
-- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the float-family member when the union has none (matching "an integer literal types into a unique floating context"); a float literal selects the float-family member. The literal must be exactly representable in the selected member.
+- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
 
 ```xray
-var a: int | float = 1        // exact match: int
-var b: int | float = 1.0      // exact match: float
+var a: i64 | f64 = 1        // exact match: i64
+var b: i64 | f64 = 1.0      // exact match: f64
 var c: i32 | string = 7       // sole integer-family member: i32
-var d: f32 | string = 1.5     // sole float-family member: f32
+var d: f32 | string = 1.5     // sole f64-family member: f32
 ```
 
 `is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
 
 **Special cases**:
-- `int | null` normalizes to `int?`.
-- When `T?` appears in a union: `int? | string` is effectively `int | string | null`, normalized to `(int | string)?`.
+- `i64 | null` normalizes to `i64?`.
+- When `T?` appears in a union: `i64? | string` is effectively `i64 | string | null`, normalized to `(i64 | string)?`.
 
 ### 2.7 Tuple Types
 
@@ -1258,12 +1258,12 @@ Xray's tuples are **first-class** — they may appear as any value, be stored as
 
 ```xray
 // Literals
-var t = (1, 2, 3)                 // type inferred as (int, int, int)
+var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)
 var h = (10, "hi", true)          // heterogeneous tuple
 var single = (99,)                // single-element tuple: note trailing comma
 
 // Type annotation
-var p: (int, string) = (7, "ok")
+var p: (i64, string) = (7, "ok")
 
 // Field access: .N (N is a compile-time constant integer index)
 var first = t.0                   // 1
@@ -1273,12 +1273,12 @@ var a     = nest.0.0              // 1
 var b     = nest.1.1              // 4
 
 // Function return and destructuring
-fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
+fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }
 var (q, r) = divmod(17, 5)        // tuple destructure
 
 // Generic
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-var p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (i64, string)
 ```
 
 **Notes**:
@@ -1305,9 +1305,9 @@ main()
 ### 2.8 Type Aliases
 
 ```xray
-type Result = int | string
-type Mapper = fn(int) -> int
-type Point = { x: float, y: float }
+type Result = i64 | string
+type Mapper = fn(i64) -> i64
+type Point = { x: f64, y: f64 }
 type Pair<T> = { first: T, second: T }
 type Mapper2<T, U> = fn(T) -> U
 ```
@@ -1317,8 +1317,8 @@ runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
 ```xray
-var p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
-var f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) -> string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
@@ -1329,14 +1329,14 @@ errors.
 
 **Function-type syntax.** A function type is led by `fn`, written
 `fn(T1, T2) -> R`; parameters may carry a `ref` / `move` mode (e.g.
-`fn(ref int) -> int`). When the return is `unit` the arrow segment is omitted,
+`fn(ref i64) -> i64`). When the return is `unit` the arrow segment is omitted,
 written `fn(T)` / `fn()` — an explicit `-> ()` is **not** allowed in type
 position. This is a deliberate asymmetry with the declaration position, where
 both `fn f() -> ()` and `fn f()` are valid (§5.2); a type appears in dense
 inline positions (parameters, generic arguments, container elements) and keeps
 a single spelling. A bare `(` in type position is only a tuple or a grouping,
 matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups — so
-a nullable function type is written directly as `(fn() -> int)?`. `CFn<...>`
+a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
 ### 2.9 Type Inference
@@ -1344,13 +1344,13 @@ uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 See §7.4 for details. In summary:
 
 ```xray
-var x = 1               // x: int
-var y = 1.5             // y: float
+var x = 1               // x: i64
+var y = 1.5             // y: f64
 var z = "hello"         // z: string
-var a = [1, 2, 3]       // a: Array<int>
-var m = #{"a": 1}    // m: Map<string, int>
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred return
+var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -1359,16 +1359,16 @@ var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred re
 
 | From | To | Allowed and condition |
 |--|--|--|
-| `T` | `T` (including `int`=`i64`, `float`=`f64`) | ✅ identity |
+| `T` | `T` | ✅ identity |
 | `i8 → i16 → i32 → i64` | a wider type on the chain | ✅ lossless widening |
-| `u8/byte → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
-| `f32` | `f64` (=`float`) | ✅ lossless widening |
+| `u8 → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
+| `f32` | `f64` | ✅ lossless widening |
 | Integer literal | a unique integer / floating context | ✅ direct typing; the integer target represents it, or the floating target represents it exactly |
 | Typed integer | another signedness, a narrower type, or fixed-width ↔ `isize`/`usize` | ❌ explicit `as` required |
 | Typed integer | any floating type | ❌ explicit `as` required |
-| Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
+| Typed f64 | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ zero-materialization JSON scalar widening |
+| `i64` / `f64` / `string` / `bool` / `null` | `JSON.Value` | ✅ zero-materialization JSON scalar widening |
 | composite type | `JSON.Value` | ❌ `JSON.value(value)` required, and the type must satisfy `JSON.Encodable` |
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ pure-alias identity |
 | `null` | `T?` | ✅ |
@@ -1384,7 +1384,7 @@ var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred re
 > fn nameOf<T: User>(value: T) -> string { return value.name }
 > print(nameOf(full))              // OK: T retains full's concrete exact shape
 >
-> type Opt = { name: string, age: int? }
+> type Opt = { name: string, age: i64? }
 > var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
 
@@ -1393,16 +1393,16 @@ var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred re
 #### 2.10.2 Explicit `as`
 
 ```xray
-var n = x as int        // throws TypeError on failure
-var n = x as int?       // returns null on failure (safe cast)
+var n = x as i64        // throws TypeError on failure
+var n = x as i64?       // returns null on failure (safe cast)
 ```
 
 Applies to:
-- Between numeric types (including `JSON.Value → int`, checked at runtime).
+- Between numeric types (including `JSON.Value → i64`, checked at runtime).
 - Runtime checks from `JSON.Value` to scalar types; composite typed decoding uses `JSON.decode<T>` / `JSON.decodeObject<T>`.
 - Parent → child (downcast).
 
-Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
 
 `expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 
@@ -1419,13 +1419,13 @@ Acts only as a type guard; does not change the value.
 ### 2.11 typeOf / typeName / Type Enum
 
 ```xray
-typeOf(value)     // returns a Type enum value (an int representation)
+typeOf(value)     // returns a Type enum value (an i64 representation)
 typeName(value)   // returns the type name as a string
 ```
 
 `Type` enum members:
 
-`Type.int`, `Type.float`, `Type.string`, `Type.bool`, `Type.null`,
+`Type.i64`, `Type.f64`, `Type.string`, `Type.bool`, `Type.null`,
 `Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
@@ -1510,7 +1510,7 @@ fn check(a: string?) -> bool {
 **N-8 (early exit)** When a branch necessarily terminates (`return` / `throw` / `break` / `continue`), the code after it inherits the opposite-direction fact:
 
 ```xray
-fn nameLen(s: string?) -> int {
+fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // s is narrowed to string here
 }
@@ -1633,7 +1633,7 @@ An ordinary synchronous closure captures an outer binding **by reference**, so a
 ```xray
 fn rejected() {
     var buf = [1, 2, 3]
-    const peek = fn() -> int { return len(buf) }
+    const peek = fn() -> i64 { return len(buf) }
     go consume(move buf)       // E0382: closure capture 'peek' is active
     print(peek())
 }
@@ -1643,8 +1643,8 @@ A closure literal that appears only as a **call argument** usually creates no li
 
 ```xray
 fn ok() {
-    var buf: Array<int> = []
-    items.forEach(fn(x: int) { buf.push(x) })   // capture bounded by the call
+    var buf: Array<i64> = []
+    items.forEach(fn(x: i64) { buf.push(x) })   // capture bounded by the call
     consume(move buf)                            // OK
 }
 ```
@@ -1698,9 +1698,9 @@ fn main() {
     nums.push(4)
     print(nums)          // => [1, 2, 3, 4]
     print(len(nums))     // => 4
-    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
     print(doubled)       // => [2, 4, 6, 8]
-    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
     print(evens)         // => [2, 4]
 }
 
@@ -1716,7 +1716,7 @@ fn main() {
     print(scores.get("alice") ?? 0)   // => 95
     print(len(scores))                 // => 3
 
-    var seen = Set<int>()
+    var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
@@ -1777,12 +1777,12 @@ This is a requirement rather than a conservative preference. Differential testin
 **E11 (statements)**: statements are evaluated in source order. A `defer` establishes a static cleanup edge where it appears, while its outer bindings are read when cleanup executes; see §4.9 for timing.
 
 ```xray
-fn t(tag: string, v: int) -> int { print(tag); return v }
-fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
 
 class Counter {
-    hits: int = 0
+    hits: i64 = 0
 }
 
 fn mk(tag: string) -> Counter { print(tag); return Counter() }
@@ -1838,7 +1838,7 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 | Operator | Applicable types | Result type | Notes |
 |--|--|--|--|
-| `-x` | numeric | same | negation; preserves float NaN |
+| `-x` | numeric | same | negation; preserves f64 NaN |
 | `+x` | numeric | same | identity, almost never useful |
 | `!x` | `bool` | `bool` | logical not; **rejects non-bool** (unlike JS) |
 | `~x` | integer | same | bitwise complement |
@@ -1850,8 +1850,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(1) }      // the final expression is the block result
@@ -1870,7 +1870,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` has a restricted interpreter. A block supports local `const`/`var` declarations, local assignments and compound assignments, `if`/`while`, C-style `for`, fixed-array `for-in`, labeled or unlabeled `break`/`continue` inside loops, `compile_assert(...)`, and `compile_error(...)`. A statement block is erased from runtime; use `return <consteval-expression>` when the block must produce a value. Function calls are not currently consteval-safe, and unsupported statements are rejected during analysis.
@@ -1901,7 +1901,7 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 #### 3.3.1 Arithmetic Operators
 
-| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×float | string / other |
+| Operator | same-kind integers | same-kind floats | losslessly widenable numeric | integer×f64 | string / other |
 |--|--|--|--|--|--|
 | `+` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | `string + string` concatenates; other ❌ |
 | `-` | original integer type | original floating type | unique wider type | ❌ (explicit `as` required) | ❌ |
@@ -1912,13 +1912,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 “Losslessly widenable” means only a same-signed integer chain or `f32 → f64`. A direct numeric literal may acquire the unique context of the other already-typed operand; two already-typed operands never use C-style usual arithmetic conversions.
 
 **Special semantics**:
-- `int / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
-- `int % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
-- Division whose result type is `float`/`f32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
-- `%` accepts integer operands only; modulo with a static type that contains float (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
+- `i64 / 0` → throws `XR_ERR_DIV_BY_ZERO` (E0420) at runtime.
+- `i64 % 0` → throws `XR_ERR_MOD_BY_ZERO` (E0421) at runtime.
+- Division whose result type is `f64`/`f32` follows IEEE-754: `1.0 / 0.0` produces `+inf`, `-1.0 / 0.0` produces `-inf`, and `0.0 / 0.0` produces `NaN`; use `x.isNaN()` or `math.isNaN(x)` to test NaN.
+- `%` accepts integer operands only; modulo with a static type that contains f64 (e.g. `5.0 % 2.0`) is a compile-time analyzer error. Runtime `XR_ERR_TYPE_MISMATCH` (E0404) remains only as a dynamic fallback.
 - Integer overflow: see §2.3.1.
 - `string + string` is O(n) concatenation; for heavy concatenation use `StringBuilder`.
-- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `int(c)` explicitly when the code point is needed.
+- `rune` is an independent Unicode scalar type and does not participate in arithmetic; use `i64(c)` explicitly when the code point is needed.
 
 #### 3.3.2 Bitwise Operators
 
@@ -1926,19 +1926,19 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 - Apply only to integer types.
 - Shift counts are taken modulo 64 (unlike C: always defined in xray).
-- `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding `uintN`.
+- `>>` is an **arithmetic right shift** (preserves the sign bit). For unsigned shifts, use the corresponding exact type (`u8`, `u16`, `u32`, or `u64`).
 - `bool` does not participate in bitwise operations (use `&&` `||`).
-- `rune` does not participate in bitwise operations; use `int(c)` explicitly when the code point is needed.
+- `rune` does not participate in bitwise operations; use `i64(c)` explicitly when the code point is needed.
 
 #### 3.3.3 Comparison Operators
 
 | Operator | Semantics |
 |--|--|
-| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-float and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
+| `==` | value equality. Numeric operands must have the same type or a unique lossless common type; integer-vs-f64 and different-signedness integers require an explicit conversion first. Strings compare by content. class/struct uses `==` overload or default identity. |
 | `!=` | inverse of `==` |
 | `<` `<=` `>` `>=` | supported by numbers and strings; other types are unsupported by default (enable via `operator<` overload). |
 
-**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔float promotion, or implicit signedness changes.
+**Difference vs. JS / C**: xray's `==` does not perform string↔number conversion, integer↔f64 promotion, or implicit signedness changes.
 
 #### 3.3.4 Logical Operators
 
@@ -2029,7 +2029,7 @@ var road = user?.address.street // whole-chain short-circuit: null when user is 
 #### Force unwrap `expr!`
 
 ```xray
-var v: int = nullable_int!      // throws NullThrowError (E0410) at runtime when null
+var v: i64 = nullable_int!      // throws NullThrowError (E0410) at runtime when null
 ```
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
@@ -2052,7 +2052,7 @@ if (v is User) {
 - Result type: `bool`.
 - **Type guard**: when `v` is a simple binding, the analyzer narrows it to its intersection with `T` in the true branch and removes that intersection in the false branch, per §2.13 N-4 / N-6.
 - Applies to unions, nullable values, class hierarchies, and runtime category checks on `JSON.Value`.
-- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is int` / `is float` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
+- **Fixed-width numeric types**: a dynamically erased value keeps only its i64 or f64 family, not its width, so `v is i32` asks whether the value is exactly representable in `i32` — the only form the erased value can answer. `is i64` / `is f64` hold for the whole family. `v as T?` uses the same predicate and yields `null` when it does not hold.
 
 #### `as` type cast
 
@@ -2062,8 +2062,8 @@ AsExpr ::= UnaryExpr 'as' Type
 ```
 
 ```xray
-var n = v as int           // throws TypeError on failure
-var n = v as int?          // returns null on failure (the "as nullable" safe form)
+var n = v as i64           // throws TypeError on failure
+var n = v as i64?          // returns null on failure (the "as nullable" safe form)
 ```
 
 | Form | Failure behavior | Use case |
@@ -2072,7 +2072,7 @@ var n = v as int?          // returns null on failure (the "as nullable" safe fo
 | `expr as T?` | returns `null` | a fallible dynamic / structural cast; not a numeric conversion |
 
 **Supported conversions**:
-- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
+- Between numeric types: integer-to-integer reduces modulo the target width and is interpreted with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422) for NaN, infinity, or an out-of-range value. Numeric conversion uses only `expr as T`, never the nullable form.
 - `JSON.Value →` scalar type (runtime category check); use `JSON.decode<T>` for composites.
 - Parent → child (runtime `instanceof`).
 - Union member → concrete member.
@@ -2095,7 +2095,7 @@ for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 ```
 
-- Type: `Range` (int ranges only).
+- Type: `Range` (i64 ranges only).
 - **Precedence (see §3.1)**: `..` / `..=` bind looser than every arithmetic operator (`* / % + - << >>`), so endpoints group first — `0..n+1` is `0..(n+1)` and `1..2*3` is `1..(2*3)`; they bind tighter than comparison and logical operators, so `0..n == 0..m` is `(0..n) == (0..m)`.
 - **Non-associative**: ranges do not chain; `a..b..c` is a syntax error. Parenthesize an endpoint if a nested range is intended.
 - `a..b` is the half-open interval `[a, b)`: `a` is included, `b` is not.
@@ -2106,7 +2106,7 @@ for (i in 0..n+1) { print(i) }   // endpoint binds first: 0..(n+1)
 #### Spread `...`
 
 Allowed in the following positions only:
-- **Function rest parameter declaration**: `fn f(...args: int)`
+- **Function rest parameter declaration**: `fn f(...args: i64)`
 - **Function call spread**: `f(...args)`; the spread source must be a tuple whose arity is statically known.
 - **Tuple literal spread**: `(head, ...tail)`; the spread source must be a tuple whose arity is statically known.
 - **Array literal spread**: `[...a, x, ...b]`; the spread source must be an array. The result is a new array built by runtime concatenation (O(n)).
@@ -2132,8 +2132,8 @@ ArrayElem ::= '...' Expr | Expr
 
 ```xray
 var a = [1, 2, 3]
-var empty: Array<int> = []
-var mixed = [1, "hello"]    // type Array<int | string>
+var empty: Array<i64> = []
+var mixed = [1, "hello"]    // type Array<i64 | string>
 ```
 
 #### Map `#{k: v, ...}` and `#{}`
@@ -2181,14 +2181,14 @@ var obj = { users }              // shorthand
 - An object literal never becomes dynamic because of its expected type. Use `JSON.value(value)` for a typed composite crossing the JSON boundary, and use `JSON.Object` / Map for a dynamic object.
 - Name the structural object with a `type` alias: `var u: User = {...}` (compile-time field check, sealed).
 
-#### Array<byte> `Array<byte>(...)`
+#### Array<u8> `Array<u8>(...)`
 
 See §2.4.6 and §14.5.
 
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
 See §10.5.
@@ -2236,11 +2236,11 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-var bytes: Slice<byte> = text.bytes()
+var bytes: Slice<u8> = text.bytes()
 bytes[i]                // explicit byte-view index
 ```
 
-- `Array` indexing: `int`; out-of-bounds throws `E0430`.
+- `Array` indexing: `i64`; out-of-bounds throws `E0430`.
 - `Map` indexing: key type; missing key → `E0431`.
 - Integer indexing a `string` is a compile error; use `runes().nth(i)` or `bytes()[i]` to select the unit explicitly.
 - User classes: via `operator[]` overload.
@@ -2256,7 +2256,7 @@ arr[1:4]                // elements [1, 4)
 arr[:3]                 // first 3
 arr[2:]                 // from index 2 to the end
 arr[:]                  // full-length view (not a copy)
-var view: Slice<int> = arr[1:4]
+var view: Slice<i64> = arr[1:4]
 ```
 
 - Half-open interval `[start, end)`.
@@ -2283,14 +2283,14 @@ FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```xray
 // ── Arrow lambda: each parameter may be annotated or inferred independently ──
 arr.map(x -> x * 2)
-var add = (x: int, y) -> x + y
+var add = (x: i64, y) -> x + y
 
 // Expression bodies return implicitly; ref only grants a writable loan
-var calculate = (x: ref int) -> x * 2
-var doubleInPlace = (x: ref int) -> { x = x * 2 }
+var calculate = (x: ref i64) -> x * 2
+var doubleInPlace = (x: ref i64) -> { x = x * 2 }
 
 // ── fn lambda: explicit return type, generics, or a full parameter contract ──
-var inc = fn(x: int) -> int {
+var inc = fn(x: i64) -> i64 {
     var y = x + 1
     return y
 }
@@ -2305,11 +2305,11 @@ var identity = fn<T>(x: T) -> T { return x }     // generic
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | Use for an explicit return type, generics, or a full declaration-style signature |
 
 **Key rules**:
-- Arrow parameter annotations are independent, so `(x: int, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
+- Arrow parameter annotations are independent, so `(x: i64, y) -> ...` is valid. Each unannotated parameter is inferred from binding types, callee signatures, container element types, and body constraints. Failed inference raises `E0365`; annotate that parameter or its binding, provide call-site context, or use a fully explicit `fn` signature.
 - Parameter modes use the shared postfix annotation syntax: `x: ref T` and `x: move T`. `(ref x) -> ...`, default parameters, and rest parameters are not arrow syntax; defaults and rest parameters belong to named function declarations.
 - An arrow lambda has no return-type position. Both `(x: T): R -> ...` and `(x: T) -> R { ... }` are errors; an explicit return type requires `fn(x: T) -> R { ... }`.
 - `-> expr` implicitly returns the expression value. `-> { ... }` supports multiple statements; value returns require `return value`, normal fallthrough returns `()`, and a final expression has no special implicit-return semantics.
-- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref int) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref int) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
+- `ref` means that the caller supplies a writable loan; it does not mean automatic writeback. `(x: ref i64) -> x * 2` only reads and returns a product, leaving the caller unchanged. `(x: ref i64) -> { x = x * 2 }` mutates the caller in place and returns `()`. To mutate and return, assign in a block and then write `return x`.
 - Tooling may emit a non-mandatory hint when an anonymous-function parameter is explicitly written as `ref` and complete effect analysis proves it is never mutated. The hint is suppressed when an expected callable contract requires `ref`, the mode was inferred, or effect analysis is incomplete; it never changes type checking or runtime semantics.
 - Capture rules: see §7.4. A `go` closure consumes the unified provenance-based capture plan: inline values, published const values, and audited synchronization handles may be captured directly; execution-local graphs, module-mutable state, and views/pointers with insufficient lifetime are rejected and must cross as explicit `copy(...)` / `move` arguments.
 
@@ -2348,19 +2348,19 @@ Construction has the same form as a function call: `TypeName(args)`. `new` is re
 
 ```xray
 var p = Point(1.0, 2.0)
-var arr = Array<int>()
-const ch = Channel<int>(10)
-var m = Map<string, int>()
+var arr = Array<i64>()
+const ch = Channel<i64>(10)
+var m = Map<string, i64>()
 ```
 
 **Used for**:
 - Class and struct instantiation (`TypeName(args)`).
-- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<byte>` / `StringBuilder`, etc.; also `TypeName(args)`).
+- Constructing built-in container types (`Array` / `Map` / `Set` / `Channel` / `Array<u8>` / `StringBuilder`, etc.; also `TypeName(args)`).
 - Disambiguation is by symbol kind in the analyzer: type names construct, function names call (naming convention: types capitalized, functions lowercase).
 
 **Relation to literals**:
 ```xray
-var a = [1, 2, 3]              // equivalent to Array<int>() + push
+var a = [1, 2, 3]              // equivalent to Array<i64>() + push
 var m = #{}                    // equivalent to Map<...>()
 var p = Point{x: 1, y: 2}      // struct literal
 ```
@@ -2465,7 +2465,7 @@ if (x > 0) {
 
 **Constraints**:
 - The condition **must** be parenthesized (unlike Go/Rust).
-- The condition must be `bool` or nullable presence `T?` (`T != bool`); bare `bool?`, `int`, `string`, collections, etc. are compile errors (see §2.3.3).
+- The condition must be `bool` or nullable presence `T?` (`T != bool`); bare `bool?`, `i64`, `string`, collections, etc. are compile errors (see §2.3.3).
 - Branch bodies must be blocks `{...}`; **no** single-statement-without-braces form.
 - `if` is not an expression; for an expression form use the ternary `? :` or `match`.
 
@@ -2558,7 +2558,7 @@ Iteration source / yield mapping:
 | `Map<K, V>` | key | (key, value) |
 | `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
-| `Range` (`a..b`) | int | — |
+| `Range` (`a..b`) | i64 | — |
 | Concrete enum type `E` with unit-only variants | actual `E` values (declaration order) | — |
 | Enum type `E` containing a payload variant | **compile error**; use `E.variants` | — |
 | `EnumVariants<E>` | `EnumVariant<E>` descriptors (declaration order) | — |
@@ -2635,11 +2635,11 @@ fn done() {
     return                 // implicitly returns () (Unit)
 }
 
-fn answer() -> int {
+fn answer() -> i64 {
     return 42
 }
 
-fn pair(a: int, b: int) -> (int, int) {
+fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // multi-value return must wrap a tuple in parens
 }
 ```
@@ -2661,7 +2661,7 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray
-enum AppError { NotFound, Timeout(ms: int) }
+enum AppError { NotFound, Timeout(ms: i64) }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
@@ -2754,7 +2754,7 @@ dump(some_obj)                 // debug output, with type info and structure
 Combining `if` / `match` / `for-in` control flow:
 
 ```xray
-fn classify(n: int) -> string {
+fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
         0 -> "zero"
@@ -2803,9 +2803,9 @@ ObjectBinding ::= Identifier (':' Identifier)?
 #### 5.1.1 `var` — mutable binding
 
 ```xray
-var x = 1                         // type inferred as int
+var x = 1                         // type inferred as i64
 var name: string = "Alice"        // explicit type
-var count: int                    // no initializer: zero value used
+var count: i64                    // no initializer: zero value used
 var maybeName: string?            // OK: defaults to null
 var empty: string = ""            // string requires an explicit initializer
 ```
@@ -2819,7 +2819,7 @@ var empty: string = ""            // string requires an explicit initializer
 
 ```xray
 const PI = 3.14159
-const MAX_LEN: int = 1024
+const MAX_LEN: i64 = 1024
 ```
 
 - Initializer is **required**.
@@ -2833,7 +2833,7 @@ const MAX_LEN: int = 1024
 - The compiler infers unique ownership for fresh mutable graphs; no storage modifier is required. `move` requires a unique root with no live alias/loan and invalidates the source binding on success; `copy` preserves the source and explicitly constructs an independent graph.
 
 ```xray
-const channel = Channel<int>(16)
+const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
@@ -2881,7 +2881,7 @@ AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 #### 5.2.1 Basic form
 
 ```xray
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
@@ -2889,7 +2889,7 @@ fn greet(name: string) -> () {         // explicit Unit
     print("Hi ${name}")
 }
 
-fn echo(x: int) {                       // omitted return type = ()
+fn echo(x: i64) {                       // omitted return type = ()
     print(x)
 }
 ```
@@ -2902,7 +2902,7 @@ fn echo(x: int) {                       // omitted return type = ()
 #### 5.2.2 Default parameter values
 
 ```xray
-fn connect(host: string, port: int = 8080, tls: bool = false) {
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
 }
 
@@ -2919,17 +2919,17 @@ connect("localhost", 443, true)
 #### 5.2.3 Multiple return values
 
 ```xray
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
 var (q, r) = divmod(17, 5)
-var result = divmod(10, 3)        // result has type (int, int)
+var result = divmod(10, 3)        // result has type (i64, i64)
 ```
 
 **Constraints**:
-- The return type wraps the tuple in parentheses: `(int, bool)`.
-- A single return value omits the parentheses: `: int`.
+- The return type wraps the tuple in parentheses: `(i64, bool)`.
+- A single return value omits the parentheses: `: i64`.
 - `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
 
 #### 5.2.4 Parameter modes
@@ -2938,12 +2938,12 @@ Ordinary parameters provide a read-only capability by default. Only writable bor
 ownership transfer have explicit modes: `name: ref T` and `name: move T`.
 
 ```xray
-fn length_sq(v: Vec2) -> float {
+fn length_sq(v: Vec2) -> f64 {
     // v is read-only; the ABI may pass a small value or a read-only address
     return v.x * v.x + v.y * v.y
 }
 
-fn translate(v: ref Vec2, dx: float, dy: float) -> () {
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
     // v is a mutable reference (changes are visible to the caller)
     v.x += dx
     v.y += dy
@@ -2970,7 +2970,7 @@ Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output l
 #### 5.2.5 Rest parameters
 
 ```xray
-fn sum(...nums: int) -> int {
+fn sum(...nums: i64) -> i64 {
     var total = 0
     for (n in nums) { total += n }
     return total
@@ -2992,14 +2992,14 @@ fn main() { ... }
 ```
 
 - Top-level `fn` declarations are hoisted to the top of the current scope.
-- `var f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
+- `var f = (x: i64) -> x` (an arrow function bound to a variable) is **not** hoisted.
 
 #### 5.2.7 Tail-call optimization
 
 The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
 
 ```xray
-fn factorial(n: int, acc: int = 1) -> int {
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // tail call: optimized to a loop
 }
@@ -3026,8 +3026,8 @@ An `extern "C"` block declares external **function symbols** that share the C AB
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
     fn cos(x: f64) -> f64
 }
 
@@ -3069,15 +3069,15 @@ Rules:
 ```xray
 extern "C" {
     fn bsearch(
-        key: Ptr<byte>,
-        base: Ptr<byte>,
+        key: Ptr<u8>,
+        base: Ptr<u8>,
         count: usize,
         size: usize,
-        cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>
-    ) -> Ptr<byte>
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
     return 0
 }
 
@@ -3140,13 +3140,13 @@ Run `xray verify --contract perf-contracts.toml`. A contract checks existing sem
 Closure capture and higher-order functions:
 
 ```xray
-fn apply(f: fn(int) -> int, x: int) -> int {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
 }
 
 fn main() {
     var base = 10
-    var addBase = fn(x: int) -> int { return x + base }   // closure captures base
+    var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
     print(addBase(5))            // => 15
     print(apply(addBase, 7))     // => 17 (function passed as an argument)
 }
@@ -3157,7 +3157,7 @@ main()
 Multiple return values (a tuple):
 
 ```xray
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
@@ -3199,7 +3199,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```xray
 class Animal {
     name: string                       // field
-    private _age: int = 0              // private field with default value
+    private _age: i64 = 0              // private field with default value
 
     constructor(name: string) {
         this.name = name
@@ -3252,7 +3252,7 @@ class Dog extends Animal {
 | `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
 | `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
 
-**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: int = 0`.
+**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: i64 = 0`.
 
 > `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 
@@ -3260,9 +3260,9 @@ class Dog extends Animal {
 
 ```xray
 class Point {
-    x: float
-    y: float
-    constructor(x: float, y: float) {
+    x: f64
+    y: f64
+    constructor(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -3270,9 +3270,9 @@ class Point {
 
 // Parameter types may be omitted (inferred from same-named fields)
 class Vector2 {
-    x: float
-    y: float
-    constructor(x, y) {         // equivalent to (x: float, y: float)
+    x: f64
+    y: f64
+    constructor(x, y) {         // equivalent to (x: f64, y: f64)
         this.x = x
         this.y = y
     }
@@ -3290,10 +3290,10 @@ class Vector2 {
 
 ```xray
 class Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    constructor(x: float, y: float) {
+    constructor(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -3305,7 +3305,7 @@ class Vec2 {
         return this.x == other.x && this.y == other.y
     }
 
-    operator[](index: int) -> float {
+    operator[](index: i64) -> f64 {
         if (index == 0) { return this.x }
         return this.y
     }
@@ -3325,11 +3325,11 @@ class Vec2 {
 
 ```xray
 class Counter {
-    n: int = 0
+    n: i64 = 0
     operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: int) -> Counter { this.n = this.n + other; return this }
-    operator[](i: int) -> int { return this.n + i }
-    operator[]=(i: int, v: int) { this.n = v - i }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
 }
 ```
 
@@ -3343,7 +3343,7 @@ class Counter {
 interface Iterator<T> {
     hasNext() -> bool       // is another element available; does not consume one
     next() -> T             // take the next element and advance
-    nth(index: int) -> T    // advance index elements from the current position and return it
+    nth(index: i64) -> T    // advance index elements from the current position and return it
 }
 
 interface Iterable<T> {
@@ -3368,17 +3368,17 @@ A field name followed by an accessor block declares a **computed property**: it 
 
 ```xray
 class Rect {
-    _w: int
-    _h: int
-    constructor(w: int, h: int) { this._w = w; this._h = h }
+    _w: i64
+    _h: i64
+    constructor(w: i64, h: i64) { this._w = w; this._h = h }
 
     // Read-only: getter alone
-    area: int { fn() { return this._w * this._h } }
+    area: i64 { fn() { return this._w * this._h } }
 
     // Readable and writable: getter + setter
-    width: int {
+    width: i64 {
         fn() { return this._w }
-        fn(v: int) { this._w = v }
+        fn(v: i64) { this._w = v }
     }
 }
 
@@ -3430,9 +3430,9 @@ Operator overloading (call with named values):
 
 ```xray
 class Vec2 {
-    x: int
-    y: int
-    constructor(x: int, y: int) { this.x = x; this.y = y }
+    x: i64
+    y: i64
+    constructor(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -3459,10 +3459,10 @@ StructDecl ::= 'struct' Identifier TypeParams?
 
 ```xray
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    magnitude_sq() -> float {
+    magnitude_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 }
@@ -3491,7 +3491,7 @@ b.x = 99.0
 ```xray
 struct Config {
     host: string
-    port: int = 8080        // declaration default: omittable in a literal
+    port: i64 = 8080        // declaration default: omittable in a literal
     label: string?          // nullable: omittable in a literal
 }
 
@@ -3525,8 +3525,8 @@ A `struct` is a value type: assignment and argument passing copy it.
 
 ```xray
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 fn main() {
@@ -3554,8 +3554,8 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // method si
 
 ```xray
 interface Shape {
-    area() -> float
-    perimeter() -> float
+    area() -> f64
+    perimeter() -> f64
 }
 
 // Interface method return types may be omitted (default ())
@@ -3565,18 +3565,18 @@ interface Greeter {
 }
 
 class Circle implements Shape {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
 }
 
 // Implement multiple interfaces
 class Logger implements Shape, Greeter {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
     log() { print("logging") }
 }
@@ -3593,26 +3593,26 @@ fn describe(s: Shape) -> string {
 - The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
 - **Return types in interface method declarations may be omitted** (default `()`).
 - Interface methods are `abstract` by default (no body).
-- Interfaces may declare **property signatures** (`length: int`, `const id: int`); the implementing type must provide a corresponding field.
+- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type must provide a corresponding field.
 - Implementing types may add additional methods (the interface defines the minimum surface).
 
 ```xray
 // property signatures + interface inheritance
 interface HasLength {
-    length: int
+    length: i64
 }
 interface SizedCollection<T> extends HasLength {
     first() -> T
 }
 
-class Buffer implements SizedCollection<int> {
-    length: int                       // implements the property signature
-    private data: Array<int>
-    constructor(n: int) {
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // implements the property signature
+    private data: Array<i64>
+    constructor(n: i64) {
         this.length = n
         this.data = []
     }
-    first() -> int { return this.data[0] }
+    first() -> i64 { return this.data[0] }
 }
 ```
 
@@ -3622,13 +3622,13 @@ Interface + `implements` + polymorphism:
 
 ```xray
 interface Shape {
-    area() -> float
+    area() -> f64
 }
 
 class Circle implements Shape {
-    r: float
-    constructor(r: float) { this.r = r }
-    area() -> float { return 3.14159 * this.r * this.r }
+    r: f64
+    constructor(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
 fn main() {
@@ -3670,7 +3670,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> int {
+    fn code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -3695,8 +3695,8 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 // A recursive enum payload must be indirected through a class node
@@ -3707,7 +3707,7 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(int),
+    Number(i64),
     Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
@@ -3751,7 +3751,7 @@ Instance properties (act on the enum value):
 
 ```xray
 Color.Red.name        // "Red"          variant name (string)
-Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
+Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
@@ -3771,7 +3771,7 @@ for (variant in NetEvent.variants) {
     print(variant.name)
     for (field in variant.payloads) {
         print(field.name)                 // field: EnumPayloadField<NetEvent>
-        print(field.type)                 // int: canonical TypeId for the concrete field type
+        print(field.type)                 // i64: canonical TypeId for the concrete field type
     }
 }
 ```
@@ -3790,10 +3790,10 @@ The descriptor API is a closed whitelist:
 
 | Type | Properties / operations |
 |---|---|
-| `EnumVariants<E>` | `length: int`, checked `[index] -> EnumVariant<E>`, and `for-in` |
-| `EnumVariant<E>` | `ordinal: int`, `name: string`, `payloadCount: int`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
-| `EnumPayloads<E>` | `length: int`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
-| `EnumPayloadField<E>` | `index: int`, `name: string`, `type: int` (canonical TypeId) |
+| `EnumVariants<E>` | `length: i64`, checked `[index] -> EnumVariant<E>`, and `for-in` |
+| `EnumVariant<E>` | `ordinal: i64`, `name: string`, `payloadCount: i64`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
+| `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
 
 For a named payload field, `name` is its source declaration name. A positional payload field has no declared name and deterministically reports `""`, not `null`, so the descriptor surface keeps a non-null `string` type.
 
@@ -3803,14 +3803,14 @@ This facility is a compiler-recognized static type domain, not an `Iterable` con
 
 An actual unit-only enum value likewise carries only its ordinal on typed paths. Once it crosses a tagged or erased boundary, its immutable static sidecar must retain the enum name and every case name so later `.name`, `toString()`, equality, and generic string formatting remain VM-equivalent. Enums that stay typed emit no such sidecar.
 
-Generic code must identify a concrete enum layout. `Option<int>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
+Generic code must identify a concrete enum layout. `Option<i64>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
 
 #### 5.6.6 Reverse lookup (value to member)
 
 `Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
 
 ```xray
-fn statusFromCode(code: int) -> HttpStatus? {
+fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
     if (code == 404) { return HttpStatus.NotFound }
     if (code == 500) { return HttpStatus.InternalError }
@@ -3824,11 +3824,11 @@ Instance and static methods may be defined inside `enum` bodies with the same sy
 
 ```xray
 enum Shape {
-    Circle(radius: float),
-    Rect(w: float, h: float),
-    Triangle(a: float, b: float, c: float)
+    Circle(radius: f64),
+    Rect(w: f64, h: f64),
+    Triangle(a: f64, b: f64, c: f64)
 
-    fn area() -> float {
+    fn area() -> f64 {
         return match (this) {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
@@ -3858,7 +3858,7 @@ Static methods use `static fn` and are useful for factories, lookup helpers, and
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: int) -> Color {
+    static fn fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
@@ -3901,9 +3901,9 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
-type Outcome = int | string                          // union alias
-type Mapper = fn(int) -> int                           // function-type alias
-type Point = { x: float, y: float }                  // structural object alias (sealed)
+type Outcome = i64 | string                          // union alias
+type Mapper = fn(i64) -> i64                           // function-type alias
+type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
 type Pair<T> = { first: T, second: T }                // generic alias
 ```
 
@@ -4043,8 +4043,8 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 match (event) {
@@ -4054,13 +4054,13 @@ match (event) {
 }
 ```
 
-> Both simple enums (no payload) and ADT enums **require** exhaustiveness; including a `_` catch-all suffices to skip the check. Non-enum operands (such as `int`) are not subject to the check.
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; including a `_` catch-all suffices to skip the check. Non-enum operands (such as `i64`) are not subject to the check.
 
 ### 6.4 Type Patterns `is T`
 
 ```xray
 match (value) {
-    is int n -> "int: ${n}"       // bind the narrowed value
+    is i64 n -> "i64: ${n}"       // bind the narrowed value
     is string -> "a string"
     is User u -> "user: ${u.name}"
     _ -> "unknown"
@@ -4199,9 +4199,9 @@ A closure captures variables from outer scopes as **upvalues**.
 The default capture mode is **by reference**:
 
 ```xray
-fn make_counter() -> (() -> int) {
+fn make_counter() -> (() -> i64) {
     var count = 0
-    return fn() -> int {
+    return fn() -> i64 {
         count += 1                  // mutates the outer count
         return count
     }
@@ -4231,13 +4231,13 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-var big_buffer = Array<byte>(1024 * 1024)
+var big_buffer = Array<u8>(1024 * 1024)
 
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(big_buffer)             // compile error: an execution-local heap value cannot cross bare
 
-var t2 = go fn(b: Array<byte>) -> int {
+var t2 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
@@ -4281,7 +4281,7 @@ go fn() { local += 1 }()                 // ❌ compile error: cannot capture mu
 ```xray
 // Pattern 1: explicitly copy an execution-local graph
 var arr = [1, 2, 3]
-var t = go fn(data: Array<int>) -> int {
+var t = go fn(data: Array<i64>) -> i64 {
     data.push(4)            // mutates the copy, original is unaffected
     return len(data)
 }(copy(arr))
@@ -4289,20 +4289,20 @@ print(arr)                  // [1, 2, 3] unchanged
 
 // Pattern 2: const, zero-copy read-only (capturable)
 const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> int {
+var t2 = go fn(c: JSON.Object) -> i64 {
     return c.rate
 }(config)
 
 // Pattern 3: move ownership
-var big = Array<byte>(1024)
-var t3 = go fn(b: Array<byte>) -> int {
+var big = Array<u8>(1024)
+var t3 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big)
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-const ch = Channel<int>(10)
-var t4 = go fn(c: Channel<int>) -> int {
+const ch = Channel<i64>(10)
+var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -4448,17 +4448,17 @@ Define business errors as ADT enums with context-carrying payloads:
 ```xray
 enum HttpErr {
     NotFound(string),
-    ServerError(int, string),
+    ServerError(i64, string),
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, int),
+    InvalidChar(string, i64),
     Overflow,
 }
 
-fn fetchUser(id: int) -> User {
+fn fetchUser(id: i64) -> User {
     if (id <= 0) { throw HttpErr.NotFound("user not found") }
     // ...
 }
@@ -4531,7 +4531,7 @@ Panics propagate via limited stack unwinding and generate `PanicInfo` objects wi
 
 ```xray
 try {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // OOB → panic
 } catch panic {
     log("runtime fault caught")
@@ -4567,7 +4567,7 @@ class PanicInfo {
     message: string             // human-readable message (e.g. "index out of bounds")
     stack: Array<string>        // automatically captured call stack
     cause: PanicInfo?           // chained cause
-    code: int                   // error code
+    code: i64                   // error code
     data: JSON.Value            // additional data; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -4581,7 +4581,7 @@ User code generally does not construct `PanicInfo` directly — use `throw <enum
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])                       // out of bounds → panic
     } catch panic (p) {
@@ -4730,7 +4730,7 @@ Reference table:
 | Map lookup, optional fields | `T?` | `map.get(k) -> Value?` |
 | Runtime fault fallback | `catch panic` | Array OOB, division by zero |
 | Multi-branch result | enum | `nextEvent() -> NetEvent` |
-| Primary result + metadata | tuple | `parse(s) -> (Ast, int)` |
+| Primary result + metadata | tuple | `parse(s) -> (Ast, i64)` |
 
 ### 8.6 Common patterns
 
@@ -4799,7 +4799,7 @@ var user = db.findUser(id) ?? guestUser
 #### Pattern 4: catch panic for runtime fault fallback
 
 ```xray
-fn safeDivide(a: int, b: int) -> string {
+fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
     } catch panic {
@@ -4817,7 +4817,7 @@ These are self-contained programs that run as-is and pass `xray check` (comments
 ```xray
 enum ParseErr { Empty, BadChar(string) }
 
-fn parseDigit(s: string) -> int {
+fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar(s) }
     return 42
@@ -4869,7 +4869,7 @@ caught
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
@@ -4903,7 +4903,7 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-var a = identity<int>(42)
+var a = identity<i64>(42)
 var b = identity("hello")               // T inferred as string
 
 // Generic class
@@ -4913,7 +4913,7 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-var b1 = Box<int>(42)
+var b1 = Box<i64>(42)
 var b2 = Box<string>("hi")
 
 // Multi-parameter generic
@@ -4927,7 +4927,7 @@ class Pair<K, V> {
 
 // Generic interface
 interface Comparable<T> {
-    compareTo(other: T) -> int
+    compareTo(other: T) -> i64
 }
 
 // Generic type alias: transparent syntax substitution, not a new type
@@ -4936,8 +4936,8 @@ type PairAlias<T> = { first: T, second: T }
 
 Generic `type` aliases use `AliasTypeParams`: only a name list is allowed, with
 no constraints. At each use site, the type arguments are substituted directly
-into the alias RHS, so `PairAlias<int>` is equivalent to `{ first: int, second:
-int }`. This happens at compile time and creates no runtime metadata,
+into the alias RHS, so `PairAlias<i64>` is equivalent to `{ first: i64, second:
+i64 }`. This happens at compile time and creates no runtime metadata,
 monomorphization instance, or AOT branch; cyclic aliases are rejected.
 
 ### 9.2 Type Constraints: `<T: Constraint>` and Intersection Constraints `&`
@@ -4965,30 +4965,30 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 | Interface | Meaning |
 |---|---|
-| `Comparable` | usable with `<` `<=` `>` `>=`; int/float/string and types implementing `Comparable` |
-| `Hashable` | usable as a `Map` key or `Set` element; built-in `int` / `float` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> int` (signature below) |
+| `Comparable` | usable with `<` `<=` `>` `>=`; i64/f64/string and types implementing `Comparable` |
+| `Hashable` | usable as a `Map` key or `Set` element; built-in `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` satisfy it by default, and user types must provide both `operator==` and `hash() -> i64` (signature below) |
 | `Stringable` | callable via `.toString()`; almost every built-in type implements it by default |
 | `Iterable<T>` | usable through the iterator protocol in `for-in`; Array, Slice, Map (including `JSON.Object`), Set, string, Range, the `Iterator<T>` a generator returns, and types with a custom `iterator()` satisfy this constraint. `JSON.Value` is not directly iterable. `Channel<T>` is receivable with `for-in` but drives a dedicated receive loop instead of the iterator protocol, so it does not satisfy it. Unit-only `for (value in E)` and concrete `E.variants` are compile-time finite-domain forms; they do not make an enum satisfy `Iterable<T>` and cannot stand in for a generic `Iterable<T>` constraint |
 
-`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> int`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
+`Hashable` is a static contract: when a concrete class / struct / enum is used as a `Map<K, V>` key, a `Set<T>` element, or declares `implements Hashable`, the compiler must see a non-`static`, non-`private` `operator==` and `hash() -> i64`. The parameter type of `operator==` must be **spelled as the name of the declaring type itself** — Xray has no `Self` type, and writing `Self` produces diagnostic `E0365`:
 
 ```xray
 class Token implements Hashable {
-    value: int
+    value: i64
 
-    constructor(value: int) { this.value = value }
+    constructor(value: i64) { this.value = value }
 
     // the parameter is spelled Token, not Self
     operator==(other: Token) -> bool { return this.value == other.value }
 
-    hash() -> int { return this.value }
+    hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, int> = #{}
+var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, int>)`.
+Providing only one of `==` or `hash()` is a compile error. If the key/element is a type parameter, that parameter itself must be explicitly constrained, for example `fn f<K: Hashable>(m: Map<K, i64>)`.
 
 #### `where` clauses
 
@@ -5025,15 +5025,15 @@ Hash containers store and retrieve by a **key equivalence relation**, which is a
 - `a == b` implies `a` and `b` are key-equivalent (the converse does not hold).
 - Key equivalence implies `hash(a) == hash(b)`.
 
-Built-in `float` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
+Built-in `f64` compares with IEEE `==`, which is not reflexive on NaN, so its key relation adds: **all NaNs are one key**, and `-0.0` is the same key as `+0.0`. `nan == nan` therefore stays `false`, while `m[nan] = v` followed by `m[nan]` always finds the value.
 
 Operations that ask "is this value in here" use the key relation rather than `==`: `Map`'s `containsKey` / `containsValue` / subscript read and write / `delete`, `Set`'s `add` / `contains` / `delete`, and `Array`'s `indexOf` / `contains`.
 
-A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with float fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
+A user type's `operator==` serves as its own key relation, so **it must be reflexive**. A type with f64 fields that forwards IEEE comparison unchanged reintroduces the invariant break described above.
 
 **Current limitations**:
 - **Higher-kinded types** (`F<_>` as a parameter) are not supported — see §9.6.1; this is an explicit non-goal, not a deferral.
-- Default type parameters (`<T = int>`) are not supported.
+- Default type parameters (`<T = i64>`) are not supported.
 - `where` accepts exactly the expressiveness of an inline constraint (`T: A & B`); constraints on associated or nested types (`where T.Item: Hashable`) are not supported, because associated types do not exist.
 - Duplicate names in one type-parameter list (`<T, T>`) are rejected.
 - Interface implementation still requires **explicit `implements`** at the class declaration site (not at the constraint site; see §5.4).
@@ -5043,9 +5043,9 @@ A user type's `operator==` serves as its own key relation, so **it must be refle
 #### Type inference
 
 ```xray
-identity(42)                    // T inferred as int
+identity(42)                    // T inferred as i64
 Box("hello")                // T inferred as string
-Pair("key", 100)            // K=string, V=int
+Pair("key", 100)            // K=string, V=i64
 ```
 
 The inference algorithm is **bidirectional**:
@@ -5057,9 +5057,9 @@ The inference algorithm is **bidirectional**:
 When inference fails or precision is needed:
 
 ```xray
-var empty = Array<int>()              // no element to infer from
-var m = Map<string, int>()
-var result = identity<float>(0)            // the type argument supplies a unique context; 0 is directly typed as float
+var empty = Array<i64>()              // no element to infer from
+var m = Map<string, i64>()
+var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64
 ```
 
 ### 9.4 Specialization and Monomorphization
@@ -5068,7 +5068,7 @@ var result = identity<float>(0)            // the type argument supplies a uniqu
 
 - **Instance identity**: `identity<string>` and `identity<MyClass>` are two instances, and so are `Box<string>` and `Box<MyClass>` — even though both use the PTR runtime representation. The frontend never merges by representation, because a duck-typed generic body resolves `x.foo()` against the concrete type argument: until that resolution is done, two ABI-equivalent instances are not interchangeable.
 - **Code sharing is an AOT decision, not a frontend one**: size-driven merging happens after resolution, in the backend plan (`generic-body-plan` / `generic-code-size-plan` evidence rows decide `share_canonical_body` against a size threshold), and it carries evidence. The frontend keeps identity exact; the backend owns size.
-- Name mangling: `identity<int>` → `identity$i64`, `Pair<string, int>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
+- Name mangling: `identity<i64>` → `identity$i64`, `Pair<string, i64>` → `Pair$str_i64`. The mangled name *is* the instance identity, so it must never drop a type argument.
 - Strict compile-time type checking ensures safety; cold-path type-name metadata may retain concrete type-parameter display information when the names/debug profile enables it.
 
 > Source of truth: `src/frontend/analyzer/xanalyzer_mono.c` (monomorphization pass), `xanalyzer_mono.h` (API).
@@ -5079,7 +5079,7 @@ Two budgets guard two different risks, and they are not interchangeable:
 
 | Budget | Value | Guards | On breach |
 |---|:---:|---|---|
-| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<int>` building `RouteMatch<int>` building `Map<string, int>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0389` |
+| `XR_MONO_MAX_DEPTH` | 128 | **Nesting**. A specialized body may instantiate further generics (`Router<i64>` building `RouteMatch<i64>` building `Map<string, i64>`), so expansion is a fixpoint. Polymorphic recursion (`fn f<T>() { f<Box<T>>() }`) makes that fixpoint diverge, and depth is the only quantity that can detect it: every round produces a genuinely new type tuple, so neither dedup nor a counter can tell divergence from legitimate breadth | `E0389` |
 | `XR_MONO_MAX_INSTANCES` | 16384 | **Breadth**. Each instance clones a whole declaration, so this is a compile-time memory backstop rather than a language rule. It sits far above any realistic program | `E0387` |
 
 **Exceeding a budget is always a hard error, never a silent downgrade.** Leaving a call generic would reintroduce boxing underneath an `xray verify` `forbid=["box"]` contract that just "proved" it absent — exactly the kind of invisible de-optimization versioned effect contracts exist to rule out.
@@ -5089,7 +5089,7 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 **Performance impact**:
 - Monomorphization lets AOT generate unboxed fast paths for I64 / F64 / BOOL value representations.
 - Per-type specialization grows code and metadata size roughly with "type combinations x declaration size"; this buys exact layout, faithful debug type names, and per-type specialization. Size is recovered by the AOT sharing plan above, against its threshold.
-- Built-in specialized containers (`Array<int>`, `Array<byte>`) further avoid boxing overhead.
+- Built-in specialized containers (`Array<i64>`, `Array<u8>`) further avoid boxing overhead.
 - Cross-module generics are expanded during build-time whole-program / LTO analysis. Libraries that expose generic definitions must ship analyzable IR/AST form rather than only opaque precompiled artifacts.
 
 **Error-effect specialization for higher-order functions**: callback parameters are effect-polymorphic by default. Monomorphization selects a `NO_THROW` or `MAY_THROW` version from the argument callback's throw-effect summary, so a callback proven no-throw does not generate unnecessary error checks; an unknown dynamic target conservatively selects the may-throw version. Strong guarantees at higher-order call boundaries use `xray verify` contracts and reject incomplete proof.
@@ -5100,7 +5100,7 @@ The `E0389` diagnostic prints the full instantiation chain (`a$i64 -> b$Box_i64 
 |---|---|---|
 | `where` clauses | **Stable** | see §9.2 |
 | Declaration-site variance (`out T` / `in T`) | **Unimplemented** | has a prerequisite, see §9.6 |
-| Default type parameters (`<T = int>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
+| Default type parameters (`<T = i64>`) | **Unimplemented** | the syntax is currently an error, not silently ignored |
 | Higher-kinded types (HKT) | **Explicitly not provided** | conflicts with whole-program monomorphization, see §9.6.1 |
 
 ### 9.5 Protocols (Duck Typing) vs. Nominal Typing
@@ -5130,7 +5130,7 @@ render(Square())     // OK
 Only `object literal` and `type T = {...}` use structural matching. Structural matching requires an **exact field set** (see §2.10.1): neither extra nor missing fields, except that fields whose declared type admits null may be omitted.
 
 ```xray
-type Point = { x: float, y: float }
+type Point = { x: f64, y: f64 }
 
 fn describe(p: Point) { ... }
 
@@ -5164,9 +5164,9 @@ Because of monomorphization, every concrete instantiation has its own class/func
 class Container<T> {
     items: Array<T>
 }
-var c = Container<int>()
-print(c is Container<int>)     // true
-print(typeName(c))             // "Container<int>" when type names are enabled
+var c = Container<i64>()
+print(c is Container<i64>)     // true
+print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
 
 Structured field/method metadata is not provided automatically by the default runtime; use explicit derive or compile-time generation for inspect/serialization use cases.
@@ -5206,12 +5206,12 @@ GoOption ::= 'name' ':' StringLiteral
 var t1 = go worker(0, channel)
 
 // Inline logic: a lambda must still form a complete call with explicit arguments
-var t2 = go fn(d: JSON.Object) -> int {
+var t2 = go fn(d: JSON.Object) -> i64 {
     return d.value * 2
 }(payload)
 
 // Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist
-var t3 = go fn() -> int {
+var t3 = go fn() -> i64 {
     return compute()
 }()
 
@@ -5223,7 +5223,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 ```xray
 var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> int {
+var task = go fn(d: JSON.Object) -> i64 {
     return d.value + 1
 }(move data)        // transfer data ownership to the coroutine; data is unusable afterwards
 ```
@@ -5232,7 +5232,7 @@ var task = go fn(d: JSON.Object) -> int {
 
 ```xray
 var n = 10
-var task = go fn(x: int) -> int {
+var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
@@ -5242,7 +5242,7 @@ var task = go fn(x: int) -> int {
 - Coroutines are scheduled on idle worker threads (M:N).
 - `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
-- Execution-local heap values (`Array` / `Map` / `Set` / `JSON.Object` / composite `JSON.Value` arms / `Array<byte>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
+- Execution-local heap values (`Array` / `Map` / `Set` / `JSON.Object` / composite `JSON.Value` arms / `Array<u8>` / `StringBuilder`, etc.) crossing a coroutine boundary must use explicit `copy(x)` or `move x`; **passing them bare is a compile error**. Scalars, `string`, published const values, and audited Channel / Task / Atomic handles pass directly. `move` requires a rebindable local `var` root proven unique with no live alias/loan. `go` arguments share the same transfer plan as `ch.send` and `select` send arms, so every boundary operation visibly states whether data is copied, moved, or capability-shared.
 - `name` inside `go(name: ...)` is diagnostic/debug metadata only. The semantic modifier is the `linked go` prefix and is not a `GoOptions` entry.
 - An ordinary outer `var` may never be captured by a `go` closure, for either reads or writes. This rule does not depend on coroutine count or scheduling. Mutable state shared across coroutines must flow through audited `Channel`, `Atomic`, or `sync` handles; direct captured mutation is a compile error.
 - `linked go call()` still accepts only a call expression and returns an ordinary `Task<T>`. Outside a scope it attaches the child Task to the current parent Task: parent cancellation recursively cancels the child, child failure cancels the parent and its linked subtree, and a parent that has finished its own body still waits for linked children to terminate. Inside a scope, membership and failure propagation are owned solely by that scope's policy; no second parent-child relation is layered on top.
@@ -5264,10 +5264,10 @@ var result = await task                    // yields the current coroutine until
 var t1 = go compute(2)
 var t2 = go compute(3)
 var t3 = go compute(4)
-var results: Array<int> = await all [t1, t2, t3]
+var results: Array<i64> = await all [t1, t2, t3]
 // also works on a variable directly, no brackets needed
 var tasks = [t1, t2, t3]
-var results2: Array<int> = await all tasks
+var results2: Array<i64> = await all tasks
 
 // await any: wait for the first to complete, return its result; the others keep running
 var first = await any [t1, t2, t3]
@@ -5291,7 +5291,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
 - `all` / `any` / `anySuccess` are **contextual keywords** after `await`; they apply only in this position.
-- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<int>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / `JSON.Value` result type.
+- The input to `await all` must be homogeneous: every element must have the same static `Task<T>` type, and the result type is `Array<T>`. Heterogeneous tasks such as mixed `Task<i64>` and `Task<string>` are not automatically erased or boxed; await them individually, or convert inside each task to a common enum / union / `JSON.Value` result type.
 
 ### 10.4 `Task<T>` handle
 
@@ -5304,7 +5304,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 | `t.cancel()` | `() -> ()` | Request cooperative cancellation |
 | `t.poll()` | `() -> TaskResult<T>` | Non-blocking observation; returns `TaskResult.Pending` while incomplete |
 | `t.awaitResult()` | `() -> TaskResult<T>` | Waits and returns a status result without rethrowing |
-| `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
+| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
 
 ```xray
 var t = go fetch(url)
@@ -5336,8 +5336,8 @@ ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 Channels use stable `const` bindings. Their audited synchronization capability permits `send`/`recv` to mutate protected internal state:
 
 ```xray
-const ch  = Channel<int>(10)    // buffered, capacity = 10
-const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)
+const ch  = Channel<i64>(10)    // buffered, capacity = 10
+const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)
 const cha = Channel(3)          // element type inferred from the first send
 ```
 
@@ -5350,13 +5350,13 @@ const cha = Channel(3)          // element type inferred from the first send
 | `recvOr(default)` | `(T) -> T` | Blocking receive; returns the payload directly, or `default` when closed and drained, without allocating a `Recv<T>` wrapper |
 | `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
-| `sendTimeout(v, ms)` | `(T, int) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
-| `recvTimeout(ms)` | `(int) -> Recv<T>` | Receive with timeout; timeout returns `Recv.Timeout` |
+| `sendTimeout(v, ms)` | `(T, i64) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(i64) -> Recv<T>` | Receive with timeout; timeout returns `Recv.Timeout` |
 | `close()` | `() -> ()` | Close the channel; idempotent |
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
-const ch = Channel<int>(10)
+const ch = Channel<i64>(10)
 ch.send(42)                             // blocking send
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -5386,7 +5386,7 @@ var value = ch.recvOr(-1)
 In type position, a channel is written as `Channel<T>` and may be used in function parameters, fields, and return types:
 
 ```xray
-fn producer(ch: Channel<int>) {
+fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
@@ -5412,8 +5412,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-const ch1 = Channel<int>(2)
-const ch2 = Channel<int>(2)
+const ch1 = Channel<i64>(2)
+const ch2 = Channel<i64>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // receive arm
@@ -5479,9 +5479,9 @@ try {
 }
 
 // scope: keep task handles and inspect each outcome after the block
-var first: Task<int>?
-var second: Task<int>?
-var third: Task<int>?
+var first: Task<i64>?
+var second: Task<i64>?
+var third: Task<i64>?
 scope {
     first = go failing("error1")
     second = go failing("error2")
@@ -5509,18 +5509,18 @@ MoveExpr ::= 'move' Identifier
 A transfer across a coroutine boundary reads the same decision procedure, so the guarantee that coroutines do not share a mutable graph rests on the uniqueness evidence in §2.14, not on a separate concurrency-only rule.
 
 ```xray
-var buf = Array<byte>(1024 * 1024)
+var buf = Array<u8>(1024 * 1024)
 
 // hand off to a coroutine
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move buf)
 // compile error: buf has been moved
 // print(len(buf))
 
 // hand off to a channel
-const ch = Channel<Array<byte>>(1)
-var payload = Array<byte>(4096)
+const ch = Channel<Array<u8>>(1)
+var payload = Array<u8>(4096)
 ch.send(move payload)
 // compile error: payload has been moved
 ```
@@ -5537,7 +5537,7 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 |---|---|---|
 | Channel(1) | A single-element channel | The recommended mutex pattern (simulate lock/unlock via send/recv) |
 | `const`/synchronized capability | Stable read-only value or synchronized identity | Ordinary graphs are deeply read-only; audited handles expose only capability-approved interior mutation |
-| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `int`/`float`/`bool` |
+| `Atomic<T>` | Lock-free atomic wrapper | C11 atomic operations for `i64`/`f64`/`bool` |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | Coroutine-domain locks | Require explicit `import sync`; wait by suspending a coroutine, not by blocking a worker; not allowed in `sys.Thread` bodies |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar`, etc. | OS-thread-domain locks | Require explicit `import sys`; block the current OS thread, suitable for `sys.Thread`, runtime components, and short critical sections |
 
@@ -5545,14 +5545,14 @@ When mutual exclusion or atomic operations are unavoidable, the runtime provides
 
 #### `Atomic<T>` — lock-free atomic type
 
-`Atomic<T>` wraps `int`, `float`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
+`Atomic<T>` wraps `i64`, `f64`, or `bool`, allocated on the system heap, using C11 atomic instructions for lock-free cross-coroutine reads and writes.
 
 **Declaration constraint**: name an `Atomic<T>` handle with `const`; its atomic methods come from an audited synchronized interior-mutation capability.
 
 ```xray
-const counter = Atomic(0)         // Atomic<int>
+const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
-const rate = Atomic(3.14)         // Atomic<float>
+const rate = Atomic(3.14)         // Atomic<f64>
 ```
 
 **Method overview** (full signatures in §14.19):
@@ -5561,7 +5561,7 @@ const rate = Atomic(3.14)         // Atomic<float>
 |---|---|
 | `load(ord?)` | Atomic read |
 | `store(val, ord?)` | Atomic write |
-| `add(val, ord?)` / `sub(val, ord?)` | Atomic add/subtract (int/float) |
+| `add(val, ord?)` / `sub(val, ord?)` | Atomic add/subtract (i64/f64) |
 | `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | Atomic add/subtract returning old value |
 | `swap(val, ord?)` | Atomic swap, returns old value |
 | `compareExchange(expected, desired, ord?)` | CAS, returns `(old, bool)` |
@@ -5752,7 +5752,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 // 1. visibility belongs to the declaration
 export fn helper() { return }
 export final class MyClass {
-    value: int
+    value: i64
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
@@ -5971,21 +5971,24 @@ These global functions and built-in constructor/static functions are usable with
 |--|--|--|
 | `print` | `(...values) -> ()` | print to stdout, automatically appending a newline; multiple arguments are separated by spaces |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
-| `len` | `(value) -> int` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
+| `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
 
 ### 13.2 Type Conversion
 
 | Function | Signature | Description |
 |--|--|--|
-| `int(x)` | `(value) -> int` | convert to int; `rune` converts to its Unicode scalar code point; throws if string parsing fails |
-| `float(x)` | `(value) -> float` | convert to float |
+| `x as T` | `numeric -> T` | explicit numeric conversion among the 12 exact scalar types; `T` is `i8` / `i16` / `i32` / `i64` / `u8` / `u16` / `u32` / `u64` / `f32` / `f64` / `isize` / `usize` |
+| `i64.parse(s)` | `(string) -> i64` | strict decimal integer parse; throws on failure |
+| `i64.tryParse(s)` | `(string) -> i64?` | strict decimal integer parse; returns `null` on failure |
+| `f64.parse(s)` | `(string) -> f64` | strict decimal floating-point parse; throws on failure |
+| `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
 | `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
-| `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
-| `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
+| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
-`int(s)` and `float(s)` parse the whole string, and anything the grammar does not accept throws: surrounding whitespace and a leading sign are allowed, and the rest must be decimal digits; `float` also accepts a fractional part and an exponent, and needs only one digit across the integer and fractional parts (`.5` and `1.` both parse). Trailing residue is a parse failure rather than a prefix parse, so `int("12abc")` throws instead of yielding `12`; hex and the `inf` / `nan` spellings are rejected as well, and an integer outside the `int` range is rejected rather than saturated. This is the grammar `strconv.parseInt` / `strconv.parseFloat` already enforce (§15.8).
+`i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
 
 ### 13.3 Type Checking
 
@@ -6000,10 +6003,10 @@ The global read-only environment values are not functions: `process` (entry argu
 
 ```xray
 var x = 42
-print(typeOf(x) == Type.int)    // true
-print(typeName(x))              // "int"
-print(x is int)                 // true
-// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
+print(typeOf(x) == Type.i64)    // true
+print(typeName(x))              // "i64"
+print(x is i64)                 // true
+// typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
 
 ### 13.4 Coroutines
@@ -6036,7 +6039,7 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | `Set.from(iterable)` | Set from a string / Array / Set |
 | `Set.range(start, end)` | inclusive integer Set |
 
-BigInt uses the `123n` literal or `int.toBigInt()`; JSON uses `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`; DateTime uses factory functions in the `datetime` module.
+BigInt uses the `123n` literal or `i64.toBigInt()`; JSON uses `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`; DateTime uses factory functions in the `datetime` module.
 
 ---
 
@@ -6047,40 +6050,40 @@ BigInt uses the `123n` literal or `int.toBigInt()`; JSON uses `JSON.parse<T>` / 
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
-### 14.1 `int` Methods
+### 14.1 `i64` Methods
 
 | Method | Signature | Description |
 |--|--|--|
-| `abs()` | `() -> int` | absolute value |
+| `abs()` | `() -> i64` | absolute value |
 | `toString()` | `() -> string` | decimal string |
 | `toBigInt()` | `() -> BigInt` | convert to BigInt |
-| `toFloat()` | `() -> float` | convert to float |
+| `toF64()` | `() -> f64` | convert to f64 |
 | `toHex()` | `() -> string` | hexadecimal string |
-| `max(other)` / `min(other)` | `(int) -> int` | binary max/min |
-| `sqrt()` | `() -> float` | square root |
-| `pow(exp)` | `(float) -> float` | power |
-| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
-| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | clamps overflow to the `int` boundary |
-| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | explicit two's-complement wrap |
-| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | reports signed overflow only (use `checked*` for the value) |
-| `popcount()` | `() -> int` | number of set bits in the two's-complement representation |
-| `leadingZeros()` / `trailingZeros()` | `() -> int` | leading/trailing zero bit count (`0` yields `64`) |
-| `byteswap()` | `() -> int` | reverses the byte order |
-| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | bit rotation (`n` taken modulo 64) |
+| `max(other)` / `min(other)` | `(i64) -> i64` | binary max/min |
+| `sqrt()` | `() -> f64` | square root |
+| `pow(exp)` | `(f64) -> f64` | power |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(i64) -> i64?` | returns `null` on overflow |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(i64) -> i64` | clamps overflow to the `i64` boundary |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(i64) -> i64` | explicit two's-complement wrap |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(i64) -> bool` | reports signed overflow only (use `checked*` for the value) |
+| `popcount()` | `() -> i64` | number of set bits in the two's-complement representation |
+| `leadingZeros()` / `trailingZeros()` | `() -> i64` | leading/trailing zero bit count (`0` yields `64`) |
+| `byteswap()` | `() -> i64` | reverses the byte order |
+| `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | bit rotation (`n` taken modulo 64) |
 
 `abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
 
-### 14.2 `float` Methods
+### 14.2 `f64` Methods
 
 | Method | Signature | Description |
 |--|--|--|
-| `abs()` | `() -> float` | absolute value |
+| `abs()` | `() -> f64` | absolute value |
 | `toString()` | `() -> string` | string conversion |
-| `toFixed(decimals?)` | `(int?) -> string` | fixed-decimal string |
-| `toInt()` | `() -> int` | convert to int |
-| `floor()` / `ceil()` / `round()` | `() -> int` | rounding |
-| `sqrt()` | `() -> float` | square root |
-| `pow(exp)` | `(float) -> float` | power |
+| `toFixed(decimals?)` | `(i64?) -> string` | fixed-decimal string |
+| `toI64()` | `() -> i64` | convert to i64 |
+| `floor()` / `ceil()` / `round()` | `() -> i64` | rounding |
+| `sqrt()` | `() -> f64` | square root |
+| `pow(exp)` | `(f64) -> f64` | power |
 | `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
 ### 14.3 `BigInt` Methods
@@ -6089,10 +6092,10 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 |--|--|--|
 | `abs()` | `() -> BigInt` | absolute value |
 | `toString()` | `() -> string` | string conversion |
-| `sign()` | `() -> int` | -1 / 0 / 1 |
+| `sign()` | `() -> i64` | -1 / 0 / 1 |
 | `isZero()` / `isNegative()` / `isPositive()` | `() -> bool` | sign predicates |
-| `toInt()` | `() -> int?` | returns null when not representable as `int` |
-| `toFloat()` | `() -> float` | convert to float |
+| `toI64()` | `() -> i64?` | returns null when not representable as `i64` |
+| `toF64()` | `() -> f64` | convert to f64 |
 
 ### 14.4 `bool` Methods
 
@@ -6118,11 +6121,11 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | Member | Type / Description |
 |--|--|
 | `len(s)` | O(1) Unicode scalar count |
-| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / independent `Array<byte>` |
+| `bytes()` / `copyBytes()` | borrowed `Slice<u8>` / independent `Array<u8>` |
 | `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
 | `string.fromRune(r)` | constructs a string from one Unicode scalar |
-| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
-| `string.fromUtf8Lossy(bytes)` | copies a `Slice<byte>`, replacing invalid sequences with U+FFFD |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<u8>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
+| `string.fromUtf8Lossy(bytes)` | copies a `Slice<u8>`, replacing invalid sequences with U+FFFD |
 | `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
@@ -6136,15 +6139,15 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 
 Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 
-### 14.6 `Array<byte>`
+### 14.6 `Array<u8>`
 
-`Array<byte>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
+`Array<u8>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<u8>(n)` / `Array<u8>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
 
 ### 14.7 `Array<T>` Methods
 
 | Member | Type / Description |
 |--|--|
-| `len(arr)` | global `int` query |
+| `len(arr)` | global `i64` query |
 | `capacity` / `arr[i]` / `arr[i] = v` | capacity field and indexed read/write; `get(i)` / `set(i, v)` are also available |
 | `push(x)` / `pop()` | tail insert/remove |
 | `shift()` / `unshift(x)` | head insert/remove |
@@ -6166,7 +6169,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 
 | Member | Type / Description |
 |--|--|
-| `len(m)` | global `int` query |
+| `len(m)` | global `i64` query |
 | `m[k]` / `m[k] = v` | indexed read/write |
 | `get(k)` / `set(k, v)` | `get` returns `null` when absent; `set` writes |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
@@ -6178,13 +6181,13 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
-The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<float, V>` is the float key `1.0`, not an int key stored in a float map. Key matching uses the key equivalence relation from §9.2, not `==`.
+The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<f64, V>` is the f64 key `1.0`, not an i64 key stored in a f64 map. Key matching uses the key equivalence relation from §9.2, not `==`.
 
 ### 14.9 `Set<T>` Methods
 
 | Member | Type / Description |
 |--|--|
-| `len(set)` | global `int` query |
+| `len(set)` | global `i64` query |
 | `add(x)` / `contains(x)` / `delete(x)` | insert, query, remove |
 | `clear()` | empty the set |
 | `values()` | returns `Array<T>` |
@@ -6207,13 +6210,13 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `close()` | close the channel |
 | `capacity` / `isClosed` | capacity and closed-state fields |
 
-`Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
+`Recv.Value(v)` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
 ### 14.11 `JSON` Namespace
 
 `JSON` is a prelude namespace, not a value type that variables can use, and it needs no `import json`. Use `JSON.Value` for schema-less JSON and `JSON.Object` when the dynamic value is known to be an object. `JSON.Object` is a pure alias for `Map<string, JSON.Value>`, so enumeration, dynamic subscripts, field insertion/removal, and `len` use the Map API in §14.8 directly.
 
-`JSON.Value` is the recursive boundary domain `null | bool | int | float | string | Array<JSON.Value> | JSON.Object`. It has no magic dot access, subscript, iteration, or `len`: commit to a schema with typed decode, explicitly unwrap it with `asObject` / `asArray`, or use the path API for arbitrary depth.
+`JSON.Value` is the recursive boundary domain `null | bool | i64 | f64 | string | Array<JSON.Value> | JSON.Object`. It has no magic dot access, subscript, iteration, or `len`: commit to a schema with typed decode, explicitly unwrap it with `asObject` / `asArray`, or use the path API for arbitrary depth.
 
 | Static function | Description |
 |--|--|
@@ -6222,7 +6225,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
 | `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
-| `JSON.stringify<T>(value, indent?)` | serializes an encodable value; `indent` must be a non-null `int` |
+| `JSON.stringify<T>(value, indent?)` | serializes an encodable value; `indent` must be a non-null `i64` |
 | `JSON.isValid(text, strict?)` | validates JSON text |
 | `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | inspects the active JSON arm |
 | `JSON.asObject(value)` / `JSON.asArray(value)` | returns a nullable view sharing the underlying object/array storage, without copying |
@@ -6231,10 +6234,10 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | mutates or removes a path through object keys and array indices |
 | `JSON.merge(parts)` | recombines the typed and top-level rest parts of `JSON.WithRest<T>` as a `JSON.Object` |
 
-`JSON.Path` is `Array<string | int>`: a string segment is one complete object key, and an int segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
+`JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
 
 ```xray
-type Request = { action: string, userId: int }
+type Request = { action: string, userId: i64 }
 
 var request = JSON.parse<Request>(body)       // unknown fields reject by default
 var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
@@ -6245,7 +6248,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON scalars (`null`, `bool`, `int`, `float`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
+JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
 
 ### 14.12 `Range`
 
@@ -6255,7 +6258,7 @@ JSON scalars (`null`, `bool`, `int`, `float`, and `string`) widen implicitly whe
 |--|--|
 | `start` / `end` | The start and the declared endpoint |
 | `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
-| `toArray()` | Produces an independent `Array<int>` in iteration order |
+| `toArray()` | Produces an independent `Array<i64>` in iteration order |
 | `toString()` | Returns an `a..b` or `a..=b` string |
 | `iterator()` | iteration protocol; yields the same elements as `toArray()`, lazily |
 | `len(range)` | Returns the number of elements in the range |
@@ -6321,7 +6324,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
+`Atomic<T>` wraps `i64`, `f64`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
 
 | Method | Signature | Description |
 |--|--|--|
@@ -6346,11 +6349,11 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 > MCP knowledge and the API inventory use the source-derived inventory; `xray builtin-dump` is only one runtime builtin-view input.
 > See [Appendix D — stdlib module index](#d-stdlib-module-index).
 
-> **Authoritative stdlib module list** (28 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
+> **Authoritative stdlib module list** (27 modules; source: `stdlib/<module>/*.c` / `stdlib/<module>/*.xr`):
 >
-> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `strconv`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
+> `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<byte>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
+> The exact prelude type/namespace set is: `Array`, `Atomic`, `OsBarrier`, `BigInt`, `Channel`, `OsCondvar`, `PanicInfo`, `JSON` (including `JSON.Value` / `JSON.Object`), `Map`, `OsMutex`, `NetConn`, `NetListener`, `OsOnce`, `Path`, `Range`, `Regex`, `OsRwLock`, `Set`, `StringBuilder`, and `Thread`. `Array<u8>` is an `Array` specialization; module types such as `DateTime` and `Logger` must be imported. See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -6379,7 +6382,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 The `net` TCP API intentionally has three data paths:
 
 - `read(conn)` / `write(conn, data)`: message path. Payload is exposed as an Xray `string`, suitable for protocol parsing, text handling, and logic that must inspect bytes.
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<byte>` buffer path for binary protocol hot loops without per-packet temporary strings.
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`: reusable `Array<u8>` buffer path for binary protocol hot loops without per-packet temporary strings.
 - `copy(src, dst)` / `copyBidirectional(a, b)`: native stream path. Payload stays in a reusable C buffer, suitable for proxy, relay, `copy(conn, conn)` echo, and other high-throughput workloads that do not need to inspect every byte in Xray code.
 
 Design rule: raw streams should not allocate temporary strings merely to pass through the language layer; use string APIs only when application logic needs the bytes.
@@ -6428,7 +6431,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 
 | Module | Key APIs |
 |--|--|
-| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` etc.; constants `PI` / `E` / `MAX_INT` / `MIN_INT` |
+| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` etc.; constants `PI` / `E` / `MAX_I64` / `MIN_I64` |
 
 ### 15.8 Text
 
@@ -6436,9 +6439,7 @@ The TLS client path is provided by `dialTLS(host, port, timeout?)` and `upgradeT
 |--|--|
 | `regex` | `compile(pattern)` returns `Regex`; see §14.14. The `/pattern/flags` literal form is also supported |
 | `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
-| `strconv` | `parseInt` `parseFloat` |
-
-The built-ins `int(s)` / `float(s)` / `string(n)` remain available for ordinary conversions; use `strconv` when radix/default parsing controls are needed.
+Decimal text parsing is owned by exact scalar static namespaces: `i64.parse(s)` / `i64.tryParse(s)` and `f64.parse(s)` / `f64.tryParse(s)`. Numeric conversions use explicit `as`.
 
 ### 15.9 Logging and Diagnostics
 
@@ -6484,20 +6485,20 @@ Their functionality has either moved into other modules (see the per-section not
 
 Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
 
-- **Descriptor (8 bytes)**: `tag: byte`, `flags: byte`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
+- **Descriptor (8 bytes)**: `tag: u8`, `flags: u8`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `i64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
 - **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|
-| `int` | `XR_TAG_I64` + 64-bit signed payload |
-| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `i64` | `XR_TAG_I64` + 64-bit signed payload |
+| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
+| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
@@ -6640,7 +6641,7 @@ class PanicInfo {
     message: string             // human-readable message
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
     cause: PanicInfo?           // chained cause
-    code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
+    code: i64                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: JSON.Value            // structured data for a runtime fault; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -6808,7 +6809,7 @@ Native AOT does not emit machine code directly from SSA and is not a JIT; the se
 
 ## 18. Error Codes
 
-> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `int` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
+> The single source of truth is `src/runtime/xerror_codes.h`. `XrErrorCode` is an `i64` in `src/runtime/xerror.h`; user-facing rendering is `Exxxx`. Gaps are allowed and must not be filled with names absent from the header.
 
 ### 18.1 Lexer and Parser
 
@@ -7321,7 +7322,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## Appendix B. Keyword Index
 
-These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **64 keywords** are the union of the 52 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
@@ -7329,7 +7330,6 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
-| `byte` | §2.3.1 |
 | `catch` | §8 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
@@ -7341,25 +7341,24 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `enum` | §5.6 |
 | `export` | §11 |
 | `extends` | §5.3 |
-| `false` | §1.6.4 |
-| `final` | §5.3 |
-| `float` | §2.3.2 |
 | `f32` | §2.3.2 |
 | `f64` | §2.3.2 |
+| `false` | §1.6.4 |
+| `final` | §5.3 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
-| `if` | §4.2 |
-| `implements` | §5.5 |
-| `import` | §11 |
-| `in` | §4.4 |
-| `int` | §2.3.1 |
 | `i16` | §2.3.1 |
 | `i32` | §2.3.1 |
 | `i64` | §2.3.1 |
 | `i8` | §2.3.1 |
+| `if` | §4.2 |
+| `implements` | §5.5 |
+| `import` | §11 |
+| `in` | §4.4 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
+| `isize` | §2.3.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
@@ -7386,7 +7385,9 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `u8` | §2.3.1 |
 | `union` | §5.2.9 |
 | `unsafe` | §3.2 / §5.2 |
+| `usize` | §2.3.1 |
 | `var` | §5.1 |
+| `where` | §9.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 
@@ -7410,7 +7411,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 
 ## Appendix D. Standard Library Module Index
 
-The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
+The full set of 27 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
 
 | Module | Purpose |
 |--|--|
@@ -7432,7 +7433,6 @@ The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in
 | `path` | path manipulation |
 | `regex` | regular expressions |
 | `runtime` | runtime information and heap introspection |
-| `strconv` | numeric string parsing |
 | `sync` | coroutine synchronization primitives |
 | `sys` | OS-thread and low-level synchronization surface |
 | `text` | Unicode text transforms |
@@ -7454,9 +7454,9 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Dimension | JS/TS | xray |
 |--|--|--|
 | Static typing | Optional in TS | **Mandatory**; schema-less data explicitly uses `JSON.Value` / `JSON.Object` |
-| Numerics | Single `number` (double) | `int`, `float`, `BigInt` strictly distinguished |
-| Conditions | truthy / falsy | conditions must be `bool`, or nullable `T?` presence; int/string have no truthy conversion |
-| Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric int↔float, and `===`/`!==` are not operators |
+| Numerics | Single `number` (double) | `i64`, `f64`, `BigInt` strictly distinguished |
+| Conditions | truthy / falsy | conditions must be `bool`, or nullable `T?` presence; i64/string have no truthy conversion |
+| Equality | `===` is strict, `==` is weak (string↔number coercion) | Only `==`/`!=`; value equality only promotes numeric i64↔f64, and `===`/`!==` are not operators |
 | Closure capture | by reference | by reference (default); `go` closures are strictly restricted |
 | Objects | dynamic fields | `{...}` creates an exact structural object; dynamic keys use `Map` / `JSON.Object` |
 | import | ES Modules | xray-specific syntax (stdlib uses unquoted form) |
@@ -7518,7 +7518,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | **AOT** | Ahead-of-Time compilation: Xi IR generates C and the selected C toolchain produces a native binary at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
-| **Array<byte>** | Byte buffer type (see §2.4.6) |
+| **Array<u8>** | Byte buffer type (see §2.4.6) |
 | **Slice<T>** | Borrowed view over contiguous element storage owned by another value; owns no data and is constrained by borrow lifetimes (see §2.4.2) |
 | **borrow** | Access to another value's storage without taking ownership; `Slice<T>`, `ref` parameters, and `Ptr<T>` / `MutPtr<T>` are all borrows and share the `E0382` / `E0383` / `E0384` rules |
 | **rune** | Primitive type for one Unicode scalar value; not numeric and not an alias of `u32` (see §2.3.5) |

@@ -3,7 +3,7 @@ import base64 as b64
 import { isValid as isValidBase64 } from base64
 
 fn xray_no_alloc_pure_stdlib_call_reject(data: string) -> string {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return base64.encode(view)
 }
 

@@ -1,13 +1,13 @@
 // 0381_optional_call.xr
 // Test: optional function call operator (?.()).
 
-type IntFn = fn(int) -> int
+type IntFn = fn(i64) -> i64
 
 @test
 fn test_optional_call_on_value() {
     var hits = 0
 
-    fn bump(x: int) -> int {
+    fn bump(x: i64) -> i64 {
         hits += 1
         return x + 1
     }
@@ -22,7 +22,7 @@ fn test_optional_call_on_value() {
 fn test_optional_call_on_null_short_circuits() {
     var hits = 0
 
-    fn arg_side_effect() -> int {
+    fn arg_side_effect() -> i64 {
         hits += 100
         return 41
     }

@@ -12,7 +12,7 @@ var port = 9100
 if (len(process.args) > 0) {
     // int(s) throws on a non-decimal argument (spec 13.2) rather than
     // yielding a null to fall back from.
-    port = int(process.args[0])
+    port = i64.parse(process.args[0])
 }
 
 print("=== WebSocket Echo Server (Pure Benchmark) ===")

@@ -1,9 +1,9 @@
 // is expression - runtime type checking
 fn checkType(x) {
-    if (x is int) {
+    if (x is i64) {
         print("It's an integer")
         return x * 2
-    } else if (x is float) {
+    } else if (x is f64) {
         print("It's a float")
         return x + 0.5
     } else if (x is string) {
@@ -27,7 +27,7 @@ fn checkType(x) {
 // Type checking in match
 fn processValue(val) {
     return match (val) {
-        v if v is int => v * 2
+        v if v is i64 => v * 2
         v if v is string => len(v)
         v if v is Array<any> => v.reduce(fn(a, b) {
             return a + b

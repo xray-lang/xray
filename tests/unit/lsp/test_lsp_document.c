@@ -369,7 +369,7 @@ TEST(completion_shared_channel_member) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "const ch = Channel<int>(1)\n"
+    const char *content = "const ch = Channel<i64>(1)\n"
                           "ch.\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///completion.xr", content, 1);
     ASSERT(doc != NULL);
@@ -425,7 +425,7 @@ TEST(contextual_u32_literal_preserves_completion_and_hover_type) {
     ASSERT(items != NULL);
     XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
     ASSERT(rotate != NULL);
-    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): u32");
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: i64): u32");
 
     xjson_free(items);
 
@@ -476,7 +476,7 @@ TEST(completion_enum_descriptor_properties) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "enum Event { Data(value: int) }\n"
+    const char *content = "enum Event { Data(value: i64) }\n"
                           "for (variant in Event.variants) {\n"
                           "    for (field in variant.payloads) {\n"
                           "        field.\n"
@@ -515,7 +515,7 @@ TEST(hover_enum_descriptor_keeps_precise_type) {
     ASSERT(hover != NULL);
     const char *value = hover_markdown_value(hover);
     ASSERT(value != NULL);
-    ASSERT(strstr(value, "EnumVariant<Color>.ordinal: int") != NULL);
+    ASSERT(strstr(value, "EnumVariant<Color>.ordinal: i64") != NULL);
     ASSERT(strstr(value, "Allocation: none") != NULL);
 
     xjson_free(hover);
@@ -549,7 +549,7 @@ TEST(completion_u8_array_registry_methods) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "var bytes = Array<byte>(0)\n"
+    const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///u8_array.xr", content, 1);
     ASSERT(doc != NULL);
@@ -565,7 +565,7 @@ TEST(completion_u8_array_registry_methods) {
     ASSERT(append != NULL);
     const char *doc_text = xjson_get_string(append, "documentation");
     ASSERT(doc_text != NULL);
-    ASSERT(strstr(doc_text, "Array<byte> byte bulk methods") != NULL);
+    ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);
     ASSERT(strstr(doc_text, "Availability: heap-capable profiles") != NULL);
     ASSERT(strstr(doc_text, "Lowering: xi.byte.array.append.from") != NULL);
 
@@ -590,7 +590,7 @@ TEST(completion_uint8_array_uses_canonical_byte_docs) {
     ASSERT(append != NULL);
     const char *doc_text = xjson_get_string(append, "documentation");
     ASSERT(doc_text != NULL);
-    ASSERT(strstr(doc_text, "Array<byte> byte bulk methods") != NULL);
+    ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);
     ASSERT(strstr(doc_text, "Array<u8>") == NULL);
     ASSERT(strstr(doc_text, "Slice<u8>") == NULL);
 
@@ -602,7 +602,7 @@ TEST(completion_int_array_excludes_u8_registry_methods) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "var ints = Array<int>(0)\n"
+    const char *content = "var ints = Array<i64>(0)\n"
                           "ints.\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///int_array.xr", content, 1);
     ASSERT(doc != NULL);
@@ -623,8 +623,8 @@ TEST(completion_u8_slice_registry_methods) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "var bytes = Array<byte>(4)\n"
-                          "var view: Slice<byte> = bytes[:]\n"
+    const char *content = "var bytes = Array<u8>(4)\n"
+                          "var view: Slice<u8> = bytes[:]\n"
                           "view.\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///u8_slice.xr", content, 1);
     ASSERT(doc != NULL);
@@ -646,7 +646,7 @@ TEST(hover_u8_array_registry_method) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "var bytes = Array<byte>(0)\n"
+    const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.appendFrom(bytes[:])\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///hover_u8_array.xr", content, 1);
     ASSERT(doc != NULL);
@@ -657,9 +657,9 @@ TEST(hover_u8_array_registry_method) {
     ASSERT(hover != NULL);
     const char *value = hover_markdown_value(hover);
     ASSERT(value != NULL);
-    ASSERT(strstr(value, "Array<byte>.appendFrom") != NULL);
-    ASSERT(strstr(value, "Slice<byte>") != NULL);
-    ASSERT(strstr(value, "Array<byte> byte bulk methods") != NULL);
+    ASSERT(strstr(value, "Array<u8>.appendFrom") != NULL);
+    ASSERT(strstr(value, "Slice<u8>") != NULL);
+    ASSERT(strstr(value, "Array<u8> byte bulk methods") != NULL);
     ASSERT(strstr(value, "Availability: heap-capable profiles") != NULL);
     ASSERT(strstr(value, "Lowering: xi.byte.array.append.from") != NULL);
 
@@ -672,7 +672,7 @@ TEST(hover_deprecated_message_roundtrip) {
     ASSERT(server != NULL);
 
     const char *content = "@deprecated(\"use modern\")\n"
-                          "export fn legacy(x: int) -> int { return x + 1 }\n";
+                          "export fn legacy(x: i64) -> i64 { return x + 1 }\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///hover_deprecated.xr", content, 1);
     ASSERT(doc != NULL);
     xlsp_parse_document(doc, server);
@@ -696,7 +696,7 @@ TEST(signature_help_u8_array_registry_method) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "var bytes = Array<byte>(0)\n"
+    const char *content = "var bytes = Array<u8>(0)\n"
                           "bytes.appendFrom(bytes[:])\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///sig_u8_array.xr", content, 1);
     ASSERT(doc != NULL);
@@ -712,7 +712,7 @@ TEST(signature_help_u8_array_registry_method) {
     const char *label = xjson_get_string(sig0, "label");
     ASSERT(label != NULL);
     ASSERT(strstr(label, "appendFrom") != NULL);
-    ASSERT(strstr(label, "Slice<byte>") != NULL);
+    ASSERT(strstr(label, "Slice<u8>") != NULL);
 
     xjson_free(help);
     xlsp_server_free(server);
@@ -847,7 +847,7 @@ TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
 
     XrJsonValue *rotate = json_array_find_label(items, "rotateLeft");
     ASSERT(rotate != NULL);
-    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: int): u32");
+    ASSERT_STR_EQ(xjson_get_string(rotate, "detail"), "rotateLeft(count: i64): u32");
     const char *documentation = xjson_get_string(rotate, "documentation");
     ASSERT(documentation != NULL);
     ASSERT(strstr(documentation, "Allocation: no heap allocation") != NULL);
@@ -859,7 +859,7 @@ TEST(exact_integer_bit_builtins_use_receiver_specialized_registry) {
     ASSERT_STR_EQ(signature, "byteswap(): u32");
     ASSERT(xlsp_builtin_get_signature_for_type(&u32, "popcount", signature, sizeof(signature)) !=
            NULL);
-    ASSERT_STR_EQ(signature, "popcount(): int");
+    ASSERT_STR_EQ(signature, "popcount(): i64");
 
     xjson_free(items);
 }
@@ -868,7 +868,7 @@ TEST(param_mode_user_function_lsp_display) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn adjust(view: int, slot: ref int, payload: move Array<int>) -> int {\n"
+    const char *content = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>) -> i64 {\n"
                           "    slot = slot + view + len(payload)\n"
                           "    return slot\n"
                           "}\n"
@@ -880,7 +880,7 @@ TEST(param_mode_user_function_lsp_display) {
                           "    adjust(value, ref slot, move payload)\n"
                           "    adj\n"
                           "}\n";
-    const char *expected = "fn adjust(view: int, slot: ref int, payload: move Array<int>): int";
+    const char *expected = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>): i64";
 
     XrLspDocument *doc = xlsp_document_open(server, "file:///param_mode_lsp.xr", content, 1);
     ASSERT(doc != NULL);
@@ -918,10 +918,10 @@ TEST(param_mode_user_function_lsp_display) {
     XrJsonValue *params = xjson_get_array(sig0, "parameters");
     ASSERT(params != NULL);
     ASSERT(xjson_array_len(params) == 3);
-    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 0), "label"), "view: int");
-    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 1), "label"), "slot: ref int");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 0), "label"), "view: i64");
+    ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 1), "label"), "slot: ref i64");
     ASSERT_STR_EQ(xjson_get_string(xjson_array_get(params, 2), "label"),
-                  "payload: move Array<int>");
+                  "payload: move Array<i64>");
 
     xjson_free(help);
     xlsp_server_free(server);
@@ -931,7 +931,7 @@ TEST(param_mode_semantic_tokens_mark_modes_and_call_access) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn adjust(view: int, slot: ref int, payload: move Array<int>) -> int {\n"
+    const char *content = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>) -> i64 {\n"
                           "    slot = slot + view + len(payload)\n"
                           "    return slot\n"
                           "}\n"
@@ -1006,7 +1006,7 @@ TEST(param_mode_inlay_hints_describe_modes) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *content = "fn adjust(view: int, slot: ref int, payload: move Array<int>) -> int {\n"
+    const char *content = "fn adjust(view: i64, slot: ref i64, payload: move Array<i64>) -> i64 {\n"
                           "    slot = slot + view + len(payload)\n"
                           "    return slot\n"
                           "}\n"
@@ -1037,7 +1037,7 @@ TEST(throw_effect_inlay_hints_show_inferred_result) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
     const char *content = "enum HintError { Boom }\n"
-                          "fn pure(value: int) -> int { return value + 1 }\n"
+                          "fn pure(value: i64) -> i64 { return value + 1 }\n"
                           "fn fallible() { throw HintError.Boom }\n";
     XrLspDocument *doc = xlsp_document_open(server, "file:///throw_effect_inlay.xr", content, 1);
     ASSERT(doc != NULL);
@@ -1118,7 +1118,7 @@ TEST(code_action_payload_enum_iteration_to_variants) {
     ASSERT(server != NULL);
 
     const char *uri = "file:///enum_quickfix.xr";
-    const char *content = "enum Result { Ok(value: int), Error(message: string) }\n"
+    const char *content = "enum Result { Ok(value: i64), Error(message: string) }\n"
                           "for (value in Result) {\n"
                           "    print(value)\n"
                           "}\n";
@@ -1240,7 +1240,7 @@ TEST(cycle_report_diagnoses_every_candidate_field) {
     const char *content = "class Node {\n"
                           "    peer: Node?\n"
                           "    owner: Node?\n"
-                          "    tag: int\n"
+                          "    tag: i64\n"
                           "}\n";
     XrLspDocument *doc = xlsp_document_open(server, uri, content, 1);
     ASSERT(doc != NULL);
@@ -1510,7 +1510,7 @@ TEST(cycle_report_offers_weak_only_where_it_compiles) {
     // produce an edit that does not compile, which is worse than no action.
     const char *uri = "file:///unweakable.xr";
     const char *content = "class Mixed {\n"
-                          "    loose: int | string | Mixed | null\n"
+                          "    loose: i64 | string | Mixed | null\n"
                           "    pinned: Mixed\n"
                           "    ok: Mixed?\n"
                           "}\n";

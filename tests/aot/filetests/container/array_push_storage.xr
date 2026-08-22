@@ -1,8 +1,8 @@
-fn write_bytes(out: ref Array<byte>) {
+fn write_bytes(out: ref Array<u8>) {
     out.push(7)
     out.push(9)
 }
 
-var out: Array<byte> = Array.withCapacity(2)
+var out: Array<u8> = Array.withCapacity(2)
 write_bytes(ref out)
-print(len(out) + (out[0] as int) + (out[1] as int))
+print(len(out) + (out[0] as i64) + (out[1] as i64))

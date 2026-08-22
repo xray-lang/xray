@@ -4,11 +4,11 @@
 import runtime
 
 class Node {
-    value: int
+    value: i64
     constructor(value) { this.value = value }
 }
 
-fn makeNode(value: int) -> Node {
+fn makeNode(value: i64) -> Node {
     return Node(value)
 }
 

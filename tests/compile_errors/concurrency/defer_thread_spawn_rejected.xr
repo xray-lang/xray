@@ -2,7 +2,7 @@ import sys
 
 fn owner() {
     defer {
-        var thread = sys.Thread.spawn(fn() -> int { return 1 })
+        var thread = sys.Thread.spawn(fn() -> i64 { return 1 })
         print(thread.join())
     }
 }

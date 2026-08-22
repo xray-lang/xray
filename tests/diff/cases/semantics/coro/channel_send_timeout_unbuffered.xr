@@ -1,4 +1,4 @@
-const ch = Channel<int>(0)
+const ch = Channel<i64>(0)
 var sent = ch.sendTimeout(7, 10)
 print(match (sent) {
     SendResult.Sent -> "sent"

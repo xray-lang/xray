@@ -1,10 +1,10 @@
 import { U8x16 } from simd
 
-fn roundtrip() -> byte {
-    var input: [byte; 16] = [7; 16]
-    var output: [byte; 16] = [0; 16]
-    var inputView: Slice<byte> = input[:]
-    var outputView: Slice<byte> = output[:]
+fn roundtrip() -> u8 {
+    var input: [u8; 16] = [7; 16]
+    var output: [u8; 16] = [0; 16]
+    var inputView: Slice<u8> = input[:]
+    var outputView: Slice<u8> = output[:]
     var lanes = unsafe { U8x16.load(inputView, 0) }
     unsafe { lanes.store(ref outputView, 0) }
     return lanes.extract(0)

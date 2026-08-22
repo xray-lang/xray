@@ -1,7 +1,7 @@
 // Bool values derived from Array<byte> reads must remain live after short-circuit
 // nullable-bool comparisons.
 
-fn check(raw: Array<byte>, expectMasked: bool? = null) {
+fn check(raw: Array<u8>, expectMasked: bool? = null) {
     var second = raw[1]
     var masked = (second & 128) != 0
     if (expectMasked != null && masked != expectMasked!) {
@@ -14,5 +14,5 @@ fn check(raw: Array<byte>, expectMasked: bool? = null) {
     }
 }
 
-check(Array<byte>([129, 2, 72, 105]), false)
-check(Array<byte>([129, 130, 1, 2, 3, 4, 73, 107]), true)
+check(Array<u8>([129, 2, 72, 105]), false)
+check(Array<u8>([129, 130, 1, 2, 3, 4, 73, 107]), true)

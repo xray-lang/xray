@@ -1,4 +1,4 @@
-fn unwrapAfterGuard(value: int?) -> int {
+fn unwrapAfterGuard(value: i64?) -> i64 {
     if (value == null) {
         return -1
     }

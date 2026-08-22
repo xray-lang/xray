@@ -46,13 +46,13 @@ class P implements Pairer {
 
 // An iterable bound declared on an interface method.
 interface Summing {
-    total<T: Iterable<int>>(xs: T) -> int
+    total<T: Iterable<i64>>(xs: T) -> i64
 }
 
 class Sum implements Summing {
     constructor() {}
 
-    total<T: Iterable<int>>(xs: T) -> int {
+    total<T: Iterable<i64>>(xs: T) -> i64 {
         var n = 0
         for (i in xs) { n = n + i }
         return n
@@ -62,7 +62,7 @@ class Sum implements Summing {
 @test
 fn test_interface_generic_method_explicit_type_arg() {
     var t = Tagger()
-    assert_eq(t.wrap<int>(1), "wrapped:tagger")
+    assert_eq(t.wrap<i64>(1), "wrapped:tagger")
     assert_eq(t.wrap<string>("s"), "wrapped:tagger")
 }
 
@@ -81,8 +81,8 @@ fn test_interface_non_generic_sibling_still_works() {
 @test
 fn test_interface_generic_method_multiple_params() {
     var p = P()
-    assert_eq(p.pair<int, string>(1, "one"), "paired")
-    assert_eq(p.pair<string, int>("k", 2), "paired")
+    assert_eq(p.pair<i64, string>(1, "one"), "paired")
+    assert_eq(p.pair<string, i64>("k", 2), "paired")
 }
 
 @test

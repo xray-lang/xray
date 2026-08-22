@@ -6,7 +6,7 @@
 //
 // Usage: xray gc_fragmentation.xr -- [iterations]
 
-fn run(n: int) {
+fn run(n: i64) {
     // Phase 1: Swiss cheese pattern
     // Allocate array of objects, then nil-out every other one
     // This creates maximum fragmentation for line-based allocators
@@ -109,5 +109,5 @@ fn run(n: int) {
     print("Phase 3 (size mixing x" + n + "): final array length=" + lastLen)
 }
 
-var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500
+var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 500 : 500
 run(n)

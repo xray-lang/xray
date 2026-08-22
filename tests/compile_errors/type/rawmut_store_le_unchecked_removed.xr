@@ -1,4 +1,4 @@
-fn write(dst: Array<byte>) {
+fn write(dst: Array<u8>) {
     unsafe {
         var p = dst.mutPtr()
         p.storeLEUnchecked<u16>(0, 1)

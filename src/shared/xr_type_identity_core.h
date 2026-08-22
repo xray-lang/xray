@@ -19,8 +19,8 @@
 typedef enum XrTypeIdentityCoreKind {
     XR_TYPE_IDENTITY_CORE_NULL = 0,
     XR_TYPE_IDENTITY_CORE_BOOL = 1,
-    XR_TYPE_IDENTITY_CORE_INT = 8,
-    XR_TYPE_IDENTITY_CORE_FLOAT = 11,
+    XR_TYPE_IDENTITY_CORE_I64 = 8,
+    XR_TYPE_IDENTITY_CORE_F64 = 11,
     XR_TYPE_IDENTITY_CORE_STRING = 12,
     XR_TYPE_IDENTITY_CORE_FUNCTION = 13,
     XR_TYPE_IDENTITY_CORE_ARRAY = 14,
@@ -59,8 +59,8 @@ static inline uint8_t xr_type_identity_core_eval_impl(XrTypeIdentityCoreKind kin
     switch (kind) {
         case XR_TYPE_IDENTITY_CORE_NULL:
         case XR_TYPE_IDENTITY_CORE_BOOL:
-        case XR_TYPE_IDENTITY_CORE_INT:
-        case XR_TYPE_IDENTITY_CORE_FLOAT:
+        case XR_TYPE_IDENTITY_CORE_I64:
+        case XR_TYPE_IDENTITY_CORE_F64:
         case XR_TYPE_IDENTITY_CORE_STRING:
         case XR_TYPE_IDENTITY_CORE_FUNCTION:
         case XR_TYPE_IDENTITY_CORE_ARRAY:

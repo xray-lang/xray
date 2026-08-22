@@ -90,7 +90,7 @@ typedef struct ClassDeclNode {
                                        // re-collected by the post-mono analysis pass
     char *generic_origin_name;         // Original generic class name (e.g. "Box"), NULL if not mono
     char *display_name;                // User-visible name without mangling suffix
-    const char **mono_type_arg_names;  // Concrete type display names (e.g. ["int","string"]), NULL
+    const char **mono_type_arg_names;  // Concrete type display names (e.g. ["i64","string"]), NULL
                                        // if not mono
     int mono_type_arg_count;           // Element count of mono_type_arg_names
 } ClassDeclNode;

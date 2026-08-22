@@ -1,4 +1,4 @@
 import mem
 
-var p = mem.ptr<byte>(0)
+var p = mem.ptr<u8>(0)
 unsafe { print(mem.load<string>(p)) }

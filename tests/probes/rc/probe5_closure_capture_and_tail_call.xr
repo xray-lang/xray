@@ -33,58 +33,58 @@
 import runtime
 
 class Node {
-    n: int
+    n: i64
 
     constructor(n) {
         this.n = n
     }
 
-    bump() -> int {
+    bump() -> i64 {
         this.n = this.n + 1
         return this.n
     }
 }
 
 // 捕获但不调用
-fn capture_only(i: int) {
+fn capture_only(i: i64) {
     var p = Node(i)
-    var f = fn() -> int { return p.n }
+    var f = fn() -> i64 { return p.n }
 }
 
 // 捕获并调用——这一条同时踩中两个缺陷
-fn capture_and_call(i: int) -> int {
+fn capture_and_call(i: i64) -> i64 {
     var p = Node(i)
-    var f = fn() -> int { return p.bump() }
+    var f = fn() -> i64 { return p.bump() }
     return f()
 }
 
 // 捕获后源变量继续使用：ARC 必须先 dup，运行时不得再 retain
-fn capture_then_use(i: int) -> int {
+fn capture_then_use(i: i64) -> i64 {
     var p = Node(i)
-    var f = fn() -> int { return p.n }
+    var f = fn() -> i64 { return p.n }
     return p.n + f()
 }
 
 // 同一变量被两个闭包捕获：ARC 只 dup 一次（初始 +1 + dup = 2，各一个）
-fn capture_twice(i: int) -> int {
+fn capture_twice(i: i64) -> i64 {
     var p = Node(i)
-    var f = fn() -> int { return p.n }
-    var g = fn() -> int { return p.n + 1 }
+    var f = fn() -> i64 { return p.n }
+    var g = fn() -> i64 { return p.n + 1 }
     return f() + g()
 }
 
 // 嵌套：内层从外层的 upvals 借 p。这一条是**必须** retain 的那半边——
 // 外层仍持有 p，内层不能白拿。少了它就是提前释放，不是泄漏。
-fn nested_capture(i: int) -> int {
+fn nested_capture(i: i64) -> i64 {
     var p = Node(i)
-    var outer = fn() -> int {
-        var inner = fn() -> int { return p.n }
+    var outer = fn() -> i64 {
+        var inner = fn() -> i64 { return p.n }
         return inner()
     }
     return outer()
 }
 
-fn churn(name: string, which: int, n: int) {
+fn churn(name: string, which: i64, n: i64) {
     for (var w = 0; w < 200; w++) {
         if (which == 1) { capture_only(w) }
         else if (which == 2) { capture_and_call(w) }
@@ -136,15 +136,15 @@ fn test_nested_capture_is_reclaimed() {
 @test
 fn test_captured_value_stays_alive_and_correct() {
     var p = Node(10)
-    var f = fn() -> int { return p.bump() }
+    var f = fn() -> i64 { return p.bump() }
     assert(f() == 11)
     assert(f() == 12)
     assert(p.n == 12)
 
     // 嵌套：内层借外层的 upval，两层都要能读到同一个对象
     var q = Node(100)
-    var outer = fn() -> int {
-        var inner = fn() -> int { return q.bump() }
+    var outer = fn() -> i64 {
+        var inner = fn() -> i64 { return q.bump() }
         return inner() + inner()
     }
     assert(outer() == 203)

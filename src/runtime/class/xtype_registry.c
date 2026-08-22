@@ -184,9 +184,9 @@ bool xr_registry_register_type(XrVMRuntime *X, XrTypeMetadata *meta) {
 
     // Cache builtin types
     if (meta->klass) {
-        if (strcmp(type_name, TYPE_NAME_INT) == 0) {
+        if (strcmp(type_name, TYPE_NAME_I64) == 0) {
             registry->int_type = meta;
-        } else if (strcmp(type_name, TYPE_NAME_FLOAT) == 0) {
+        } else if (strcmp(type_name, TYPE_NAME_F64) == 0) {
             registry->float_type = meta;
         } else if (strcmp(type_name, TYPE_NAME_BOOL) == 0) {
             registry->bool_type = meta;
@@ -444,10 +444,14 @@ const char *xr_xr_type_kind_name(struct XrType *xa_type) {
         return "object";
 
     switch (xa_type->kind) {
-        case XR_KIND_INT:
-            return "int";
-        case XR_KIND_FLOAT:
-            return "float";
+        case XR_KIND_INT: {
+            const char *name = xr_scalar_rep_name(xa_type->scalar_rep);
+            return name ? name : "i64";
+        }
+        case XR_KIND_FLOAT: {
+            const char *name = xr_scalar_rep_name(xa_type->scalar_rep);
+            return name ? name : "f64";
+        }
         case XR_KIND_BOOL:
             return "bool";
         case XR_KIND_STRING:

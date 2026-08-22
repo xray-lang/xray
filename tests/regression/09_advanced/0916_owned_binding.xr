@@ -3,7 +3,7 @@
 
 @test
 fn test_owned_fresh_array() {
-    var buffer = Array<int>()
+    var buffer = Array<i64>()
     buffer.push(1)
     buffer.push(2)
     assert_eq(len(buffer), 2)
@@ -13,7 +13,7 @@ fn test_owned_fresh_array() {
 
 @test
 fn test_owned_move_initializer() {
-    var source = Array<int>()
+    var source = Array<i64>()
     source.push(7)
     var buffer = move source
     buffer.push(8)
@@ -24,7 +24,7 @@ fn test_owned_move_initializer() {
 
 @test
 fn test_owned_copy_initializer() {
-    var source = Array<int>()
+    var source = Array<i64>()
     source.push(3)
     var buffer = copy(source)
     source.push(4)
@@ -35,7 +35,7 @@ fn test_owned_copy_initializer() {
 
 @test
 fn test_shared_copy_initializer() {
-    var source = Array<byte>(2, 0)
+    var source = Array<u8>(2, 0)
     source[0] = 1
     source[1] = 2
 
@@ -49,7 +49,7 @@ fn test_shared_copy_initializer() {
 
 @test
 fn test_owned_move_to_shared_ref_free_array() {
-    var bytes = Array<byte>(3, 0)
+    var bytes = Array<u8>(3, 0)
     bytes[0] = 10
     bytes[1] = 20
     bytes[2] = 30
@@ -64,10 +64,10 @@ fn test_owned_move_to_shared_ref_free_array() {
 
 @test
 fn test_owned_move_to_shared_after_slice_last_use() {
-    var bytes = Array<byte>(2, 0)
+    var bytes = Array<u8>(2, 0)
     bytes[0] = 41
     bytes[1] = 42
-    var view: Slice<byte> = bytes[:]
+    var view: Slice<u8> = bytes[:]
     assert_eq(len(view), 2)
 
     const frozen = move bytes
@@ -77,26 +77,26 @@ fn test_owned_move_to_shared_after_slice_last_use() {
     assert_eq(frozen[1], 42)
 }
 
-fn make_owned_return_buffer() -> Array<byte> {
-    var bytes = Array<byte>(2, 0)
+fn make_owned_return_buffer() -> Array<u8> {
+    var bytes = Array<u8>(2, 0)
     bytes[0] = 11
     bytes[1] = 12
     return bytes
 }
 
-fn make_owned_return_buffer_alt() -> Array<byte> {
-    var bytes = Array<byte>(2, 0)
+fn make_owned_return_buffer_alt() -> Array<u8> {
+    var bytes = Array<u8>(2, 0)
     bytes[0] = 31
     bytes[1] = 32
     return bytes
 }
 
-fn choose_owned_return_buffer(flag: bool) -> Array<byte> {
+fn choose_owned_return_buffer(flag: bool) -> Array<u8> {
     return flag ? make_owned_return_buffer() : make_owned_return_buffer_alt()
 }
 
-fn make_shared_return_buffer() -> const Array<byte> {
-    var bytes = Array<byte>(2, 0)
+fn make_shared_return_buffer() -> const Array<u8> {
+    var bytes = Array<u8>(2, 0)
     bytes[0] = 21
     bytes[1] = 22
     const frozen = move bytes

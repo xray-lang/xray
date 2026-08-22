@@ -1,9 +1,9 @@
-var values: Array<int> = []
+var values: Array<i64> = []
 values.push(1)
 values.push(2)
 values.push(3)
 
-var sum = values.reduce(fn(acc: int, x: int) -> int {
+var sum = values.reduce(fn(acc: i64, x: i64) -> i64 {
     return acc + x
 }, 0)
 

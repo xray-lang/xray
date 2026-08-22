@@ -1,4 +1,4 @@
-fn xray_no_alloc_bigint_scalar_methods_ok(value: BigInt) -> int {
+fn xray_no_alloc_bigint_scalar_methods_ok(value: BigInt) -> i64 {
     var score = value.sign()
     if (value.isPositive()) {
         score = score + 10
@@ -9,8 +9,8 @@ fn xray_no_alloc_bigint_scalar_methods_ok(value: BigInt) -> int {
     if (!value.isZero()) {
         score = score + 30
     }
-    score = score + (value.toInt() ?? 0)
-    if (value.toFloat() > 0.0) {
+    score = score + (value.toI64() ?? 0)
+    if (value.toF64() > 0.0) {
         score = score + 40
     }
     return score

@@ -1,1 +1,0 @@
-tests/diff/cases/semantics/stdlib/strconv_contract_direct.xr

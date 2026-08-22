@@ -1,8 +1,8 @@
-fn worker(n: int) -> int {
+fn worker(n: i64) -> i64 {
     return n + 1
 }
 
-fn run_many(iter: int) -> int {
+fn run_many(iter: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < iter; i++) {
         var task = go worker(i)

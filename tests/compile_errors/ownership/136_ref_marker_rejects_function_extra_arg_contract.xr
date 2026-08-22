@@ -1,6 +1,6 @@
 fn f() {}
 
-fn bad(x: ref int) {
+fn bad(x: ref i64) {
     f(ref x)
 }
 

@@ -1,8 +1,8 @@
 // Aggregate literals name their fields, so an undeclared name is decidable
 // during analysis instead of surfacing as a runtime field-not-declared panic.
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 var p = Point{x: 1, y: 2, z: 3}

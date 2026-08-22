@@ -1,4 +1,4 @@
-fn readAge() -> int {
+fn readAge() -> i64 {
     var user = { name: "ada", age: 1 }
     return user.age
 }

@@ -9,7 +9,7 @@
 
 const ITERATIONS = 6000
 
-fn side(mine: Atomic<int>, theirs: Atomic<int>) -> int {
+fn side(mine: Atomic<i64>, theirs: Atomic<i64>) -> i64 {
     mine.store(1, Ordering.SeqCst)
     return theirs.load(Ordering.SeqCst)
 }

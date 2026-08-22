@@ -1057,5 +1057,5 @@ class C131<T> {
         return this.v
     }
 }
-var c = C0<int>(5)
+var c = C0<i64>(5)
 print(c.get())

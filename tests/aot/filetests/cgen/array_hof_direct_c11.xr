@@ -1,11 +1,11 @@
 fn main() {
     var values = [1, 2, 3]
-    var mapped = values.map(fn(x: int) -> int { return x + 1 })
-    var kept = values.filter(fn(x: int) -> bool { return x > 1 })
-    var total = values.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
-    var empty: Array<int> = []
-    var emptyTotal = empty.reduce(fn(acc: int, x: int) -> int { return acc + x }, 9)
-    values.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
+    var mapped = values.map(fn(x: i64) -> i64 { return x + 1 })
+    var kept = values.filter(fn(x: i64) -> bool { return x > 1 })
+    var total = values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)
+    var empty: Array<i64> = []
+    var emptyTotal = empty.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 9)
+    values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)
 
     print(len(mapped))
     print(len(kept))

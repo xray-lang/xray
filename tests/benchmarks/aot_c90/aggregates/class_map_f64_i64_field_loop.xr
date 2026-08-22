@@ -1,27 +1,27 @@
 class DoubleIntMapBag {
-    values: Map<float, int>
+    values: Map<f64, i64>
 
     constructor() {
-        var values: Map<float, int> = #{}
+        var values: Map<f64, i64> = #{}
         this.values = values
     }
 
-    fill(n: int) -> int {
+    fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
-            this.values.set((i as float) + 0.5, i * 5 + 7)
+            this.values.set((i as f64) + 0.5, i * 5 + 7)
             i = i + 1
         }
         return len(this.values)
     }
 
-    scan(n: int, rounds: int) -> int {
+    scan(n: i64, rounds: i64) -> i64 {
         var r = 0
         var sum = 0
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                var key = (i as float) + 0.5
+                var key = (i as f64) + 0.5
                 if (this.values.containsKey(key)) {
                     sum = sum + this.values.get(key)!
                 }
@@ -33,7 +33,7 @@ class DoubleIntMapBag {
     }
 }
 
-fn class_map_f64_i64_field_loop_run(n: int, rounds: int) -> int {
+fn class_map_f64_i64_field_loop_run(n: i64, rounds: i64) -> i64 {
     var bag = DoubleIntMapBag()
     var count = bag.fill(n)
     return bag.scan(n, rounds) + count

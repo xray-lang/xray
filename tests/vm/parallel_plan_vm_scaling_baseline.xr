@@ -1,14 +1,14 @@
 import parallel
 
-const touched = Atomic<int>(0)
-const lane0 = Atomic<int>(0)
-const lane1 = Atomic<int>(0)
-const lane2 = Atomic<int>(0)
-const lane3 = Atomic<int>(0)
-const lane4 = Atomic<int>(0)
-const lane5 = Atomic<int>(0)
-const lane6 = Atomic<int>(0)
-const lane7 = Atomic<int>(0)
+const touched = Atomic<i64>(0)
+const lane0 = Atomic<i64>(0)
+const lane1 = Atomic<i64>(0)
+const lane2 = Atomic<i64>(0)
+const lane3 = Atomic<i64>(0)
+const lane4 = Atomic<i64>(0)
+const lane5 = Atomic<i64>(0)
+const lane6 = Atomic<i64>(0)
+const lane7 = Atomic<i64>(0)
 
 fn reset() {
     touched.store(0, Ordering.Relaxed)
@@ -22,7 +22,7 @@ fn reset() {
     lane7.store(0, Ordering.Relaxed)
 }
 
-fn lanesSeen() -> int {
+fn lanesSeen() -> i64 {
     return lane0.load(Ordering.Relaxed) + lane1.load(Ordering.Relaxed) +
         lane2.load(Ordering.Relaxed) + lane3.load(Ordering.Relaxed) +
         lane4.load(Ordering.Relaxed) + lane5.load(Ordering.Relaxed) +
@@ -30,7 +30,7 @@ fn lanesSeen() -> int {
 }
 
 reset()
-var plan1 = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
+var plan1 = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)
 plan1.forEach(0..8000, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
@@ -41,7 +41,7 @@ print(touched.load(Ordering.Relaxed) == 8000)
 print(lanesSeen() == 1)
 
 reset()
-var plan2 = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+var plan2 = parallel.Plan<i64>(parallel.Options(2), (lane) -> lane)
 plan2.forEach(0..16000, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
@@ -54,7 +54,7 @@ print(touched.load(Ordering.Relaxed) == 16000)
 print(lanesSeen() == 2)
 
 reset()
-var plan4 = parallel.Plan<int>(parallel.Options(4), (lane) -> lane)
+var plan4 = parallel.Plan<i64>(parallel.Options(4), (lane) -> lane)
 plan4.forEach(0..32000, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {
@@ -71,7 +71,7 @@ print(touched.load(Ordering.Relaxed) == 32000)
 print(lanesSeen() == 4)
 
 reset()
-var plan8 = parallel.Plan<int>(parallel.Options(8), (lane) -> lane)
+var plan8 = parallel.Plan<i64>(parallel.Options(8), (lane) -> lane)
 plan8.forEach(0..64000, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
     if (state == 0) {

@@ -1,14 +1,14 @@
 import sys
 
-fn maybeThread(t: move Thread<int>) -> Thread<int>? {
+fn maybeThread(t: move Thread<i64>) -> Thread<i64>? {
     return t
 }
 
 fn run() {
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
-    var joined = maybeThread(move t) ?? sys.Thread.spawn(fn() -> int {
+    var joined = maybeThread(move t) ?? sys.Thread.spawn(fn() -> i64 {
         return 0
     })
     print(joined.join())

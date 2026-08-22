@@ -2,7 +2,7 @@
 """Seeded cross-oracle fuzzing for task-200 native binary stdlib baselines.
 
 This harness intentionally targets the current native-backed compress and
-crypto surface before the Slice<byte>/Array<byte> API switch. It compares the
+crypto surface before the Slice<u8>/Array<u8> API switch. It compares the
 stable parts of that surface against Python's zlib, hashlib, hmac, and shape
 checks so later task-200 work can distinguish intentional API convergence from
 semantic drift.
@@ -118,9 +118,9 @@ def generate_shape_program() -> tuple[str, bytes]:
         "import crypto",
         "",
         "fn isHex(text: string) -> bool {",
-        "    var bytes: Slice<byte> = text.bytes()",
+        "    var bytes: Slice<u8> = text.bytes()",
         "    for (var i = 0; i < len(bytes); i++) {",
-        "        var c: int = bytes[i]",
+        "        var c: i64 = bytes[i]",
         "        var digit = c >= 48 && c <= 57",
         "        var lower = c >= 97 && c <= 102",
         "        if (!digit && !lower) { return false }",

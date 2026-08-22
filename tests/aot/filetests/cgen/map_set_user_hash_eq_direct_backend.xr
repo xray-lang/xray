@@ -1,7 +1,7 @@
 class Token implements Hashable {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
@@ -9,14 +9,14 @@ class Token implements Hashable {
         return this.value == other.value
     }
 
-    hash() -> int {
+    hash() -> i64 {
         return this.value
     }
 }
 
-fn userHashEqPlan() -> int {
+fn userHashEqPlan() -> i64 {
     var token = Token(7)
-    var values: Map<Token, int> = #{}
+    var values: Map<Token, i64> = #{}
     values.set(token, 99)
     var strict = values[token]
     var seen: Set<Token> = #[]

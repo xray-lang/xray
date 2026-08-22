@@ -1,1 +1,1 @@
-Slice<byte>.get() must be inside an unsafe block
+Slice<u8>.get() must be inside an unsafe block

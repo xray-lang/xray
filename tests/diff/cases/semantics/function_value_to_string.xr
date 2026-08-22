@@ -4,17 +4,17 @@
 // from the type-name profile would make a program's output depend on how it was
 // built. One name-free spelling keeps VM and AOT in step on every profile.
 
-fn helper(n: int) -> int {
+fn helper(n: i64) -> i64 {
     return n + 1
 }
 
-fn apply(f: fn(int) -> int, n: int) -> int {
+fn apply(f: fn(i64) -> i64, n: i64) -> i64 {
     return f(n)
 }
 
 fn main() {
     var named = helper
-    var lambda = (a: int) -> a * 2
+    var lambda = (a: i64) -> a * 2
 
     print(named)
     print(string(named))

@@ -1,19 +1,19 @@
-fn worker(x: int) -> int {
+fn worker(x: i64) -> i64 {
     return x + 1
 }
 
-fn sum(xs: Array<int>) -> int {
+fn sum(xs: Array<i64>) -> i64 {
     return len(xs)
 }
 
-const ch: Channel<Array<int>> = Channel(1)
+const ch: Channel<Array<i64>> = Channel(1)
 
 var a = go worker(41)
 var xs = [1, 2, 3]
 var b = go sum(copy(xs))
 
-fn send_owned(ch: Channel<Array<int>>) {
-    var ys = Array<int>(2, 0)
+fn send_owned(ch: Channel<Array<i64>>) {
+    var ys = Array<i64>(2, 0)
     ys[0] = 4
     ys[1] = 5
     ch.send(move ys)

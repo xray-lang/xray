@@ -1,11 +1,11 @@
-fn run(n: int) -> int {
-    var xs: Array<int> = []
-    var bytes: Array<byte> = Array<byte>(16, 0)
-    var sourceBytes: Array<byte> = Array<byte>(8, 3)
-    var window: Slice<byte> = bytes[0:8]
-    var source: Slice<byte> = sourceBytes[:]
-    var out: Array<byte> = Array.withCapacity(0)
-    var valid: Array<byte> = Array<byte>(5, 0)
+fn run(n: i64) -> i64 {
+    var xs: Array<i64> = []
+    var bytes: Array<u8> = Array<u8>(16, 0)
+    var sourceBytes: Array<u8> = Array<u8>(8, 3)
+    var window: Slice<u8> = bytes[0:8]
+    var source: Slice<u8> = sourceBytes[:]
+    var out: Array<u8> = Array.withCapacity(0)
+    var valid: Array<u8> = Array<u8>(5, 0)
     valid[0] = 104
     valid[1] = 101
     valid[2] = 108
@@ -19,7 +19,7 @@ fn run(n: int) -> int {
         window.copyFrom(source)
         out.appendFrom(source)
         var text = string.fromUtf8(valid[:])!
-        total = total + len(xs) + int(window[0]) + len(text)
+        total = total + len(xs) + (window[0] as i64) + len(text)
         i = i + 1
     }
     return total + len(out)

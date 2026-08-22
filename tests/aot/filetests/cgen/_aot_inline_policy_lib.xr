@@ -1,6 +1,6 @@
 import { U8x16, U32x4, U64x2 } from simd
 
-fn small(x: int) -> int {
+fn small(x: i64) -> i64 {
     return x + 1
 }
 
@@ -8,7 +8,7 @@ fn small(x: int) -> int {
 // budget in Xi because each lane operation carries error/copy/release
 // bookkeeping.  It is nevertheless one straight-line, allocation-free native
 // kernel and must stay C-inlineable when called from a hot loop.
-fn vectorStripe(acc: Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
+fn vectorStripe(acc: Slice<u64>, input: Slice<u8>, secret: Slice<u8>) {
     assert(len(acc) >= 8)
     assert(len(input) >= 64)
     assert(len(secret) >= 64)
@@ -35,7 +35,7 @@ fn vectorStripe(acc: Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
     nextB1.store(ref accWindow, 6)
 }
 
-fn looping(n: int) -> int {
+fn looping(n: i64) -> i64 {
     var acc = 0
     var i = 0
     while (i < n) {
@@ -45,8 +45,8 @@ fn looping(n: int) -> int {
     return acc
 }
 
-fn stackAggregate(index: int) -> int {
-    var lanes: [int; 32] = [1; 32]
+fn stackAggregate(index: i64) -> i64 {
+    var lanes: [i64; 32] = [1; 32]
     var acc = lanes[index & 31]
     var i = 0
     while (i < 32) {
@@ -72,11 +72,11 @@ fn smallStackAccumulator(seed: u64) -> u64 {
     return total
 }
 
-export fn runPolicy(n: int) -> int {
+export fn runPolicy(n: i64) -> i64 {
     return looping(n) + small(n) + stackAggregate(n)
 }
 
-export fn runVectorPolicy(acc: Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
+export fn runVectorPolicy(acc: Slice<u64>, input: Slice<u8>, secret: Slice<u8>) {
     vectorStripe(acc, input, secret)
 }
 

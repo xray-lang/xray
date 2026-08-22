@@ -8,7 +8,7 @@
 
 // ===== escaping through a return =====
 
-fn build_reversed() -> Array<int> {
+fn build_reversed() -> Array<i64> {
     var a = [1, 2, 3]
     return a.reverse()
 }
@@ -22,7 +22,7 @@ fn test_reverse_escapes_receiver_death() {
     assert_eq(r[2], 1)
 }
 
-fn build_sorted() -> Array<int> {
+fn build_sorted() -> Array<i64> {
     var a = [3, 1, 2]
     return a.sort()
 }
@@ -35,7 +35,7 @@ fn test_sort_escapes_receiver_death() {
     assert_eq(r[2], 3)
 }
 
-fn build_filled() -> Array<int> {
+fn build_filled() -> Array<i64> {
     var a = [0, 0, 0]
     return a.fill(7)
 }
@@ -48,7 +48,7 @@ fn test_fill_escapes_receiver_death() {
     assert_eq(r[2], 7)
 }
 
-fn build_reserved() -> Array<int> {
+fn build_reserved() -> Array<i64> {
     var a = [4, 5]
     return a.reserve(32)
 }
@@ -61,7 +61,7 @@ fn test_reserve_escapes_receiver_death() {
     assert_eq(r[1], 5)
 }
 
-fn build_resized() -> Array<int> {
+fn build_resized() -> Array<i64> {
     var a = [4, 5]
     return a.resize(4, 9)
 }
@@ -101,7 +101,7 @@ fn test_stringbuilder_clear_escapes_receiver_death() {
 
 @test
 fn test_optional_chain_merge() {
-    var a: Array<int>? = [1, 2, 3]
+    var a: Array<i64>? = [1, 2, 3]
     var r = a?.reverse()
     assert_eq(len(r!), 3)
     assert_eq(r![0], 3)
@@ -109,15 +109,15 @@ fn test_optional_chain_merge() {
 
 @test
 fn test_optional_chain_null_receiver() {
-    var a: Array<int>? = null
-    var r: Array<int>? = a?.reverse()
+    var a: Array<i64>? = null
+    var r: Array<i64>? = a?.reverse()
     assert_eq(r == null, true)
 }
 
 // ===== chained self-returns =====
 // Each link aliases the same object; the chain must not release it twice.
 
-fn build_chained() -> Array<int> {
+fn build_chained() -> Array<i64> {
     var a = [3, 1, 2]
     return a.sort().reverse()
 }
@@ -164,9 +164,9 @@ fn test_self_return_in_loop() {
 
 @test
 fn test_set_union_result_is_independent() {
-    var s = Set<int>()
+    var s = Set<i64>()
     s.add(1)
-    var other = Set<int>()
+    var other = Set<i64>()
     other.add(2)
     var u = s.union(other)
     s.add(3)

@@ -5,12 +5,12 @@ const UART0 = 0x10000000
 fn uart_init() {
     // 16550A power-on state is not a usable cross-version contract. Program a
     // deterministic 8N1 configuration before observing the transmit port.
-    mem.volatileStore(mem.mutPtr<byte>(UART0 + 1), 0x00, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0 + 3), 0x80, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0 + 0), 0x03, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0 + 1), 0x00, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0 + 3), 0x03, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0 + 2), 0x07, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0 + 1), 0x00, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0 + 3), 0x80, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0 + 0), 0x03, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0 + 1), 0x00, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0 + 3), 0x03, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0 + 2), 0x07, 1)
 }
 
 fn kernel_entry() -> i32 {
@@ -18,9 +18,9 @@ fn kernel_entry() -> i32 {
     unsafe { startupLinked() }
     // Keep the boot fixture below the freestanding runtime boundary: rune
     // methods require hosted builtin initialization and are tested elsewhere.
-    mem.volatileStore(mem.mutPtr<byte>(UART0), 82, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0), 86, 1)
-    mem.volatileStore(mem.mutPtr<byte>(UART0), 10, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0), 82, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0), 86, 1)
+    mem.volatileStore(mem.mutPtr<u8>(UART0), 10, 1)
     while (true) {
     }
     return 0

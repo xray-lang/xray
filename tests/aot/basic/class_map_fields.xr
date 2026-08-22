@@ -1,17 +1,17 @@
 class ScoreBag {
-    scores: Map<string, int>
+    scores: Map<string, i64>
 
     constructor() {
-        var scores: Map<string, int> = #{}
+        var scores: Map<string, i64> = #{}
         this.scores = scores
     }
 
-    put(name: string, score: int) -> int {
+    put(name: string, score: i64) -> i64 {
         this.scores.set(name, score)
         return score
     }
 
-    score(name: string) -> int {
+    score(name: string) -> i64 {
         return this.scores.get(name) ?? -1
     }
 

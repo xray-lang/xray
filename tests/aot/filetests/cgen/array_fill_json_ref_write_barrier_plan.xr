@@ -1,6 +1,6 @@
-fn fillUsers(users: ref Array<JSON.Value>, replacement: JSON.Value) -> int {
+fn fillUsers(users: ref Array<JSON.Value>, replacement: JSON.Value) -> i64 {
     users.fill(replacement, 1, 3)
-    return copy(JSON.require<int>(users[1], ["age"]))
+    return copy(JSON.require<i64>(users[1], ["age"]))
 }
 
 var users: Array<JSON.Value> = [

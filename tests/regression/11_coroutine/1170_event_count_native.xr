@@ -11,7 +11,7 @@ fn test_event_count_epoch_wait_and_close() {
     assert_eq(event.wait(0), 1)
 
     const ready = CountdownLatch(1)
-    var t = go fn() -> int {
+    var t = go fn() -> i64 {
         ready.done()
         return event.wait(1, 0)
     }()
@@ -22,7 +22,7 @@ fn test_event_count_epoch_wait_and_close() {
 
     const closed = EventCount(7)
     const closeReady = CountdownLatch(1)
-    var closeTask = go fn() -> int {
+    var closeTask = go fn() -> i64 {
         closeReady.done()
         return closed.wait(7)
     }()

@@ -6,15 +6,15 @@
 // with an unwritten (null) runtime tag and decoded as null. Returning the map
 // forces a full JIT compile (no field-load bail-out), exposing the bug.
 // Must agree across VM / JIT / AOT.
-fn squares(n: int) -> Map<int, int> {
-    var m: Map<int, int> = #{}
+fn squares(n: i64) -> Map<i64, i64> {
+    var m: Map<i64, i64> = #{}
     for (i in 0..n) {
         m.set(i, i * i)
     }
     return m
 }
 
-fn total(m: Map<int, int>) -> int {
+fn total(m: Map<i64, i64>) -> i64 {
     var sum = 0
     for (k, v in m) {
         sum = sum + v

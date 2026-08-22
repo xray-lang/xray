@@ -3,6 +3,6 @@ print(local.get() == null)
 local.set("main")
 print(local.get() ?? "missing")
 
-var count = Coro.Local<int>()
+var count = Coro.Local<i64>()
 count.set(7)
 print(count.get() ?? -1)

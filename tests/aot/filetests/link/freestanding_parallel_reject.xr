@@ -1,6 +1,6 @@
 import parallel
 
-fn xray_freestanding_parallel_reject(n: int) -> int {
+fn xray_freestanding_parallel_reject(n: i64) -> i64 {
     var total = 0
     parallel.forEach(0..n, (i) -> {
         total = total + i

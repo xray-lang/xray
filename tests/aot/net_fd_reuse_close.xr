@@ -2,9 +2,8 @@
 // operating system reuses the descriptor for a new connection.
 import net
 import os
-import strconv
-var triggerPort = strconv.parseInt(os.getenv("XRAY_TRIGGER_PORT")!)!
-var statusPort = strconv.parseInt(os.getenv("XRAY_STATUS_PORT")!)!
+var triggerPort = i64.tryParse(os.getenv("XRAY_TRIGGER_PORT")!)!
+var statusPort = i64.tryParse(os.getenv("XRAY_STATUS_PORT")!)!
 var trigger = net.listen(triggerPort, 1)!
 var retiredFd = net.fd(trigger)
 var control = net.accept(trigger)!

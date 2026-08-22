@@ -5,20 +5,20 @@
 // a single type with no comma just groups. `(fn() -> int)` is therefore a
 // grouped function type, not a 1-tuple, and a nullable function type can
 // finally be spelled directly as `(fn() -> int)?` rather than through an alias.
-fn makeCounter() -> (fn() -> int) {
+fn makeCounter() -> (fn() -> i64) {
     var count = 0
-    return fn() -> int { count = count + 1
+    return fn() -> i64 { count = count + 1
                          return count }
 }
 
-fn takesParen(f: (fn(int) -> int)) -> int { return f(1) }
+fn takesParen(f: (fn(i64) -> i64)) -> i64 { return f(1) }
 
 fn main() {
     var c = makeCounter()
     print(c())                        // 1
     print(takesParen(x -> x + 41))    // 42
 
-    var nf: (fn() -> int)? = null
+    var nf: (fn() -> i64)? = null
     print(nf == null)                 // true
     nf = c
     print(nf!())                      // 2

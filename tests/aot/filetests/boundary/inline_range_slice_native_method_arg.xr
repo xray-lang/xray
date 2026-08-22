@@ -5,9 +5,9 @@
  * Slice<T> from the source element type; otherwise the backend faced an untyped
  * slice and failed instead of emitting the span construction below. */
 
-fn decode(raw: Array<byte>, end: int) -> string {
+fn decode(raw: Array<u8>, end: i64) -> string {
     return string.fromUtf8Lossy(raw[0:end])
 }
 
-var data: Array<byte> = [104, 105]
+var data: Array<u8> = [104, 105]
 print(decode(data, 2))

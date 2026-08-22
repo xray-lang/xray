@@ -1,4 +1,4 @@
 import mem
 
-var n = mem.sizeOf<Array<int>>()
+var n = mem.sizeOf<Array<i64>>()
 print(n)

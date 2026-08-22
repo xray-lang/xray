@@ -1,1 +1,1 @@
-Array<byte> has no member 'repeatFromUnchecked'
+Array<u8> has no member 'repeatFromUnchecked'

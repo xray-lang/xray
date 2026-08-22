@@ -1,7 +1,7 @@
 // 1316_json_decode.xr
 // Test: JSON.decode<T>() compiler-generated typed decode
 
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 @test
 fn test_sanity() {
@@ -48,7 +48,7 @@ fn test_decode_non_object() {
 }
 
 // Optional fields and more types
-type Config = { host: string, port: int, debug: bool }
+type Config = { host: string, port: i64, debug: bool }
 
 @test
 fn test_decode_bool_field() {
@@ -60,7 +60,7 @@ fn test_decode_bool_field() {
     assert_eq(cfg!.debug, true)
 }
 
-type Point = { x: float, y: float }
+type Point = { x: f64, y: f64 }
 
 @test
 fn test_decode_float_fields() {
@@ -71,7 +71,7 @@ fn test_decode_float_fields() {
     assert_eq(pt!.y, 2.7)
 }
 
-type Address = { city: string, zip: int }
+type Address = { city: string, zip: i64 }
 type Profile = { name: string, address: Address }
 
 @test

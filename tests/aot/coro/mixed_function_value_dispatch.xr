@@ -1,8 +1,8 @@
-fn sync_worker() -> int {
+fn sync_worker() -> i64 {
     return 40
 }
 
-fn suspend_worker() -> int {
+fn suspend_worker() -> i64 {
     Coro.yield()
     return 41
 }

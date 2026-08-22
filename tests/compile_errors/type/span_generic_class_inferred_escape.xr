@@ -7,8 +7,8 @@ class Box<T> {
 }
 
 fn bad() {
-    var bytes = Array<byte>(4)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(4)
+    var view: Slice<u8> = bytes[:]
     var box = Box(view)
     print(len(box.value))
 }

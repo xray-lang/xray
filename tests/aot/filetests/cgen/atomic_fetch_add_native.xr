@@ -1,10 +1,10 @@
-const counter: Atomic<int> = Atomic<int>(0)
+const counter: Atomic<i64> = Atomic<i64>(0)
 
-fn next() -> int {
+fn next() -> i64 {
     return counter.fetchAdd(1, Ordering.Relaxed)
 }
 
-fn nextSlot(width: int) -> int {
+fn nextSlot(width: i64) -> i64 {
     var index = counter.fetchAdd(1, Ordering.Relaxed)
     if (index >= 64) {
         return index

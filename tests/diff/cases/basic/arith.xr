@@ -1,9 +1,9 @@
 // anchor: basic-arith
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
-fn mul(a: int, b: int) -> int {
+fn mul(a: i64, b: i64) -> i64 {
     return a * b
 }
 

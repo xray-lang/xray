@@ -1,9 +1,9 @@
 const REQUESTS = 50000
 
 fn serve(
-    requests: Channel<(int, int, int)>,
-    replies: Channel<(int, int, int)>
-) -> int {
+    requests: Channel<(i64, i64, i64)>,
+    replies: Channel<(i64, i64, i64)>
+) -> i64 {
     var checksum = 0
     while (true) {
         match (requests.recv()) {
@@ -21,9 +21,9 @@ fn serve(
 }
 
 fn route(
-    replies: Channel<(int, int, int)>,
-    outputs: Array<Channel<(int, int, int)>>
-) -> int {
+    replies: Channel<(i64, i64, i64)>,
+    outputs: Array<Channel<(i64, i64, i64)>>
+) -> i64 {
     var routed = 0
     while (true) {
         match (replies.recv()) {
@@ -38,11 +38,11 @@ fn route(
 }
 
 fn produce(
-    requests: Channel<(int, int, int)>,
-    replies: Channel<(int, int, int)>,
-    ready: Channel<int>,
-    start: Channel<int>,
-    done: Channel<(int, int)>
+    requests: Channel<(i64, i64, i64)>,
+    replies: Channel<(i64, i64, i64)>,
+    ready: Channel<i64>,
+    start: Channel<i64>,
+    done: Channel<(i64, i64)>
 ) {
     ready.send(1)
     var _start = start.recv()
@@ -62,13 +62,13 @@ fn produce(
     done.send(move result)
 }
 
-const requests = Channel<(int, int, int)>(64)
-const serviceReplies = Channel<(int, int, int)>(64)
-const ready = Channel<int>(1)
-const start = Channel<int>(1)
-const done = Channel<(int, int)>(1)
-var outputs: Array<Channel<(int, int, int)>> = []
-outputs.push(Channel<(int, int, int)>(1))
+const requests = Channel<(i64, i64, i64)>(64)
+const serviceReplies = Channel<(i64, i64, i64)>(64)
+const ready = Channel<i64>(1)
+const start = Channel<i64>(1)
+const done = Channel<(i64, i64)>(1)
+var outputs: Array<Channel<(i64, i64, i64)>> = []
+outputs.push(Channel<(i64, i64, i64)>(1))
 var service = go serve(requests, serviceReplies)
 var router = go route(serviceReplies, copy(outputs))
 var completed = 0

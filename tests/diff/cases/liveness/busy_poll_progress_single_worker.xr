@@ -7,12 +7,12 @@
 // permanently shadowed READY peers on the owner side of the deque.
 import time
 
-fn producer(ch: Channel<int>) {
+fn producer(ch: Channel<i64>) {
     time.sleep(20)
     ch.send(100)
 }
 
-var ch = Channel<int>(1)
+var ch = Channel<i64>(1)
 go producer(ch)
 var got = 0
 var running = true

@@ -5,17 +5,17 @@
 // permissive JSON.Value field. Any backend whose decode validation drifts (accepts a
 // wrong kind, over-rejects, or diverges VM vs AOT) fails here.
 
-type Scalars = { i: int, f: float, s: string, b: bool }
-type Nested = { id: int, inner: Scalars }
+type Scalars = { i: i64, f: f64, s: string, b: bool }
+type Nested = { id: i64, inner: Scalars }
 type Items = { items: Array<JSON.Value> }
 type Opt = { name: string, note: string? }
 type AnyF = { v: JSON.Value }
-type Item = { id: int, label: string }
+type Item = { id: i64, label: string }
 type Containers = {
-    ints: Array<int>,
+    ints: Array<i64>,
     items: Array<Item>,
-    scores: Map<string, int>,
-    buckets: Map<string, Array<int>>
+    scores: Map<string, i64>,
+    buckets: Map<string, Array<i64>>
 }
 
 fn p(text: string) -> JSON.Value {

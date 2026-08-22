@@ -1,13 +1,13 @@
 class FillBag {
-    values: Array<int>
+    values: Array<i64>
 
     constructor() {
-        var values: Array<int> = []
+        var values: Array<i64> = []
         this.values = values
     }
 
-    fill(n: int) -> int {
-        var values: Array<int> = []
+    fill(n: i64) -> i64 {
+        var values: Array<i64> = []
         this.values = values
 
         var i = 0
@@ -25,11 +25,11 @@ class FillBag {
         return total
     }
 
-    at(i: int) -> int {
+    at(i: i64) -> i64 {
         return this.values[i]
     }
 
-    len() -> int {
+    len() -> i64 {
         return len(this.values)
     }
 }

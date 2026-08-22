@@ -1,13 +1,11 @@
 import net
 import os
-import strconv
-
 @test
 fn benchmark_server_lifecycle() {
-    var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
+    var port = i64.tryParse(os.getenv("XRAY_BENCH_PORT")!)!
     var listener = net.listen(port, 8)
     var conn = net.accept(listener)!
-    var buf = Array<byte>(4)
+    var buf = Array<u8>(4)
     var completed = 0
     while (completed < 64) {
         var n = net.readInto(conn, ref buf, 4)

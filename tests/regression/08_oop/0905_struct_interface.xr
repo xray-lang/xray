@@ -2,13 +2,13 @@
 // Expected: struct methods fulfill interface contract, polymorphic dispatch works
 
 interface Shape {
-    area() -> float
+    area() -> f64
     name() -> string
 }
 struct Circle implements Shape {
-    radius: float
+    radius: f64
 
-    area() -> float {
+    area() -> f64 {
         return 3.14159 * this.radius * this.radius
     }
 
@@ -17,9 +17,9 @@ struct Circle implements Shape {
     }
 }
 struct Square implements Shape {
-    side: float
+    side: f64
 
-    area() -> float {
+    area() -> f64 {
         return this.side * this.side
     }
 

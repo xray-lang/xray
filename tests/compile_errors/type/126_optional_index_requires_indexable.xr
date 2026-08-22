@@ -1,5 +1,5 @@
 fn main() {
-    var n: int? = 1
+    var n: i64? = 1
     var x = n?[0]
     print(x)
 }

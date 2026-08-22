@@ -103,11 +103,11 @@ static void test_boolmap_tagged_bool_keys_only(void) {
     ASSERT_TRUE(xrt_boolmap_has_v(m, XR_FROM_BOOL(true)), "true key has");
 
     ASSERT_EQ_TAG(xrt_boolmap_get_v(m, XR_FROM_INT(0)), XR_TAG_NULL,
-                  "int 0 must not alias bool false");
+                  "i64 0 must not alias bool false");
     ASSERT_EQ_TAG(xrt_boolmap_get_v(m, XR_FROM_INT(1)), XR_TAG_NULL,
-                  "int 1 must not alias bool true");
-    ASSERT_TRUE(!xrt_boolmap_has_v(m, XR_FROM_INT(1)), "int key must not report present");
-    ASSERT_TRUE(!xrt_boolmap_delete_v(m, XR_FROM_INT(0)), "int key must not delete false slot");
+                  "i64 1 must not alias bool true");
+    ASSERT_TRUE(!xrt_boolmap_has_v(m, XR_FROM_INT(1)), "i64 key must not report present");
+    ASSERT_TRUE(!xrt_boolmap_delete_v(m, XR_FROM_INT(0)), "i64 key must not delete false slot");
     ASSERT_EQ_INT(xrt_boolmap_len(m), 2, "wrong-tag delete leaves boolmap untouched");
     xrt_boolmap_set_v(m, XR_FROM_INT(1), XR_FROM_INT(99));
     ASSERT_EQ_INT(xrt_boolmap_get_v(m, XR_FROM_BOOL(true)).i, 21,
@@ -124,7 +124,7 @@ static void test_boolmap_f32_tagged_value_still_narrows(void) {
     xrt_boolmap_set_v(m, XR_FROM_BOOL(true), XR_FROM_FLOAT(1.25));
     XrValue got = xrt_boolmap_get_v(m, XR_FROM_BOOL(true));
 
-    ASSERT_EQ_TAG(got, XR_TAG_F64, "f32 boolmap get boxes as float");
+    ASSERT_EQ_TAG(got, XR_TAG_F64, "f32 boolmap get boxes as f64");
     ASSERT_TRUE(fabs(got.f - 1.25) < 0.00001, "f32 boolmap value round-trips");
 
     xrt_boolmap_destroy(m);

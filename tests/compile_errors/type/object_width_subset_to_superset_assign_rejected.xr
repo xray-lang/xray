@@ -1,6 +1,6 @@
 // Object width rule: a source with FEWER fields is not assignable to a sealed
 // Object target with more required fields (§2.10.1, both directions rejected).
-type Big = { a: int, b: int }
+type Big = { a: i64, b: i64 }
 
 fn main() {
     var small = { a: 1 }

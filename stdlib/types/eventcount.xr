@@ -1,11 +1,11 @@
 // Built-in EventCount type; implemented by the runtime.
 class EventCount {
-    epoch: int
+    epoch: i64
     isClosed: bool
     // @receiver_write
-    advance(step?: int) -> int
+    advance(step?: i64) -> i64
     // @receiver_write
-    wait(lastEpoch: int, workerHint?: int) -> int
+    wait(lastEpoch: i64, workerHint?: i64) -> i64
     // @receiver_write
     close()
 }

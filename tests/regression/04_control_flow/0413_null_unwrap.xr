@@ -2,7 +2,7 @@
 
 @test
 fn test_null_unwrap_throws_413() {
-    var x: int? = null
+    var x: i64? = null
     var caught = false
     try {
         var v = x!
@@ -20,6 +20,6 @@ fn test_null_unwrap_throws_413() {
 
 @test
 fn test_non_null_unwrap_succeeds() {
-    var y: int? = 42
+    var y: i64? = 42
     assert_eq(y!, 42)
 }

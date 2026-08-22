@@ -1,6 +1,6 @@
 import { Options, ParallelError, Plan } from parallel
 
-var plan = Plan<int>(Options(2), lane -> lane + 1)
+var plan = Plan<i64>(Options(2), lane -> lane + 1)
 
 fn closePlan() {
     plan.close()
@@ -35,8 +35,8 @@ try {
     }
 }
 
-var fresh = Plan<int>(Options(2), lane -> lane)
-const touched = Atomic<int>(0)
+var fresh = Plan<i64>(Options(2), lane -> lane)
+const touched = Atomic<i64>(0)
 fresh.forEach(0..4, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
 })

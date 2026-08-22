@@ -7,18 +7,18 @@ import test_yield
 var TASKS = 32
 var BLOCK_MS = 25
 if (len(process.args) > 0) {
-    TASKS = int(process.args[0]) ?? TASKS
+    TASKS = i64.tryParse(process.args[0]) ?? TASKS
 }
 if (len(process.args) > 1) {
-    BLOCK_MS = int(process.args[1]) ?? BLOCK_MS
+    BLOCK_MS = i64.tryParse(process.args[1]) ?? BLOCK_MS
 }
 
-fn blocking_task(id: int) -> int {
+fn blocking_task(id: i64) -> i64 {
     var slept = test_yield.blocking_sleep(BLOCK_MS)
     return id + slept
 }
 
-fn cpu_task(rounds: int) -> int {
+fn cpu_task(rounds: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < rounds; i++) {
         sum = sum + (i % 17)

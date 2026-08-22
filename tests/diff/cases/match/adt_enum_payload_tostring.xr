@@ -8,8 +8,8 @@
 // payload-aware formatter. Every stringification surface below must agree
 // byte-for-byte across backends.
 
-enum E { A(int), B }
-enum P { Pair(int, string), Solo }
+enum E { A(i64), B }
+enum P { Pair(i64, string), Solo }
 enum W { Wrap(E), Empty }
 
 var e = E.A(7)

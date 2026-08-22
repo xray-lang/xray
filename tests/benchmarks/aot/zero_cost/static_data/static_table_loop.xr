@@ -1,9 +1,9 @@
 struct Pair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     const pair = comptime Pair{left: 3, right: 4}
     const bias = comptime 7
     var i = 0

@@ -6,9 +6,9 @@
 // to publish, so every one of these positions was rejected by the analyzer.
 
 class Money {
-    cents: int
+    cents: i64
 
-    constructor(cents: int) {
+    constructor(cents: i64) {
         this.cents = cents
     }
 
@@ -16,7 +16,7 @@ class Money {
         return Money(this.cents + other.cents)
     }
 
-    operator*(factor: int) -> Money {
+    operator*(factor: i64) -> Money {
         return Money(this.cents * factor)
     }
 
@@ -26,7 +26,7 @@ class Money {
 }
 
 // The operator result is passed to a parameter declared as the class type.
-fn total(value: Money) -> int {
+fn total(value: Money) -> i64 {
     return value.cents
 }
 

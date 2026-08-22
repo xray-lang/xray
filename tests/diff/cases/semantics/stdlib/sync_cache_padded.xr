@@ -1,6 +1,6 @@
 import { CachePadded } from sync
 
-var a = CachePadded<int>{ value: 41 }
+var a = CachePadded<i64>{ value: 41 }
 a.value = a.value + 1
 print(a.value)
 

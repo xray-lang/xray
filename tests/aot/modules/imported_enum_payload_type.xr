@@ -2,7 +2,7 @@
 // scope even when the entry module does not import those nested payload types.
 import { MirroredResult, mirror, produce } from "./enum_payload_import_dep"
 
-fn score(ok: bool) -> int {
+fn score(ok: bool) -> i64 {
     return match (mirror(produce(ok))) {
         MirroredResult.Ok(value)  -> 42
         MirroredResult.Err(error) -> -3

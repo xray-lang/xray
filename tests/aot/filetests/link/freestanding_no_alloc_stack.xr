@@ -1,6 +1,6 @@
-fn xray_no_alloc_stack_score(i: int) -> int {
-    var bytes: [byte; 4] = [1, 2, 3, 4]
-    var view: Slice<byte> = bytes[:]
+fn xray_no_alloc_stack_score(i: i64) -> i64 {
+    var bytes: [u8; 4] = [1, 2, 3, 4]
+    var view: Slice<u8> = bytes[:]
     view[i] = 9
-    return int(view[i]) + int(bytes[0])
+    return (view[i] as i64) + (bytes[0] as i64)
 }

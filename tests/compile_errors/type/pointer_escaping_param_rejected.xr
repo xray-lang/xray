@@ -1,6 +1,6 @@
-var saved = Ptr<byte>.null()
+var saved = Ptr<u8>.null()
 
-fn keep(ptr: Ptr<byte>) {
+fn keep(ptr: Ptr<u8>) {
     saved = ptr
 }
 

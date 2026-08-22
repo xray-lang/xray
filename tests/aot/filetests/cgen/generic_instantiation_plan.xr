@@ -5,11 +5,11 @@ fn id<T>(x: T, keep: bool) -> T {
     return x
 }
 
-fn wrapper(x: int) -> int {
+fn wrapper(x: i64) -> i64 {
     if (x < 0) {
         return x
     }
-    return id<int>(x, true)
+    return id<i64>(x, true)
 }
 
 print(wrapper(41))

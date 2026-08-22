@@ -14,7 +14,7 @@ fn recv_string(ch: Channel<string>) -> string {
     }
 }
 
-fn produce(n: int) -> string {
+fn produce(n: i64) -> string {
     var s = glue("task_", string(n))
     Coro.yield()
     return s
@@ -29,7 +29,7 @@ fn build_map(seed: string) -> Map<string, string> {
 }
 
 var map_key = glue("k", "1")
-var m: Map<string, int> = #{}
+var m: Map<string, i64> = #{}
 m.set(map_key, 7)
 m.set(glue("k", "1"), 11)
 print(len(m))

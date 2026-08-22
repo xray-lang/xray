@@ -41,12 +41,12 @@ XR_TYPE_NAME(I16, 4, TYPE_NAME_I16)
 XR_TYPE_NAME(U16, 5, TYPE_NAME_U16)
 XR_TYPE_NAME(I32, 6, TYPE_NAME_I32)
 XR_TYPE_NAME(U32, 7, TYPE_NAME_U32)
-XR_TYPE_NAME(INT, 8, TYPE_NAME_INT) /* = int64, "int" is the canonical name */
+XR_TYPE_NAME(I64, 8, TYPE_NAME_I64)
 XR_TYPE_NAME(U64, 9, TYPE_NAME_U64)
 
 /* Float family */
 XR_TYPE_NAME(F32, 10, TYPE_NAME_F32)
-XR_TYPE_NAME(FLOAT, 11, TYPE_NAME_FLOAT) /* = float64, "float" is canonical */
+XR_TYPE_NAME(F64, 11, TYPE_NAME_F64)
 
 /* Object types */
 XR_TYPE_NAME(STRING, 12, TYPE_NAME_STRING)
@@ -92,3 +92,8 @@ XR_TYPE_NAME(RUNE, 43, TYPE_NAME_RUNE)
  * stays what it says -- an object value -- and does not double as the answer
  * for Json. */
 XR_TYPE_NAME(JSON, 44, TYPE_NAME_JSON)
+
+/* Target-width scalar namespaces have distinct public identities without
+ * changing the stable ordinals of any existing type. */
+XR_TYPE_NAME(ISIZE, 45, TYPE_NAME_ISIZE)
+XR_TYPE_NAME(USIZE, 46, TYPE_NAME_USIZE)

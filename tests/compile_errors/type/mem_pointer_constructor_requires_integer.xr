@@ -1,4 +1,4 @@
 import mem
 
-var p = mem.mutPtr<byte>("not an address")
+var p = mem.mutPtr<u8>("not an address")
 print(p.isNull())

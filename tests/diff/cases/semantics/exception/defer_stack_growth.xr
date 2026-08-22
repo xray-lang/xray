@@ -3,12 +3,12 @@
 // while the returning frame's cached ci/base pointers are still live. Frame
 // exit must re-derive ci/base after cleanup, otherwise it reads freed memory
 // (heap-use-after-free, caught under ASan). Output must match across backends.
-fn deep(n: int) -> int {
+fn deep(n: i64) -> i64 {
     if (n <= 0) { return 0 }
     return 1 + deep(n - 1)
 }
 
-fn run() -> int {
+fn run() -> i64 {
     defer { print(deep(200)) }
     return 42
 }

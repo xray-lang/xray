@@ -1,4 +1,4 @@
-fn smallMutationBoundary() -> int {
+fn smallMutationBoundary() -> i64 {
     var scores = #{"ada": 7, "lin": 9}
     scores.set("grace", 11)
     scores["lin"] = 10

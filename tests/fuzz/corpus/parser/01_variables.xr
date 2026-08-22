@@ -1,6 +1,6 @@
 // Variable declarations
 let x = 10
-let y: int = 20
+let y: i64 = 20
 const PI = 3.14159
 const NAME: string = "xray"
 // Type annotations

@@ -6,14 +6,14 @@ import time
 
 var DEPTH = 100000  // 链深度
 if (len(process.args) > 0) {
-    DEPTH = int(process.args[0]) ?? DEPTH
+    DEPTH = i64.tryParse(process.args[0]) ?? DEPTH
 }
 
 print("=== Chain Spawn 测试 ===")
 print("链深度:", DEPTH)
 
 // 链式协程：创建下一级并等待结果
-fn chain(depth: int) -> int {
+fn chain(depth: i64) -> i64 {
     if (depth <= 0) {
         return 0
     }
@@ -22,7 +22,7 @@ fn chain(depth: int) -> int {
     return result + 1
 }
 
-fn chain_child(depth: int) -> int {
+fn chain_child(depth: i64) -> i64 {
     return chain(depth)
 }
 
@@ -34,7 +34,7 @@ print("结果:", result)
 print("正确:", result == DEPTH)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("速度:", int(DEPTH * 1000 / elapsed), "spawns/sec")
+    print("速度:", (DEPTH * 1000 / elapsed as i64), "spawns/sec")
 } else {
     print("速度: 太快无法测量")
 }

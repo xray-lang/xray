@@ -1,5 +1,5 @@
 class Holder {
-    view: Slice<byte>? = null
+    view: Slice<u8>? = null
 }
 
 fn main() {

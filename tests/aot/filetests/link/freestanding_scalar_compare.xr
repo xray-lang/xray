@@ -1,4 +1,4 @@
-fn xray_scalar_compare(a: float, b: float, x: int, y: int) -> int {
+fn xray_scalar_compare(a: f64, b: f64, x: i64, y: i64) -> i64 {
     var n = 0
     if (a < b) {
         n = n + 1

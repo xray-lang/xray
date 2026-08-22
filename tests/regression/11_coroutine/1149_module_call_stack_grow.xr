@@ -13,7 +13,7 @@
 
 import "./modules/big_stack" as big
 
-fn worker(n: int) -> int {
+fn worker(n: i64) -> i64 {
     // Keep many locals live so worker has high maxstacksize (~20+).
     // This pushes middle()'s base_offset far enough that wide()'s
     // register file (30+ slots) extends past the slab's 64 slots.

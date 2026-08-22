@@ -6,13 +6,13 @@ import time
 
 var N = 10000  // 找到前 N 个素数
 if (len(process.args) > 0) {
-    N = int(process.args[0]) ?? N
+    N = i64.tryParse(process.args[0]) ?? N
 }
 
 print("=== 并发素数筛测试 ===")
 print("目标素数数量:", N)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -20,7 +20,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 数字生成器：向 channel 发送 2, 3, 4, ...
-fn generate(ch: Channel<int>, limit: int) {
+fn generate(ch: Channel<i64>, limit: i64) {
     for (var i = 2; i <= limit; i++) {
         ch.send(i)
     }
@@ -28,7 +28,7 @@ fn generate(ch: Channel<int>, limit: int) {
 }
 
 // 过滤器：过滤掉能被 prime 整除的数
-fn filter(in_ch: Channel<int>, out_ch: Channel<int>, prime: int) {
+fn filter(in_ch: Channel<i64>, out_ch: Channel<i64>, prime: i64) {
     while (true) {
         var n = recv_int(in_ch, -1)
         if (n < 0) {
@@ -42,7 +42,7 @@ fn filter(in_ch: Channel<int>, out_ch: Channel<int>, prime: int) {
 }
 
 // 估算上界：找前 N 个素数需要检查到大约 N * ln(N) + N * ln(ln(N))
-fn estimate_limit(n: int) -> int {
+fn estimate_limit(n: i64) -> i64 {
     if (n < 10) { return 30 }
     // 粗略上界: n * 15 对于 n <= 100000 足够
     return n * 15
@@ -51,11 +51,11 @@ fn estimate_limit(n: int) -> int {
 var limit = estimate_limit(N)
 var start = time.monotonic()
 
-const channels: Array<Channel<int>> = [Channel(100)]
+const channels: Array<Channel<i64>> = [Channel(100)]
 var tasks: Array<Task> = []
 tasks.push(go generate(channels[0], limit))
 
-var primes: Array<int> = []
+var primes: Array<i64> = []
 var count = 0
 var cur = 0  // index into channels array
 
@@ -95,7 +95,7 @@ print("预期:", N)
 print("正确:", count == N)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("速度:", int(count * 1000 / elapsed), "primes/sec")
+    print("速度:", (count * 1000 / elapsed as i64), "primes/sec")
 } else {
     print("速度: 太快无法测量")
 }

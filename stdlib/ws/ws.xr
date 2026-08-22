@@ -25,18 +25,18 @@ const _OP_PONG = 10
 export class ParsedFrame {
     fin: bool
     rsv1: bool
-    opcode: int
+    opcode: i64
     masked: bool
-    payload: Array<byte>
-    consumedBytes: int
+    payload: Array<u8>
+    consumedBytes: i64
 
     constructor(
         fin: bool,
         rsv1: bool,
-        opcode: int,
+        opcode: i64,
         masked: bool,
-        payload: Array<byte>,
-        consumedBytes: int
+        payload: Array<u8>,
+        consumedBytes: i64
     ) {
         this.fin = fin
         this.rsv1 = rsv1
@@ -50,10 +50,10 @@ export class ParsedFrame {
 export class WsUrl {
     secure: bool
     host: string
-    port: int
+    port: i64
     path: string
 
-    constructor(secure: bool, host: string, port: int, path: string) {
+    constructor(secure: bool, host: string, port: i64, path: string) {
         this.secure = secure
         this.host = host
         this.port = port
@@ -62,21 +62,21 @@ export class WsUrl {
 }
 
 export class ClosePayload {
-    code: int
+    code: i64
     reason: string
 
-    constructor(code: int, reason: string) {
+    constructor(code: i64, reason: string) {
         this.code = code
         this.reason = reason
     }
 }
 
 export class ParsedUpgradeResponse {
-    statusCode: int
+    statusCode: i64
     protocol: string?
     deflate: bool
 
-    constructor(statusCode: int, protocol: string? = null, deflate: bool = false) {
+    constructor(statusCode: i64, protocol: string? = null, deflate: bool = false) {
         this.statusCode = statusCode
         this.protocol = protocol
         this.deflate = deflate
@@ -105,7 +105,7 @@ export class ParsedUpgradeRequest {
     }
 }
 
-fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
+fn _startsWithAt(s: string, pos: i64, prefix: string) -> bool {
     if (pos < 0 || pos + len(prefix) > len(s)) { return false }
     for (var i = 0; i < len(prefix); i++) {
         if (s.runes().nth(pos + i) != prefix.runes().nth(i)) { return false }
@@ -113,7 +113,7 @@ fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
     return true
 }
 
-fn _indexOfFrom(s: string, needle: string, start: int) -> int {
+fn _indexOfFrom(s: string, needle: string, start: i64) -> i64 {
     if (len(needle) == 0) { return start }
     var i = start
     while (i + len(needle) <= len(s)) {
@@ -139,38 +139,38 @@ fn _trim(s: string) -> string {
     return s.slice(start, end)
 }
 
-fn _hexNibble(c: rune) -> int {
+fn _hexNibble(c: rune) -> i64 {
     var n = c.toUInt32()
-    if (n >= 48 && n <= 57) { return (n - 48) as int }
-    if (n >= 65 && n <= 70) { return (n - 55) as int }
-    if (n >= 97 && n <= 102) { return (n - 87) as int }
+    if (n >= 48 && n <= 57) { return (n - 48) as i64 }
+    if (n >= 65 && n <= 70) { return (n - 55) as i64 }
+    if (n >= 97 && n <= 102) { return (n - 87) as i64 }
     return -1
 }
 
-fn _hexBytes(hex: string) -> Array<byte> {
-    if (len(hex) % 2 != 0) { return Array<byte>(0) }
-    var out = Array<byte>(len(hex) / 2)
+fn _hexBytes(hex: string) -> Array<u8> {
+    if (len(hex) % 2 != 0) { return Array<u8>(0) }
+    var out = Array<u8>(len(hex) / 2)
     var oi = 0
     var i = 0
     while (i + 1 < len(hex)) {
         var hi = _hexNibble(hex.runes().nth(i))
         var lo = _hexNibble(hex.runes().nth(i + 1))
-        if (hi < 0 || lo < 0) { return Array<byte>(0) }
-        out[oi] = (((hi << 4) | lo) & 255) as byte
+        if (hi < 0 || lo < 0) { return Array<u8>(0) }
+        out[oi] = (((hi << 4) | lo) & 255) as u8
         oi = oi + 1
         i = i + 2
     }
     return out
 }
 
-fn _base64Encode(data: Array<byte>) -> string {
+fn _base64Encode(data: Array<u8>) -> string {
     var n = len(data)
     var out = StringBuilder()
     var i = 0
     while (i + 3 <= n) {
-        var b0 = data[i] as int
-        var b1 = data[i + 1] as int
-        var b2 = data[i + 2] as int
+        var b0 = data[i] as i64
+        var b1 = data[i + 1] as i64
+        var b2 = data[i + 2] as i64
         out.append(_B64_STD.runes().nth(b0 >> 2))
         out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
         out.append(_B64_STD.runes().nth(((b1 & 15) << 2) | (b2 >> 6)))
@@ -179,13 +179,13 @@ fn _base64Encode(data: Array<byte>) -> string {
     }
     var rem = n - i
     if (rem == 1) {
-        var b0 = data[i] as int
+        var b0 = data[i] as i64
         out.append(_B64_STD.runes().nth(b0 >> 2))
         out.append(_B64_STD.runes().nth((b0 & 3) << 4))
         out.append("==")
     } else if (rem == 2) {
-        var b0 = data[i] as int
-        var b1 = data[i + 1] as int
+        var b0 = data[i] as i64
+        var b1 = data[i + 1] as i64
         out.append(_B64_STD.runes().nth(b0 >> 2))
         out.append(_B64_STD.runes().nth(((b0 & 3) << 4) | (b1 >> 4)))
         out.append(_B64_STD.runes().nth((b1 & 15) << 2))
@@ -199,73 +199,73 @@ fn _isDigit(c: rune) -> bool {
     return n >= 48 && n <= 57
 }
 
-fn _parsePort(s: string, start: int, end: int) -> int {
+fn _parsePort(s: string, start: i64, end: i64) -> i64 {
     if (start >= end) { return -1 }
     var n = 0
     for (var i = start; i < end; i++) {
         var c = s.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        n = n * 10 + ((c.toUInt32() - 48) as int)
+        n = n * 10 + ((c.toUInt32() - 48) as i64)
         if (n > 65535) { return -1 }
     }
     if (n <= 0) { return -1 }
     return n
 }
 
-fn _isContinuationByte(b: int) -> bool {
+fn _isContinuationByte(b: i64) -> bool {
     return b >= 0x80 && b <= 0xBF
 }
 
-fn _validUtf8Bytes(data: Array<byte>, start: int, end: int) -> bool {
+fn _validUtf8Bytes(data: Array<u8>, start: i64, end: i64) -> bool {
     var i = start
     while (i < end) {
-        var b = data[i] as int
+        var b = data[i] as i64
         if (b <= 0x7F) {
             i = i + 1
         } else if (b >= 0xC2 && b <= 0xDF) {
-            if (i + 1 >= end || !_isContinuationByte(data[i + 1] as int)) { return false }
+            if (i + 1 >= end || !_isContinuationByte(data[i + 1] as i64)) { return false }
             i = i + 2
         } else if (b == 0xE0) {
             if (i + 2 >= end) { return false }
-            var b1 = data[i + 1] as int
-            var b2 = data[i + 2] as int
+            var b1 = data[i + 1] as i64
+            var b2 = data[i + 2] as i64
             if (b1 < 0xA0 || b1 > 0xBF || !_isContinuationByte(b2)) { return false }
             i = i + 3
         } else if (b >= 0xE1 && b <= 0xEC) {
             if (i + 2 >= end ||
-                !_isContinuationByte(data[i + 1] as int) ||
-                !_isContinuationByte(data[i + 2] as int)) { return false }
+                !_isContinuationByte(data[i + 1] as i64) ||
+                !_isContinuationByte(data[i + 2] as i64)) { return false }
             i = i + 3
         } else if (b == 0xED) {
             if (i + 2 >= end) { return false }
-            var b1 = data[i + 1] as int
-            var b2 = data[i + 2] as int
+            var b1 = data[i + 1] as i64
+            var b2 = data[i + 2] as i64
             if (b1 < 0x80 || b1 > 0x9F || !_isContinuationByte(b2)) { return false }
             i = i + 3
         } else if (b >= 0xEE && b <= 0xEF) {
             if (i + 2 >= end ||
-                !_isContinuationByte(data[i + 1] as int) ||
-                !_isContinuationByte(data[i + 2] as int)) { return false }
+                !_isContinuationByte(data[i + 1] as i64) ||
+                !_isContinuationByte(data[i + 2] as i64)) { return false }
             i = i + 3
         } else if (b == 0xF0) {
             if (i + 3 >= end) { return false }
-            var b1 = data[i + 1] as int
+            var b1 = data[i + 1] as i64
             if (b1 < 0x90 || b1 > 0xBF ||
-                !_isContinuationByte(data[i + 2] as int) ||
-                !_isContinuationByte(data[i + 3] as int)) { return false }
+                !_isContinuationByte(data[i + 2] as i64) ||
+                !_isContinuationByte(data[i + 3] as i64)) { return false }
             i = i + 4
         } else if (b >= 0xF1 && b <= 0xF3) {
             if (i + 3 >= end ||
-                !_isContinuationByte(data[i + 1] as int) ||
-                !_isContinuationByte(data[i + 2] as int) ||
-                !_isContinuationByte(data[i + 3] as int)) { return false }
+                !_isContinuationByte(data[i + 1] as i64) ||
+                !_isContinuationByte(data[i + 2] as i64) ||
+                !_isContinuationByte(data[i + 3] as i64)) { return false }
             i = i + 4
         } else if (b == 0xF4) {
             if (i + 3 >= end) { return false }
-            var b1 = data[i + 1] as int
+            var b1 = data[i + 1] as i64
             if (b1 < 0x80 || b1 > 0x8F ||
-                !_isContinuationByte(data[i + 2] as int) ||
-                !_isContinuationByte(data[i + 3] as int)) { return false }
+                !_isContinuationByte(data[i + 2] as i64) ||
+                !_isContinuationByte(data[i + 3] as i64)) { return false }
             i = i + 4
         } else {
             return false
@@ -274,9 +274,9 @@ fn _validUtf8Bytes(data: Array<byte>, start: int, end: int) -> bool {
     return true
 }
 
-fn _bytesToString(data: Array<byte>, start: int, end: int) -> string {
+fn _bytesToString(data: Array<u8>, start: i64, end: i64) -> string {
     if (start >= end) { return "" }
-    var out = Array<byte>(end - start)
+    var out = Array<u8>(end - start)
     for (var i = start; i < end; i++) {
         out[i - start] = data[i]
     }
@@ -286,7 +286,7 @@ fn _bytesToString(data: Array<byte>, start: int, end: int) -> string {
     return string.fromUtf8(out[:])!
 }
 
-fn _randomBytes(n: int) -> Array<byte> {
+fn _randomBytes(n: i64) -> Array<u8> {
     return _hexBytes(crypto.randomBytes(n))
 }
 
@@ -335,7 +335,7 @@ fn _headerHasElementToken(value: string, token: string) -> bool {
     return false
 }
 
-fn _parseStatusCode(line: string) -> int {
+fn _parseStatusCode(line: string) -> i64 {
     if (!_startsWithAt(line, 0, "HTTP/1.1 ")) { return -1 }
     if (len(line) < 12) { return -1 }
     if (len(line) > 12 && line.runes().nth(12) != ' ') { return -1 }
@@ -343,7 +343,7 @@ fn _parseStatusCode(line: string) -> int {
     for (var i = 9; i < 12; i++) {
         var c = line.runes().nth(i)
         if (!_isDigit(c)) { return -1 }
-        code = code * 10 + ((c.toUInt32() - 48) as int)
+        code = code * 10 + ((c.toUInt32() - 48) as i64)
     }
     return code
 }
@@ -618,18 +618,18 @@ export fn parseUrl(url: string) -> WsUrl? {
     return WsUrl(secure, host, port, path)
 }
 
-export fn isValidCloseCode(code: int) -> bool {
+export fn isValidCloseCode(code: i64) -> bool {
     return code == 1000 || code == 1001 || code == 1002 || code == 1003 ||
         code == 1007 || code == 1008 || code == 1009 || code == 1010 ||
         code == 1011 || (code >= 3000 && code <= 4999)
 }
 
-export fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
+export fn parseClosePayload(payload: Array<u8>) -> ClosePayload? {
     if (len(payload) > 125 || len(payload) == 1) { return null }
     if (len(payload) == 0) { return ClosePayload(1005, "") }
 
-    var codeHi: int = payload[0] as int
-    var codeLo: int = payload[1] as int
+    var codeHi: i64 = payload[0] as i64
+    var codeLo: i64 = payload[1] as i64
     var code = (codeHi << 8) | codeLo
     if (!isValidCloseCode(code)) { return null }
     if (!_validUtf8Bytes(payload, 2, len(payload))) { return null }
@@ -637,19 +637,19 @@ export fn parseClosePayload(payload: Array<byte>) -> ClosePayload? {
     return ClosePayload(code, _bytesToString(payload, 2, len(payload)))
 }
 
-fn _copyInto(dst: ref Array<byte>, off: int, src: Array<byte>) {
+fn _copyInto(dst: ref Array<u8>, off: i64, src: Array<u8>) {
     for (var i = 0; i < len(src); i++) {
         dst[off + i] = src[i]
     }
 }
 
-fn _validOpcode(opcode: int) -> bool {
+fn _validOpcode(opcode: i64) -> bool {
     return opcode == 0 || opcode == _OP_TEXT || opcode == _OP_BINARY ||
         opcode == _OP_CLOSE || opcode == _OP_PING || opcode == _OP_PONG
 }
 
-export fn maskPayload(payload: Array<byte>, key: Array<byte>) -> Array<byte> {
-    var out = Array<byte>(len(payload))
+export fn maskPayload(payload: Array<u8>, key: Array<u8>) -> Array<u8> {
+    var out = Array<u8>(len(payload))
     if (len(key) < 4) { return out }
     for (var i = 0; i < len(payload); i++) {
         out[i] = (payload[i] ^ key[i % 4]) & 255
@@ -658,22 +658,22 @@ export fn maskPayload(payload: Array<byte>, key: Array<byte>) -> Array<byte> {
 }
 
 export fn parseFrame(
-    raw: Array<byte>,
+    raw: Array<u8>,
     expectMasked: bool = false,
     enforceMask: bool = false,
     allowRsv1: bool = false,
-    maxPayloadBytes: int = 67108864
+    maxPayloadBytes: i64 = 67108864
 ) -> ParsedFrame? {
     if (len(raw) < 2) { return null }
 
-    var first: int = raw[0] as int
-    var second: int = raw[1] as int
+    var first: i64 = raw[0] as i64
+    var second: i64 = raw[1] as i64
     var rsv1 = (first & 64) != 0
     var rsv23 = (first & 48) != 0
     if (rsv23 || (rsv1 && !allowRsv1)) { return null }
 
     var fin = (first & 128) != 0
-    var opcode: int = first & 15
+    var opcode: i64 = first & 15
     if (!_validOpcode(opcode)) { return null }
 
     var control = (opcode & 8) != 0
@@ -683,14 +683,14 @@ export fn parseFrame(
     var expectedMaskMode = expectMasked ? 1 : 0
     if (enforceMask && maskMode != expectedMaskMode) { return null }
 
-    var payloadLen: int = second & 127
+    var payloadLen: i64 = second & 127
     var offset = 2
     if (control && payloadLen > 125) { return null }
 
     if (payloadLen == 126) {
         if (len(raw) < 4) { return null }
-        var lenHi: int = raw[2] as int
-        var lenLo: int = raw[3] as int
+        var lenHi: i64 = raw[2] as i64
+        var lenLo: i64 = raw[3] as i64
         payloadLen = (lenHi << 8) | lenLo
         if (payloadLen < 126) { return null }
         offset = 4
@@ -699,7 +699,7 @@ export fn parseFrame(
         if ((raw[2] & 128) != 0) { return null }
         var n = 0
         for (var i = 0; i < 8; i++) {
-            n = (n << 8) | (raw[2 + i] as int)
+            n = (n << 8) | (raw[2 + i] as i64)
         }
         if (n <= 65535) { return null }
         payloadLen = n
@@ -715,39 +715,39 @@ export fn parseFrame(
     }
 
     if (len(raw) < offset + payloadLen) { return null }
-    var payload = Array<byte>(payloadLen)
+    var payload = Array<u8>(payloadLen)
     for (var i = 0; i < payloadLen; i++) {
-        var b = raw[offset + i] as int
+        var b = raw[offset + i] as i64
         if (maskMode == 1) {
-            b = (b ^ (raw[maskStart + (i % 4)] as int)) & 255
+            b = (b ^ (raw[maskStart + (i % 4)] as i64)) & 255
         }
-        payload[i] = b as byte
+        payload[i] = b as u8
     }
 
     return ParsedFrame(fin, rsv1, opcode, maskMode == 1, payload, offset + payloadLen)
 }
 
-export fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true) -> Array<byte> {
+export fn frame(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true) -> Array<u8> {
     var ext = 0
     if (len(payload) > 65535) { ext = 8 }
     else if (len(payload) > 125) { ext = 2 }
     var maskLen = mask ? 4 : 0
     var headerLen = 2 + ext + maskLen
-    var out = Array<byte>(headerLen + len(payload))
-    out[0] = ((128 | (opcode & 15)) & 255) as byte
+    var out = Array<u8>(headerLen + len(payload))
+    out[0] = ((128 | (opcode & 15)) & 255) as u8
     if (ext == 8) {
-        out[1] = ((mask ? 128 : 0) | 127) as byte
+        out[1] = ((mask ? 128 : 0) | 127) as u8
         var n = len(payload)
         for (var i = 7; i >= 0; i = i - 1) {
-            out[2 + i] = (n & 255) as byte
+            out[2 + i] = (n & 255) as u8
             n = n >> 8
         }
     } else if (ext == 2) {
-        out[1] = ((mask ? 128 : 0) | 126) as byte
-        out[2] = ((len(payload) >> 8) & 255) as byte
-        out[3] = (len(payload) & 255) as byte
+        out[1] = ((mask ? 128 : 0) | 126) as u8
+        out[2] = ((len(payload) >> 8) & 255) as u8
+        out[3] = (len(payload) & 255) as u8
     } else {
-        out[1] = ((mask ? 128 : 0) | len(payload)) as byte
+        out[1] = ((mask ? 128 : 0) | len(payload)) as u8
     }
 
     var body = payload
@@ -760,30 +760,30 @@ export fn frame(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true)
     return out
 }
 
-export fn textFrame(data: string, mask: bool = true) -> Array<byte> {
+export fn textFrame(data: string, mask: bool = true) -> Array<u8> {
     return frame(data.copyBytes(), _OP_TEXT, mask)
 }
 
-export fn binaryFrame(data: Array<byte>, mask: bool = true) -> Array<byte> {
+export fn binaryFrame(data: Array<u8>, mask: bool = true) -> Array<u8> {
     return frame(data, _OP_BINARY, mask)
 }
 
-export fn closeFrame(code: int = 1000, reason: string = "", mask: bool = true) -> Array<byte> {
+export fn closeFrame(code: i64 = 1000, reason: string = "", mask: bool = true) -> Array<u8> {
     var reasonBytes = reason.copyBytes()
-    var payload = Array<byte>(2 + len(reasonBytes))
-    payload[0] = ((code >> 8) & 255) as byte
-    payload[1] = (code & 255) as byte
+    var payload = Array<u8>(2 + len(reasonBytes))
+    payload[0] = ((code >> 8) & 255) as u8
+    payload[1] = (code & 255) as u8
     _copyInto(ref payload, 2, reasonBytes)
     return frame(payload, _OP_CLOSE, mask)
 }
 
-export fn pingFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
-    var payload = data != null ? data! : Array<byte>(0)
+export fn pingFrame(data: Array<u8>? = null, mask: bool = true) -> Array<u8> {
+    var payload = data != null ? data! : Array<u8>(0)
     return frame(payload, _OP_PING, mask)
 }
 
-export fn pongFrame(data: Array<byte>? = null, mask: bool = true) -> Array<byte> {
-    var payload = data != null ? data! : Array<byte>(0)
+export fn pongFrame(data: Array<u8>? = null, mask: bool = true) -> Array<u8> {
+    var payload = data != null ? data! : Array<u8>(0)
     return frame(payload, _OP_PONG, mask)
 }
 
@@ -806,16 +806,16 @@ const _WS_CLOSE_PROTOCOL_ERROR = 1002
 const _WS_CLOSE_TOO_LARGE = 1009
 
 export final class WsConnectOptions {
-    timeoutMs: int
-    pingIntervalMs: int
-    pongTimeoutMs: int
-    maxMessageSize: int
+    timeoutMs: i64
+    pingIntervalMs: i64
+    pongTimeoutMs: i64
+    maxMessageSize: i64
 
     constructor(
-        timeoutMs: int = 30000,
-        pingIntervalMs: int = 0,
-        pongTimeoutMs: int = 0,
-        maxMessageSize: int = _WS_MAX_MESSAGE_BYTES
+        timeoutMs: i64 = 30000,
+        pingIntervalMs: i64 = 0,
+        pongTimeoutMs: i64 = 0,
+        maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES
     ) {
         this.timeoutMs = timeoutMs
         this.pingIntervalMs = pingIntervalMs
@@ -829,11 +829,11 @@ export final class WsConnectOptions {
 // null) when the peer closed or the stream faulted, so recv callers can loop
 // on `msg.error == null`.
 export final class WsMessage {
-    data: Array<byte>?
+    data: Array<u8>?
     binary: bool
     error: string?
 
-    constructor(data: Array<byte>? = null, binary: bool = false, error: string? = null) {
+    constructor(data: Array<u8>? = null, binary: bool = false, error: string? = null) {
         this.data = data
         this.binary = binary
         this.error = error
@@ -849,35 +849,35 @@ export final class WsMessage {
 // length, 0 when more bytes are needed, or -1 on a protocol violation. This
 // gives recv the three-way verdict parseFrame's nullable result cannot, so a
 // malformed frame closes with 1002 instead of blocking for more data.
-fn _frameSpan(raw: Array<byte>, maxPayload: int) -> int {
+fn _frameSpan(raw: Array<u8>, maxPayload: i64) -> i64 {
     var n = len(raw)
     if (n < 2) { return 0 }
-    var first: int = raw[0] as int
+    var first: i64 = raw[0] as i64
     var rsv23 = (first & 48) != 0
     if (rsv23) { return -1 }
-    var opcode: int = first & 15
+    var opcode: i64 = first & 15
     if (!_validOpcode(opcode)) { return -1 }
     var control = (opcode & 8) != 0
     var fin = (first & 128) != 0
     if (control && !fin) { return -1 }
 
-    var second: int = raw[1] as int
+    var second: i64 = raw[1] as i64
     var masked = (second & 128) != 0
-    var lenCode: int = second & 127
+    var lenCode: i64 = second & 127
     if (control && lenCode > 125) { return -1 }
 
     var offset = 2
     var payloadLen = lenCode
     if (lenCode == 126) {
         if (n < 4) { return 0 }
-        payloadLen = ((raw[2] as int) << 8) | (raw[3] as int)
+        payloadLen = ((raw[2] as i64) << 8) | (raw[3] as i64)
         offset = 4
     } else if (lenCode == 127) {
         if (n < 10) { return 0 }
         payloadLen = 0
         for (var i = 0; i < 8; i++) {
             if (i < 4 && raw[2 + i] != 0) { return -1 }
-            payloadLen = (payloadLen << 8) | (raw[2 + i] as int)
+            payloadLen = (payloadLen << 8) | (raw[2 + i] as i64)
         }
         if (payloadLen < 0) { return -1 }
         offset = 10
@@ -894,11 +894,11 @@ fn _frameSpan(raw: Array<byte>, maxPayload: int) -> int {
 export final class WsConn {
     private _conn: NetConn?
     private _isServer: bool
-    private _rbuf: Array<byte>
-    private _fragBuf: Array<byte>?
+    private _rbuf: Array<u8>
+    private _fragBuf: Array<u8>?
     private _fragBinary: bool
     private _closed: bool
-    private _maxMessage: int
+    private _maxMessage: i64
     url: string
     error: string?
 
@@ -907,11 +907,11 @@ export final class WsConn {
         isServer: bool,
         url: string,
         error: string?,
-        maxMessage: int
+        maxMessage: i64
     ) {
         this._conn = conn
         this._isServer = isServer
-        this._rbuf = Array<byte>()
+        this._rbuf = Array<u8>()
         this._fragBuf = null
         this._fragBinary = false
         this._closed = conn == null
@@ -923,7 +923,7 @@ export final class WsConn {
     isOpen() -> bool { return !this._closed && this._conn != null }
 
     // Send one frame; a client masks, a server does not (RFC 6455 5.1).
-    private _sendFrame(payload: Array<byte>, opcode: int) -> bool {
+    private _sendFrame(payload: Array<u8>, opcode: i64) -> bool {
         if (this._conn == null) { return false }
         var f = frame(payload, opcode, !this._isServer)
         return net.writeBytes(this._conn!, f) == len(f)
@@ -932,28 +932,28 @@ export final class WsConn {
     // Pull more bytes into the read buffer; false at EOF or on error.
     private _fill() -> bool {
         if (this._conn == null) { return false }
-        var chunk = Array<byte>(_WS_READ_CHUNK)
+        var chunk = Array<u8>(_WS_READ_CHUNK)
         var n = net.readInto(this._conn!, ref chunk, _WS_READ_CHUNK)
         if (n <= 0) { return false }
         for (var i = 0; i < n; i++) { this._rbuf.push(chunk[i]) }
         return true
     }
 
-    private _consume(count: int) {
+    private _consume(count: i64) {
         if (count <= 0) { return }
-        var rest = Array<byte>()
+        var rest = Array<u8>()
         for (var i = count; i < len(this._rbuf); i++) { rest.push(this._rbuf[i]) }
         this._rbuf = rest
     }
 
-    private _writeClose(code: int, reason: string) {
+    private _writeClose(code: i64, reason: string) {
         if (this._conn == null) { return }
         var f = closeFrame(code, reason, !this._isServer)
         net.writeBytes(this._conn!, f)
     }
 
     // Close the transport after an error and surface it as a WsMessage.
-    private _fail(code: int, reason: string) -> WsMessage {
+    private _fail(code: i64, reason: string) -> WsMessage {
         if (!this._closed) { this._writeClose(code, reason) }
         this._closed = true
         if (this._conn != null) {
@@ -967,7 +967,7 @@ export final class WsConn {
     // are handled inline and never surface. A returned message with a non-null
     // error marks a clean close or a fault; null means the read deadline
     // elapsed with no complete frame.
-    recv(timeout: int = -1) -> WsMessage? {
+    recv(timeout: i64 = -1) -> WsMessage? {
         if (this._conn == null) { return WsMessage(null, false, "closed") }
         net.setReadDeadline(this._conn!, timeout >= 0 ? time.monotonic() + timeout : 0)
         while (true) {
@@ -1050,13 +1050,13 @@ export final class WsConn {
         return this._sendFrame(data.copyBytes(), _OP_TEXT)
     }
 
-    sendBytes(data: Array<byte>, binary: bool = false) -> bool {
+    sendBytes(data: Array<u8>, binary: bool = false) -> bool {
         return this._sendFrame(data, binary ? _OP_BINARY : _OP_TEXT)
     }
 
-    ping() -> bool { return this._sendFrame(Array<byte>(0), _OP_PING) }
+    ping() -> bool { return this._sendFrame(Array<u8>(0), _OP_PING) }
 
-    close(code: int = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+    close(code: i64 = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
         if (this._closed || this._conn == null) { return true }
         this._writeClose(code, reason)
         this._closed = true
@@ -1067,7 +1067,7 @@ export final class WsConn {
 }
 
 // Find the byte after the CRLFCRLF that ends an HTTP head, or -1.
-fn _crlfCrlf(raw: Array<byte>) -> int {
+fn _crlfCrlf(raw: Array<u8>) -> i64 {
     for (var i = 0; i + 3 < len(raw); i++) {
         if (raw[i] == 13 && raw[i + 1] == 10 && raw[i + 2] == 13 && raw[i + 3] == 10) {
             return i + 4
@@ -1077,16 +1077,16 @@ fn _crlfCrlf(raw: Array<byte>) -> int {
 }
 
 // Read an HTTP upgrade head (through the terminating CRLFCRLF) as text.
-fn _wsReadHandshake(conn: NetConn, timeoutMs: int) -> string? {
-    var raw = Array<byte>()
+fn _wsReadHandshake(conn: NetConn, timeoutMs: i64) -> string? {
+    var raw = Array<u8>()
     net.setReadDeadline(conn, time.monotonic() + timeoutMs)
     while (len(raw) < _WS_UPGRADE_MAX_BYTES) {
         var end = _crlfCrlf(raw)
         if (end >= 0) {
-            var head: Slice<byte> = raw[0:end]
+            var head: Slice<u8> = raw[0:end]
             return string.fromUtf8Lossy(head)
         }
-        var chunk = Array<byte>(_WS_READ_CHUNK)
+        var chunk = Array<u8>(_WS_READ_CHUNK)
         var n = net.readInto(conn, ref chunk, _WS_READ_CHUNK)
         if (n <= 0) { return null }
         for (var i = 0; i < n; i++) { raw.push(chunk[i]) }
@@ -1143,9 +1143,9 @@ export fn connect(url: string, options: WsConnectOptions? = null) -> WsConn {
 // uses for its route snapshot.
 final class _WsServeCtx {
     handler: fn(ref WsConn)
-    maxMessage: int
+    maxMessage: i64
 
-    constructor(handler: fn(ref WsConn), maxMessage: int) {
+    constructor(handler: fn(ref WsConn), maxMessage: i64) {
         this.handler = handler
         this.maxMessage = maxMessage
     }
@@ -1181,23 +1181,23 @@ export fn sendText(conn: ref WsConn, data: string) -> bool {
     return conn.sendText(data)
 }
 
-export fn sendBytes(conn: ref WsConn, data: Array<byte>, binary: bool = false) -> bool {
+export fn sendBytes(conn: ref WsConn, data: Array<u8>, binary: bool = false) -> bool {
     return conn.sendBytes(data, binary)
 }
 
-export fn recv(conn: ref WsConn, timeout: int = -1) -> WsMessage? {
+export fn recv(conn: ref WsConn, timeout: i64 = -1) -> WsMessage? {
     return conn.recv(timeout)
 }
 
 export fn ping(conn: ref WsConn) -> bool { return conn.ping() }
 
-export fn close(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
+export fn close(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = "") -> bool {
     return conn.close(code, reason)
 }
 
 // Listen, returning null instead of throwing so the caller keeps a clean
 // ownership summary (a try-assigned local defeats the move analysis).
-fn _wsListen(port: int) -> NetListener? {
+fn _wsListen(port: i64) -> NetListener? {
     try {
         return net.listen(port, 1024)
     } catch (e: NetError) {
@@ -1209,10 +1209,10 @@ fn _wsListen(port: int) -> NetListener? {
 // accepted connection (the http server shape). Setting running to false stops
 // the accept loop and the linked scope cancels in-flight handlers.
 export fn serve(
-    port: int,
+    port: i64,
     handler: fn(ref WsConn),
     running: Atomic<bool>,
-    maxMessage: int = _WS_MAX_MESSAGE_BYTES
+    maxMessage: i64 = _WS_MAX_MESSAGE_BYTES
 ) -> bool {
     if (!running.load()) { return false }
     var maybeListener = _wsListen(port)

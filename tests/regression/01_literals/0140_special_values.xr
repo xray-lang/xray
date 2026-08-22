@@ -86,19 +86,19 @@ fn test_whitespace_string() {
 // ===== 空集合 =====
 @test
 fn test_empty_array() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     assert_eq(len(arr), 0)
 }
 
 @test
 fn test_empty_map() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     assert_eq(len(m), 0)
 }
 
 @test
 fn test_empty_set() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     assert_eq(len(s), 0)
 }
 
@@ -114,14 +114,4 @@ fn test_zero_int() {
 fn test_zero_float() {
     var x = 0
     assert_eq(x == 0, true)
-}
-
-// ===== 布尔边界 =====
-@test
-fn test_bool_in_arithmetic() {
-    // true 作为 1，false 作为 0
-    var t = true
-    var f = false
-    assert_eq(int(t), 1)
-    assert_eq(int(f), 0)
 }

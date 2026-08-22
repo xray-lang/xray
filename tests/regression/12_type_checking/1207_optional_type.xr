@@ -3,7 +3,7 @@
 // All types can be nullable (int?, string?, etc.)
 // Test 1: Variable with optional type
 
-fn findIndex(arr: Array<int>, val: int) -> int? {
+fn findIndex(arr: Array<i64>, val: i64) -> i64? {
     for (var i = 0; i < len(arr); i++) {
         if (arr[i] == val) {
             return i
@@ -20,10 +20,10 @@ fn greet(name: string?) -> string {
 
 @test
 fn test_optional_type() {
-    var x: int? = null
+    var x: i64? = null
     print(x)
     // expect: null
-    var y: int? = 42
+    var y: i64? = 42
     print(y)
 
     // expect: 42
@@ -54,7 +54,7 @@ fn test_optional_type() {
     print(greet("Bob"))
     // expect: Hello, Bob!
     // Test 6: Array optional type
-    var arr: Array<int>? = null
+    var arr: Array<i64>? = null
     print(arr)
     // expect: null
     arr = [1, 2, 3]

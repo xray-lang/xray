@@ -1,7 +1,7 @@
 // anchor: pass-gvn-redundant-expression
 // Global value numbering: the same expression is computed on both paths and
 // again after the merge, over operands nothing writes between them.
-fn run(a: int, b: int, pick: bool) -> int {
+fn run(a: i64, b: i64, pick: bool) -> i64 {
     var t = 0
     if (pick) {
         t = a * b + 1

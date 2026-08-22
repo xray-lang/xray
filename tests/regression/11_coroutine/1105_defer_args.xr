@@ -4,7 +4,7 @@ fn cleanup(msg: string) {
     print(msg)
 }
 
-fn log_value(name: string, value: int) {
+fn log_value(name: string, value: i64) {
     print(name)
     print(value)
 }

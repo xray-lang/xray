@@ -1,8 +1,8 @@
 // A field without a declaration default and without a nullable type must be
 // set by the literal; use Point() when a whole zero value is intended.
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 var p = Point{x: 1}

@@ -1,6 +1,6 @@
 import { LIMIT } from "./_imported_scalar_const_native_compare_lib"
 
-fn withinLimit(length: int) -> bool {
+fn withinLimit(length: i64) -> bool {
     return length <= LIMIT
 }
 

@@ -77,7 +77,8 @@ static const char SYSTEM_PREAMBLE[] =
     "You are an expert Xray language assistant. "
     "Xray is a statically-typed scripting language with native concurrency. "
     "Key features:\n"
-    "- Types: int, float, string, bool, Array<T>, Map<K,V>, Set<T>, "
+    "- Types: exact scalars (i8..i64, u8..u64, f32/f64, isize/usize), "
+    "string, bool, Array<T>, Map<K,V>, Set<T>, "
     "Channel<T>, JSON.Value\n"
     "- Concurrency: go/await, const Channel, scope, select, explicit move/copy\n"
     "- Safety: if it compiles, it's concurrency-safe\n"
@@ -108,7 +109,7 @@ static const char EXPLAIN_ERROR_SYSTEM[] =
 
 static const char CONVERT_SYSTEM[] =
     "Convert the following code to idiomatic Xray. Guidelines:\n"
-    "1. Use Xray types: int (not number), string (not str)\n"
+    "1. Use exact Xray scalar types such as i64 or f64, and string (not str)\n"
     "2. Use match instead of switch\n"
     "3. Use for-in range (for i in 0..n) when possible\n"
     "4. Use Channel + go for concurrency instead of threads/async-await\n"

@@ -1,7 +1,7 @@
 // anchor: pass-block-simplify-empty-and-chained
 // Block simplification: empty blocks and single-predecessor chains collapse. The
 // observable order of the prints is what must not move.
-fn run(n: int) {
+fn run(n: i64) {
     if (n > 0) {
         if (n > 1) {
             if (n > 2) {

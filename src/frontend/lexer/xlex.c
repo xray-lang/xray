@@ -18,7 +18,7 @@
 #include "../../base/xutf8.h"
 #include "../../base/xsimd.h"
 #include "../../base/xmalloc.h"
-#include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 
 // ============================================================================
 // Trivia Functions
@@ -422,11 +422,10 @@ static const XrKeyword keywords[] = {
  * xkeywords.def. Keeping a separate tiny table preserves the sorted binary
  * search invariant of the general keyword table. */
 static const XrKeyword scalar_keywords[] = {
-#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
-                       canonical_display, public_type_id, range_class)                             \
-    {spelling, length, lexer_token},
-#include "../../shared/xr_scalar_type.def"
-#undef XR_SCALAR_TYPE
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    {source_name, (int) (sizeof(source_name) - 1), TK_##id},
+#include "../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
 };
 
 #define NUM_SCALAR_KEYWORDS (sizeof(scalar_keywords) / sizeof(scalar_keywords[0]))
@@ -438,11 +437,10 @@ static const XrKeyword scalar_keywords[] = {
 #include "xkeywords.def"
 #undef XR_KW
 
-#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
-                       canonical_display, public_type_id, range_class)                             \
-    _Static_assert(sizeof(spelling) - 1 == (length), "scalar keyword length mismatch: " spelling);
-#include "../../shared/xr_scalar_type.def"
-#undef XR_SCALAR_TYPE
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    _Static_assert(sizeof(source_name) > 1, "empty exact scalar keyword");
+#include "../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
 
 static XrTokenType identifier_type(Scanner *scanner) {
     const char *s = scanner->start;
@@ -457,7 +455,7 @@ static XrTokenType identifier_type(Scanner *scanner) {
     // The same total order is used to sort xkeywords.def, so this is correct
     // by construction; the lengths-differ branch ensures shorter prefixes
     // (e.g. "in") are found instead of being conflated with longer keywords
-    // (e.g. "int" / "interface"), and prefixes of keywords (e.g. user-named
+    // (e.g. "i64" / "interface"), and prefixes of keywords (e.g. user-named
     // `iffy`) cannot collide with the keyword (`if`) because length differs.
     int lo = 0, hi = (int) NUM_KEYWORDS - 1;
     while (lo <= hi) {
@@ -1369,11 +1367,10 @@ static const char *token_names[] = {
     [TK_STRING] = "string",
     [TK_BOOL] = "bool",
     [TK_RUNE] = "rune",
-#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
-                       canonical_display, public_type_id, range_class)                             \
-    [lexer_token] = spelling,
-#include "../../shared/xr_scalar_type.def"
-#undef XR_SCALAR_TYPE
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    [TK_##id] = source_name,
+#include "../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
 
     // Type operators / special
     [TK_QUESTION] = "?",

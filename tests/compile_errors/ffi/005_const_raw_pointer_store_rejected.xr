@@ -1,5 +1,5 @@
 // 113 FFI: unsafe permits dereference, but const Ptr<T> still rejects stores.
-extern "C" { fn raw_addr() -> Ptr<byte> }
+extern "C" { fn raw_addr() -> Ptr<u8> }
 
 var p = unsafe { raw_addr() }
 unsafe {

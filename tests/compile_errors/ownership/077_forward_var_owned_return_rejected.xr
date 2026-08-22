@@ -2,8 +2,8 @@ fn main() {
     var local = buildBuffer()
 }
 
-fn buildBuffer() -> Array<byte> {
-    var result = Array<byte>(1, 0)
+fn buildBuffer() -> Array<u8> {
+    var result = Array<u8>(1, 0)
     return move result
 }
 

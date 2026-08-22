@@ -1,23 +1,23 @@
-fn byte_ops() -> int {
-    var bytes = Array<byte>(8, 0)
-    var srcBytes = Array<byte>(4, 3)
-    var view: Slice<byte> = bytes[:]
-    var src: Slice<byte> = srcBytes[:]
+fn byte_ops() -> i64 {
+    var bytes = Array<u8>(8, 0)
+    var srcBytes = Array<u8>(4, 3)
+    var view: Slice<u8> = bytes[:]
+    var src: Slice<u8> = srcBytes[:]
     view.fill(1)
     view.store<u16>(2, 0x0203, Endian.LE)
     view.copyFrom(src)
     view.repeatFrom(4, 2, 2)
-    return int(view[0]) + int(view[4])
+    return (view[0] as i64) + (view[4] as i64)
 }
 
-fn word_ops() -> int {
+fn word_ops() -> i64 {
     var words = Array<u32>(4, 0)
     var srcWords = Array<u32>(2, 9)
     var view: Slice<u32> = words[:]
     var src: Slice<u32> = srcWords[:]
     view.fill(7)
     view.copyFrom(src)
-    return int(view[0]) + int(view[1])
+    return (view[0] as i64) + (view[1] as i64)
 }
 
 print(byte_ops())

@@ -2,19 +2,19 @@
 // for class constructor lowering to XI_CALL_METHOD that previously fell through
 // to AOT runtime method dispatch.
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
-    constructor(x: int, y: int) {
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
 
-    sum() -> int {
+    sum() -> i64 {
         return this.x + this.y
     }
 
-    shift(dx: int) {
+    shift(dx: i64) {
         this.x = this.x + dx
     }
 }

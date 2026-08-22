@@ -1,7 +1,4 @@
 import text
-
-import strconv
-
 // anchor: string-surface-declared-methods
 // Canonical string/rune/byte surface must behave identically on VM and AOT.
 
@@ -27,11 +24,11 @@ print(text.reverseRunes("abc"))
 print(text.reverseRunes("aé😀"))
 
 // numeric parsing: null on failure
-print(strconv.parseInt("42"))
-print(strconv.parseInt(" -7 "))
-print(strconv.parseInt("x"))
-print(strconv.parseFloat("3.5"))
-print(strconv.parseFloat("nope"))
+print(i64.tryParse("42"))
+print(i64.tryParse(" -7 "))
+print(i64.tryParse("x"))
+print(f64.tryParse("3.5"))
+print(f64.tryParse("nope"))
 
 // emptiness / toString
 print(len("") == 0)
@@ -39,11 +36,11 @@ print(len("a") == 0)
 print("self".toString())
 
 // Binary/text conversion is explicit and validates UTF-8.
-var bin: Array<byte> = [104, 105]
+var bin: Array<u8> = [104, 105]
 print(string.fromUtf8(bin[:]))
-var accented: Array<byte> = [104, 195, 169]
+var accented: Array<u8> = [104, 195, 169]
 print(string.fromUtf8(accented[:]))
-var invalid: Array<byte> = [255]
+var invalid: Array<u8> = [255]
 var caught_invalid_utf8 = false
 var invalid_utf8_error = ""
 try {

@@ -895,13 +895,13 @@ static XrTypeRef *xa_synth_tref_from_type(XrCompilerSession *session, const XrTy
     }
     switch (t->kind) {
         case XR_KIND_INT:
-            return t->scalar_rep == XR_NATIVE_I64 ? xr_tref_int(session)
-                                                  : xr_tref_int_width(session, t->scalar_rep);
+            return t->scalar_rep == XR_NATIVE_I64 ? xr_tref_i64(session)
+                                                  : xr_tref_scalar(session, t->scalar_rep);
         case XR_KIND_FLOAT:
             if (!xr_scalar_rep_is_float(t->scalar_rep))
                 return NULL;
-            return t->scalar_rep == XR_NATIVE_F64 ? xr_tref_float(session)
-                                                  : xr_tref_float_width(session, t->scalar_rep);
+            return t->scalar_rep == XR_NATIVE_F64 ? xr_tref_f64(session)
+                                                  : xr_tref_scalar(session, t->scalar_rep);
         case XR_KIND_STRING:
             return xr_tref_string(session);
         case XR_KIND_BOOL:
@@ -1662,8 +1662,8 @@ static void xa_check_thread_spawn_options(XaInferContext *ctx, AstNode *node) {
     if (node->type != AST_STRUCT_LITERAL) {
         xa_analyzer_add_diagnostic(
             ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
-            "sys.Thread.spawn options must be ThreadOptions{ stackSize: <int>, name: <string>, "
-            "affinity: [<int>, ...] }",
+            "sys.Thread.spawn options must be ThreadOptions{ stackSize: <i64>, name: <string>, "
+            "affinity: [<i64>, ...] }",
             &loc);
         return;
     }
@@ -2859,13 +2859,13 @@ static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNod
         .file = ctx->file_path, .line = node ? node->line : 0, .column = node ? node->column : 0};
     if (call->type_arg_count != 1 || !call->type_args || !call->type_args[0]) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_GENERIC_COUNT,
-                                   "Slice<byte>.reinterpret<T>() expects exactly one type argument",
+                                   "Slice<u8>.reinterpret<T>() expects exactly one type argument",
                                    &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
     }
     XrType *target = xr_tref_resolve_in_analyzer(ctx->analyzer, call->type_args[0]);
     if (xa_reject_error_type_success_type(ctx->analyzer, target, "generic type argument",
-                                          "Slice<byte>.reinterpret<T>()", node ? node->line : 0,
+                                          "Slice<u8>.reinterpret<T>()", node ? node->line : 0,
                                           node ? node->column : 0))
         return xr_type_new_error(NULL);
     uint32_t target_size = 0;
@@ -2875,7 +2875,7 @@ static XrType *xa_byte_slice_reinterpret_return_type(XaInferContext *ctx, AstNod
         !xr_type_all_bit_patterns_valid(target)) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                    XR_ERR_ANALYZE_GENERIC_CONSTRAINT,
-                                   "Slice<byte>.reinterpret<T>() requires a statically laid out "
+                                   "Slice<u8>.reinterpret<T>() requires a statically laid out "
                                    "target for which every bit pattern is valid",
                                    &loc);
         return xr_type_new_error(ctx->analyzer->isolate);
@@ -4082,7 +4082,7 @@ static void xa_check_freestanding_math_call(XaInferContext *ctx, AstNode *node, 
     snprintf(feature, sizeof(feature), "math.%s", member);
     xa_freestanding_report_unavailable(
         ctx, node, feature,
-        "freestanding math currently allows literal constants and int-only min/max/clamp; "
+        "freestanding math currently allows literal constants and i64-only min/max/clamp; "
         "libm-backed or floating math helpers are hosted-only");
 }
 
@@ -6722,7 +6722,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                   .column = call->arguments[1]->column};
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_ARG_TYPE,
-                                           "JSON.stringify() indent must be a non-null int", &loc);
+                                           "JSON.stringify() indent must be a non-null i64", &loc);
                 return xr_type_new_error(ctx->analyzer->isolate);
             }
         }
@@ -8135,10 +8135,10 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     }
 
     if (xa_call_is_byte_slice_typed_load(call, callee_obj_type))
-        return_type = xa_load_le_return_type(ctx, node, call, "Slice<byte>.load<T>()", true);
+        return_type = xa_load_le_return_type(ctx, node, call, "Slice<u8>.load<T>()", true);
 
     if (xa_call_is_byte_slice_typed_store(call, callee_obj_type)) {
-        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "Slice<byte>.store<T>()", true);
+        (void) xa_byte_slice_typed_type_arg(ctx, node, call, "Slice<u8>.store<T>()", true);
         return_type = xr_type_new_unit(ctx->analyzer->isolate);
     }
 

@@ -7,7 +7,7 @@ vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
 export_authority = "boundary_manifest_semantic_source"
 l4_algorithm_review_task = "task-256"
 l4_algorithm_reviewed = [
-  "_probe", "base64", "csv", "datetime", "encoding", "path", "strconv",
+  "_probe", "base64", "csv", "datetime", "encoding", "path",
   "sync", "text", "toml", "url", "xml", "yaml",
 ]
 error_model = "enum_value_channel"
@@ -103,7 +103,7 @@ layer = "L1"
 policy = "native_primitive"
 semantic_source = "stdlib/defs/core.def"
 factory_source = "stdlib/math/math.c"
-public_native = ["E", "EPSILON", "INF", "LN10", "LN2", "LOG10E", "LOG2E", "MAX_FLOAT", "MAX_INT", "MIN_INT", "NAN", "PI", "SQRT2", "TAU", "abs", "acos", "asin", "atan", "atan2", "cbrt", "ceil", "clamp", "cos", "cosh", "degToRad", "exp", "expm1", "floor", "fmod", "hypot", "isFinite", "isNaN", "lerp", "log", "log10", "log1p", "log2", "max", "min", "pow", "radToDeg", "random", "randomInt", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh", "trunc"]
+public_native = ["E", "EPSILON", "INF", "LN10", "LN2", "LOG10E", "LOG2E", "MAX_F64", "MAX_I64", "MIN_I64", "NAN", "PI", "SQRT2", "TAU", "abs", "acos", "asin", "atan", "atan2", "cbrt", "ceil", "clamp", "cos", "cosh", "degToRad", "exp", "expm1", "floor", "fmod", "hypot", "isFinite", "isNaN", "lerp", "log", "log10", "log1p", "log2", "max", "min", "pow", "radToDeg", "random", "randomInt", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh", "trunc"]
 perf_suite = "stdlib/math"
 
 [[module]]
@@ -290,18 +290,6 @@ public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true
 perf_suite = "stdlib/text"
-
-[[module]]
-name = "strconv"
-public = true
-layer = "L4"
-policy = "xray_semantic"
-semantic_source = "stdlib/strconv/strconv.xr"
-factory_source = "stdlib/strconv/strconv.c"
-public_native = []
-def_migration_complete = true
-aot_helper_forbidden = true
-perf_suite = "stdlib/strconv"
 
 [[module]]
 name = "_probe"

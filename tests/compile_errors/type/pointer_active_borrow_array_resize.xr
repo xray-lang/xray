@@ -1,5 +1,5 @@
 fn run() {
-    var values = Array<int>(0)
+    var values = Array<i64>(0)
     values.push(1)
     var ptr = unsafe { values.mutPtr() }
     values.push(2)

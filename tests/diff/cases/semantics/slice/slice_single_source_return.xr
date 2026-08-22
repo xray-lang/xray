@@ -1,34 +1,34 @@
-fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
     return data[start:]
 }
 
-fn forward(data: Slice<byte>, start: int) -> Slice<byte> {
+fn forward(data: Slice<u8>, start: i64) -> Slice<u8> {
     return tail(data, start)
 }
 
 class Window {
-    bytes: Array<byte>
-    start: int
+    bytes: Array<u8>
+    start: i64
 
-    constructor(bytes: Array<byte>, start: int) {
+    constructor(bytes: Array<u8>, start: i64) {
         this.bytes = bytes
         this.start = start
     }
 
-    tail() -> Slice<byte> {
+    tail() -> Slice<u8> {
         return this.bytes[this.start:]
     }
 }
 
 fn main() {
-    var bytes: Array<byte> = [10, 20, 30, 40]
-    var source: Slice<byte> = bytes[:]
-    var result: Slice<byte> = forward(source, 2)
+    var bytes: Array<u8> = [10, 20, 30, 40]
+    var source: Slice<u8> = bytes[:]
+    var result: Slice<u8> = forward(source, 2)
     print(len(result))
     print(result[0])
     print(result[1])
     var window = Window(bytes, 1)
-    var receiverResult: Slice<byte> = window.tail()
+    var receiverResult: Slice<u8> = window.tail()
     print(receiverResult[0])
 }
 

@@ -686,7 +686,7 @@ static XrCFuncResult net_accept_handle_yieldable(XrVMRuntime *X, XrValue *args, 
 typedef struct {
     int fd;
     XrNetConn *conn;
-    XrArray *buf;  // Array<byte> buffer supplied by caller (not owned)
+    XrArray *buf;  // Array<u8> buffer supplied by caller (not owned)
     size_t target_len;
     size_t received;
     bool exact;
@@ -871,7 +871,7 @@ static XrCFuncResult net_read_into_step(XrVMRuntime *X, NetReadIntoState *state,
 
 /*
  * net.__readInto(conn, buffer, maxlen) -> int
- * Read once into a reusable Array<byte> buffer. EOF returns 0; errors return -1.
+ * Read once into a reusable Array<u8> buffer. EOF returns 0; errors return -1.
  */
 static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                              XrValue *result) {
@@ -943,7 +943,7 @@ static XrCFuncResult net_read_into_yieldable(XrVMRuntime *X, XrValue *args, int 
 typedef struct {
     int fd;
     XrNetConn *conn;
-    const char *data;  // Points directly into Array<byte> storage (not owned)
+    const char *data;  // Points directly into Array<u8> storage (not owned)
     size_t len;
     size_t written;
     bool is_tls;
@@ -2102,7 +2102,7 @@ static XrValue net_udp_bind_handle(XrVMRuntime *X, XrValue *args, int nargs) {
 typedef struct {
     int fd;
     XrNetConn *conn;
-    const char *data;  // Points into Array<byte> storage (not owned)
+    const char *data;  // Points into Array<u8> storage (not owned)
     size_t len;
     struct sockaddr_storage addr;
     socklen_t addr_len;
@@ -2209,7 +2209,7 @@ static XrCFuncResult net_udp_send_to_yieldable(XrVMRuntime *X, XrValue *args, in
 typedef struct {
     int fd;
     XrNetConn *conn;
-    XrArray *buf;  // caller-owned Array<byte>
+    XrArray *buf;  // caller-owned Array<u8>
     int64_t deadline_ms;
 } NetUdpRecvState;
 

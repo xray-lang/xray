@@ -5,8 +5,8 @@
 // AOT must agree.
 
 fn main() {
-    const ch: Channel<Array<int>> = Channel(4)
-    const sch: Channel<int> = Channel(2)
+    const ch: Channel<Array<i64>> = Channel(4)
+    const sch: Channel<i64> = Channel(2)
 
     var a = [1, 2, 3]
     select {

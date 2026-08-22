@@ -1,4 +1,4 @@
-fn takes_u8(x: byte) {
+fn takes_u8(x: u8) {
     print(x)
 }
 
@@ -8,15 +8,15 @@ fn returns_i16() -> i16 {
 
 var a: i8 = 128
 var b: i8 = -129
-var c: byte = 256
-var d: byte = -1
+var c: u8 = 256
+var d: u8 = -1
 var e: u32 = 4294967296
 
-var f: byte = 0
+var f: u8 = 0
 f = 256
 takes_u8(256)
 
-var xs: Array<byte> = [0, 256]
-var pair: (byte, u16) = (1, 65536)
-var m: Map<byte, byte> = #{256: 1, 1: 256}
-var s: Set<byte> = #[256]
+var xs: Array<u8> = [0, 256]
+var pair: (u8, u16) = (1, 65536)
+var m: Map<u8, u8> = #{256: 1, 1: 256}
+var s: Set<u8> = #[256]

@@ -1,7 +1,7 @@
 // anchor: byte-slice-load-store-endian-shared-core
 fn main() {
-    var bytes = Array<byte>(12)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(12)
+    var view: Slice<u8> = bytes[:]
     view.store<u16>(0, 4660, Endian.LE)
     view.store<u16>(2, 4660, Endian.BE)
     view.store<u32>(4, 16909060, Endian.BE)
@@ -12,10 +12,10 @@ fn main() {
     print(bytes[3])
     print(bytes[4])
     print(bytes[7])
-    print(int(view.load<u16>(0, Endian.LE)))
-    print(int(view.load<u16>(2, Endian.BE)))
-    print(int(view.load<u32>(4, Endian.BE)))
-    print(int(view.load<u16>(8)))
+    print((view.load<u16>(0, Endian.LE) as i64))
+    print((view.load<u16>(2, Endian.BE) as i64))
+    print((view.load<u32>(4, Endian.BE) as i64))
+    print((view.load<u16>(8) as i64))
 }
 
 main()

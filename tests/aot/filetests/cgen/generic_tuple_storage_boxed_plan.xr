@@ -2,12 +2,12 @@ fn first<T>(items: Array<T>) -> T {
     return items[0]
 }
 
-fn run() -> int {
-    var values: Array<(int, bool)> = []
+fn run() -> i64 {
+    var values: Array<(i64, bool)> = []
     values.push((7, true))
     values.push((11, false))
 
-    var item = first<(int, bool)>(values)
+    var item = first<(i64, bool)>(values)
     if (item.1) {
         return item.0
     }

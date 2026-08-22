@@ -33,7 +33,7 @@ static XiCgenVerifyResult verify_c90(const char *src) {
 
 TEST(w1_unbalanced_braces) {
     const char *src = "void f(void) {\n"
-                      "    int a = 1;\n"; /* missing closing brace */
+                      "    i64 a = 1;\n"; /* missing closing brace */
     XiCgenVerifyResult r = verify(src);
     ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_W1_BALANCE);
     ASSERT_TRUE(r.line > 0);
@@ -41,7 +41,7 @@ TEST(w1_unbalanced_braces) {
 
 TEST(w1_stray_close_brace) {
     const char *src = "void f(void) {\n"
-                      "    int a = 1;\n"
+                      "    i64 a = 1;\n"
                       "}\n"
                       "}\n"; /* one extra close */
     XiCgenVerifyResult r = verify(src);
@@ -50,7 +50,7 @@ TEST(w1_stray_close_brace) {
 
 TEST(w1_unterminated_string) {
     const char *src = "static const char *s = \"abc;\n"
-                      "int x = 0;\n";
+                      "i64 x = 0;\n";
     XiCgenVerifyResult r = verify(src);
     ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_W1_BALANCE);
 }
@@ -59,7 +59,7 @@ TEST(w1_unterminated_string) {
 
 TEST(w2_path_fragment) {
     /* a source/path fragment leaked into an emitted symbol position */
-    const char *src = "static int broken = pkg/../oops;\n";
+    const char *src = "static i64 broken = pkg/../oops;\n";
     XiCgenVerifyResult r = verify(src);
     ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_W2_IDENTIFIER);
 }
@@ -99,8 +99,8 @@ TEST(w3_temp_assignment_at_file_scope) {
 
 TEST(w4_use_before_def) {
     const char *src = "void f(void) {\n"
-                      "    int a = v5;\n" /* v5 used here ... */
-                      "    int v5 = 2;\n" /* ... but defined here */
+                      "    i64 a = v5;\n" /* v5 used here ... */
+                      "    i64 v5 = 2;\n" /* ... but defined here */
                       "}\n";
     XiCgenVerifyResult r = verify(src);
     ASSERT_EQ_INT(r.category, XI_CGEN_VERIFY_W4_FORWARD_REF);
@@ -111,12 +111,12 @@ TEST(w4_use_before_def) {
 
 TEST(ok_simple_program) {
     const char *src = "#include <stdio.h>\n"
-                      "static int add(int a, int b) {\n"
-                      "    int v0 = a + b;\n"
+                      "static i64 add(i64 a, i64 b) {\n"
+                      "    i64 v0 = a + b;\n"
                       "    return v0;\n"
                       "}\n"
-                      "int main(void) {\n"
-                      "    int v1 = add(2, 3);\n"
+                      "i64 main(void) {\n"
+                      "    i64 v1 = add(2, 3);\n"
                       "    return v1;\n"
                       "}\n";
     XiCgenVerifyResult r = verify(src);
@@ -129,7 +129,7 @@ TEST(ok_strings_and_comments_with_braces) {
                       "static const char *j = \"{ \\\"k\\\": [1,2,3] }\";\n"
                       "void g(void) {\n"
                       "    // trailing } ) brace in a line comment\n"
-                      "    int v0 = 0;\n"
+                      "    i64 v0 = 0;\n"
                       "    (void) v0;\n"
                       "}\n";
     XiCgenVerifyResult r = verify(src);
@@ -143,14 +143,14 @@ TEST(ok_coroutine_frame_macro_temps) {
                       "    uint32_t state;\n"
                       "    int64_t v3;\n"
                       "} frame;\n"
-                      "int resume(void *raw) {\n"
+                      "i64 resume(void *raw) {\n"
                       "    frame *f = (frame *) raw;\n"
                       "#define v3 (f->v3)\n"
                       "#if defined(XRAY_AOT_DEBUG_LOCALS)\n"
                       "    int64_t dbg = (int64_t) v3;\n"
                       "#endif\n"
                       "    v3 = 7;\n"
-                      "    return (int) v3;\n"
+                      "    return (i64) v3;\n"
                       "#undef v3\n"
                       "}\n";
     XiCgenVerifyResult r = verify(src);
@@ -161,10 +161,10 @@ TEST(ok_coroutine_frame_macro_temps) {
 
 TEST(c90_accepts_governed_kernel_shape) {
     const char *src = "#include \"xrt_c90.h\"\n"
-                      "unsigned int hash(const void *data, size_t length) {\n"
-                      "    unsigned int value;\n"
+                      "unsigned i64 hash(const void *data, size_t length) {\n"
+                      "    unsigned i64 value;\n"
                       "    (void) data;\n"
-                      "    value = (unsigned int) length;\n"
+                      "    value = (unsigned i64) length;\n"
                       "    return value;\n"
                       "}\n";
     XiCgenVerifyResult r = verify_c90(src);
@@ -173,7 +173,7 @@ TEST(c90_accepts_governed_kernel_shape) {
 
 TEST(c90_rejects_compound_literal_and_runtime_residue) {
     XiCgenVerifyResult compound = verify_c90("void f(void) { S s = ((S){0}); }\n");
-    XiCgenVerifyResult runtime = verify_c90("extern int xrt_builtins[4];\n");
+    XiCgenVerifyResult runtime = verify_c90("extern i64 xrt_builtins[4];\n");
     ASSERT_EQ_INT(compound.category, XI_CGEN_VERIFY_C90_RESTRICTED);
     ASSERT_TRUE(strstr(compound.message, "compound-literal") != NULL);
     ASSERT_EQ_INT(runtime.category, XI_CGEN_VERIFY_C90_RESTRICTED);
@@ -181,7 +181,7 @@ TEST(c90_rejects_compound_literal_and_runtime_residue) {
 }
 
 TEST(c90_rejects_line_comments_but_ignores_literal_text) {
-    XiCgenVerifyResult comment = verify_c90("int x; // not ISO C90\n");
+    XiCgenVerifyResult comment = verify_c90("i64 x; // not ISO C90\n");
     XiCgenVerifyResult literal = verify_c90("const char *s = \"// ({ _Atomic ...\";\n");
     ASSERT_EQ_INT(comment.category, XI_CGEN_VERIFY_C90_RESTRICTED);
     ASSERT_EQ_INT(literal.category, XI_CGEN_VERIFY_OK);

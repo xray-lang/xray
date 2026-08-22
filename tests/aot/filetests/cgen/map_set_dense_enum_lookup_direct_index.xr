@@ -6,7 +6,7 @@ enum Color {
     Purple
 }
 
-fn denseEnumLookup() -> int {
+fn denseEnumLookup() -> i64 {
     var scores = #{
         Color.Red: 10,
         Color.Green: 11,

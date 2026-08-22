@@ -1,9 +1,9 @@
-fn xray_no_alloc_array_concat_reject(left: Array<int>, right: Array<int>) -> int {
+fn xray_no_alloc_array_concat_reject(left: Array<i64>, right: Array<i64>) -> i64 {
     return len(left.concat(right))
 }
 
-var xs = Array<int>(0, 0)
-var ys = Array<int>(0, 0)
+var xs = Array<i64>(0, 0)
+var ys = Array<i64>(0, 0)
 xs.push(1)
 ys.push(2)
 print(xray_no_alloc_array_concat_reject(xs, ys))

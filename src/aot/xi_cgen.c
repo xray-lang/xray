@@ -39,6 +39,7 @@
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_native_type_core.h"
+#include "../shared/xr_exact_scalar_registry.h"
 #include "../shared/xr_owner_forward_core.h"
 #include "../shared/xr_codegen_opaque_core.h"
 #include "../shared/xr_copy_core.h"

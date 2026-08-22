@@ -13,14 +13,14 @@ if (empty) {
     print("absent2")
 }
 
-var n: int? = 0
+var n: i64? = 0
 if (n) {
     print("zero-but-present")
 } else {
     print("absent3")
 }
 
-var absent: int? = null
+var absent: i64? = null
 if (absent) {
     print("bad")
 } else {

@@ -219,7 +219,7 @@ def run_basic_modules(rec: Recorder, config: Config, ws: workspace.Workspace) ->
 
     app.write_text('import { triple } from "./mathlib"\n\nprint(triple(14))\n',
                    encoding="utf-8")
-    lib.write_text("export fn triple(x: int) -> int {\n    return x * 3\n}\n",
+    lib.write_text("export fn triple(x: i64) -> i64 {\n    return x * 3\n}\n",
                    encoding="utf-8")
     r = build(config, cache, app, d / "app1")
     if not require_build(rec, r, "cold"):
@@ -229,7 +229,7 @@ def run_basic_modules(rec: Recorder, config: Config, ws: workspace.Workspace) ->
     expect_output(rec, config, d / "app1", "42", "cold")
 
     # Body-only change: the library recompiles, the consumer does not.
-    lib.write_text("export fn triple(x: int) -> int {\n    return x * 5\n}\n",
+    lib.write_text("export fn triple(x: i64) -> i64 {\n    return x * 5\n}\n",
                    encoding="utf-8")
     r = build(config, cache, app, d / "app2")
     if not require_build(rec, r, "body-change"):
@@ -238,8 +238,8 @@ def run_basic_modules(rec: Recorder, config: Config, ws: workspace.Workspace) ->
     expect_state(rec, r.combined_text(), "app", "hit", "body-change")
     expect_output(rec, config, d / "app2", "70", "body-change")
 
-    lib.write_text("export fn triple(x: int) -> int {\n    return x * 5\n}\n\n"
-                   "export fn quad(x: int) -> int {\n    return x * 4\n}\n",
+    lib.write_text("export fn triple(x: i64) -> i64 {\n    return x * 5\n}\n\n"
+                   "export fn quad(x: i64) -> i64 {\n    return x * 4\n}\n",
                    encoding="utf-8")
     r = build(config, cache, app, d / "app3")
     if not require_build(rec, r, "add-export"):
@@ -272,7 +272,7 @@ def run_evidence_manifest_cache(rec: Recorder, config: Config,
     cache = d / ".cache"
     app = d / "evidence.xr"
 
-    app.write_text("fn id(x: int) -> int {\n    return x\n}\n\nprint(id(7))\n",
+    app.write_text("fn id(x: i64) -> i64 {\n    return x\n}\n\nprint(id(7))\n",
                    encoding="utf-8")
     r = build(config, cache, app, d / "ev1")
     if not require_build(rec, r, "evidence-cold"):
@@ -324,7 +324,7 @@ def run_evidence_manifest_cache(rec: Recorder, config: Config,
     expect_output(rec, config, d / "ev_payload_corrupt", "7", "evidence-payload-corrupt")
 
     # A body edit keeps declarations/graph but invalidates body and global.
-    app.write_text("fn id(x: int) -> int {\n    return x + 1\n}\n\nprint(id(7))\n",
+    app.write_text("fn id(x: i64) -> i64 {\n    return x + 1\n}\n\nprint(id(7))\n",
                    encoding="utf-8")
     r = build(config, cache, app, d / "ev3")
     if not require_build(rec, r, "evidence-body-change"):
@@ -340,7 +340,7 @@ def run_evidence_manifest_cache(rec: Recorder, config: Config,
     expect_output(rec, config, d / "ev3", "8", "evidence-body-change")
 
     # A signature change invalidates every phase.
-    app.write_text("fn id(x: int, y: int) -> int {\n    return x + y\n}\n\n"
+    app.write_text("fn id(x: i64, y: i64) -> i64 {\n    return x + y\n}\n\n"
                    "print(id(7, 2))\n", encoding="utf-8")
     r = build(config, cache, app, d / "ev4")
     if not require_build(rec, r, "evidence-decl-change"):
@@ -370,11 +370,11 @@ def run_class_symbols(rec: Recorder, config: Config, ws: workspace.Workspace) ->
     app.write_text('import { Box } from "./shape"\n\nvar b = Box(4)\nprint(b.area())\n',
                    encoding="utf-8")
     lib.write_text("""export class Box {
-    side: int
-    constructor(s: int) {
+    side: i64
+    constructor(s: i64) {
         this.side = s
     }
-    area() -> int {
+    area() -> i64 {
         return this.side * this.side
     }
 }
@@ -391,14 +391,14 @@ def run_class_symbols(rec: Recorder, config: Config, ws: workspace.Workspace) ->
     # cache stays sound because the key covers what consumers actually need --
     # making the app call perimeter() does recompile shape and links.
     lib.write_text("""export class Box {
-    side: int
-    constructor(s: int) {
+    side: i64
+    constructor(s: i64) {
         this.side = s
     }
-    area() -> int {
+    area() -> i64 {
         return this.side * this.side
     }
-    perimeter() -> int {
+    perimeter() -> i64 {
         return this.side * 4
     }
 }
@@ -419,8 +419,8 @@ def run_lto_cache(rec: Recorder, config: Config, ws: workspace.Workspace) -> Non
 
     app.write_text('import { triple } from "./mathlib"\n\n'
                    "print(triple(14))\nprint(triple(2))\n", encoding="utf-8")
-    lib.write_text("export fn triple(x: int) -> int {\n    return x * 5\n}\n\n"
-                   "export fn quad(x: int) -> int {\n    return x * 4\n}\n",
+    lib.write_text("export fn triple(x: i64) -> i64 {\n    return x * 5\n}\n\n"
+                   "export fn quad(x: i64) -> i64 {\n    return x * 4\n}\n",
                    encoding="utf-8")
     r = build(config, cache, app, d / "lapp1", ["--lto"])
     if not require_build(rec, r, "lto-cold"):

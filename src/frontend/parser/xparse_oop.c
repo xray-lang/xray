@@ -435,7 +435,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
         if (xr_parser_check(parser, TK_VAR)) {
             xr_parser_error_at_current(parser,
                                        "'var' is not used for field declarations in struct body; "
-                                       "write the field name directly, e.g.: name: int");
+                                       "write the field name directly, e.g.: name: i64");
             xr_parser_advance(parser);
             continue;
         }
@@ -932,10 +932,10 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                     AstNode *dv = param->default_value;
                     switch (dv->type) {
                         case AST_LITERAL_INT:
-                            param->type = xr_tref_int(parser->compiler_session);
+                            param->type = xr_tref_i64(parser->compiler_session);
                             break;
                         case AST_LITERAL_FLOAT:
-                            param->type = xr_tref_float(parser->compiler_session);
+                            param->type = xr_tref_f64(parser->compiler_session);
                             break;
                         case AST_LITERAL_STRING:
                         case AST_TEMPLATE_STRING:
@@ -2188,9 +2188,9 @@ AstNode *xr_parse_static_constructor(Parser *parser, bool is_private) {
         xr_parser_error(parser, "static constructor cannot have return type");
         xr_parser_advance(parser);  // skip :
         // Skip type annotation
-        if (xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_INT) ||
-            xr_parser_check(parser, TK_STRING) || xr_parser_check(parser, TK_FLOAT) ||
-            xr_parser_check(parser, TK_BOOL)) {
+        if (xr_parser_check(parser, TK_NAME) || xr_parser_check(parser, TK_STRING) ||
+            xr_parser_check(parser, TK_BOOL) ||
+            (parser->current.type >= TK_I8 && parser->current.type <= TK_USIZE)) {
             xr_parser_advance(parser);
         }
     }

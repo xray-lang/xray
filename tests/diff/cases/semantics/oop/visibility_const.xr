@@ -2,15 +2,15 @@
 // private accessible within the class (including another instance of the same
 // class), protected accessible within the class, const set in the constructor.
 class Account {
-    private balance: int
+    private balance: i64
     protected owner: string
-    const id: int
-    constructor(b: int, o: string, i: int) {
+    const id: i64
+    constructor(b: i64, o: string, i: i64) {
         this.balance = b
         this.owner = o
         this.id = i
     }
-    getBalance() -> int { return this.balance }
+    getBalance() -> i64 { return this.balance }
     ownerName() -> string { return this.owner }
     richerThan(other: Account) -> bool { return this.balance > other.balance }
 }

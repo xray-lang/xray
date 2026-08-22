@@ -63,7 +63,7 @@ export class RwLock<T> {
     _entry: Semaphore
     _gate: Semaphore
     _rflag: Atomic<bool>
-    _readers: int
+    _readers: i64
     value: T
 
     constructor(v: T) {
@@ -140,7 +140,7 @@ export class Once {
 export class Barrier {
     _latch: CountdownLatch
 
-    constructor(parties: int) {
+    constructor(parties: i64) {
         this._latch = CountdownLatch(parties)
     }
 
@@ -159,7 +159,7 @@ export class Barrier {
 export class Condvar {
     _mutex: Semaphore
     _wlock: Atomic<bool>
-    _waiters: int
+    _waiters: i64
     _sem: Semaphore
 
     constructor() {
@@ -211,5 +211,5 @@ export class Condvar {
 // `.value`, which needs an enum instance).
 import mem
 export fn fence(order: Ordering) {
-    mem.fence(order as int)
+    mem.fence(order as i64)
 }

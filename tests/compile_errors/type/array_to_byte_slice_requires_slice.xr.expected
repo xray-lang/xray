@@ -1,1 +1,1 @@
-Type 'Array<byte>' is not assignable to type 'Slice<byte>'
+Type 'Array<u8>' is not assignable to type 'Slice<u8>'

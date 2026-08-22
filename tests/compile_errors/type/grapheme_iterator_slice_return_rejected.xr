@@ -1,5 +1,5 @@
-fn graphemes(text: string) -> Iterator<Slice<byte>> {
-    var view: Slice<byte> = text.bytes()
+fn graphemes(text: string) -> Iterator<Slice<u8>> {
+    var view: Slice<u8> = text.bytes()
     if (len(view) > 0) {
         print(len(view))
     }

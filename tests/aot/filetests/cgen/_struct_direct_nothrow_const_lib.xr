@@ -1,5 +1,5 @@
-export const CHUNK: int = 8
+export const CHUNK: i64 = 8
 
-export fn divideByChunk(value: int) -> int {
+export fn divideByChunk(value: i64) -> i64 {
     return value / CHUNK
 }

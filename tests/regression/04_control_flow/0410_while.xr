@@ -105,7 +105,7 @@ fn test_while_continue() {
 
 @test
 fn test_while_continue_and_break() {
-    var result: Array<int> = []
+    var result: Array<i64> = []
     var i = 0
     while (i < 10) {
         i++

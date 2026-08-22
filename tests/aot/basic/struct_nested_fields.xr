@@ -1,18 +1,18 @@
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 struct Box {
     p: Point
-    z: int
+    z: i64
 }
 
 var b = Box{p: Point{x: 1, y: 2}, z: 3}
 b.p.x = b.p.x + 4
 print(b.p.x + b.p.y + b.z)
 
-fn local() -> int {
+fn local() -> i64 {
     var p = Point{x: 10, y: 20}
     var box = Box{p: p, z: 30}
     box.p.y = box.p.y + 5

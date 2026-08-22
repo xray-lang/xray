@@ -1,4 +1,4 @@
 fn xray_rawptr_null_is_null() -> bool {
-    var p = Ptr<byte>.null()
+    var p = Ptr<u8>.null()
     return p.isNull()
 }

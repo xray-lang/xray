@@ -8,10 +8,10 @@
 // method call.
 
 class Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    constructor(x: float, y: float) {
+    constructor(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -24,20 +24,20 @@ class Vec2 {
         return Vec2(this.x - other.x, this.y - other.y)
     }
 
-    operator*(scalar: float) -> Vec2 {
+    operator*(scalar: f64) -> Vec2 {
         return Vec2(this.x * scalar, this.y * scalar)
     }
 
-    operator/(scalar: float) -> Vec2 {
+    operator/(scalar: f64) -> Vec2 {
         return Vec2(this.x / scalar, this.y / scalar)
     }
 }
 
 class ModPair {
-    a: int
-    b: int
+    a: i64
+    b: i64
 
-    constructor(a: int, b: int) {
+    constructor(a: i64, b: i64) {
         this.a = a
         this.b = b
     }

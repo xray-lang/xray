@@ -1,4 +1,4 @@
-fn recv_timeout_until_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>, timeout_ms: int) {
+fn recv_timeout_until_close(ch: Channel<i64>, ready: Channel<i64>, done: Channel<i64>, timeout_ms: i64) {
     ready.send(1)
     match (ch.recvTimeout(timeout_ms)) {
         Recv.Value(value) -> done.send(value)
@@ -6,7 +6,7 @@ fn recv_timeout_until_close(ch: Channel<int>, ready: Channel<int>, done: Channel
     }
 }
 
-fn recv_int(ch: Channel<int>) -> int {
+fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
@@ -16,9 +16,9 @@ fn recv_int(ch: Channel<int>) -> int {
 @test
 fn test_channel_close_wakes_timed_recv_fanout() {
     const waiter_count = 64
-    const ch = Channel<int>(0)
-    const ready = Channel<int>(0)
-    const done = Channel<int>(waiter_count)
+    const ch = Channel<i64>(0)
+    const ready = Channel<i64>(0)
+    const done = Channel<i64>(waiter_count)
 
     for (var i = 0; i < waiter_count; i++) {
         go recv_timeout_until_close(ch, ready, done, 2000)

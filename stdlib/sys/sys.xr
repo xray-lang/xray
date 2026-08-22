@@ -12,7 +12,7 @@ export enum Signal {
     INT
 }
 
-fn _signalCode(signal: Signal) -> int {
+fn _signalCode(signal: Signal) -> i64 {
     return match (signal) {
         Signal.TERM -> 15
         Signal.KILL -> 9
@@ -25,28 +25,28 @@ export fn onSignal(signal: Signal, handler: fn()) -> bool {
 }
 
 export class Pipe {
-    _readHandle: int
-    _writeHandle: int
+    _readHandle: i64
+    _writeHandle: i64
     _readOpen: bool
     _writeOpen: bool
 
-    constructor(readHandle: int, writeHandle: int) {
+    constructor(readHandle: i64, writeHandle: i64) {
         this._readHandle = readHandle
         this._writeHandle = writeHandle
         this._readOpen = readHandle >= 0
         this._writeOpen = writeHandle >= 0
     }
 
-    readEnd() -> int { return this._readHandle }
+    readEnd() -> i64 { return this._readHandle }
 
-    writeEnd() -> int { return this._writeHandle }
+    writeEnd() -> i64 { return this._writeHandle }
 
-    read(maxBytes: int = 8192) -> Array<byte>? {
+    read(maxBytes: i64 = 8192) -> Array<u8>? {
         if (!this._readOpen || maxBytes < 0) { return null }
         return __pipeRead(this._readHandle, maxBytes)
     }
 
-    write(data: Array<byte>) -> int {
+    write(data: Array<u8>) -> i64 {
         if (!this._writeOpen) { return -1 }
         return __pipeWrite(this._writeHandle, data)
     }
@@ -81,13 +81,13 @@ export class Pipe {
 export class ProcessOptions {
     cwd: string?
     env: Map<string, string>?
-    stdin: int?
-    stdout: int?
-    stderr: int?
+    stdin: i64?
+    stdout: i64?
+    stderr: i64?
     detached: bool
 
-    constructor(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null,
-                stdout: int? = null, stderr: int? = null, detached: bool = false) {
+    constructor(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null,
+                stdout: i64? = null, stderr: i64? = null, detached: bool = false) {
         this.cwd = cwd
         this.env = env
         this.stdin = stdin
@@ -98,24 +98,24 @@ export class ProcessOptions {
 }
 
 export class Process {
-    _id: int
+    _id: i64
     _open: bool
 
-    constructor(id: int, detached: bool = false) {
+    constructor(id: i64, detached: bool = false) {
         this._id = id
         this._open = id > 0 && !detached
     }
 
-    id: int { fn() { return this._id } }
+    id: i64 { fn() { return this._id } }
 
-    wait() -> int {
+    wait() -> i64 {
         if (!this._open) { return -1 }
         var code = __processWait(this._id)
         this._open = false
         return code
     }
 
-    tryWait() -> int? {
+    tryWait() -> i64? {
         if (!this._open) { return -1 }
         var code = __processTryWait(this._id)
         if (code != null) {
@@ -138,9 +138,9 @@ export class Process {
         var cwd: string? = null
         var envKeys: Array<string>? = null
         var envValues: Array<string>? = null
-        var stdinRead: int? = null
-        var stdoutWrite: int? = null
-        var stderrWrite: int? = null
+        var stdinRead: i64? = null
+        var stdoutWrite: i64? = null
+        var stderrWrite: i64? = null
         var detached = false
         if (options != null) {
             cwd = options!.cwd
@@ -170,7 +170,7 @@ enum _ThreadLocalError {
     RecursiveInit
 }
 
-fn _threadLocalPruneDeadSlots<T>(values: ref Map<int, T>) {
+fn _threadLocalPruneDeadSlots<T>(values: ref Map<i64, T>) {
     var keys = values.keys()
     for (key in keys) {
         if (!__threadLocalAlive(key)) {
@@ -179,7 +179,7 @@ fn _threadLocalPruneDeadSlots<T>(values: ref Map<int, T>) {
     }
 }
 
-fn _threadLocalPruneDeadFlags(values: ref Map<int, bool>) {
+fn _threadLocalPruneDeadFlags(values: ref Map<i64, bool>) {
     var keys = values.keys()
     for (key in keys) {
         if (!__threadLocalAlive(key)) {
@@ -190,8 +190,8 @@ fn _threadLocalPruneDeadFlags(values: ref Map<int, bool>) {
 
 export class ThreadLocal<T> {
     _lock: OsMutex
-    _values: Map<int, T>
-    _initializing: Map<int, bool>
+    _values: Map<i64, T>
+    _initializing: Map<i64, bool>
     _init: fn() -> T
 
     constructor(init: fn() -> T) {
@@ -258,15 +258,15 @@ export class ThreadLocal<T> {
 }
 
 export class Dylib {
-    _handle: int
+    _handle: i64
     _open: bool
 
-    constructor(handle: int) {
+    constructor(handle: i64) {
         this._handle = handle
         this._open = handle != 0
     }
 
-    symbol(name: string) -> Ptr<byte>? {
+    symbol(name: string) -> Ptr<u8>? {
         if (!this._open) { return null }
         return __dylibSymbol(this._handle, name)
     }

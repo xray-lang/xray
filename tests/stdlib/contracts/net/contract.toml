@@ -46,13 +46,13 @@ intentional_semantic_changes = [
   "listen, udpBind and upgradeTLS throw NetError instead of returning null handles",
   "lookup returns Array<IpAddress>, empty on failure, instead of string?",
   "UdpPacket is removed; recvFrom fills a caller buffer and returns UdpFrom sender identity under an explicit timeoutMs",
-  "sendTo takes Array<byte> payloads and an explicit timeoutMs",
+  "sendTo takes Array<u8> payloads and an explicit timeoutMs",
   "copyBidirectional throws NetError only for argument validation (Closed, Invalid); a per-direction I/O error ends that direction and the byte counts are still returned",
   "NetError gains Cancelled so cooperative cancellation is distinct from Closed"
 ]
 # Byte-first convergence roadmap:
-#   converged byte read: readBytes returns Array<byte>
-#   future converged writeBytes and sendTo accept Slice<byte>
+#   converged byte read: readBytes returns Array<u8>
+#   future converged writeBytes and sendTo accept Slice<u8>
 known_legacy_bugs = [
   "legacy net.read exposes arbitrary socket bytes as string?",
   "legacy dial/listen/udpBind/upgradeTLS report setup failure as null without a typed reason",
@@ -72,7 +72,7 @@ new_behavior = "stream I/O is byte-only (readInto/readBytes/writeBytes); connect
 [[legacy_behavior]]
 id = "high-byte-loopback"
 classification = "required"
-new_behavior = "socket loopback preserves high-byte octets exactly through the Array<byte> surface (writeBytes/readInto)"
+new_behavior = "socket loopback preserves high-byte octets exactly through the Array<u8> surface (writeBytes/readInto)"
 
 [[legacy_behavior]]
 id = "native-copy-byte-boundary"

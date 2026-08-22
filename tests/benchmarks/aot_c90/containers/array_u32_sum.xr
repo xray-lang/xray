@@ -1,4 +1,4 @@
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var vals: Array<u32> = []
     var i = 0
     while (i < n) {
@@ -9,7 +9,7 @@ fn run(n: int) -> int {
     var sum = 0
     i = 0
     while (i < len(vals)) {
-        sum = sum + (vals[i] as int)
+        sum = sum + (vals[i] as i64)
         i = i + 1
     }
     return sum

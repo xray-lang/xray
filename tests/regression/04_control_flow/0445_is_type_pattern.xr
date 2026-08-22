@@ -2,9 +2,9 @@
 
 @test
 fn test_is_pattern_no_binding() {
-    fn classify(v: int | string) -> string {
+    fn classify(v: i64 | string) -> string {
         return match (v) {
-            is int -> "integer",
+            is i64 -> "integer",
             is string -> "text",
         }
     }
@@ -14,9 +14,9 @@ fn test_is_pattern_no_binding() {
 
 @test
 fn test_is_pattern_with_binding() {
-    fn describe(v: int | string) -> string {
+    fn describe(v: i64 | string) -> string {
         return match (v) {
-            is int n -> "int:" + (n as string),
+            is i64 n -> "int:" + (n as string),
             is string s -> "str:" + s,
         }
     }
@@ -26,9 +26,9 @@ fn test_is_pattern_with_binding() {
 
 @test
 fn test_is_pattern_three_arms() {
-    fn tag(v: int | string | bool) -> int {
+    fn tag(v: i64 | string | bool) -> i64 {
         return match (v) {
-            is int -> 1,
+            is i64 -> 1,
             is string -> 2,
             is bool -> 3,
         }
@@ -40,9 +40,9 @@ fn test_is_pattern_three_arms() {
 
 @test
 fn test_is_pattern_with_wildcard_fallback() {
-    fn check(v: int | string | float) -> string {
+    fn check(v: i64 | string | f64) -> string {
         return match (v) {
-            is int -> "i",
+            is i64 -> "i",
             _ -> "other",
         }
     }

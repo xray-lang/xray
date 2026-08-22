@@ -1,2 +1,2 @@
-var out: Array<byte> = Array.withCapacity(4)
+var out: Array<u8> = Array.withCapacity(4)
 out.setLengthUnchecked(2)

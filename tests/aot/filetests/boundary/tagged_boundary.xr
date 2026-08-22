@@ -1,21 +1,21 @@
 class Counter {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    bump() -> int {
+    bump() -> i64 {
         this.value = this.value + 1
         return this.value
     }
 }
 
-fn make_counter(value: int) -> Counter {
+fn make_counter(value: i64) -> Counter {
     return Counter(value)
 }
 
-fn read_counter(c: ref Counter) -> int {
+fn read_counter(c: ref Counter) -> i64 {
     return c.bump()
 }
 

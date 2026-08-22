@@ -33,7 +33,7 @@ fn main() {
     var shorts = Array<u16>(3, 7)
     var shortSlice: Slice<u16> = shorts[:]
     shortSlice.fill(0)
-    print(int(shorts[0]) + int(shorts[1]) + int(shorts[2]))
+    print((shorts[0] as i64) + (shorts[1] as i64) + (shorts[2] as i64))
 }
 
 main()

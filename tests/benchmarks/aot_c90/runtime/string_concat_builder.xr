@@ -1,4 +1,4 @@
-fn run(rounds: int, parts: int) -> int {
+fn run(rounds: i64, parts: i64) -> i64 {
     var total = 0
     var r = 0
     while (r < rounds) {

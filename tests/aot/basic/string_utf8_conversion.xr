@@ -20,7 +20,7 @@ fn caughtUtf8InvalidViaCall(bytes: Array<u8>) -> bool {
     return false
 }
 
-fn caughtInvalidByteRange(s: string, start: int, end: int) -> bool {
+fn caughtInvalidByteRange(s: string, start: i64, end: i64) -> bool {
     try {
         s.sliceBytes(start, end)
     } catch (e: StringSliceError) {

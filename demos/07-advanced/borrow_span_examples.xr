@@ -6,12 +6,12 @@
 import mem
 
 // === 1. value: ordinary parameter ===
-fn plusOne(value: int) -> int {
+fn plusOne(value: i64) -> i64 {
     return value + 1
 }
 
 // === 2. in: readonly borrowed parameter ===
-fn sumBorrowed(data: Array<int>) -> int {
+fn sumBorrowed(data: Array<i64>) -> i64 {
     var total = 0
     for (x in data) {
         total = total + x
@@ -20,45 +20,45 @@ fn sumBorrowed(data: Array<int>) -> int {
 }
 
 // === 3. ref: mutable borrowed parameter ===
-fn fillZero(buf: ref Array<byte>) {
+fn fillZero(buf: ref Array<u8>) {
     for (i in 0..len(buf)) {
         buf[i] = 0
     }
 }
 
 // === 4. out: caller-visible initialization ===
-fn initializeAnswer(slot: ref int) {
+fn initializeAnswer(slot: ref i64) {
     slot = 42
 }
 
 // === 5. borrowed values cannot escape ===
-fn copyForStorage(data: Array<int>) -> Array<int> {
+fn copyForStorage(data: Array<i64>) -> Array<i64> {
     // Returning `data` directly would be a compile error because `data` is
     // borrowed for this call only. Return an owned snapshot instead.
     return copy(data)
 }
 
 class Holder {
-    items: Array<int>
+    items: Array<i64>
 
     constructor() {
         this.items = []
     }
 }
 
-fn storeCopy(data: Array<int>, holder: ref Holder) {
+fn storeCopy(data: Array<i64>, holder: ref Holder) {
     // Storing `data` directly would let a borrowed value escape. Store an
     // owned snapshot instead.
     holder.items = copy(data)
 }
 
 // === 6. move: transfer ownership ===
-fn takeBytes(data: move Array<byte>) -> int {
+fn takeBytes(data: move Array<u8>) -> i64 {
     return len(data)
 }
 
 fn moveExample() {
-    var payload = Array<byte>(8)
+    var payload = Array<u8>(8)
     payload[0] = 1
     payload[1] = 2
 
@@ -71,7 +71,7 @@ fn moveExample() {
 // === 7. Slice and Buffer stay local to their owner ===
 fn sliceExample() {
     var values = [2, 3, 4, 5]
-    var view: Slice<int> = values[1:4]
+    var view: Slice<i64> = values[1:4]
 
     for (i in 0..len(view)) {
         view[i] = view[i] * 10
@@ -83,7 +83,7 @@ fn sliceExample() {
 
 fn bufferExample() {
     var buffer = mem.allocZeroed(4)
-    var view: Slice<byte> = buffer.asMutBytes()
+    var view: Slice<u8> = buffer.asMutBytes()
     view[0] = 7
     view[1] = 9
 
@@ -98,7 +98,7 @@ var nums = [1, 2, 3, 4]
 print("sumBorrowed: ${sumBorrowed(nums)}")
 print("nums still usable: ${len(nums)}")
 
-var bytes = Array<byte>(4)
+var bytes = Array<u8>(4)
 bytes[0] = 9
 bytes[1] = 8
 fillZero(ref bytes)

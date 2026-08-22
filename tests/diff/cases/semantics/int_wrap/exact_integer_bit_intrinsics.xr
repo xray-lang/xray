@@ -3,15 +3,15 @@
 // Functions keep the operands dynamic so VM bytecode and AOT native shapes
 // are both exercised; the assignments below also prove receiver preservation.
 
-fn rotl8(x: byte, n: int) -> byte { return x.rotateLeft(n) }
-fn rotr8(x: byte, n: int) -> byte { return x.rotateRight(n) }
+fn rotl8(x: u8, n: i64) -> u8 { return x.rotateLeft(n) }
+fn rotr8(x: u8, n: i64) -> u8 { return x.rotateRight(n) }
 fn swap16(x: u16) -> u16 { return x.byteswap() }
-fn round32(x: i32, n: int) -> i32 { return x.rotateLeft(n).rotateRight(n) }
+fn round32(x: i32, n: i64) -> i32 { return x.rotateLeft(n).rotateRight(n) }
 fn swap64(x: u64) -> u64 { return x.byteswap() }
 fn mulhi32(x: u32, y: u32) -> u32 { return x.mulHigh(y) }
 fn mulhi64(x: u64, y: u64) -> u64 { return x.mulHigh(y) }
 
-var b: byte = rotl8(129, 1)
+var b: u8 = rotl8(129, 1)
 var resultU8: u8 = b.byteswap()
 var resultI8: i8 = (-128 as i8).rotateLeft(-1)
 print(b)                                  // 3
@@ -38,7 +38,7 @@ var resultU64: u64 = swap64(72623859790382856)
 print(resultI64)                          // INT64_MIN bit pattern
 print(resultU64)                          // 0x0807060504030201
 print((-1 as u64).popcount())          // 64
-print((255 as byte).mulHigh(2 as byte))   // 1
+print((255 as u8).mulHigh(2 as u8))   // 1
 print((65535 as u16).mulHigh(2 as u16)) // 1
 var max32: u32 = (0 as u32) - (1 as u32)
 var max64: u64 = (0 as u64) - (1 as u64)
@@ -51,7 +51,7 @@ print(iz)                                 // pointer-width round trip
 print(uz)
 
 // `int` remains the language's signed 64-bit default, through the same Xi op.
-var x: int = 12345
-var n: int = -65
+var x: i64 = 12345
+var n: i64 = -65
 print(x.rotateLeft(n).rotateRight(n))
 print((0).leadingZeros())

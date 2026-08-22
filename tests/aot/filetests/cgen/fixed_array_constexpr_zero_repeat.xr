@@ -1,8 +1,8 @@
 const N = 1 << 3
 
-fn run() -> int {
-    var key: [byte; N] = [0; N]
-    return len(key) + (key[0] as int)
+fn run() -> i64 {
+    var key: [u8; N] = [0; N]
+    return len(key) + (key[0] as i64)
 }
 
 print(run())

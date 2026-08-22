@@ -1,6 +1,6 @@
-const SCORES: Map<string, int> = #{"ada": 1}
+const SCORES: Map<string, i64> = #{"ada": 1}
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var i = 0
     var sum = 0
     while (i < n) {

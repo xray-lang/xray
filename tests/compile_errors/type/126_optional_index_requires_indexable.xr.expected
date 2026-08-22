@@ -1,1 +1,1 @@
-type 'int' does not support indexed access
+type 'i64' does not support indexed access

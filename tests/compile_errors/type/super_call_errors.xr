@@ -43,7 +43,7 @@ class Dog3 extends Animal {
 
 // ===== Test 4: super() without parent class (XR2043) =====
 class Standalone {
-    value: int
+    value: i64
 
     constructor(v) {
         super()

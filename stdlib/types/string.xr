@@ -14,26 +14,26 @@ enum StringSliceError {
     InvalidByteRange
 }
 class string {
-    static fromUtf8(bytes: Slice<byte>) -> string
-    static fromUtf8Lossy(bytes: Slice<byte>) -> string
+    static fromUtf8(bytes: Slice<u8>) -> string
+    static fromUtf8Lossy(bytes: Slice<u8>) -> string
     static fromRune(value: rune) -> string
     static join(parts: Array<string>, separator?: string) -> string
     contains(search: string) -> bool
-    indexOf(search: string, start?: int) -> int
-    lastIndexOf(search: string) -> int
-    slice(start: int, end?: int) -> string
-    sliceBytes(start: int, end: int) -> string
+    indexOf(search: string, start?: i64) -> i64
+    lastIndexOf(search: string) -> i64
+    slice(start: i64, end?: i64) -> string
+    sliceBytes(start: i64, end: i64) -> string
     toString() -> string
-    split(separator: string, limit?: int) -> Array<string>
+    split(separator: string, limit?: i64) -> Array<string>
     replace(search: string, replacement: string) -> string
     replaceAll(search: string, replacement: string) -> string
-    repeat(count: int) -> string
+    repeat(count: i64) -> string
     startsWith(search: string) -> bool
     endsWith(search: string) -> bool
     // Owned UTF-8 byte bridge.
-    copyBytes() -> Array<byte>
+    copyBytes() -> Array<u8>
     // Borrowed UTF-8 bytes; readonly because strings are immutable.
     // @lowered
-    bytes() -> Slice<byte>
+    bytes() -> Slice<u8>
     runes() -> Iterator<rune>
 }

@@ -2,25 +2,25 @@ import runtime
 import time
 
 class Packet {
-    payload: Array<byte>
+    payload: Array<u8>
 
-    constructor(payload: Array<byte>) {
+    constructor(payload: Array<u8>) {
         this.payload = payload
     }
 
-    replace(first: Array<byte>, second: Array<byte>) {
+    replace(first: Array<u8>, second: Array<u8>) {
         this.payload = first
         this.payload = second
         this.payload = this.payload
     }
 }
 
-fn packetSize(payload: Array<byte>) -> int {
+fn packetSize(payload: Array<u8>) -> i64 {
     var packet = Packet(payload)
     return len(packet.payload)
 }
 
-fn churn(payload: Array<byte>, rounds: int) -> int {
+fn churn(payload: Array<u8>, rounds: i64) -> i64 {
     time.sleep(1)
     var total = 0
     for (var i = 0; i < rounds; i++) {
@@ -29,7 +29,7 @@ fn churn(payload: Array<byte>, rounds: int) -> int {
     return total
 }
 
-var payload = Array<byte>(4096, 7)
+var payload = Array<u8>(4096, 7)
 var beforeBytes = runtime.liveBytes()
 var beforeObjects = runtime.liveObjects()
 var total = churn(payload, 2000)

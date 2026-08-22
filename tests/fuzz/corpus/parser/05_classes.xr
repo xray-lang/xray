@@ -1,7 +1,7 @@
 // Basic class
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
     constructor(x, y) {
         this.x = x
@@ -22,7 +22,7 @@ class Point {
 // Class with static members
 class Counter {
     static count = 0
-    value: int
+    value: i64
 
     constructor() {
         Counter.count++
@@ -66,30 +66,30 @@ class Dog extends Animal {
 
 // Getter and Setter
 class Circle {
-    _radius: float
+    _radius: f64
 
     constructor(radius) {
         this._radius = radius
     }
 
-    radius: float {
+    radius: f64 {
         fn() { return this._radius }
         fn(value) { this._radius = value }
     }
 
-    diameter: float {
+    diameter: f64 {
         fn() { return this._radius * 2 }
     }
 
-    area: float {
+    area: f64 {
         fn() { return 3.14159 * this._radius * this._radius }
     }
 }
 
 // Operator overloading
 class Vector2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
     constructor(x, y) {
         this.x = x
@@ -119,13 +119,13 @@ interface Drawable {
 }
 
 interface Shape {
-    area(): float
-    perimeter(): float
+    area(): f64
+    perimeter(): f64
 }
 
 class Rectangle implements Shape {
-    width: float
-    height: float
+    width: f64
+    height: f64
 
     constructor(width, height) {
         this.width = width
@@ -143,7 +143,7 @@ class Rectangle implements Shape {
 
 // Private members
 class BankAccount {
-    private _balance: float
+    private _balance: f64
 
     constructor(initial) {
         this._balance = initial

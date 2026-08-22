@@ -1,7 +1,7 @@
-fn xray_no_alloc_array_reserve_reject(xs: ref Array<int>) -> int {
+fn xray_no_alloc_array_reserve_reject(xs: ref Array<i64>) -> i64 {
     xs.reserve(16)
     return len(xs)
 }
 
-var xs = Array<int>(0, 0)
+var xs = Array<i64>(0, 0)
 print(xray_no_alloc_array_reserve_reject(ref xs))

@@ -21,24 +21,24 @@ from typing import Any
 
 VALUE_TYPES = {
     "bool": ("bool", "uint8_t", "XR_IS_BOOL", "XR_TO_BOOL", "xr_bool"),
-    "int": ("i64", "int64_t", "XR_IS_INT", "XR_TO_INT", "xr_int"),
-    "float": ("f64", "double", "XR_IS_FLOAT", "XR_TO_FLOAT", "xr_float"),
+    "i64": ("i64", "int64_t", "XR_IS_INT", "XR_TO_INT", "xr_int"),
+    "f64": ("f64", "double", "XR_IS_FLOAT", "XR_TO_FLOAT", "xr_float"),
     "string": ("string", "XrValue", "XR_IS_STRING", "", ""),
     "bool?": ("nullable-bool", "XrValue", "", "", ""),
-    "int?": ("nullable-i64", "XrValue", "", "", ""),
-    "float?": ("nullable-f64", "XrValue", "", "", ""),
+    "i64?": ("nullable-i64", "XrValue", "", "", ""),
+    "f64?": ("nullable-f64", "XrValue", "", "", ""),
     "string?": ("nullable-string", "XrValue", "", "", ""),
-    "Array<byte>": ("array-u8", "XrValue", "XR_IS_ARRAY", "", ""),
-    "Array<byte>?": ("nullable-array-u8", "XrValue", "", "", ""),
-    "Array<float>": ("array-f64", "XrValue", "XR_IS_ARRAY", "", ""),
+    "Array<u8>": ("array-u8", "XrValue", "XR_IS_ARRAY", "", ""),
+    "Array<u8>?": ("nullable-array-u8", "XrValue", "", "", ""),
+    "Array<f64>": ("array-f64", "XrValue", "XR_IS_ARRAY", "", ""),
     "Array<string>": ("array-string", "XrValue", "XR_IS_ARRAY", "", ""),
     "Array<string>?": ("nullable-array-string", "XrValue", "", "", ""),
-    "Slice<byte>": ("slice-u8", "XrValue", "XR_IS_ARRAY", "", ""),
+    "Slice<u8>": ("slice-u8", "XrValue", "XR_IS_ARRAY", "", ""),
     "()": ("unit", "void", "", "", "xr_null"),
 }
 
 for _integer_type in (
-    "byte", "char", "rune", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64",
+    "rune", "i8", "u8", "i16", "u16", "i32", "u32", "u64", "isize", "usize",
 ):
     VALUE_TYPES[_integer_type] = (
         f"i64:{_integer_type}", "int64_t", "XR_IS_INT", "XR_TO_INT", "xr_int"
@@ -293,8 +293,8 @@ def hosted_entry(
     kinds = [param_type for _, param_type, _ in params] + [result]
     has_array = any(
         value in {
-            "Array<byte>", "Array<byte>?", "Array<float>",
-            "Array<string>", "Array<string>?", "Slice<byte>",
+            "Array<u8>", "Array<u8>?", "Array<f64>",
+            "Array<string>", "Array<string>?", "Slice<u8>",
         }
         for value in kinds
     )
@@ -319,7 +319,7 @@ def hosted_entry(
         if owner and (owner, base) not in imports:
             imports.append((owner, base))
     owned_results = {
-        "string", "string?", "Array<byte>", "Array<byte>?", "Array<float>",
+        "string", "string?", "Array<u8>", "Array<u8>?", "Array<f64>",
         "Array<string>", "Array<string>?",
     }
     result_abi = value_types[result][0]
@@ -329,7 +329,7 @@ def hosted_entry(
         else "owned"
         if result in owned_results or result_abi.startswith("object:")
         else "immediate-or-null"
-        if result in {"bool?", "int?", "float?"}
+        if result in {"bool?", "i64?", "f64?"}
         else "immediate"
     )
     return {
@@ -361,7 +361,7 @@ def hosted_bridge_params(entry: dict[str, Any]) -> list[tuple[str, str, str | No
     params = list(entry["params"])
     if not any(default is not None for _, _, default in params):
         return params
-    bridge = [("_provided", "int", None)]
+    bridge = [("_provided", "i64", None)]
     for name, param_type, default in params:
         bridge_type = (
             param_type

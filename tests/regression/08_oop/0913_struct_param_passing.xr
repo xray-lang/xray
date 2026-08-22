@@ -1,8 +1,8 @@
 // Test: struct parameter passing modes (value / in / ref)
 
 struct Vec2 {
-    x: float = 0.0
-    y: float = 0.0
+    x: f64 = 0.0
+    y: f64 = 0.0
 }
 
 struct Rect {
@@ -16,10 +16,10 @@ fn move_value(v: Vec2) -> Vec2 {
     result.y = result.y + 20.0
     return result
 }
-fn length_sq(v: Vec2) -> float {
+fn length_sq(v: Vec2) -> f64 {
     return v.x * v.x + v.y * v.y
 }
-fn translate(v: ref Vec2, dx: float, dy: float) {
+fn translate(v: ref Vec2, dx: f64, dy: f64) {
     v.x = v.x + dx
     v.y = v.y + dy
 }
@@ -27,11 +27,11 @@ fn add_to(target: ref Vec2, src: Vec2) {
     target.x = target.x + src.x
     target.y = target.y + src.y
 }
-fn scale(v: ref Vec2, factor: float) {
+fn scale(v: ref Vec2, factor: f64) {
     v.x = v.x * factor
     v.y = v.y * factor
 }
-fn dot(a: Vec2, b: Vec2) -> float {
+fn dot(a: Vec2, b: Vec2) -> f64 {
     return a.x * b.x + a.y * b.y
 }
 fn normalize(v: ref Vec2) {

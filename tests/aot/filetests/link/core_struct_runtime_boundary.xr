@@ -1,8 +1,8 @@
 struct Sample {
-    x: int
-    y: float
+    x: i64
+    y: f64
     ok: bool
-    b: byte
+    b: u8
 }
 
 struct CPoint {
@@ -12,20 +12,20 @@ struct CPoint {
 
 struct CBox {
     p: CPoint
-    tag: byte
+    tag: u8
 }
 
-fn sample_score() -> int {
+fn sample_score() -> i64 {
     var s = Sample{x: 41, y: 2.5, ok: true, b: 200}
     s.x = s.x + 1
     s.b = s.b + 1
     if (s.ok) {
-        return s.x + (s.b as int)
+        return s.x + (s.b as i64)
     }
     return 0
 }
 
-fn fixed_layout_score() -> int {
+fn fixed_layout_score() -> i64 {
     var p = CPoint{x: 10, y: 20}
     p.x = p.x + 2
 

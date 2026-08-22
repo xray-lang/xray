@@ -1,3 +1,3 @@
-fn bad(src: Slice<byte>) -> int {
-    return int(src.get(0))
+fn bad(src: Slice<u8>) -> i64 {
+    return (src.get(0) as i64)
 }

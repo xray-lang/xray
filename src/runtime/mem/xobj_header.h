@@ -287,8 +287,8 @@ static inline size_t xr_obj_header_size(void) {
 static inline const char *xr_obj_type_name(XrObjType type) {
     static const char *names[] = {TYPE_NAME_NULL,
                                   TYPE_NAME_BOOL,
-                                  TYPE_NAME_INT,
-                                  TYPE_NAME_FLOAT,
+                                  TYPE_NAME_I64,
+                                  TYPE_NAME_F64,
                                   TYPE_NAME_STRING,
                                   TYPE_NAME_FUNCTION,
                                   TYPE_NAME_CFUNCTION,

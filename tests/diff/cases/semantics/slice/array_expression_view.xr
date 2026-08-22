@@ -1,7 +1,7 @@
 // anchor: slice-array-expression-view
 fn main() {
     var arr = [10, 20, 30, 40]
-    var view: Slice<int> = arr[1:3]
+    var view: Slice<i64> = arr[1:3]
     arr[1] = 21
     print(view[0])
     view[1] = 31

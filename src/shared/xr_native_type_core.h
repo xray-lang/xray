@@ -16,6 +16,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Sentinel for syntax and semantic structures that do not carry a scalar
+ * representation. It is representation metadata, not a source spelling. */
+#define XR_SCALAR_REP_NONE UINT8_MAX
+
 // Native type tags for value struct fields and aggregate runtime layouts.
 typedef enum {
     XR_NATIVE_I64 = 0,                // int64_t (8 bytes)

@@ -4,7 +4,7 @@
 // ===== 函数调用展开：所有参数 =====
 @test
 fn test_call_spread_all_args() {
-    fn dist(x1: int, y1: int, x2: int, y2: int) -> int {
+    fn dist(x1: i64, y1: i64, x2: i64, y2: i64) -> i64 {
         var dx = x2 - x1
         var dy = y2 - y1
         return dx * dx + dy * dy
@@ -17,7 +17,7 @@ fn test_call_spread_all_args() {
 // ===== 函数调用展开：混合 spread 与显式参数 =====
 @test
 fn test_call_spread_mixed() {
-    fn add4(a: int, b: int, c: int, d: int) -> int {
+    fn add4(a: i64, b: i64, c: i64, d: i64) -> i64 {
         return a + b + c + d
     }
     var p1 = (1, 2)
@@ -58,7 +58,7 @@ fn test_tuple_concat_mixed() {
 // ===== 异构类型：spread 保留每个槽位的精确类型 =====
 @test
 fn test_spread_heterogeneous() {
-    fn describe(n: int, s: string, b: bool) -> string {
+    fn describe(n: i64, s: string, b: bool) -> string {
         return string(n) + "/" + s + "/" + string(b)
     }
     var t = (42, "answer", true)
@@ -69,7 +69,7 @@ fn test_spread_heterogeneous() {
 @test
 fn test_nested_spread() {
     var inner = (2, 3)
-    var outer: (int, int, int, int) = (1, ...inner, 4)
+    var outer: (i64, i64, i64, i64) = (1, ...inner, 4)
     assert_eq(outer.0, 1)
     assert_eq(outer.1, 2)
     assert_eq(outer.2, 3)

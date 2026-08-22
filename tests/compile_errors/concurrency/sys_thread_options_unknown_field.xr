@@ -1,6 +1,6 @@
 import sys
 
-var t = sys.Thread.spawn(ThreadOptions{ priority: 1 }, fn() -> int {
+var t = sys.Thread.spawn(ThreadOptions{ priority: 1 }, fn() -> i64 {
     return 1
 })
 print(t.join())

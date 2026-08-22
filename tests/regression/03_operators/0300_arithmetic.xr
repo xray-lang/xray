@@ -21,8 +21,8 @@ fn test_add_floats() {
 
 @test
 fn test_add_mixed() {
-    assert_eq((1 as float) + 1.5, 2.5)
-    assert_eq(2.5 + (1 as float), 3.5)
+    assert_eq((1 as f64) + 1.5, 2.5)
+    assert_eq(2.5 + (1 as f64), 3.5)
 }
 
 // ===== 减法 =====
@@ -43,8 +43,8 @@ fn test_sub_floats() {
 
 @test
 fn test_sub_mixed() {
-    assert_eq((5 as float) - 2.5, 2.5)
-    assert_eq(5.5 - (2 as float), 3.5)
+    assert_eq((5 as f64) - 2.5, 2.5)
+    assert_eq(5.5 - (2 as f64), 3.5)
 }
 
 // ===== 乘法 =====
@@ -65,8 +65,8 @@ fn test_mul_floats() {
 
 @test
 fn test_mul_mixed() {
-    assert_eq((2 as float) * 2.5, 5.0)
-    assert_eq(2.5 * (2 as float), 5.0)
+    assert_eq((2 as f64) * 2.5, 5.0)
+    assert_eq(2.5 * (2 as f64), 5.0)
 }
 
 // ===== 除法 =====
@@ -86,8 +86,8 @@ fn test_div_floats() {
 
 @test
 fn test_div_mixed() {
-    assert_eq((5 as float) / 2.0, 2.5)
-    assert_eq(5.0 / (2 as float), 2.5)
+    assert_eq((5 as f64) / 2.0, 2.5)
+    assert_eq(5.0 / (2 as f64), 2.5)
 }
 
 // ===== 取模 =====

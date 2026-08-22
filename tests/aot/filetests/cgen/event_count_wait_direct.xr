@@ -2,7 +2,7 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 const event = EventCount(0)
 const ready = CountdownLatch(1)
 
-var t = go fn() -> int {
+var t = go fn() -> i64 {
     ready.done()
     return event.wait(0, 0)
 }()

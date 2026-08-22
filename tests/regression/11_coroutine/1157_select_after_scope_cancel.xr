@@ -6,12 +6,12 @@
 
 enum CancelE { Boom }
 
-fn boom() -> int {
+fn boom() -> i64 {
     throw CancelE.Boom
 }
 
-fn blocked_in_select_after() -> int {
-    const ch = Channel<int>(1)
+fn blocked_in_select_after() -> i64 {
+    const ch = Channel<i64>(1)
     select {
         msg from ch -> { return 1 }
         after 1000000 -> { return 2 }

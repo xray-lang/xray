@@ -23,14 +23,14 @@ class Wrapper<T> {
 @test
 fn test_generic_instanceof() {
     // T1: instanceof with generic — generic_origin check
-    var b = Box<int>(42)
+    var b = Box<i64>(42)
     assert(b is Box)
 
     var bs = Box<string>("hello")
     assert(bs is Box)
 
     // Non-Box should fail
-    var w = Wrapper<int>(1)
+    var w = Wrapper<i64>(1)
     assert(!(w is Box))
     assert(w is Wrapper)
 }
@@ -38,7 +38,7 @@ fn test_generic_instanceof() {
 @test
 fn test_generic_runtime_behavior() {
     // T2: Generic class values preserve origin and payload behavior.
-    var b = Box<int>(42)
+    var b = Box<i64>(42)
     assert(b is Box)
     assert_eq(b.value, 42)
 
@@ -47,7 +47,7 @@ fn test_generic_runtime_behavior() {
     assert_eq(bs.value, "hello")
 
     // T7: Multiple type parameters
-    var p = Pair<int, string>{first: 1, second: "x"}
+    var p = Pair<i64, string>{first: 1, second: "x"}
     assert(p is Pair)
     assert_eq(p.first, 1)
     assert_eq(p.second, "x")
@@ -61,18 +61,18 @@ fn test_generic_runtime_behavior() {
 @test
 fn test_struct_generic_is_typeof() {
     // T9: Struct generic `is` + value behavior
-    var p1 = Pair<int, string>{first: 1, second: "x"}
+    var p1 = Pair<i64, string>{first: 1, second: "x"}
     assert(p1 is Pair)
     assert_eq(p1.first, 1)
     assert_eq(p1.second, "x")
 
-    var p2 = Pair<float, bool>{first: 3.14, second: true}
+    var p2 = Pair<f64, bool>{first: 3.14, second: true}
     assert(p2 is Pair)
     assert_eq(p2.first, 3.14)
     assert_eq(p2.second, true)
 
     // Non-struct should not match
-    var b = Box<int>(1)
+    var b = Box<i64>(1)
     assert(!(b is Pair))
 }
 
@@ -82,7 +82,7 @@ fn test_rep_sharing_correctness() {
     // Wrapper<string> and Wrapper<Array> have the same slot layout (both PTR)
     // but must remain distinct classes with correct type info
     var ws = Wrapper<string>("hello")
-    var wi = Wrapper<int>(42)
+    var wi = Wrapper<i64>(42)
 
     assert_eq(ws.value, "hello")
     assert_eq(wi.value, 42)
@@ -92,7 +92,7 @@ fn test_rep_sharing_correctness() {
     assert(wi is Wrapper)
 
     // Different instantiations must not be confused
-    var b = Box<int>(1)
+    var b = Box<i64>(1)
     assert(!(b is Wrapper))
     assert(!(ws is Box))
 }

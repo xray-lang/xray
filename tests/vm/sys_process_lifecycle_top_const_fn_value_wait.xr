@@ -1,7 +1,7 @@
 import sys
 import { Process } from sys
 
-const waitProcess = fn(p: Process) -> int {
+const waitProcess = fn(p: Process) -> i64 {
     var code = p.wait()
     print("top-fn-value waited " + string(code))
     return code

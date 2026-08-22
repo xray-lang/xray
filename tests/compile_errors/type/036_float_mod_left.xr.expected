@@ -1,2 +1,2 @@
 modulo operator '%' requires integer operands
-float
+f64

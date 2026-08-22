@@ -191,31 +191,31 @@
     _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
     _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
     _(BYTE_SLICE_LOAD_U16, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<byte>.load<uint16>(R[A+1], R[A+2], R[A+3])")                                   \
+      "R[A] = Slice<u8>.load<uint16>(R[A+1], R[A+2], R[A+3])")                                   \
     _(BYTE_SLICE_LOAD_U32, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<byte>.load<uint32>(R[A+1], R[A+2], R[A+3])")                                   \
+      "R[A] = Slice<u8>.load<uint32>(R[A+1], R[A+2], R[A+3])")                                   \
     _(BYTE_SLICE_LOAD_U64, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<byte>.load<uint64>(R[A+1], R[A+2], R[A+3])")                                   \
+      "R[A] = Slice<u8>.load<uint64>(R[A+1], R[A+2], R[A+3])")                                   \
     _(BYTE_SLICE_LOAD_F32, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<byte>.load<float32>(R[A+1], R[A+2], R[A+3])")                                  \
+      "R[A] = Slice<u8>.load<float32>(R[A+1], R[A+2], R[A+3])")                                  \
     _(BYTE_SLICE_LOAD_F64, FMT_A, KOP_A_USE,                                                       \
-      "R[A] = Slice<byte>.load<float64>(R[A+1], R[A+2], R[A+3])")                                  \
+      "R[A] = Slice<u8>.load<float64>(R[A+1], R[A+2], R[A+3])")                                  \
     _(BYTE_SLICE_STORE_U16, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<byte>.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
+      "Slice<u8>.store<uint16>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
     _(BYTE_SLICE_STORE_U32, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<byte>.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
+      "Slice<u8>.store<uint32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
     _(BYTE_SLICE_STORE_U64, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<byte>.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
+      "Slice<u8>.store<uint64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                 \
     _(BYTE_SLICE_STORE_F32, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<byte>.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
+      "Slice<u8>.store<float32>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
     _(BYTE_SLICE_STORE_F64, FMT_A, KOP_A_INOUT,                                                    \
-      "Slice<byte>.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
+      "Slice<u8>.store<float64>(R[A+1], R[A+2], R[A+3], R[A+4])")                                \
     _(BYTE_SLICE_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                    \
     _(BYTE_SLICE_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                \
     _(BYTE_SLICE_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                         \
     _(BYTE_SLICE_COMMON_PREFIX, FMT_A, KOP_A_USE, "R[A] = R[A].commonPrefix(R[A+1])")              \
     _(BYTE_SLICE_REPEAT, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
-    _(SLICE_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<byte>(), C=slot")                 \
+    _(SLICE_AS_BYTES, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].asArray<u8>(), C=slot")                 \
     _(SLICE_FILL, FMT_A, KOP_A_INOUT, "R[A].fill(R[A+1])")                                         \
     _(SLICE_COPY, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1])")                                     \
     _(SLICE_COMPARE, FMT_A, KOP_A_USE, "R[A] = R[A].compare(R[A+1])")                              \
@@ -225,7 +225,7 @@
     _(PLACE_LOAD, FMT_AB, KOP_AB_UNARY, "R[A] = load call-bound place R[B]")                       \
     _(PLACE_STORE, FMT_AB, KOP_AB_STORE, "store R[B] through call-bound place R[A]")               \
     _(STRING_BYTES_SLICE, FMT_ABC, KOP_ABC_BIN,                                                    \
-      "R[A] = borrowed Slice<byte> of string R[B], C=slot")                                        \
+      "R[A] = borrowed Slice<u8> of string R[B], C=slot")                                        \
     _(BYTE_ARRAY_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")       \
     _(BYTE_ARRAY_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")   \
     _(BYTE_ARRAY_APPEND_FROM, FMT_A, KOP_A_INOUT, "R[A].appendFrom(R[A+1])")                       \

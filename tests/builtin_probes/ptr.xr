@@ -1,2 +1,2 @@
-fn use(p: Ptr<int>) -> bool { return true }
+fn use(p: Ptr<i64>) -> bool { return true }
 print(true)

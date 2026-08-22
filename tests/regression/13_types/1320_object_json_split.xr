@@ -1,7 +1,7 @@
 // 1320_object_json_split.xr
 // Test: object literals are exact shapes; schema-less JSON objects use Map storage.
 
-type User = { id: int, name: string }
+type User = { id: i64, name: string }
 
 @test
 fn test_default_object() {

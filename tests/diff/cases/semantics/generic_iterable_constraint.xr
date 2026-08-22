@@ -10,7 +10,7 @@
 // since a clone plan per type argument has to leave no call site pointing at
 // the generic origin.
 
-fn total<T: Iterable<int>>(xs: T) -> int {
+fn total<T: Iterable<i64>>(xs: T) -> i64 {
     var n = 0
     for (i in xs) {
         n = n + i
@@ -18,7 +18,7 @@ fn total<T: Iterable<int>>(xs: T) -> int {
     return n
 }
 
-fn keyLengths<T: Iterable<string>>(xs: T) -> int {
+fn keyLengths<T: Iterable<string>>(xs: T) -> i64 {
     var n = 0
     for (k in xs) {
         n = n + len(k)
@@ -26,7 +26,7 @@ fn keyLengths<T: Iterable<string>>(xs: T) -> int {
     return n
 }
 
-fn indexedSum<T: Iterable<int>>(xs: T) -> int {
+fn indexedSum<T: Iterable<i64>>(xs: T) -> i64 {
     var n = 0
     for (k, v in xs) {
         n = n + k + v
@@ -34,11 +34,11 @@ fn indexedSum<T: Iterable<int>>(xs: T) -> int {
     return n
 }
 
-fn sizeOf<T: Lengthable>(x: T) -> int {
+fn sizeOf<T: Lengthable>(x: T) -> i64 {
     return len(x)
 }
 
-fn upTo(limit: int) -> Iterator<int> {
+fn upTo(limit: i64) -> Iterator<i64> {
     var i = 1
     while (i <= limit) {
         yield i
@@ -46,8 +46,8 @@ fn upTo(limit: int) -> Iterator<int> {
     }
 }
 
-var s: Set<int> = #[1, 2, 3]
-var m: Map<string, int> = #{"aa": 1, "bbb": 2}
+var s: Set<i64> = #[1, 2, 3]
+var m: Map<string, i64> = #{"aa": 1, "bbb": 2}
 var j: JSON.Object = JSON.parseObject("{\"a\":1,\"bb\":2}")
 var r = 2..6
 

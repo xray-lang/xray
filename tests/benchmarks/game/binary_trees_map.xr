@@ -10,21 +10,21 @@ class MapTree {
     }
 }
 
-fn makeTree(depth: int) -> MapTree {
+fn makeTree(depth: i64) -> MapTree {
     if (depth > 0) {
         return MapTree(makeTree(depth - 1), makeTree(depth - 1))
     }
     return MapTree(null, null)
 }
 
-fn checksum(node: MapTree?) -> int {
+fn checksum(node: MapTree?) -> i64 {
     if (node == null) { return 0 }
     var left = node!.children.get("left")
     if (left == null) { return 1 }
     return checksum(left) + checksum(node!.children.get("right")) + 1
 }
 
-fn run(maxDepth: int) {
+fn run(maxDepth: i64) {
     var minDepth = 4
     var stretchDepth = maxDepth + 1
     var stretchTree = makeTree(stretchDepth)
@@ -48,5 +48,5 @@ fn run(maxDepth: int) {
     print("long lived tree of depth ${maxDepth}\t check: ${checksum(longLivedTree)}")
 }
 
-var maxDepth = len(process.args) > 0 ? int(process.args[0]) ?? 16 : 16
+var maxDepth = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 16 : 16
 run(maxDepth)

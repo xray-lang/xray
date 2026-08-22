@@ -49,12 +49,12 @@ print(dog.fetch("ball"))
 
 // === Static methods ===
 class Counter {
-    private count: int
+    private count: i64
 
     constructor() { this.count = 0 }
 
     increment() { this.count = this.count + 1 }
-    getCount() -> int { return this.count }
+    getCount() -> i64 { return this.count }
 
     static create() -> Counter {
         return Counter()

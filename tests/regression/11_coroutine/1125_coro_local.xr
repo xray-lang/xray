@@ -8,14 +8,14 @@
 @test
 fn test_coro_local() {
     var nameLocal = Coro.Local<string>()
-    var countLocal = Coro.Local<int>()
+    var countLocal = Coro.Local<i64>()
     nameLocal.set("main")
     countLocal.set(42)
     assert_eq(nameLocal.get(), "main")
     assert_eq(countLocal.get(), 42)
 
-    var idLocal = Coro.Local<int>()
-    var idTask = go fn(slot: CoroLocal<int>) -> int {
+    var idLocal = Coro.Local<i64>()
+    var idTask = go fn(slot: CoroLocal<i64>) -> i64 {
         slot.set(1)
         return slot.get() ?? -1
     }(copy(idLocal))
@@ -36,5 +36,5 @@ fn test_coro_local() {
 
     assert_eq(nameLocal.get(), "main")
     assert_eq(countLocal.get(), 42)
-    assert_eq(Coro.Local<int>().get(), null)
+    assert_eq(Coro.Local<i64>().get(), null)
 }

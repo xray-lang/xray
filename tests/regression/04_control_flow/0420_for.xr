@@ -44,7 +44,7 @@ fn test_for_step_two() {
 
 @test
 fn test_for_step_three() {
-    var result: Array<int> = []
+    var result: Array<i64> = []
     for (var i = 0; i < 10; i += 3) {
         result.push(i)
     }
@@ -113,7 +113,7 @@ fn test_for_continue() {
 
 @test
 fn test_for_continue_first() {
-    var result: Array<int> = []
+    var result: Array<i64> = []
     for (var i = 0; i < 5; i++) {
         if (i == 0) {
             continue
@@ -175,7 +175,7 @@ fn test_for_outer_variable() {
 
 @test
 fn test_for_collect() {
-    var result: Array<int> = []
+    var result: Array<i64> = []
     for (var i = 0; i < 5; i++) {
         result.push(i * i)
     }

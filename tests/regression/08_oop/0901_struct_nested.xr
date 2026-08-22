@@ -2,14 +2,14 @@
 // Expected: nested struct fields work, copy is deep
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 struct Rect {
     origin: Point
     size: Point
 
-    area() -> float {
+    area() -> f64 {
         return this.size.x * this.size.y
     }
 }

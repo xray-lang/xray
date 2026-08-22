@@ -27,9 +27,9 @@ fn main() {
     print(string(arr[0]))
     print(string(arr[1]))
 
-    var i: int = 42
+    var i: i64 = 42
     var b: bool = true
-    var f: float = 2.5
+    var f: f64 = 2.5
     print(string(i))
     print(string(b))
     print(string(false))

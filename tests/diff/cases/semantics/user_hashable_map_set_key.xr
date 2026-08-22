@@ -9,16 +9,16 @@
 // same fields must find the stored entry identically on both.
 
 class Key implements Hashable {
-    a: int
+    a: i64
     b: string
-    constructor(a: int, b: string) {
+    constructor(a: i64, b: string) {
         this.a = a
         this.b = b
     }
     operator ==(other: Key) -> bool {
         return this.a == other.a && this.b == other.b
     }
-    hash() -> int {
+    hash() -> i64 {
         return this.a * 31 + len(this.b)
     }
 }

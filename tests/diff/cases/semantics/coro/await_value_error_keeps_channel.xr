@@ -7,11 +7,11 @@
 // uncaught), and AOT dropped it entirely -- no output, exit 0.
 enum E { Boom }
 
-fn failing() -> int {
+fn failing() -> i64 {
     throw E.Boom
 }
 
-fn direct() -> int {
+fn direct() -> i64 {
     return failing()
 }
 
@@ -28,17 +28,17 @@ fn caught_here() {
 
 // No catch here: it propagates by value to a caller that does have one,
 // exactly as a same-frame throw would.
-fn hop() -> int {
+fn hop() -> i64 {
     var t = go failing()
     return await t
 }
 
 // Awaiting a coroutine that only ever succeeds stays on the normal path.
-fn ok(n: int) -> int {
+fn ok(n: i64) -> i64 {
     return n * 2
 }
 
-fn sum_two() -> int {
+fn sum_two() -> i64 {
     var a = go ok(3)
     var b = go ok(4)
     return (await a) + (await b)

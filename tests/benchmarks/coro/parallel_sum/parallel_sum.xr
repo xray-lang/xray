@@ -7,17 +7,17 @@ var N = 8
 var SIZE = 10000000
 // 数组大小（1000万）
 if (len(process.args) > 0) {
-    N = int(process.args[0]) ?? N
+    N = i64.tryParse(process.args[0]) ?? N
 }
 if (len(process.args) > 1) {
-    SIZE = int(process.args[1]) ?? SIZE
+    SIZE = i64.tryParse(process.args[1]) ?? SIZE
 }
 print("=== 并行求和测试 ===")
 print("并行度:", N)
 print("数组大小:", SIZE)
 
 // 计算部分和
-fn partial_sum(start: int, end: int) -> int {
+fn partial_sum(start: i64, end: i64) -> i64 {
     var sum = 0
     for (var i = start; i < end; i++) {
         sum = sum + i
@@ -57,7 +57,7 @@ var serial_elapsed = time.monotonic() - serial_start
 print("串行时间:", serial_elapsed, "ms")
 print("串行结果:", serial_sum)
 if (elapsed > 0) {
-    print("加速比:", float(serial_elapsed) / float(elapsed))
+    print("加速比:", (serial_elapsed as f64) / (elapsed as f64))
 } else {
     print("加速比: 太快无法测量")
 }

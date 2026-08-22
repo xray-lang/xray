@@ -19,15 +19,15 @@ fn main() {
     var acceptedB = net.accept(listener)!
     var bridge = go bridgeOnce(move acceptedA, move acceptedB)
 
-    print(net.writeBytes(left, Array<byte>([108, 101, 102, 116])))
-    print(net.writeBytes(right, Array<byte>([114, 105, 103, 104, 116])))
+    print(net.writeBytes(left, Array<u8>([108, 101, 102, 116])))
+    print(net.writeBytes(right, Array<u8>([114, 105, 103, 104, 116])))
     net.shutdownWrite(left)
     net.shutdownWrite(right)
 
-    var fromRight = Array<byte>(8)
+    var fromRight = Array<u8>(8)
     print(net.readInto(left, ref fromRight, 8))
     print(fromRight[0])
-    var fromLeft = Array<byte>(8)
+    var fromLeft = Array<u8>(8)
     print(net.readInto(right, ref fromLeft, 8))
     print(fromLeft[0])
 

@@ -1,6 +1,6 @@
 import { U8x64, U32x16, U64x8 } from simd
 
-fn stripe(acc: ref Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
+fn stripe(acc: ref Slice<u64>, input: Slice<u8>, secret: Slice<u8>) {
     var data = U8x64.load(input)
     var words = data.bitXor(U8x64.load(secret)).reinterpretU32()
     var product = words.widenMulEven(words.swapAdjacent())
@@ -14,8 +14,8 @@ fn stripe(acc: ref Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
 
 fn main() {
     var acc: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
-    var input: [byte; 64] = [1; 64]
-    var secret: [byte; 64] = [2; 64]
+    var input: [u8; 64] = [1; 64]
+    var secret: [u8; 64] = [2; 64]
     var accView: Slice<u64> = acc[:]
     stripe(ref accView, input[:], secret[:])
     print(acc[0])

@@ -22,7 +22,7 @@ enum HttpStatus {
     OK,
     NotFound
 
-    fn code() -> int {
+    fn code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404

@@ -1,7 +1,7 @@
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
@@ -15,7 +15,7 @@ fn make() -> Payload<Box> {
     return Payload.Item(Box(7))
 }
 
-fn score() -> int {
+fn score() -> i64 {
     var payload = make()
     match (payload) {
         Payload.Item(box) -> {

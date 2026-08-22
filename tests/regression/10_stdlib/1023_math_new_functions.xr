@@ -207,17 +207,17 @@ fn test_epsilon() {
 
 @test
 fn test_max_int() {
-    assert(math.MAX_INT > 0)
-    assert_eq(typeName(math.MAX_INT) == "int", true)
+    assert(math.MAX_I64 > 0)
+    assert_eq(typeName(math.MAX_I64) == "i64", true)
 }
 
 @test
 fn test_min_int() {
-    assert(math.MIN_INT < 0)
-    assert_eq(typeName(math.MIN_INT) == "int", true)
+    assert(math.MIN_I64 < 0)
+    assert_eq(typeName(math.MIN_I64) == "i64", true)
 }
 
 @test
 fn test_max_float() {
-    assert(math.MAX_FLOAT > 1e300)
+    assert(math.MAX_F64 > 1e300)
 }

@@ -11,7 +11,7 @@
 import net
 import { NetError } from net
 
-fn tryListen(backlog: int) -> NetListener? {
+fn tryListen(backlog: i64) -> NetListener? {
     try {
         return net.listen(0, backlog)
     } catch (e: NetError) {

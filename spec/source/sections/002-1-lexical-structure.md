@@ -8,7 +8,7 @@ order: 002
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，66 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字表，52 条）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字表，12 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -22,7 +22,7 @@ xray 源文件**必须**是合法 UTF-8。scanner 在产生首个 token 前对�
 
 **空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义。
 
-**唯一的空白敏感规则**：`<` 是否引入泛型实参列表，取决于它**前面**是否有空白。`f<T>(x)` 是带显式类型实参的调用，`f < T` 是比较。连续 `>` 的拆分**不**依赖空白：`Array<Array<int>>` 与 `Array<Array<int> >` 完全等价，由语法位置而非空白决定。
+**唯一的空白敏感规则**：`<` 是否引入泛型实参列表，取决于它**前面**是否有空白。`f<T>(x)` 是带显式类型实参的调用，`f < T` 是比较。连续 `>` 的拆分**不**依赖空白：`Array<Array<i64>>` 与 `Array<Array<i64> >` 完全等价，由语法位置而非空白决定。
 
 #### 1.2.1 语句边界
 
@@ -152,14 +152,14 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.6 类型名（保留）
 
-`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
-`float` `f32` `f64` `bool` `string` `rune`
+`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
+`f32` `f64` `bool` `string` `rune`
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/builtin_symbols.def` 自动引入的类型符号：
 > `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
-> `Array<byte>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
+> `Array<u8>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 > 这些名字**不可被重新声明**：`class Array {}`、`enum TaskResult {}`、`interface Stringable {}` 一律是编译错误。
 > 完整的保留集是该注册表的全部条目（类型、枚举、约束接口），不止上面列出的 prelude 类型；
 > 标准库自身对它们的声明是这些名字的**定义**，不受此限制。
@@ -197,9 +197,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
-- 无唯一数值上下文的整数字面量默认类型为 `int`（= `i64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
-- 范围：默认 `int` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `int` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
+- 无唯一数值上下文的整数字面量默认类型为 `i64`。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
+- 范围：默认 `i64` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `i64` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
 
 ```xray
 42
@@ -218,7 +218,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-字面量类型为 `float`（= `f64`，IEEE-754 双精度）。
+字面量类型为 `f64`（IEEE-754 双精度）。
 
 ```xray
 3.14
@@ -313,7 +313,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
-- `b/br` 产生 `[byte; L]`；`c/cr` 产生 `[byte; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
+- `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
 - `c/cr` 在 escape、换行规范化与 margin 移除后拒绝任何 interior NUL。
@@ -321,9 +321,9 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // 反斜杠原样，仍插值
-b"\\x89PNG"              // escaped [byte; 4]
+b"\\x89PNG"              // escaped [u8; 4]
 br"${HOME}\\bin"         // raw bytes；`${HOME}` 不插值
-c"puts"                   // [byte; 5]，最后一项是 appended NUL
+c"puts"                   // [u8; 5]，最后一项是 appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
 
@@ -450,7 +450,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `?[` | 可选链索引 (`arr?[0]`) |
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
-| `\|` | union 类型 (`int \| string`) / 位或 |
+| `\|` | union 类型 (`i64 \| string`) / 位或 |
 | `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
@@ -490,7 +490,7 @@ var primes = #[2, 3, 5, 7]
 
 ## 1. Lexical Structure
 
-> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (keyword table, 66 entries), `src/frontend/lexer/xlex.c` (scanner implementation).
+> Source of truth: `src/frontend/lexer/xlex.h` (token enum), `src/frontend/lexer/xkeywords.def` (52 general keywords), `src/shared/xr_exact_scalar_registry.def` (12 exact scalar keywords), and `src/frontend/lexer/xlex.c` (scanner implementation).
 
 ### 1.1 Character Encoding
 
@@ -504,7 +504,7 @@ Line numbers advance on `\n`. Windows `\r\n` works because `\r` is skipped as ho
 
 **Whitespace**: space (`U+0020`), horizontal tab (`U+0009`), and line terminators. Whitespace separates tokens and carries no semantics.
 
-**The one whitespace-sensitive rule**: whether `<` opens a generic argument list depends on whether whitespace **precedes** it. `f<T>(x)` is a call with explicit type arguments; `f < T` is a comparison. Splitting consecutive `>` does **not** depend on whitespace: `Array<Array<int>>` and `Array<Array<int> >` are exactly equivalent, decided by grammatical position rather than spacing.
+**The one whitespace-sensitive rule**: whether `<` opens a generic argument list depends on whether whitespace **precedes** it. `f<T>(x)` is a call with explicit type arguments; `f < T` is a comparison. Splitting consecutive `>` does **not** depend on whitespace: `Array<Array<i64>>` and `Array<Array<i64> >` are exactly equivalent, decided by grammatical position rather than spacing.
 
 #### 1.2.1 Statement Boundaries
 
@@ -634,14 +634,14 @@ Xray has **64 reserved keywords** in total, grouped by purpose below:
 
 #### 1.5.6 Type Names (reserved)
 
-`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
-`float` `f32` `f64` `bool` `string` `rune`
+`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
+`f32` `f64` `bool` `string` `rune`
 
 Writing `unknown` in a type annotation is rejected by the parser; it is not a lexical keyword, and remains usable as an ordinary identifier in expression position.
 
 > **Note**: the following names are **not** lexer keywords; `stdlib/prelude/builtin_symbols.def` introduces them automatically:
 > `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`.
-> `Array<byte>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
+> `Array<u8>` is an `Array` specialization, not a separate name. Module-owned types such as `DateTime` and `Logger` require explicit imports from their modules.
 > These names **cannot be redeclared**: `class Array {}`, `enum TaskResult {}` and `interface Stringable {}` are all compile errors.
 > The reserved set is every entry in that registry -- types, enums and constraint interfaces -- not only the prelude types listed above.
 > The standard library's own declarations of them are the **definitions** of those names and are exempt.
@@ -679,9 +679,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - Digit separators `_` exist purely for readability and may appear anywhere between digits.
-- An integer literal without a unique numeric context defaults to `int` (= `i64`). The `n` suffix promotes to `BigInt` (see §1.6.3).
-- Range: the default `int` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
-- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `int` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
+- An integer literal without a unique numeric context defaults to `i64`. The `n` suffix promotes to `BigInt` (see §1.6.3).
+- Range: the default `i64` context covers `[-(2^63), 2^63 - 1]`; overflow is detected at compile time.
+- When an integer literal appears directly in a unique numeric context (variable initialization, assignment, argument, return value, collection element, or another already-typed numeric operand), it acquires the target type directly instead of first becoming `i64` and then being converted. An integer target must represent the value; a floating target must represent it exactly. Otherwise compilation fails and an explicit `as` is required to express truncation, sign change, or rounding intent.
 
 ```xray
 42
@@ -700,7 +700,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-Literal type is `float` (= `f64`, IEEE-754 double precision).
+Literal type is `f64` (IEEE-754 double precision).
 
 ```xray
 3.14
@@ -795,7 +795,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - No prefix / `r` produces a valid UTF-8 `string`; no prefix processes escapes, while `r` preserves backslashes literally.
-- `b/br` produces `[byte; L]`; `c/cr` produces `[byte; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
+- `b/br` produces `[u8; L]`; `c/cr` produces `[u8; L+1]` with an appended NUL. `b/c` processes escapes, while `br/cr` preserves raw bytes.
 - `${...}` interpolates only in the no-prefix / `r` family. It is always ordinary payload bytes in `b/br/c/cr`.
 - The only prefixes are no prefix, `r`, `b`, `br`, `c`, and `cr`; `rb/rc` are not aliases. A prefix must immediately precede the quote run.
 - `c/cr` rejects every interior NUL after escape decoding, newline normalization, and margin removal.
@@ -803,9 +803,9 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // backslashes are raw; interpolation remains active
-b"\\x89PNG"              // escaped [byte; 4]
+b"\\x89PNG"              // escaped [u8; 4]
 br"${HOME}\\bin"         // raw bytes; `${HOME}` does not interpolate
-c"puts"                   // [byte; 5], ending in the appended NUL
+c"puts"                   // [u8; 5], ending in the appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
 
@@ -932,7 +932,7 @@ Only the **statement-level postfix** form `x++` / `x--` is supported; prefix `++
 | `?[` | optional chain index (`arr?[0]`) |
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
-| `\|` | union type (`int \| string`) / bitwise or |
+| `\|` | union type (`i64 \| string`) / bitwise or |
 | `->` | unified arrow: function return type, closures, `match` / `select` arms; a function type is led by `fn` (`fn(T) -> R`) and drops the arrow when it returns unit (`fn(T)`) |
 | `...` | rest / spread |
 | `..` | half-open range (`0..10`) |

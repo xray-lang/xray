@@ -4,14 +4,14 @@
 // survive suspension and run LIFO. The cleanup-live place for `c` also keeps
 // its native-class instance alive through the await.
 class Conn {
-    id: int
-    constructor(id: int) { this.id = id }
+    id: i64
+    constructor(id: i64) { this.id = id }
     close() { print("close conn " + string(this.id)) }
 }
 
-fn leaf(n: int) -> int { return n + 1 }
+fn leaf(n: i64) -> i64 { return n + 1 }
 
-fn worker(id: int) -> int {
+fn worker(id: i64) -> i64 {
     var c = Conn(id)
     defer { c.close() }                           // method-call defer, held across await
     defer { print("defer-builtin " + string(id)) }

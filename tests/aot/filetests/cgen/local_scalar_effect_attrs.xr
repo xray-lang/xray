@@ -11,7 +11,7 @@ fn localRound(value: u32) -> u32 {
 }
 
 @noinline
-fn sliceRead(data: Slice<byte>) -> u32 {
+fn sliceRead(data: Slice<u8>) -> u32 {
     return data.load<u32>(0, Endian.LE)
 }
 
@@ -19,10 +19,10 @@ export fn xray_local_round(value: u32) -> u32 {
     return localRound(value)
 }
 
-export fn xray_slice_read(data: Slice<byte>) -> u32 {
+export fn xray_slice_read(data: Slice<u8>) -> u32 {
     return sliceRead(data)
 }
 
-var storage: [byte; 4] = [1, 2, 3, 4]
+var storage: [u8; 4] = [1, 2, 3, 4]
 print(xray_local_round(1))
 print(xray_slice_read(storage[:]))

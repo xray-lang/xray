@@ -3,7 +3,7 @@
 import yaml
 import { YamlValue } from yaml
 
-fn get_int(value: YamlValue, key: string) -> int {
+fn get_int(value: YamlValue, key: string) -> i64 {
     return yaml.asInt(yaml.get(value, key)!) ?? -1
 }
 
@@ -18,7 +18,7 @@ fn test_json_nested_paths() {
         }
         text += "42"
         for (_ in 0..depth) { text += "}" }
-        assert_eq(JSON.require<int>(JSON.parseValue(text), path), 42)
+        assert_eq(JSON.require<i64>(JSON.parseValue(text), path), 42)
     }
 }
 
@@ -27,8 +27,8 @@ fn test_json_wide_objects() {
     var object: JSON.Object = JSON.parseObject("{}")
     for (i in 0..100) { object.set("f" + string(i), i) }
     var round = JSON.parseValue(JSON.stringify(object))
-    assert_eq(JSON.require<int>(round, ["f0"]), 0)
-    assert_eq(JSON.require<int>(round, ["f99"]), 99)
+    assert_eq(JSON.require<i64>(round, ["f0"]), 0)
+    assert_eq(JSON.require<i64>(round, ["f99"]), 99)
 }
 
 @test

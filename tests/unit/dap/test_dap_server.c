@@ -123,7 +123,7 @@ TEST(build_variable) {
     XrJsonValue *var = xjson_new_object();
     xjson_object_set(var, "name", xjson_new_string("count"));
     xjson_object_set(var, "value", xjson_new_string("42"));
-    xjson_object_set(var, "type", xjson_new_string("int"));
+    xjson_object_set(var, "type", xjson_new_string("i64"));
     xjson_object_set(var, "variablesReference", xjson_new_number(0));
 
     size_t len;
@@ -131,7 +131,7 @@ TEST(build_variable) {
     ASSERT(json != NULL);
     ASSERT(strstr(json, "count") != NULL);
     ASSERT(strstr(json, "42") != NULL);
-    ASSERT(strstr(json, "int") != NULL);
+    ASSERT(strstr(json, "i64") != NULL);
 
     free(json);
     xjson_free(var);

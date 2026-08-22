@@ -1,8 +1,8 @@
-export fn sumWindow(view: Slice<byte>) -> int {
+export fn sumWindow(view: Slice<u8>) -> i64 {
     var total = 0
     var i = 0
     while (i < len(view)) {
-        total = total + int(view[i])
+        total = total + (view[i] as i64)
         i = i + 1
     }
     return total + len(view)

@@ -15,7 +15,7 @@ fn test_map_basic() {
 
 @test
 fn test_map_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var result = arr.map(fn(x) {
         return x * 2
     })
@@ -66,7 +66,7 @@ fn test_filter_all() {
 
 @test
 fn test_filter_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var result = arr.filter(fn(x) {
         return true
     })
@@ -112,7 +112,7 @@ fn test_reduce_min() {
 
 @test
 fn test_reduce_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var sum = arr.reduce(fn(acc, x) {
         return acc + x
     }, 0)
@@ -141,7 +141,7 @@ fn test_foreach_basic() {
 
 @test
 fn test_foreach_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var count = 0
     arr.forEach(fn(x) {
         count++
@@ -215,7 +215,7 @@ fn test_count_matches() {
 @test
 fn test_flatten_single_level() {
     var nested = [[1, 2], [3, 4], [5, 6]]
-    var flat: Array<int> = []
+    var flat: Array<i64> = []
     for (arr in nested) {
         for (x in arr) {
             flat.push(x)

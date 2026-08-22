@@ -29,35 +29,29 @@ fn test_bool_to_string() {
 
 @test
 fn test_string_to_int() {
-    assert_eq(int("42"), 42)
-    assert_eq(int("-100"), -100)
-    assert_eq(int("0"), 0)
+    assert_eq(i64.parse("42"), 42)
+    assert_eq(i64.parse("-100"), -100)
+    assert_eq(i64.parse("0"), 0)
 }
 
 @test
 fn test_float_to_int() {
-    assert_eq(int(3.7), 3)
-    assert_eq(int(-2.9), -2)
-}
-
-@test
-fn test_bool_to_int() {
-    assert_eq(int(true), 1)
-    assert_eq(int(false), 0)
+    assert_eq((3.7 as i64), 3)
+    assert_eq((-2.9 as i64), -2)
 }
 
 // ===== 转为浮点数 =====
 
 @test
 fn test_string_to_float() {
-    var f = float("3.14")
+    var f = f64.parse("3.14")
     assert_eq(f > 3.13, true)
     assert_eq(f < 3.15, true)
 }
 
 @test
 fn test_int_to_float() {
-    var f = float(42)
+    var f = (42 as f64)
     assert_eq(f, 42.0)
 }
 

@@ -1,32 +1,32 @@
 interface Shape {
-    area() -> int
+    area() -> i64
 }
 
 class Circle implements Shape {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    area() -> int {
+    area() -> i64 {
         return this.value * this.value
     }
 }
 
 class Square implements Shape {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    area() -> int {
+    area() -> i64 {
         return this.value + this.value
     }
 }
 
-fn score<T: Shape>(value: T) -> int {
+fn score<T: Shape>(value: T) -> i64 {
     return value.area()
 }
 

@@ -2,11 +2,11 @@
 
 enum LinkErr { Msg(string) }
 
-fn failing() -> int {
+fn failing() -> i64 {
     throw LinkErr.Msg("linked child error")
     return 0
 }
-fn slow_work() -> int {
+fn slow_work() -> i64 {
     var x = 0
     for (var i = 0; i < 1000; i++) {
         x = x + 1

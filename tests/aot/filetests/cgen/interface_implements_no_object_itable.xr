@@ -1,20 +1,20 @@
 interface Shape {
-    area() -> int
+    area() -> i64
 }
 
 class Circle implements Shape {
-    r: int
+    r: i64
 
-    constructor(r: int) {
+    constructor(r: i64) {
         this.r = r
     }
 
-    area() -> int {
+    area() -> i64 {
         return this.r * this.r
     }
 }
 
-fn run() -> int {
+fn run() -> i64 {
     var circle = Circle(7)
     return circle.area()
 }

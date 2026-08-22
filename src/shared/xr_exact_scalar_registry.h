@@ -114,6 +114,26 @@ static inline const XrExactScalarDesc *xr_exact_scalar_by_source_name(const char
     return NULL;
 }
 
+static inline bool xr_scalar_rep_is_integer(uint8_t scalar_rep) {
+    const XrExactScalarDesc *row = xr_exact_scalar_by_native_type(scalar_rep);
+    return row && row->family == XR_EXACT_SCALAR_FAMILY_INTEGER;
+}
+
+static inline bool xr_scalar_rep_is_float(uint8_t scalar_rep) {
+    const XrExactScalarDesc *row = xr_exact_scalar_by_native_type(scalar_rep);
+    return row && row->family == XR_EXACT_SCALAR_FAMILY_FLOAT;
+}
+
+static inline bool xr_scalar_rep_is_unsigned(uint8_t scalar_rep) {
+    const XrExactScalarDesc *row = xr_exact_scalar_by_native_type(scalar_rep);
+    return row && row->range_class == XR_EXACT_SCALAR_RANGE_UNSIGNED;
+}
+
+static inline const char *xr_scalar_rep_name(uint8_t scalar_rep) {
+    const XrExactScalarDesc *row = xr_exact_scalar_by_native_type(scalar_rep);
+    return row ? row->source_name : NULL;
+}
+
 static inline void xr_exact_scalar_set_error(char *error, size_t error_size,
                                              const char *message) {
     if (!error || error_size == 0)

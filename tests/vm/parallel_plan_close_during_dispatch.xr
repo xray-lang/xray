@@ -1,6 +1,6 @@
 import { Options, ParallelError, Plan } from parallel
 
-var plan = Plan<int>(Options(2), (lane) -> lane + 10)
+var plan = Plan<i64>(Options(2), (lane) -> lane + 10)
 
 fn closePlan() {
     plan.close()

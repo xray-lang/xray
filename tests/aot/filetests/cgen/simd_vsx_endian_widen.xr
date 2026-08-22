@@ -1,6 +1,6 @@
 import { U8x16, U32x4 } from simd
 
-fn firstWord(bytes: Slice<byte>) -> u64 {
+fn firstWord(bytes: Slice<u8>) -> u64 {
     return U8x16.load(bytes).reinterpretU64().extract(0)
 }
 
@@ -8,11 +8,11 @@ fn products(a: U32x4, b: U32x4) -> u64 {
     return a.widenMulEven(b).reduceAdd() + a.widenMulOdd(b).reduceAdd()
 }
 
-fn overshift(a: U32x4, bits: int) -> u32 {
+fn overshift(a: U32x4, bits: i64) -> u32 {
     return a.shiftLeft(bits).extract(0)
 }
 
-var bytes: [byte; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+var bytes: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 var a: [u32; 4] = [2, 3, 5, 7]
 var b: [u32; 4] = [11, 13, 17, 19]
 var words = U32x4.fromLanes(a)

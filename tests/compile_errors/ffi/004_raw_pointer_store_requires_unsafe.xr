@@ -1,5 +1,5 @@
 // 113 FFI: writing through a mutable raw pointer is still unsafe.
-extern "C" { fn raw_mut_addr() -> MutPtr<byte> }
+extern "C" { fn raw_mut_addr() -> MutPtr<u8> }
 
 var p = unsafe { raw_mut_addr() }
 p[0] = 7

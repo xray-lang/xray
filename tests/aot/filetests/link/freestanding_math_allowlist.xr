@@ -1,15 +1,15 @@
 import math
 import { min, max, clamp } from math
 
-fn xray_math_allowlist_constants(x: float) -> float {
+fn xray_math_allowlist_constants(x: f64) -> f64 {
     return math.PI + math.E + math.TAU + math.SQRT2 + x
 }
 
-fn xray_math_allowlist_max_int() -> int {
-    return math.MAX_INT
+fn xray_math_allowlist_max_int() -> i64 {
+    return math.MAX_I64
 }
 
-fn xray_math_allowlist_int_core(a: int, b: int) -> int {
+fn xray_math_allowlist_int_core(a: i64, b: i64) -> i64 {
     var lo = min(a, b, 5)
     var hi = max(a, b, 10)
     var c1 = clamp(a, 0, b)

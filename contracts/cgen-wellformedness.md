@@ -31,4 +31,4 @@ part of the frozen verifier suite.
 
 anchor-sha256: src/aot/xi_cgen_verify_output.h a3662a2575d97d5da3f5ae63fe8319eabc0aad0bc1303264bc8a468397bd9705
 anchor-sha256: src/aot/xi_cgen_verify_output.c e981972ae6f97d20d64096009558d889e01b613433f82ebede9f2bbeab8523fa
-anchor-sha256: tests/unit/aot/test_cgen_verify_output.c 520622431943c0ff2f1ceba36b1905537dc30f18272f87ce28de5265e0e346d3
+anchor-sha256: tests/unit/aot/test_cgen_verify_output.c ca23cace6f60e24445d82f7dcb984673fd36ecf4c4504064d5dca56501a40c25

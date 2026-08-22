@@ -1,14 +1,14 @@
-fn fill_words(dst: ref Slice<u32>, value: u32) -> int {
+fn fill_words(dst: ref Slice<u32>, value: u32) -> i64 {
     var filled: Slice<u32> = dst.fill(value)
     return len(filled)
 }
 
-fn zero_words(dst: ref Slice<u32>) -> int {
+fn zero_words(dst: ref Slice<u32>) -> i64 {
     dst.fill(0)
     return len(dst)
 }
 
-fn runFill() -> int {
+fn runFill() -> i64 {
     var words = Array<u32>(4, 0)
     var wordsView: Slice<u32> = words[:]
     return fill_words(ref wordsView, 7) + zero_words(ref wordsView)

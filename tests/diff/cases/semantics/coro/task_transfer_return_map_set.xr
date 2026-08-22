@@ -1,11 +1,11 @@
-fn buildMap() -> Map<int, int> {
-    var values: Map<int, int> = #{}
+fn buildMap() -> Map<i64, i64> {
+    var values: Map<i64, i64> = #{}
     values[7] = 11
     return values
 }
 
-fn buildSet() -> Set<int> {
-    var values: Set<int> = #[3, 5]
+fn buildSet() -> Set<i64> {
+    var values: Set<i64> = #[3, 5]
     return values
 }
 

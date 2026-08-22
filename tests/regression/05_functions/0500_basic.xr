@@ -26,7 +26,7 @@ fn test_function_no_return() {
 
 @test
 fn test_single_param() {
-    fn double(x: int) -> int {
+    fn double(x: i64) -> i64 {
         return x * 2
     }
     assert_eq(double(5), 10)
@@ -34,7 +34,7 @@ fn test_single_param() {
 
 @test
 fn test_multiple_params() {
-    fn add(a: int, b: int) -> int {
+    fn add(a: i64, b: i64) -> i64 {
         return a + b
     }
     assert_eq(add(3, 5), 8)
@@ -42,7 +42,7 @@ fn test_multiple_params() {
 
 @test
 fn test_many_params() {
-    fn sum(a: int, b: int, c: int, d: int, e: int) -> int {
+    fn sum(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
         return a + b + c + d + e
     }
     assert_eq(sum(1, 2, 3, 4, 5), 15)
@@ -52,13 +52,13 @@ fn test_many_params() {
 
 @test
 fn test_return_int() {
-    fn getInt() -> int { return 42 }
+    fn getInt() -> i64 { return 42 }
     assert_eq(getInt(), 42)
 }
 
 @test
 fn test_return_float() {
-    fn getFloat() -> float { return 3.14 }
+    fn getFloat() -> f64 { return 3.14 }
     assert_eq(getFloat(), 3.14)
 }
 
@@ -76,13 +76,13 @@ fn test_return_bool() {
 
 @test
 fn test_return_null() {
-    fn getNull() -> int? { return null }
+    fn getNull() -> i64? { return null }
     assert_eq(getNull(), null)
 }
 
 @test
 fn test_return_array() {
-    fn getArray() -> Array<int> { return [1, 2, 3] }
+    fn getArray() -> Array<i64> { return [1, 2, 3] }
     var arr = getArray()
     assert_eq(len(arr), 3)
 }
@@ -91,7 +91,7 @@ fn test_return_array() {
 
 @test
 fn test_early_return() {
-    fn check(x: int) -> string {
+    fn check(x: i64) -> string {
         if (x > 10) {
             return "big"
         }
@@ -103,7 +103,7 @@ fn test_early_return() {
 
 @test
 fn test_multiple_returns() {
-    fn classify(x: int) -> string {
+    fn classify(x: i64) -> string {
         if (x < 0) { return "negative" }
         if (x == 0) { return "zero" }
         return "positive"
@@ -117,7 +117,7 @@ fn test_multiple_returns() {
 
 @test
 fn test_local_variables() {
-    fn compute(x: int) -> int {
+    fn compute(x: i64) -> i64 {
         var a = x * 2
         var b = a + 10
         return b
@@ -128,7 +128,7 @@ fn test_local_variables() {
 @test
 fn test_shadow_outer() {
     var x = 100
-    fn inner() -> int {
+    fn inner() -> i64 {
         var x = 10
         return x
     }
@@ -140,7 +140,7 @@ fn test_shadow_outer() {
 
 @test
 fn test_call_in_expression() {
-    fn double(x: int) -> int { return x * 2 }
+    fn double(x: i64) -> i64 { return x * 2 }
     
     var result = double(5) + double(3)
     assert_eq(result, 16)
@@ -148,7 +148,7 @@ fn test_call_in_expression() {
 
 @test
 fn test_nested_call() {
-    fn double(x: int) -> int { return x * 2 }
+    fn double(x: i64) -> i64 { return x * 2 }
     
     var result = double(double(3))
     assert_eq(result, 12)
@@ -156,8 +156,8 @@ fn test_nested_call() {
 
 @test
 fn test_call_as_argument() {
-    fn add(a: int, b: int) -> int { return a + b }
-    fn double(x: int) -> int { return x * 2 }
+    fn add(a: i64, b: i64) -> i64 { return a + b }
+    fn double(x: i64) -> i64 { return x * 2 }
     
     var result = add(double(2), double(3))
     assert_eq(result, 10)  // 4 + 6
@@ -167,7 +167,7 @@ fn test_call_as_argument() {
 
 @test
 fn test_function_as_condition() {
-    fn isPositive(x: int) -> bool { return x > 0 }
+    fn isPositive(x: i64) -> bool { return x > 0 }
     
     var result = ""
     if (isPositive(5)) {

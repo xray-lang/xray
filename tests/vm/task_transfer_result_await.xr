@@ -1,4 +1,4 @@
-fn values() -> Array<int> {
+fn values() -> Array<i64> {
     var result = [1, 2, 3]
     return result
 }

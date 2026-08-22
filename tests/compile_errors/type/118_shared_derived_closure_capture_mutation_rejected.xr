@@ -1,5 +1,5 @@
 class Box {
-    items: Array<int> = Array<int>(2, 5)
+    items: Array<i64> = Array<i64>(2, 5)
 }
 
 fn main() {

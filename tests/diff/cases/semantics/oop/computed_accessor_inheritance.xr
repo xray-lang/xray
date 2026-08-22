@@ -4,20 +4,20 @@
 // AOT resolves the same source-level accessors directly.
 
 class Counter {
-    _value: int
+    _value: i64
 
-    constructor(initial: int) {
+    constructor(initial: i64) {
         this._value = initial
     }
 
-    value: int {
+    value: i64 {
         fn() { return this._value }
-        fn(next: int) { this._value = next }
+        fn(next: i64) { this._value = next }
     }
 }
 
 class StepCounter extends Counter {
-    constructor(initial: int) {
+    constructor(initial: i64) {
         super(initial)
     }
 }

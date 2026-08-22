@@ -12,7 +12,7 @@ class State {
                       other.lanes[4], other.lanes[5], other.lanes[6], other.lanes[7]]
     }
 
-    set(index: int, value: u64) {
+    set(index: i64, value: u64) {
         this.lanes[index] = value
     }
 

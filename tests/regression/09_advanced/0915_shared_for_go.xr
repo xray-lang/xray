@@ -34,7 +34,7 @@ fn test_shared_typeof_for_go() {
 
 @test
 fn test_shared_channel_for_go() {
-    const ch = Channel<int>(3)
+    const ch = Channel<i64>(3)
     scope {
         for (i in 0..3) {
             go fn() {

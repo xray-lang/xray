@@ -5,7 +5,7 @@ enum NoAllocHue {
 
 enum NoAllocState {
     Idle,
-    Busy(int),
+    Busy(i64),
 }
 
 type NoAllocVariant = EnumVariant<NoAllocHue> | EnumVariant<NoAllocState>

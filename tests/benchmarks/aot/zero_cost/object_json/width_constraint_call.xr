@@ -1,8 +1,8 @@
-fn nameWidth<T: { name: string }>(value: T) -> int {
+fn nameWidth<T: { name: string }>(value: T) -> i64 {
     return len(value.name)
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var ada = { name: "Ada", age: 37 }
     var bob = { name: "Bob", active: true }
     var i = 0
@@ -16,6 +16,6 @@ fn run(n: int) -> int {
 
 var iterations = 2000000
 if (len(process.args) > 0) {
-    iterations = int(process.args[0]) ?? iterations
+    iterations = i64.tryParse(process.args[0]) ?? iterations
 }
 print(run(iterations))

@@ -10,7 +10,7 @@ var d: u32 = 4294967295
 print(d.wrappingMul(2))
 var e: u64 = 18446744073709551615
 print(e.wrappingAdd(1))
-var f: int = 9223372036854775807
+var f: i64 = 9223372036854775807
 print(f.wrappingAdd(1))
 var g: i16 = 32767
 print(g.wrappingAdd(1))
@@ -21,7 +21,7 @@ print(i.wrappingAdd(10).wrappingAdd(0))
 print(i.wrappingAdd(10) == i + 10)
 
 // 普通 int 的其余方法族语义不变
-var j: int = 9223372036854775807
+var j: i64 = 9223372036854775807
 print(j.checkedAdd(1))
 print(j.saturatingAdd(1))
 print(j.addOverflows(1))

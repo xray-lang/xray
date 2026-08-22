@@ -1,5 +1,5 @@
-fn run(n: int) -> int {
-    var scores: Map<string, int> = #{}
+fn run(n: i64) -> i64 {
+    var scores: Map<string, i64> = #{}
     scores.set("ada", 1)
     var key = "ada"
 

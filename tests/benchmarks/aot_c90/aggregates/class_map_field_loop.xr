@@ -1,12 +1,12 @@
 class IntMapBag {
-    values: Map<int, int>
+    values: Map<i64, i64>
 
     constructor() {
-        var values: Map<int, int> = #{}
+        var values: Map<i64, i64> = #{}
         this.values = values
     }
 
-    fill(n: int) -> int {
+    fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.set(i, i * 3 + 1)
@@ -15,7 +15,7 @@ class IntMapBag {
         return len(this.values)
     }
 
-    scan(n: int, rounds: int) -> int {
+    scan(n: i64, rounds: i64) -> i64 {
         var r = 0
         var sum = 0
         while (r < rounds) {
@@ -32,7 +32,7 @@ class IntMapBag {
     }
 }
 
-fn class_map_field_loop_run(n: int, rounds: int) -> int {
+fn class_map_field_loop_run(n: i64, rounds: i64) -> i64 {
     var bag = IntMapBag()
     var count = bag.fill(n)
     return bag.scan(n, rounds) + count

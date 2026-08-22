@@ -1,18 +1,18 @@
-fn bump(value: ref int) -> int {
+fn bump(value: ref i64) -> i64 {
     value = value + 1
     return value
 }
 
-fn fill(value: ref int) -> int {
+fn fill(value: ref i64) -> i64 {
     value = 9
     return value
 }
 
-fn invokeBump(action: fn(ref int) -> int, value: ref int) -> int {
+fn invokeBump(action: fn(ref i64) -> i64, value: ref i64) -> i64 {
     return action(ref value)
 }
 
-fn invokeFill(action: fn(ref int) -> int, value: ref int) -> int {
+fn invokeFill(action: fn(ref i64) -> i64, value: ref i64) -> i64 {
     return action(ref value)
 }
 

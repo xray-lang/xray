@@ -1,4 +1,4 @@
-fn consume(value: move Array<int>) { print(len(value)) }
+fn consume(value: move Array<i64>) { print(len(value)) }
 
 fn main_logic() {
     var buf = [1, 2, 3]

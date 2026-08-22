@@ -1,10 +1,10 @@
 // anchor: int-twos-complement-wrap
 // Two's-complement wrap must match across VM / JIT / AOT (and constant fold).
-var maxv: int = 9223372036854775807
+var maxv: i64 = 9223372036854775807
 print(maxv + 1)
 
-var minv: int = -9223372036854775807 - 1
+var minv: i64 = -9223372036854775807 - 1
 print(minv - 1)
 
-var big: int = 9223372036854775807
+var big: i64 = 9223372036854775807
 print(big * 2)

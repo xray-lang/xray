@@ -17,10 +17,10 @@ legacy_public_surface = [
   "BE"
 ]
 intentional_semantic_changes = [
-  "hexEncode accepts Slice<byte> and hexDecode returns Array<byte>",
+  "hexEncode accepts Slice<u8> and hexDecode returns Array<u8>",
   "hexDecode throws HexError instead of returning null",
   "hexDecodeString and valid-string UTF-8 metric aliases are removed",
-  "utf8Valid accepts arbitrary Slice<byte> and enforces strict shortest-form UTF-8",
+  "utf8Valid accepts arbitrary Slice<u8> and enforces strict shortest-form UTF-8",
   "UTF-16 uses Endian options and throws Utf16Error instead of returning null"
 ]
 known_legacy_bugs = [

@@ -1,11 +1,11 @@
 interface SourceView {
-    view(data: Slice<byte>) -> Slice<byte>
+    view(data: Slice<u8>) -> Slice<u8>
 }
 
 class WrongSource implements SourceView {
-    bytes: Array<byte> = [9, 8]
+    bytes: Array<u8> = [9, 8]
 
-    view(data: Slice<byte>) -> Slice<byte> {
+    view(data: Slice<u8>) -> Slice<u8> {
         return this.bytes[:]
     }
 }

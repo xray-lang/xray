@@ -8,6 +8,6 @@ class Box<T> {
     }
 }
 
-var plan = Plan<int>(Options(2), lane -> lane + 1)
-var total = plan.reduce(0..8, Box<int>(0), (state, i) -> Box<int>(state + i), (a, b) -> Box<int>(a.value + b.value))
+var plan = Plan<i64>(Options(2), lane -> lane + 1)
+var total = plan.reduce(0..8, Box<i64>(0), (state, i) -> Box<i64>(state + i), (a, b) -> Box<i64>(a.value + b.value))
 print(total.value)

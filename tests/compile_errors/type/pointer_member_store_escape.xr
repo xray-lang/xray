@@ -1,7 +1,7 @@
 import mem
 
 class PtrBox {
-    ptr: MutPtr<byte>? = null
+    ptr: MutPtr<u8>? = null
 }
 
 fn run() {

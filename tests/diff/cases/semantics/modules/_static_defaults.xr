@@ -5,11 +5,11 @@ export class StaticDefaults {
         return prefix + ":" + suffix
     }
 
-    static score(base: int, bonus: int = 7) -> int {
+    static score(base: i64, bonus: i64 = 7) -> i64 {
         return base + bonus
     }
 
-    static isMissing(value: int? = null) -> bool {
+    static isMissing(value: i64? = null) -> bool {
         return value == null
     }
 }

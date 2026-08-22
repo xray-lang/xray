@@ -13,7 +13,7 @@ order: 025
 | **AOT** | Ahead-of-Time 编译：Xi IR 生成 C，并由所选 C toolchain 在构建时产生 native binary |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
-| **Array<byte>** | 字节缓冲类型（见 §2.4.6） |
+| **Array<u8>** | 字节缓冲类型（见 §2.4.6） |
 | **Slice<T>** | 借用视图：借用另一个值拥有的连续元素存储，自身不拥有数据，受借用生命周期约束（见 §2.4.2） |
 | **borrow / 借用** | 在不取得所有权的前提下访问另一个值的存储；`Slice<T>`、`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 都是借用，共用 `E0382` / `E0383` / `E0384` 三条规则 |
 | **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `u32` 别名（见 §2.3.5） |
@@ -59,7 +59,7 @@ order: 025
 | **AOT** | Ahead-of-Time compilation: Xi IR generates C and the selected C toolchain produces a native binary at build time |
 | **AST** | Abstract Syntax Tree: intermediate representation produced by the parser |
 | **Arena** | Bulk allocator: every allocation is freed together |
-| **Array<byte>** | Byte buffer type (see §2.4.6) |
+| **Array<u8>** | Byte buffer type (see §2.4.6) |
 | **Slice<T>** | Borrowed view over contiguous element storage owned by another value; owns no data and is constrained by borrow lifetimes (see §2.4.2) |
 | **borrow** | Access to another value's storage without taking ownership; `Slice<T>`, `ref` parameters, and `Ptr<T>` / `MutPtr<T>` are all borrows and share the `E0382` / `E0383` / `E0384` rules |
 | **rune** | Primitive type for one Unicode scalar value; not numeric and not an alias of `u32` (see §2.3.5) |

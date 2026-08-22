@@ -1,8 +1,8 @@
 import { Plan, Options } from parallel
 
-const seen: Atomic<int> = Atomic<int>(0)
+const seen: Atomic<i64> = Atomic<i64>(0)
 
-var plan = Plan<int>(Options(2), (lane) -> lane + 10)
+var plan = Plan<i64>(Options(2), (lane) -> lane + 10)
 
 plan.forEach(0..4, (state, i) -> {
     seen.add(state + i, Ordering.Relaxed)

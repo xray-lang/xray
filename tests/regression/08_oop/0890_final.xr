@@ -5,7 +5,7 @@
 
 final class Config {
     name: string
-    value: int
+    value: i64
 
     constructor(name, value) {
         this.name = name
@@ -89,11 +89,11 @@ fn test_final_class_with_parent() {
 // ===== Static method =====
 
 class MathUtil {
-    static pi() -> float {
+    static pi() -> f64 {
         return 3.14159
     }
 
-    static compute(x: float) -> float {
+    static compute(x: f64) -> f64 {
         return x * 2.0
     }
 }
@@ -107,8 +107,8 @@ fn test_final_static_method() {
 // ===== Const field =====
 
 class Settings {
-    const maxRetries: int = 3
-    timeout: int = 1000
+    const maxRetries: i64 = 3
+    timeout: i64 = 1000
 
     constructor() {
     }

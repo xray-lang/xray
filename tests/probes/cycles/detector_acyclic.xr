@@ -6,13 +6,13 @@
 
 class TreeNode {
     children: Array<TreeNode>
-    tag: int
+    tag: i64
     constructor(tag) { this.children = []; this.tag = tag }
 }
 
 class ListNode {
     next: ListNode?
-    tag: int
+    tag: i64
     constructor(tag) { this.next = null; this.tag = tag }
 }
 
@@ -38,9 +38,9 @@ fn build_list() {
 }
 
 // 闭包捕获但不成环
-fn closures_without_cycles() -> int {
+fn closures_without_cycles() -> i64 {
     var t = TreeNode(99)
-    var f = fn() -> int { return t.tag }
+    var f = fn() -> i64 { return t.tag }
     return f()
 }
 

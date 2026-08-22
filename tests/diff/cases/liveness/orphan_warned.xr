@@ -4,7 +4,7 @@
 // on BOTH backends, because the census is isolate-neutral.
 import time
 
-fn child(ch: Channel<int>) -> int {
+fn child(ch: Channel<i64>) -> i64 {
     var got = match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
@@ -13,7 +13,7 @@ fn child(ch: Channel<int>) -> int {
     return got
 }
 
-var ch = Channel<int>(0)
+var ch = Channel<i64>(0)
 go child(ch)
 time.sleep(30)
 print("main exits")

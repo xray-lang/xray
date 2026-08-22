@@ -5,7 +5,7 @@
 // Positive coverage: tests/regression/12_type_checking/1251_generic_constraint_forwarding.xr
 
 interface Shape {
-    area() -> float
+    area() -> f64
 }
 
 class Animal {
@@ -16,11 +16,11 @@ class Animal {
     }
 }
 
-fn innerShape<U: Shape>(y: U) -> float {
+fn innerShape<U: Shape>(y: U) -> f64 {
     return y.area()
 }
 
-fn outerAnimal<T: Animal>(x: T) -> float {
+fn outerAnimal<T: Animal>(x: T) -> f64 {
     return innerShape<T>(x)
 }
 

@@ -1,5 +1,5 @@
 struct BlockPoint {
-    x: int
+    x: i64
 }
 
 const GOOD = comptime {

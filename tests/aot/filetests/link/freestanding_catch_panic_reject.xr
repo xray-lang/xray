@@ -1,4 +1,4 @@
-fn xray_catch_panic_reject(n: int) -> int {
+fn xray_catch_panic_reject(n: i64) -> i64 {
     var out = 0
     try {
         out = 10 / n

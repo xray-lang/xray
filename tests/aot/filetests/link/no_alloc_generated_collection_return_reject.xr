@@ -1,10 +1,10 @@
 import os
 
-fn xray_no_alloc_os_loadavg_reject() -> int {
+fn xray_no_alloc_os_loadavg_reject() -> i64 {
     return len(os.loadavg())
 }
 
-fn xray_no_alloc_os_environ_reject() -> int {
+fn xray_no_alloc_os_environ_reject() -> i64 {
     return len(os.environ())
 }
 

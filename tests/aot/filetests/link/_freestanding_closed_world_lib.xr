@@ -1,15 +1,15 @@
 export struct ExportedBox {
-    value: int
+    value: i64
 
-    unusedBytes() -> [byte; 4] {
+    unusedBytes() -> [u8; 4] {
         return [1, 2, 3, 4]
     }
 }
 
-export fn liveAdd(value: int) -> int {
+export fn liveAdd(value: i64) -> i64 {
     return value + 7
 }
 
-export fn unusedBytes() -> [byte; 8] {
+export fn unusedBytes() -> [u8; 8] {
     return [0; 8]
 }

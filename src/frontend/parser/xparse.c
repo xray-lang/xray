@@ -169,9 +169,13 @@ static ParseRule rules[] = {
     [TK_RAW_TEMPLATE_STRING] = {xr_parse_template_string, NULL, PREC_NONE},
     [TK_NAME] = {xr_parse_variable, NULL, PREC_NONE},
 
-    // Type cast functions
-    [TK_INT] = {xr_parse_type_cast, NULL, PREC_NONE},
-    [TK_FLOAT] = {xr_parse_type_cast, NULL, PREC_NONE},
+    // Exact scalar type namespaces. Numeric conversion is expressed with `as`.
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    [TK_##id] = {xr_parse_scalar_namespace, NULL, PREC_NONE},
+#include "../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
+
+    // Value conversion keywords
     [TK_STRING] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_BOOL] = {xr_parse_type_cast, NULL, PREC_NONE},
     [TK_RUNE] = {xr_parse_type_cast, NULL, PREC_NONE},

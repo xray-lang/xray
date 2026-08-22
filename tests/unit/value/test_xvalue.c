@@ -190,7 +190,7 @@ TEST(value_type_identity_uses_shared_owner_for_runtime_and_vm) {
         xr_make_typed_ptr_val((void *) (uintptr_t) 1, XR_TSTRING),
     };
     const XrTypeId expected[] = {
-        XR_TID_NULL, XR_TID_BOOL, XR_TID_INT, XR_TID_FLOAT, XR_TID_RUNE,
+        XR_TID_NULL, XR_TID_BOOL, XR_TID_I64, XR_TID_F64, XR_TID_RUNE,
         XR_TID_STRING,
     };
     for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); i++) {

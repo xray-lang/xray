@@ -1,7 +1,7 @@
 import { Capabilities, U8x16, U32x4, U64x2 } from simd
 import mem
 
-const STATIC_SECRET: [byte; 16] = comptime [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+const STATIC_SECRET: [u8; 16] = comptime [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 fn xray_simd_u64_core(a: u64, b: u64, c: u64, d: u64) -> u64 {
     var left = U64x2.fromLanes([a, b])
@@ -16,12 +16,12 @@ fn xray_simd_widen_core(a: u32, b: u32, c: u32, d: u32) -> u64 {
     return product.reduceAdd()
 }
 
-fn xray_simd_reinterpret_core(value: byte) -> u64 {
+fn xray_simd_reinterpret_core(value: u8) -> u64 {
     var bytes = U8x16.splat(value)
     return bytes.reinterpretU64().reduceAdd()
 }
 
-fn xray_simd_capability_core() -> int {
+fn xray_simd_capability_core() -> i64 {
     var flags = 0
     if (Capabilities.isAccelerated()) {
         flags += 1
@@ -40,7 +40,7 @@ fn xray_simd_static_secret_core() -> u64 {
         STATIC_SECRET.ptr()
     }
     var secret = unsafe {
-        mem.slice<byte>(raw, 16, STATIC_SECRET)
+        mem.slice<u8>(raw, 16, STATIC_SECRET)
     }
     return U8x16.load(secret).reinterpretU64().reduceAdd()
 }

@@ -1,5 +1,3 @@
-import strconv
-
 import text
 
 // toml - pure-Xray TOML parser and writer.
@@ -35,10 +33,10 @@ export class TomlDateTime {
 }
 
 export class TomlFloat {
-    value: float
+    value: f64
     text: string
 
-    constructor(value: float, text: string = "") {
+    constructor(value: f64, text: string = "") {
         this.value = value
         if (len(text) > 0) {
             this.text = text
@@ -65,12 +63,12 @@ export class TomlArray {
         this.values.push(value)
     }
 
-    at(index: int) -> TomlValue? {
+    at(index: i64) -> TomlValue? {
         if (index < 0 || index >= len(this.values)) { return null }
         return this.values[index]
     }
 
-    len() -> int {
+    len() -> i64 {
         return len(this.values)
     }
 }
@@ -102,7 +100,7 @@ export class TomlTable {
 export class TomlValue {
     kind: string
     boolValue: bool
-    intValue: int
+    intValue: i64
     floatValue: TomlFloat?
     stringValue: string
     dateTimeValue: TomlDateTime?
@@ -126,7 +124,7 @@ export class TomlValue {
         return out
     }
 
-    static Int(value: int) -> TomlValue {
+    static Int(value: i64) -> TomlValue {
         var out = TomlValue("int")
         out.intValue = value
         return out
@@ -167,12 +165,12 @@ export class TomlValue {
         return this.tableValue!.get(key)
     }
 
-    at(index: int) -> TomlValue? {
+    at(index: i64) -> TomlValue? {
         if (this.kind != "array" || this.arrayValue == null) { return null }
         return this.arrayValue!.at(index)
     }
 
-    len() -> int {
+    len() -> i64 {
         if (this.kind == "array" && this.arrayValue != null) { return this.arrayValue!.len() }
         return 0
     }
@@ -187,12 +185,12 @@ export class TomlValue {
         return null
     }
 
-    asInt() -> int? {
+    asInt() -> i64? {
         if (this.kind == "int") { return this.intValue }
         return null
     }
 
-    asFloat() -> float? {
+    asFloat() -> f64? {
         if (this.kind == "float" && this.floatValue != null) { return this.floatValue!.value }
         return null
     }
@@ -231,11 +229,11 @@ export enum TomlErrorKind {
 
 export class TomlDiagnostic {
     kind: TomlErrorKind
-    line: int
-    column: int
+    line: i64
+    column: i64
     message: string
 
-    constructor(kind: TomlErrorKind, line: int, column: int, message: string) {
+    constructor(kind: TomlErrorKind, line: i64, column: i64, message: string) {
         this.kind = kind
         this.line = line
         this.column = column
@@ -246,10 +244,10 @@ export class TomlDiagnostic {
 export class TomlParseReport {
     data: TomlValue
     errors: Array<TomlDiagnostic>
-    lines: int
-    keys: int
+    lines: i64
+    keys: i64
 
-    constructor(data: TomlValue, errors: Array<TomlDiagnostic>, lines: int, keys: int) {
+    constructor(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64) {
         this.data = data
         this.errors = errors
         this.lines = lines
@@ -279,11 +277,11 @@ fn _isHexDigit(c: string) -> bool {
     return (o >= 48 && o <= 57) || (o >= 65 && o <= 70) || (o >= 97 && o <= 102)
 }
 
-fn _hexValue(c: string) -> int {
+fn _hexValue(c: string) -> i64 {
     var o = c.runes().nth(0).toUInt32()
-    if (o >= 48 && o <= 57) { return (o - 48) as int }
-    if (o >= 65 && o <= 70) { return (o - 55) as int }
-    if (o >= 97 && o <= 102) { return (o - 87) as int }
+    if (o >= 48 && o <= 57) { return (o - 48) as i64 }
+    if (o >= 65 && o <= 70) { return (o - 55) as i64 }
+    if (o >= 97 && o <= 102) { return (o - 87) as i64 }
     return -1
 }
 
@@ -308,7 +306,7 @@ fn _stripUnderscores(s: string) -> string {
     return out.toString()
 }
 
-fn _startsWithAt(s: string, pos: int, prefix: string) -> bool {
+fn _startsWithAt(s: string, pos: i64, prefix: string) -> bool {
     if (pos + len(prefix) > len(s)) { return false }
     return s.slice(pos, pos + len(prefix)) == prefix
 }
@@ -321,15 +319,15 @@ fn _isValueTerminator(c: string) -> bool {
 
 class TomlParser {
     data: string
-    pos: int
-    line: int
-    column: int
+    pos: i64
+    line: i64
+    column: i64
     root: TomlValue
     rootTable: TomlTable
     current: TomlTable
     errors: Array<TomlDiagnostic>
     definedTables: Map<string, bool>
-    keyCount: int
+    keyCount: i64
 
     constructor(data: string) {
         this.data = data
@@ -354,7 +352,7 @@ class TomlParser {
         return this.data.slice(this.pos, (this.pos) + 1)
     }
 
-    peekAt(offset: int) -> string {
+    peekAt(offset: i64) -> string {
         var p = this.pos + offset
         if (p < 0 || p >= len(this.data)) { return "" }
         return this.data.slice(p, (p) + 1)
@@ -582,7 +580,7 @@ class TomlParser {
         return text.trimEnd(this.data.slice(start, this.pos))
     }
 
-    parseBaseInt(raw: string, base: int) -> int {
+    parseBaseInt(raw: string, base: i64) -> i64 {
         var s = _stripUnderscores(raw)
         var start = 0
         var sign = 1
@@ -621,12 +619,12 @@ class TomlParser {
         }
 
         if (s.contains(".") || s.contains("e") || s.contains("E")) {
-            var f = strconv.parseFloat(s)
+            var f = f64.tryParse(s)
             if (f != null) { return TomlValue.Float(TomlFloat(f!, s)) }
             this.addError(TomlErrorKind.InvalidNumber, "Invalid number")
             return TomlValue.Float(TomlFloat(0.0, "0.0"))
         }
-        var i = strconv.parseInt(s)
+        var i = i64.tryParse(s)
         if (i != null) { return TomlValue.Int(i!) }
         this.addError(TomlErrorKind.InvalidNumber, "Invalid number")
         return TomlValue.Int(0)
@@ -915,7 +913,7 @@ fn _escapeString(value: string) -> string {
         } else if (c == "\t") {
             out.append("\\t")
         } else {
-            var o = c.runes().nth(0).toUInt32() as int
+            var o = c.runes().nth(0).toUInt32() as i64
             if (o < 32 || o == 127) {
                 out.append("\\u")
                 var hex = "0123456789ABCDEF"
@@ -942,7 +940,7 @@ fn _isArrayOfTables(value: TomlValue) -> bool {
     return value.len() > 0 && value.at(0)!.kind == "table"
 }
 
-fn _valueText(value: TomlValue, depth: int = 0) -> string {
+fn _valueText(value: TomlValue, depth: i64 = 0) -> string {
     if (depth > TOML_MAX_DEPTH) { return "\"\"" }
     if (value.kind == "string") { return _escapeString(value.stringValue) }
     if (value.kind == "bool") { return string(value.boolValue) }
@@ -985,7 +983,7 @@ fn _tablePrefix(prefix: string, key: string) -> string {
     return prefix + "." + key
 }
 
-fn _arrayTableText(arr: TomlValue, prefix: string, depth: int) -> string {
+fn _arrayTableText(arr: TomlValue, prefix: string, depth: i64) -> string {
     var out = StringBuilder()
     for (var i = 0; i < arr.len(); i++) {
         var value = arr.at(i)!
@@ -999,7 +997,7 @@ fn _arrayTableText(arr: TomlValue, prefix: string, depth: int) -> string {
     return out.toString()
 }
 
-fn _tableText(obj: TomlValue, prefix: string, depth: int = 0) -> string {
+fn _tableText(obj: TomlValue, prefix: string, depth: i64 = 0) -> string {
     if (depth > TOML_MAX_DEPTH) { return "" }
     var out = StringBuilder()
     var keys = obj.keys()
@@ -1062,11 +1060,11 @@ export fn boolValue(value: bool) -> TomlValue {
     return TomlValue.Bool(value)
 }
 
-export fn intValue(value: int) -> TomlValue {
+export fn intValue(value: i64) -> TomlValue {
     return TomlValue.Int(value)
 }
 
-export fn floatValue(value: float) -> TomlValue {
+export fn floatValue(value: f64) -> TomlValue {
     return TomlValue.Float(TomlFloat(value))
 }
 
@@ -1090,11 +1088,11 @@ export fn get(value: TomlValue, key: string) -> TomlValue? {
     return value.get(key)
 }
 
-export fn at(value: TomlValue, index: int) -> TomlValue? {
+export fn at(value: TomlValue, index: i64) -> TomlValue? {
     return value.at(index)
 }
 
-export fn length(value: TomlValue) -> int {
+export fn length(value: TomlValue) -> i64 {
     return value.len()
 }
 
@@ -1102,11 +1100,11 @@ export fn asBool(value: TomlValue) -> bool? {
     return value.asBool()
 }
 
-export fn asInt(value: TomlValue) -> int? {
+export fn asInt(value: TomlValue) -> i64? {
     return value.asInt()
 }
 
-export fn asFloat(value: TomlValue) -> float? {
+export fn asFloat(value: TomlValue) -> f64? {
     return value.asFloat()
 }
 

@@ -1,21 +1,21 @@
 // 测试 Task.poll / Task.awaitResult
 // 作者：xingleixu@gmail.com
 
-fn blocked(ch: Channel<int>) -> int {
+fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn compute(x: int) -> int {
+fn compute(x: i64) -> i64 {
     return x * 2
 }
 
 @test
 fn test_main() {
     // Test 1: blocked task — poll is Pending before completion
-    const ch = Channel<int>(0)
+    const ch = Channel<i64>(0)
     var task = go blocked(ch)
     print("before pending:", match (task.poll()) {
         TaskResult.Pending -> true
@@ -32,7 +32,7 @@ fn test_main() {
     ch.close()
 
     // Test 2: cancel blocked task — explicit status is Cancelled
-    const ch2 = Channel<int>(0)
+    const ch2 = Channel<i64>(0)
     var task2 = go blocked(ch2)
     task2.cancel()
     var cancelled = task2.awaitResult()

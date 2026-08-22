@@ -46,7 +46,7 @@ print(_probe.probeMakeBox("m", 9).describe())
 // static method on a class exported from a pure-Xray stdlib module
 print(ProbeBox.tagged("s", 3).describe())
 // generic class with a closure-taking method
-var cell = ProbeCell<int>(21)
+var cell = ProbeCell<i64>(21)
 print(cell.map((v) -> v * 2))
 // class containing arrays of another exported module class
 var bag = probeMakeBag()

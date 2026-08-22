@@ -10,7 +10,7 @@ class Box<T> {
 }
 
 fn main() {
-    var box = Box<int>(1)
+    var box = Box<i64>(1)
     var value = 2
     box.touch(value)
 }

@@ -1,20 +1,20 @@
 // Abstract classes and methods
 
 abstract class Shape {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    constructor(x: float, y: float) {
+    constructor(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
 
     // Abstract methods - must be implemented by subclasses
-    abstract area(): float
-    abstract perimeter(): float
+    abstract area(): f64
+    abstract perimeter(): f64
 
     // Concrete method
-    move(dx: float, dy: float) {
+    move(dx: f64, dy: f64) {
         this.x += dx
         this.y += dy
     }
@@ -25,19 +25,19 @@ abstract class Shape {
 }
 
 class Circle extends Shape {
-    radius: float
+    radius: f64
 
-    constructor(x: float, y: float, radius: float) {
+    constructor(x: f64, y: f64, radius: f64) {
         super(x, y)
         this.radius = radius
     }
 
     // Implement abstract methods
-    area(): float {
+    area(): f64 {
         return 3.14159 * this.radius * this.radius
     }
 
-    perimeter(): float {
+    perimeter(): f64 {
         return 2 * 3.14159 * this.radius
     }
 
@@ -48,20 +48,20 @@ class Circle extends Shape {
 }
 
 class Rectangle extends Shape {
-    width: float
-    height: float
+    width: f64
+    height: f64
 
-    constructor(x: float, y: float, width: float, height: float) {
+    constructor(x: f64, y: f64, width: f64, height: f64) {
         super(x, y)
         this.width = width
         this.height = height
     }
 
-    area(): float {
+    area(): f64 {
         return this.width * this.height
     }
 
-    perimeter(): float {
+    perimeter(): f64 {
         return 2 * (this.width + this.height)
     }
 
@@ -71,24 +71,24 @@ class Rectangle extends Shape {
 }
 
 class Triangle extends Shape {
-    a: float
-    b: float
-    c: float
+    a: f64
+    b: f64
+    c: f64
 
-    constructor(x: float, y: float, a: float, b: float, c: float) {
+    constructor(x: f64, y: f64, a: f64, b: f64, c: f64) {
         super(x, y)
         this.a = a
         this.b = b
         this.c = c
     }
 
-    area(): float {
+    area(): f64 {
         // Heron's formula
         let s = (this.a + this.b + this.c) / 2
         return math.sqrt(s * (s - this.a) * (s - this.b) * (s - this.c))
     }
 
-    perimeter(): float {
+    perimeter(): f64 {
         return this.a + this.b + this.c
     }
 }

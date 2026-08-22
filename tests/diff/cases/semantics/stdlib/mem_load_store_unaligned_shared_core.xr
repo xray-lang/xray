@@ -3,18 +3,18 @@
 import mem
 
 fn run() {
-    var bytes = Array<byte>(16)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(16)
+    var view: Slice<u8> = bytes[:]
     unsafe {
         var p = view.mutPtr()
         mem.store<u16>(p, 1, 0x1234, Endian.LE)
         mem.store<u32>(p, 4, 0x01020304, Endian.LE)
         mem.store<u64>(p, 8, 0x0102030405060708, Endian.LE)
 
-        var rp: Ptr<byte> = p
-        print(int(mem.load<u16>(rp, 1, Endian.LE)))
-        print(int(mem.load<u32>(rp, 4, Endian.LE)))
-        print(int(mem.load<u64>(rp, 8, Endian.LE)))
+        var rp: Ptr<u8> = p
+        print((mem.load<u16>(rp, 1, Endian.LE) as i64))
+        print((mem.load<u32>(rp, 4, Endian.LE) as i64))
+        print((mem.load<u64>(rp, 8, Endian.LE) as i64))
     }
 
     print(bytes[1])

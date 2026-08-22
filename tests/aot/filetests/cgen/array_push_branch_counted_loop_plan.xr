@@ -1,12 +1,12 @@
-fn build(flag: bool, n: int) -> int {
+fn build(flag: bool, n: i64) -> i64 {
     if (flag) {
-        var xs: Array<int> = []
+        var xs: Array<i64> = []
         for (i in 0..n) {
             xs.push(i)
         }
         return len(xs)
     } else {
-        var ys: Array<int> = []
+        var ys: Array<i64> = []
         for (i in 0..n) {
             ys.push(n)
         }

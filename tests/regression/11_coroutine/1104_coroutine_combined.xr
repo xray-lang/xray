@@ -1,7 +1,7 @@
 // 综合测试：协程功能组合使用
 // 测试 Channel 参数传递、go/await、defer
 
-fn recv_value(r: Recv<int>) -> int {
+fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
         Recv.Value(v) -> v
         _ -> 0
@@ -9,7 +9,7 @@ fn recv_value(r: Recv<int>) -> int {
 }
 
 // 生产者：向 Channel 发送数据（使用类型注解）
-fn producer(ch: Channel<int>) -> string {
+fn producer(ch: Channel<i64>) -> string {
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
@@ -17,7 +17,7 @@ fn producer(ch: Channel<int>) -> string {
 }
 
 // 消费者：从 Channel 接收数据（使用 Recv<T>）
-fn consumer(ch: Channel<int>) -> int {
+fn consumer(ch: Channel<i64>) -> i64 {
     var sum = 0
     sum = sum + recv_value(ch.tryRecv())
     sum = sum + recv_value(ch.tryRecv())
@@ -32,7 +32,7 @@ fn test_combined() {
     print("=== 协程综合测试 ===")
 
     // 1. 创建缓冲 Channel
-    const ch = Channel<int>(5)
+    const ch = Channel<i64>(5)
 
     // 2. defer 清理
     defer { cleanup() }

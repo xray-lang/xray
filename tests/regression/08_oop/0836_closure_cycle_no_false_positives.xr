@@ -10,41 +10,41 @@
 // 对应的正例（必须被拒绝）在 tests/compile_errors/cycles/247_closure_cycle_direct.xr。
 
 class Button {
-    onClick: fn() -> int
-    clicks: int
-    constructor() { this.onClick = fn() -> int { return 0 }; this.clicks = 0 }
-    render() -> int { this.clicks = this.clicks + 1; return this.clicks }
+    onClick: fn() -> i64
+    clicks: i64
+    constructor() { this.onClick = fn() -> i64 { return 0 }; this.clicks = 0 }
+    render() -> i64 { this.clicks = this.clicks + 1; return this.clicks }
 }
-class Holder { handler: fn() -> int
-    constructor() { this.handler = fn() -> int { return 0 } } }
+class Holder { handler: fn() -> i64
+    constructor() { this.handler = fn() -> i64 { return 0 } } }
 
 // 1. 闭包不捕获任何外层名
-fn no_capture() { var b = Button(); b.onClick = fn() -> int { return 0 } }
+fn no_capture() { var b = Button(); b.onClick = fn() -> i64 { return 0 } }
 
 // 2. 捕获的是无关变量
-fn unrelated_capture() { var b = Button(); var k = 5; b.onClick = fn() -> int { return k } }
+fn unrelated_capture() { var b = Button(); var k = 5; b.onClick = fn() -> i64 { return k } }
 
 // 3. 捕获后不存入被捕获对象
-fn capture_without_store() { var b = Button(); var f = fn() -> int { return b.render() }; f() }
+fn capture_without_store() { var b = Button(); var f = fn() -> i64 { return b.render() }; f() }
 
 // 4. 存入无关对象
 fn store_into_other() {
     var b = Button()
     var h = Holder()
-    h.handler = fn() -> int { return b.render() }
+    h.handler = fn() -> i64 { return b.render() }
 }
 
 // 5. 同名遮蔽：闭包内部的 b 是自己的局部
 fn shadowed() {
     var b = Button()
-    b.onClick = fn() -> int { var b = Button(); return b.render() }
+    b.onClick = fn() -> i64 { var b = Button(); return b.render() }
 }
 
 // 6. 传参代替捕获（规范推荐的写法）：闭包只用参数，不捕获 b
 fn by_parameter() {
     var b = Button()
-    b.onClick = fn() -> int { return 1 }
-    var read_via_param = fn(btn: Button) -> int { return btn.clicks }
+    b.onClick = fn() -> i64 { return 1 }
+    var read_via_param = fn(btn: Button) -> i64 { return btn.clicks }
     read_via_param(b)
 }
 
@@ -52,13 +52,13 @@ fn by_parameter() {
 fn nested_closures() {
     var b = Button()
     var k = 5
-    var outer = fn() -> int {
-        var inner = fn() -> int { return k }
+    var outer = fn() -> i64 {
+        var inner = fn() -> i64 { return k }
         return inner() + b.render()
     }
     // 外层闭包捕获了 b，但存入的是无关的局部变量 ⇒ 不成环
     var slot = Holder()
-    slot.handler = fn() -> int { return k }
+    slot.handler = fn() -> i64 { return k }
     outer()
 }
 
@@ -66,7 +66,7 @@ fn nested_closures() {
 fn two_objects() {
     var a = Button()
     var b = Button()
-    a.onClick = fn() -> int { return b.render() }
+    a.onClick = fn() -> i64 { return b.render() }
 }
 
 no_capture()

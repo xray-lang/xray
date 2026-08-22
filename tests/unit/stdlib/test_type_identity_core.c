@@ -23,12 +23,12 @@ TEST(type_identity_core_pins_public_ids) {
     ASSERT_EQ_INT(xr_type_identity_core_eval(
                       XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
                       XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO,
-                      XR_SEM_CONSUMER_AOT_HOSTED, XR_TYPE_IDENTITY_CORE_INT),
+                      XR_SEM_CONSUMER_AOT_HOSTED, XR_TYPE_IDENTITY_CORE_I64),
                   8);
     ASSERT_EQ_INT(xr_type_identity_core_eval(
                       XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
                       XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_LO,
-                      XR_SEM_CONSUMER_AOT_FREESTANDING, XR_TYPE_IDENTITY_CORE_FLOAT),
+                      XR_SEM_CONSUMER_AOT_FREESTANDING, XR_TYPE_IDENTITY_CORE_F64),
                   11);
     ASSERT_EQ_INT(xr_type_identity_core_eval(
                       XR_SEM_OWNER_ID_PRIMITIVE_TYPE_IDENTITY_HI,
@@ -46,8 +46,8 @@ TEST(type_identity_core_covers_every_kind) {
     static const XrTypeIdentityCoreKind kinds[] = {
         XR_TYPE_IDENTITY_CORE_NULL,
         XR_TYPE_IDENTITY_CORE_BOOL,
-        XR_TYPE_IDENTITY_CORE_INT,
-        XR_TYPE_IDENTITY_CORE_FLOAT,
+        XR_TYPE_IDENTITY_CORE_I64,
+        XR_TYPE_IDENTITY_CORE_F64,
         XR_TYPE_IDENTITY_CORE_STRING,
         XR_TYPE_IDENTITY_CORE_FUNCTION,
         XR_TYPE_IDENTITY_CORE_ARRAY,

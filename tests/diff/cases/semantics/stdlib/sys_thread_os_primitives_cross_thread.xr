@@ -5,9 +5,9 @@
 import sys
 
 const m = sys.OsMutex()
-const guarded = Atomic<int>(0)
+const guarded = Atomic<i64>(0)
 
-fn bumpMany(n: int) -> int {
+fn bumpMany(n: i64) -> i64 {
     for (var i = 0; i < n; i++) {
         m.lock()
         var cur = guarded.load(Ordering.Relaxed)
@@ -26,10 +26,10 @@ print(guarded.load(Ordering.Relaxed))
 
 const cm = sys.OsMutex()
 const cv = sys.OsCondvar()
-const state = Atomic<int>(0)
+const state = Atomic<i64>(0)
 
 cm.lock()
-var producer = sys.Thread.spawn(fn() -> int {
+var producer = sys.Thread.spawn(fn() -> i64 {
     cm.lock()
     state.store(7, Ordering.Release)
     cv.signal()
@@ -44,14 +44,14 @@ cm.unlock()
 print(producer.join())
 
 const barrier = sys.OsBarrier(3)
-const arrived = Atomic<int>(0)
+const arrived = Atomic<i64>(0)
 
-var b1 = sys.Thread.spawn(fn() -> int {
+var b1 = sys.Thread.spawn(fn() -> i64 {
     arrived.fetchAdd(1, Ordering.AcquireRelease)
     barrier.wait()
     return arrived.load(Ordering.Acquire)
 })
-var b2 = sys.Thread.spawn(fn() -> int {
+var b2 = sys.Thread.spawn(fn() -> i64 {
     arrived.fetchAdd(1, Ordering.AcquireRelease)
     barrier.wait()
     return arrived.load(Ordering.Acquire)
@@ -61,9 +61,9 @@ print(barrier.wait())
 print(b1.join() + b2.join() + arrived.load(Ordering.Acquire))
 
 const once = sys.OsOnce()
-const onceCount = Atomic<int>(0)
+const onceCount = Atomic<i64>(0)
 
-fn runOnce() -> int {
+fn runOnce() -> i64 {
     once.call(fn() {
         onceCount.fetchAdd(1, Ordering.AcquireRelease)
     })

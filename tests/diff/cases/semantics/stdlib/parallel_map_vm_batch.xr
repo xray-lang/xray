@@ -6,7 +6,7 @@ print(values[0])
 print(values[127])
 print(values[255])
 
-var out: Array<int> = [99, 98]
+var out: Array<i64> = [99, 98]
 parallel.mapInto(3..9, ref out, (i) -> i * 2, parallel.Options(4))
 print(len(out))
 print(out[0])

@@ -9,7 +9,7 @@
 
 @test
 fn test_narrowed_array_iterates() {
-    var a: Array<int>? = [1, 2, 3]
+    var a: Array<i64>? = [1, 2, 3]
     var sum = 0
     if (a != null) {
         for (i in a) {
@@ -21,7 +21,7 @@ fn test_narrowed_array_iterates() {
 
 @test
 fn test_narrowed_array_len() {
-    var a: Array<int>? = [1, 2, 3]
+    var a: Array<i64>? = [1, 2, 3]
     var n = 0
     if (a != null) {
         n = len(a)
@@ -31,7 +31,7 @@ fn test_narrowed_array_len() {
 
 @test
 fn test_narrowed_null_skips_body() {
-    var a: Array<int>? = null
+    var a: Array<i64>? = null
     var count = 0
     if (a != null) {
         for (i in a) {
@@ -45,7 +45,7 @@ fn test_narrowed_null_skips_body() {
 
 @test
 fn test_asserted_array_iterates() {
-    var a: Array<int>? = [4, 5, 6]
+    var a: Array<i64>? = [4, 5, 6]
     var sum = 0
     for (i in a!) {
         sum = sum + i
@@ -55,7 +55,7 @@ fn test_asserted_array_iterates() {
 
 @test
 fn test_asserted_array_len() {
-    var a: Array<int>? = [4, 5, 6]
+    var a: Array<i64>? = [4, 5, 6]
     assert_eq(len(a!), 3)
 }
 

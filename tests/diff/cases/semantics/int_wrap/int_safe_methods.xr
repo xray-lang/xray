@@ -1,8 +1,8 @@
 // anchor: int-safe-methods
 // Explicit int overflow-control methods must match between VM and AOT.
 
-var max: int = 9223372036854775807
-var min: int = -9223372036854775807 - 1
+var max: i64 = 9223372036854775807
+var min: i64 = -9223372036854775807 - 1
 
 print(max.checkedAdd(0))
 print(max.checkedAdd(1) == null)

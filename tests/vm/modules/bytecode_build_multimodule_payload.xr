@@ -1,26 +1,26 @@
 import mem
 
 export final class ByteEnvelope {
-    contractId: int
-    methodId: int
-    requestId: int
-    serviceId: int
-    generation: int
-    deadline: int
-    flags: int
-    traceId: int
-    payload: Array<byte>
+    contractId: i64
+    methodId: i64
+    requestId: i64
+    serviceId: i64
+    generation: i64
+    deadline: i64
+    flags: i64
+    traceId: i64
+    payload: Array<u8>
 
     constructor(
-        contractId: int,
-        methodId: int,
-        requestId: int,
-        serviceId: int,
-        generation: int,
-        deadline: int,
-        flags: int,
-        traceId: int,
-        payload: Array<byte>
+        contractId: i64,
+        methodId: i64,
+        requestId: i64,
+        serviceId: i64,
+        generation: i64,
+        deadline: i64,
+        flags: i64,
+        traceId: i64,
+        payload: Array<u8>
     ) {
         this.contractId = contractId
         this.methodId = methodId
@@ -35,16 +35,16 @@ export final class ByteEnvelope {
 }
 
 export struct PayloadView {
-    length: int
-    first: int
-    last: int
+    length: i64
+    first: i64
+    last: i64
 }
 
 export fn payloadView(envelope: ByteEnvelope) -> PayloadView {
     return PayloadView{
         length: len(envelope.payload),
-        first: envelope.payload[0] as int,
-        last: envelope.payload[len(envelope.payload) - 1] as int,
+        first: envelope.payload[0] as i64,
+        last: envelope.payload[len(envelope.payload) - 1] as i64,
     }
 }
 
@@ -52,7 +52,7 @@ export fn encodePayload(envelope: ByteEnvelope) -> Buffer {
     var out = mem.allocZeroed(len(envelope.payload))
     if (len(envelope.payload) > 0) {
         var target: Slice<u8> = out.asMutBytes()
-        var source: Slice<byte> = envelope.payload[:]
+        var source: Slice<u8> = envelope.payload[:]
         target.copyFrom(source)
     }
     return out

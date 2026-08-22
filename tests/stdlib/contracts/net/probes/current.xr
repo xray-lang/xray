@@ -6,17 +6,17 @@ fn emit(name: string, ok: bool) {
 
 fn highServer(listener: NetListener) -> bool {
     var conn = net.accept(listener)!
-    var buffer = Array<byte>(16)
+    var buffer = Array<u8>(16)
     var n = net.readInto(conn, ref buffer, 16)
     var written = net.writeBytes(conn, buffer)
     net.close(conn)
     return n == 5 && written == 5
 }
 
-fn highClient(port: int) -> bool {
+fn highClient(port: i64) -> bool {
     var conn = net.dial("127.0.0.1", port)
-    net.writeBytes(conn, Array<byte>([195, 169, 226, 130, 172]))
-    var buffer = Array<byte>(16)
+    net.writeBytes(conn, Array<u8>([195, 169, 226, 130, 172]))
+    var buffer = Array<u8>(16)
     var n = net.readInto(conn, ref buffer, 16)
     net.close(conn)
     return n == 5 && buffer[0] == 195 && buffer[4] == 172
@@ -29,11 +29,11 @@ fn copyServer(listener: NetListener) -> bool {
     return copied == 6
 }
 
-fn copyClient(port: int) -> bool {
+fn copyClient(port: i64) -> bool {
     var conn = net.dial("127.0.0.1", port)
-    net.writeBytes(conn, Array<byte>([110, 97, 116, 105, 118, 101]))
+    net.writeBytes(conn, Array<u8>([110, 97, 116, 105, 118, 101]))
     net.shutdownWrite(conn)
-    var buffer = Array<byte>(16)
+    var buffer = Array<u8>(16)
     var n = net.readInto(conn, ref buffer, 16)
     var ok = n == 6 && buffer[0] == 110 && buffer[5] == 101
     net.close(conn)

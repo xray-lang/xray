@@ -18,7 +18,7 @@
 class Summer {
     constructor() {}
 
-    total<T>(xs: T) -> int {
+    total<T>(xs: T) -> i64 {
         var n = 0
         for (i in xs) { n = n + i }
         return n

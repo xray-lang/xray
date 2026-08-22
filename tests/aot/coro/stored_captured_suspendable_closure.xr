@@ -1,23 +1,23 @@
 class WorkerBox {
-    worker: fn() -> int
+    worker: fn() -> i64
 
-    constructor(worker: fn() -> int) {
+    constructor(worker: fn() -> i64) {
         this.worker = worker
     }
 
-    run() -> int {
+    run() -> i64 {
         var current = this.worker
         return current()
     }
 }
 
-fn make_worker(base: int) -> fn() -> int {
-    return fn() -> int {
+fn make_worker(base: i64) -> fn() -> i64 {
+    return fn() -> i64 {
         return yield_then_add(base)
     }
 }
 
-fn yield_then_add(base: int) -> int {
+fn yield_then_add(base: i64) -> i64 {
     Coro.yield()
     return base + 1
 }

@@ -12,7 +12,7 @@ class JSON {
     static decode<T>(value: JSON.Value, unknown?: JSON.UnknownFields) -> T?
     // @lowered
     static decodeObject<T>(value: JSON.Object, unknown?: JSON.UnknownFields) -> T?
-    static stringify<T>(value: T, indent?: int) -> string
+    static stringify<T>(value: T, indent?: i64) -> string
     static value<T>(value: T) -> JSON.Value
     static isValid(text: string, strict?: bool) -> bool
     static kindOf(value: JSON.Value) -> string

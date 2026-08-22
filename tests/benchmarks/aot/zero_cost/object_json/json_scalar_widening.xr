@@ -1,10 +1,10 @@
 import codegen
 
-fn isJsonInt(value: JSON.Value) -> int {
+fn isJsonInt(value: JSON.Value) -> i64 {
     return JSON.isInt(value) ? 1 : 0
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var i = 0
     var total = 0
     while (i < n) {
@@ -16,6 +16,6 @@ fn run(n: int) -> int {
 
 var iterations = 200000
 if (len(process.args) > 0) {
-    iterations = int(process.args[0]) ?? iterations
+    iterations = i64.tryParse(process.args[0]) ?? iterations
 }
 print(run(iterations))

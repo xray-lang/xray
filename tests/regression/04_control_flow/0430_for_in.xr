@@ -18,7 +18,7 @@ fn test_for_in_array() {
 
 @test
 fn test_for_in_empty_array() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var count = 0
     for (x in arr) {
         count++
@@ -108,7 +108,7 @@ fn test_for_in_map_keys() {
 
 @test
 fn test_for_in_empty_map() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     var count = 0
     for (kv in m) {
         count++
@@ -120,7 +120,7 @@ fn test_for_in_empty_map() {
 
 @test
 fn test_for_in_map_single_var_yields_key() {
-    var m: Map<string, int> = #{"a": 1, "b": 2, "c": 3}
+    var m: Map<string, i64> = #{"a": 1, "b": 2, "c": 3}
     var acc = ""
     for (k in m) {
         acc += k
@@ -167,7 +167,7 @@ fn test_iterator_string_manual() {
 
 @test
 fn test_iterator_map_manual_yields_keys() {
-    var m: Map<string, int> = #{"a": 1, "b": 2}
+    var m: Map<string, i64> = #{"a": 1, "b": 2}
     var it = m.iterator()
     var acc = ""
     while (it.hasNext()) {
@@ -215,7 +215,7 @@ fn test_for_in_array_index_sum() {
 
 @test
 fn test_for_in_array_index_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var count = 0
     for (i, e in arr) {
         count++
@@ -326,7 +326,7 @@ fn test_for_in_nested_range() {
 @test
 fn test_for_in_collect() {
     var arr = [1, 2, 3, 4]
-    var squares: Array<int> = []
+    var squares: Array<i64> = []
     for (x in arr) {
         squares.push(x * x)
     }
@@ -338,7 +338,7 @@ fn test_for_in_collect() {
 @test
 fn test_for_in_filter() {
     var arr = [1, 2, 3, 4, 5, 6]
-    var evens: Array<int> = []
+    var evens: Array<i64> = []
     for (x in arr) {
         if (x % 2 == 0) {
             evens.push(x)

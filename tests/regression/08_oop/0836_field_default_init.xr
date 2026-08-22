@@ -13,28 +13,28 @@ class Simple {
     }
 }
 class Complex {
-    _map: Map<string, int> = #{}
-    _arr: Array<int> = []
-    _config: Map<string, int> = #{"debug": 0, "port": 8080}
+    _map: Map<string, i64> = #{}
+    _arr: Array<i64> = []
+    _config: Map<string, i64> = #{"debug": 0, "port": 8080}
 
     constructor() {
         // 字段已自动初始化
     }
 
-    addItem(key: string, value: int) {
+    addItem(key: string, value: i64) {
         this._map[key] = value
         this._arr.push(value)
     }
 
-    getMapSize() -> int {
+    getMapSize() -> i64 {
         return len(this._map.keys())
     }
 
-    getArrSize() -> int {
+    getArrSize() -> i64 {
         return len(this._arr)
     }
 
-    getPort() -> int {
+    getPort() -> i64 {
         return this._config["port"]
     }
 }
@@ -51,7 +51,7 @@ class Override {
         return this._name
     }
 
-    getCount() -> int {
+    getCount() -> i64 {
         return this._count
     }
 }
@@ -64,14 +64,14 @@ class Counter {
         this._items.push(item)
     }
 
-    count() -> int {
+    count() -> i64 {
         return len(this._items)
     }
 }
 
 class NoCtorDefaults {
-    nums: Array<int> = [1, 2]
-    settings: Map<string, int> = #{"port": 8080}
+    nums: Array<i64> = [1, 2]
+    settings: Map<string, i64> = #{"port": 8080}
 }
 
 @test

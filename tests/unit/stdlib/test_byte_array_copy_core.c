@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_byte_array_copy_core.c - canonical Array<byte> copy owner KAT
+ * test_byte_array_copy_core.c - canonical Array<u8> copy owner KAT
  */
 
 #include "../test_framework.h"

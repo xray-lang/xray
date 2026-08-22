@@ -4,7 +4,7 @@ import { DateTime } from datetime
 var xray_no_alloc_datetime_scalar_start = datetime.fromTimestamp(0)
 var xray_no_alloc_datetime_scalar_end = datetime.fromTimestamp(86400)
 
-fn xray_no_alloc_datetime_scalar_methods_ok(start: DateTime, end: DateTime) -> int {
+fn xray_no_alloc_datetime_scalar_methods_ok(start: DateTime, end: DateTime) -> i64 {
     var score = end.diff(start)
     score = score + end.diff(start, "milliseconds")
     if (start.isBefore(end)) { score = score + 1 }

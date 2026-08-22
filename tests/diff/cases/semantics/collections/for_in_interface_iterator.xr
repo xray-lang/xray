@@ -1,18 +1,18 @@
 // The spec's Iterable<T> shape: iterator() returns the interface type, and
 // for-in drives it through the hasNext/next protocol on both backends. The
 // hosted AOT runtime resolves the calls through the symbol-method table.
-class CountIter implements Iterator<int> {
-    i: int
-    constructor(n: int) { this.i = n }
+class CountIter implements Iterator<i64> {
+    i: i64
+    constructor(n: i64) { this.i = n }
     hasNext() -> bool { return this.i > 0 }
-    next() -> int { this.i -= 1; return this.i + 1 }
-    nth(index: int) -> int { return this.i - index }
+    next() -> i64 { this.i -= 1; return this.i + 1 }
+    nth(index: i64) -> i64 { return this.i - index }
 }
 
 class Countdown {
-    n: int
-    constructor(n: int) { this.n = n }
-    iterator() -> Iterator<int> { return CountIter(this.n) }
+    n: i64
+    constructor(n: i64) { this.n = n }
+    iterator() -> Iterator<i64> { return CountIter(this.n) }
 }
 
 fn main() {

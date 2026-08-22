@@ -6,19 +6,19 @@
 import { Path } from path
 
 export final class FileStat {
-    size: int
-    mode: int
-    mtime: int
-    atime: int
-    ctime: int
-    uid: int
-    gid: int
+    size: i64
+    mode: i64
+    mtime: i64
+    atime: i64
+    ctime: i64
+    uid: i64
+    gid: i64
     isFile: bool
     isDir: bool
     isSymlink: bool
 
-    constructor(size: int, mode: int, mtime: int, atime: int, ctime: int,
-                uid: int, gid: int, isFile: bool, isDir: bool, isSymlink: bool) {
+    constructor(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64,
+                uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool) {
         this.size = size
         this.mode = mode
         this.mtime = mtime
@@ -36,11 +36,11 @@ export final class FileStat {
 // explicit close (normally `defer { file.close() }`): native resources must not
 // depend on a nondeterministic finalizer contract.
 export final class File {
-    private _handle: int
+    private _handle: i64
     private _open: bool
     private _owned: bool
 
-    private constructor(handle: int, owned: bool) {
+    private constructor(handle: i64, owned: bool) {
         this._handle = handle
         this._open = handle >= 0
         this._owned = owned
@@ -54,7 +54,7 @@ export final class File {
 
     static stdin() -> File { return File(0, false) }
 
-    read(maxBytes: int = 131072) -> Array<byte>? {
+    read(maxBytes: i64 = 131072) -> Array<u8>? {
         if (!this._open || maxBytes < 0) { return null }
         return __fileRead(this._handle, maxBytes)
     }
@@ -70,20 +70,20 @@ export final class File {
 
 export final class BufReader {
     private _file: File
-    private _buffer: Array<byte>
-    private _cursor: int
-    private _chunkSize: int
+    private _buffer: Array<u8>
+    private _cursor: i64
+    private _chunkSize: i64
     private _eof: bool
 
-    private constructor(file: File, chunkSize: int) {
+    private constructor(file: File, chunkSize: i64) {
         this._file = file
-        this._buffer = Array<byte>(0)
+        this._buffer = Array<u8>(0)
         this._cursor = 0
         this._chunkSize = chunkSize
         this._eof = false
     }
 
-    static open(path: Path, chunkSize: int = 131072) -> BufReader? {
+    static open(path: Path, chunkSize: i64 = 131072) -> BufReader? {
         if (chunkSize <= 0) { return null }
         var file = File.open(path)
         if (file == null) { return null }
@@ -94,7 +94,7 @@ export final class BufReader {
         if (this._eof) { return false }
         var chunk = this._file.read(this._chunkSize)
         if (chunk == null || len(chunk!) == 0) {
-            this._buffer = Array<byte>(0)
+            this._buffer = Array<u8>(0)
             this._cursor = 0
             this._eof = true
             return false
@@ -105,7 +105,7 @@ export final class BufReader {
     }
 
     readLine() -> string? {
-        var out = Array<byte>()
+        var out = Array<u8>()
         while (true) {
             if (this._cursor >= len(this._buffer) && !this.fill()) {
                 if (len(out) == 0) { return null }
@@ -163,22 +163,22 @@ export final class LineIterator {
 // callers may reset explicitly before composing another file image.
 export final class BufWriter {
     private _path: Path
-    private _buffer: Array<byte>
+    private _buffer: Array<u8>
 
-    constructor(path: Path, capacity: int = 131072) {
+    constructor(path: Path, capacity: i64 = 131072) {
         this._path = path
-        this._buffer = Array<byte>()
+        this._buffer = Array<u8>()
         this._buffer.reserve(capacity)
     }
 
-    write(data: Slice<byte>) -> int {
+    write(data: Slice<u8>) -> i64 {
         for (var i = 0; i < len(data); i++) { this._buffer.push(data[i]) }
         return len(data)
     }
 
-    writeBytes(data: Array<byte>) -> int { return this.write(data[:]) }
+    writeBytes(data: Array<u8>) -> i64 { return this.write(data[:]) }
 
-    writeString(data: string) -> int {
+    writeString(data: string) -> i64 {
         var bytes = data.copyBytes()
         return this.write(bytes[:])
     }
@@ -187,32 +187,32 @@ export final class BufWriter {
 
     reset() { this._buffer.clear() }
 
-    size() -> int { return len(this._buffer) }
+    size() -> i64 { return len(this._buffer) }
 }
 
 export fn appendFile(path: Path, data: string) -> bool { return __appendFile(path, data) }
-export fn chmod(path: Path, mode: int) -> bool { return __chmod(path, mode) }
+export fn chmod(path: Path, mode: i64) -> bool { return __chmod(path, mode) }
 export fn chdir(path: Path) -> bool { return __chdir(path) }
 export fn copyFile(src: Path, dst: Path) -> bool { return __copyFile(src, dst) }
 export fn cwd() -> Path { return Path(__cwd()) }
 export fn exists(path: Path) -> bool { return __exists(path) }
-export fn fileSize(path: Path) -> int { return __fileSize(path) }
+export fn fileSize(path: Path) -> i64 { return __fileSize(path) }
 export fn isDir(path: Path) -> bool { return __isDir(path) }
 export fn isFile(path: Path) -> bool { return __isFile(path) }
 export fn isSymlink(path: Path) -> bool { return __isSymlink(path) }
 export fn mkdir(path: Path) -> bool { return __mkdir(path) }
 export fn mkdirp(path: Path) -> bool { return __mkdirp(path) }
 export fn readFile(path: Path) -> string? { return __readFile(path) }
-export fn readFileBytes(path: Path) -> Array<byte>? { return __readFileBytes(path) }
+export fn readFileBytes(path: Path) -> Array<u8>? { return __readFileBytes(path) }
 export fn readStdin() -> string? { return __readStdin() }
-export fn readStdinBytes() -> Array<byte>? { return __readStdinBytes() }
+export fn readStdinBytes() -> Array<u8>? { return __readStdinBytes() }
 export fn remove(path: Path) -> bool { return __remove(path) }
 export fn removeAll(path: Path) -> bool { return __removeAll(path) }
 export fn rename(old: Path, newPath: Path) -> bool { return __rename(old, newPath) }
 export fn symlink(target: Path, link: Path) -> bool { return __symlink(target, link) }
 export fn touch(path: Path) -> bool { return __touch(path) }
 export fn writeFile(path: Path, data: string) -> bool { return __writeFile(path, data) }
-export fn writeFileBytes(path: Path, data: Array<byte>) -> bool {
+export fn writeFileBytes(path: Path, data: Array<u8>) -> bool {
     return __writeFileBytes(path, data)
 }
 export fn writeStderr(data: string) -> bool { return __writeStderr(data) }

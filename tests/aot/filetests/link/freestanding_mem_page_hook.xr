@@ -1,6 +1,6 @@
 import mem
 
-fn xray_page_hook_score(n: int) -> int {
+fn xray_page_hook_score(n: i64) -> i64 {
     var size = n
     if (size <= 0) {
         size = 4096

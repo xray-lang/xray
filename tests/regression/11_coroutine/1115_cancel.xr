@@ -1,21 +1,21 @@
 // 测试 task.cancel() 功能
 // 作者：xingleixu@gmail.com
 
-fn blocked_task(ch: Channel<int>) -> int {
+fn blocked_task(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn quick_task(x: int) -> int {
+fn quick_task(x: i64) -> i64 {
     return x * 2
 }
 
 @test
 fn test_cancel() {
     // Test 1: cancel a task that cannot self-complete (blocked on channel)
-    const ch = Channel<int>(0)
+    const ch = Channel<i64>(0)
     var t1 = go blocked_task(ch)
     t1.cancel()
     var r1 = t1.awaitResult()

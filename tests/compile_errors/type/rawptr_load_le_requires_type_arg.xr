@@ -1,6 +1,6 @@
-fn read(src: Slice<byte>) -> int {
+fn read(src: Slice<u8>) -> i64 {
     unsafe {
         var p = src.ptr()
-        return int(p.loadLE(0))
+        return (p.loadLE(0) as i64)
     }
 }

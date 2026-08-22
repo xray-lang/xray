@@ -155,9 +155,9 @@ static void xr_stdlib_vm_bind_math_generated(XrVMRuntime *isolate, XrModule *mod
     xr_module_add_export(isolate, module, "LOG2E", xr_float(M_LOG2E));
     xr_module_add_export(isolate, module, "LOG10E", xr_float(M_LOG10E));
     xr_module_add_export(isolate, module, "EPSILON", xr_float(DBL_EPSILON));
-    xr_module_add_export(isolate, module, "MAX_INT", xr_int(INT64_MAX));
-    xr_module_add_export(isolate, module, "MIN_INT", xr_int(INT64_MIN));
-    xr_module_add_export(isolate, module, "MAX_FLOAT", xr_float(DBL_MAX));
+    xr_module_add_export(isolate, module, "MAX_I64", xr_int(INT64_MAX));
+    xr_module_add_export(isolate, module, "MIN_I64", xr_int(INT64_MIN));
+    xr_module_add_export(isolate, module, "MAX_F64", xr_float(DBL_MAX));
     xr_module_add_export(isolate, module, "INF", xr_float(INFINITY));
     xr_module_add_export(isolate, module, "NAN", xr_float(NAN));
 }

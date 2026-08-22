@@ -6,9 +6,9 @@ enum Failure {
 }
 
 enum Outcome {
-    Unit(int, int),
-    Echo(int, int, Buffer?),
-    State(int, int, int),
+    Unit(i64, i64),
+    Echo(i64, i64, Buffer?),
+    State(i64, i64, i64),
     Failed(Failure)
 }
 
@@ -20,13 +20,13 @@ fn step() {
     pause()
 }
 
-fn worker(n: int) -> Outcome {
+fn worker(n: i64) -> Outcome {
     var owned = Outcome.Echo(1, 2, mem.allocZeroed(n))
     step()
     return owned
 }
 
-fn run() -> int {
+fn run() -> i64 {
     var result = worker(41)
     return match (result) {
         Outcome.Echo(_id, _generation, payload) -> len(payload!.asBytes()),

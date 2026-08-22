@@ -1,17 +1,17 @@
-fn pair(src: Slice<byte>) -> int {
+fn pair(src: Slice<u8>) -> i64 {
     unsafe {
-        return int(src.get(1)) + int(src.get(2))
+        return (src.get(1) as i64) + (src.get(2) as i64)
     }
 }
 
 fn main() {
-    var bytes: Array<byte> = Array.withCapacity(4)
+    var bytes: Array<u8> = Array.withCapacity(4)
     unsafe {
         bytes.push(3)
         bytes.push(7)
         bytes.push(11)
     }
-    var view: Slice<byte> = bytes[:]
+    var view: Slice<u8> = bytes[:]
     print(pair(view))
 }
 

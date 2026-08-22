@@ -116,9 +116,9 @@ BOOL_SENTINEL_SYMBOLS = {
 
 ARRAY_OWNER_INPUT_MODULES = {"base64", "encoding", "net", "sys", "ws"}
 ARRAY_OWNER_INPUT_RE = re.compile(
-    r"\b(?:data|payload|raw|key|buffer|bytes)\s*:\s*(?:Array<byte>|Array<byte>\?)"
+    r"\b(?:data|payload|raw|key|buffer|bytes)\s*:\s*(?:Array<u8>|Array<u8>\?)"
 )
-STRING_BINARY_UNION_RE = re.compile(r"\bstring\s*\|\s*Array<byte>|Array<byte>\s*\|\s*string\b")
+STRING_BINARY_UNION_RE = re.compile(r"\bstring\s*\|\s*Array<u8>|Array<u8>\s*\|\s*string\b")
 RETURN_STRING_RE = re.compile(r"\):\s*string\??\b|->\s*string\??\b")
 NULL_SENTINEL_RE = re.compile(r"\?|null\b")
 BOOL_RETURN_RE = re.compile(r"\):\s*bool\b|->\s*bool\b")
@@ -139,7 +139,7 @@ NATIVE_STRING_CREATOR_RE = re.compile(
 )
 GENERATED_STALE_RE = re.compile(
     r"encodeBytes|decodeToBytes|writeBytes|writeFileBytes|"
-    r"string\s*\|\s*Array<byte>|"
+    r"string\s*\|\s*Array<u8>|"
     r"\(data:\s*string(?:,|\)):|"
     r"\):\s*string\?"
 )

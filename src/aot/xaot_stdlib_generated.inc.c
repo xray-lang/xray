@@ -276,11 +276,11 @@ static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
         return true;
     if (strcmp(symbol, "math.EPSILON") == 0)
         return true;
-    if (strcmp(symbol, "math.MAX_INT") == 0)
+    if (strcmp(symbol, "math.MAX_I64") == 0)
         return true;
-    if (strcmp(symbol, "math.MIN_INT") == 0)
+    if (strcmp(symbol, "math.MIN_I64") == 0)
         return true;
-    if (strcmp(symbol, "math.MAX_FLOAT") == 0)
+    if (strcmp(symbol, "math.MAX_F64") == 0)
         return true;
     if (strcmp(symbol, "math.INF") == 0)
         return true;
@@ -327,11 +327,11 @@ static bool xaot_stdlib_generated_symbol_is_freestanding_header_only(
         return true;
     if (strcmp(symbol, "math.EPSILON") == 0)
         return true;
-    if (strcmp(symbol, "math.MAX_INT") == 0)
+    if (strcmp(symbol, "math.MAX_I64") == 0)
         return true;
-    if (strcmp(symbol, "math.MIN_INT") == 0)
+    if (strcmp(symbol, "math.MIN_I64") == 0)
         return true;
-    if (strcmp(symbol, "math.MAX_FLOAT") == 0)
+    if (strcmp(symbol, "math.MAX_F64") == 0)
         return true;
     if (strcmp(symbol, "math.INF") == 0)
         return true;

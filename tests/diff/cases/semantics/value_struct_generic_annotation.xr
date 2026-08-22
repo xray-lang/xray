@@ -6,27 +6,27 @@ struct Box<T> {
 }
 
 struct Holder {
-    b: Box<int>
+    b: Box<i64>
 }
 
-fn take(b: Box<int>) -> int {
+fn take(b: Box<i64>) -> i64 {
     return b.value
 }
 
-fn make() -> Box<int> {
-    return Box<int>{value: 41}
+fn make() -> Box<i64> {
+    return Box<i64>{value: 41}
 }
 
-var p: Box<int> = Box<int>{value: 41}
+var p: Box<i64> = Box<i64>{value: 41}
 print(p.value)
 
-var q = Box<int>{value: 99}
+var q = Box<i64>{value: 99}
 print(take(q))
 
 var r = make()
 print(r.value)
 
-var h: Holder = Holder{b: Box<int>{value: 7}}
+var h: Holder = Holder{b: Box<i64>{value: 7}}
 print(h.b.value)
 
 var h2 = h

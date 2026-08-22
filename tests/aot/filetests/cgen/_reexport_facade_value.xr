@@ -1,36 +1,36 @@
-export fn facadeValue() -> int {
+export fn facadeValue() -> i64 {
     return 42
 }
 
-export fn aliasedSource() -> int {
+export fn aliasedSource() -> i64 {
     return 7
 }
 
-export fn starValue() -> int {
+export fn starValue() -> i64 {
     return 9
 }
 
-export fn groupTwoA() -> int {
+export fn groupTwoA() -> i64 {
     return 11
 }
 
-export fn groupTwoB() -> int {
+export fn groupTwoB() -> i64 {
     return 13
 }
 
-export fn groupTwoC() -> int {
+export fn groupTwoC() -> i64 {
     return 17
 }
 
 export struct ReexportPair {
-    low: int
-    high: int
+    low: i64
+    high: i64
 
-    static init(low: int, high: int) -> ReexportPair {
+    static init(low: i64, high: i64) -> ReexportPair {
         return ReexportPair{low: low, high: high}
     }
 }
 
-export fn makeReexportPair(low: int, high: int) -> ReexportPair {
+export fn makeReexportPair(low: i64, high: i64) -> ReexportPair {
     return ReexportPair.init(low, high)
 }

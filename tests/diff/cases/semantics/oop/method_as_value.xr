@@ -10,9 +10,9 @@
 // captures the receiver. If the decision instead lands on rejecting method
 // references at compile time, this case moves to tests/compile_errors/oop/.
 class Counter {
-    n: int = 7
-    get() -> int { return this.n }
-    bump(d: int) -> int { this.n = this.n + d
+    n: i64 = 7
+    get() -> i64 { return this.n }
+    bump(d: i64) -> i64 { this.n = this.n + d
                           return this.n }
 }
 
@@ -20,7 +20,7 @@ fn main() {
     var c = Counter()
     print(c.get())          // 7 -- ordinary call
 
-    var f: fn() -> int = c.get
+    var f: fn() -> i64 = c.get
     print(f())              // 7 -- receiver stays bound
 
     var g = c.bump

@@ -287,7 +287,7 @@ static void test_builtin_receiver_registry_metadata(void) {
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_ARRAY_APPEND_FROM);
     ASSERT_TRUE(append && xa_builtin_receiver_method_documentation_group(append) ==
                               XA_BUILTIN_DOC_GROUP_U8_ARRAY,
-                "appendFrom must document under Array<byte> byte bulk methods");
+                "appendFrom must document under Array<u8> byte bulk methods");
     ASSERT_TRUE(append && xa_builtin_receiver_method_profile_availability(append) ==
                               XA_BUILTIN_PROFILE_HEAP_CAPABLE,
                 "appendFrom must be marked heap-capable");
@@ -296,7 +296,7 @@ static void test_builtin_receiver_registry_metadata(void) {
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_U8_SLICE_COMMON_PREFIX);
     ASSERT_TRUE(common_prefix && xa_builtin_receiver_method_documentation_group(common_prefix) ==
                                      XA_BUILTIN_DOC_GROUP_U8_SLICE,
-                "commonPrefix must document under Slice<byte> byte range methods");
+                "commonPrefix must document under Slice<u8> byte range methods");
     ASSERT_TRUE(common_prefix && xa_builtin_receiver_method_profile_availability(common_prefix) ==
                                      XA_BUILTIN_PROFILE_ALL,
                 "commonPrefix must be available in all profiles");
@@ -334,7 +334,7 @@ static void test_builtin_receiver_method_placement(void) {
     const XaBuiltinReceiverMethodSpec *popcount =
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_INT_POPCOUNT);
     ASSERT_TRUE(popcount && popcount->result == XA_BUILTIN_TYPE_INT,
-                "popcount must return language int");
+                "popcount must return language i64");
     const XaBuiltinReceiverMethodSpec *mul_high =
         xa_builtin_receiver_method_by_id(XA_BUILTIN_RECEIVER_METHOD_EXACT_UINT_MUL_HIGH);
     ASSERT_TRUE(mul_high && mul_high->receiver == XA_BUILTIN_RECEIVER_EXACT_UNSIGNED_INTEGER &&
@@ -346,7 +346,7 @@ static void test_builtin_receiver_method_placement(void) {
     const char *u8_array_methods[] = {"appendFrom", "repeatFrom", NULL};
     for (int i = 0; u8_array_methods[i]; i++) {
         char msg[160];
-        snprintf(msg, sizeof(msg), "Array<byte> registry must contain %s", u8_array_methods[i]);
+        snprintf(msg, sizeof(msg), "Array<u8> registry must contain %s", u8_array_methods[i]);
         ASSERT_TRUE(receiver_has_method(XA_BUILTIN_RECEIVER_U8_ARRAY, u8_array_methods[i]), msg);
     }
 
@@ -354,7 +354,7 @@ static void test_builtin_receiver_method_placement(void) {
         "load", "store", "copyFrom", "compare", "commonPrefix", "reinterpret", NULL};
     for (int i = 0; array_forbidden_range_methods[i]; i++) {
         char msg[192];
-        snprintf(msg, sizeof(msg), "Array<byte> registry must not own range method %s",
+        snprintf(msg, sizeof(msg), "Array<u8> registry must not own range method %s",
                  array_forbidden_range_methods[i]);
         ASSERT_TRUE(
             !receiver_has_method(XA_BUILTIN_RECEIVER_U8_ARRAY, array_forbidden_range_methods[i]),
@@ -366,14 +366,14 @@ static void test_builtin_receiver_method_placement(void) {
                                       "repeatFrom", "reinterpret", NULL};
     for (int i = 0; u8_slice_methods[i]; i++) {
         char msg[160];
-        snprintf(msg, sizeof(msg), "Slice<byte> registry must contain %s", u8_slice_methods[i]);
+        snprintf(msg, sizeof(msg), "Slice<u8> registry must contain %s", u8_slice_methods[i]);
         ASSERT_TRUE(receiver_has_method(XA_BUILTIN_RECEIVER_U8_SLICE, u8_slice_methods[i]), msg);
     }
 
     const char *slice_forbidden_grow_methods[] = {"appendFrom", "push", "reserve", "resize", NULL};
     for (int i = 0; slice_forbidden_grow_methods[i]; i++) {
         char msg[192];
-        snprintf(msg, sizeof(msg), "Slice<byte> registry must not own grow method %s",
+        snprintf(msg, sizeof(msg), "Slice<u8> registry must not own grow method %s",
                  slice_forbidden_grow_methods[i]);
         ASSERT_TRUE(
             !receiver_has_method(XA_BUILTIN_RECEIVER_U8_SLICE, slice_forbidden_grow_methods[i]),
@@ -443,7 +443,7 @@ static void test_semantic_intrinsic_registry(void) {
                     slice_copy->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_COPY &&
                     slice_copy->effect == XA_INTRINSIC_EFFECT_WRITE_MAY_THROW &&
                     slice_copy->min_arity == 1 && slice_copy->max_arity == 1,
-                "Slice<byte>.copyFrom must have one stable memory identity");
+                "Slice<u8>.copyFrom must have one stable memory identity");
 
     const XaIntrinsicDesc *pod_ptr = xa_intrinsic_by_id(XA_INTRINSIC_POD_SLICE_PTR);
     ASSERT_TRUE(pod_ptr && pod_ptr->family == XA_INTRINSIC_FAMILY_MEMORY &&

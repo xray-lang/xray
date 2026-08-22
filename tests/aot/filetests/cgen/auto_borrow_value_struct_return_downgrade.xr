@@ -1,4 +1,4 @@
-struct Pair { a: int; b: int }
+struct Pair { a: i64; b: i64 }
 
 fn id_pair(p: Pair) -> Pair {
     return p

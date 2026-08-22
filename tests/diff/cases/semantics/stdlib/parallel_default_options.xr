@@ -9,7 +9,7 @@
 // so no caller-side import of Options is needed.
 import parallel
 
-const seen = Atomic<int>(0)
+const seen = Atomic<i64>(0)
 parallel.forEach(0..5, (i) -> {
     seen.add(i, Ordering.Relaxed)
 })
@@ -19,7 +19,7 @@ var squares = parallel.map(0..4, (i) -> i * i)
 print(len(squares))
 print(squares[3])
 
-var out: Array<int> = [0, 0, 0]
+var out: Array<i64> = [0, 0, 0]
 parallel.mapInto(1..4, ref out, (i) -> i + 10)
 print(len(out))
 print(out[2])

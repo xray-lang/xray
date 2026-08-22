@@ -8,7 +8,7 @@ fn fail() {
     throw BlockErr.Msg("bad")
 }
 
-fn loop_sum() -> int {
+fn loop_sum() -> i64 {
     var sum = 0
     for (i in 0..4) {
         defer { sum = sum + 10 + i }
@@ -17,7 +17,7 @@ fn loop_sum() -> int {
     return sum
 }
 
-fn value_try() -> int {
+fn value_try() -> i64 {
     var sum = 0
     try {
         defer { sum = sum + 10 }
@@ -29,7 +29,7 @@ fn value_try() -> int {
     return sum
 }
 
-fn return_from_block() -> int {
+fn return_from_block() -> i64 {
     var sum = 0
     defer { sum = sum + 100 }
     {

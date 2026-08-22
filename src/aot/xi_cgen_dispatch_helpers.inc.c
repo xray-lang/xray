@@ -4558,7 +4558,7 @@ static void xicgen_emit_endian_arg_i64(XiCgenCtx *ctx, FILE *out, const XiValue 
  * re-enter the checked runtime decoder here: an enum value carries its
  * declaration-order discriminator in XrValue.ext, and an integer value is
  * already the canonical Xi encoding. This keeps unsafe memory free of a
- * hidden type-error channel while checked Slice<byte> access retains its
+ * hidden type-error channel while checked Slice<u8> access retains its
  * defensive boundary decoder above. */
 static void xicgen_emit_raw_endian_arg_i64(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     int64_t endian = XR_ENDIAN_NATIVE;
@@ -7356,6 +7356,25 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "XR_FROM_BOOL(false)");
     } else if (strcmp(bn, "print") == 0) {
         xicgen_emit_print_expr(ctx, out, f, v);
+    } else if (strcmp(bn, "i64.parse") == 0 || strcmp(bn, "i64.tryParse") == 0 ||
+               strcmp(bn, "f64.parse") == 0 || strcmp(bn, "f64.tryParse") == 0) {
+        if (v->nargs != 1 || !v->args[0]) {
+            fprintf(stderr, "[xi_cgen] ERROR: exact scalar parse builtin '%s' needs one argument\n",
+                    bn);
+            emit_codegen_abort_expr(out);
+            cg_ctx_set_error(ctx);
+            return;
+        }
+        const char *helper = strcmp(bn, "i64.parse") == 0       ? "xrt_i64_parse"
+                             : strcmp(bn, "i64.tryParse") == 0 ? "xrt_i64_try_parse"
+                             : strcmp(bn, "f64.parse") == 0    ? "xrt_f64_parse"
+                                                               : "xrt_f64_try_parse";
+        XrRep result_rep = xicgen_value_c_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, result_rep);
+        fprintf(out, "%s(", helper);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
@@ -10597,7 +10616,7 @@ static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *
         return true;
     }
 
-    if (strcmp(method, "toInt") == 0) {
+    if (strcmp(method, "toI64") == 0) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_bigint_to_int_value(");
@@ -10607,7 +10626,7 @@ static bool xicgen_emit_bigint_method(XiCgenCtx *ctx, FILE *out, const XiValue *
         return true;
     }
 
-    if (strcmp(method, "toFloat") == 0) {
+    if (strcmp(method, "toF64") == 0) {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_F64, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "xrt_bigint_to_float_value(");
@@ -10832,7 +10851,7 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     int sym = cg_method_sym(method);
     if (xicgen_emit_stringbuilder_method(ctx, out, f, v, method, nargs))
         return;
-    /* string.copyArray<byte>(): the VM dispatches this by name (no stable method-symbol
+    /* string.copyArray<u8>(): the VM dispatches this by name (no stable method-symbol
      * id), so lower it directly to the runtime helper. Mirrors VM m_to_bytes. */
     if (sym < 0 && method && strcmp(method, "copyBytes") == 0 && nargs == 0 && v->nargs >= 1) {
         const char *conv_suffix =
@@ -14791,7 +14810,7 @@ static void xicgen_byte_slice_fill(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     (void) prefix;
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_FILL))
         return;
-    const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_FILL, "Slice<byte>.fill");
+    const XaotBulkPlan *bulk = cg_required_bulk_plan(ctx, f, v, XG_BULK_FILL, "Slice<u8>.fill");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
@@ -14856,7 +14875,7 @@ static void xicgen_byte_slice_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_COPY))
         return;
     const XaotBulkPlan *bulk =
-        cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<byte>.copyFrom");
+        cg_required_bulk_plan(ctx, f, v, XG_BULK_COPY, "Slice<u8>.copyFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
@@ -14885,7 +14904,7 @@ static void xicgen_byte_slice_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f
                                       const char *prefix) {
     (void) prefix;
     const XaotBulkPlan *bulk =
-        cg_required_bulk_plan(ctx, f, v, XG_BULK_COMPARE, "Slice<byte>.compare");
+        cg_required_bulk_plan(ctx, f, v, XG_BULK_COMPARE, "Slice<u8>.compare");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
@@ -14932,7 +14951,7 @@ static void xicgen_byte_slice_repeat(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     if (cg_emit_span_readonly_span_trap(ctx, out, v, XAOT_SLICE_ACCESS_BYTE_REPEAT))
         return;
     const XaotBulkPlan *bulk =
-        cg_required_bulk_plan(ctx, f, v, XG_BULK_REPEAT, "Slice<byte>.repeatFrom");
+        cg_required_bulk_plan(ctx, f, v, XG_BULK_REPEAT, "Slice<u8>.repeatFrom");
     if (v->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return;
@@ -16964,10 +16983,14 @@ static const char *xicgen_type_label_noalloc(const XrType *type) {
         return type->object.type_name;
 
     switch (type->kind) {
-        case XR_KIND_INT:
-            return "int";
-        case XR_KIND_FLOAT:
-            return "float";
+        case XR_KIND_INT: {
+            const char *name = xr_scalar_rep_name(type->scalar_rep);
+            return name ? name : "i64";
+        }
+        case XR_KIND_FLOAT: {
+            const char *name = xr_scalar_rep_name(type->scalar_rep);
+            return name ? name : "f64";
+        }
         case XR_KIND_STRING:
             return "String";
         case XR_KIND_BOOL:

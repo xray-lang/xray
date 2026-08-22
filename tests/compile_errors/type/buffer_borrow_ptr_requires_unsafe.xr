@@ -1,6 +1,6 @@
 import mem
 
-fn raw() -> MutPtr<byte> {
+fn raw() -> MutPtr<u8> {
     var b = mem.alloc(8)
     return b.borrowPtr()
 }

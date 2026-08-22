@@ -1,11 +1,11 @@
-fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
+fn send_timeout_worker(ch: Channel<i64>, timeout_ms: i64, value: i64) -> bool {
     return match (ch.sendTimeout(value, timeout_ms)) {
         SendResult.Timeout -> true
         _ -> false
     }
 }
 
-fn run_once(count: int, timeout_ms: int) -> int {
+fn run_once(count: i64, timeout_ms: i64) -> i64 {
     const ch = Channel(1)
     ch.send(1)
 

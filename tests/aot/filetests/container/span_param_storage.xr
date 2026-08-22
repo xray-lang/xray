@@ -1,14 +1,14 @@
-fn sum_bytes(src: Slice<byte>) -> int {
+fn sum_bytes(src: Slice<u8>) -> i64 {
     var total = 0
     var i = 0
     while (i < len(src)) {
-        total = total + int(src[i])
+        total = total + (src[i] as i64)
         i = i + 1
     }
     return total
 }
 
-var bytes = Array<byte>(4)
+var bytes = Array<u8>(4)
 bytes[0] = 1
 bytes[1] = 2
 bytes[2] = 3

@@ -14,7 +14,7 @@ enum Color { Red, Green }
 var b = true
 var c = Color.Green
 var r = 1.5
-var n: int? = null
+var n: i64? = null
 
 print("b=${b} c=${c} r=${r} n=${n}")
 print("lit=${false} f=${0.0}")

@@ -2,12 +2,12 @@
 // deliberately collides with the one module B exports. Skipped as a standalone
 // diff case because its basename starts with '_'.
 export class Options {
-    weight: int
-    constructor(weight: int = 10) {
+    weight: i64
+    constructor(weight: i64 = 10) {
         this.weight = weight
     }
 }
 
-export fn pick(o: Options) -> int {
+export fn pick(o: Options) -> i64 {
     return o.weight
 }

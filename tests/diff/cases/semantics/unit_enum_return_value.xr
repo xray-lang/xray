@@ -13,19 +13,19 @@
 
 enum Color { Red, Green, Blue }
 
-fn choose(n: int) -> Color {
+fn choose(n: i64) -> Color {
     if (n == 0) { return Color.Red }
     if (n == 1) { return Color.Green }
     return Color.Blue
 }
 
-fn describe(c: Color) -> int {
+fn describe(c: Color) -> i64 {
     if (c == Color.Red) { return 100 }
     if (c == Color.Green) { return 200 }
     return 300
 }
 
-fn roundtrip(n: int) -> int {
+fn roundtrip(n: i64) -> i64 {
     return describe(choose(n))
 }
 
@@ -34,7 +34,7 @@ final class Painter {
         return Color.Green
     }
 
-    shifted(n: int) -> Color {
+    shifted(n: i64) -> Color {
         return choose(n)
     }
 }

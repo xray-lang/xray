@@ -1,10 +1,10 @@
-fn common(src: Slice<byte>, left: int, right: int, maxCount: int) -> int {
-    var a: Slice<byte> = src[left:left + maxCount]
-    var b: Slice<byte> = src[right:right + maxCount]
+fn common(src: Slice<u8>, left: i64, right: i64, maxCount: i64) -> i64 {
+    var a: Slice<u8> = src[left:left + maxCount]
+    var b: Slice<u8> = src[right:right + maxCount]
     return a.commonPrefix(b)
 }
 
-var bytes = Array<byte>(8, 0)
+var bytes = Array<u8>(8, 0)
 bytes[0] = 1
 bytes[1] = 2
 bytes[2] = 3

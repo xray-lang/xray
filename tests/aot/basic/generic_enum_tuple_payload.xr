@@ -5,7 +5,7 @@ enum DecodeResult<T> {
     Err(string)
 }
 
-fn readPair() -> DecodeResult<(int, int)> {
+fn readPair() -> DecodeResult<(i64, i64)> {
     return DecodeResult.Ok((12, 34))
 }
 

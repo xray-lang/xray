@@ -1,5 +1,5 @@
-fn run(n: int) -> int {
-    var m: Map<string, int> = #{}
+fn run(n: i64) -> i64 {
+    var m: Map<string, i64> = #{}
 
     var i = 0
     while (i < n) {

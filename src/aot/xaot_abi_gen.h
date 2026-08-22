@@ -30,8 +30,8 @@ typedef struct {
 } XaotAbiInfo;
 
 #define XAOT_ABI_ENTRIES(X) \
-    X(INT, "int", XR_KIND_INT, XAOT_ABI_CLASS_SCALAR, XAOT_REP_I64, false, true, true) \
-    X(FLOAT, "float", XR_KIND_FLOAT, XAOT_ABI_CLASS_SCALAR, XAOT_REP_F64, false, true, true) \
+    X(I64, "i64", XR_KIND_INT, XAOT_ABI_CLASS_SCALAR, XAOT_REP_I64, false, true, true) \
+    X(F64, "f64", XR_KIND_FLOAT, XAOT_ABI_CLASS_SCALAR, XAOT_REP_F64, false, true, true) \
     X(BOOL, "bool", XR_KIND_BOOL, XAOT_ABI_CLASS_SCALAR, XAOT_REP_BOOL, false, false, true) \
     X(UNIT, "unit", XR_KIND_UNIT, XAOT_ABI_CLASS_VOID, XAOT_REP_VOID, false, false, false) \
     X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, true) \
@@ -46,11 +46,11 @@ typedef struct {
 
 static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
     static const XaotAbiInfo table[] = {
-        {"int", XR_KIND_INT,
+        {"i64", XR_KIND_INT,
          XAOT_ABI_CLASS_SCALAR,
          XAOT_REP_I64, false,
          true, true},
-        {"float", XR_KIND_FLOAT,
+        {"f64", XR_KIND_FLOAT,
          XAOT_ABI_CLASS_SCALAR,
          XAOT_REP_F64, false,
          true, true},

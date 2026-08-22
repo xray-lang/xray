@@ -1,6 +1,6 @@
-const counter: Atomic<int> = Atomic<int>(0)
+const counter: Atomic<i64> = Atomic<i64>(0)
 
-fn bump(counter: Atomic<int>) -> int {
+fn bump(counter: Atomic<i64>) -> i64 {
     return counter.fetchAdd(1, Ordering.Relaxed)
 }
 

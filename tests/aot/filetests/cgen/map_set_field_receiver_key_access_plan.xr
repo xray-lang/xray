@@ -1,13 +1,13 @@
 class Registry {
-    scores: Map<int, int>
-    seen: Set<int>
+    scores: Map<i64, i64>
+    seen: Set<i64>
 
-    constructor(scores: Map<int, int>, seen: Set<int>) {
+    constructor(scores: Map<i64, i64>, seen: Set<i64>) {
         this.scores = scores
         this.seen = seen
     }
 
-    mark(value: int) -> int {
+    mark(value: i64) -> i64 {
         this.scores.set(1, value)
         this.scores[2] = value
         this.seen.add(1)
@@ -28,6 +28,6 @@ class Registry {
     }
 }
 
-var scores: Map<int, int> = #{}
-var seen: Set<int> = #[]
+var scores: Map<i64, i64> = #{}
+var seen: Set<i64> = #[]
 print(Registry(scores, seen).mark(7))

@@ -7,14 +7,14 @@ fn sent(r: SendResult) -> bool {
     }
 }
 
-fn recv_value(r: Recv<int>) -> int {
+fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn recv_ok(r: Recv<int>) -> bool {
+fn recv_ok(r: Recv<i64>) -> bool {
     return match (r) {
         Recv.Value(_) -> true
         _ -> false
@@ -24,7 +24,7 @@ fn recv_ok(r: Recv<int>) -> bool {
 @test
 fn test_channel() {
     // 创建缓冲 Channel（容量 3）
-    const ch: Channel<int> = Channel(3)
+    const ch: Channel<i64> = Channel(3)
     print(ch.capacity == 3)  // true
     
     // 非阻塞发送到缓冲区

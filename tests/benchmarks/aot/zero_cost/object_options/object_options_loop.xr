@@ -1,11 +1,11 @@
-fn endpoint(host: string, port: int = 80, tls: bool = false) -> int {
+fn endpoint(host: string, port: i64 = 80, tls: bool = false) -> i64 {
     if (tls) {
         return port + len(host)
     }
     return port
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var base = { x: 1, y: 2 }
     var i = 0
     var sum = 0

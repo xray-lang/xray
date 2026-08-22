@@ -1,4 +1,4 @@
-const ch = Channel<int>(1)
+const ch = Channel<i64>(1)
 
 for (i, msg in ch) {
     print(i)

@@ -1,4 +1,4 @@
-class Box { value: int = 0 }
+class Box { value: i64 = 0 }
 
 fn main_logic() {
     var box = Box()

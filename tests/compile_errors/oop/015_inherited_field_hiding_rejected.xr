@@ -1,7 +1,7 @@
 class Base {
-    value: int = 1
+    value: i64 = 1
 }
 
 class Child extends Base {
-    value: int = 2
+    value: i64 = 2
 }

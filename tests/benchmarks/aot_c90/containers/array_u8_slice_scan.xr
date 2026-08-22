@@ -1,16 +1,16 @@
-fn run(n: int) -> int {
-    var bytes: Array<byte> = []
+fn run(n: i64) -> i64 {
+    var bytes: Array<u8> = []
     var i = 0
     while (i < n) {
-        bytes.push(i as byte)
+        bytes.push(i as u8)
         i = i + 1
     }
 
-    var mid: Slice<byte> = bytes[17:n - 17]
+    var mid: Slice<u8> = bytes[17:n - 17]
     var sum = 0
     i = 0
     while (i < len(mid)) {
-        sum = sum + (mid[i] as int)
+        sum = sum + (mid[i] as i64)
         i = i + 1
     }
     return sum

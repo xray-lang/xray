@@ -1,13 +1,13 @@
-type Pair = { x: int, y: int }
+type Pair = { x: i64, y: i64 }
 
 var order = 0
 
-fn mark(step: int) -> int {
+fn mark(step: i64) -> i64 {
     order = order * 10 + step
     return step
 }
 
-fn source(step: int, x: int, y: int) -> Pair {
+fn source(step: i64, x: i64, y: i64) -> Pair {
     mark(step)
     return { x: x, y: y }
 }

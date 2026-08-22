@@ -1,1 +1,1 @@
-optional call receiver type 'int' is not callable
+optional call receiver type 'i64' is not callable

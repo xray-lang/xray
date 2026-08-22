@@ -24,8 +24,8 @@
 typedef int XlspBuiltinType;
 
 #define XLSP_TYPE_UNRESOLVED XR_TID_NULL
-#define XLSP_TYPE_INT XR_TID_INT
-#define XLSP_TYPE_FLOAT XR_TID_FLOAT
+#define XLSP_TYPE_I64 XR_TID_I64
+#define XLSP_TYPE_F64 XR_TID_F64
 #define XLSP_TYPE_STRING XR_TID_STRING
 #define XLSP_TYPE_BOOL XR_TID_BOOL
 #define XLSP_TYPE_ARRAY XR_TID_ARRAY
@@ -50,7 +50,7 @@ XR_FUNC XlspBuiltinType xlsp_builtin_type_from_name(const char *type_name);
 XR_FUNC XrJsonValue *xlsp_builtin_get_completions(XlspBuiltinType type);
 
 // Get completions for a concrete analyzer type. This preserves receiver-specialized
-// method sets such as Array<byte> and Slice<byte>.
+// method sets such as Array<u8> and Slice<u8>.
 XR_FUNC XrJsonValue *xlsp_builtin_get_completions_for_type(XrType *type);
 
 // Get hover info for a type method

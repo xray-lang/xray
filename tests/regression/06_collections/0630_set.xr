@@ -10,7 +10,7 @@ fn test_set_literal() {
 
 @test
 fn test_empty_set() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     assert_eq(len(s), 0)
 }
 
@@ -29,7 +29,7 @@ fn test_set_dedup() {
 // ===== 添加 =====
 @test
 fn test_add_new() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     s.add(1)
     s.add(2)
     s.add(3)
@@ -54,7 +54,7 @@ fn test_has() {
 
 @test
 fn test_has_empty() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     assert_eq(s.contains(1), false)
 }
 
@@ -90,7 +90,7 @@ fn test_iterate() {
 
 @test
 fn test_iterate_empty() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     var count = 0
     for (x in s) {
         count++
@@ -126,7 +126,7 @@ fn test_to_array() {
 // ===== 边界条件 =====
 @test
 fn test_many_elements() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     for (var i = 0; i < 100; i++) {
         s.add(i)
     }
@@ -136,7 +136,7 @@ fn test_many_elements() {
 
 @test
 fn test_add_and_delete() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     s.add(1)
     s.add(2)
     s.delete(1)

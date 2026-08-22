@@ -12,7 +12,7 @@ class Tree {
     }
 }
 
-fn makeTree(depth: int) -> Tree {
+fn makeTree(depth: i64) -> Tree {
     if (depth > 0) {
         return Tree(makeTree(depth - 1), makeTree(depth - 1))
     } else {
@@ -20,7 +20,7 @@ fn makeTree(depth: int) -> Tree {
     }
 }
 
-fn checksum(node: Tree?) -> int {
+fn checksum(node: Tree?) -> i64 {
     if (node == null) {
         return 0
     }
@@ -30,7 +30,7 @@ fn checksum(node: Tree?) -> int {
     return checksum(node.left) + checksum(node.right) + 1
 }
 
-fn run(maxDepth: int) {
+fn run(maxDepth: i64) {
     var minDepth = 4
     // Stretch tree
     var stretchDepth = maxDepth + 1

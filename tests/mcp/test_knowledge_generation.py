@@ -360,9 +360,9 @@ def check_topic_metadata_lists(root: Path) -> list[str]:
 
 def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
     examples = {
-        "code-review": "fn add(a: int, b: int) -> int {\n    return a + b\n}\nprint(add(1, 2))\n",
+        "code-review": "fn add(a: i64, b: i64) -> i64 {\n    return a + b\n}\nprint(add(1, 2))\n",
         "explain-error": (
-            "const ch = Channel<int>(1)\n"
+            "const ch = Channel<i64>(1)\n"
             "ch.send(42)\n"
             "var value = ch.recv()\n"
         ),
@@ -374,7 +374,7 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
             "}\n"
         ),
         "concurrency-pattern": (
-            "fn worker(input: int) -> int {\n"
+            "fn worker(input: i64) -> i64 {\n"
             "    return input * 2\n"
             "}\n"
             "var task = go worker(21)\n"

@@ -2,8 +2,8 @@
 // one closure must not destroy the shared cell before another closure or the
 // parent function uses it.
 
-fn run() -> int {
-    var log: Array<int> = []
+fn run() -> i64 {
+    var log: Array<i64> = []
     fn a() { log.push(1) }
     fn b() { log.push(2) }
     a()

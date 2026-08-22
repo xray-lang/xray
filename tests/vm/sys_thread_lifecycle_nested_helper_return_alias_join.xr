@@ -1,11 +1,11 @@
 import sys
 
-fn passThread(t: move Thread<int>) -> Thread<int> {
+fn passThread(t: move Thread<i64>) -> Thread<i64> {
     return t
 }
 
 fn run() {
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
     var inner = passThread(move t)

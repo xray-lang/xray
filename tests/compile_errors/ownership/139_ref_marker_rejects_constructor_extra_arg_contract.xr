@@ -2,7 +2,7 @@ class Box {
     constructor() {}
 }
 
-fn bad(x: ref int) {
+fn bad(x: ref i64) {
     Box(ref x)
 }
 

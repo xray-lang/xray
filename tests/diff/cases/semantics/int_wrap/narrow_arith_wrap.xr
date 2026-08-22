@@ -8,9 +8,9 @@ fn add8(a: i8, b: i8) -> i8 { return a + b }
 fn sub8(a: i8, b: i8) -> i8 { return a - b }
 fn mul8(a: i8, b: i8) -> i8 { return a * b }
 
-fn addu8(a: byte, b: byte) -> byte { return a + b }
-fn subu8(a: byte, b: byte) -> byte { return a - b }
-fn mulu8(a: byte, b: byte) -> byte { return a * b }
+fn addu8(a: u8, b: u8) -> u8 { return a + b }
+fn subu8(a: u8, b: u8) -> u8 { return a - b }
+fn mulu8(a: u8, b: u8) -> u8 { return a * b }
 
 fn add16(a: i16, b: i16) -> i16 { return a + b }
 fn sub16(a: i16, b: i16) -> i16 { return a - b }
@@ -20,7 +20,7 @@ fn addu16(a: u16, b: u16) -> u16 { return a + b }
 fn subu16(a: u16, b: u16) -> u16 { return a - b }
 fn mulu16(a: u16, b: u16) -> u16 { return a * b }
 
-fn mix(a: i8, b: i16) -> int { return a + b }
+fn mix(a: i8, b: i16) -> i64 { return a + b }
 
 fn addu32(a: u32, b: u32) -> u32 { return a + b }
 fn subu32(a: u32, b: u32) -> u32 { return a - b }
@@ -28,8 +28,8 @@ fn mulu32(a: u32, b: u32) -> u32 { return a * b }
 fn addi32(a: i32, b: i32) -> i32 { return a + b }
 fn subi32(a: i32, b: i32) -> i32 { return a - b }
 fn muli32(a: i32, b: i32) -> i32 { return a * b }
-fn shlu8(a: byte, b: i16) -> byte { return a << b }
-fn shru8(a: byte, b: i16) -> byte { return a >> b }
+fn shlu8(a: u8, b: i16) -> u8 { return a << b }
+fn shru8(a: u8, b: i16) -> u8 { return a >> b }
 
 print(add8(127, 1))          // -128
 print(sub8(-128, 1))         // 127

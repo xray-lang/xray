@@ -1,15 +1,15 @@
-fn runtimeOnlyInt() -> int {
+fn runtimeOnlyInt() -> i64 {
     return 99
 }
 
 struct BlockPoint {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 struct BlockBox {
     p: BlockPoint
-    tag: int
+    tag: i64
 }
 
 const BLOCK_SUM = comptime {
@@ -40,9 +40,9 @@ const BLOCK_TUPLE = comptime {
     return (base, base + 1, "block")
 }
 
-const BLOCK_TABLE: [int; 3] = comptime {
+const BLOCK_TABLE: [i64; 3] = comptime {
     var base = comptime 5
-    const values: [int; 3] = comptime [base, base + 1, base + 2]
+    const values: [i64; 3] = comptime [base, base + 1, base + 2]
     return values
 }
 
@@ -83,9 +83,9 @@ fn test_comptime_block_returns_tuple_value() {
 
 @test
 fn test_comptime_block_returns_fixed_array_value() {
-    var runtime: [int; 3] = copy(comptime {
+    var runtime: [i64; 3] = copy(comptime {
         var base = comptime 30
-        const values: [int; 3] = comptime [base, base + 1, base + 2]
+        const values: [i64; 3] = comptime [base, base + 1, base + 2]
         return values
     })
     assert_eq(runtime[0], 30)

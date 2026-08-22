@@ -5,17 +5,17 @@ interface Printable {
     toString() -> string
 }
 interface Measurable {
-    measure() -> int
+    measure() -> i64
 }
 struct Score implements Printable, Measurable {
-    value: int
+    value: i64
     label: string
 
     toString() -> string {
         return "${this.label}: ${this.value}"
     }
 
-    measure() -> int {
+    measure() -> i64 {
         return this.value
     }
 }

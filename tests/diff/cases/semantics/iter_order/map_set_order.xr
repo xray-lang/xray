@@ -2,7 +2,7 @@
 // Map and Set iterate in insertion order, identically across VM / JIT / AOT:
 // update keeps a key's position, delete+reinsert moves it to the end, and the
 // (k) / (k,v) / keys() / values() projections all agree.
-var m: Map<string, int> = #{}
+var m: Map<string, i64> = #{}
 m.set("first", 1)
 m.set("second", 2)
 m.set("third", 3)
@@ -42,7 +42,7 @@ s.delete("y")
 s.add("w")
 for (e in s.values()) { print(e) }
 print("-- int set --")
-var n: Set<int> = #[]
+var n: Set<i64> = #[]
 n.add(30)
 n.add(10)
 n.add(20)

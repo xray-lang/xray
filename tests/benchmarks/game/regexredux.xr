@@ -9,12 +9,12 @@
 import regex
 
 // 计数正则匹配次数（使用新的 regex.count API）
-fn countMatches(re, text: string): int {
+fn countMatches(re, text: string): i64 {
     return regex.count(re, text)
 }
 
 // 生成测试 FASTA 数据
-fn generateFasta(n: int): string {
+fn generateFasta(n: i64): string {
     var alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
     var sb = StringBuilder()
     // 生成 ONE 序列
@@ -70,7 +70,7 @@ fn main() {
     // 生成测试数据（从命令行读取，默认 100000）
     // n = 100000 生成约 1MB 数据，用于基准测试
     // n = 1000 生成约 10KB 数据，用于快速验证
-    var n = len(process.args) > 0 ? int(process.args[0]) ?? 100000 : 100000
+    var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 100000 : 100000
     var data = generateFasta(n)
     var initialLen = len(data.bytes())
     // 步骤 1：移除 FASTA 描述行和换行符

@@ -1,5 +1,5 @@
-fn run(n: int, rounds: int) -> int {
-    var s: Set<int> = #[]
+fn run(n: i64, rounds: i64) -> i64 {
+    var s: Set<i64> = #[]
 
     var i = 0
     while (i < n) {

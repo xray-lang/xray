@@ -20,13 +20,13 @@ const MESSAGES_PER_CONNECTION = 5   // 每个连接发送的消息数
 
 /* 单个连接任务的结果，经通道回传给收集协程 */
 class ConnResult {
-    id: int
+    id: i64
     connected: bool
-    messagesSent: int
-    messagesReceived: int
-    errorCount: int
+    messagesSent: i64
+    messagesReceived: i64
+    errorCount: i64
 
-    constructor(id: int) {
+    constructor(id: i64) {
         this.id = id
         this.connected = false
         this.messagesSent = 0
@@ -36,7 +36,7 @@ class ConnResult {
 }
 
 /* 单个连接的测试任务 */
-fn connectionTask(id: int, ch: Channel<ConnResult>) {
+fn connectionTask(id: i64, ch: Channel<ConnResult>) {
     var result = ConnResult(id)
 
     // 连接
@@ -77,7 +77,7 @@ fn connectionTask(id: int, ch: Channel<ConnResult>) {
 }
 
 /* 顺序测试（基准对照） */
-fn runSequentialTest() -> int {
+fn runSequentialTest() -> i64 {
     print("[顺序测试] 运行 " + CONCURRENT_CONNECTIONS.toString() + " 个连接（顺序执行）...")
 
     var startTime = time.now()
@@ -117,7 +117,7 @@ fn runSequentialTest() -> int {
 }
 
 /* 并发测试 */
-fn runConcurrentTest() -> int {
+fn runConcurrentTest() -> i64 {
     print("[并发测试] 运行 " + CONCURRENT_CONNECTIONS.toString() + " 个连接（并发执行）...")
 
     const ch = Channel<ConnResult>(CONCURRENT_CONNECTIONS)

@@ -2,13 +2,13 @@ fn show(label: string, value: bool) {
     print(label + "=" + value.toString())
 }
 
-var emptyArray: Array<int> = []
-var fullArray: Array<int> = [1]
+var emptyArray: Array<i64> = []
+var fullArray: Array<i64> = [1]
 show("empty-array-if", bool(emptyArray))
 show("full-array-if", bool(fullArray))
 
-var emptyMap: Map<string, int> = #{}
-var fullMap: Map<string, int> = #{"x": 1}
+var emptyMap: Map<string, i64> = #{}
+var fullMap: Map<string, i64> = #{"x": 1}
 show("empty-map-if", bool(emptyMap))
 show("full-map-if", bool(fullMap))
 

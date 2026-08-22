@@ -1,6 +1,6 @@
 // AOT regression: loop PHI copies must use parallel assignment semantics.
 
-fn distance_to_pivot(limit: int, pivot: int) -> int {
+fn distance_to_pivot(limit: i64, pivot: i64) -> i64 {
     var ip = 0
     var anchor = 0
     while (ip < limit) {

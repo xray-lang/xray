@@ -1,5 +1,5 @@
-fn head(a: Array<int>) -> int {
-    var s: Slice<int> = a[0:2]
+fn head(a: Array<i64>) -> i64 {
+    var s: Slice<i64> = a[0:2]
     return len(s)
 }
 print(head([1, 2, 3]))

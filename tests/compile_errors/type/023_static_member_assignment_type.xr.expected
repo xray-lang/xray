@@ -1,1 +1,1 @@
-Type 'string' is not assignable to member 'count' (type 'int')
+Type 'string' is not assignable to member 'count' (type 'i64')

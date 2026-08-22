@@ -10,24 +10,24 @@ import time
 const SECONDS_PER_DAY = 86400
 
 class DateTimeParts {
-    year: int
-    month: int
-    day: int
-    hour: int
-    minute: int
-    second: int
-    weekday: int
-    yearday: int
+    year: i64
+    month: i64
+    day: i64
+    hour: i64
+    minute: i64
+    second: i64
+    weekday: i64
+    yearday: i64
 
     constructor(
-        year: int,
-        month: int,
-        day: int,
-        hour: int,
-        minute: int,
-        second: int,
-        weekday: int,
-        yearday: int
+        year: i64,
+        month: i64,
+        day: i64,
+        hour: i64,
+        minute: i64,
+        second: i64,
+        weekday: i64,
+        yearday: i64
     ) {
         this.year = year
         this.month = month
@@ -41,20 +41,20 @@ class DateTimeParts {
 }
 
 export class DateTime {
-    _timestamp: int
-    _millisecond: int
-    _tzOffset: int
+    _timestamp: i64
+    _millisecond: i64
+    _tzOffset: i64
     _isUtc: bool
-    _year: int
-    _month: int
-    _day: int
-    _hour: int
-    _minute: int
-    _second: int
-    _weekday: int
-    _yearday: int
+    _year: i64
+    _month: i64
+    _day: i64
+    _hour: i64
+    _minute: i64
+    _second: i64
+    _weekday: i64
+    _yearday: i64
 
-    constructor(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true) {
+    constructor(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true) {
         this._timestamp = timestamp
         this._millisecond = millisecond
         this._tzOffset = tzOffset
@@ -71,18 +71,18 @@ export class DateTime {
         this._yearday = p.yearday
     }
 
-    timestamp: int { fn() { return this._timestamp } }
-    millisecond: int { fn() { return this._millisecond } }
-    tzOffset: int { fn() { return this._tzOffset } }
+    timestamp: i64 { fn() { return this._timestamp } }
+    millisecond: i64 { fn() { return this._millisecond } }
+    tzOffset: i64 { fn() { return this._tzOffset } }
     isUtc: bool { fn() { return this._isUtc } }
-    year: int { fn() { return this._year } }
-    month: int { fn() { return this._month } }
-    day: int { fn() { return this._day } }
-    hour: int { fn() { return this._hour } }
-    minute: int { fn() { return this._minute } }
-    second: int { fn() { return this._second } }
-    weekday: int { fn() { return this._weekday } }
-    yearday: int { fn() { return this._yearday } }
+    year: i64 { fn() { return this._year } }
+    month: i64 { fn() { return this._month } }
+    day: i64 { fn() { return this._day } }
+    hour: i64 { fn() { return this._hour } }
+    minute: i64 { fn() { return this._minute } }
+    second: i64 { fn() { return this._second } }
+    weekday: i64 { fn() { return this._weekday } }
+    yearday: i64 { fn() { return this._yearday } }
 
     toString() -> string {
         return this.format("YYYY-MM-DD HH:mm:ss")
@@ -138,7 +138,7 @@ export class DateTime {
         return base + sign + _pad(off / 60, 2) + ":" + _pad(off % 60, 2)
     }
 
-    add(amount: int, unit: string) -> DateTime {
+    add(amount: i64, unit: string) -> DateTime {
         if (unit == "millisecond" || unit == "milliseconds") {
             return _fromTotalMilliseconds(this._timestamp * 1000 + this._millisecond + amount,
                                           this._tzOffset, this._isUtc)
@@ -184,7 +184,7 @@ export class DateTime {
         return DateTime(this._timestamp + amount, this._millisecond, this._tzOffset, this._isUtc)
     }
 
-    diff(other: DateTime, unit: string = "seconds") -> int {
+    diff(other: DateTime, unit: string = "seconds") -> i64 {
         var diffMs = (this._timestamp - other._timestamp) * 1000 +
                      (this._millisecond - other._millisecond)
         if (unit == "millisecond" || unit == "milliseconds") { return diffMs }
@@ -222,7 +222,7 @@ export class DateTime {
         return _isLeapYear(this._year)
     }
 
-    daysInMonth() -> int {
+    daysInMonth() -> i64 {
         return _daysInMonth(this._year, this._month)
     }
 }
@@ -235,23 +235,23 @@ export fn utc() -> DateTime {
     return fromTimestampMs(time.now())
 }
 
-export fn create(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
-          second: int = 0) -> DateTime {
+export fn create(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0,
+          second: i64 = 0) -> DateTime {
     var wall = _timeFromCivil(year, month, day, hour, minute, second)
     var off = time.localOffsetAt(wall)
     return DateTime(wall - off * 60, 0, off, false)
 }
 
-export fn createUTC(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0,
-             second: int = 0) -> DateTime {
+export fn createUTC(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0,
+             second: i64 = 0) -> DateTime {
     return DateTime(_timeFromCivil(year, month, day, hour, minute, second), 0, 0, true)
 }
 
-export fn fromTimestamp(ts: int) -> DateTime {
+export fn fromTimestamp(ts: i64) -> DateTime {
     return DateTime(ts, 0, 0, true)
 }
 
-export fn fromTimestampMs(ts: int) -> DateTime {
+export fn fromTimestampMs(ts: i64) -> DateTime {
     return _fromTotalMilliseconds(ts, 0, true)
 }
 
@@ -323,15 +323,15 @@ export fn parse(s: string, format: string = "ISO8601") -> DateTime? {
     return DateTime(t - off * 60, ms, off, false)
 }
 
-export fn offset() -> int {
+export fn offset() -> i64 {
     return time.localOffset()
 }
 
-fn _isLeapYear(year: int) -> bool {
+fn _isLeapYear(year: i64) -> bool {
     return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
-fn _daysInMonth(year: int, month: int) -> int {
+fn _daysInMonth(year: i64, month: i64) -> i64 {
     if (month == 1) { return 31 }
     if (month == 2) {
         if (_isLeapYear(year)) { return 29 }
@@ -350,20 +350,20 @@ fn _daysInMonth(year: int, month: int) -> int {
     return 30
 }
 
-fn _floorDiv(a: int, b: int) -> int {
+fn _floorDiv(a: i64, b: i64) -> i64 {
     var q = a / b
     var r = a % b
     if (r < 0) { q = q - 1 }
     return q
 }
 
-fn _floorMod(a: int, b: int) -> int {
+fn _floorMod(a: i64, b: i64) -> i64 {
     var r = a % b
     if (r < 0) { return r + b }
     return r
 }
 
-fn _daysFromCivil(year: int, month: int, day: int) -> int {
+fn _daysFromCivil(year: i64, month: i64, day: i64) -> i64 {
     var y = year
     if (month <= 2) { y = y - 1 }
     var era = _floorDiv(y, 400)
@@ -375,7 +375,7 @@ fn _daysFromCivil(year: int, month: int, day: int) -> int {
     return era * 146097 + doe - 719468
 }
 
-fn _civilFromDays(zRaw: int) -> DateTimeParts {
+fn _civilFromDays(zRaw: i64) -> DateTimeParts {
     var z = zRaw + 719468
     var era = _floorDiv(z, 146097)
     var doe = z - era * 146097
@@ -394,12 +394,12 @@ fn _civilFromDays(zRaw: int) -> DateTimeParts {
     return DateTimeParts(y, m, d, 0, 0, 0, w, yd)
 }
 
-fn _timeFromCivil(year: int, month: int, day: int, hour: int, minute: int, second: int) -> int {
+fn _timeFromCivil(year: i64, month: i64, day: i64, hour: i64, minute: i64, second: i64) -> i64 {
     return _daysFromCivil(year, month, day) * SECONDS_PER_DAY + hour * 3600 + minute * 60 +
            second
 }
 
-fn _partsFromRaw(timestamp: int, tzOffset: int, isUtc: bool) -> DateTimeParts {
+fn _partsFromRaw(timestamp: i64, tzOffset: i64, isUtc: bool) -> DateTimeParts {
     var t = timestamp
     if (!isUtc) { t = t + tzOffset * 60 }
     var days = _floorDiv(t, SECONDS_PER_DAY)
@@ -411,8 +411,8 @@ fn _partsFromRaw(timestamp: int, tzOffset: int, isUtc: bool) -> DateTimeParts {
     return p
 }
 
-fn _createWithZone(year: int, month: int, day: int, hour: int, minute: int, second: int,
-                   millisecond: int, tzOffset: int, isUtc: bool) -> DateTime {
+fn _createWithZone(year: i64, month: i64, day: i64, hour: i64, minute: i64, second: i64,
+                   millisecond: i64, tzOffset: i64, isUtc: bool) -> DateTime {
     var wall = _timeFromCivil(year, month, day, hour, minute, second)
     if (isUtc) {
         return DateTime(wall, millisecond, 0, true)
@@ -420,13 +420,13 @@ fn _createWithZone(year: int, month: int, day: int, hour: int, minute: int, seco
     return DateTime(wall - tzOffset * 60, millisecond, tzOffset, false)
 }
 
-fn _fromTotalMilliseconds(totalMs: int, tzOffset: int, isUtc: bool) -> DateTime {
+fn _fromTotalMilliseconds(totalMs: i64, tzOffset: i64, isUtc: bool) -> DateTime {
     var sec = _floorDiv(totalMs, 1000)
     var ms = _floorMod(totalMs, 1000)
     return DateTime(sec, ms, tzOffset, isUtc)
 }
 
-fn _pad(value: int, width: int) -> string {
+fn _pad(value: i64, width: i64) -> string {
     var v = value
     var sign = ""
     if (v < 0) {
@@ -440,18 +440,18 @@ fn _pad(value: int, width: int) -> string {
     return sign + s
 }
 
-fn _parseNDigits(s: string, start: int, count: int) -> int? {
+fn _parseNDigits(s: string, start: i64, count: i64) -> i64? {
     if (start < 0 || start + count > len(s)) { return null }
     var out = 0
     for (var i = 0; i < count; i++) {
         var c = s.runes().nth(start + i).toUInt32()
         if (c < 48 || c > 57) { return null }
-        out = out * 10 + ((c - 48) as int)
+        out = out * 10 + ((c - 48) as i64)
     }
     return out
 }
 
-fn _parseDateAt(s: string, start: int, sep: rune) -> DateTimeParts? {
+fn _parseDateAt(s: string, start: i64, sep: rune) -> DateTimeParts? {
     var y = _parseNDigits(s, start, 4)
     if (y == null) { return null }
     if (start + 4 >= len(s) || s.runes().nth(start + 4) != sep) { return null }
@@ -463,7 +463,7 @@ fn _parseDateAt(s: string, start: int, sep: rune) -> DateTimeParts? {
     return DateTimeParts(y!, m!, d!, 0, 0, 0, 0, 0)
 }
 
-fn _parseTimeAt(s: string, start: int) -> DateTimeParts? {
+fn _parseTimeAt(s: string, start: i64) -> DateTimeParts? {
     var h = _parseNDigits(s, start, 2)
     if (h == null) { return null }
     if (start + 2 >= len(s) || s.runes().nth(start + 2) != ':') { return null }
@@ -478,7 +478,7 @@ fn _parseTimeAt(s: string, start: int) -> DateTimeParts? {
     return DateTimeParts(1970, 1, 1, h!, m!, sec, 0, 0)
 }
 
-fn _parseMilliseconds(s: string, timeStart: int) -> int {
+fn _parseMilliseconds(s: string, timeStart: i64) -> i64 {
     var dot = -1
     var i = timeStart
     while (i < len(s)) {
@@ -497,7 +497,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
     while (p < len(s) && digits < 3) {
         var c = s.runes().nth(p).toUInt32()
         if (c < 48 || c > 57) { break }
-        ms = ms * 10 + ((c - 48) as int)
+        ms = ms * 10 + ((c - 48) as i64)
         digits = digits + 1
         p = p + 1
     }
@@ -508,7 +508,7 @@ fn _parseMilliseconds(s: string, timeStart: int) -> int {
     return ms
 }
 
-fn _findTimeSeparator(s: string) -> int {
+fn _findTimeSeparator(s: string) -> i64 {
     for (var i = 0; i < len(s); i++) {
         var ch = s.runes().nth(i)
         if (ch == 'T' || ch == ' ') { return i }
@@ -516,7 +516,7 @@ fn _findTimeSeparator(s: string) -> int {
     return -1
 }
 
-fn _findTimezoneStart(s: string, start: int) -> int {
+fn _findTimezoneStart(s: string, start: i64) -> i64 {
     for (var i = start; i < len(s); i++) {
         var ch = s.runes().nth(i)
         if (ch == 'Z' || ch == '+' || ch == '-') { return i }
@@ -524,7 +524,7 @@ fn _findTimezoneStart(s: string, start: int) -> int {
     return -1
 }
 
-fn _parseTimezoneOffset(s: string, start: int) -> int? {
+fn _parseTimezoneOffset(s: string, start: i64) -> i64? {
     if (start >= len(s)) { return null }
     var sign = 1
     if (s.runes().nth(start) == '-') { sign = -1 }

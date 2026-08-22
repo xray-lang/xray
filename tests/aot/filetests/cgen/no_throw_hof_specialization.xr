@@ -4,21 +4,21 @@ fn apply<T>(callback: fn(T) -> T, value: T) -> T {
     return callback(value)
 }
 
-fn increment(value: int) -> int {
+fn increment(value: i64) -> i64 {
     return value + 1
 }
 
-fn checked(value: int) -> int {
+fn checked(value: i64) -> i64 {
     if (value < 0) {
         throw HofError.Negative
     }
     return value + 1
 }
 
-fn xray_apply_pure(value: int) -> int {
-    return apply<int>(increment, value)
+fn xray_apply_pure(value: i64) -> i64 {
+    return apply<i64>(increment, value)
 }
 
-fn xray_apply_checked(value: int) -> int {
-    return apply<int>(checked, value)
+fn xray_apply_checked(value: i64) -> i64 {
+    return apply<i64>(checked, value)
 }

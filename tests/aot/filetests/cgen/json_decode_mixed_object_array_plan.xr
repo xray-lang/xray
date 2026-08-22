@@ -1,4 +1,4 @@
-type Address = { city: string, zip: int }
+type Address = { city: string, zip: i64 }
 type Profile = { name: string, tags: Array<JSON.Value>, address: Address, active: bool }
 
 fn jsonDecodeMixedObjectArrayPlan() -> JSON.Value {

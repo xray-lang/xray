@@ -1,9 +1,9 @@
-fn launch(data: Array<int>) {
+fn launch(data: Array<i64>) {
     var task = go fn() {
         return len(data)
     }()
     print(await task)
 }
 
-var values: Array<int> = [1, 2, 3]
+var values: Array<i64> = [1, 2, 3]
 launch(values)

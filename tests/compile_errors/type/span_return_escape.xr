@@ -1,8 +1,8 @@
-fn escaped_int_slice() -> Slice<int> {
-    var src = Array<int>(4, 0)
+fn escaped_int_slice() -> Slice<i64> {
+    var src = Array<i64>(4, 0)
     src[0] = 10
     src[1] = 20
-    var view: Slice<int> = src[0:2]
+    var view: Slice<i64> = src[0:2]
     return view
 }
 

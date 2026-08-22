@@ -1,9 +1,9 @@
 // A container copy recursively duplicates native-layout class instances.
 // Mutating the copied instance must not affect the original object graph.
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }

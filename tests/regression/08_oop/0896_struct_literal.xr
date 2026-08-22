@@ -4,34 +4,34 @@
 // === Basic struct ===
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
-fn distance(pt: Point) -> float {
+fn distance(pt: Point) -> f64 {
     return pt.x * pt.x + pt.y * pt.y
 }
 struct Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    mag_sq() -> float {
+    mag_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 }
 struct Rect {
-    x: float
-    y: float
-    w: float
-    h: float
+    x: f64
+    y: f64
+    w: f64
+    h: f64
 
-    area() -> float {
+    area() -> f64 {
         return this.w * this.h
     }
 }
 struct Color {
-    r: int
-    g: int
-    b: int
+    r: i64
+    g: i64
+    b: i64
 }
 
 @test

@@ -2,7 +2,7 @@
 // Heap-shaped yields are born in transfer storage and cross the producer /
 // consumer boundary without a runtime graph copy.
 
-fn arrays() -> Iterator<Array<int>> {
+fn arrays() -> Iterator<Array<i64>> {
     yield [1, 2]
 
     var moved = [3, 4]

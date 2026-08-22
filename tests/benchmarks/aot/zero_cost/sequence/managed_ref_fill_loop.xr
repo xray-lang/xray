@@ -2,7 +2,7 @@ fn makeText(seed: string) -> string {
     return seed + "-managed"
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var values: Array<string> = [makeText("old-a"), makeText("old-b"), makeText("old-c"), makeText("old-d")]
     var evenValue = makeText("even")
     var oddValue = makeText("twin")

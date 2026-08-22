@@ -2,29 +2,29 @@
 // Expected: struct creation, methods, arrays, return values
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
-fn make_point(x: float, y: float) -> Point {
+fn make_point(x: f64, y: f64) -> Point {
     return Point{x: x, y: y}
 }
 fn origin() -> Point {
     return Point{x: 0.0, y: 0.0}
 }
 struct Rect {
-    x: float
-    y: float
-    w: float
-    h: float
+    x: f64
+    y: f64
+    w: f64
+    h: f64
 
-    area() -> float {
+    area() -> f64 {
         return this.w * this.h
     }
 }
 struct Color {
-    r: int
-    g: int
-    b: int
+    r: i64
+    g: i64
+    b: i64
 }
 
 @test

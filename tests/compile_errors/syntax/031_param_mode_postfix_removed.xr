@@ -1,3 +1,3 @@
-fn bad(x: int ref) -> int {
+fn bad(x: i64 ref) -> i64 {
     return x
 }

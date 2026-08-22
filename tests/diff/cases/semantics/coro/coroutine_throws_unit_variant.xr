@@ -3,15 +3,15 @@
 // here while AOT accepted it.
 enum E { Boom }
 
-fn body() -> int {
+fn body() -> i64 {
     throw E.Boom
 }
 
-fn payload_body() -> int {
+fn payload_body() -> i64 {
     throw E2.Code(7)
 }
 
-enum E2 { Code(int) }
+enum E2 { Code(i64) }
 
 var a = go body()
 match (a.awaitResult()) {

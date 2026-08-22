@@ -1,5 +1,5 @@
 class Counter {
-    static count: int = 0
+    static count: i64 = 0
 }
 
 Counter.count = "wrong"

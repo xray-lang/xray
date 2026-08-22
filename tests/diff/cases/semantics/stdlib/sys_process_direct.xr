@@ -28,7 +28,7 @@ if (poll != null) {
 var done = sys.Process.spawn("sh", ["-c", "exit 3"])
 print(done != null)
 if (done != null) {
-    var code: int? = null
+    var code: i64? = null
     var spins = 0
     while (code == null && spins < 100) {
         code = done!.tryWait()

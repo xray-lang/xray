@@ -1,4 +1,4 @@
-fn provenWindowLength(values: Slice<u64>, start: int) -> int {
+fn provenWindowLength(values: Slice<u64>, start: i64) -> i64 {
     assert(start >= 0)
     assert(start <= len(values) - 2)
     var window = values.window(start, 2)

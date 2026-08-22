@@ -5,9 +5,9 @@
 //
 // Usage: xray gc_hashmap_resize.xr -- [iterations]
 
-type DataRecord = { data: int }
+type DataRecord = { data: i64 }
 
-fn run(n: int) {
+fn run(n: i64) {
     // Phase 1: Build a long-lived map, then repeatedly overwrite values
     // This forces write barriers: old container ← young value
     var bigMap: JSON.Object = JSON.parseObject("{}")
@@ -29,14 +29,14 @@ fn run(n: int) {
         round = round + 1
     }
     // Verify
-    var check = JSON.require<int>(bigMap, ["key_500", "v"])
+    var check = JSON.require<i64>(bigMap, ["key_500", "v"])
     print("Phase 1 done: " + n.toString() + " rounds, check=" + check.toString())
 
     // Phase 2: Create and discard many small maps (allocation churn)
     var total = 0
     i = 0
     while (i < n * 10) {
-        var m: Map<string, int> = Map()
+        var m: Map<string, i64> = Map()
         var j = 0
         while (j < 20) {
             m["k" + j.toString()] = j * j
@@ -64,5 +64,5 @@ fn run(n: int) {
     print("Phase 3 (nested maps): check=" + deepCheck.toString())
 }
 
-var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500
+var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 500 : 500
 run(n)

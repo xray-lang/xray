@@ -1,6 +1,6 @@
 import mem
 
-fn xray_no_alloc_heap_reject(n: int) -> int {
+fn xray_no_alloc_heap_reject(n: i64) -> i64 {
     var b = mem.alloc(n)
     return len(b)
 }

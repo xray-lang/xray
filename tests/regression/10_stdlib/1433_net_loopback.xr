@@ -13,7 +13,7 @@
 import net
 import { NetError } from net
 
-fn tryListen(backlog: int) -> NetListener? {
+fn tryListen(backlog: i64) -> NetListener? {
     try {
         return net.listen(0, backlog)
     } catch (e: NetError) {
@@ -57,10 +57,10 @@ fn test_loopback_echo() {
     go serveEcho(move served)
 
     // "hello"
-    var n = net.writeBytes(c, Array<byte>([104, 101, 108, 108, 111]))
+    var n = net.writeBytes(c, Array<u8>([104, 101, 108, 108, 111]))
     assert_eq(n, 5)
 
-    var resp = Array<byte>(16)
+    var resp = Array<u8>(16)
     var got = net.readInto(c, ref resp)
     assert_eq(got, 5)
     assert_eq(resp[0], 104)
@@ -86,10 +86,10 @@ fn test_loopback_binary_high_bytes() {
     go serveEcho(move served)
 
     // UTF-8 bytes of "é€": 0xC3 0xA9 0xE2 0x82 0xAC — every octet >= 0x80.
-    var payload = Array<byte>([195, 169, 226, 130, 172])
+    var payload = Array<u8>([195, 169, 226, 130, 172])
     assert_eq(net.writeBytes(c, payload), 5)
 
-    var resp = Array<byte>(16)
+    var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
     assert_eq(n, 5)
     assert_eq(resp[0], 195)
@@ -115,9 +115,9 @@ fn test_native_copy_self_loopback() {
     go serveNativeCopyEcho(move served)
 
     // "native"
-    assert_eq(net.writeBytes(c, Array<byte>([110, 97, 116, 105, 118, 101])), 6)
+    assert_eq(net.writeBytes(c, Array<u8>([110, 97, 116, 105, 118, 101])), 6)
 
-    var resp = Array<byte>(16)
+    var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
     assert_eq(n, 6)
     assert_eq(resp[0], 110)
@@ -142,8 +142,8 @@ fn test_native_copy_loopback() {
     go relayOnce(move acceptedSrc, move acceptedDst)
 
     // "relay"
-    assert_eq(net.writeBytes(src, Array<byte>([114, 101, 108, 97, 121])), 5)
-    var resp = Array<byte>(16)
+    assert_eq(net.writeBytes(src, Array<u8>([114, 101, 108, 97, 121])), 5)
+    var resp = Array<u8>(16)
     var n = net.readInto(dst, ref resp)
     assert_eq(n, 5)
     assert_eq(resp[0], 114)

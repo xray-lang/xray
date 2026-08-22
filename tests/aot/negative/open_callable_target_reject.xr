@@ -1,4 +1,4 @@
-fn invoke(callback: fn() -> int) -> int {
+fn invoke(callback: fn() -> i64) -> i64 {
     return callback()
 }
 

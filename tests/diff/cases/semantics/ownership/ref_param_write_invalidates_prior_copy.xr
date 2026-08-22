@@ -3,13 +3,13 @@
 // because only the alias side was checked for address exposure, so the
 // callee's write through `&pos` was observed through the earlier copy.
 
-fn readByte(input: const Slice<byte>, pos: ref int) -> int {
-    var value = input[pos] as int
+fn readByte(input: const Slice<u8>, pos: ref i64) -> i64 {
+    var value = input[pos] as i64
     pos += 1
     return value
 }
 
-fn decodeAt(input: const Slice<byte>, start: int) -> int {
+fn decodeAt(input: const Slice<u8>, start: i64) -> i64 {
     var pos = start
     var savedOffset = pos
     var value = readByte(input, ref pos)
@@ -19,14 +19,14 @@ fn decodeAt(input: const Slice<byte>, start: int) -> int {
     return 0 - 1
 }
 
-fn advanceTwice(counter: ref int) -> int {
+fn advanceTwice(counter: ref i64) -> i64 {
     counter += 1
     counter += 1
     return counter
 }
 
 fn run() {
-    var image: Array<byte> = [9, 9, 0, 9]
+    var image: Array<u8> = [9, 9, 0, 9]
     print(decodeAt(image[:], 2))
     print(decodeAt(image[:], 0))
 

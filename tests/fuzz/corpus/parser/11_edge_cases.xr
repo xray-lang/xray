@@ -66,8 +66,8 @@ let result = match (x) {
 let grade = score >= 90 ? "A" : score >= 80 ? "B" : score >= 70 ? "C" : score >= 60 ? "D" : "F"
 
 // Complex type annotations
-let fn_typed: fn(int, int): int = (a, b) => a + b
-let arr_typed: Array<int> = [1, 2, 3]
+let fn_typed: fn(i64, i64): i64 = (a, b) => a + b
+let arr_typed: Array<i64> = [1, 2, 3]
 let map_typed: Map<string, string> = {"key" => "value"}
 
 // Anonymous class in expression (if supported)

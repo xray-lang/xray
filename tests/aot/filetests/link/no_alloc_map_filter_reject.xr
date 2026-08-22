@@ -1,11 +1,11 @@
-fn xray_no_alloc_map_filter_keep(value: int) -> bool {
+fn xray_no_alloc_map_filter_keep(value: i64) -> bool {
     return value > 0
 }
 
-fn xray_no_alloc_map_filter_reject(values: Map<int, int>) -> int {
+fn xray_no_alloc_map_filter_reject(values: Map<i64, i64>) -> i64 {
     return len(values.filter(xray_no_alloc_map_filter_keep))
 }
 
-var xray_no_alloc_map_filter_values: Map<int, int> = #{}
+var xray_no_alloc_map_filter_values: Map<i64, i64> = #{}
 xray_no_alloc_map_filter_values.set(1, 2)
 print(xray_no_alloc_map_filter_reject(xray_no_alloc_map_filter_values))

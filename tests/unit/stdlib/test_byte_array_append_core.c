@@ -1,4 +1,4 @@
-/* Canonical growable Array<byte>.appendFrom owner KAT. */
+/* Canonical growable Array<u8>.appendFrom owner KAT. */
 
 #include "../test_framework.h"
 #include "shared/xr_byte_array_append_core.h"

@@ -4,7 +4,7 @@
 //   - negative indexes never wrap from the end (that is slice-only).
 // Every out-of-range assignment raises E0430 (array index out of range).
 
-fn set_at(xs: ref Array<int>, i: int, v: int) -> int {
+fn set_at(xs: ref Array<i64>, i: i64, v: i64) -> i64 {
     // Returns the panic code on out-of-range assignment, or -1 on success.
     try {
         xs[i] = v

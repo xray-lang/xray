@@ -1,5 +1,5 @@
 // anchor: basic-closures-recursion
-fn makeCounter() -> fn() -> int {
+fn makeCounter() -> fn() -> i64 {
     var n = 0
     return () -> {
         n = n + 1
@@ -13,9 +13,9 @@ print(c())
 print(c())
 
 var base = 10
-print(((x: int) -> x + base)(5))
+print(((x: i64) -> x + base)(5))
 
-fn fib(n: int) -> int {
+fn fib(n: i64) -> i64 {
     if (n < 2) {
         return n
     }

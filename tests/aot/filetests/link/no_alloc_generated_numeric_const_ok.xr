@@ -1,9 +1,9 @@
 import math
 import mem
 
-fn xray_no_alloc_generated_numeric_const_ok() -> int {
+fn xray_no_alloc_generated_numeric_const_ok() -> i64 {
     var flag = 0
-    if (math.MAX_INT > 0) {
+    if (math.MAX_I64 > 0) {
         flag = flag + 1
     }
     if (mem.PROT_READ == 1 && mem.PROT_WRITE == 2) {

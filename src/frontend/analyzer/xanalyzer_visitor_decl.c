@@ -484,7 +484,7 @@ static void xa_report_extern_non_boundary(XaInferContext *ctx, XrLocation *loc, 
     if (type && type->kind == XR_KIND_STRING) {
         snprintf(msg, sizeof(msg),
                  "%s '%s' uses 'string', which is a managed heap object, not a C string; pass an "
-                 "explicit UTF-8 byte view (Ptr<byte>/MutPtr<byte> plus a length) instead",
+                 "explicit UTF-8 byte view (Ptr<u8>/MutPtr<u8> plus a length) instead",
                  site, name ? name : "?");
     } else {
         snprintf(msg, sizeof(msg),
@@ -3430,7 +3430,7 @@ static void xa_check_interface_conformance(XaInferContext *ctx, AstNode *cls_nod
                     char msg[320];
                     snprintf(msg, sizeof(msg),
                              "Class '%s' implements Lengthable but does not provide a valid "
-                             "non-mutating 'operator len() -> int'",
+                             "non-mutating 'operator len() -> i64'",
                              cls_info->name ? cls_info->name : "?");
                     XrLocation loc = {.file = ctx->file_path, .line = cls_node->line};
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
@@ -3697,7 +3697,7 @@ void xa_validate_interface_throw_effects(XaInferContext *ctx, AstNode *node) {
  * won for constructors and instance methods but lost everywhere else: a user
  * class declaring `static withCapacity` still ran Array's, `Json.parse` on a
  * user Json compiled and then panicked at run time, and annotating a variable
- * produced "Type 'Array<int>' is not assignable to type 'Array<int>'" because
+ * produced "Type 'Array<i64>' is not assignable to type 'Array<i64>'" because
  * the two distinct types print the same. A native handle collision was worse
  * still and already rejected here -- that check is what this generalizes.
  *
@@ -4112,7 +4112,7 @@ skip_interfaces:
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "%s '%s' field '%s' must have an explicit type annotation "
-                         "(int, float, bool, string, fixed array, or struct)",
+                         "(i64, f64, bool, string, fixed array, or struct)",
                          diag_label, cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -4387,7 +4387,7 @@ skip_layout:
                     xa_analyzer_add_diagnostic(
                         ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
                         "operator len must be an instance operator with signature "
-                        "'operator len() -> int'",
+                        "'operator len() -> i64'",
                         &loc);
                 }
             }

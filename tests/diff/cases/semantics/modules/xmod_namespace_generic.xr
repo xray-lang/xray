@@ -6,7 +6,7 @@
 // value-discarding `void` body). VM and AOT must agree byte-for-byte.
 import "./_genbox" as bx
 
-var b = bx.Box<int>(10)
+var b = bx.Box<i64>(10)
 print(b.get())                 // 10
 print(b.map((v) -> v * 2))     // 20
 

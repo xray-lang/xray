@@ -53,12 +53,12 @@ SUMMARY_RE = re.compile(
     r"xsm-publish-order=([0-9a-f]{64})"
 )
 
-SOLO_V1 = "fn scale(x: int) -> int {\n    return x * 3\n}\n\nprint(scale(14))\n"
-SOLO_V2 = "fn scale(x: int) -> int {\n    return x * 5\n}\n\nprint(scale(14))\n"
-LEAF_V1 = "export fn scale(x: int) -> int {\n    return x * 3\n}\n"
-LEAF_V2 = "export fn scale(x: int) -> int {\n    return x * 5\n}\n"
+SOLO_V1 = "fn scale(x: i64) -> i64 {\n    return x * 3\n}\n\nprint(scale(14))\n"
+SOLO_V2 = "fn scale(x: i64) -> i64 {\n    return x * 5\n}\n\nprint(scale(14))\n"
+LEAF_V1 = "export fn scale(x: i64) -> i64 {\n    return x * 3\n}\n"
+LEAF_V2 = "export fn scale(x: i64) -> i64 {\n    return x * 5\n}\n"
 MIDDLE = ('import { scale } from "./leaf"\n\n'
-          "export fn twice(x: int) -> int {\n    return scale(x) + scale(x)\n}\n")
+          "export fn twice(x: i64) -> i64 {\n    return scale(x) + scale(x)\n}\n")
 APP = 'import { twice } from "./middle"\n\nprint(twice(7))\n'
 
 

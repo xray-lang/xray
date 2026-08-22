@@ -1,7 +1,7 @@
 // anchor: pass-inline-small-callee
 // Inlining: a small body called from a loop, plus a nested function value, plus
 // a call whose result feeds another call.
-fn scale(a: int, b: int) -> int {
+fn scale(a: i64, b: i64) -> i64 {
     return a * b + 1
 }
 
@@ -11,7 +11,7 @@ fn run() {
         total = total + scale(i, 3)
     }
     print(total)
-    fn local(v: int) -> int {
+    fn local(v: i64) -> i64 {
         return v + 10
     }
     print(local(scale(2, 5)))

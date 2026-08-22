@@ -4,11 +4,11 @@
 // contract violation (E0432) in both backends -- not the int zero value the
 // unguarded pull used to hand back.
 
-fn one() -> Iterator<int> {
+fn one() -> Iterator<i64> {
     yield 5
 }
 
-fn empty() -> Iterator<int> {
+fn empty() -> Iterator<i64> {
     for (var i = 0; i < 0; i++) {
         yield i
     }

@@ -31,7 +31,7 @@ def sample_fn(argc_line: str, extra_lines: str = "") -> str:
     return (
         "module sample {\n"
         "  fn probe {\n"
-        '    signature: "(a: int, b: int): int"\n'
+        '    signature: "(a: i64, b: i64): i64"\n'
         '    doc: "probe"\n'
         '    vm: "sample_probe"\n'
         f"    {argc_line}\n"
@@ -141,7 +141,7 @@ class ArgSpecManifestTests(unittest.TestCase):
                 root,
                 "module net {\n"
                 "  fn __copy {\n"
-                '    signature: "(src: NetConn, dst: NetConn, bufferSize?: int): int"\n'
+                '    signature: "(src: NetConn, dst: NetConn, bufferSize?: i64): i64"\n'
                 '    doc: "copy"\n'
                 '    vm: "net_copy_yieldable"\n'
                 '    vm_binding: "yieldable"\n'

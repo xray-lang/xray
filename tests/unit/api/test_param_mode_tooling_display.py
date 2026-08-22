@@ -17,7 +17,7 @@ import gen_mcp_knowledge as mcp_knowledge  # noqa: E402
 import gen_stdlib_types as stdlib_types  # noqa: E402
 
 
-PARAM_MODE_SIGNATURE = "(view: Slice<byte>, sink: ref Array<byte>, job: move Buffer): int"
+PARAM_MODE_SIGNATURE = "(view: Slice<u8>, sink: ref Array<u8>, job: move Buffer): i64"
 
 
 class ParamModeToolingDisplayTest(unittest.TestCase):

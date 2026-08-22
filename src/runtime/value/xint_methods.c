@@ -18,7 +18,7 @@ void xr_int_register_native_type(XrVMRuntime *isolate) {
         {"toBigInt", xr_int_to_bigint_method, 0},
         {"max", xr_int_max_method, 0},
         {"min", xr_int_min_method, 0},
-        {"toFloat", xr_int_to_float_method, 0},
+        {"toF64", xr_int_to_float_method, 0},
         {"toHex", xr_int_to_hex_method, 0},
         {"sqrt", xr_int_sqrt_method, 0},
         {"pow", xr_int_pow_method, 0},

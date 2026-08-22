@@ -4,7 +4,7 @@
 // agree on production order and on how far the inner generator advanced when the
 // outer one is abandoned early.
 
-fn inner(n: int) -> Iterator<int> {
+fn inner(n: i64) -> Iterator<i64> {
     for (var i = 0; i < n; i++) {
         print("inner " + string(i))
         yield i
@@ -12,7 +12,7 @@ fn inner(n: int) -> Iterator<int> {
     print("inner-end")
 }
 
-fn doubled(n: int) -> Iterator<int> {
+fn doubled(n: i64) -> Iterator<i64> {
     for (v in inner(n)) {
         print("outer " + string(v))
         yield v * 2
@@ -37,7 +37,7 @@ for (x in doubled(4)) {
 }
 
 // Three levels deep, to catch a driver that only handles a single nesting level.
-fn triple(n: int) -> Iterator<int> {
+fn triple(n: i64) -> Iterator<i64> {
     for (v in doubled(n)) {
         yield v + 1
     }

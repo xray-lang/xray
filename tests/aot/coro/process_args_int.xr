@@ -2,14 +2,14 @@ var parsed = 77
 var fallback = 88
 
 if (len(process.args) > 0) {
-    parsed = int(process.args[0]) ?? parsed
+    parsed = i64.tryParse(process.args[0]) ?? parsed
 }
 
 if (len(process.args) > 1) {
-    fallback = int(process.args[1]) ?? fallback
+    fallback = i64.tryParse(process.args[1]) ?? fallback
 }
 
-fn echo_arg(value: int) -> int {
+fn echo_arg(value: i64) -> i64 {
     Coro.yield()
     return value
 }

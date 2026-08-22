@@ -1,12 +1,12 @@
-var min: int = -9223372036854775807 - 1
-var max: int = 9223372036854775807
+var min: i64 = -9223372036854775807 - 1
+var max: i64 = 9223372036854775807
 
 print(min)
 print(max)
 print("left=" + min.toString())
 print(max.toString() + "=right")
 
-var ints = Array<int>(3, 0)
+var ints = Array<i64>(3, 0)
 ints[0] = min
 ints[1] = max
 ints[2] = -42

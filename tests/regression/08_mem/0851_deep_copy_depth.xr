@@ -8,10 +8,10 @@
 
 class CopyNode {
     next: CopyNode?
-    value: int
+    value: i64
     tag: string
 
-    constructor(next: CopyNode?, value: int, tag: string = "") {
+    constructor(next: CopyNode?, value: i64, tag: string = "") {
         this.next = next
         this.value = value
         this.tag = tag

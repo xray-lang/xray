@@ -6,7 +6,7 @@
 // at run time. Receive from the channel directly, or collect into an Array
 // first.
 
-fn total<T: Iterable<int>>(xs: T) -> int {
+fn total<T: Iterable<i64>>(xs: T) -> i64 {
     var n = 0
     for (i in xs) {
         n = n + i
@@ -14,7 +14,7 @@ fn total<T: Iterable<int>>(xs: T) -> int {
     return n
 }
 
-var ch = Channel<int>(4)
+var ch = Channel<i64>(4)
 ch.send(1)
 ch.send(2)
 ch.close()

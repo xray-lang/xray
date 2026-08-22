@@ -17,11 +17,10 @@ const char *xr_keywords[] = {
 #define XR_KW(spelling, length, token) spelling,
 #include "xkeywords.def"
 #undef XR_KW
-#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
-                       canonical_display, public_type_id, range_class)                             \
-    spelling,
-#include "../../../shared/xr_scalar_type.def"
-#undef XR_SCALAR_TYPE
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    source_name,
+#include "../../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
     NULL};
 
 // Builtin and prelude symbols offered by completion and protected from rename.
@@ -34,5 +33,5 @@ const char *xr_builtins[] = {
 #include "../../../stdlib/prelude/builtin_symbols.def"
     "Coro",         "CoroPool",  "__dir__",       "__file__",    "process", "assert", "assert_eq",
     "assert_false", "assert_ne", "assert_throws", "assert_true", "bool",    "chr",    "copy",
-    "dump",         "float",     "int",           "len",         "print",   "rune",
+    "dump",         "len",       "print",         "rune",
     "string",       "typeName",  "typeOf",        NULL};

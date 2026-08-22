@@ -2,7 +2,7 @@ import { runPolicy, runSmallStackPolicy, runVectorPolicy } from "./_aot_inline_p
 
 print(runPolicy(8))
 var acc: [u64; 8] = [0; 8]
-var input: [byte; 64] = [0; 64]
-var secret: [byte; 64] = [0; 64]
+var input: [u8; 64] = [0; 64]
+var secret: [u8; 64] = [0; 64]
 runVectorPolicy(acc[:], input[:], secret[:])
 print(runSmallStackPolicy(3))

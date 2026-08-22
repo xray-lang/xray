@@ -12,7 +12,7 @@ fn test_h2_uses_unified_request_api() {
 fn test_h2_options_object() {
     var headers = Headers()
     headers.add("Content-Type", "application/json")
-    var body: Array<byte> = [123, 125]
+    var body: Array<u8> = [123, 125]
     var opts: HttpRequestOptions = {
         url: "https://example.com/api",
         method: HttpMethod.post(),

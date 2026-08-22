@@ -287,7 +287,7 @@ static bool vm_copy_array_ref_to_fixed_heap(XrVMRuntime *isolate, XrValue *slot)
     if (bytes > UINT32_MAX - sizeof(XrObjHeader) - 1u)
         return false;
     /* Reserve one extra byte and NUL-terminate the copied payload. A fixed byte
-     * buffer's data pointer (b"..".ptr() / Ptr<byte>) is handed to C string APIs
+     * buffer's data pointer (b"..".ptr() / Ptr<u8>) is handed to C string APIs
      * across the FFI boundary, so it must read as a valid NUL-terminated C
      * string. The AOT backend already guarantees this (byte literals emit as
      * `static const char[] = "..."`); without the terminator the VM copy is one

@@ -1,7 +1,7 @@
 // A plain local aggregate moved into a task must be allocated in the
 // transferable domain by the ownership solver.  Neither backend may insert a
 // boundary clone.
-fn append_and_count(values: move Array<int>) -> int {
+fn append_and_count(values: move Array<i64>) -> i64 {
     values.push(3)
     return len(values)
 }

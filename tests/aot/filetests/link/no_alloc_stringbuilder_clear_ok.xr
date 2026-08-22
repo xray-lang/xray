@@ -1,4 +1,4 @@
-fn xray_no_alloc_stringbuilder_clear_ok(sb: ref StringBuilder) -> int {
+fn xray_no_alloc_stringbuilder_clear_ok(sb: ref StringBuilder) -> i64 {
     sb.clear()
     return len(sb)
 }

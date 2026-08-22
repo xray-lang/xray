@@ -283,7 +283,7 @@ vmcase(OP_NEWMAP) {
     int storage_mode = vm_resolve_allocation_storage_mode(base, (uint8_t) (c & 0x03));
     uint8_t value_tid = (uint8_t) ((c >> 3) & 0x1F);
     int key_kind = (c >> 8) & 0x03;
-    uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_INT : 0;
+    uint8_t key_tid = (key_kind == 1) ? XR_TID_STRING : (key_kind == 2) ? XR_TID_I64 : 0;
 
     XrMap *map;
     if (storage_mode != 0 && xr_isolate_get_sys_heap(isolate)) {
@@ -1117,7 +1117,7 @@ vmcase(OP_SLICE_AS_BYTES) {
     int b = GETARG_B(i);
     int c = GETARG_C(i);
     if (!XR_IS_INT(R(c))) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.asArray<byte>() missing Slice frame slot");
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Slice.asArray<u8>() missing Slice frame slot");
     }
     void *data = NULL;
     int64_t length = 0;
@@ -1128,7 +1128,7 @@ vmcase(OP_SLICE_AS_BYTES) {
     uint32_t reserved = 0;
     void *guard = NULL;
     VM_SLICE_VIEW(R(b), data, length, elem_type, elem_size, elem_tid, contains_refs, reserved,
-                  guard, "Slice.asArray<byte>() expects Slice");
+                  guard, "Slice.asArray<u8>() expects Slice");
     (void) elem_tid;
     (void) contains_refs;
     uint16_t layout_id = XR_IS_SLICE_REF(R(b)) ? XR_SLICE_REF_LAYOUT_ID(R(b)) : 0;
@@ -1141,10 +1141,10 @@ vmcase(OP_SLICE_AS_BYTES) {
                                0, 0, 0, false, false));
     if (view_result.status == XR_POD_SLICE_VIEW_INVALID_SOURCE_LAYOUT) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
-                         "Slice.asArray<byte>() requires POD Slice element type");
+                         "Slice.asArray<u8>() requires POD Slice element type");
     }
     if (view_result.status != XR_POD_SLICE_VIEW_OK) {
-        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asArray<byte>() byte length overflow");
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Slice.asArray<u8>() byte length overflow");
     }
     XrSliceView *span = VM_SLICE_SLOT(R(c));
     span->data = view_result.data;
@@ -2445,7 +2445,7 @@ vmcase(OP_INDEX_SET) {
 vmcase(OP_SLICE) {
     /* OP_SLICE: slice operation
     ** R[A] = R[B][R[C]:R[C+1]]
-    ** - R[B]: source object (Array/String/Array<byte>)
+    ** - R[B]: source object (Array/String/Array<u8>)
     ** - R[C]: start index (0 = from beginning)
     ** - R[C+1]: end index (large positive value = to end)
     */

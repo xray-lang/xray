@@ -1,4 +1,4 @@
-var flags: Map<int, bool> = #{}
+var flags: Map<i64, bool> = #{}
 flags.set(1, true)
 flags.set(2, false)
 flags.set(3, true)
@@ -12,14 +12,14 @@ print(len(values))
 print(values[0])
 
 class BoolValueMapBag {
-    values: Map<int, bool>
+    values: Map<i64, bool>
 
     constructor() {
-        var values: Map<int, bool> = #{}
+        var values: Map<i64, bool> = #{}
         this.values = values
     }
 
-    fill(n: int) -> int {
+    fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
             this.values.set(i, i % 3 == 0)
@@ -28,7 +28,7 @@ class BoolValueMapBag {
         return len(this.values)
     }
 
-    count(n: int) -> int {
+    count(n: i64) -> i64 {
         var i = 0
         var total = 0
         while (i < n) {

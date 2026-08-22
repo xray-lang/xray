@@ -8,7 +8,7 @@
 // Every case below allocates inside a loop from operands defined outside it,
 // which is exactly the shape LICM wants to hoist.
 
-fn widthLoop(x: int, n: int) -> int {
+fn widthLoop(x: i64, n: i64) -> i64 {
     var acc = 0
     for (i in 0..n) {
         acc = acc + len(string(x)) + i
@@ -19,7 +19,7 @@ fn widthLoop(x: int, n: int) -> int {
     return acc
 }
 
-fn concatLoop(prefix: string, n: int) -> int {
+fn concatLoop(prefix: string, n: i64) -> i64 {
     var acc = 0
     for (i in 0..n) {
         acc = acc + len(prefix + "-tail")
@@ -30,7 +30,7 @@ fn concatLoop(prefix: string, n: int) -> int {
     return acc
 }
 
-fn arrayLoop(a: int, b: int, n: int) -> int {
+fn arrayLoop(a: i64, b: i64, n: i64) -> i64 {
     var acc = 0
     for (i in 0..n) {
         acc = acc + len([a, b])
@@ -41,7 +41,7 @@ fn arrayLoop(a: int, b: int, n: int) -> int {
     return acc
 }
 
-fn nestedLoop(x: int, n: int) -> int {
+fn nestedLoop(x: i64, n: i64) -> i64 {
     var acc = 0
     for (i in 0..n) {
         for (j in 0..n) {

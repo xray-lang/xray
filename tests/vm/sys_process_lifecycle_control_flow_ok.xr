@@ -4,7 +4,7 @@ enum ProcessLintErr {
     Msg(s: string)
 }
 
-const processLintCh = Channel<int>(1)
+const processLintCh = Channel<i64>(1)
 processLintCh.trySend(1)
 
 fn closeProcessInTryOrCatch(throwNow: bool) {
@@ -19,7 +19,7 @@ fn closeProcessInTryOrCatch(throwNow: bool) {
     }
 }
 
-fn closeProcessInMatch(tag: int) {
+fn closeProcessInMatch(tag: i64) {
     var p = sys.Process.spawn("sh", ["-c", "exit 0"])
     match (tag) {
         0 -> {
@@ -48,7 +48,7 @@ fn closeProcessInTernary(flag: bool) {
     print(flag ? p!.wait() : p!.wait())
 }
 
-fn closePipeInMatch(tag: int) {
+fn closePipeInMatch(tag: i64) {
     var pipe = sys.Pipe.open()
     match (tag) {
         0 -> {

@@ -11,15 +11,15 @@ fn xray_no_alloc_datetime_format_reject(value: DateTime) -> string {
     return value.format("YYYY")
 }
 
-fn xray_no_alloc_datetime_add_reject(value: DateTime) -> int {
+fn xray_no_alloc_datetime_add_reject(value: DateTime) -> i64 {
     return value.add(1, "day").timestamp
 }
 
-fn xray_no_alloc_datetime_toutc_reject(value: DateTime) -> int {
+fn xray_no_alloc_datetime_toutc_reject(value: DateTime) -> i64 {
     return value.toUTC().timestamp
 }
 
-fn xray_no_alloc_datetime_tolocal_reject(value: DateTime) -> int {
+fn xray_no_alloc_datetime_tolocal_reject(value: DateTime) -> i64 {
     return value.toLocal().timestamp
 }
 

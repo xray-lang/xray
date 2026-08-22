@@ -1,12 +1,12 @@
-fn make_data(n: int, seed: int) -> Array<int> {
-    var data: Array<int> = []
+fn make_data(n: i64, seed: i64) -> Array<i64> {
+    var data: Array<i64> = []
     for (var i = 0; i < n; i++) {
         data.push((i * seed + 19) % 4096)
     }
     return data
 }
 
-fn vec_add_sum(a: Array<int>, b: Array<int>, rounds: int) -> int {
+fn vec_add_sum(a: Array<i64>, b: Array<i64>, rounds: i64) -> i64 {
     var total = 0
     var n = len(a)
     for (var r = 0; r < rounds; r++) {

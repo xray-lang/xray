@@ -64,9 +64,9 @@ XR_FUNC bool xg_object_shape_stable_key(uint8_t domain, const XgObjectFieldSumma
 
 XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    if (tref_kind == XR_TREF_INT || tref_kind == XR_TREF_FLOAT) {
+    if (tref_kind == XR_TREF_SCALAR) {
         h = type_key_fold_u64(h, UINT64_C(0x5343414c4152));
-        h = type_key_fold_u64(h, tref_kind == XR_TREF_INT ? XR_NATIVE_I64 : XR_NATIVE_F64);
+        h = type_key_fold_u64(h, XR_NATIVE_I64);
     } else {
         h = type_key_fold_u64(h, tref_kind);
         h = type_key_fold_u64(h, 0);
@@ -78,8 +78,7 @@ XR_FUNC uint32_t xg_synthetic_type_key(uint8_t tref_kind) {
 
 XR_FUNC uint32_t xg_synthetic_width_type_key(uint8_t tref_kind, uint8_t scalar_rep) {
     uint64_t h = XR_FNV64_OFFSET_BASIS;
-    if (tref_kind == XR_TREF_INT || tref_kind == XR_TREF_INT_WIDTH || tref_kind == XR_TREF_FLOAT ||
-        tref_kind == XR_TREF_FLOAT_WIDTH)
+    if (tref_kind == XR_TREF_SCALAR)
         h = type_key_fold_u64(h, UINT64_C(0x5343414c4152));
     else
         h = type_key_fold_u64(h, tref_kind);

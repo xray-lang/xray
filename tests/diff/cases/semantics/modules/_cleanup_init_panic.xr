@@ -3,4 +3,4 @@ defer { print("panic dependency cleanup") }
 var zero = 0
 print(1 / zero)
 
-export fn unreachable_value() -> int { return 1 }
+export fn unreachable_value() -> i64 { return 1 }

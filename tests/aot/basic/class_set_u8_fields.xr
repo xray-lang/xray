@@ -1,25 +1,25 @@
 class ByteSetBag implements Lengthable {
-    values: Set<byte>
+    values: Set<u8>
 
     constructor() {
-        var values: Set<byte> = #[]
+        var values: Set<u8> = #[]
         this.values = values
     }
 
-    fill(n: int) -> int {
+    fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
-            this.values.add(i as byte)
+            this.values.add(i as u8)
             i = i + 1
         }
         return len(this.values)
     }
 
-    scan(n: int) -> int {
+    scan(n: i64) -> i64 {
         var i = 0
         var hits = 0
         while (i < n) {
-            if (this.values.contains(i as byte)) {
+            if (this.values.contains(i as u8)) {
                 hits = hits + i
             }
             i = i + 1
@@ -27,11 +27,11 @@ class ByteSetBag implements Lengthable {
         return hits
     }
 
-    prune(n: int) -> int {
+    prune(n: i64) -> i64 {
         var i = 0
         var removed = 0
         while (i < n) {
-            if (this.values.delete(i as byte)) {
+            if (this.values.delete(i as u8)) {
                 removed = removed + 1
             }
             i = i + 2
@@ -39,7 +39,7 @@ class ByteSetBag implements Lengthable {
         return removed + len(this.values)
     }
 
-    operator len() -> int {
+    operator len() -> i64 {
         return len(this.values)
     }
 }

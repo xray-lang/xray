@@ -10,7 +10,7 @@
 // that call site still targets the generic origin while its int sibling is
 // specialized. AOT must emit both.
 
-fn tagOf<T>(x: T) -> int {
+fn tagOf<T>(x: T) -> i64 {
     return len(string(x))
 }
 
@@ -24,13 +24,13 @@ fn firstOr<T>(xs: Array<T>, dflt: T) -> T {
 // A Slice cannot cross an escaping parameter, so it is only reachable as a type
 // argument the callee never inspects. It still has to survive the round trip
 // through the writeback and specialize on the span ABI.
-fn bumpFor<T>(x: T, k: int) -> int {
+fn bumpFor<T>(x: T, k: i64) -> i64 {
     return k + 1
 }
 
 // The loop plus the size guard keep this out of the inliner, so the erased
 // origin has to survive as a real callable body rather than being folded away.
-fn widthOf<T>(x: T, n: int) -> int {
+fn widthOf<T>(x: T, n: i64) -> i64 {
     var tag = len(string(x))
     var acc = 0
     for (i in 0..n) {
@@ -44,7 +44,7 @@ fn widthOf<T>(x: T, n: int) -> int {
 
 // Same shape, but never inspects x, so it can take a type argument no tref can
 // spell. Kept out of the inliner for the same reason as widthOf.
-fn rounds<T>(x: T, n: int) -> int {
+fn rounds<T>(x: T, n: i64) -> i64 {
     var acc = 0
     for (i in 0..n) {
         acc = acc + i
@@ -55,7 +55,7 @@ fn rounds<T>(x: T, n: int) -> int {
     return acc
 }
 
-fn helper(n: int) -> int {
+fn helper(n: i64) -> i64 {
     return n + 1
 }
 
@@ -65,7 +65,7 @@ fn main() {
     var scores = #{"k": 1}
     var letters = #["a", "b"]
     var doc = {"a": 1}
-    var view: Slice<int> = ints[1:3]
+    var view: Slice<i64> = ints[1:3]
 
     // Same generic, one instance per distinct container type argument.
     print(tagOf(ints))

@@ -1,3 +1,3 @@
-var bytes = Array<byte>(1)
-const view: Slice<byte> = bytes[:]
+var bytes = Array<u8>(1)
+const view: Slice<u8> = bytes[:]
 view[0] = 1

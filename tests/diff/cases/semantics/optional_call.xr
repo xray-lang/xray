@@ -1,22 +1,22 @@
 // optional_call.xr
 // VM/AOT differential coverage for func?.(args).
 
-type IntFn = fn(int) -> int
-type FloatFn = fn(float) -> float
+type IntFn = fn(i64) -> i64
+type FloatFn = fn(f64) -> f64
 
 var calls = 0
 
-fn bump(x: int) -> int {
+fn bump(x: i64) -> i64 {
     calls += 1
     return x + 1
 }
 
-fn half(x: float) -> float {
+fn half(x: f64) -> f64 {
     calls += 1
     return x / 2.0
 }
 
-fn arg_side_effect() -> int {
+fn arg_side_effect() -> i64 {
     calls += 100
     return 41
 }

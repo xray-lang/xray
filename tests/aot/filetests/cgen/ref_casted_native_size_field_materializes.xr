@@ -1,4 +1,4 @@
-fn bump(value: ref int) {
+fn bump(value: ref i64) {
     value += 3
 }
 
@@ -6,8 +6,8 @@ struct Counter {
     stripes: usize
     total: u64
 
-    advanced() -> int {
-        var stripes = this.stripes as int
+    advanced() -> i64 {
+        var stripes = this.stripes as i64
         bump(ref stripes)
         return stripes
     }

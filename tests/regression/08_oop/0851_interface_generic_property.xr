@@ -10,22 +10,22 @@
 // ===== 单类型参数泛型接口 =====
 
 interface Container<T> {
-    get(index: int) -> T
-    size() -> int
+    get(index: i64) -> T
+    size() -> i64
 }
 
-class IntBox implements Container<int> {
-    value: int
+class IntBox implements Container<i64> {
+    value: i64
 
-    constructor(v: int) {
+    constructor(v: i64) {
         this.value = v
     }
 
-    get(index: int) -> int {
+    get(index: i64) -> i64 {
         return this.value
     }
 
-    size() -> int {
+    size() -> i64 {
         return 1
     }
 }
@@ -48,11 +48,11 @@ interface KVDescriptor<K, V> extends Pair<K, V> {
     describe() -> string
 }
 
-class StringIntEntry implements KVDescriptor<string, int> {
+class StringIntEntry implements KVDescriptor<string, i64> {
     k: string
-    v: int
+    v: i64
 
-    constructor(k: string, v: int) {
+    constructor(k: string, v: i64) {
         this.k = k
         this.v = v
     }
@@ -61,7 +61,7 @@ class StringIntEntry implements KVDescriptor<string, int> {
         return this.k
     }
 
-    value() -> int {
+    value() -> i64 {
         return this.v
     }
 
@@ -81,17 +81,17 @@ fn test_extends_with_type_args() {
 // ===== 接口属性签名 =====
 
 interface HasLength {
-    length: int
+    length: i64
 }
 
 class PropertyBuffer implements HasLength {
-    size: int
+    size: i64
 
-    constructor(s: int) {
+    constructor(s: i64) {
         this.size = s
     }
 
-    length: int {
+    length: i64 {
         fn() { return this.size }
     }
 }
@@ -105,20 +105,20 @@ fn test_interface_property() {
 // ===== 接口属性 + const 修饰 =====
 
 interface Identifiable {
-    const id: int
+    const id: i64
     name: string
 }
 
 class Item implements Identifiable {
-    item_id: int
+    item_id: i64
     item_name: string
 
-    constructor(id: int, name: string) {
+    constructor(id: i64, name: string) {
         this.item_id = id
         this.item_name = name
     }
 
-    id: int {
+    id: i64 {
         fn() { return this.item_id }
     }
 
@@ -137,7 +137,7 @@ fn test_interface_const_property() {
 // ===== 泛型接口 + 属性混合 =====
 
 interface SizedCollection<T> {
-    length: int
+    length: i64
     first() -> T
 }
 
@@ -149,11 +149,11 @@ fn test_generic_interface_with_property_declares() {
 // ===== 受约束的泛型类型参数 =====
 
 interface Numeric {
-    toFloat() -> float
+    toF64() -> f64
 }
 
 interface Stats<T: Numeric> {
-    mean() -> float
+    mean() -> f64
     sum() -> T
 }
 

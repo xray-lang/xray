@@ -2,12 +2,12 @@
 // Expected: == on structs without operator== uses deep comparison
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 struct Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
     operator ==(other: Vec2) -> bool {
         return this.x == other.x && this.y == other.y

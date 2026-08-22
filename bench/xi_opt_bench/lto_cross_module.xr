@@ -1,16 +1,16 @@
-fn tiny_a(x: int) -> int {
+fn tiny_a(x: i64) -> i64 {
     return x * 3 + 1
 }
 
-fn tiny_b(x: int) -> int {
+fn tiny_b(x: i64) -> i64 {
     return tiny_a(x) - 2
 }
 
-fn tiny_c(x: int) -> int {
+fn tiny_c(x: i64) -> i64 {
     return tiny_b(x) + tiny_a(x / 2)
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var total = 0
     for (var i = 0; i < rounds; i++) {
         total = total + tiny_c(i % 1024)

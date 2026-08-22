@@ -1,7 +1,7 @@
 // Smuggling the same pointer inside a struct does not change the answer: the
 // escape is rejected at the literal that would store it.
 struct Box {
-    p: MutPtr<int>
+    p: MutPtr<i64>
 }
 
 fn main() {

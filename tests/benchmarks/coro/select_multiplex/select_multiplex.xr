@@ -9,7 +9,7 @@ import time
 
 var MSGS = 1000        // 每个生产者发送的消息数
 if (len(process.args) > 0) {
-    MSGS = int(process.args[0]) ?? MSGS
+    MSGS = i64.tryParse(process.args[0]) ?? MSGS
 }
 
 const PRODUCERS = 4
@@ -21,7 +21,7 @@ print("每生产者消息:", MSGS)
 print("总消息数:", TOTAL)
 
 // 生产者：向 channel 发送消息
-fn producer(ch: Channel<int>, id: int, count: int) {
+fn producer(ch: Channel<i64>, id: i64, count: i64) {
     for (var i = 0; i < count; i++) {
         ch.send(id * 1000000 + i)
     }
@@ -66,7 +66,7 @@ print("预期:", TOTAL)
 print("正确:", received == TOTAL)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(received * 1000 / elapsed), "msg/sec")
+    print("吞吐量:", (received * 1000 / elapsed as i64), "msg/sec")
 } else {
     print("吞吐量: 太快无法测量")
 }

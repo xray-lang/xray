@@ -8,21 +8,21 @@ fn is_sent(r: SendResult) -> bool {
     }
 }
 
-fn recv_value(r: Recv<int>) -> int {
+fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn has_value(r: Recv<int>) -> bool {
+fn has_value(r: Recv<i64>) -> bool {
     return match (r) {
         Recv.Value(_) -> true
         _ -> false
     }
 }
 
-const ch: Channel<int> = Channel(2)
+const ch: Channel<i64> = Channel(2)
 
 var s1 = ch.trySend(7)
 var s2 = ch.trySend(9)

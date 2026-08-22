@@ -1,5 +1,5 @@
 // Tuple-based multi-value forms
-fn getTwoValues(): (int, int) {
+fn getTwoValues(): (i64, i64) {
     return (1, 2)
 }
 

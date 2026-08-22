@@ -1,4 +1,4 @@
-fn guardedDiv(n: int, d: int) -> int {
+fn guardedDiv(n: i64, d: i64) -> i64 {
     if (d <= 0) {
         return -1
     }

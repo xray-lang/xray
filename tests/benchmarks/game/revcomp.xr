@@ -57,7 +57,7 @@ fn processFasta(input: string) {
 // 生成测试数据
 // 注意：此函数触发 StringBuilder + 长字符串 + 循环 Bug
 // 详见文档: docs/192_StringBuilder_长字符串循环Bug.md
-fn generateFasta(n: int): string {
+fn generateFasta(n: i64): string {
     var alu = "GGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGCGGGCGGATCACCTGAGGTCAGGAGTTCGAGACCAGCCTGGCCAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAATTAGCCGGGCGTGGTGGCGCGCGCCTGTAATCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATCGCTTGAACCCGGGAGGCGGAGGTTGCAGTGAGCCGAGATCGCGCCACTGCACTCCAGCCTGGGCGACAGAGCGAGACTCCGTCTCAAAAA"
     var sb = StringBuilder()
     sb.append(">ONE Homo sapiens alu\n")
@@ -88,6 +88,6 @@ fn generateFasta(n: int): string {
 }
 
 // 主程序 - 性能基准测试（从命令行读取，默认 250000）
-var n = len(process.args) > 0 ? int(process.args[0]) ?? 250000 : 250000
+var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 250000 : 250000
 var input = generateFasta(n)
 processFasta(input)

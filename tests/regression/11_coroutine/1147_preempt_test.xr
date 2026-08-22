@@ -7,14 +7,14 @@
 
 import time
 
-fn recv_int(ch: Channel<int>) -> int {
+fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn worker(id: int, ch: Channel<int>, iterations: int) {
+fn worker(id: i64, ch: Channel<i64>, iterations: i64) {
     for (var i = 0; i < iterations; i++) {
         time.sleep(5)
     }
@@ -25,7 +25,7 @@ fn worker(id: int, ch: Channel<int>, iterations: int) {
 fn test_preempt_test() {
     const WORKER_COUNT = 4
     const ITERATIONS = 3
-    const resultCh = Channel<int>(WORKER_COUNT)
+    const resultCh = Channel<i64>(WORKER_COUNT)
 
 
     print("启动 " + string(WORKER_COUNT) + " 个协程...")
@@ -35,7 +35,7 @@ fn test_preempt_test() {
     /* Collect IDs first; concurrent scheduling makes recv order
      * non-deterministic, so we sort before printing to keep stdout
      * stable across runs and across interp/JIT modes. */
-    var ids: Array<int> = []
+    var ids: Array<i64> = []
     var received = 0
     for (var i = 0; i < WORKER_COUNT; i++) {
         var id = recv_int(resultCh)

@@ -1,7 +1,7 @@
 import sys
 import sync
 
-var t = sys.Thread.spawn(fn() -> int {
+var t = sys.Thread.spawn(fn() -> i64 {
     var b = sync.Barrier(1)
     if (b.wait()) {
         return 1

@@ -1,6 +1,6 @@
 import { Options, Plan } from parallel
 
-var plan = Plan<int>(Options(4), lane -> lane)
+var plan = Plan<i64>(Options(4), lane -> lane)
 
 try {
     var result = plan.reduce(
@@ -21,7 +21,7 @@ try {
     print("caught")
 }
 
-const afterReduce = Atomic<int>(0)
+const afterReduce = Atomic<i64>(0)
 plan.forEach(0..4, (state, i) -> {
     afterReduce.add(1, Ordering.Relaxed)
 })

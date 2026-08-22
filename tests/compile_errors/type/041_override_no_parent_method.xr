@@ -1,5 +1,5 @@
 class Solo {
-    override run() -> int {
+    override run() -> i64 {
         return 1
     }
 }

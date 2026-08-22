@@ -15,7 +15,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_resolver.h"
 #include "../../runtime/xisolate_api.h"
-#include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xchecks.h"
 #include "xray_vm.h"
@@ -167,7 +167,7 @@ static int language_compare_path(const void *left, const void *right) {
 }
 
 static const char *language_scalar_name(uint8_t scalar_rep) {
-    const char *name = xr_scalar_rep_canonical_name(scalar_rep);
+    const char *name = xr_scalar_rep_name(scalar_rep);
     return name ? name : "dynamic";
 }
 

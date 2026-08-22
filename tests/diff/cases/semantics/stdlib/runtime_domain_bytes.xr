@@ -4,7 +4,7 @@
 import runtime
 
 var before = runtime.sharedBytes()
-var ch = Channel<int>(16)
+var ch = Channel<i64>(16)
 var during = runtime.sharedBytes()
 // A live shared object raises the shared-domain reading.
 print(during > before)

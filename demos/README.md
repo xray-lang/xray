@@ -107,12 +107,12 @@ Fresh mutable reference graphs bound to `var` are inferred as unique. No storage
 - Stable `const` data and audited synchronization handles such as `Channel` may cross execution boundaries through their verified capability.
 
 ```xray
-fn byteCount(data: Array<byte>) -> int {
+fn byteCount(data: Array<u8>) -> int {
     return len(data)
 }
 
 fn ownedExample() {
-    var payload = Array<byte>(4, 0)
+    var payload = Array<u8>(4, 0)
     payload[0] = 7
     var snapshot = copy(payload)
     var task = go byteCount(move payload)

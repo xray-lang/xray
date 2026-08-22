@@ -3,8 +3,8 @@
   "title": "Types",
   "spec_anchor": "#2-类型系统-type-system",
   "aliases": [
-    "int",
-    "float",
+    "i64",
+    "f64",
     "string",
     "bool",
     "nullable",
@@ -17,7 +17,7 @@
   "sections": [
     {
       "heading": "Primitive and built-in categories",
-      "markdown": "- `int` — default signed integer\n- `float` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- exact structural objects `{ field: T }`\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`"
+      "markdown": "- `i64` — default signed integer\n- `f64` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- exact structural objects `{ field: T }`\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`"
     },
     {
       "heading": "Explicit conditions",

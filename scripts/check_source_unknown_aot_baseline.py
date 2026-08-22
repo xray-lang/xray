@@ -39,14 +39,14 @@ BASELINES = (
         category="TASK_AOT_BASELINE",
         xr_path="tests/aot/filetests/cgen/array_task_direct.xr",
         expect_path="tests/aot/filetests/cgen/array_task_direct.expect",
-        source_contains=("Array<Task<int>>", "await tasks[0]"),
+        source_contains=("Array<Task<i64>>", "await tasks[0]"),
         expect_contains=("xr_aot_await_task", "xr_slot_aot_frame_offset"),
     ),
     Baseline(
         category="THREADLOCAL_AOT_BASELINE",
         xr_path="tests/aot/filetests/cgen/sys_threadlocal_typed_baseline.xr",
         expect_path="tests/aot/filetests/cgen/sys_threadlocal_typed_baseline.expect",
-        source_contains=("sys.ThreadLocal<int>", "local.set(20)", "local.get()"),
+        source_contains=("sys.ThreadLocal<i64>", "local.set(20)", "local.get()"),
         expect_contains=(
             "xrt_sys_thread_local_id()",
             "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)",

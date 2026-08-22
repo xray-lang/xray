@@ -1,15 +1,15 @@
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var object = JSON.parseObject("{\"value\":0}")
     var root = JSON.parseValue("{\"items\":[0]}")
     var i = 0
     var total = 0
     while (i < n) {
         JSON.set(object, ["value"], i)
-        if (JSON.require<int>(object, ["value"]) == i) {
+        if (JSON.require<i64>(object, ["value"]) == i) {
             total = total + 1
         }
         JSON.set(root, ["items", 0], i)
-        if (JSON.get<int>(root, ["items", 0]) == i) {
+        if (JSON.get<i64>(root, ["items", 0]) == i) {
             total = total + 1
         }
         JSON.set(object, ["temporary"], i)
@@ -23,6 +23,6 @@ fn run(n: int) -> int {
 
 var iterations = 20000
 if (len(process.args) > 0) {
-    iterations = int(process.args[0]) ?? iterations
+    iterations = i64.tryParse(process.args[0]) ?? iterations
 }
 print(run(iterations))

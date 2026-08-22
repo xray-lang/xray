@@ -1,7 +1,7 @@
 // Coro.dump() 和 Coro.stalled() 测试
 // 作者：xingleixu@gmail.com
 
-fn worker(c: Channel<int>) -> string {
+fn worker(c: Channel<i64>) -> string {
     c.send(42)
     return "done"
 }
@@ -20,7 +20,7 @@ fn test_coro_dump() {
     print("stalled:", len(stalled))
 
     print("test4: with coroutines")
-    const ch = Channel<int>(1)
+    const ch = Channel<i64>(1)
 
 
     var t = go(name: "test-worker") worker(ch)

@@ -100,7 +100,7 @@ python3 compare.py results/
 xray 的 `net` 模块现在区分两条 TCP 数据路径：
 
 - `net.read` / `net.write`：把 payload 暴露为 Xray `string`，适合协议解析和文本处理。
-- `net.readInto` / `net.writeBytes`：payload 进入用户提供的可复用 `Array<byte>` 缓冲区，适合二进制协议热路径。
+- `net.readInto` / `net.writeBytes`：payload 进入用户提供的可复用 `Array<u8>` 缓冲区，适合二进制协议热路径。
 - `net.copy(src, dst)`：payload 留在可复用 native buffer 中，适合 proxy、relay、`net.copy(conn, conn)` echo 等不需要逐字节进入语言层的高吞吐场景。
 
 默认 echo suite 使用 `net.copy(conn, conn, 65536)`，目的是测试 TCP runtime 和调度器本身；Phase 1 suite 则用同一客户端负载对比 string path 与 byte-array path。

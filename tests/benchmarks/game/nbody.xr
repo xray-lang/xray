@@ -19,7 +19,7 @@ const PI = 3.141592653589793
 const DAYS_PER_YEAR = 365.24
 const SOLAR_MASS = 4.0 * PI * PI
 
-type Body = { x: float, y: float, z: float, vx: float, vy: float, vz: float, mass: float }
+type Body = { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
 
 // 创建天体对象
 fn createBody(x, y, z, vx, vy, vz, mass): Body {
@@ -96,7 +96,7 @@ fn offsetMomentum(bodies: Array<Body>) {
 ** 动能 = 0.5 * m * v^2
 ** 势能 = -G * m1 * m2 / r（G=1）
 */
-fn energy(bodies: Array<Body>): float {
+fn energy(bodies: Array<Body>): f64 {
     var e = 0.0
     var nbodies = len(bodies)
     for (var i = 0; i < nbodies; i++) {
@@ -125,7 +125,7 @@ fn energy(bodies: Array<Body>): float {
 ** 2. 更新速度
 ** 3. 更新位置
 */
-fn advance(bodies: Array<Body>, dt: float) {
+fn advance(bodies: Array<Body>, dt: f64) {
     var nbodies = len(bodies)
     // 计算引力并更新速度
     for (var i = 0; i < nbodies; i++) {
@@ -159,7 +159,7 @@ fn advance(bodies: Array<Body>, dt: float) {
 // 主程序
 fn main() {
     // 迭代次数（从命令行读取，默认 500000）
-    var n = len(process.args) > 0 ? int(process.args[0]) ?? 500000 : 500000
+    var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 500000 : 500000
     // 创建天体系统
     var bodies = createBodies()
     // 初始化：调整动量使系统质心静止

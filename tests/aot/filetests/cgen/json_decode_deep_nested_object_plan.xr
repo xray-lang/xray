@@ -1,4 +1,4 @@
-type Geo = { lat: float, verified: bool }
+type Geo = { lat: f64, verified: bool }
 type Address = { city: string, geo: Geo }
 type Profile = { name: string, address: Address }
 

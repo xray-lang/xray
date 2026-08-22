@@ -1,5 +1,5 @@
 class Base {
-    wide: int
+    wide: i64
     flag: bool
 }
 
@@ -8,7 +8,7 @@ class Child extends Base {
 }
 
 class Holder {
-    values: Array<int> = []
+    values: Array<i64> = []
 }
 
 print(0)

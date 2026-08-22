@@ -1,7 +1,7 @@
 class Box<T> {
     values: Array<T>
 
-    constructor(init: fn(int) -> T) {
+    constructor(init: fn(i64) -> T) {
         var states: Array<T> = []
         for (lane in 0..3) {
             states.push(init(lane))
@@ -9,13 +9,13 @@ class Box<T> {
         this.values = states
     }
 
-    get(i: int) -> T {
+    get(i: i64) -> T {
         return this.values[i]
     }
 }
 
-var seen: Array<int> = []
-var box = Box<int>((lane) -> {
+var seen: Array<i64> = []
+var box = Box<i64>((lane) -> {
     seen.push(lane)
     return 100 + lane
 })

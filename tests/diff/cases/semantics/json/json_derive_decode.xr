@@ -4,9 +4,9 @@
 @derive(JSON)
 class User {
     name: string
-    age: int
+    age: i64
 
-    constructor(name: string, age: int) {
+    constructor(name: string, age: i64) {
         print("constructor-ran")
         this.name = name
         this.age = age
@@ -17,9 +17,9 @@ class User {
 class Envelope {
     user: User
     tags: Array<string>
-    scores: Map<string, int>
+    scores: Map<string, i64>
 
-    constructor(user: User, tags: Array<string>, scores: Map<string, int>) {
+    constructor(user: User, tags: Array<string>, scores: Map<string, i64>) {
         print("envelope-constructor-ran")
         this.user = user
         this.tags = tags
@@ -29,8 +29,8 @@ class Envelope {
 
 @derive(JSON)
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 @derive(JSON)
@@ -59,13 +59,13 @@ class Packet {
 var parsed: User = JSON.parse<User>("{\"name\":\"Ada\",\"age\":37}")
 var parsedJson = JSON.value(parsed)
 print(JSON.require<string>(parsedJson, ["name"]))
-print(JSON.require<int>(parsedJson, ["age"]))
+print(JSON.require<i64>(parsedJson, ["age"]))
 
 var decoded = JSON.decode<User>(JSON.parseValue("{\"name\":\"Grace\",\"age\":42}"))
 print(decoded == null)
 var decodedJson = JSON.value(decoded!)
 print(JSON.require<string>(decodedJson, ["name"]))
-print(JSON.require<int>(decodedJson, ["age"]))
+print(JSON.require<i64>(decodedJson, ["age"]))
 
 var nested: Envelope = JSON.parse<Envelope>(
     "{\"user\":{\"name\":\"Lin\",\"age\":29},\"tags\":[\"compiler\",\"vm\"],\"scores\":{\"a\":9}}"
@@ -73,7 +73,7 @@ var nested: Envelope = JSON.parse<Envelope>(
 var nestedJson = JSON.value(nested)
 print(JSON.require<string>(nestedJson, ["user", "name"]))
 print(JSON.require<string>(nestedJson, ["tags", 1]))
-print(JSON.require<int>(nestedJson, ["scores", "a"]))
+print(JSON.require<i64>(nestedJson, ["scores", "a"]))
 
 print(JSON.decode<User>(JSON.parseValue("{\"name\":\"bad\",\"age\":true}")) == null)
 
@@ -86,7 +86,7 @@ fn exerciseDerivedStructs() {
     print(box.point.x)
     print(box.label)
     var boxJson = JSON.value(box)
-    print(JSON.require<int>(boxJson, ["point", "x"]))
+    print(JSON.require<i64>(boxJson, ["point", "x"]))
     print(JSON.require<string>(boxJson, ["label"]))
     print(JSON.stringify(box))
 

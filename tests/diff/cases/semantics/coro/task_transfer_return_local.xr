@@ -1,7 +1,7 @@
 // A function return is a terminal ownership edge: returning a unique local
 // automatically forwards its root. Await keeps one uniform spelling and
 // consumes the unique-result Task handle without a source-level `move`.
-fn values() -> Array<int> {
+fn values() -> Array<i64> {
     var result = [1, 2, 3]
     return result
 }

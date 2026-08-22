@@ -5,7 +5,7 @@ import time
 
 var ITERATIONS = 100000
 
-fn elapsed_ms(start: int, end: int): float {
+fn elapsed_ms(start: i64, end: i64): f64 {
     return ((end - start) as f64) / 1000000.0
 }
 
@@ -13,7 +13,7 @@ fn elapsed_ms(start: int, end: int): float {
 // POSITIVE: Map with short string keys (SSO avoids promote)
 // ============================================================
 fn bench_map_short_keys() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     var start = time.nanos()
     for (i in 0..ITERATIONS) {
         m["k" + i.toString()] = i
@@ -25,7 +25,7 @@ fn bench_map_short_keys() {
 
 // NEGATIVE: Map with long string keys (>14 bytes, no SSO benefit)
 fn bench_map_long_keys() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     var start = time.nanos()
     for (i in 0..ITERATIONS) {
         m["this_is_a_very_long_key_name_" + i.toString()] = i
@@ -39,7 +39,7 @@ fn bench_map_long_keys() {
 // POSITIVE: Map lookup with short string keys
 // ============================================================
 fn bench_map_lookup_short() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     for (i in 0..1000) {
         m["k" + i.toString()] = i
     }

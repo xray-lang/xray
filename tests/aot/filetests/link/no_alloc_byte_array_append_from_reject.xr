@@ -1,8 +1,8 @@
-fn xray_no_alloc_byte_array_append_from_reject(dst: ref Array<byte>, src: Slice<byte>) -> int {
+fn xray_no_alloc_byte_array_append_from_reject(dst: ref Array<u8>, src: Slice<u8>) -> i64 {
     dst.appendFrom(src)
     return len(dst)
 }
 
-var dst: Array<byte> = Array.withCapacity(8)
-var src = Array<byte>(2, 65)
+var dst: Array<u8> = Array.withCapacity(8)
+var src = Array<u8>(2, 65)
 print(xray_no_alloc_byte_array_append_from_reject(ref dst, src[:]))

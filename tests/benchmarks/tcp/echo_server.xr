@@ -11,7 +11,7 @@ fn serveStream(conn: NetConn) {
 
 fn serveMessage(conn: NetConn) {
     defer { net.close(conn) }
-    var buf = Array<byte>(65536)
+    var buf = Array<u8>(65536)
     while (true) {
         var n = net.readInto(conn, ref buf, 65536)
         if (n <= 0) {
@@ -26,7 +26,7 @@ fn serveMessage(conn: NetConn) {
 
 fn serveBytes(conn: NetConn) {
     defer { net.close(conn) }
-    var buf = Array<byte>(65536)
+    var buf = Array<u8>(65536)
     while (true) {
         var n = net.readInto(conn, ref buf)
         if (n <= 0) {
@@ -41,7 +41,7 @@ fn serveBytes(conn: NetConn) {
 
 fn serveDiscard(conn: NetConn) {
     defer { net.close(conn) }
-    var buf = Array<byte>(65536)
+    var buf = Array<u8>(65536)
     while (true) {
         var n = net.readInto(conn, ref buf, 65536)
         if (n <= 0) {
@@ -51,9 +51,9 @@ fn serveDiscard(conn: NetConn) {
     net.writeBytes(conn, "OK".copyBytes())
 }
 
-fn serveSlowDiscard(conn: NetConn, delayMs: int) {
+fn serveSlowDiscard(conn: NetConn, delayMs: i64) {
     defer { net.close(conn) }
-    var buf = Array<byte>(4096)
+    var buf = Array<u8>(4096)
     while (true) {
         var n = net.readInto(conn, ref buf, 4096)
         if (n <= 0) {
@@ -66,7 +66,7 @@ fn serveSlowDiscard(conn: NetConn, delayMs: int) {
     net.writeBytes(conn, "OK".copyBytes())
 }
 
-fn serveSource(conn: NetConn, totalBytes: int) {
+fn serveSource(conn: NetConn, totalBytes: i64) {
     defer { net.close(conn) }
     var chunk = "S".repeat(65536).copyBytes()
     var remaining = totalBytes
@@ -83,7 +83,7 @@ fn serveSource(conn: NetConn, totalBytes: int) {
     }
 }
 
-fn tryDial(port: int) -> NetConn? {
+fn tryDial(port: i64) -> NetConn? {
     try {
         return net.dial("127.0.0.1", port)
     } catch (e) {
@@ -91,7 +91,7 @@ fn tryDial(port: int) -> NetConn? {
     }
 }
 
-fn serveProxy(client: NetConn, upstreamPort: int) {
+fn serveProxy(client: NetConn, upstreamPort: i64) {
     var upstream = tryDial(upstreamPort)
     if (upstream == null) {
         net.close(client)
@@ -103,7 +103,7 @@ fn serveProxy(client: NetConn, upstreamPort: int) {
     net.close(upstream!)
 }
 
-fn handleConn(conn: NetConn, mode: string, extra: int) {
+fn handleConn(conn: NetConn, mode: string, extra: i64) {
     if (mode == "stream") {
         serveStream(conn)
     } else if (mode == "message" || mode == "idle") {
@@ -125,7 +125,7 @@ fn handleConn(conn: NetConn, mode: string, extra: int) {
 
 var port = 9001
 if (len(process.args) > 0) {
-    port = int(process.args[0]) ?? 9001
+    port = i64.tryParse(process.args[0]) ?? 9001
 }
 
 var mode = "stream"
@@ -135,7 +135,7 @@ if (len(process.args) > 1) {
 
 var extra = 67108864
 if (len(process.args) > 2) {
-    extra = int(process.args[2]) ?? extra
+    extra = i64.tryParse(process.args[2]) ?? extra
 }
 
 var listener = net.listen(port, 1024)

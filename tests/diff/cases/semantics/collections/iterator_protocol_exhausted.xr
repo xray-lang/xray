@@ -93,7 +93,7 @@ try {
 }
 
 // An empty collection is exhausted from its first pull.
-var empty: Array<int> = []
+var empty: Array<i64> = []
 var ei = empty.iterator()
 print("empty-has " + string(ei.hasNext()))
 try {

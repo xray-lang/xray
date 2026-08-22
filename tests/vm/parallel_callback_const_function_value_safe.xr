@@ -1,9 +1,9 @@
 import parallel
 
-const total = Atomic<int>(0)
+const total = Atomic<i64>(0)
 
 parallel.forEach(0..4, (i) -> {
-    const addOne = fn(x: int) -> int {
+    const addOne = fn(x: i64) -> i64 {
         return x + 1
     }
     total.add(addOne(i), Ordering.Relaxed)

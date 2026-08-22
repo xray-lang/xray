@@ -1,4 +1,4 @@
-export fn refKernel(values: ref [u64; 8], rounds: int) {
+export fn refKernel(values: ref [u64; 8], rounds: i64) {
     var view: Slice<u64> = values[:]
     var i = 0
     while (i < rounds) {

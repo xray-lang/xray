@@ -1,6 +1,6 @@
 import { TypeOnlyConfig } from "./_type_only_selective_import_lib"
 
-fn total(config: TypeOnlyConfig) -> int {
+fn total(config: TypeOnlyConfig) -> i64 {
     return len(config.name) + config.count
 }
 

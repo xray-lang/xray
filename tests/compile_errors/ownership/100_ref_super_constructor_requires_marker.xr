@@ -1,14 +1,14 @@
 class Base {
-    value: int = 0
+    value: i64 = 0
 
-    constructor(value: ref int) {
+    constructor(value: ref i64) {
         value = value + 1
         this.value = value
     }
 }
 
 class Child extends Base {
-    constructor(value: int) {
+    constructor(value: i64) {
         super(value)
     }
 }

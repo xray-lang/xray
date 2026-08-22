@@ -1,4 +1,4 @@
-fn xray_no_alloc_json_scalar_methods_ok(value: JSON.Object) -> int {
+fn xray_no_alloc_json_scalar_methods_ok(value: JSON.Object) -> i64 {
     var score = len(value)
     if (value.containsKey("answer")) {
         score = score + 10

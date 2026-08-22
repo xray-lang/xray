@@ -12,12 +12,12 @@ fn main() {
     print(len(evens))
     var total = a.reduce((acc, x) -> acc + x, 0)
     print(total)
-    var tail: Slice<int> = a[-4:-1]
+    var tail: Slice<i64> = a[-4:-1]
     print(len(tail))
     print(tail[0])
     tail[1] = 33
     print(a[3])
-    var syntax_tail: Slice<int> = a[-4:-1]
+    var syntax_tail: Slice<i64> = a[-4:-1]
     print(len(syntax_tail))
     print(syntax_tail[1])
     var fill_range = [1, 2, 3, 4, 5, 6]
@@ -30,7 +30,7 @@ fn main() {
     fill_range.fill(4, 4)
     print(fill_range[4])
     print(fill_range[5])
-    var bytes = Array<byte>(6)
+    var bytes = Array<u8>(6)
     bytes.fill(1)
     bytes.fill(255, 1, 4)
     print(bytes[0])
@@ -41,7 +41,7 @@ fn main() {
     print(bytes.indexOf(42))
     print(bytes.contains(255))
     print(bytes.contains(42))
-    var packet = Array<byte>(8)
+    var packet = Array<u8>(8)
     packet[0] = 1
     packet[1] = 2
     packet[2] = 3
@@ -50,17 +50,17 @@ fn main() {
     packet[5] = 6
     packet[6] = 7
     packet[7] = 8
-    var packetView: Slice<byte> = packet[:]
+    var packetView: Slice<u8> = packet[:]
     var packet32: u32 = packetView.load<u32>(0, Endian.LE)
     var packet64: u64 = packetView.load<u64>(0, Endian.LE)
-    print(int(packet32))
-    print(int(packet64))
-    var copied: Array<byte> = Array.withCapacity(6)
+    print((packet32 as i64))
+    print((packet64 as i64))
+    var copied: Array<u8> = Array.withCapacity(6)
     copied.appendFrom(packetView[1:4])
     print(copied[0])
     print(copied[2])
-    var repeated: Array<byte> = Array.withCapacity(9)
-    var seed = Array<byte>(3)
+    var repeated: Array<u8> = Array.withCapacity(9)
+    var seed = Array<u8>(3)
     seed[0] = 65
     seed[1] = 66
     seed[2] = 67

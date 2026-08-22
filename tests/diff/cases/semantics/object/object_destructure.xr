@@ -3,9 +3,9 @@
 // VM/AOT: shorthand + rename bindings, retained nested values, function-return
 // sources, non-consumption of the source, and destructure into existing bindings.
 
-type Point = { x: int, y: int }
+type Point = { x: i64, y: i64 }
 
-fn makePoint(a: int, b: int) -> Point {
+fn makePoint(a: i64, b: i64) -> Point {
     return { x: a, y: b }
 }
 

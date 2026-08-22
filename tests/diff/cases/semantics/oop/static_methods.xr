@@ -2,22 +2,22 @@
 // a static method takes arguments, and a static method calls another static.
 // VM and AOT must agree byte-for-byte.
 class Vec {
-    x: int
-    y: int
-    constructor(x: int, y: int) {
+    x: i64
+    y: i64
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
     static origin() -> Vec {
         return Vec(0, 0)
     }
-    static of(x: int, y: int) -> Vec {
+    static of(x: i64, y: i64) -> Vec {
         return Vec(x, y)
     }
-    static diagonal(n: int) -> Vec {
+    static diagonal(n: i64) -> Vec {
         return Vec.of(n, n)
     }
-    sum() -> int {
+    sum() -> i64 {
         return this.x + this.y
     }
 }

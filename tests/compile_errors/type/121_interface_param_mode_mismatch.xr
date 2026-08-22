@@ -1,8 +1,8 @@
 interface Writer {
-    write(value: ref int)
+    write(value: ref i64)
 }
 
 class BadWriter implements Writer {
-    write(value: int) {
+    write(value: i64) {
     }
 }

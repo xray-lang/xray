@@ -11,7 +11,7 @@
 // fields and Array<Node> payloads.
 
 enum Node {
-    Leaf(int),
+    Leaf(i64),
     Branch(Array<Node>)
 }
 
@@ -23,10 +23,10 @@ class Tree {
         this.kids = []
     }
     getRoot() -> Node { return this.root }         // getprop returns enum
-    at(i: int) -> Node { return this.kids[i] }     // dynamic Array<enum> index load
+    at(i: i64) -> Node { return this.kids[i] }     // dynamic Array<enum> index load
 }
 
-fn describe(n: Node) -> int {
+fn describe(n: Node) -> i64 {
     return match (n) {
         Node.Leaf(v) -> v,
         Node.Branch(a) -> len(a)

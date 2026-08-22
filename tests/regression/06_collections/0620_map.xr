@@ -10,7 +10,7 @@ fn test_map_literal() {
 
 @test
 fn test_empty_map() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     assert_eq(len(m), 0)
 }
 
@@ -60,7 +60,7 @@ fn test_set_overwrite() {
 
 @test
 fn test_bracket_assign() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     m["x"] = 100
     assert_eq(m["x"], 100)
 }
@@ -155,7 +155,7 @@ fn test_mixed_value_types() {
 // ===== 边界条件 =====
 @test
 fn test_many_entries() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     for (var i = 0; i < 100; i++) {
         m.set("key" + i.toString(), i)
     }

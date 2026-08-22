@@ -30,7 +30,7 @@ fn test_string_repeat() {
 
     // 变量方式
     var s: string = "-"
-    var n: int = 5
+    var n: i64 = 5
     var result = s.repeat(n)
     assert_eq(result, "-----")
 

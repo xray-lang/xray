@@ -1,5 +1,5 @@
-fn xray_no_alloc_array_filled_new_reject() -> int {
-    var xs = Array<int>(16, 0)
+fn xray_no_alloc_array_filled_new_reject() -> i64 {
+    var xs = Array<i64>(16, 0)
     return len(xs)
 }
 

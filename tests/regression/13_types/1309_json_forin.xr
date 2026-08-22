@@ -8,7 +8,7 @@ fn test_json_object_for_in() {
     assert_eq(keys, "abc")
 
     var total = 0
-    for (_, value in obj) { total += int(value) }
+    for (_, value in obj) { total += (value as i64) }
     assert_eq(total, 6)
 }
 

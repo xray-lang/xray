@@ -1,8 +1,8 @@
 fn main() {
-    var chunks: Array<Array<byte>> = [Array<byte>(0), Array<byte>(0)]
+    var chunks: Array<Array<u8>> = [Array<u8>(0), Array<u8>(0)]
     chunks[0].push(1)
-    var view: Slice<byte> = chunks[0][:]
-    chunks[0] = Array<byte>(0)
+    var view: Slice<u8> = chunks[0][:]
+    chunks[0] = Array<u8>(0)
     print(len(view))
 }
 

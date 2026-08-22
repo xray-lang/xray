@@ -15,7 +15,7 @@
 //      Take min of 5-10 cold runs; outliers are scheduler noise.
 
 // ---------- len(string) / rune nth ----------
-fn bench_string_methods(iters: int) -> int {
+fn bench_string_methods(iters: i64) -> i64 {
     var s = "the quick brown fox jumps over the lazy dog"
     var acc = 0
     for (var i = 0; i < iters; i++) {
@@ -28,8 +28,8 @@ fn bench_string_methods(iters: int) -> int {
 }
 
 // ---------- Array.push / get / length -- IC on Array receiver ----------
-fn bench_array_methods(iters: int) -> int {
-    var a: Array<int> = []
+fn bench_array_methods(iters: i64) -> i64 {
+    var a: Array<i64> = []
     var total = 0
     for (var i = 0; i < iters; i++) {
         a.push(i)
@@ -46,8 +46,8 @@ fn bench_array_methods(iters: int) -> int {
 // `m.get(k) as int` would also exercise the receiver but currently
 // crashes the JIT codegen on this particular pattern; size + has are
 // equally good IC stress sites and stay on the interpreter fast path.
-fn bench_map_methods(iters: int) -> int {
-    var m: Map<string, int> = #{}
+fn bench_map_methods(iters: i64) -> i64 {
+    var m: Map<string, i64> = #{}
     var total = 0
     for (var i = 0; i < iters; i++) {
         var k = "k" + (i % 32).toString()
@@ -60,7 +60,7 @@ fn bench_map_methods(iters: int) -> int {
 }
 
 // ---------- int.toString / abs -- IC on int receiver (raw-receiver opcode) ----------
-fn bench_int_methods(iters: int) -> int {
+fn bench_int_methods(iters: i64) -> i64 {
     var acc = 0
     for (var i = 0; i < iters; i++) {
         var s = i.toString()

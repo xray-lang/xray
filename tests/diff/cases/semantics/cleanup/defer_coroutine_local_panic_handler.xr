@@ -1,8 +1,8 @@
 // A cleanup-local panic handler is stack-bound to one non-suspending cleanup
 // execution, even when the owning function itself has suspended.
-fn leaf() -> int { return 7 }
+fn leaf() -> i64 { return 7 }
 
-fn worker() -> int {
+fn worker() -> i64 {
     defer {
         try {
             var zero = 0

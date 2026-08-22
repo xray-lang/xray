@@ -24,13 +24,13 @@ export enum CsvErrorKind {
 
 export class CsvDiagnostic {
     kind: CsvErrorKind
-    byteOffset: int
-    line: int
-    record: int
-    column: int
+    byteOffset: i64
+    line: i64
+    record: i64
+    column: i64
     message: string
 
-    constructor(kind: CsvErrorKind, byteOffset: int, line: int, record: int, column: int,
+    constructor(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64,
                 message: string) {
         this.kind = kind
         this.byteOffset = byteOffset
@@ -43,12 +43,12 @@ export class CsvDiagnostic {
 
 export enum CsvError {
     InvalidOption(string),
-    InputLimitExceeded(int),
-    FieldLimitExceeded(int),
-    ColumnLimitExceeded(int),
-    UnterminatedQuote(int, int, int, int, string),
-    InvalidEscape(int, int, int, int, string),
-    FieldCountMismatch(int, int, int, int, string)
+    InputLimitExceeded(i64),
+    FieldLimitExceeded(i64),
+    ColumnLimitExceeded(i64),
+    UnterminatedQuote(i64, i64, i64, i64, string),
+    InvalidEscape(i64, i64, i64, i64, string),
+    FieldCountMismatch(i64, i64, i64, i64, string)
 }
 
 export type CsvParseOptions = {
@@ -59,11 +59,11 @@ export type CsvParseOptions = {
     trimFields: bool,
     skipEmptyLines: bool,
     commentPrefix: string,
-    skipRecords: int,
-    maxRecords: int,
-    maxInputBytes: int,
-    maxFieldBytes: int,
-    maxColumns: int
+    skipRecords: i64,
+    maxRecords: i64,
+    maxInputBytes: i64,
+    maxFieldBytes: i64,
+    maxColumns: i64
 }
 
 export type CsvWriteOptions = {
@@ -140,13 +140,13 @@ class _CsvState {
     linebreak: string
     truncated: bool
     currentRow: Array<string>
-    currentRecord: int
-    currentColumn: int
-    physicalLine: int
-    byteOffset: int
-    expectedColumns: int
+    currentRecord: i64
+    currentColumn: i64
+    physicalLine: i64
+    byteOffset: i64
+    expectedColumns: i64
     firstFieldQuoted: bool
-    currentFieldBytes: int
+    currentFieldBytes: i64
 
     constructor(delimiter: rune) {
         this.document = CsvDocument()
@@ -187,7 +187,7 @@ fn _isNewline(c: rune) -> bool {
 
 fn _detectDelimiter(data: string, quoteChar: rune, escapeChar: rune) -> rune {
     var candidates: Array<rune> = [',', '\t', ';', '|']
-    var counts: Array<int> = [0, 0, 0, 0]
+    var counts: Array<i64> = [0, 0, 0, 0]
     var quoted = false
     var iter = data.runes()
     var hasPending = false
@@ -259,7 +259,7 @@ fn _addDiagnostic(state: ref _CsvState, kind: CsvErrorKind, message: string) {
     ))
 }
 
-fn _addRecordDiagnostic(state: ref _CsvState, kind: CsvErrorKind, record: int, message: string) {
+fn _addRecordDiagnostic(state: ref _CsvState, kind: CsvErrorKind, record: i64, message: string) {
     state.diagnostics.push(CsvDiagnostic(
         kind,
         state.byteOffset,
@@ -276,7 +276,7 @@ fn _checkFieldLimit(state: _CsvState, options: CsvParseOptions) {
     }
 }
 
-fn _utf8Width(value: rune) -> int {
+fn _utf8Width(value: rune) -> i64 {
     var scalar = value.toUInt32()
     if (scalar <= 0x7F) { return 1 }
     if (scalar <= 0x7FF) { return 2 }
@@ -319,7 +319,7 @@ fn _observeLinebreak(state: ref _CsvState, value: string) {
     state.physicalLine = state.physicalLine + 1
 }
 
-fn _newlineText(current: rune, width: int) -> string {
+fn _newlineText(current: rune, width: i64) -> string {
     if (width == 2) { return "\r\n" }
     return current.toString()
 }

@@ -1,4 +1,4 @@
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 class ObjectMethodReturnLocalFactory {
     makeUser() -> User {
@@ -6,7 +6,7 @@ class ObjectMethodReturnLocalFactory {
     }
 }
 
-fn objectMethodReturnLocalPlan() -> int {
+fn objectMethodReturnLocalPlan() -> i64 {
     var f = ObjectMethodReturnLocalFactory()
     var user = f.makeUser()
     return user.age

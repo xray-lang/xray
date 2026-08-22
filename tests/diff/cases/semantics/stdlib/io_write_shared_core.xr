@@ -13,7 +13,7 @@ print(io.appendFile(textFile, "\nomega"))
 print(io.readFile(textFile) == "alpha\nomega")
 
 var bytesFile = path.join(root, path.from("bytes.bin"))
-var bytes = Array<byte>(4)
+var bytes = Array<u8>(4)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 10

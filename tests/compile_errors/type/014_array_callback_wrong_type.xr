@@ -9,11 +9,11 @@ var xs = [1, 2, 3]
 
 var bad1 = xs.map(0)
 var bad2 = xs.filter(0)
-var bad3 = xs.reduce(0, fn(acc: int, v: int) -> int { return acc + v })
+var bad3 = xs.reduce(0, fn(acc: i64, v: i64) -> i64 { return acc + v })
 var bad4 = xs.find(0)
 var bad5 = xs.every(0)
 var bad6 = xs.some(0)
 xs.forEach(0)
 
-var m: Map<string, int> = Map()
+var m: Map<string, i64> = Map()
 m.forEach(0)

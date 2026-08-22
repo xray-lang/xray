@@ -186,6 +186,45 @@ static inline XrValue xrt_chr(XrValue val) {
     return XR_IS_NULL(ch) ? XR_NULL_VAL : xrt_rune_to_string(XR_TO_RUNE(ch));
 }
 
+/* Exact scalar text parsing is a distinct source operation from numeric `as`
+ * conversion. These helpers accept strings only so generated C cannot silently
+ * widen the public parse surface back to a general conversion builtin. */
+static XrValue xrt_i64_parse(XrValue val) {
+    if (!XR_IS_STR(val))
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+    XrStringParseIntResult parsed =
+        xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
+    if (!parsed.ok)
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+    return XR_FROM_INT(parsed.value);
+}
+
+static XrValue xrt_i64_try_parse(XrValue val) {
+    if (!XR_IS_STR(val))
+        return XR_NULL_VAL;
+    XrStringParseIntResult parsed =
+        xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
+    return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
+}
+
+static XrValue xrt_f64_parse(XrValue val) {
+    if (!XR_IS_STR(val))
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+    XrStringParseFloatResult parsed =
+        xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
+    if (!parsed.ok)
+        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+    return XR_FROM_FLOAT(parsed.value);
+}
+
+static XrValue xrt_f64_try_parse(XrValue val) {
+    if (!XR_IS_STR(val))
+        return XR_NULL_VAL;
+    XrStringParseFloatResult parsed =
+        xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
+    return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+}
+
 static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_INT(val))
         return val;
@@ -200,7 +239,7 @@ static XrValue xrt_to_int(XrValue val) {
         XrStringParseIntResult parsed =
             xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
         if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_INT_PARSE_MSG);
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
         return XR_FROM_INT(parsed.value);
     }
     if (XR_IS_BOOL(val))
@@ -219,7 +258,7 @@ static XrValue xrt_to_float(XrValue val) {
         XrStringParseFloatResult parsed =
             xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
         if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_FLOAT_PARSE_MSG);
+            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
         return XR_FROM_FLOAT(parsed.value);
     }
     if (XR_IS_BOOL(val))
@@ -451,7 +490,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     return XR_NULL_VAL;
 }
 
-/* string.copyBytes() -> Array<byte>: the UTF-8 bytes of the string. */
+/* string.copyBytes() -> Array<u8>: the UTF-8 bytes of the string. */
 static inline XrValue xrt_str_to_bytes(XrValue s) {
     int64_t len = (int64_t) xr_str_len(s);
     xrt_array_t *b = xrt_array_new_typed_ptr(len, XR_ELEM_U8);
@@ -488,7 +527,7 @@ static inline XrValue xrt_str_to_bytes(XrValue s) {
  *
  * SCOPE.  This convention covers the dispatchers, not the language operation.
  * The code generator has specialized lowerings that reach the same helpers
- * directly and answer BORROWED — `Array<byte>.fill()` becomes a bare
+ * directly and answer BORROWED — `Array<u8>.fill()` becomes a bare
  * xrt_array_fill_value(), and reserve/resize/appendFrom/repeatFrom have their
  * own emitters.  Each of those is self-consistent (nothing releases what they
  * return), so the split is safe today, but it is the reason ownership cannot

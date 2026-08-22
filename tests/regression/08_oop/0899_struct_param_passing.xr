@@ -2,20 +2,20 @@
 // Expected: modifying struct parameter inside function does not affect caller
 
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
-fn move_point(p: Point, dx: float, dy: float) -> Point {
+fn move_point(p: Point, dx: f64, dy: f64) -> Point {
     var result = copy(p)
     result.x = result.x + dx
     result.y = result.y + dy
     return result
 }
 struct Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    scale(factor: float) -> Vec2 {
+    scale(factor: f64) -> Vec2 {
         return Vec2{x: this.x * factor, y: this.y * factor}
     }
 }
@@ -25,7 +25,7 @@ fn double_and_offset(v: Vec2) -> Vec2 {
     result.y = result.y * 2.0
     return result
 }
-fn make_point(x: float, y: float) -> Point {
+fn make_point(x: f64, y: f64) -> Point {
     return Point{x: x, y: y}
 }
 

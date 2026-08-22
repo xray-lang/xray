@@ -1,8 +1,8 @@
-fn id(x: int) -> int {
+fn id(x: i64) -> i64 {
     return x
 }
 
-fn wrap() -> int {
+fn wrap() -> i64 {
     return id(7)
 }
 

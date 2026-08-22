@@ -14,8 +14,8 @@ legacy_public_surface = [
   "isValid"
 ]
 intentional_semantic_changes = [
-  "public encode accepts Slice<byte>",
-  "decode returns Array<byte> and throws Base64Error on invalid input",
+  "public encode accepts Slice<u8>",
+  "decode returns Array<u8> and throws Base64Error on invalid input",
   "URL-safe and padding policy are explicit options",
   "encodeBytes/decodeToBytes/encodeUrl/decodeUrl aliases are removed"
 ]
@@ -27,7 +27,7 @@ benchmark_suite = "stdlib/base64"
 [[legacy_behavior]]
 id = "rfc4648-roundtrip"
 classification = "required"
-new_behavior = "standard and URL-safe alphabets round-trip through Slice<byte>/Array<byte> on VM and AOT"
+new_behavior = "standard and URL-safe alphabets round-trip through Slice<u8>/Array<u8> on VM and AOT"
 
 [[legacy_behavior]]
 id = "typed-error-invalid-input"

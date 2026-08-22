@@ -6,8 +6,8 @@ struct Box<T> {
     value: T
 }
 struct Other {
-    value: int
+    value: i64
 }
 
-var p: Box<int> = Other{value: 41}
+var p: Box<i64> = Other{value: 41}
 print(p.value)

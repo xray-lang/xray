@@ -1,9 +1,9 @@
 import math
 
-fn xray_math_pi(x: float) -> float {
+fn xray_math_pi(x: f64) -> f64 {
     return math.PI + x
 }
 
-fn xray_math_max_int() -> int {
-    return math.MAX_INT
+fn xray_math_max_int() -> i64 {
+    return math.MAX_I64
 }

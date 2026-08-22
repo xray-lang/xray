@@ -64,7 +64,7 @@ fn test_iteration_count_matches_len() {
 @test
 fn test_stored_range_yields_int() {
     var r = 1..4
-    var items: Array<int> = []
+    var items: Array<i64> = []
     for (i in r) {
         items.push(i)
     }
@@ -73,7 +73,7 @@ fn test_stored_range_yields_int() {
 
 // ===== 参数 / 字段 / 表达式中的 Range =====
 
-fn range_total(r: Range) -> int {
+fn range_total(r: Range) -> i64 {
     var sum = 0
     for (i in r) {
         sum = sum + i
@@ -124,7 +124,7 @@ fn test_range_array_element() {
 @test
 fn test_stored_range_break_continue() {
     var r = 0..10
-    var seen: Array<int> = []
+    var seen: Array<i64> = []
     for (i in r) {
         if (i == 2) {
             continue

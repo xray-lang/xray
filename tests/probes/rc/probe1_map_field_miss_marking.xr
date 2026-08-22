@@ -30,7 +30,7 @@ import runtime
 
 class ArrayNode {
     children: Array<ArrayNode>
-    tag: int
+    tag: i64
 
     constructor(tag) {
         this.children = []
@@ -40,7 +40,7 @@ class ArrayNode {
 
 class MapNode {
     children: Map<string, MapNode>
-    tag: int
+    tag: i64
 
     constructor(tag) {
         this.children = #{}
@@ -48,27 +48,27 @@ class MapNode {
     }
 }
 
-fn make_array_cycle(i: int) {
+fn make_array_cycle(i: i64) {
     var a = ArrayNode(i)
     var b = ArrayNode(i + 1)
     a.children.push(b)
     b.children.push(a)
 }
 
-fn make_map_cycle(i: int) {
+fn make_map_cycle(i: i64) {
     var a = MapNode(i)
     var b = MapNode(i + 1)
     a.children["next"] = b
     b.children["next"] = a
 }
 
-fn make_array_chain(i: int) {
+fn make_array_chain(i: i64) {
     var a = ArrayNode(i)
     var b = ArrayNode(i + 1)
     a.children.push(b)
 }
 
-fn make_map_chain(i: int) {
+fn make_map_chain(i: i64) {
     var a = MapNode(i)
     var b = MapNode(i + 1)
     a.children["next"] = b
@@ -132,13 +132,13 @@ fn test_map_field_cycles_are_treated_like_array_field_cycles() {
 // 这里能测的是它的另一半：穿透**不得**造成误标。struct 只能装标量、string、
 // 定长数组和其它 struct，全都不可能成环，所以持有 struct 的类不该被标记。
 struct ScalarLink {
-    tag: int
+    tag: i64
     label: string
 }
 
 class StructNode {
     data: ScalarLink
-    tag: int
+    tag: i64
 
     constructor(tag) {
         this.data = ScalarLink(tag, "n")
@@ -147,7 +147,7 @@ class StructNode {
 }
 
 // 持有 struct 的类，struct 里只有不可能成环的东西 ⇒ 必须完全被纯 RC 回收。
-fn make_struct_holder(i: int) {
+fn make_struct_holder(i: i64) {
     var a = StructNode(i)
     var b = StructNode(i + 1)
 }

@@ -1,5 +1,5 @@
 struct Bag {
-    data: Array<int>
+    data: Array<i64>
 }
 
 fn main() {

@@ -1,12 +1,12 @@
-type Grow = fn(ref Array<byte>)
+type Grow = fn(ref Array<u8>)
 
-fn grow(data: ref Array<byte>) {
+fn grow(data: ref Array<u8>) {
     data.push(99)
 }
 
 fn invoke(handler: Grow) {
-    var owner: Array<byte> = [1, 2]
-    var view: Slice<byte> = owner[:]
+    var owner: Array<u8> = [1, 2]
+    var view: Slice<u8> = owner[:]
     handler(ref owner)
     print(view[0])
 }

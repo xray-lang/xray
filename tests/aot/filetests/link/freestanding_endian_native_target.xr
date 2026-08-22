@@ -1,6 +1,6 @@
-fn xray_native_endian_u16() -> int {
-    var bytes: [byte; 4] = [0, 0, 0, 0]
-    var view: Slice<byte> = bytes[:]
+fn xray_native_endian_u16() -> i64 {
+    var bytes: [u8; 4] = [0, 0, 0, 0]
+    var view: Slice<u8> = bytes[:]
     view.store<u16>(0, 0x1234, Endian.Native)
-    return int(view.load<u16>(0, Endian.Native))
+    return (view.load<u16>(0, Endian.Native) as i64)
 }

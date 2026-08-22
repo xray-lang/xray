@@ -1,6 +1,6 @@
 // Spec §2.13 N-12: calling a possibly-null function value is rejected.
 fn main() {
-    var f: (fn() -> int)? = null
+    var f: (fn() -> i64)? = null
     print(f())
 }
 

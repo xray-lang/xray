@@ -22,7 +22,7 @@ fn test_for_in_readonly_body_keeps_pre_loop_narrowing() {
 @test
 fn test_for_in_empty_collection_keeps_pre_loop_value() {
     var s: string? = "seed"
-    var xs: Array<int> = []
+    var xs: Array<i64> = []
     for (v in xs) {
         s = null
     }
@@ -34,7 +34,7 @@ fn test_for_in_empty_collection_keeps_pre_loop_value() {
 @test
 fn test_for_in_body_write_rejoins_at_header() {
     var s: string? = null
-    var xs: Array<int> = [1, 2]
+    var xs: Array<i64> = [1, 2]
     for (v in xs) {
         s = "x"
     }
@@ -45,7 +45,7 @@ fn test_for_in_body_write_rejoins_at_header() {
 
 @test
 fn test_for_in_body_write_guarded_after_loop() {
-    var xs: Array<int> = []
+    var xs: Array<i64> = []
     var s: string? = null
     for (v in xs) {
         s = "x"

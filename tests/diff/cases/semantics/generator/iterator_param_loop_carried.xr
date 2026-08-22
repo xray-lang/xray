@@ -4,7 +4,7 @@
 // generator out of the caller's for-in, so the resume body is the only place
 // those phis are eliminated: its edge temporaries must be declared there.
 
-fn totalIt(xs: Iterator<int>) -> int {
+fn totalIt(xs: Iterator<i64>) -> i64 {
     var n = 0
     for (i in xs) {
         n = n + i
@@ -12,14 +12,14 @@ fn totalIt(xs: Iterator<int>) -> int {
     return n
 }
 
-fn firstOf(xs: Iterator<int>) -> int {
+fn firstOf(xs: Iterator<i64>) -> i64 {
     for (i in xs) {
         return i
     }
     return -1
 }
 
-fn upTo(limit: int) -> Iterator<int> {
+fn upTo(limit: i64) -> Iterator<i64> {
     var i = 1
     while (i <= limit) {
         yield i
@@ -27,7 +27,7 @@ fn upTo(limit: int) -> Iterator<int> {
     }
 }
 
-fn evensUpTo(limit: int) -> Iterator<int> {
+fn evensUpTo(limit: i64) -> Iterator<i64> {
     var i = 0
     var seen = 0
     while (i <= limit) {

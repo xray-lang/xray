@@ -1,8 +1,8 @@
 import mem
 
 fn main() {
-    var bytes = Array<byte>(8)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(8)
+    var view: Slice<u8> = bytes[:]
     unsafe {
         var value = mem.load<string>(view.mutPtr(), 0)
         print(value)

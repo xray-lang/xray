@@ -1,7 +1,7 @@
 // Reassigning an outer binding changes the receiver observed by its cleanup.
 class Conn {
-    id: int = 0
-    constructor(id: int) { this.id = id }
+    id: i64 = 0
+    constructor(id: i64) { this.id = id }
     close() { print("closing conn", this.id) }
 }
 

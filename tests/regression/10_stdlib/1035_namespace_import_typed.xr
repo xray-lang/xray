@@ -32,7 +32,7 @@ fn test_namespace_class() {
 
 @test
 fn test_namespace_in_nested() {
-    fn inner() -> int {
+    fn inner() -> i64 {
         return typed_lib.double_it(5)
     }
     assert_eq(inner(), 10)
@@ -40,7 +40,7 @@ fn test_namespace_in_nested() {
 
 @test
 fn test_namespace_byte_u8_canonical_identity() {
-    var byteArray: Array<byte> = [1, 2, 3]
+    var byteArray: Array<u8> = [1, 2, 3]
     var uint8Array: Array<u8> = [4, 5, 6]
     var fromModule: Array<u8> = typed_lib.make_uint8_bytes()
 
@@ -51,7 +51,7 @@ fn test_namespace_byte_u8_canonical_identity() {
 
 @test
 fn test_namespace_byte_u8_slice_identity() {
-    var byteArray: Array<byte> = [10, 20, 30]
+    var byteArray: Array<u8> = [10, 20, 30]
     var uint8Array: Array<u8> = [40, 50, 60]
 
     assert_eq(typed_lib.sum_byte_slice(uint8Array[:]), 90)

@@ -1,9 +1,9 @@
-fn buildBuffer() -> Array<byte> {
-    var result = Array<byte>(1, 0)
+fn buildBuffer() -> Array<u8> {
+    var result = Array<u8>(1, 0)
     return move result
 }
 
-fn consume(f: fn() -> Array<byte>) {
+fn consume(f: fn() -> Array<u8>) {
     var local = f()
     print(len(local))
 }

@@ -8,11 +8,11 @@
 
 const ITERATIONS = 6000
 
-fn writer(target: Atomic<int>) {
+fn writer(target: Atomic<i64>) {
     target.store(1, Ordering.SeqCst)
 }
 
-fn reader(first: Atomic<int>, second: Atomic<int>) -> int {
+fn reader(first: Atomic<i64>, second: Atomic<i64>) -> i64 {
     var f = first.load(Ordering.SeqCst)
     var s = second.load(Ordering.SeqCst)
     // Encodes the observed pair as f*2 + s so the caller can compare them.

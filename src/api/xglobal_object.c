@@ -105,8 +105,8 @@ bool xr_global_register_all_core_classes(XrGlobalObject *global, XrVMRuntime *is
     REG_OR_FAIL(TYPE_NAME_MAP, core->mapClass);
     REG_OR_FAIL(TYPE_NAME_SET, core->setClass);
 
-    REG_OR_FAIL(TYPE_NAME_INT, core->intClass);
-    REG_OR_FAIL(TYPE_NAME_FLOAT, core->floatClass);
+    REG_OR_FAIL(TYPE_NAME_I64, core->intClass);
+    REG_OR_FAIL(TYPE_NAME_F64, core->floatClass);
     REG_OR_FAIL(TYPE_NAME_BOOL, core->boolClass);
     REG_OR_FAIL(TYPE_NAME_NULL, core->nullClass);
 

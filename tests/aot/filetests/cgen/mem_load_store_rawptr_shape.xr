@@ -1,39 +1,39 @@
 import mem
 
-fn xray_mem_u32_load_le(p: Ptr<u8>, offset: int) -> u32 {
+fn xray_mem_u32_load_le(p: Ptr<u8>, offset: i64) -> u32 {
     unsafe {
         return mem.load<u32>(p, offset, Endian.LE)
     }
 }
 
-fn xray_mem_u32_store_le(p: MutPtr<u8>, offset: int, value: u32) {
+fn xray_mem_u32_store_le(p: MutPtr<u8>, offset: i64, value: u32) {
     unsafe {
         mem.store<u32>(p, offset, value, Endian.LE)
     }
 }
 
-fn xray_mem_u32_roundtrip(p: MutPtr<u8>, offset: int) -> u32 {
+fn xray_mem_u32_roundtrip(p: MutPtr<u8>, offset: i64) -> u32 {
     unsafe {
         mem.store<u32>(p, offset, 270544960, Endian.LE)
         return mem.load<u32>(p, offset, Endian.LE)
     }
 }
 
-fn xray_mem_f32_roundtrip(p: MutPtr<u8>, offset: int, value: f32) -> f32 {
+fn xray_mem_f32_roundtrip(p: MutPtr<u8>, offset: i64, value: f32) -> f32 {
     unsafe {
         mem.store<f32>(p, offset, value, Endian.LE)
         return mem.load<f32>(p, offset, Endian.LE)
     }
 }
 
-fn xray_mem_ptr_roundtrip(p: MutPtr<u8>, q: Ptr<u8>, offset: int) -> Ptr<u8> {
+fn xray_mem_ptr_roundtrip(p: MutPtr<u8>, q: Ptr<u8>, offset: i64) -> Ptr<u8> {
     unsafe {
         mem.store<Ptr<u8>>(p, offset, q)
         return mem.load<Ptr<u8>>(p, offset)
     }
 }
 
-fn xray_mem_u64_dynamic_endian(p: MutPtr<u8>, offset: int, value: u64,
+fn xray_mem_u64_dynamic_endian(p: MutPtr<u8>, offset: i64, value: u64,
                                little: bool) -> u64 {
     var endian = little ? Endian.LE : Endian.BE
     unsafe {

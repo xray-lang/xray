@@ -1,11 +1,11 @@
-fn recv_once(ch: Channel<int>) -> int {
+fn recv_once(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> -1
     }
 }
 
-fn caller(ch: Channel<int>) -> int {
+fn caller(ch: Channel<i64>) -> i64 {
     var value = recv_once(ch)
     return value + 1
 }

@@ -10,7 +10,7 @@ fn test_missing_key_and_type_change() {
     assert(JSON.isNull(JSON.require<JSON.Value>(obj, ["value"])))
 }
 
-fn add_field(obj: ref JSON.Object, key: string, value: int) {
+fn add_field(obj: ref JSON.Object, key: string, value: i64) {
     obj.set(key, value)
 }
 
@@ -18,12 +18,12 @@ fn add_field(obj: ref JSON.Object, key: string, value: int) {
 fn test_object_mutation_in_function() {
     var obj: JSON.Object = JSON.parseObject("{}")
     add_field(ref obj, "added", 123)
-    assert_eq(JSON.require<int>(obj, ["added"]), 123)
+    assert_eq(JSON.require<i64>(obj, ["added"]), 123)
 }
 
 @test
 fn test_nested_mutation() {
     var root = JSON.parseValue("{\"child\":{\"value\":1}}")
     JSON.set(root, ["child", "value"], 99)
-    assert_eq(JSON.require<int>(root, ["child", "value"]), 99)
+    assert_eq(JSON.require<i64>(root, ["child", "value"]), 99)
 }

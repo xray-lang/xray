@@ -8,7 +8,7 @@ struct Outer {
 }
 
 struct Buf {
-    data: [byte; 4]
+    data: [u8; 4]
     bias: i32
 }
 
@@ -24,7 +24,7 @@ fn sum_buf(p: Buf) -> i32 {
     return (p.data[0] as i32) + (p.data[1] as i32) + p.bias
 }
 
-fn pick_buf(p: Buf, i: int) -> i32 {
+fn pick_buf(p: Buf, i: i64) -> i32 {
     return (p.data[i] as i32) + p.bias
 }
 

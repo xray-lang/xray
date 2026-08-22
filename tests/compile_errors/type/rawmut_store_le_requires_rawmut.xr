@@ -1,4 +1,4 @@
-fn write(src: Slice<byte>) {
+fn write(src: Slice<u8>) {
     unsafe {
         var p = src.ptr()
         p.storeLE<u16>(0, 1)

@@ -1,7 +1,7 @@
 // anchor: break-while-induction-parameter-bound
 // The exit bound arrives as a parameter, so no caller-side constant can be
 // folded into the loop before the exit is analysed.
-fn count_to(limit: int, ceiling: int) -> int {
+fn count_to(limit: i64, ceiling: i64) -> i64 {
     var i = 0
     var sum = 0
     while (i < ceiling) {

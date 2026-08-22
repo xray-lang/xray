@@ -3,9 +3,9 @@
 // and a multi-statement unsafe block. The VM (libffi + OP_PTR_LOAD/STORE) and
 // AOT (direct C call + inline *(T*)) backends must produce identical output.
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
-    fn memcpy(dst: MutPtr<byte>, src: Ptr<byte>, n: usize) -> MutPtr<byte>
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
+    fn memcpy(dst: MutPtr<u8>, src: Ptr<u8>, n: usize) -> MutPtr<u8>
 }
 
 var src = unsafe { malloc(4) }

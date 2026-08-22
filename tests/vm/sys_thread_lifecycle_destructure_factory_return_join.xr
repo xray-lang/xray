@@ -1,12 +1,12 @@
 import sys
 
-fn makeThread() -> Thread<int> {
-    return sys.Thread.spawn(fn() -> int {
+fn makeThread() -> Thread<i64> {
+    return sys.Thread.spawn(fn() -> i64 {
         return 42
     })
 }
 
-fn wrapThread() -> Thread<int> {
+fn wrapThread() -> Thread<i64> {
     return makeThread()
 }
 

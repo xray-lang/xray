@@ -5,17 +5,17 @@
 // print() uses, or they see an opaque reference and render a placeholder while
 // print() of the same slice renders elements correctly.
 
-fn describe(s: Slice<int>) -> int {
+fn describe(s: Slice<i64>) -> i64 {
     return len(s)
 }
 
 fn main() {
     var ints = [10, 20, 30, 40]
     var names = ["ab", "cd", "ef"]
-    var view: Slice<int> = ints[1:3]
+    var view: Slice<i64> = ints[1:3]
     var nview: Slice<string> = names[0:2]
-    var empty: Slice<int> = ints[2:2]
-    var whole: Slice<int> = ints[0:4]
+    var empty: Slice<i64> = ints[2:2]
+    var whole: Slice<i64> = ints[0:4]
 
     print(view)
     print(string(view))

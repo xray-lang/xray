@@ -12,4 +12,4 @@ unsafe {
     values.push(0)
 }
 patch(ref values)
-print(int(values[0]) + int(values[1]))
+print((values[0] as i64) + (values[1] as i64))

@@ -2,7 +2,7 @@
 // If-conversion: a diamond whose two arms only pick a value is the shape that
 // becomes a select. Every call below must produce a different answer for each
 // arm, so an oracle cannot be satisfied by a select that always yields one side.
-fn pick_larger(a: int, b: int) -> int {
+fn pick_larger(a: i64, b: i64) -> i64 {
     var r = 0
     if (a > b) {
         r = a
@@ -12,7 +12,7 @@ fn pick_larger(a: int, b: int) -> int {
     return r
 }
 
-fn label(a: int, b: int) -> int {
+fn label(a: i64, b: i64) -> i64 {
     var out = 0
     if (a > b) {
         out = 100

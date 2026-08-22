@@ -1,9 +1,9 @@
 @derive(JSON, Inspect)
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
-    constructor(x: int, y: int) {
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
@@ -16,5 +16,5 @@ fn make_point() -> Point {
 var p = make_point()
 print(p)
 var encoded = JSON.value(p)
-print(JSON.require<int>(encoded, ["x"]))
-print(JSON.require<int>(encoded, ["y"]))
+print(JSON.require<i64>(encoded, ["x"]))
+print(JSON.require<i64>(encoded, ["y"]))

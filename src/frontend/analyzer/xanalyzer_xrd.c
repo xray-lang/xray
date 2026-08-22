@@ -154,8 +154,8 @@ static bool xrd_validate_signature_types(const char *signature) {
     }
     for (size_t i = 0; i < sizeof(removed_byte_aliases) / sizeof(removed_byte_aliases[0]); i++) {
         if (xrd_signature_contains_token(signature, removed_byte_aliases[i])) {
-            xrd_set_error("XRD descriptor uses removed byte alias '%s'; use Array<byte> or "
-                          "Slice<byte> explicitly",
+            xrd_set_error("XRD descriptor uses removed byte alias '%s'; use Array<u8> or "
+                          "Slice<u8> explicitly",
                           removed_byte_aliases[i]);
             return false;
         }
@@ -163,7 +163,7 @@ static bool xrd_validate_signature_types(const char *signature) {
     return true;
 }
 
-// Parse handle fields from "{ const fd: int, const type: string }"
+// Parse handle fields from "{ const fd: i64, const type: string }"
 static bool parse_handle_fields(const char *p, XaBuiltinHandleField **out_fields, int *out_count) {
     if (out_fields)
         *out_fields = NULL;

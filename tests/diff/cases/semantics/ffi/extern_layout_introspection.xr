@@ -6,7 +6,7 @@ struct CScalar {
 }
 
 struct CPointer {
-    next: Ptr<byte>
+    next: Ptr<u8>
 }
 
 struct CArray {
@@ -22,7 +22,7 @@ struct M3FuncType {
 struct CHeader {
     tag: u8
     count: u32
-    next: Ptr<byte>
+    next: Ptr<u8>
     samples: [u16; 3]
 }
 

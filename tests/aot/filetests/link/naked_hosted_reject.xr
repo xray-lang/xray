@@ -2,7 +2,7 @@ extern "C" {
     fn xray_naked_stub()
 }
 
-fn answer() -> int {
+fn answer() -> i64 {
     return 42
 }
 

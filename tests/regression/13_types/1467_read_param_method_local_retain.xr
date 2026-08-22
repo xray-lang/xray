@@ -1,19 +1,19 @@
 class Holder {
-    items: Array<Array<int>>
+    items: Array<Array<i64>>
 
     constructor() {
         this.items = []
     }
 
-    stash(value: Array<int>) {
+    stash(value: Array<i64>) {
         this.items.push(value)
     }
 }
 
-fn stash(data: Array<int>, holder: ref Holder) {
+fn stash(data: Array<i64>, holder: ref Holder) {
     holder.stash(data)
 }
 
-var values: Array<int> = [1, 2, 3]
+var values: Array<i64> = [1, 2, 3]
 var holder = Holder()
 stash(values, ref holder)

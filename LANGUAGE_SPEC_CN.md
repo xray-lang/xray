@@ -114,7 +114,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 
 ## 1. 词法结构 (Lexical Structure)
 
-> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（关键字表，66 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
+> 真值源：`src/frontend/lexer/xlex.h`（token 枚举）、`src/frontend/lexer/xkeywords.def`（通用关键字表，52 条）、`src/shared/xr_exact_scalar_registry.def`（exact 标量关键字表，12 条）、`src/frontend/lexer/xlex.c`（扫描器实现）。
 
 ### 1.1 字符编码
 
@@ -128,7 +128,7 @@ xray 源文件**必须**是合法 UTF-8。scanner 在产生首个 token 前对�
 
 **空白字符**：空格 (`U+0020`)、水平制表符 (`U+0009`)、行结尾。空白用于分隔 token，不传递语义。
 
-**唯一的空白敏感规则**：`<` 是否引入泛型实参列表，取决于它**前面**是否有空白。`f<T>(x)` 是带显式类型实参的调用，`f < T` 是比较。连续 `>` 的拆分**不**依赖空白：`Array<Array<int>>` 与 `Array<Array<int> >` 完全等价，由语法位置而非空白决定。
+**唯一的空白敏感规则**：`<` 是否引入泛型实参列表，取决于它**前面**是否有空白。`f<T>(x)` 是带显式类型实参的调用，`f < T` 是比较。连续 `>` 的拆分**不**依赖空白：`Array<Array<i64>>` 与 `Array<Array<i64> >` 完全等价，由语法位置而非空白决定。
 
 #### 1.2.1 语句边界
 
@@ -258,14 +258,14 @@ xray 共 **64 个保留关键字**，按用途分组如下：
 
 #### 1.5.6 类型名（保留）
 
-`int` `i8` `i16` `i32` `i64` `byte` `u8` `u16` `u32` `u64`
-`float` `f32` `f64` `bool` `string` `rune`
+`i8` `i16` `i32` `i64` `u8` `u16` `u32` `u64` `isize` `usize`
+`f32` `f64` `bool` `string` `rune`
 
 类型注解中写 `unknown` 会被解析器拒绝；它不是词法关键字，表达式位置仍可作为普通标识符使用。
 
 > **注意**：以下名字**不是**词法关键字，而是 `stdlib/prelude/builtin_symbols.def` 自动引入的类型符号：
 > `Array` · `Atomic` · `BigInt` · `Channel` · `JSON` · `Map` · `NetConn` · `NetListener` · `OsBarrier` · `OsCondvar` · `OsMutex` · `OsOnce` · `OsRwLock` · `PanicInfo` · `Path` · `Range` · `Regex` · `Set` · `Slice` · `StringBuilder` · `Thread`。
-> `Array<byte>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
+> `Array<u8>` 是 `Array` 的特化而不是独立名字。`DateTime`、`Logger` 等模块类型必须从对应模块显式 import。
 > 这些名字**不可被重新声明**：`class Array {}`、`enum TaskResult {}`、`interface Stringable {}` 一律是编译错误。
 > 完整的保留集是该注册表的全部条目（类型、枚举、约束接口），不止上面列出的 prelude 类型；
 > 标准库自身对它们的声明是这些名字的**定义**，不受此限制。
@@ -303,9 +303,9 @@ BinLit ::= '0b' BinDigit (BinDigit | '_')*
 ```
 
 - 千位分隔符 `_` 仅用于可读性，可出现在数字之间任意位置。
-- 无唯一数值上下文的整数字面量默认类型为 `int`（= `i64`）。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
-- 范围：默认 `int` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
-- 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `int` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
+- 无唯一数值上下文的整数字面量默认类型为 `i64`。后缀 `n` 转为 `BigInt`（见 §1.6.3）。
+- 范围：默认 `i64` 上下文为 `[-(2^63), 2^63 - 1]`；溢出在编译期检测。
+- 当整数字面量直接出现在唯一数值上下文（变量初始化、赋值、参数、返回值、集合元素或另一已定型数值操作数）时，字面量直接取得目标类型，而不是先构造 `i64` 再转换。整数目标必须能表示该值；浮点目标必须能精确表示该值。否则编译器拒绝，并要求用显式 `as` 表达截断、符号变化或舍入意图。
 
 ```xray
 42
@@ -324,7 +324,7 @@ FloatLiteral ::= Digit+ '.' Digit* Exp?
 Exp ::= ('e' | 'E') ('+' | '-')? Digit+
 ```
 
-字面量类型为 `float`（= `f64`，IEEE-754 双精度）。
+字面量类型为 `f64`（IEEE-754 双精度）。
 
 ```xray
 3.14
@@ -419,7 +419,7 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```
 
 - 无 prefix / `r` 产生合法 UTF-8 `string`；无 prefix 处理 escape，`r` 保留反斜杠原文。
-- `b/br` 产生 `[byte; L]`；`c/cr` 产生 `[byte; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
+- `b/br` 产生 `[u8; L]`；`c/cr` 产生 `[u8; L+1]` 并自动追加 NUL。`b/c` 处理 escape，`br/cr` 保留原始 bytes。
 - `${...}` 只在无 prefix / `r` 中插值；在 `b/br/c/cr` 中永远是普通 payload bytes。
 - 只接受无 prefix、`r`、`b`、`br`、`c`、`cr`；`rb/rc` 不是 alias。prefix 必须无空格紧接 quote run。
 - `c/cr` 在 escape、换行规范化与 margin 移除后拒绝任何 interior NUL。
@@ -427,9 +427,9 @@ BlockClose ::= LineStart Indent SameQuoteRun (LineEnding | EOF)
 ```xray
 "Hello, ${name}!"
 r"C:\\path\\${name}"   // 反斜杠原样，仍插值
-b"\\x89PNG"              // escaped [byte; 4]
+b"\\x89PNG"              // escaped [u8; 4]
 br"${HOME}\\bin"         // raw bytes；`${HOME}` 不插值
-c"puts"                   // [byte; 5]，最后一项是 appended NUL
+c"puts"                   // [u8; 5]，最后一项是 appended NUL
 cr"C:\\assets"           // raw C bytes + appended NUL
 ```
 
@@ -556,7 +556,7 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | `?[` | 可选链索引 (`arr?[0]`) |
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
-| `\|` | union 类型 (`int \| string`) / 位或 |
+| `\|` | union 类型 (`i64 \| string`) / 位或 |
 | `->` | 统一箭头：函数返回类型、闭包、`match` / `select` 分支；函数类型以 `fn` 引导（`fn(T) -> R`），返回 unit 时省略箭头（`fn(T)`） |
 | `...` | rest / spread |
 | `..` | 半开范围 (`0..10`) |
@@ -611,10 +611,10 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 类别 | 示例 |
 |--|--|
-| Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
-| 精确整数 | `i8`、`i16`、`i32`、`i64`、`byte`..`u64` |
+| Primitive | `i64`、`f64`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
+| 精确整数 | `i8`、`i16`、`i32`、`i64`、`u8`..`u64` |
 | 精确浮点 | `f32`、`f64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
 | Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
@@ -721,33 +721,33 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 #### 2.3.1 整数类型
 
-| 类型 | 范围 | 别名 |
+| 类型 | 范围 | 默认角色 |
 |--|--|--|
 | `i8` | `[-128, 127]` | — |
 | `i16` | `[-32768, 32767]` | — |
 | `i32` | `[-2³¹, 2³¹-1]` | — |
-| `i64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
-| `byte`..`u64` | 无符号对应 | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | 默认整数类型 |
+| `u8`..`u64` | 无符号对应 | — |
 
-- 无唯一数值上下文的整数字面量默认 `int`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`byte + byte -> byte`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
-- 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
-- `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
+- 无唯一数值上下文的整数字面量默认 `i64`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`u8 + u8 -> u8`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
+- 静态类型为 `u8`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- `i64` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `i64` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
 
 #### 2.3.2 浮点类型
 
 | 类型 | 标准 |
 |--|--|
 | `f32` | IEEE-754 单精度 |
-| `f64` | IEEE-754 双精度；`float` 的别名 |
+| `f64` | IEEE-754 双精度；默认浮点类型 |
 
-字面量默认 `float`。
+字面量默认 `f64`。
 
 #### 2.3.3 `bool`
 
-`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: int = true`，也不能 `var b: bool = 1`）。
+`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: i64 = true`，也不能 `var b: bool = 1`）。
 
 **条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
@@ -756,7 +756,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `bool` | 允许 | 直接布尔判断 |
 | `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
+| `i64` / `f64` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
@@ -799,7 +799,7 @@ print(smile.toUInt32())   // 128512
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
 - `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
-- 显式转换：`int(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
 #### 2.3.6 Unit `()`（无返回值）
@@ -831,8 +831,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(4) }
@@ -856,8 +856,8 @@ unsafe {
 有序可变数组。详见 §14.7。
 
 ```xray
-var a: Array<int> = [1, 2, 3]
-var b = [1, 2, 3]                // 推断为 Array<int>
+var a: Array<i64> = [1, 2, 3]
+var b = [1, 2, 3]                // 推断为 Array<i64>
 var c: Array<string> = []         // 显式空数组
 ```
 
@@ -872,10 +872,10 @@ var c: Array<string> = []         // 显式空数组
 定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和引用容器等元素类型，因此可以递归组合：
 
 ```xray
-var bytes: [byte; 4] = [1, 2, 3, 4]
-var zero: [byte; 64] = [0; 64]
+var bytes: [u8; 4] = [1, 2, 3, 4]
+var zero: [u8; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
@@ -883,21 +883,21 @@ var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
 
 ```xray
-var data: [byte; 4] = [5, 6, 7, 8]
-var view: Slice<byte> = data[1:4]
+var data: [u8; 4] = [5, 6, 7, 8]
+var view: Slice<u8> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [byte; 4]
-    payload: [byte; 128]
+    magic: [u8; 4]
+    payload: [u8; 128]
 }
 
-var key: [byte; 4] = [1, 2, 3, 4]
+var key: [u8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> byte {
+fn first(packet: Packet) -> u8 {
     return packet.magic[0]
 }
 ```
@@ -924,19 +924,19 @@ fn first(packet: Packet) -> byte {
 |--|--|--|
 | `array[start:end]` | `Slice<T>` | owner 是 `Array<T>` |
 | `fixedArray[start:end]` | `Slice<T>` | owner 是 `[T; N]` |
-| `str.bytes()` | `Slice<byte>` | owner 是 `string` 的 UTF-8 字节存储 |
+| `str.bytes()` | `Slice<u8>` | owner 是 `string` 的 UTF-8 字节存储 |
 
 ```xray
-var arr: Array<int> = [10, 20, 30, 40]
-var view: Slice<int> = arr[1:3]      // OK：借用 arr
-var all: Slice<int> = arr[:]         // 全长视图，不是拷贝
+var arr: Array<i64> = [10, 20, 30, 40]
+var view: Slice<i64> = arr[1:3]      // OK：借用 arr
+var all: Slice<i64> = arr[:]         // 全长视图，不是拷贝
 var bad = arr[1:3]                   // E0365：切片结果需要显式目标类型
 ```
 
 owner 必须是**具名的局部变量、参数或 receiver 上的字段路径**。不能借用临时值：
 
 ```xray
-var view: Slice<byte> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
+var view: Slice<u8> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
 ```
 
 ##### 能力
@@ -948,13 +948,13 @@ var view: Slice<byte> = makeBytes()[0:2]   // E0384：不能从临时 owner 创�
 
 ```xray
 fn main() {
-    var arr: Array<int> = [10, 20, 30, 40]
-    var view: Slice<int> = arr[1:3]        // 借用视图，不是拷贝
+    var arr: Array<i64> = [10, 20, 30, 40]
+    var view: Slice<i64> = arr[1:3]        // 借用视图，不是拷贝
     view[1] = 31
     print(arr[2])                          // 31 —— 写穿到 owner
     arr[1] = 21
     print(view[0])                         // 21 —— owner 的元素写入对视图立即可见
-    var owned: Array<int> = copy(arr[1:3]) // 独立的 Array<T>
+    var owned: Array<i64> = copy(arr[1:3]) // 独立的 Array<T>
     arr.push(50)                           // OK：此处没有存活的视图
     print(len(owned))
 }
@@ -973,15 +973,15 @@ main()
 
 ```xray
 fn ok() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     print(len(view))                 // view 的最后一次使用
     bytes.push(3)                    // OK：借用已结束（规则 3）
 }
 
 fn rejected() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     bytes.push(3)                    // E0382：view 仍存活
     print(len(view))
 }
@@ -994,19 +994,19 @@ fn rejected() {
 来源不唯一、或借自函数的局部值时，是编译错误 `E0384`：
 
 ```xray
-fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
     return data[start:]              // OK：唯一来源是参数 data
 }
 
-fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
     if (useA) {
         return a
     }
     return b                         // E0384：多来源
 }
 
-fn alsoBad() -> Slice<int> {
-    var local: Array<int> = [1, 2]
+fn alsoBad() -> Slice<i64> {
+    var local: Array<i64> = [1, 2]
     return local[:]                  // E0384：借自局部值
 }
 ```
@@ -1016,7 +1016,7 @@ fn alsoBad() -> Slice<int> {
 需要让数据活过 owner，或需要把它放进长生命周期存储时，用 `copy` 把视图物化为独立的 owner：
 
 ```xray
-var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
+var owned: Array<i64> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
 ```
 
 `copy(slice)` 的结果类型是 `Array<T>`，不是 `Slice<T>`；它是唯一能把借用数据变成拥有数据的构造。
@@ -1032,7 +1032,7 @@ var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
 **Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
 
 ```xray
-var m: Map<string, int> = #{"a": 1, "b": 2}
+var m: Map<string, i64> = #{"a": 1, "b": 2}
 var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // 空 Map
 
@@ -1049,14 +1049,14 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> int` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> i64` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.4 `Set<T>`
 
 去重集合。详见 §14.9。
 
 ```xray
-var s: Set<int> = #[1, 2, 3]
+var s: Set<i64> = #[1, 2, 3]
 ```
 
 #### 2.4.5 `Channel<T>`
@@ -1064,16 +1064,16 @@ var s: Set<int> = #[1, 2, 3]
 协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
-#### 2.4.6 `Array<byte>`
+#### 2.4.6 `Array<u8>`
 
-类型化字节缓冲。语义等价 `Array<byte>`，但底层是连续内存。
+类型化字节缓冲。语义等价 `Array<u8>`，但底层是连续内存。
 
 ```xray
-var buf = Array<byte>(1024)
-var init = Array<byte>([72, 101, 108, 108, 111])
+var buf = Array<u8>(1024)
+var init = Array<u8>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
@@ -1095,7 +1095,7 @@ var age = 30
 var user = { name, age }                  // 等价 { name: name, age: age }
 
 // Map 字面量：`#{}` 前缀 + `:`
-var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, i64>
 var data: JSON.Object = #{"name": "Alice", "age": 30}
 data["traceId"] = "req-1"               // 动态键只属于 Map
 ```
@@ -1113,7 +1113,7 @@ data["traceId"] = "req-1"               // 动态键只属于 Map
 **对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
 
 ```xray
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
@@ -1181,14 +1181,14 @@ for (i in 3..=5) {
 `T?` 是 `T | null` 的语法糖。
 
 ```xray
-var x: int? = null      // OK
-var y: int? = 42        // OK
-var z: int = null       // 编译错误：null 不是 int
+var x: i64? = null      // OK
+var y: i64? = 42        // OK
+var z: i64 = null       // 编译错误：null 不是 i64
 ```
 
 `JSON.Value` 本身包含 `null`，因此 `JSON.Value?` 与 `JSON.Value | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
 
-**可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
+**可空原始类型一等公民**：`i64?` / `f64?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
 > `bool?` 是三态（`true` / `false` / `null`）。它合法，但**不能直接作条件**（裸 `if (b)` where `b: bool?` 是编译错误，见 §5 / 任务 128）；需显式写 `b == true` / `b != null` / `b ?? false`。
 
@@ -1202,13 +1202,13 @@ var v = x ?? 0
 var city = user?.address.city
 
 // 3. 强制解包
-var v: int = x!           // 若 x 为 null，运行时 panic NullError
+var v: i64 = x!           // 若 x 为 null，运行时 panic NullError
 
 // 4. 流敏感收窄（完整规则见 §2.13）
 if (x != null) {
-    print(x + 1)          // 此分支内 x 已收窄为 int
+    print(x + 1)          // 此分支内 x 已收窄为 i64
 }
-if (x is int) {
+if (x is i64) {
     print(x + 1)
 }
 ```
@@ -1216,20 +1216,20 @@ if (x is int) {
 ### 2.6 Union 类型
 
 ```xray
-var v: int | string = 42
+var v: i64 | string = 42
 v = "hello"             // OK
 ```
 
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
 - 成员互不为彼此的子类型（否则会被规范化）。
-- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | float` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
+- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
 ```xray
-var v: int | string = ...
+var v: i64 | string = ...
 match v {
-    is int    -> print("int: ${v}"),
+    is i64    -> print("i64: ${v}"),
     is string -> print("str: ${v}"),
 }
 ```
@@ -1241,8 +1241,8 @@ match v {
 - 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
 
 ```xray
-var a: int | float = 1        // 精确匹配 int
-var b: int | float = 1.0      // 精确匹配 float
+var a: i64 | f64 = 1        // 精确匹配 i64
+var b: i64 | f64 = 1.0      // 精确匹配 f64
 var c: i32 | string = 7       // 唯一整数族成员：i32
 var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 ```
@@ -1250,8 +1250,8 @@ var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 `is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
 
 **特殊化**：
-- `int | null` 规范化为 `int?`。
-- `T?` 出现在 union 时：`int? | string` 实际等价 `int | string | null`，规范化为 `(int | string)?`。
+- `i64 | null` 规范化为 `i64?`。
+- `T?` 出现在 union 时：`i64? | string` 实际等价 `i64 | string | null`，规范化为 `(i64 | string)?`。
 
 ### 2.7 元组类型
 
@@ -1259,12 +1259,12 @@ xray 的元组**是头等公民**——可以作为任意值出现、作为字�
 
 ```xray
 // 字面量
-var t = (1, 2, 3)                 // 类型推断为 (int, int, int)
+var t = (1, 2, 3)                 // 类型推断为 (i64, i64, i64)
 var h = (10, "hi", true)          // 异构元组
 var single = (99,)                // 单元素元组：注意尾逗号
 
 // 类型注解
-var p: (int, string) = (7, "ok")
+var p: (i64, string) = (7, "ok")
 
 // 字段访问：.N（N 是编译期常量整数下标）
 var first = t.0                   // 1
@@ -1274,12 +1274,12 @@ var a     = nest.0.0              // 1
 var b     = nest.1.1              // 4
 
 // 函数返回与解构
-fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
+fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }
 var (q, r) = divmod(17, 5)        // tuple destructure
 
 // 泛型
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-var p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (i64, string)
 ```
 
 **注意事项**：
@@ -1306,9 +1306,9 @@ main()
 ### 2.8 类型别名
 
 ```xray
-type Result = int | string
-type Mapper = fn(int) -> int
-type Point = { x: float, y: float }
+type Result = i64 | string
+type Mapper = fn(i64) -> i64
+type Point = { x: f64, y: f64 }
 type Pair<T> = { first: T, second: T }
 type Mapper2<T, U> = fn(T) -> U
 ```
@@ -1316,26 +1316,26 @@ type Mapper2<T, U> = fn(T) -> U
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
 ```xray
-var p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
-var f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) -> string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
 
-**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref int) -> int`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> int)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
+**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
 ### 2.9 类型推断
 
 详见 §7.4。简述：
 
 ```xray
-var x = 1               // x: int
-var y = 1.5             // y: float
+var x = 1               // x: i64
+var y = 1.5             // y: f64
 var z = "hello"         // z: string
-var a = [1, 2, 3]       // a: Array<int>
-var m = #{"a": 1}    // m: Map<string, int>
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回类型推断
+var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -1344,16 +1344,16 @@ var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回�
 
 | 源 | 目标 | 允许与条件 |
 |--|--|--|
-| `T` | `T`（含 `int`=`i64`、`float`=`f64`） | ✅ identity |
+| `T` | `T` | ✅ identity |
 | `i8 → i16 → i32 → i64` | 链上更宽的类型 | ✅ 无损加宽 |
-| `u8/byte → u16 → u32 → u64` | 链上更宽的类型 | ✅ 无损加宽 |
-| `f32` | `f64`（=`float`） | ✅ 无损加宽 |
+| `u8 → u16 → u32 → u64` | 链上更宽的类型 | ✅ 无损加宽 |
+| `f32` | `f64` | ✅ 无损加宽 |
 | 整数字面量 | 唯一整数 / 浮点上下文 | ✅ 直接定型；目标整数可表示，或目标浮点精确可表示 |
 | 已定型整数 | 不同符号、较窄或 `isize`/`usize` 与固定宽度之间 | ❌ 必须显式 `as` |
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
+| `i64` / `f64` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
 | 复合类型 | `JSON.Value` | ❌ 必须写 `JSON.value(value)`，并满足 `JSON.Encodable` |
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
 | `null` | `T?` | ✅ |
@@ -1369,7 +1369,7 @@ var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回�
 > fn nameOf<T: User>(value: T) -> string { return value.name }
 > print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
 >
-> type Opt = { name: string, age: int? }
+> type Opt = { name: string, age: i64? }
 > var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
 
@@ -1378,12 +1378,12 @@ var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回�
 #### 2.10.2 显式 `as`
 
 ```xray
-var n = x as int        // 失败抛 TypeError
-var n = x as int?       // 失败返回 null（安全转换）
+var n = x as i64        // 失败抛 TypeError
+var n = x as i64?       // 失败返回 null（安全转换）
 ```
 
 适用于：
-- 数值之间（含 `JSON.Value → int`，运行时检查）。
+- 数值之间（含 `JSON.Value → i64`，运行时检查）。
 - `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
 - 父类 → 子类（向下转）。
 
@@ -1404,13 +1404,13 @@ if (v is User) {
 ### 2.11 typeOf / typeName / Type 枚举
 
 ```xray
-typeOf(value)     // 返回 Type 枚举值（int 表示）
+typeOf(value)     // 返回 Type 枚举值（i64 表示）
 typeName(value)   // 返回类型名字符串
 ```
 
 `Type` 枚举成员：
 
-`Type.int`、`Type.float`、`Type.string`、`Type.bool`、`Type.null`、
+`Type.i64`、`Type.f64`、`Type.string`、`Type.bool`、`Type.null`、
 `Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
@@ -1495,7 +1495,7 @@ fn check(a: string?) -> bool {
 **N-8（早返回）** 当分支必然终止（`return` / `throw` / `break` / `continue`），其后的代码继承该条件的相反方向事实：
 
 ```xray
-fn nameLen(s: string?) -> int {
+fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // 此处 s 已收窄为 string
 }
@@ -1618,7 +1618,7 @@ fn rejected() {
 ```xray
 fn rejected() {
     var buf = [1, 2, 3]
-    const peek = fn() -> int { return len(buf) }
+    const peek = fn() -> i64 { return len(buf) }
     go consume(move buf)       // E0382：closure capture 'peek' is active
     print(peek())
 }
@@ -1628,8 +1628,8 @@ fn rejected() {
 
 ```xray
 fn ok() {
-    var buf: Array<int> = []
-    items.forEach(fn(x: int) { buf.push(x) })   // 调用边界内的捕获
+    var buf: Array<i64> = []
+    items.forEach(fn(x: i64) { buf.push(x) })   // 调用边界内的捕获
     consume(move buf)                            // OK
 }
 ```
@@ -1683,9 +1683,9 @@ fn main() {
     nums.push(4)
     print(nums)          // => [1, 2, 3, 4]
     print(len(nums))     // => 4
-    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
     print(doubled)       // => [2, 4, 6, 8]
-    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
     print(evens)         // => [2, 4]
 }
 
@@ -1701,7 +1701,7 @@ fn main() {
     print(scores.get("alice") ?? 0)   // => 95
     print(len(scores))                 // => 3
 
-    var seen = Set<int>()
+    var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
@@ -1762,12 +1762,12 @@ xray 的求值顺序**完全确定**：语言不存在未指定（unspecified）
 **E11（语句）**：语句按源码顺序求值。`defer` 在注册处建立静态 cleanup 边，块内外部绑定在 cleanup 执行时读取；执行时机见 §4.9。
 
 ```xray
-fn t(tag: string, v: int) -> int { print(tag); return v }
-fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
 
 class Counter {
-    hits: int = 0
+    hits: i64 = 0
 }
 
 fn mk(tag: string) -> Counter { print(tag); return Counter() }
@@ -1835,8 +1835,8 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(1) }      // 块的最后一个表达式作为结果
@@ -1855,7 +1855,7 @@ unsafe {
 
 ```xray
 const SCALE = comptime 8 * 4
-var buf: [byte; comptime SCALE + 2] = [0; SCALE + 2]
+var buf: [u8; comptime SCALE + 2] = [0; SCALE + 2]
 ```
 
 `comptime { ... }` 已实现受限解释执行。块支持局部 `const`/`var`、局部变量赋值和复合赋值、`if`/`while`、C 风格 `for`、定长数组 `for-in`、循环内带标签或不带标签的 `break`/`continue`、`compile_assert(...)` 与 `compile_error(...)`。块只产生编译期副作用并在运行时被擦除；需要把值带出块时使用 `return <consteval-expression>`。当前函数调用不属于 consteval-safe 表达式，unsupported 语句会在分析期拒绝。
@@ -1897,13 +1897,13 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 “可无损加宽”仅指同符号整数链和 `f32 → f64`。一个直接数值字面量可由另一已定型操作数取得唯一上下文；两个已定型操作数不存在 C 风格 usual arithmetic conversions。
 
 **特殊语义**：
-- `int / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
-- `int % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
-- 结果类型为 `float`/`f32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
-- `%` 仅接受整数操作数；静态类型包含 float 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
+- `i64 / 0` → 运行时抛 `XR_ERR_DIV_BY_ZERO` (E0420)。
+- `i64 % 0` → 运行时抛 `XR_ERR_MOD_BY_ZERO` (E0421)。
+- 结果类型为 `f64`/`f32` 的除法遵循 IEEE-754：`1.0 / 0.0` 产生 `+inf`，`-1.0 / 0.0` 产生 `-inf`，`0.0 / 0.0` 产生 `NaN`；可用 `x.isNaN()` 或 `math.isNaN(x)` 检测 NaN。
+- `%` 仅接受整数操作数；静态类型包含 f64 的求模（如 `5.0 % 2.0`）在分析期编译错误。运行时 `XR_ERR_TYPE_MISMATCH` (E0404) 仅作为动态兜底。
 - 整数溢出：见 §2.3.1。
 - 字符串 `+ string` 是 O(n) 拼接；密集拼接请用 `StringBuilder`。
-- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `int(c)`。
+- `rune` 是独立的 Unicode scalar 类型，不参与算术；需要码点时显式写 `i64(c)`。
 
 #### 3.3.2 位运算
 
@@ -1911,9 +1911,9 @@ BinOp ::= '+' | '-' | '*' | '/' | '%'
 
 - 仅作用于整数类型。
 - 移位计数取模 64（与 C 不同：xray 总是定义的）。
-- `>>` 是**算术右移**（保留符号位）。无符号类型用对应的 `uintN`。
+- `>>` 是**算术右移**（保留符号位）。无符号类型使用对应的 exact 类型（`u8` / `u16` / `u32` / `u64`）。
 - bool 不参与位运算（用 `&&` `||`）。
-- `rune` 不参与位运算；需要码点时显式写 `int(c)`。
+- `rune` 不参与位运算；需要码点时显式写 `i64(c)`。
 
 #### 3.3.3 比较运算符
 
@@ -2014,7 +2014,7 @@ var road = user?.address.street // 整链短路：user 为 null 时结果为 nul
 #### 强制解包 `expr!`
 
 ```xray
-var v: int = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
+var v: i64 = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
 ```
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
@@ -2037,7 +2037,7 @@ if (v is User) {
 - 结果类型 `bool`。
 - **类型守卫**：`v` 是简单绑定时，分析器按 §2.13 N-4 / N-6 在 true 分支把 `v` 收窄为与 `T` 的交，在 false 分支移除该交集。
 - 适用于 union、可空、class 层级与 `JSON.Value` 运行期类别检查。
-- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is int` / `is float` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
+- **定宽数值类型**：动态擦除后的值只保留 i64 / f64 两个族，不保留位宽，因此 `v is i32` 问的是"该值能否被 `i32` 精确表示"——这是擦除后唯一可回答的形式。`is i64` / `is f64` 对整个族恒为真；`v as T?` 用同一个判定，不通过时返回 `null`。
 
 #### `as` 类型转换
 
@@ -2047,8 +2047,8 @@ AsExpr ::= UnaryExpr 'as' Type
 ```
 
 ```xray
-var n = v as int           // 失败抛 TypeError
-var n = v as int?          // 失败返回 null（"as nullable" 安全形式）
+var n = v as i64           // 失败抛 TypeError
+var n = v as i64?          // 失败返回 null（"as nullable" 安全形式）
 ```
 
 | 形式 | 失败行为 | 用途 |
@@ -2080,7 +2080,7 @@ for (i in 0..=n) { print(i) }
 for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 ```
 
-- 类型 `Range`（仅 int 范围）。
+- 类型 `Range`（仅 i64 范围）。
 - **优先级（见 §3.1）**：`..` / `..=` 比所有算术运算符（`* / % + - << >>`）都松，故端点先结合——`0..n+1` 是 `0..(n+1)`，`1..2*3` 是 `1..(2*3)`；它比比较与逻辑运算符紧，故 `0..n == 0..m` 是 `(0..n) == (0..m)`。
 - **非结合**：范围不能链式书写，`a..b..c` 是语法错误；确需嵌套时给端点加括号。
 - `a..b` 是半开区间 `[a, b)`：`a` 包含、`b` 不包含。
@@ -2091,7 +2091,7 @@ for (i in 0..n+1) { print(i) }   // 端点先算：0..(n+1)
 #### 展开 `...`
 
 仅在以下位置使用：
-- **函数 rest 参数声明**：`fn f(...args: int)`
+- **函数 rest 参数声明**：`fn f(...args: i64)`
 - **函数调用展开**：`f(...args)`，展开源必须是静态 arity 已知的 tuple。
 - **tuple 字面量展开**：`(head, ...tail)`，展开源必须是静态 arity 已知的 tuple。
 - **数组字面量展开**：`[...a, x, ...b]`，展开源必须是数组，运行期拼接成新数组（O(n)）。
@@ -2117,8 +2117,8 @@ ArrayElem ::= '...' Expr | Expr
 
 ```xray
 var a = [1, 2, 3]
-var empty: Array<int> = []
-var mixed = [1, "hello"]    // 类型 Array<int | string>
+var empty: Array<i64> = []
+var mixed = [1, "hello"]    // 类型 Array<i64 | string>
 ```
 
 #### Map `#{k: v, ...}` 与 `#{}`
@@ -2166,14 +2166,14 @@ var obj = { users }              // shorthand
 - 对象字面量不因期望类型变成动态对象；typed 复合值进入 JSON 边界使用 `JSON.value(value)`，动态 object 使用 `JSON.Object` / Map。
 - 用 `type` 别名命名 structural object：`var u: User = {...}`（编译期检查字段集，密封）。
 
-#### Array<byte> `Array<byte>(...)`
+#### Array<u8> `Array<u8>(...)`
 
 详见 §2.4.6 与 §14.5。
 
 #### Channel `Channel<T>(buf?)`
 
 ```xray
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
 详见 §10.5。
@@ -2221,11 +2221,11 @@ IndexAccess ::= Primary '[' Expr ']'
 arr[0]
 arr[0] = 10
 map["key"]
-var bytes: Slice<byte> = text.bytes()
+var bytes: Slice<u8> = text.bytes()
 bytes[i]                // 显式 byte 视图索引
 ```
 
-- `Array` 索引：`int`，越界抛 `E0430`。
+- `Array` 索引：`i64`，越界抛 `E0430`。
 - `Map` 索引：键类型；找不到键 → `E0431`。
 - `string` 整数索引：编译错误；使用 `runes().nth(i)` 或 `bytes()[i]` 显式选择单位。
 - 自定义类：通过 `operator[]` 重载。
@@ -2241,7 +2241,7 @@ arr[1:4]                // 元素 [1,4)
 arr[:3]                 // 前 3 个
 arr[2:]                 // 从索引 2 到末尾
 arr[:]                  // 全长视图（不是拷贝）
-var view: Slice<int> = arr[1:4]
+var view: Slice<i64> = arr[1:4]
 ```
 
 - 半开区间 `[start, end)`。
@@ -2268,14 +2268,14 @@ FnExpression  ::= 'fn' GenericParams? '(' ArrowParams? ')' ('->' Type)? Block
 ```xray
 // ── arrow lambda：每个参数都可独立标注或推断 ──
 arr.map(x -> x * 2)
-var add = (x: int, y) -> x + y
+var add = (x: i64, y) -> x + y
 
 // 表达式体隐式返回；ref 只授予可写借用，不会自动写回
-var calculate = (x: ref int) -> x * 2
-var doubleInPlace = (x: ref int) -> { x = x * 2 }
+var calculate = (x: ref i64) -> x * 2
+var doubleInPlace = (x: ref i64) -> { x = x * 2 }
 
 // ── fn lambda：显式返回类型、泛型或完整参数契约 ──
-var inc = fn(x: int) -> int {
+var inc = fn(x: i64) -> i64 {
     var y = x + 1
     return y
 }
@@ -2290,11 +2290,11 @@ var identity = fn<T>(x: T) -> T { return x }     // 泛型
 | fn lambda | `fn(x: T) -> R { ... }` / `fn<T>(...) { ... }` | 需要显式返回类型、泛型或完整声明式签名时选择 |
 
 **关键规则**：
-- arrow 参数的类型标注相互独立，可以混写 `(x: int, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
+- arrow 参数的类型标注相互独立，可以混写 `(x: i64, y) -> ...`；未标注参数综合绑定类型、调用点签名、容器元素类型和函数体约束推断。推断不足时报 `E0365`，可直接标注该参数、标注绑定、补充调用点类型上下文，或改写为显式签名的 `fn`。
 - 参数 mode 使用统一的后缀标注：`x: ref T`、`x: move T`。`(ref x) -> ...`、默认值和 rest 参数不是 arrow 语法；默认值和 rest 参数属于具名函数声明。
 - arrow 没有返回类型位置。`(x: T): R -> ...` 与 `(x: T) -> R { ... }` 都是错误；显式返回类型必须写成 `fn(x: T) -> R { ... }`。
 - `-> expr` 隐式返回表达式值。`-> { ... }` 支持多条语句，值返回必须写 `return value`；正常落到块尾返回 `()`，块尾表达式没有特殊的隐式返回语义。
-- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref int) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref int) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
+- `ref` 表示调用者提供可写借用，不表示自动写回：`(x: ref i64) -> x * 2` 只读取并返回乘积，调用者的值不变；`(x: ref i64) -> { x = x * 2 }` 原地修改调用者并返回 `()`。需要“修改并返回”时，在块中赋值后显式 `return x`。
 - 工具可对“源码显式写了 `ref`、函数体确定未修改该参数”的匿名函数给出非强制 hint。期望函数契约要求 `ref`、mode 来自推断或效果分析不完整时不提示；该提示不改变类型检查或运行时语义。
 - 捕获规则：见 §7.4。`go` 协程闭包消费统一的 provenance-based capture plan：inline、已发布 const 值与受审计同步句柄可直接捕获；execution-local graph、module-mutable state 和生命周期不足的 view/pointer 会被拒绝，必须通过参数显式 `copy(...)` / `move`。
 
@@ -2333,19 +2333,19 @@ ConstructExpr ::= Identifier TypeArgs? '(' ArgList? ')'
 
 ```xray
 var p = Point(1.0, 2.0)
-var arr = Array<int>()
-const ch = Channel<int>(10)
-var m = Map<string, int>()
+var arr = Array<i64>()
+const ch = Channel<i64>(10)
+var m = Map<string, i64>()
 ```
 
 **用于**：
 - 类与 struct 实例化（`TypeName(args)`）。
-- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<byte>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
+- 容器内置类型构造（`Array`/`Map`/`Set`/`Channel`/`Array<u8>`/`StringBuilder` 等，同样是 `TypeName(args)`）。
 - 消歧由 analyzer 按符号种类判定：类型名构造，函数名调用（命名约定：类型大写、函数小写）。
 
 **与字面量的关系**：
 ```xray
-var a = [1, 2, 3]              // 等价 Array<int>() + push
+var a = [1, 2, 3]              // 等价 Array<i64>() + push
 var m = #{}                    // 等价 Map<...>()
 var p = Point{x: 1, y: 2}      // struct literal
 ```
@@ -2450,7 +2450,7 @@ if (x > 0) {
 
 **约束**：
 - 条件**必须**用括号包裹（与 Go/Rust 不同）。
-- 条件必须是 `bool` 或 `T?`（`T != bool`）存在性检查；`bool?` 与裸 `int` / `string` / 集合等均为编译错误（见 §2.3.3）。
+- 条件必须是 `bool` 或 `T?`（`T != bool`）存在性检查；`bool?` 与裸 `i64` / `string` / 集合等均为编译错误（见 §2.3.3）。
 - 分支体必须是块 `{...}`，**不允许**单语句省略括号。
 - `if` 不是表达式；要表达式形式用三元 `? :` 或 `match`。
 
@@ -2543,7 +2543,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Map<K, V>` | key | (key, value) |
 | `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
-| `Range`（`a..b`） | int | — |
+| `Range`（`a..b`） | i64 | — |
 | 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
 | 含 payload 变体的 enum 类型 `E` | **编译错误**；使用 `E.variants` | — |
 | `EnumVariants<E>` | `EnumVariant<E>` 描述符（声明顺序） | — |
@@ -2620,11 +2620,11 @@ fn done() {
     return                 // 隐式返回 ()（Unit）
 }
 
-fn answer() -> int {
+fn answer() -> i64 {
     return 42
 }
 
-fn pair(a: int, b: int) -> (int, int) {
+fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // 多返回值，必须用括号包裹元组
 }
 ```
@@ -2646,7 +2646,7 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray
-enum AppError { NotFound, Timeout(ms: int) }
+enum AppError { NotFound, Timeout(ms: i64) }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
@@ -2737,7 +2737,7 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 综合 `if` / `match` / `for-in` 的控制流：
 
 ```xray
-fn classify(n: int) -> string {
+fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
         0 -> "zero"
@@ -2786,9 +2786,9 @@ ObjectBinding ::= Identifier (':' Identifier)?
 #### 5.1.1 `var` — 可变绑定
 
 ```xray
-var x = 1                         // 类型推断为 int
+var x = 1                         // 类型推断为 i64
 var name: string = "Alice"        // 显式类型
-var count: int                    // 仅声明无初值：使用零值
+var count: i64                    // 仅声明无初值：使用零值
 var maybeName: string?            // OK：默认 null
 var empty: string = ""            // string 必须显式初始化
 ```
@@ -2802,7 +2802,7 @@ var empty: string = ""            // string 必须显式初始化
 
 ```xray
 const PI = 3.14159
-const MAX_LEN: int = 1024
+const MAX_LEN: i64 = 1024
 ```
 
 - **必须**有初值。
@@ -2816,7 +2816,7 @@ const MAX_LEN: int = 1024
 - 新鲜可变图由编译器推断唯一所有权，不需要存储修饰符。`move` 要求源根唯一且无存活 alias/loan，成功后使源绑定失效；`copy` 保留源并显式构造独立图。
 
 ```xray
-const channel = Channel<int>(16)
+const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
@@ -2864,7 +2864,7 @@ AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 #### 5.2.1 基本形式
 
 ```xray
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
@@ -2872,7 +2872,7 @@ fn greet(name: string) -> () {         // 显式 Unit
     print("Hi ${name}")
 }
 
-fn echo(x: int) {                       // 省略返回类型 = ()
+fn echo(x: i64) {                       // 省略返回类型 = ()
     print(x)
 }
 ```
@@ -2885,7 +2885,7 @@ fn echo(x: int) {                       // 省略返回类型 = ()
 #### 5.2.2 默认参数值
 
 ```xray
-fn connect(host: string, port: int = 8080, tls: bool = false) {
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
 }
 
@@ -2902,17 +2902,17 @@ connect("localhost", 443, true)
 #### 5.2.3 多返回值
 
 ```xray
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
 var (q, r) = divmod(17, 5)
-var result = divmod(10, 3)        // result 类型 (int, int)
+var result = divmod(10, 3)        // result 类型 (i64, i64)
 ```
 
 **约束**：
-- 返回类型用括号包裹元组：`(int, bool)`。
-- 单返回值不写括号：`: int`。
+- 返回类型用括号包裹元组：`(i64, bool)`。
+- 单返回值不写括号：`: i64`。
 - `return (a, b)` 必须带括号；裸逗号 `return a, b` 是编译错误（`E0801`）。
 
 #### 5.2.4 参数模式
@@ -2921,12 +2921,12 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 `name: ref T`、`name: move T`。
 
 ```xray
-fn length_sq(v: Vec2) -> float {
+fn length_sq(v: Vec2) -> f64 {
     // v 默认只读；具体 ABI 可按值或按只读地址传递
     return v.x * v.x + v.y * v.y
 }
 
-fn translate(v: ref Vec2, dx: float, dy: float) -> () {
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
     // v 是可变引用（修改对调用方可见）
     v.x += dx
     v.y += dy
@@ -2953,7 +2953,7 @@ submit(makeJob())
 #### 5.2.5 rest 参数
 
 ```xray
-fn sum(...nums: int) -> int {
+fn sum(...nums: i64) -> i64 {
     var total = 0
     for (n in nums) { total += n }
     return total
@@ -2975,14 +2975,14 @@ fn main() { ... }
 ```
 
 - 顶层 `fn` 声明被提升到当前作用域顶部。
-- `var f = (x: int) -> x`（赋值给变量的箭头函数）**不**提升。
+- `var f = (x: i64) -> x`（赋值给变量的箭头函数）**不**提升。
 
 #### 5.2.7 尾递归优化
 
 Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
 
 ```xray
-fn factorial(n: int, acc: int = 1) -> int {
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环
 }
@@ -3009,8 +3009,8 @@ greet()                   // 必须显式调用
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
     fn cos(x: f64) -> f64
 }
 
@@ -3053,15 +3053,15 @@ print(mem.offsetOf<CHeader>("count"))
 ```xray
 extern "C" {
     fn bsearch(
-        key: Ptr<byte>,
-        base: Ptr<byte>,
+        key: Ptr<u8>,
+        base: Ptr<u8>,
         count: usize,
         size: usize,
-        cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>
-    ) -> Ptr<byte>
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
     return 0
 }
 
@@ -3132,13 +3132,13 @@ allow = []
 闭包捕获与高阶函数：
 
 ```xray
-fn apply(f: fn(int) -> int, x: int) -> int {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
 }
 
 fn main() {
     var base = 10
-    var addBase = fn(x: int) -> int { return x + base }   // 闭包捕获 base
+    var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
     print(addBase(5))            // => 15
     print(apply(addBase, 7))     // => 17（函数作为参数传入）
 }
@@ -3149,7 +3149,7 @@ main()
 多返回值（元组）：
 
 ```xray
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
@@ -3191,7 +3191,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```xray
 class Animal {
     name: string                       // 字段
-    private _age: int = 0              // 私有字段，可有默认值
+    private _age: i64 = 0              // 私有字段，可有默认值
 
     constructor(name: string) {
         this.name = name
@@ -3244,7 +3244,7 @@ class Dog extends Animal {
 | `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
 | `final` | 类声明前缀 | `final class C` 禁止继承；`final` 不用于字段或方法 |
 
-**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: int = 0`。
+**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: i64 = 0`。
 
 > `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
 
@@ -3252,9 +3252,9 @@ class Dog extends Animal {
 
 ```xray
 class Point {
-    x: float
-    y: float
-    constructor(x: float, y: float) {
+    x: f64
+    y: f64
+    constructor(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -3262,9 +3262,9 @@ class Point {
 
 // 参数类型可省（从同名字段推断）
 class Vector2 {
-    x: float
-    y: float
-    constructor(x, y) {         // 等价于显式写 (x: float, y: float)
+    x: f64
+    y: f64
+    constructor(x, y) {         // 等价于显式写 (x: f64, y: f64)
         this.x = x
         this.y = y
     }
@@ -3282,10 +3282,10 @@ class Vector2 {
 
 ```xray
 class Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    constructor(x: float, y: float) {
+    constructor(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -3297,7 +3297,7 @@ class Vec2 {
         return this.x == other.x && this.y == other.y
     }
 
-    operator[](index: int) -> float {
+    operator[](index: i64) -> f64 {
         if (index == 0) { return this.x }
         return this.y
     }
@@ -3317,11 +3317,11 @@ class Vec2 {
 
 ```xray
 class Counter {
-    n: int = 0
+    n: i64 = 0
     operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: int) -> Counter { this.n = this.n + other; return this }
-    operator[](i: int) -> int { return this.n + i }
-    operator[]=(i: int, v: int) { this.n = v - i }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
 }
 ```
 
@@ -3335,7 +3335,7 @@ class Counter {
 interface Iterator<T> {
     hasNext() -> bool       // 是否还有下一个元素；不消费元素
     next() -> T             // 取下一个元素并前进
-    nth(index: int) -> T    // 从当前位置起前进 index 个元素并返回
+    nth(index: i64) -> T    // 从当前位置起前进 index 个元素并返回
 }
 
 interface Iterable<T> {
@@ -3360,17 +3360,17 @@ interface Iterable<T> {
 
 ```xray
 class Rect {
-    _w: int
-    _h: int
-    constructor(w: int, h: int) { this._w = w; this._h = h }
+    _w: i64
+    _h: i64
+    constructor(w: i64, h: i64) { this._w = w; this._h = h }
 
     // 只读：只有 getter
-    area: int { fn() { return this._w * this._h } }
+    area: i64 { fn() { return this._w * this._h } }
 
     // 可读可写：getter + setter
-    width: int {
+    width: i64 {
         fn() { return this._w }
-        fn(v: int) { this._w = v }
+        fn(v: i64) { this._w = v }
     }
 }
 
@@ -3422,9 +3422,9 @@ main()
 
 ```xray
 class Vec2 {
-    x: int
-    y: int
-    constructor(x: int, y: int) { this.x = x; this.y = y }
+    x: i64
+    y: i64
+    constructor(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -3451,10 +3451,10 @@ StructDecl ::= 'struct' Identifier TypeParams?
 
 ```xray
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    magnitude_sq() -> float {
+    magnitude_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 }
@@ -3483,7 +3483,7 @@ b.x = 99.0
 ```xray
 struct Config {
     host: string
-    port: int = 8080        // 声明默认值：字面量中可省
+    port: i64 = 8080        // 声明默认值：字面量中可省
     label: string?          // 可空：字面量中可省
 }
 
@@ -3517,8 +3517,8 @@ var c = Config{host: "localhost"}    // OK
 
 ```xray
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 fn main() {
@@ -3546,8 +3546,8 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // 方法签
 
 ```xray
 interface Shape {
-    area() -> float
-    perimeter() -> float
+    area() -> f64
+    perimeter() -> f64
 }
 
 // 接口方法返回类型可省略（默认 ()）
@@ -3557,18 +3557,18 @@ interface Greeter {
 }
 
 class Circle implements Shape {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
 }
 
 // 实现多个接口
 class Logger implements Shape, Greeter {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
     log() { print("logging") }
 }
@@ -3585,26 +3585,26 @@ fn describe(s: Shape) -> string {
 - 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
 - 接口方法声明中的**返回类型可省略**（默认 `()`）。
 - 接口方法默认 `abstract`（无方法体）。
-- 接口可声明**属性签名**（`length: int`、`const id: int`）；实现类必须有相应字段。
+- 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类必须有相应字段。
 - 实现类可以提供额外的方法（接口仅定义最小集）。
 
 ```xray
 // 属性签名 + 接口继承
 interface HasLength {
-    length: int
+    length: i64
 }
 interface SizedCollection<T> extends HasLength {
     first() -> T
 }
 
-class Buffer implements SizedCollection<int> {
-    length: int                       // 实现属性签名
-    private data: Array<int>
-    constructor(n: int) {
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // 实现属性签名
+    private data: Array<i64>
+    constructor(n: i64) {
         this.length = n
         this.data = []
     }
-    first() -> int { return this.data[0] }
+    first() -> i64 { return this.data[0] }
 }
 ```
 
@@ -3614,13 +3614,13 @@ class Buffer implements SizedCollection<int> {
 
 ```xray
 interface Shape {
-    area() -> float
+    area() -> f64
 }
 
 class Circle implements Shape {
-    r: float
-    constructor(r: float) { this.r = r }
-    area() -> float { return 3.14159 * this.r * this.r }
+    r: f64
+    constructor(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
 fn main() {
@@ -3662,7 +3662,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> int {
+    fn code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -3687,8 +3687,8 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 // 递归 enum 的 payload 必须经 class 节点间接化
@@ -3699,7 +3699,7 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(int),
+    Number(i64),
     Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
@@ -3743,7 +3743,7 @@ match (event) {
 
 ```xray
 Color.Red.name        // "Red"          变体名 (string)
-Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
+Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
@@ -3763,7 +3763,7 @@ for (variant in NetEvent.variants) {
     print(variant.name)
     for (field in variant.payloads) {
         print(field.name)                 // field: EnumPayloadField<NetEvent>
-        print(field.type)                 // int：具体字段类型的 canonical TypeId
+        print(field.type)                 // i64：具体字段类型的 canonical TypeId
     }
 }
 ```
@@ -3782,10 +3782,10 @@ descriptor API 是封闭白名单：
 
 | 类型 | 属性 / 操作 |
 |---|---|
-| `EnumVariants<E>` | `length: int`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
-| `EnumVariant<E>` | `ordinal: int`、`name: string`、`payloadCount: int`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
-| `EnumPayloads<E>` | `length: int`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
-| `EnumPayloadField<E>` | `index: int`、`name: string`、`type: int`（canonical TypeId） |
+| `EnumVariants<E>` | `length: i64`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
+| `EnumVariant<E>` | `ordinal: i64`、`name: string`、`payloadCount: i64`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
+| `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
 
 命名 payload 字段的 `name` 是源码声明名；位置 payload 字段没有声明名，其 `name` 确定为 `""`，不使用 `null`，因此 descriptor 表面保持非空 `string` 类型。
 
@@ -3795,14 +3795,14 @@ descriptor API 是封闭白名单：
 
 unit-only enum 的实际值在 typed 路径中同样只携带 ordinal；一旦该值跨入 tagged/擦除边界，静态 sidecar 必须保留 enum 名与全部 case 名，使边界后的 `.name`、`toString()`、相等性和通用字符串格式化与 VM 语义一致。仍保持 typed 的 enum 不生成该 sidecar。
 
-泛型时必须知道具体 enum layout，例如 `Option<int>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
+泛型时必须知道具体 enum layout，例如 `Option<i64>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
 
 #### 5.6.6 反查（从值到成员）
 
 默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
 
 ```xray
-fn statusFromCode(code: int) -> HttpStatus? {
+fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
     if (code == 404) { return HttpStatus.NotFound }
     if (code == 500) { return HttpStatus.InternalError }
@@ -3816,11 +3816,11 @@ fn statusFromCode(code: int) -> HttpStatus? {
 
 ```xray
 enum Shape {
-    Circle(radius: float),
-    Rect(w: float, h: float),
-    Triangle(a: float, b: float, c: float)
+    Circle(radius: f64),
+    Rect(w: f64, h: f64),
+    Triangle(a: f64, b: f64, c: f64)
 
-    fn area() -> float {
+    fn area() -> f64 {
         return match (this) {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
@@ -3850,7 +3850,7 @@ print(s.isRound())       // true
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: int) -> Color {
+    static fn fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
@@ -3893,9 +3893,9 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
-type Outcome = int | string                          // union 别名
-type Mapper = fn(int) -> int                              // 函数类型别名
-type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
+type Outcome = i64 | string                          // union 别名
+type Mapper = fn(i64) -> i64                              // 函数类型别名
+type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
 type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
 
@@ -4035,8 +4035,8 @@ match (msg) {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 match (event) {
@@ -4046,13 +4046,13 @@ match (event) {
 }
 ```
 
-> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；只要包含 `_` 兜底分支即可跳过检查。对非 enum 变量（如 `int`）不强制。
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；只要包含 `_` 兜底分支即可跳过检查。对非 enum 变量（如 `i64`）不强制。
 
 ### 6.4 类型模式 `is T`
 
 ```xray
 match (value) {
-    is int n -> "int: ${n}"       // 绑定窄化值
+    is i64 n -> "i64: ${n}"       // 绑定窄化值
     is string -> "a string"
     is User u -> "user: ${u.name}"
     _ -> "unknown"
@@ -4191,9 +4191,9 @@ print(x)                     // 1
 默认按 **引用捕获**：
 
 ```xray
-fn make_counter() -> (() -> int) {
+fn make_counter() -> (() -> i64) {
     var count = 0
-    return fn() -> int {
+    return fn() -> i64 {
         count += 1                  // 修改外层 count
         return count
     }
@@ -4221,13 +4221,13 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-var big_buffer = Array<byte>(1024 * 1024)
+var big_buffer = Array<u8>(1024 * 1024)
 
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
 
-var t2 = go fn(b: Array<byte>) -> int {
+var t2 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
@@ -4271,7 +4271,7 @@ go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可�
 ```xray
 // 方法 1：显式复制 execution-local graph
 var arr = [1, 2, 3]
-var t = go fn(data: Array<int>) -> int {
+var t = go fn(data: Array<i64>) -> i64 {
     data.push(4)            // 拷贝上修改，不影响原值
     return len(data)
 }(copy(arr))
@@ -4279,20 +4279,20 @@ print(arr)                  // [1, 2, 3] 未变
 
 // 方法 2：const 零拷贝只读（可被捕获）
 const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> int {
+var t2 = go fn(c: JSON.Object) -> i64 {
     return c.rate
 }(config)
 
 // 方法 3：move 转移所有权
-var big = Array<byte>(1024)
-var t3 = go fn(b: Array<byte>) -> int {
+var big = Array<u8>(1024)
+var t3 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big)
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-const ch = Channel<int>(10)
-var t4 = go fn(c: Channel<int>) -> int {
+const ch = Channel<i64>(10)
+var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -4438,17 +4438,17 @@ try {
 ```xray
 enum HttpErr {
     NotFound(string),
-    ServerError(int, string),
+    ServerError(i64, string),
     Timeout,
 }
 
 enum ParseErr {
     Empty,
-    InvalidChar(string, int),
+    InvalidChar(string, i64),
     Overflow,
 }
 
-fn fetchUser(id: int) -> User {
+fn fetchUser(id: i64) -> User {
     if (id <= 0) { throw HttpErr.NotFound("user not found") }
     // ...
 }
@@ -4521,7 +4521,7 @@ panic 通过有限的栈展开传播，生成 `PanicInfo` 对象携带堆栈信�
 
 ```xray
 try {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     var v = arr[10]                          // 越界 → panic
 } catch panic {
     log("runtime fault caught")
@@ -4557,7 +4557,7 @@ class PanicInfo {
     message: string             // 人类可读消息（如 "index out of bounds"）
     stack: Array<string>        // 自动捕获的调用栈
     cause: PanicInfo?           // 链式 cause
-    code: int                   // 错误码
+    code: i64                   // 错误码
     data: JSON.Value            // 附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -4571,7 +4571,7 @@ class PanicInfo {
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])                       // 越界 → panic
     } catch panic (p) {
@@ -4708,7 +4708,7 @@ fn good(c: Conn) {
 | 字典查找、可选字段 | `T?` | `map.get(k) -> Value?` |
 | 运行时故障兜底 | `catch panic` | 数组越界、除零 |
 | 多分支结果 | enum | `nextEvent() -> NetEvent` |
-| 主结果 + 元数据 | tuple | `parse(s) -> (Ast, int)` |
+| 主结果 + 元数据 | tuple | `parse(s) -> (Ast, i64)` |
 
 ### 8.6 常用模式
 
@@ -4777,7 +4777,7 @@ var user = db.findUser(id) ?? guestUser
 #### 模式 4：catch panic 兜底运行时故障
 
 ```xray
-fn safeDivide(a: int, b: int) -> string {
+fn safeDivide(a: i64, b: i64) -> string {
     try {
         return string(a / b)
     } catch panic {
@@ -4795,7 +4795,7 @@ fn safeDivide(a: int, b: int) -> string {
 ```xray
 enum ParseErr { Empty, BadChar(string) }
 
-fn parseDigit(s: string) -> int {
+fn parseDigit(s: string) -> i64 {
     if (len(s) == 0) { throw ParseErr.Empty }
     if (s == "x") { throw ParseErr.BadChar(s) }
     return 42
@@ -4847,7 +4847,7 @@ caught
 
 ```xray
 fn main() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     try {
         print(arr[10])
     } catch panic (p) {
@@ -4881,7 +4881,7 @@ fn identity<T>(x: T) -> T {
     return x
 }
 
-var a = identity<int>(42)
+var a = identity<i64>(42)
 var b = identity("hello")               // 推断 T=string
 
 // 泛型类
@@ -4891,7 +4891,7 @@ class Box<T> {
     get() -> T { return this.value }
 }
 
-var b1 = Box<int>(42)
+var b1 = Box<i64>(42)
 var b2 = Box<string>("hi")
 
 // 多参数泛型
@@ -4905,14 +4905,14 @@ class Pair<K, V> {
 
 // 泛型接口
 interface Comparable<T> {
-    compareTo(other: T) -> int
+    compareTo(other: T) -> i64
 }
 
 // 泛型 type alias：透明语法替换，不产生新类型
 type PairAlias<T> = { first: T, second: T }
 ```
 
-`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<int>` 等价于 `{ first: int, second: int }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
+`type` 别名的泛型形参使用 `AliasTypeParams`：只允许名字列表，不支持约束。别名使用处会把类型实参直接代入别名 RHS，例如 `PairAlias<i64>` 等价于 `{ first: i64, second: i64 }`。这一步发生在编译期，不产生运行时元数据、单态化实例或 AOT 分支；循环别名会被拒绝。
 
 ### 9.2 类型约束：`<T: Constraint>` 与交叉约束 `&`
 
@@ -4939,30 +4939,30 @@ fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
 
 | 接口 | 含义 |
 |---|---|
-| `Comparable` | 可用 `<` `<=` `>` `>=` 比较；int/float/string/Comparable 实现者 |
-| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `int` / `float` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> int`（签名见下） |
+| `Comparable` | 可用 `<` `<=` `>` `>=` 比较；i64/f64/string/Comparable 实现者 |
+| `Hashable` | 可作为 `Map` 键或 `Set` 元素；内置 `i64` / `f64` / `string` / `bool` / `enum` / `BigInt` 默认满足，用户类型必须同时提供 `operator==` 与 `hash() -> i64`（签名见下） |
 | `Stringable` | 可调 `.toString()`；几乎所有内置类型默认实现 |
 | `Iterable<T>` | 通过 iterator 协议被 `for-in` 遍历；Array、Slice、Map（含 `JSON.Object`）、Set、string、Range、生成器返回的 `Iterator<T>` 与自定义 `iterator()` 满足此约束。`JSON.Value` 不可直接迭代。`Channel<T>` 虽可用 `for-in` 接收，但走专用接收循环而非 iterator 协议，不满足此约束。unit-only enum 的 `for (value in E)` 与 concrete enum 的 `E.variants` 是编译期有限域语法，不使 enum 满足 `Iterable<T>`，也不能替代泛型 `Iterable<T>` 约束 |
 
-`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> int`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
+`Hashable` 是静态契约：具体 class / struct / enum 用作 `Map<K, V>` 的键、`Set<T>` 的元素，或声明 `implements Hashable` 时，编译器必须看到非 `static`、非 `private` 的 `operator==` 与 `hash() -> i64`。`operator==` 的参数类型必须**写成声明它的那个类型自己的名字**——Xray 没有 `Self` 类型，写 `Self` 会得到诊断 `E0365`：
 
 ```xray
 class Token implements Hashable {
-    value: int
+    value: i64
 
-    constructor(value: int) { this.value = value }
+    constructor(value: i64) { this.value = value }
 
     // 参数写 Token，不写 Self
     operator==(other: Token) -> bool { return this.value == other.value }
 
-    hash() -> int { return this.value }
+    hash() -> i64 { return this.value }
 }
 
-var counts: Map<Token, int> = #{}
+var counts: Map<Token, i64> = #{}
 counts.set(Token(7), 99)
 ```
 
-只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, int>)`。
+只提供旧式 `hashCode()` 不满足契约；只提供 `==` 或只提供 `hash()` 也会编译失败。若键/元素是类型参数，类型参数本身必须显式声明 `: Hashable`，例如 `fn f<K: Hashable>(m: Map<K, i64>)`。
 
 #### `where` 子句
 
@@ -4999,7 +4999,7 @@ enum Wrap<T> where T: Comparable { ... }
 - `a == b` 蕴含 `a` 与 `b` 键等价（反之不成立）。
 - 键等价蕴含 `hash(a) == hash(b)`。
 
-内置 `float` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
+内置 `f64` 的 `==` 是 IEEE 语义，对 NaN 不自反，所以它的键等价额外规定：**所有 NaN 是同一个键**，`-0.0` 与 `+0.0` 是同一个键。于是 `nan == nan` 仍为 `false`，而 `m[nan] = v` 之后 `m[nan]` 一定取得到。
 
 按"值是否在其中"提问的操作走键等价关系，不走 `==`：`Map` 的 `containsKey` / `containsValue` / 下标读写 / `delete`，`Set` 的 `add` / `contains` / `delete`，以及 `Array` 的 `indexOf` / `contains`。
 
@@ -5007,7 +5007,7 @@ enum Wrap<T> where T: Comparable { ... }
 
 **当前限制**：
 - 不支持**高阶类型**（`F<_>` 作为参数）——见 §9.6.1，这是明确不提供，不是暂缓。
-- 不支持默认类型参数（`<T = int>`）。
+- 不支持默认类型参数（`<T = i64>`）。
 - `where` 只接受与内联约束相同的表达力（`T: A & B`）；不支持对关联类型或嵌套类型的约束（`where T.Item: Hashable`），因为关联类型本身不存在。
 - 同一个类型参数列表中不得出现重名参数（`<T, T>`）。
 - 接口实现仍需**显式 `implements`**（在类声明位置，不是约束位置，详见 §5.4）。
@@ -5017,9 +5017,9 @@ enum Wrap<T> where T: Comparable { ... }
 #### 类型推断
 
 ```xray
-identity(42)                    // T 推断为 int
+identity(42)                    // T 推断为 i64
 Box("hello")                // T 推断为 string
-Pair("key", 100)            // K=string, V=int
+Pair("key", 100)            // K=string, V=i64
 ```
 
 推断算法是**双向推断**：
@@ -5031,9 +5031,9 @@ Pair("key", 100)            // K=string, V=int
 在推断失败或需要明确时：
 
 ```xray
-var empty = Array<int>()              // 无元素可推
-var m = Map<string, int>()
-var result = identity<float>(0)            // 泛型实参提供唯一上下文，0 直接定型为 float
+var empty = Array<i64>()              // 无元素可推
+var m = Map<string, i64>()
+var result = identity<f64>(0)            // 泛型实参提供唯一上下文，0 直接定型为 f64
 ```
 
 ### 9.4 特化与 monomorphization
@@ -5042,7 +5042,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 
 - **实例身份**：`identity<string>` 与 `identity<MyClass>` 是两个实例，`Box<string>` 与 `Box<MyClass>` 也是两个实例——即使它们的运行时表示同为 PTR。前端不按表示合并，因为 duck-typed 的泛型体要针对具体类型实参解析 `x.foo()`：在解析完成之前，两个 ABI 等价的实例并不可互换。
 - **代码共享是 AOT 决策，不是前端决策**：体积合并发生在解析之后的后端计划里（`generic-body-plan` / `generic-code-size-plan` 证据行，按体积阈值决定 `share_canonical_body`），并且带证据。前端保持精确身份，后端负责体积。
-- 名字修饰（name mangling）：`identity<int>` → `identity$i64`，`Pair<string, int>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
+- 名字修饰（name mangling）：`identity<i64>` → `identity$i64`，`Pair<string, i64>` → `Pair$str_i64`。修饰名承载实例身份，因此不得丢失任何类型实参。
 - 编译期严格类型检查保证安全；冷路径类型名元数据可在启用 names/debug profile 时保留具体类型参数显示信息。
 
 > 真值源：`src/frontend/analyzer/xanalyzer_mono.c`（单态化 pass）、`xanalyzer_mono.h`（API）。
@@ -5053,7 +5053,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 
 | 预算 | 值 | 防什么 | 超限 |
 |---|:---:|---|---|
-| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<int>` 构造 `RouteMatch<int>` 构造 `Map<string, int>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0389` |
+| `XR_MONO_MAX_DEPTH` | 128 | **嵌套深度**。特化体可以再实例化别的泛型（`Router<i64>` 构造 `RouteMatch<i64>` 构造 `Map<string, i64>`），因此展开是一个不动点迭代。多态递归（`fn f<T>() { f<Box<T>>() }`）让该迭代发散，而深度是唯一能识别它的量——每一轮都产生真正全新的类型元组，去重与计数都无法把发散和合法的广度区分开 | `E0389` |
 | `XR_MONO_MAX_INSTANCES` | 16384 | **广度**。每个实例克隆一份完整声明，因此这是编译期内存兜底，不是语言规则。取值远高于任何现实程序 | `E0387` |
 
 **超限一律是硬错误，绝不静默降级。** 把调用留在泛型状态会在 `xray verify` 的 `forbid=["box"]` 合同下面重新引入装箱，而合同刚刚"证明"了它不存在——这类不可见的去优化正是版本化 effect 合同要排除的东西。
@@ -5063,7 +5063,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 **性能影响**：
 - 单态化让 AOT 在 I64 / F64 / BOOL 等值表示上生成无装箱 fast path。
 - 逐类型特化会增加代码和元数据体积（大致按“类型组合数 × 声明体积”增长），换来精确布局、调试类型名保真和按类型特化；体积回收由上述 AOT 共享计划按阈值完成。
-- 内置特化容器（`Array<int>`、`Array<byte>`）进一步避免装箱开销。
+- 内置特化容器（`Array<i64>`、`Array<u8>`）进一步避免装箱开销。
 - 跨模块泛型在构建期 whole-program / LTO 阶段展开；提供泛型定义的库必须保留可分析的 IR/AST 形态，不能只发布不透明预编译产物。
 
 **高阶函数的错误效应特化**：回调参数默认是 effect-polymorphic。单态化会按实参回调的 throw-effect summary 选择 `NO_THROW` 或 `MAY_THROW` 版本，使已证明 no-throw 的回调路径不生成无用 error-check；未知动态目标保守进入 may-throw 版本。需要强保证的高阶调用边界使用 `xray verify` 合同，证明不足即拒绝。
@@ -5074,7 +5074,7 @@ var result = identity<float>(0)            // 泛型实参提供唯一上下文�
 |---|---|---|
 | `where` 子句 | **稳定** | 见 §9.2 |
 | 声明点方差（`out T` / `in T`） | **未实现** | 有前置依赖，见 §9.6 |
-| 默认类型参数（`<T = int>`） | **未实现** | 语法当前是错误，不是被忽略 |
+| 默认类型参数（`<T = i64>`） | **未实现** | 语法当前是错误，不是被忽略 |
 | 高阶类型（HKT） | **明确不提供** | 与全程序单态化冲突，见 §9.6.1 |
 
 ### 9.5 协议（duck typing）与名义类型
@@ -5104,7 +5104,7 @@ render(Square())     // OK
 仅 `object literal` 与 `type T = {...}` 是结构化匹配。结构化匹配要求**精确字段集**（详见 §2.10.1）：既不能多也不能少，只有类型可空的字段允许缺省。
 
 ```xray
-type Point = { x: float, y: float }
+type Point = { x: f64, y: f64 }
 
 fn describe(p: Point) { ... }
 
@@ -5138,9 +5138,9 @@ describe({ x: 1.0 })                  // 编译错误 E0356：missing field 'y'
 class Container<T> {
     items: Array<T>
 }
-var c = Container<int>()
-print(c is Container<int>)     // true
-print(typeName(c))             // "Container<int>" when type names are enabled
+var c = Container<i64>()
+print(c is Container<i64>)     // true
+print(typeName(c))             // "Container<i64>" when type names are enabled
 ```
 
 结构化字段/方法元数据不会由默认运行时自动提供；需要 inspect/serialization 等能力时应使用显式 derive 或编译期生成。
@@ -5180,12 +5180,12 @@ GoOption ::= 'name' ':' StringLiteral
 var t1 = go worker(0, channel)
 
 // 内联逻辑：lambda 也必须形成完整调用，并显式传参
-var t2 = go fn(d: JSON.Object) -> int {
+var t2 = go fn(d: JSON.Object) -> i64 {
     return d.value * 2
 }(payload)
 
 // 无参数内联逻辑仍写成零参 lambda 调用；不存在 go { ... } 语法
-var t3 = go fn() -> int {
+var t3 = go fn() -> i64 {
     return compute()
 }()
 
@@ -5197,7 +5197,7 @@ var named = go(name: "worker-1") worker(1, channel)
 
 ```xray
 var data = { value: 10 }
-var task = go fn(d: JSON.Object) -> int {
+var task = go fn(d: JSON.Object) -> i64 {
     return d.value + 1
 }(move data)        // 把 data 的所有权移交给协程；之后 data 不可访问
 ```
@@ -5206,7 +5206,7 @@ var task = go fn(d: JSON.Object) -> int {
 
 ```xray
 var n = 10
-var task = go fn(x: int) -> int {
+var task = go fn(x: i64) -> i64 {
     return x + 1
 }(n)
 ```
@@ -5216,7 +5216,7 @@ var task = go fn(x: int) -> int {
 - 协程在闲置 worker 线程中调度（M:N）。
 - `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
-- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `JSON.Object` / `JSON.Value` 的复合 arm / `Array<byte>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
+- 跨协程传递 execution-local heap 值（`Array` / `Map` / `Set` / `JSON.Object` / `JSON.Value` 的复合 arm / `Array<u8>` / `StringBuilder` 等）必须显式 `copy(x)` 或 `move x`，**裸传是编译错误**；标量、`string`、已发布 const 值和受审计的 Channel / Task / Atomic 等可直接传。`move` 只适用于 verifier 证明为唯一、无存活 alias/loan 的可重绑局部 `var` 根。`go` 实参与 `ch.send`、`select` 发送分支共用同一 transfer plan，每次边界传递都能从源码看出复制、转移或能力共享语义。
 - `go(name: ...)` 中 `name` 仅是诊断/调试元数据；语义修饰符是前缀 `linked go`，不进入 `GoOptions`。
 - 普通外层 `var` 禁止被 `go` 闭包捕获，读和写都一样；这条规则不依赖协程数量或调度时序。多个协程的共享可变状态必须通过 `Channel`、`Atomic` 或 `sync` 的受审计句柄传递，直接捕获修改时报编译错误。
 - `linked go call()` 仍只接受调用表达式并返回普通 `Task<T>`。在独立 scope 之外，它把子 Task 挂到当前父 Task：父任务取消会递归取消子任务，子任务失败会取消父任务及其关联子树，父任务在已完成自身正文后仍等待链接子任务终结。在 `scope` 内，成员关系与错误传播统一由该 scope 的策略管理，不再叠加第二套父子关系。
@@ -5238,10 +5238,10 @@ var result = await task                    // 让出当前协程直到 task 完�
 var t1 = go compute(2)
 var t2 = go compute(3)
 var t3 = go compute(4)
-var results: Array<int> = await all [t1, t2, t3]
+var results: Array<i64> = await all [t1, t2, t3]
 // 也可直接对变量使用，无需中括号
 var tasks = [t1, t2, t3]
-var results2: Array<int> = await all tasks
+var results2: Array<i64> = await all tasks
 
 // await any：等待任一完成，返回该任务结果；其他任务继续运行
 var first = await any [t1, t2, t3]
@@ -5265,7 +5265,7 @@ var firstOk = await anySuccess [t1, t2, t3]
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
 - `all` / `any` / `anySuccess` 在 `await` 后面是**上下文关键字**，仅在此位置生效。
-- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<int>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
+- `await all` 的输入必须是同构任务集合：每个元素都必须是同一静态 `Task<T>` 类型，结果类型为 `Array<T>`。异构任务（如 `Task<i64>` 与 `Task<string>` 混合）不会自动擦除或装箱；需要逐个 `await`，或在任务内部显式转换为统一 enum / union / `JSON.Value` 结果类型。
 
 ### 10.4 `Task<T>` 句柄
 
@@ -5278,7 +5278,7 @@ var firstOk = await anySuccess [t1, t2, t3]
 | `t.cancel()` | `() -> ()` | 请求取消任务（合作式） |
 | `t.poll()` | `() -> TaskResult<T>` | 非阻塞观察；未完成返回 `TaskResult.Pending` |
 | `t.awaitResult()` | `() -> TaskResult<T>` | 阻塞等待并返回状态结果，不重抛异常 |
-| `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
+| `t.awaitTimeout(ms)` | `(i64) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
 
 ```xray
 var t = go fetch(url)
@@ -5310,8 +5310,8 @@ ChannelNew  ::= 'Channel' ('<' Type '>')? '(' Expression ')'
 Channel 以稳定的 `const` 绑定命名；其类型来自受审计的同步能力 registry，因此 `send`/`recv` 可修改受保护的内部状态：
 
 ```xray
-const ch  = Channel<int>(10)    // 有缓冲，capacity = 10
-const ch0 = Channel<int>(0)     // 无缓冲（同步握手）
+const ch  = Channel<i64>(10)    // 有缓冲，capacity = 10
+const ch0 = Channel<i64>(0)     // 无缓冲（同步握手）
 const cha = Channel(3)          // 元素类型从首次 send 推断
 ```
 
@@ -5324,13 +5324,13 @@ const cha = Channel(3)          // 元素类型从首次 send 推断
 | `recvOr(default)` | `(T) -> T` | 阻塞接收；收到值时直接返回 `T`，关闭且缓冲为空时返回 `default`，不分配 `Recv<T>` 包装 |
 | `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
 | `tryRecv()` | `() -> Recv<T>` | 非阻塞接收；空时返回 `Recv.Empty` |
-| `sendTimeout(v, ms)` | `(T, int) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
-| `recvTimeout(ms)` | `(int) -> Recv<T>` | 带超时接收；超时返回 `Recv.Timeout` |
+| `sendTimeout(v, ms)` | `(T, i64) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(i64) -> Recv<T>` | 带超时接收；超时返回 `Recv.Timeout` |
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray
-const ch = Channel<int>(10)
+const ch = Channel<i64>(10)
 ch.send(42)                             // 阻塞发送
 var v = match (ch.recv()) {
     Recv.Value(value) -> value
@@ -5360,7 +5360,7 @@ var value = ch.recvOr(-1)
 Channel 在类型位置写作 `Channel<T>`，可用于函数参数、字段和返回类型：
 
 ```xray
-fn producer(ch: Channel<int>) {
+fn producer(ch: Channel<i64>) {
     ch.send(42)
 }
 ```
@@ -5386,8 +5386,8 @@ DefaultArm ::= '_' '->' Block
 ```
 
 ```xray
-const ch1 = Channel<int>(2)
-const ch2 = Channel<int>(2)
+const ch1 = Channel<i64>(2)
+const ch2 = Channel<i64>(2)
 
 select {
     msg from ch1 -> { print("got from ch1:", msg) }      // 接收分支
@@ -5453,9 +5453,9 @@ try {
 }
 
 // scope：保留 task handle，块退出后逐个观察 outcome
-var first: Task<int>?
-var second: Task<int>?
-var third: Task<int>?
+var first: Task<i64>?
+var second: Task<i64>?
+var third: Task<i64>?
 scope {
     first = go failing("error1")
     second = go failing("error2")
@@ -5483,18 +5483,18 @@ MoveExpr ::= 'move' Identifier
 跨协程边界的转移读的是同一套判定，因此「协程之间不共享可变图」这条保证依赖 §2.14 的唯一性证据，而不是另一套并发专用规则。
 
 ```xray
-var buf = Array<byte>(1024 * 1024)
+var buf = Array<u8>(1024 * 1024)
 
 // 移交给协程
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move buf)
 // 编译错误：buf has been moved
 // print(len(buf))
 
 // 移交给 channel
-const ch = Channel<Array<byte>>(1)
-var payload = Array<byte>(4096)
+const ch = Channel<Array<u8>>(1)
+var payload = Array<u8>(4096)
 ch.send(move payload)
 // 编译错误：payload has been moved
 ```
@@ -5511,7 +5511,7 @@ xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式�
 |---|---|---|
 | Channel(1) | 单元素 channel | 互斥的最佳实践（通过 send/recv 模拟 lock/unlock） |
 | `const`/同步能力 | 稳定只读值或同步身份 | 普通图深只读；受审计同步句柄只允许其能力方法修改内部状态 |
-| `Atomic<T>` | 无锁原子包装 | 对 `int`/`float`/`bool` 提供 C11 原子操作 |
+| `Atomic<T>` | 无锁原子包装 | 对 `i64`/`f64`/`bool` 提供 C11 原子操作 |
 | `sync.Mutex<T>` / `sync.RwLock<T>` | 协程域锁 | 需显式 `import sync`；等待时挂起协程，不阻塞 worker；不得在 `sys.Thread` 线程体中使用 |
 | `sys.OsMutex` / `sys.OsRwLock` / `sys.OsCondvar` 等 | OS 线程域锁 | 需显式 `import sys`；阻塞当前 OS 线程，适合 `sys.Thread`、运行时组件和短临界区 |
 
@@ -5519,14 +5519,14 @@ xray 的默认并发模型偏向**消息传递 + 验证后能力共享 + 显式�
 
 #### `Atomic<T>` — 无锁原子类型
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
+`Atomic<T>` 包装 `i64`、`f64` 或 `bool`，在系统堆上分配，底层使用 C11 原子指令，无需锁即可跨协程安全读写。
 
 **声明约束**：`Atomic<T>` 句柄以 `const` 命名；其原子方法来自受审计的同步内部可变能力。
 
 ```xray
-const counter = Atomic(0)         // Atomic<int>
+const counter = Atomic(0)         // Atomic<i64>
 const flag = Atomic(false)        // Atomic<bool>
-const rate = Atomic(3.14)         // Atomic<float>
+const rate = Atomic(3.14)         // Atomic<f64>
 ```
 
 **方法一览**（完整签名见 §14.19）：
@@ -5535,7 +5535,7 @@ const rate = Atomic(3.14)         // Atomic<float>
 |---|---|
 | `load(ord?)` | 原子读取 |
 | `store(val, ord?)` | 原子写入 |
-| `add(val, ord?)` / `sub(val, ord?)` | 原子加减（int/float） |
+| `add(val, ord?)` / `sub(val, ord?)` | 原子加减（i64/f64） |
 | `fetchAdd(val, ord?)` / `fetchSub(val, ord?)` | 原子加减并返回旧值 |
 | `swap(val, ord?)` | 原子交换，返回旧值 |
 | `compareExchange(expected, desired, ord?)` | CAS，返回 `(old, bool)` |
@@ -5727,7 +5727,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 // 1. 声明自身携带 export 可见性
 export fn helper() { return }
 export final class MyClass {
-    value: int
+    value: i64
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
@@ -5944,21 +5944,24 @@ fn measuredKernel(value: u64) -> u64 {
 |--|--|--|
 | `print` | `(...values) -> ()` | 输出到 stdout，自动追加换行；多参以空格分隔 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
-| `len` | `(value) -> int` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
+| `len` | `(value) -> i64` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
 
 ### 13.2 类型转换
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `int(x)` | `(value) -> int` | 转为 int；`rune` 转为 Unicode scalar code point；字符串解析失败抛异常 |
-| `float(x)` | `(value) -> float` | 转为 float |
+| `x as T` | `numeric -> T` | 在 12 个 exact scalar 类型间做显式数值转换；`T` 必须是 `i8` / `i16` / `i32` / `i64` / `u8` / `u16` / `u32` / `u64` / `f32` / `f64` / `isize` / `usize` |
+| `i64.parse(s)` | `(string) -> i64` | 严格解析十进制整数；失败抛异常 |
+| `i64.tryParse(s)` | `(string) -> i64?` | 严格解析十进制整数；失败返回 `null` |
+| `f64.parse(s)` | `(string) -> f64` | 严格解析十进制浮点数；失败抛异常 |
+| `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
 | `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
-| `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
-| `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
+| `rune(n)` | `(i64) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
-`int(s)` / `float(s)` 解析整个字符串，不被文法接受的输入一律抛异常：允许首尾空白与前导符号，其余必须是十进制数字；`float` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留是解析失败而不是前缀解析，因此 `int("12abc")` 抛异常而不是得到 `12`；十六进制与 `inf` / `nan` 写法同样拒绝，整数超出 `int` 范围也是拒绝而不是饱和。这与 `strconv.parseInt` / `strconv.parseFloat` 已有的文法一致（§15.8）。
+`i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
 
 ### 13.3 类型检查
 
@@ -5973,10 +5976,10 @@ fn measuredKernel(value: u64) -> u64 {
 
 ```xray
 var x = 42
-print(typeOf(x) == Type.int)    // true
-print(typeName(x))              // "int"
-print(x is int)                 // true
-// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
+print(typeOf(x) == Type.i64)    // true
+print(typeName(x))              // "i64"
+print(x is i64)                 // true
+// typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
 
 ### 13.4 协程
@@ -6009,7 +6012,7 @@ print(x is int)                 // true
 | `Set.from(iterable)` | 从 string / Array / Set 创建 Set |
 | `Set.range(start, end)` | 创建闭区间整数 Set |
 
-BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`；DateTime 使用 `datetime` 模块工厂函数。
+BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`；DateTime 使用 `datetime` 模块工厂函数。
 
 ---
 
@@ -6020,40 +6023,40 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 本节按主题汇总每种内置类型的方法、签名和行为。
 
-### 14.1 `int` 方法
+### 14.1 `i64` 方法
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
-| `abs()` | `() -> int` | 绝对值 |
+| `abs()` | `() -> i64` | 绝对值 |
 | `toString()` | `() -> string` | 十进制字符串 |
 | `toBigInt()` | `() -> BigInt` | 转 BigInt |
-| `toFloat()` | `() -> float` | 转 float |
+| `toF64()` | `() -> f64` | 转 f64 |
 | `toHex()` | `() -> string` | 十六进制字符串 |
-| `max(other)` / `min(other)` | `(int) -> int` | 双值最值 |
-| `sqrt()` | `() -> float` | 平方根 |
-| `pow(exp)` | `(float) -> float` | 幂运算 |
-| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
-| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | 溢出饱和到 `int` 边界 |
-| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | 显式二补码环绕 |
-| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
-| `popcount()` | `() -> int` | 二补码位表示中置位的个数 |
-| `leadingZeros()` / `trailingZeros()` | `() -> int` | 前导/后缀零比特数（`0` 返回 `64`） |
-| `byteswap()` | `() -> int` | 反转字节序 |
-| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | 循环移位（`n` 按模 64） |
+| `max(other)` / `min(other)` | `(i64) -> i64` | 双值最值 |
+| `sqrt()` | `() -> f64` | 平方根 |
+| `pow(exp)` | `(f64) -> f64` | 幂运算 |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(i64) -> i64?` | 溢出返回 `null` |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(i64) -> i64` | 溢出饱和到 `i64` 边界 |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(i64) -> i64` | 显式二补码环绕 |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(i64) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
+| `popcount()` | `() -> i64` | 二补码位表示中置位的个数 |
+| `leadingZeros()` / `trailingZeros()` | `() -> i64` | 前导/后缀零比特数（`0` 返回 `64`） |
+| `byteswap()` | `() -> i64` | 反转字节序 |
+| `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | 循环移位（`n` 按模 64） |
 
 `abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
-### 14.2 `float` 方法
+### 14.2 `f64` 方法
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
-| `abs()` | `() -> float` | 绝对值 |
+| `abs()` | `() -> f64` | 绝对值 |
 | `toString()` | `() -> string` | 字符串化 |
-| `toFixed(decimals?)` | `(int?) -> string` | 固定位数小数字符串 |
-| `toInt()` | `() -> int` | 转 int |
-| `floor()` / `ceil()` / `round()` | `() -> int` | 取整 |
-| `sqrt()` | `() -> float` | 平方根 |
-| `pow(exp)` | `(float) -> float` | 幂运算 |
+| `toFixed(decimals?)` | `(i64?) -> string` | 固定位数小数字符串 |
+| `toI64()` | `() -> i64` | 转 i64 |
+| `floor()` / `ceil()` / `round()` | `() -> i64` | 取整 |
+| `sqrt()` | `() -> f64` | 平方根 |
+| `pow(exp)` | `(f64) -> f64` | 幂运算 |
 | `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
 
 ### 14.3 `BigInt` 方法
@@ -6062,10 +6065,10 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>`
 |--|--|--|
 | `abs()` | `() -> BigInt` | 绝对值 |
 | `toString()` | `() -> string` | 字符串化 |
-| `sign()` | `() -> int` | -1 / 0 / 1 |
+| `sign()` | `() -> i64` | -1 / 0 / 1 |
 | `isZero()` / `isNegative()` / `isPositive()` | `() -> bool` | 符号判断 |
-| `toInt()` | `() -> int?` | 无法表示时返回 null |
-| `toFloat()` | `() -> float` | 转 float |
+| `toI64()` | `() -> i64?` | 无法表示时返回 null |
+| `toF64()` | `() -> f64` | 转 f64 |
 
 ### 14.4 `bool` 方法
 
@@ -6091,11 +6094,11 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>`
 | 成员 | 类型 / 说明 |
 |--|--|
 | `len(s)` | O(1) Unicode scalar 数量 |
-| `bytes()` / `copyBytes()` | 借用的 `Slice<byte>` / 独立的 `Array<byte>` |
+| `bytes()` / `copyBytes()` | 借用的 `Slice<u8>` / 独立的 `Array<u8>` |
 | `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
 | `string.fromRune(r)` | 从一个 Unicode scalar 构造字符串 |
-| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
-| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<byte>`，非法序列替换为 U+FFFD |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<u8>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
+| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<u8>`，非法序列替换为 U+FFFD |
 | `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
@@ -6109,15 +6112,15 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>`
 
 string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
-### 14.6 `Array<byte>`
+### 14.6 `Array<u8>`
 
-`Array<byte>` 是可直接使用的 `Array` 具体化，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
+`Array<u8>` 是可直接使用的 `Array` 具体化，构造由 `Array<u8>(n)` / `Array<u8>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
 
 ### 14.7 `Array<T>` 方法
 
 | 成员 | 类型/说明 |
 |--|--|
-| `len(arr)` | `int` 全局查询 |
+| `len(arr)` | `i64` 全局查询 |
 | `capacity` / `arr[i]` / `arr[i] = v` | 容量属性与下标读写；也可使用 `get(i)` / `set(i, v)` |
 | `push(x)` / `pop()` | 尾部增删 |
 | `shift()` / `unshift(x)` | 头部增删 |
@@ -6139,7 +6142,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 | 成员 | 类型/说明 |
 |--|--|
-| `len(m)` | `int` 全局查询 |
+| `len(m)` | `i64` 全局查询 |
 | `m[k]` / `m[k] = v` | 下标读写 |
 | `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
@@ -6155,7 +6158,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 | 成员 | 类型/说明 |
 |--|--|
-| `len(set)` | `int` 全局查询 |
+| `len(set)` | `i64` 全局查询 |
 | `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
 | `clear()` | 清空 |
 | `values()` | 返回 `Array<T>` |
@@ -6178,13 +6181,13 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `close()` | 关闭 channel |
 | `capacity` / `isClosed` | 容量和关闭状态属性 |
 
-`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
+`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
 ### 14.11 `JSON` 命名空间
 
 `JSON` 是 prelude 命名空间，不是可声明变量的值类型，也不需要 `import json`。schema-less JSON 使用 `JSON.Value`；确定为 object 的动态 JSON 使用 `JSON.Object`。`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，因此枚举、动态下标、增删字段和 `len` 都直接使用 §14.8 的 Map API。
 
-`JSON.Value` 是 `null | bool | int | float | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
+`JSON.Value` 是 `null | bool | i64 | f64 | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
 
 | 静态函数 | 说明 |
 |--|--|
@@ -6193,7 +6196,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
 | `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
-| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `int` |
+| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `i64` |
 | `JSON.isValid(text, strict?)` | 校验 JSON 文本 |
 | `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | 查询 JSON arm |
 | `JSON.asObject(value)` / `JSON.asArray(value)` | 返回共享底层存储的可空 object/array 视图，不复制 |
@@ -6202,10 +6205,10 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | 修改或删除路径；路径可穿过 object key 与 array index |
 | `JSON.merge(parts)` | 将 `JSON.WithRest<T>` 的 typed 部分和顶层 rest 重新组成 `JSON.Object` |
 
-`JSON.Path` 是 `Array<string | int>`：string segment 是完整 object key，int segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
+`JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
 ```xray
-type Request = { action: string, userId: int }
+type Request = { action: string, userId: i64 }
 
 var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
 var payload = JSON.parseObject(body)          // JSON.Object，即 Map
@@ -6216,7 +6219,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON 标量 `null`、`bool`、`int`、`float`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
+JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
 
 ### 14.12 `Range`
 
@@ -6226,7 +6229,7 @@ JSON 标量 `null`、`bool`、`int`、`float`、`string` 可在有明确 `JSON.V
 |--|--|
 | `start` / `end` | 起点与声明的终点 |
 | `contains(x)` | 按半开或闭区间语义判断 `x` 是否在范围内 |
-| `toArray()` | 按迭代顺序生成独立的 `Array<int>` |
+| `toArray()` | 按迭代顺序生成独立的 `Array<i64>` |
 | `toString()` | 返回 `a..b` 或 `a..=b` 形式的字符串 |
 | `iterator()` | 迭代协议；惰性产出与 `toArray()` 相同的元素序列 |
 | `len(range)` | 返回范围中的元素数量 |
@@ -6292,7 +6295,7 @@ print(len(empty))           // 0
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
+`Atomic<T>` 包装 `i64`、`f64` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -6317,11 +6320,11 @@ print(len(empty))           // 0
 > MCP knowledge 和 API inventory 使用 source-derived inventory；`xray builtin-dump` 只作为运行时 builtin 视图输入之一。
 > 详见 [附录 D stdlib 模块索引](#d-stdlib-模块索引)。
 
-> **真实 stdlib 模块清单**（28 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
+> **真实 stdlib 模块清单**（27 个，源码：`stdlib/<module>/*.c` / `stdlib/<module>/*.xr`）：
 >
-> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`strconv`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
+> `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`http`、`io`、`log`、`math`、`mem`、`net`、`os`、`parallel`、`path`、`regex`、`runtime`、`sync`、`sys`、`text`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<byte>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
+> 不需要 import 的 prelude 类型/命名空间为：`Array`、`Atomic`、`OsBarrier`、`BigInt`、`Channel`、`OsCondvar`、`PanicInfo`、`JSON`（含 `JSON.Value` / `JSON.Object`）、`Map`、`OsMutex`、`NetConn`、`NetListener`、`OsOnce`、`Path`、`Range`、`Regex`、`OsRwLock`、`Set`、`StringBuilder`、`Thread`。`Array<u8>` 是 `Array` 的具体化；`DateTime`、`Logger` 等模块类型需要从对应模块导入。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -6350,7 +6353,7 @@ print(len(empty))           // 0
 `net` 的 TCP API 明确区分三类数据路径：
 
 - `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
-- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<byte>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Array<u8>` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
 - `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
 
 设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
@@ -6399,7 +6402,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 | 模块 | 关键 API |
 |--|--|
-| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` 等；常量 `PI` / `E` / `MAX_INT` / `MIN_INT` |
+| `math` | `sin` `cos` `tan` `log` `pow` `sqrt` `floor` `ceil` `round` `abs` `min` `max` 等；常量 `PI` / `E` / `MAX_I64` / `MIN_I64` |
 
 ### 15.8 文本
 
@@ -6407,9 +6410,7 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 |--|--|
 | `regex` | `compile(pattern)` 返回 `Regex`；详见 §14.14。也支持 `/pattern/flags` 字面量 |
 | `text` | `lower` `upper` `trim` `trimStart` `trimEnd` `padStart` `padEnd` `reverseRunes` `translate` |
-| `strconv` | `parseInt` `parseFloat` |
-
-内置转换 `int(s)` / `float(s)` / `string(n)` 仍可用于普通转换；需要带 radix / default 的解析接口时使用 `strconv`。
+十进制文本解析由 exact scalar 静态命名空间提供：`i64.parse(s)` / `i64.tryParse(s)` 与 `f64.parse(s)` / `f64.tryParse(s)`。数值间转换使用显式 `as`。
 
 ### 15.9 日志与诊断
 
@@ -6455,20 +6456,20 @@ TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, ho
 
 Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
 
-- **Descriptor（8 字节）**：`tag: byte`、`flags: byte`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Descriptor（8 字节）**：`tag: u8`、`flags: u8`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
 - **Payload（8 字节）**：`i64` / `double` / 指针三选一，按 `tag` 解释。
 - **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
 - **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
 
 | 值类型 | 内部表示 |
 |--|--|
-| `int` | `XR_TAG_I64` + 64-bit signed payload |
-| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `i64` | `XR_TAG_I64` + 64-bit signed payload |
+| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
+| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
@@ -6611,7 +6612,7 @@ class PanicInfo {
     message: string             // 人类可读消息
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: PanicInfo?           // 链式 cause
-    code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
+    code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -6779,7 +6780,7 @@ native AOT 不是直接从 SSA 发射机器码，也不是 JIT；最终机器码
 
 ## 18. 错误码 (Error Codes)
 
-> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `int`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
+> 唯一真值源：`src/runtime/xerror_codes.h`。`XrErrorCode` 在 `src/runtime/xerror.h` 中是 `i64`；用户可见格式为 `Exxxx`。编号可保留空洞，不得用文档中不存在的名称补齐。
 
 ### 18.1 Lexer 与 parser
 
@@ -7291,7 +7292,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 B. 关键字索引
 
-以下 **66 个**关键字与 `src/frontend/lexer/xkeywords.def` 一一对应并按源码顺序（ASCII 字典序）排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **64 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 52 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -7299,7 +7300,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
-| `byte` | §2.3.1 |
 | `catch` | §8 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
@@ -7311,25 +7311,24 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `enum` | §5.6 |
 | `export` | §11 |
 | `extends` | §5.3 |
-| `false` | §1.6.4 |
-| `final` | §5.3 |
-| `float` | §2.3.2 |
 | `f32` | §2.3.2 |
 | `f64` | §2.3.2 |
+| `false` | §1.6.4 |
+| `final` | §5.3 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
-| `if` | §4.2 |
-| `implements` | §5.5 |
-| `import` | §11 |
-| `in` | §4.4 |
-| `int` | §2.3.1 |
 | `i16` | §2.3.1 |
 | `i32` | §2.3.1 |
 | `i64` | §2.3.1 |
 | `i8` | §2.3.1 |
+| `if` | §4.2 |
+| `implements` | §5.5 |
+| `import` | §11 |
+| `in` | §4.4 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
+| `isize` | §2.3.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
@@ -7356,7 +7355,9 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `u8` | §2.3.1 |
 | `union` | §5.2.9 |
 | `unsafe` | §3.2 / §5.2 |
+| `usize` | §2.3.1 |
 | `var` | §5.1 |
+| `where` | §9.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 
@@ -7380,7 +7381,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 
 ## 附录 D. 标准库模块索引
 
-完整 28 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
+完整 27 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
 
 | 模块 | 用途 |
 |--|--|
@@ -7402,7 +7403,6 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | `path` | 路径操作 |
 | `regex` | 正则 |
 | `runtime` | 运行时信息与堆内省 |
-| `strconv` | 字符串数值解析 |
 | `sync` | 协程同步原语 |
 | `sys` | OS 线程与底层同步接口 |
 | `text` | Unicode 文本变换 |
@@ -7424,9 +7424,9 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 维度 | JS/TS | xray |
 |--|--|--|
 | 静态类型 | TS 可选 | **强制**；schema-less 数据显式使用 `JSON.Value` / `JSON.Object` |
-| 数值 | 仅 `number`（双精度） | `int` `float` `BigInt` 严格区分 |
-| 条件 | truthy / falsy | 条件必须是 `bool`，或使用 nullable `T?` 的存在性；int/string 不做 truthy 转换 |
-| 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 int↔float 提升，不提供 `===`/`!==` |
+| 数值 | 仅 `number`（双精度） | `i64` `f64` `BigInt` 严格区分 |
+| 条件 | truthy / falsy | 条件必须是 `bool`，或使用 nullable `T?` 的存在性；i64/string 不做 truthy 转换 |
+| 相等比较 | `===` 强、`==` 弱（string↔number 自动转） | 仅 `==`/`!=`；值相等只做数值 i64↔f64 提升，不提供 `===`/`!==` |
 | 闭包捕获 | 引用 | 引用（默认）；`go` 闭包严格受限 |
 | 对象 | 动态字段 | `{...}` 形成 exact structural object；动态键使用 `Map` / `JSON.Object` |
 | import | ES Module | 自有 import 语法（含 stdlib 无引号形式） |
@@ -7488,7 +7488,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | **AOT** | Ahead-of-Time 编译：Xi IR 生成 C，并由所选 C toolchain 在构建时产生 native binary |
 | **AST** | Abstract Syntax Tree：源码解析后的中间表示 |
 | **Arena** | 批量分配器：所有分配同时释放 |
-| **Array<byte>** | 字节缓冲类型（见 §2.4.6） |
+| **Array<u8>** | 字节缓冲类型（见 §2.4.6） |
 | **Slice<T>** | 借用视图：借用另一个值拥有的连续元素存储，自身不拥有数据，受借用生命周期约束（见 §2.4.2） |
 | **borrow / 借用** | 在不取得所有权的前提下访问另一个值的存储；`Slice<T>`、`ref` 参数与 `Ptr<T>` / `MutPtr<T>` 都是借用，共用 `E0382` / `E0383` / `E0384` 三条规则 |
 | **rune** | 单个 Unicode scalar value 的原始类型；不是数值类型，也不是 `u32` 别名（见 §2.3.5） |

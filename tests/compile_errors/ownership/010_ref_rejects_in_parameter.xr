@@ -1,10 +1,10 @@
-fn mutate(data: ref Array<int>) {
+fn mutate(data: ref Array<i64>) {
     data.push(1)
 }
 
-fn view(data: Array<int>) {
+fn view(data: Array<i64>) {
     mutate(ref data)
 }
 
-var values: Array<int> = []
+var values: Array<i64> = []
 view(values)

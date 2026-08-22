@@ -928,7 +928,7 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
      * resolve here even though it does in a real compilation; analyzing them
      * as the sync module itself puts those declarations in scope. */
     const char *analyzer_file =
-        (strstr(source, "WorkQueue<int>") || strstr(source, "CountdownLatch") ||
+        (strstr(source, "WorkQueue<i64>") || strstr(source, "CountdownLatch") ||
          strstr(source, "ResultGroup") || strstr(source, "Semaphore"))
             ? "stdlib/sync/sync.xr"
             : "test.xr";
@@ -963,7 +963,7 @@ static XiFunc *compile_to_ir(const char *source) {
 }
 
 TEST(target_plan_owned_string_lifecycle_from_source) {
-    const char *source = "fn probe() -> int {\n"
+    const char *source = "fn probe() -> i64 {\n"
                          "    var text = string(7) + \"-frame\"\n"
                          "    Coro.yield()\n"
                          "    return len(text)\n"
@@ -1597,13 +1597,13 @@ TEST(cgen_simple_arith) {
     assert(code != NULL && "C code generation failed");
 
     assert(contains(code, "printf(\"%lld\", (long long)") &&
-           "native int print should use direct printf");
+           "native i64 print should use direct printf");
     assert(!contains(code, "xrt_println(") && !contains(code, "xrt_print(") &&
-           "native int print should not call the generic tagged printer");
+           "native i64 print should not call the generic tagged printer");
     assert(!contains(code, "XR_FROM_INT(v") &&
-           "print-only int boxes should be elided from generated C");
+           "print-only i64 boxes should be elided from generated C");
     /* Should have a main function that accepts script arguments. */
-    assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
+    assert(contains(code, "i64 main(i64 argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
     const char *linux_feature_test = strstr(code, "#define _GNU_SOURCE 1");
@@ -1641,7 +1641,7 @@ TEST(cgen_simple_arith) {
            contains(code, "#pragma clang diagnostic ignored \"-Wdeclaration-after-statement\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wfloat-equal\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wswitch-enum\"") &&
-           contains(code, "#pragma clang diagnostic ignored \"-Wimplicit-int-conversion\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wimplicit-i64-conversion\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wshorten-64-to-32\"") &&
            "generated translation units should isolate Clang-only warning suppressions");
 
@@ -2364,8 +2364,8 @@ TEST(cgen_unused_call_result_emits_effect_statement_without_local) {
 
 TEST(cgen_unused_array_reserve_result_emits_effect_statement_without_local) {
     const char *src = "@noinline\n"
-                      "fn grow(flag: bool) -> int {\n"
-                      "    var bytes: Array<byte> = [1, 2, 3]\n"
+                      "fn grow(flag: bool) -> i64 {\n"
+                      "    var bytes: Array<u8> = [1, 2, 3]\n"
                       "    if (flag) { bytes.reserve(len(bytes) + 4) }\n"
                       "    return len(bytes)\n"
                       "}\n"
@@ -2616,7 +2616,7 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
 }
 
 TEST(cgen_panicinfo_constructor_token_emits_no_local) {
-    const char *src = "fn requireValue(value: int?) -> int { return value! }\n"
+    const char *src = "fn requireValue(value: i64?) -> i64 { return value! }\n"
                       "print(requireValue(1))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "PanicInfo token fixture should compile");
@@ -2641,7 +2641,7 @@ TEST(cgen_static_module_namespace_receivers_emit_no_shared_locals) {
     const char *src = "import os\n"
                       "import time\n"
                       "fn describe() -> string { return os.platform + os.arch }\n"
-                      "fn stamp() -> int { return time.nanos() }\n"
+                      "fn stamp() -> i64 { return time.nanos() }\n"
                       "print(describe())\n"
                       "print(stamp() >= 0)\n";
     XiFunc *ir = compile_to_ir(src);
@@ -3193,14 +3193,14 @@ TEST(cgen_rune_is_whitespace_consumes_immutable_emission_recipe) {
 }
 
 TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
-    const char *src = "fn viewLength(view: Slice<byte>) -> int { return len(view) }\n"
-                      "fn slicedLength(bytes: Array<byte>) -> int {\n"
-                      "    const view: Slice<byte> = bytes[1:]\n"
+    const char *src = "fn viewLength(view: Slice<u8>) -> i64 { return len(view) }\n"
+                      "fn slicedLength(bytes: Array<u8>) -> i64 {\n"
+                      "    const view: Slice<u8> = bytes[1:]\n"
                       "    var decoded = string.fromUtf8(bytes)\n"
                       "    if (decoded == null) { return 0 }\n"
                       "    return viewLength(view)\n"
                       "}\n"
-                      "var bytes: Array<byte> = [1, 2, 3]\n"
+                      "var bytes: Array<u8> = [1, 2, 3]\n"
                       "print(slicedLength(bytes))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "direct span argument fixture should compile");
@@ -3457,7 +3457,7 @@ TEST(cgen_immediate_scalar_constant_inlines_into_place_store) {
 
 TEST(cgen_native_signed_i64_constant_emits_immediate_without_local) {
     const char *src = "@noinline\n"
-                      "fn addOne(value: int) -> int {\n"
+                      "fn addOne(value: i64) -> i64 {\n"
                       "    return value + 1\n"
                       "}\n"
                       "print(addOne(41))\n";
@@ -3551,8 +3551,8 @@ TEST(cgen_runtime_string_slice_constant_emits_immediate_without_local) {
 
 TEST(cgen_typed_array_constants_emit_immediate_without_locals) {
     const char *src = "@noinline\n"
-                      "fn bytes() -> Array<byte> {\n"
-                      "    var out = Array<byte>(1)\n"
+                      "fn bytes() -> Array<u8> {\n"
+                      "    var out = Array<u8>(1)\n"
                       "    out.push(92)\n"
                       "    return out\n"
                       "}\n"
@@ -4010,7 +4010,7 @@ TEST(cgen_standalone_prelude_enum_globals_generate_static_members) {
                       "        _ -> false\n"
                       "    }\n"
                       "}\n"
-                      "fn empty(r: Recv<int>) -> bool {\n"
+                      "fn empty(r: Recv<i64>) -> bool {\n"
                       "    return match (r) {\n"
                       "        Recv.Empty -> true\n"
                       "        _ -> false\n"
@@ -4088,9 +4088,9 @@ TEST(cgen_variable_and_print) {
     /* Should contain the constant 42 */
     assert(contains(code, "42") && "should contain constant 42");
     assert(contains(code, "printf(\"%lld\", (long long)") && contains(code, "putchar('\\n')") &&
-           "native int print should use direct printf/putchar");
+           "native i64 print should use direct printf/putchar");
     assert(!contains(code, "xrt_println(") && !contains(code, "xrt_print(") &&
-           "native int print should not call the generic tagged printer");
+           "native i64 print should not call the generic tagged printer");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4125,7 +4125,7 @@ TEST(cgen_if_else) {
 }
 
 TEST(cgen_ordinary_bool_control_has_no_probability_wrapper) {
-    const char *src = "fn choose(flag: bool) -> int {\n"
+    const char *src = "fn choose(flag: bool) -> i64 {\n"
                       "    if (flag) {\n"
                       "        return 1\n"
                       "    }\n"
@@ -4178,7 +4178,7 @@ TEST(cgen_multi_print) {
     assert(contains(code, "20") && "should contain 20");
     assert(contains(code, "+") && "should contain addition");
     assert(contains(code, "printf(\"%lld\", (long long)") &&
-           "native int print should use direct printf");
+           "native i64 print should use direct printf");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4187,7 +4187,7 @@ TEST(cgen_multi_print) {
 
 TEST(cgen_while_loop) {
     /* While loop generates blocks and back edges */
-    const char *src = "fn hot() -> int {\n"
+    const char *src = "fn hot() -> i64 {\n"
                       "    var i = 0\n"
                       "    while (i < 5) {\n"
                       "        i = i + 1\n"
@@ -4316,7 +4316,7 @@ TEST(cgen_string_concat_cleanup_consumes_immutable_emission) {
 
 TEST(cgen_function_call) {
     /* Function definition and call */
-    const char *src = "fn add(a: int, b: int) -> int { return a + b }\n"
+    const char *src = "fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                       "var r = add(3, 4)\n"
                       "print(r)\n";
 
@@ -4390,11 +4390,11 @@ TEST(cgen_plain_function_does_not_emit_public_c_abi_wrapper) {
 }
 
 TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
-    const char *lib_src = "var bias: [int; 1] = [1]\n"
-                          "fn helper(x: int) -> int {\n"
+    const char *lib_src = "var bias: [i64; 1] = [1]\n"
+                          "fn helper(x: i64) -> i64 {\n"
                           "    return x + 1\n"
                           "}\n"
-                          "export fn public(x: int) -> int {\n"
+                          "export fn public(x: i64) -> i64 {\n"
                           "    return helper(x) + bias[0]\n"
                           "}\n"
                           "public(0)\n";
@@ -4455,10 +4455,10 @@ TEST(cgen_multimodule_private_helpers_are_file_local_inline) {
 }
 
 TEST(cgen_multimodule_branching_dispatcher_defers_to_native_inliner) {
-    const char *lib_src = "fn path0(value: int) -> int { return value + 1 }\n"
-                          "fn path1(value: int) -> int { return value + 2 }\n"
-                          "fn path2(value: int) -> int { return value + 3 }\n"
-                          "export fn dispatch(tag: int, value: int) -> int {\n"
+    const char *lib_src = "fn path0(value: i64) -> i64 { return value + 1 }\n"
+                          "fn path1(value: i64) -> i64 { return value + 2 }\n"
+                          "fn path2(value: i64) -> i64 { return value + 3 }\n"
+                          "export fn dispatch(tag: i64, value: i64) -> i64 {\n"
                           "    var mixed = value ^ (tag << 1)\n"
                           "    mixed = (mixed + 7) ^ (mixed >> 3)\n"
                           "    mixed = mixed ^ tag\n"
@@ -4514,7 +4514,7 @@ TEST(cgen_multimodule_branching_dispatcher_defers_to_native_inliner) {
 
 TEST(cgen_noinline_attribute_preserves_native_boundary) {
     const char *src = "@noinline\n"
-                      "fn boundary(value: int) -> int { return value + 1 }\n"
+                      "fn boundary(value: i64) -> i64 { return value + 1 }\n"
                       "print(boundary(41))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "IR compilation failed");
@@ -4543,8 +4543,8 @@ TEST(cgen_noinline_attribute_preserves_native_boundary) {
 
 TEST(cgen_inline_attribute_forces_native_expansion) {
     const char *src = "@inline\n"
-                      "fn expansion(value: int) -> int {\n"
-                      "    var scratch: [int; 4] = [value, 2, 3, 4]\n"
+                      "fn expansion(value: i64) -> i64 {\n"
+                      "    var scratch: [i64; 4] = [value, 2, 3, 4]\n"
                       "    var result = value\n"
                       "    var i = 0\n"
                       "    while (i < 64) {\n"
@@ -4580,7 +4580,7 @@ TEST(cgen_inline_attribute_forces_native_expansion) {
 }
 
 TEST(cgen_c_export_wrapper_keeps_default_visibility) {
-    const char *src = "fn bridge(x: int) -> int { return x + 1 }\n"
+    const char *src = "fn bridge(x: i64) -> i64 { return x + 1 }\n"
                       "bridge(0)\n";
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -4616,7 +4616,7 @@ TEST(cgen_c_export_wrapper_keeps_default_visibility) {
 }
 
 TEST(cgen_stats_tracks_native_abi) {
-    const char *src = "fn inc(x: int) -> int { return x + 1 }\n"
+    const char *src = "fn inc(x: i64) -> i64 { return x + 1 }\n"
                       "print(inc(41))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4640,7 +4640,7 @@ TEST(cgen_stats_tracks_native_abi) {
 }
 
 TEST(cgen_module_prefix_is_c_identifier) {
-    const char *src = "fn compute(n: int) -> int { return n * n }\n"
+    const char *src = "fn compute(n: i64) -> i64 { return n * n }\n"
                       "print(compute(3))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4687,7 +4687,7 @@ TEST(cgen_emits_source_line_directives) {
 }
 
 TEST(cgen_emits_debug_source_var_slots) {
-    const char *src = "fn compute(seed: int) -> int {\n"
+    const char *src = "fn compute(seed: i64) -> i64 {\n"
                       "    var answer = seed + 1\n"
                       "    var doubled = answer * 2\n"
                       "    var ratio = (doubled as f64) / 2.0\n"
@@ -4710,7 +4710,7 @@ TEST(cgen_emits_debug_source_var_slots) {
     assert(contains(code, "int64_t answer = 0;") && "source local should get a debug local");
     assert(contains(code, "int64_t doubled = 0;") &&
            "second source local should get a debug local");
-    assert(contains(code, "double ratio = 0;") && "float source local should get a debug local");
+    assert(contains(code, "double ratio = 0;") && "f64 source local should get a debug local");
     assert(contains(code, "uint8_t ok = 0;") && "bool source local should get a debug local");
     assert(contains(code, "seed = (int64_t)") && "source parameter should be synchronized");
     assert(contains(code, "answer = (int64_t)") && "answer should be synchronized");
@@ -4724,7 +4724,7 @@ TEST(cgen_emits_debug_source_var_slots) {
 }
 
 TEST(cgen_emits_shadowed_debug_source_var_slots) {
-    const char *src = "fn compute(seed: int) -> int {\n"
+    const char *src = "fn compute(seed: i64) -> i64 {\n"
                       "    var answer = seed + 1\n"
                       "    if (answer > 0) {\n"
                       "        var shadowSeed = seed + 10\n"
@@ -4843,9 +4843,9 @@ TEST(cgen_local_value_struct_copy_consumes_named_aggregate_emission) {
 
 TEST(cgen_struct_field_only_place_loads_are_debug_guarded) {
     const char *src = "struct Pair {\n"
-                      "    left: int\n"
-                      "    right: int\n"
-                      "    sum() -> int {\n"
+                      "    left: i64\n"
+                      "    right: i64\n"
+                      "    sum() -> i64 {\n"
                       "        return this.left + this.right\n"
                       "    }\n"
                       "}\n"
@@ -4877,7 +4877,7 @@ TEST(cgen_struct_field_only_place_loads_are_debug_guarded) {
 TEST(cgen_struct_raw_deref_method_receiver_skips_release_copy) {
     const char *src = "struct State {\n"
                       "    value: u64\n"
-                      "    tail: [byte; 4]\n"
+                      "    tail: [u8; 4]\n"
                       "    reset(value: u64) {\n"
                       "        this.value = value\n"
                       "        this.tail = [1, 2, 3, 4]\n"
@@ -4926,13 +4926,13 @@ TEST(cgen_struct_raw_deref_method_receiver_skips_release_copy) {
 }
 
 TEST(cgen_struct_scalar_field_ref_skips_release_load) {
-    const char *src = "fn bumpPair(left: ref int, right: ref int) {\n"
+    const char *src = "fn bumpPair(left: ref i64, right: ref i64) {\n"
                       "    left += 1\n"
                       "    right += 2\n"
                       "}\n"
                       "struct Counter {\n"
-                      "    left: int\n"
-                      "    right: int\n"
+                      "    left: i64\n"
+                      "    right: i64\n"
                       "    advance() { bumpPair(ref this.left, ref this.right) }\n"
                       "}\n"
                       "var counter = Counter{left: 3, right: 5}\n"
@@ -4964,15 +4964,15 @@ TEST(cgen_struct_scalar_field_ref_skips_release_load) {
 TEST(cgen_mem_slice_struct_pointer_owner_load_is_elided) {
     const char *src = "import mem\n"
                       "struct Holder {\n"
-                      "    pointer: Ptr<byte>\n"
-                      "    viewLength(size: int) -> int {\n"
-                      "        var bytes: const Slice<byte> = unsafe {\n"
-                      "            mem.slice<byte>(this.pointer, size, this.pointer)\n"
+                      "    pointer: Ptr<u8>\n"
+                      "    viewLength(size: i64) -> i64 {\n"
+                      "        var bytes: const Slice<u8> = unsafe {\n"
+                      "            mem.slice<u8>(this.pointer, size, this.pointer)\n"
                       "        }\n"
                       "        return len(bytes)\n"
                       "    }\n"
                       "}\n"
-                      "var holder = Holder{pointer: Ptr<byte>.null()}\n"
+                      "var holder = Holder{pointer: Ptr<u8>.null()}\n"
                       "print(holder.viewLength(0))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -4997,7 +4997,7 @@ TEST(cgen_mem_slice_struct_pointer_owner_load_is_elided) {
 }
 
 TEST(cgen_native_bool_assert_does_not_materialize_box) {
-    const char *src = "fn checkRange(value: int) {\n"
+    const char *src = "fn checkRange(value: i64) {\n"
                       "    assert(value >= 0)\n"
                       "    assert(value < 16)\n"
                       "}\n"
@@ -5028,7 +5028,7 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
 }
 
 TEST(cgen_assert_equality_consumes_stable_owner_adapter) {
-    const char *src = "fn checkEquality(value: int) {\n"
+    const char *src = "fn checkEquality(value: i64) {\n"
                       "    assert_eq(value, 7)\n"
                       "    assert_ne(value, 8)\n"
                       "}\n"
@@ -5060,14 +5060,14 @@ TEST(cgen_assert_equality_consumes_stable_owner_adapter) {
 TEST(cgen_span_phi_snapshot_is_debug_only) {
     const char *src =
         "import mem\n"
-        "fn selectedLength(flag: bool, first: Slice<byte>, second: Slice<byte>, "
-        "output: MutPtr<byte>) -> int {\n"
-        "    var selected: const Slice<byte> = first\n"
+        "fn selectedLength(flag: bool, first: Slice<u8>, second: Slice<u8>, "
+        "output: MutPtr<u8>) -> i64 {\n"
+        "    var selected: const Slice<u8> = first\n"
         "    if (flag) { selected = second }\n"
         "    unsafe { mem.set(output, 0, 0) }\n"
         "    return len(selected)\n"
         "}\n"
-        "var bytes = Array<byte>(2)\n"
+        "var bytes = Array<u8>(2)\n"
         "unsafe { print(selectedLength(true, bytes[:], bytes[:], bytes.mutPtr())) }\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -5096,12 +5096,12 @@ TEST(cgen_span_phi_snapshot_is_debug_only) {
 }
 
 TEST(cgen_span_ref_only_value_omits_unused_data_cache) {
-    const char *src = "fn touch(view: ref Slice<byte>) {\n"
+    const char *src = "fn touch(view: ref Slice<u8>) {\n"
                       "    if (len(view) > 0) { view[0] = 7 }\n"
                       "}\n"
-                      "fn allocate(size: int) -> Array<byte> {\n"
-                      "    var output = Array<byte>(size)\n"
-                      "    var view: Slice<byte> = output[:]\n"
+                      "fn allocate(size: i64) -> Array<u8> {\n"
+                      "    var output = Array<u8>(size)\n"
+                      "    var view: Slice<u8> = output[:]\n"
                       "    touch(ref view)\n"
                       "    return output\n"
                       "}\n"
@@ -5132,16 +5132,16 @@ TEST(cgen_span_ref_only_value_omits_unused_data_cache) {
 TEST(cgen_struct_value_abi_uses_canonical_layout_typedef) {
     const char *src =
         "struct Totals {\n"
-        "    bytes: int\n"
-        "    checksum: int\n"
+        "    bytes: i64\n"
+        "    checksum: i64\n"
         "}\n"
-        "fn make(a: int, b: int) -> Totals {\n"
+        "fn make(a: i64, b: i64) -> Totals {\n"
         "    return Totals{bytes: a, checksum: b}\n"
         "}\n"
         "fn combine(a: Totals, b: Totals) -> Totals {\n"
         "    return Totals{bytes: a.bytes + b.bytes, checksum: a.checksum + b.checksum}\n"
         "}\n"
-        "fn run(n: int) -> int {\n"
+        "fn run(n: i64) -> i64 {\n"
         "    var t = combine(make(n, 1), make(2, 3))\n"
         "    return t.bytes + t.checksum\n"
         "}\n"
@@ -5170,7 +5170,7 @@ TEST(cgen_struct_value_abi_uses_canonical_layout_typedef) {
 }
 
 TEST(cgen_coro_emits_source_line_directives) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
@@ -5222,7 +5222,7 @@ TEST(cgen_coro_emits_source_line_directives) {
 }
 
 TEST(cgen_coro_emits_debug_source_var_slots) {
-    const char *src = "fn worker(seed: int) -> int {\n"
+    const char *src = "fn worker(seed: i64) -> i64 {\n"
                       "    var answer = seed + 1\n"
                       "    Coro.yield()\n"
                       "    var doubled = answer * 2\n"
@@ -5259,7 +5259,7 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
     assert(contains(code, "int64_t doubled = 0;") &&
            "coroutine source local after suspension should get a debug local");
     assert(contains(code, "double ratio = 0;") &&
-           "coroutine float source local should get a debug local");
+           "coroutine f64 source local should get a debug local");
     assert(contains(code, "uint8_t ok = 0;") &&
            "coroutine bool source local should get a debug local");
     assert(contains(code, "seed = (int64_t)") &&
@@ -5269,7 +5269,7 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
     assert(contains(code, "doubled = (int64_t)") &&
            "post-resume source local should be synchronized after assignment");
     assert(contains(code, "ratio = (double)") &&
-           "coroutine float source local should be synchronized after assignment");
+           "coroutine f64 source local should be synchronized after assignment");
     assert(contains(code, "ok = (uint8_t)") &&
            "coroutine bool source local should be synchronized after assignment");
 
@@ -5279,10 +5279,10 @@ TEST(cgen_coro_emits_debug_source_var_slots) {
 }
 
 TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
-    const char *src = "fn produce() -> int {\n"
+    const char *src = "fn produce() -> i64 {\n"
                       "    return 41\n"
                       "}\n"
-                      "fn worker(ch: Channel<int>) -> int {\n"
+                      "fn worker(ch: Channel<i64>) -> i64 {\n"
                       "    var task = go produce()\n"
                       "    var result = await task\n"
                       "    ch.send(result)\n"
@@ -5292,7 +5292,7 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
                       "        _ -> 0\n"
                       "    }\n"
                       "}\n"
-                      "const ch: Channel<int> = Channel(1)\n"
+                      "const ch: Channel<i64> = Channel(1)\n"
                       "var task = go worker(ch)\n"
                       "print(await task)\n";
 
@@ -5326,7 +5326,7 @@ TEST(cgen_coro_syncs_helper_result_debug_source_vars) {
 
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
-    const char *src = "fn fact(n: int) -> int {\n"
+    const char *src = "fn fact(n: i64) -> i64 {\n"
                       "    if (n <= 1) { return 1 }\n"
                       "    return n * fact(n - 1)\n"
                       "}\n"
@@ -5375,7 +5375,7 @@ TEST(cgen_for_loop) {
 
 TEST(cgen_parallel_for_each_uses_runtime_executor) {
     const char *src = "import parallel\n"
-                      "fn run(n: int) {\n"
+                      "fn run(n: i64) {\n"
                       "    const base = 10\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        print(i + base)\n"
@@ -5406,9 +5406,9 @@ TEST(cgen_parallel_for_each_uses_runtime_executor) {
 TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
     const char *src = "import parallel\n"
                       "const bias = 2\n"
-                      "var floats: Array<float> = []\n"
+                      "var floats: Array<f64> = []\n"
                       "floats.reserve(8)\n"
-                      "parallel.mapInto(0..4, ref floats, (i) -> float(i + bias) + 0.5, "
+                      "parallel.mapInto(0..4, ref floats, (i) -> f64(i + bias) + 0.5, "
                       "parallel.Options(2))\n"
                       "var flags: Array<bool> = []\n"
                       "flags.reserve(8)\n"
@@ -5434,7 +5434,7 @@ TEST(cgen_parallel_map_into_scalar_lanes_use_direct_storage) {
     TEST_REQUIRE(count_between(code, code_end, "xr_parallel_for_range_i64(") == 3,
                  "scalar mapInto should use one range executor per map");
     TEST_REQUIRE(count_between(code, code_end, "((double*)") >= 1,
-                 "Array<float> mapInto should store through direct double storage");
+                 "Array<f64> mapInto should store through direct double storage");
     TEST_REQUIRE(count_between(code, code_end, "((uint8_t*)") >= 2,
                  "Array<bool>/Array<u8> mapInto should store through direct byte storage");
     TEST_REQUIRE(count_between(code, code_end, "xrt_array_write_preallocated(") == 0,
@@ -5475,7 +5475,7 @@ TEST(cgen_parallel_map_return_uses_runtime_executor) {
 
 TEST(cgen_parallel_reduce_uses_runtime_executor) {
     const char *src = "import parallel\n"
-                      "fn run(n: int) -> int {\n"
+                      "fn run(n: i64) -> i64 {\n"
                       "    const base = 10\n"
                       "    return parallel.reduce(0..n, 0, (i) -> i + base, "
                       "(a, b) -> a + b, parallel.Options(2))\n"
@@ -5513,10 +5513,10 @@ TEST(cgen_parallel_reduce_uses_runtime_executor) {
 TEST(cgen_parallel_reduce_struct_accumulator_uses_aggregate_runtime) {
     const char *src = "import parallel\n"
                       "struct Totals {\n"
-                      "    bytes: int\n"
-                      "    checksum: int\n"
+                      "    bytes: i64\n"
+                      "    checksum: i64\n"
                       "}\n"
-                      "fn run(n: int) -> int {\n"
+                      "fn run(n: i64) -> i64 {\n"
                       "    var totals = parallel.reduce(0..n, Totals{bytes: 0, checksum: 0}, "
                       "(i) -> Totals{bytes: i, checksum: 1}, "
                       "(a, b) -> Totals{bytes: a.bytes + b.bytes, "
@@ -5584,11 +5584,11 @@ TEST(lower_parallel_call_plan_resolves_selective_aliases) {
 
 TEST(lower_parallel_plan_methods_preserve_intrinsic_identity) {
     const char *src = "import parallel\n"
-                      "fn initLane(lane: int) -> int { return lane }\n"
-                      "var plan = parallel.Plan<int>(parallel.Options(2), initLane)\n"
+                      "fn initLane(lane: i64) -> i64 { return lane }\n"
+                      "var plan = parallel.Plan<i64>(parallel.Options(2), initLane)\n"
                       "plan.forEach(0..2, (state, i) -> {})\n"
                       "var mapped = plan.map(0..2, (state, i) -> state + i)\n"
-                      "var out: Array<int> = []\n"
+                      "var out: Array<i64> = []\n"
                       "out.reserve(2)\n"
                       "plan.mapInto(0..2, ref out, (state, i) -> state + i)\n"
                       "var sum = plan.reduce(0..2, 0, (state, i) -> state + i, "
@@ -5611,7 +5611,7 @@ TEST(lower_parallel_plan_methods_preserve_intrinsic_identity) {
 TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
     const char *src = "import parallel\n"
                       "const total = Atomic(0)\n"
-                      "fn run(n: int) {\n"
+                      "fn run(n: i64) {\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        total.fetchAdd(i, Ordering.Relaxed)\n"
                       "    }, parallel.Options(2))\n"
@@ -5628,11 +5628,11 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL);
-    assert(!had_error && "parallel.forEach AOT body should allow direct Atomic<int> RMW ops");
+    assert(!had_error && "parallel.forEach AOT body should allow direct Atomic<i64> RMW ops");
     assert(contains(code, "xr_parallel_for_range_i64(") &&
            "Atomic body should still use the AOT runtime executor");
     assert(contains(code, "atomic_fetch_add_explicit(") &&
-           "Atomic<int>.fetchAdd should keep the direct C11 atomic lowering");
+           "Atomic<i64>.fetchAdd should keep the direct C11 atomic lowering");
 
     xr_free(code);
     xi_func_free(ir);
@@ -5640,7 +5640,7 @@ TEST(cgen_parallel_for_each_allows_atomic_i64_direct_body) {
 
 TEST(analyzer_parallel_for_each_rejects_throwing_body) {
     const char *src = "import parallel\n"
-                      "fn run(n: int) {\n"
+                      "fn run(n: i64) {\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        assert(false)\n"
                       "    }, parallel.Options(2))\n"
@@ -5757,8 +5757,8 @@ TEST(cgen_parallel_for_body_closure_stack_allocates) {
 }
 
 TEST(cgen_typed_array_uses_raw_storage_fast_path) {
-    const char *src = "fn sum() -> int {\n"
-                      "    var values: Array<int> = []\n"
+    const char *src = "fn sum() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
                       "    values.push(41)\n"
                       "    return values[0] + len(values)\n"
                       "}\n"
@@ -5772,18 +5772,18 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed array fast path should generate");
     assert((contains(code, "xrt_array_new_typed(") || contains(code, "xrt_array_new_typed_ptr(")) &&
-           "Array<int> creation must preserve typed storage");
-    assert(contains(code, "XR_ELEM_I64") && "Array<int> must use the I64 typed element layout");
+           "Array<i64> creation must preserve typed storage");
+    assert(contains(code, "XR_ELEM_I64") && "Array<i64> must use the I64 typed element layout");
     assert(contains(code, "((int64_t*)_a->data)") &&
-           "Array<int> index reads and writes must access raw typed storage");
+           "Array<i64> index reads and writes must access raw typed storage");
     assert((contains(code, "((xrt_array_t*)") || contains(code, "->len")) &&
-           "len(Array<int>) must read the runtime array length directly");
+           "len(Array<i64>) must read the runtime array length directly");
     assert(!contains(code, "xrt_method_1(") &&
-           "Array<int>.push must not fall back to dynamic method dispatch");
+           "Array<i64>.push must not fall back to dynamic method dispatch");
     assert(!contains(code, "xrt_getprop(") &&
-           "len(Array<int>) must not fall back to dynamic property dispatch");
+           "len(Array<i64>) must not fall back to dynamic property dispatch");
     assert(!contains(code, "xrt_index_get(") &&
-           "Array<int> index read must not fall back to runtime index dispatch");
+           "Array<i64> index read must not fall back to runtime index dispatch");
 
     printf("  Generated typed array fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -5791,7 +5791,7 @@ TEST(cgen_typed_array_uses_raw_storage_fast_path) {
 }
 
 TEST(cgen_checked_typed_array_store_proves_nonnull_data) {
-    const char *src = "fn put(values: ref Array<u64>, index: int, value: u64) {\n"
+    const char *src = "fn put(values: ref Array<u64>, index: i64, value: u64) {\n"
                       "    values[index] = value\n"
                       "}\n"
                       "var values: Array<u64> = [1, 2]\n"
@@ -5925,14 +5925,14 @@ TEST(cgen_err_check_releases_live_arc_owners_on_cold_edge) {
 }
 
 TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
-    const char *src = "fn sum() -> int {\n"
+    const char *src = "fn sum() -> i64 {\n"
                       "    var bytes: Array<u8> = []\n"
                       "    bytes.push(200)\n"
                       "    unsafe {\n"
                       "        var value = 42\n"
                       "        bytes.set(0, value as u8)\n"
                       "    }\n"
-                      "    return int(bytes[0]) + len(bytes)\n"
+                      "    return i64(bytes[0]) + len(bytes)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -5964,9 +5964,9 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
 }
 
 TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
-    const char *src = "fn first(s: string) -> int {\n"
+    const char *src = "fn first(s: string) -> i64 {\n"
                       "    var bytes = s.copyBytes()\n"
-                      "    return int(bytes[0])\n"
+                      "    return i64(bytes[0])\n"
                       "}\n"
                       "print(first(\"A\"))\n";
 
@@ -5989,11 +5989,11 @@ TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
 }
 
 TEST(cgen_typed_array_zero_fill_range_uses_memset) {
-    const char *src = "fn run() -> int {\n"
+    const char *src = "fn run() -> i64 {\n"
                       "    var values = Array<u32>(8, 7)\n"
                       "    values.fill(0, 0, 8)\n"
                       "    unsafe {\n"
-                      "        return int(values.get(1)) + int(values.get(6))\n"
+                      "        return i64(values.get(1)) + i64(values.get(6))\n"
                       "    }\n"
                       "}\n"
                       "print(run())\n";
@@ -6018,31 +6018,31 @@ TEST(cgen_typed_array_zero_fill_range_uses_memset) {
 
 TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
     const char *src =
-        "fn run() -> int {\n"
-        "    var src = Array<byte>(16)\n"
+        "fn run() -> i64 {\n"
+        "    var src = Array<u8>(16)\n"
         "    src[0] = 1\n"
         "    src[1] = 2\n"
         "    src[2] = 3\n"
         "    src[3] = 4\n"
-        "    var view: Slice<byte> = src[:]\n"
-        "    var dst: Array<byte> = Array.withCapacity(460)\n"
+        "    var view: Slice<u8> = src[:]\n"
+        "    var dst: Array<u8> = Array.withCapacity(460)\n"
         "    dst.reserve(460)\n"
         "    dst.appendFrom(view[0:4])\n"
         "    dst.repeatFrom(2, 2)\n"
         "    dst.appendFrom(view[0:4])\n"
-        "    var dstView: Slice<byte> = dst[:]\n"
+        "    var dstView: Slice<u8> = dst[:]\n"
         "    dstView.repeatFrom(6, 2, 2)\n"
-        "    var dstWindow: Slice<byte> = dstView[8:10]\n"
-        "    var srcWindow: Slice<byte> = dstView[6:8]\n"
+        "    var dstWindow: Slice<u8> = dstView[8:10]\n"
+        "    var srcWindow: Slice<u8> = dstView[6:8]\n"
         "    dstWindow.copyFrom(srcWindow)\n"
-        "    var prefixLeft: Slice<byte> = dstView[0:2]\n"
-        "    var prefixRight: Slice<byte> = dstView[4:6]\n"
+        "    var prefixLeft: Slice<u8> = dstView[0:2]\n"
+        "    var prefixRight: Slice<u8> = dstView[4:6]\n"
         "    var prefix = prefixLeft.commonPrefix(prefixRight)\n"
         "    var v16: u16 = view.load<u16>(0, Endian.LE)\n"
         "    var v32: u32 = view.load<u32>(0, Endian.LE)\n"
         "    var v64: u64 = view.load<u64>(0, Endian.LE)\n"
         "    view.store<u16>(8, v16, Endian.LE)\n"
-        "    return int(v16) + int(v32) + int(v64) + int(dst[5]) + int(dst[9]) + prefix\n"
+        "    return i64(v16) + i64(v32) + i64(v64) + i64(dst[5]) + i64(dst[9]) + prefix\n"
         "}\n"
         "print(run())\n";
 
@@ -6052,7 +6052,7 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Array<byte> raw memory helpers should generate");
+    assert(!had_error && "Array<u8> raw memory helpers should generate");
 
     const char *fn = strstr(code, "static int64_t test_run_");
     assert(fn != NULL && "run declaration should exist");
@@ -6064,39 +6064,39 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
            "run function body should be bounded");
 
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u16_le_unchecked_raw(") > 0 &&
-           "Slice<byte>.load<u16>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<u8>.load<u16>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u32_le_unchecked_raw(") > 0 &&
-           "Slice<byte>.load<u32>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<u8>.load<u32>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u64_le_unchecked_raw(") > 0 &&
-           "Slice<byte>.load<u64>(Endian.LE) must lower to the trusted LE load helper");
+           "Slice<u8>.load<u64>(Endian.LE) must lower to the trusted LE load helper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_store_u16(") > 0 &&
-           "Slice<byte>.store<u16> must lower to the plan-driven core store helper");
+           "Slice<u8>.store<u16> must lower to the plan-driven core store helper");
     assert(count_between(fn_body, fn_end, "xr_raw_memory_copy_nonoverlap(") > 0 &&
-           "Array<byte>.appendFrom must lower to the inline Array<byte>+Slice<byte> non-overlap "
+           "Array<u8>.appendFrom must lower to the inline Array<u8>+Slice<u8> non-overlap "
            "fast path");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_copy_checked_raw(") > 0 &&
-           "Slice<byte>.copyFrom must lower through the stable owner adapter");
+           "Slice<u8>.copyFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_raw(") > 0 &&
-           "Array<byte>.appendFrom must lower through the stable owner adapter");
+           "Array<u8>.appendFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_append_from_span_slow_raw(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") == 0 &&
            count_between(fn_body, fn_end, "xr_raw_memory_copy_nonoverlap(") == 0 &&
-           "Array<byte>.appendFrom CGen must not recreate grow, alias, or copy semantics");
+           "Array<u8>.appendFrom CGen must not recreate grow, alias, or copy semantics");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
-           "Array<byte>.repeatFrom must lower through the stable owner adapter");
+           "Array<u8>.repeatFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") == 0 &&
-           "Array<byte>.repeatFrom CGen must not recreate repeat or reserve semantics");
+           "Array<u8>.repeatFrom CGen must not recreate repeat or reserve semantics");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_repeat_from_checked_raw(") > 0 &&
-           "Slice<byte>.repeatFrom must lower through the stable owner adapter");
+           "Slice<u8>.repeatFrom must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_from(") == 0 &&
-           "static Slice<byte>.repeatFrom hot path must not keep the generic repeat wrapper");
+           "static Slice<u8>.repeatFrom hot path must not keep the generic repeat wrapper");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_copy_from(") == 0 &&
-           "static Slice<byte>.copyFrom hot path must not keep the generic copy wrapper");
+           "static Slice<u8>.copyFrom hot path must not keep the generic copy wrapper");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_checked_raw(") > 0 &&
-           "Slice<byte>.commonPrefix must lower through the stable owner adapter");
+           "Slice<u8>.commonPrefix must lower through the stable owner adapter");
     assert(count_between(fn_body, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
-           "Array<byte>.reserve must lower to the raw AOT helper");
+           "Array<u8>.reserve must lower to the raw AOT helper");
     assert(count_between(fn_body, fn_end, "xrt_byte_array_load_u16_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_array_load_u32_le_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_array_load_u64_le_value(") == 0 &&
@@ -6105,22 +6105,22 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
            count_between(fn_body, fn_end, "xrt_byte_slice_copy_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_slice_common_prefix_value(") == 0 &&
            count_between(fn_body, fn_end, "xrt_array_reserve_value(") == 0 &&
-           "Array<byte> hot path must not call boxed value helpers");
+           "Array<u8> hot path must not call boxed value helpers");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_load_u16_checked_raw(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_slice_load_u32_checked_raw(") == 0 &&
            count_between(fn_body, fn_end, "xrt_byte_slice_load_u64_checked_raw(") == 0 &&
-           "static Slice<byte>.load hot path must not keep dynamic span checks");
+           "static Slice<u8>.load hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xrt_byte_slice_store_u16_checked_raw(") == 0 &&
-           "static Slice<byte>.store hot path must not keep dynamic span checks");
+           "static Slice<u8>.store hot path must not keep dynamic span checks");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_common_prefix_raw(") == 0 &&
            "generated C must not revive the retired common-prefix kernel");
     assert(count_between(fn_body, fn_end, "xr_array_core_bytes_repeat_copy(_span.data") == 0 &&
-           "Slice<byte>.repeatFrom must not recreate owner semantics");
+           "Slice<u8>.repeatFrom must not recreate owner semantics");
     assert(count_between(fn_body, fn_end, "memmove(_dst.data, _src.data") == 0 &&
-           "Slice<byte>.copyFrom must not recreate owner semantics");
+           "Slice<u8>.copyFrom must not recreate owner semantics");
     assert(count_between(fn_body, fn_end, "xrt_method_") == 0 &&
            count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
-           "Array<byte> hot path must not fall back to dynamic dispatch");
+           "Array<u8> hot path must not fall back to dynamic dispatch");
     assert(count_between(fn_body, fn_end, "strcmp(") == 0 &&
            count_between(fn_body, fn_end, "\"appendFrom\"") == 0 &&
            count_between(fn_body, fn_end, "\"repeatFrom\"") == 0 &&
@@ -6128,17 +6128,17 @@ TEST(cgen_byte_slice_safe_methods_use_stable_owners) {
            count_between(fn_body, fn_end, "\"commonPrefix\"") == 0 &&
            count_between(fn_body, fn_end, "\"load\"") == 0 &&
            count_between(fn_body, fn_end, "\"store\"") == 0 &&
-           "Array<byte>/Slice<byte> hot path must not use hidden method-name matching");
+           "Array<u8>/Slice<u8> hot path must not use hidden method-name matching");
     assert(count_between(fn_body, fn_end, "XR_ELEM_ANY") == 0 &&
-           "Array<byte>/Slice<byte> hot path must not degrade to tagged element storage");
+           "Array<u8>/Slice<u8> hot path must not degrade to tagged element storage");
     assert(count_between(fn_body, fn_end, "((XrValue*)") == 0 &&
-           "Array<byte>/Slice<byte> hot path must not reinterpret raw bytes as boxed values");
+           "Array<u8>/Slice<u8> hot path must not reinterpret raw bytes as boxed values");
     assert(count_between(fn_body, fn_end, "xrt_map_new(3)") == 0 &&
            count_between(fn_body, fn_end, "xrt_getprop_name(") == 0 &&
            count_between(fn_body, fn_end, "_ev_Endian_LE") == 0 &&
-           "Slice<byte>.load/store hot path must fold direct Endian constants");
+           "Slice<u8>.load/store hot path must fold direct Endian constants");
 
-    printf("  Generated Array<byte> raw helper fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Array<u8> raw helper fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -6218,7 +6218,7 @@ TEST(cgen_byte_array_copy_uses_stable_owner_adapter) {
 
 TEST(cgen_byte_slice_native_load_elides_endian_box) {
     const char *src =
-        "fn roundtrip(view: ref Slice<byte>, value: u64, endian: Endian, flip: bool) -> u64 {\n"
+        "fn roundtrip(view: ref Slice<u8>, value: u64, endian: Endian, flip: bool) -> u64 {\n"
         "    var bias: u64 = 1\n"
         "    if (flip) { bias = 2 }\n"
         "    unsafe {\n"
@@ -6227,8 +6227,8 @@ TEST(cgen_byte_slice_native_load_elides_endian_box) {
         "    }\n"
         "}\n"
         "fn run() -> u64 {\n"
-        "    var bytes = Array<byte>(8)\n"
-        "    var view: Slice<byte> = bytes[:]\n"
+        "    var bytes = Array<u8>(8)\n"
+        "    var view: Slice<u8> = bytes[:]\n"
         "    return roundtrip(ref view, 42, Endian.LE, false)\n"
         "}\n"
         "print(run())\n";
@@ -6258,14 +6258,14 @@ TEST(cgen_byte_slice_native_load_elides_endian_box) {
 
 TEST(cgen_span_window_and_mem_slice_elide_boxed_operands) {
     const char *src = "import mem\n"
-                      "fn rawWindowLength(source: Slice<byte>, start: int, count: u32) -> int {\n"
-                      "    var window = source.window(start, count as int)\n"
+                      "fn rawWindowLength(source: Slice<u8>, start: i64, count: u32) -> i64 {\n"
+                      "    var window = source.window(start, count as i64)\n"
                       "    unsafe {\n"
-                      "        var raw = mem.slice<byte>(window.ptr(), len(window), window)\n"
+                      "        var raw = mem.slice<u8>(window.ptr(), len(window), window)\n"
                       "        return len(raw)\n"
                       "    }\n"
                       "}\n"
-                      "var source: [byte; 4] = [1, 2, 3, 4]\n"
+                      "var source: [u8; 4] = [1, 2, 3, 4]\n"
                       "print(rawWindowLength(source[:], 1, 2))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -6290,12 +6290,12 @@ TEST(cgen_span_window_and_mem_slice_elide_boxed_operands) {
 }
 
 TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
-    const char *src = "fn hot(dst: ref Array<byte>) -> int {\n"
+    const char *src = "fn hot(dst: ref Array<u8>) -> i64 {\n"
                       "    dst.reserve(8)\n"
                       "    return len(dst)\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var dst = Array<byte>(1)\n"
+                      "fn run() -> i64 {\n"
+                      "    var dst = Array<u8>(1)\n"
                       "    return hot(ref dst)\n"
                       "}\n"
                       "print(run())\n";
@@ -6306,7 +6306,7 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Borrowed Array<byte> parameter reserve should generate");
+    assert(!had_error && "Borrowed Array<u8> parameter reserve should generate");
 
     const char *fn = strstr(code, "static int64_t test_hot_");
     assert(fn != NULL && "hot declaration should exist");
@@ -6316,24 +6316,24 @@ TEST(cgen_borrowed_bytes_param_reserve_skips_arc) {
     assert(fn_end != NULL && "hot function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_array_reserve_trusted_raw(") > 0 &&
-           "borrowed Array<byte>.reserve must still lower to the raw helper");
+           "borrowed Array<u8>.reserve must still lower to the raw helper");
     assert(count_between(fn, fn_end, "xrt_retain(") == 0 &&
            count_between(fn, fn_end, "xrt_release(") == 0 &&
-           "borrowed Array<byte>.reserve receiver must not force parameter ARC");
+           "borrowed Array<u8>.reserve receiver must not force parameter ARC");
 
-    printf("  Generated borrowed Array<byte> reserve fast path %zu bytes of C code\n",
+    printf("  Generated borrowed Array<u8> reserve fast path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
-    const char *src = "fn sum(src: Slice<byte>) -> int {\n"
+    const char *src = "fn sum(src: Slice<u8>) -> i64 {\n"
                       "    var v: u32 = src.load<u32>(0, Endian.LE)\n"
-                      "    return int(v)\n"
+                      "    return i64(v)\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var bytes = Array<byte>(4)\n"
+                      "fn run() -> i64 {\n"
+                      "    var bytes = Array<u8>(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
@@ -6348,33 +6348,33 @@ TEST(cgen_direct_call_converts_bytes_to_byte_slice_arg) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "direct Slice<byte> arguments should generate");
+    assert(!had_error && "direct Slice<u8> arguments should generate");
     assert(contains(code, "xrt_span_from_array_slice(") &&
-           "direct call should pass an explicit Array<byte> slice as a native span");
+           "direct call should pass an explicit Array<u8> slice as a native span");
     assert(contains(code, "test_sum_") && "helper should be emitted as a direct call target");
     assert(!contains(code, "cannot pass non-aggregate") &&
-           "direct call argument ABI should not reject Array<byte>-to-Slice<byte> conversion");
+           "direct call argument ABI should not reject Array<u8>-to-Slice<u8> conversion");
 
     printf(
-        "  Generated direct Array<byte>-to-Slice<byte> argument conversion %zu bytes of C code\n",
+        "  Generated direct Array<u8>-to-Slice<u8> argument conversion %zu bytes of C code\n",
         strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
-    const char *src = "fn apply(f: fn(Slice<byte>) -> int, src: Array<byte>) -> int {\n"
+    const char *src = "fn apply(f: fn(Slice<u8>) -> i64, src: Array<u8>) -> i64 {\n"
                       "    return f(src[:])\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var bytes = Array<byte>(4)\n"
+                      "fn run() -> i64 {\n"
+                      "    var bytes = Array<u8>(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
-                      "    return apply(fn(src: Slice<byte>) -> int {\n"
+                      "    return apply(fn(src: Slice<u8>) -> i64 {\n"
                       "        var v: u32 = src.load<u32>(0, Endian.LE)\n"
-                      "        return int(v)\n"
+                      "        return i64(v)\n"
                       "    }, bytes)\n"
                       "}\n"
                       "print(run())\n";
@@ -6386,24 +6386,24 @@ TEST(cgen_boxed_adapter_converts_byte_slice_arg) {
     XiCgenStats stats = {0};
     char *code = generate_c_with_status_and_cgen_stats(ir, "test", &had_error, &stats);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "boxed Slice<byte> adapter should generate");
-    assert(stats.boxed_adapters >= 1 && "dynamic Slice<byte> callback should keep a boxed adapter");
+    assert(!had_error && "boxed Slice<u8> adapter should generate");
+    assert(stats.boxed_adapters >= 1 && "dynamic Slice<u8> callback should keep a boxed adapter");
     assert(contains(code, "xrt_span_from_value_ref(p0") &&
            "boxed adapter should convert its boxed parameter to the canonical span ABI");
     assert(!contains(code, "_cl, p0)") &&
-           "boxed adapter must not pass XrValue directly to a raw Slice<byte> ABI slot");
+           "boxed adapter must not pass XrValue directly to a raw Slice<u8> ABI slot");
 
-    printf("  Generated boxed Slice<byte> adapter conversion %zu bytes of C code\n", strlen(code));
+    printf("  Generated boxed Slice<u8> adapter conversion %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
-    const char *src = "fn run() -> int {\n"
-                      "    var src = Array<byte>(2)\n"
+    const char *src = "fn run() -> i64 {\n"
+                      "    var src = Array<u8>(2)\n"
                       "    src[0] = 7\n"
                       "    src[1] = 9\n"
-                      "    var out = Array<byte>(4)\n"
+                      "    var out = Array<u8>(4)\n"
                       "    out.resize(2, 0)\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
@@ -6411,9 +6411,9 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
                       "        p[0] = 0\n"
                       "        var sp = src.ptr()\n"
                       "        p.copyFromNonOverlapping(sp, 2)\n"
-                      "        var view: Slice<byte> = out[:]\n"
+                      "        var view: Slice<u8> = out[:]\n"
                       "        var rp = view.ptr()\n"
-                      "        sum = int(rp[0]) + int(rp[1])\n"
+                      "        sum = i64(rp[0]) + i64(rp[1])\n"
                       "    }\n"
                       "    return sum\n"
                       "}\n"
@@ -6455,12 +6455,12 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
     assert(count_between(fn, fn_end, "memcpy((void *)(uintptr_t)") == 0 &&
            "Ptr memcpy must use native pointer locals directly");
     const char *slice_call = strstr(fn, "xrt_span_from_array_slice(");
-    assert(slice_call != NULL && "test should still exercise Slice<byte> ptr() after array slice");
+    assert(slice_call != NULL && "test should still exercise Slice<u8> ptr() after array slice");
     assert(count_between(fn, slice_call, "XR_TO_INT(") == 0 &&
            count_between(fn, fn_end, "XR_TAG_PTR") == 0 &&
            "Ptr/MutPtr locals must stay in native address representation");
     assert(count_between(fn, fn_end, "xrt_release(") == 2 &&
-           "each owning Array<byte> (src, out) must be released exactly once; raw pointers add "
+           "each owning Array<u8> (src, out) must be released exactly once; raw pointers add "
            "no ARC");
     assert(count_between(fn, fn_end, "xrt_retain(") == 0 &&
            "raw pointer views must not add retain traffic on the owning arrays");
@@ -6471,10 +6471,10 @@ TEST(cgen_array_data_ptr_unchecked_uses_raw_pointer_path) {
 }
 
 TEST(cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy) {
-    const char *src = "fn run() -> int {\n"
+    const char *src = "fn run() -> i64 {\n"
                       "    unsafe {\n"
-                      "        var dst = MutPtr<byte>.null()\n"
-                      "        var src = Ptr<byte>.null()\n"
+                      "        var dst = MutPtr<u8>.null()\n"
+                      "        var src = Ptr<u8>.null()\n"
                       "        dst.copyFromNonOverlapping(src, 0)\n"
                       "    }\n"
                       "    return 1\n"
@@ -6505,9 +6505,9 @@ TEST(cgen_zero_byte_rawptr_copy_accepts_null_without_memcpy) {
 }
 
 TEST(cgen_cfn_local_coercion_uses_native_function_address) {
-    const char *src = "type Op = CFn<fn(int) -> int>\n"
-                      "fn inc(value: int) -> int { return value + 1 }\n"
-                      "fn run() -> int {\n"
+    const char *src = "type Op = CFn<fn(i64) -> i64>\n"
+                      "fn inc(value: i64) -> i64 { return value + 1 }\n"
+                      "fn run() -> i64 {\n"
                       "    var operation: Op = inc\n"
                       "    return operation(41)\n"
                       "}\n"
@@ -6534,13 +6534,13 @@ TEST(cgen_cfn_local_coercion_uses_native_function_address) {
 }
 
 TEST(cgen_rawptr_copy_forwarded_constant_has_no_release_local) {
-    const char *src = "fn copyTwo(enabled: bool, destination: MutPtr<byte>, source: Ptr<byte>) {\n"
+    const char *src = "fn copyTwo(enabled: bool, destination: MutPtr<u8>, source: Ptr<u8>) {\n"
                       "    if (enabled) {\n"
                       "        unsafe { destination.copyFromNonOverlapping(source, 2) }\n"
                       "    }\n"
                       "}\n"
-                      "var source = Array<byte>(2)\n"
-                      "var destination = Array<byte>(2)\n"
+                      "var source = Array<u8>(2)\n"
+                      "var destination = Array<u8>(2)\n"
                       "unsafe { copyTwo(true, destination.mutPtr(), source.ptr()) }\n";
 
     XiPipelineConfig cfg = xi_pipeline_aot_config();
@@ -6571,8 +6571,8 @@ TEST(cgen_rawptr_copy_forwarded_constant_has_no_release_local) {
 
 TEST(cgen_rawptr_parallel_for_each_capture_is_rejected) {
     const char *src = "import parallel\n"
-                      "fn run(n: int) {\n"
-                      "    var slots: Array<int> = [0]\n"
+                      "fn run(n: i64) {\n"
+                      "    var slots: Array<i64> = [0]\n"
                       "    parallel.forEach(0..n, (i) -> {\n"
                       "        unsafe {\n"
                       "            var p = slots.mutPtr()\n"
@@ -6589,22 +6589,22 @@ TEST(cgen_rawptr_parallel_for_each_capture_is_rejected) {
 }
 
 TEST(cgen_span_index_get_elides_dead_err_check) {
-    const char *src = "fn sum(src: Slice<byte>, n: int) -> int {\n"
+    const char *src = "fn sum(src: Slice<u8>, n: i64) -> i64 {\n"
                       "    var total = 0\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
-                      "        total = total + int(src[i])\n"
+                      "        total = total + i64(src[i])\n"
                       "        i = i + 1\n"
                       "    }\n"
                       "    return total\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var bytes = Array<byte>(4)\n"
+                      "fn run() -> i64 {\n"
+                      "    var bytes = Array<u8>(4)\n"
                       "    bytes[0] = 1\n"
                       "    bytes[1] = 2\n"
                       "    bytes[2] = 3\n"
                       "    bytes[3] = 4\n"
-                      "    const view: Slice<byte> = bytes[:]\n"
+                      "    const view: Slice<u8> = bytes[:]\n"
                       "    return sum(view, 4)\n"
                       "}\n"
                       "print(run())\n";
@@ -6615,7 +6615,7 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Slice<byte> index read should generate");
+    assert(!had_error && "Slice<u8> index read should generate");
 
     const char *fn = find_static_function_definition(code, "test_sum_");
     assert(fn != NULL && "sum definition should exist");
@@ -6623,25 +6623,25 @@ TEST(cgen_span_index_get_elides_dead_err_check) {
     assert(fn_end != NULL && "sum function body should be bounded");
 
     assert(count_between(fn, fn_end, "((uint8_t*)_s.data)[_idx]") > 0 &&
-           "Slice<byte> index read must stay in native span storage");
+           "Slice<u8> index read must stay in native span storage");
     assert(count_between(fn, fn_end, "xrt_index_oob(") > 0 &&
-           "safe Slice<byte> index read must keep its bounds trap");
+           "safe Slice<u8> index read must keep its bounds trap");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "Slice<byte> index read must not keep a dead ERR_CHECK after the noreturn bounds trap");
+           "Slice<u8> index read must not keep a dead ERR_CHECK after the noreturn bounds trap");
 
-    printf("  Generated Slice<byte> index get fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Slice<u8> index get fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_span_slice_elides_dead_err_check) {
-    const char *src = "fn windowLen(src: Slice<byte>, start: int, n: int) -> int {\n"
-                      "    const part: Slice<byte> = src[start:start + n]\n"
+    const char *src = "fn windowLen(src: Slice<u8>, start: i64, n: i64) -> i64 {\n"
+                      "    const part: Slice<u8> = src[start:start + n]\n"
                       "    return len(part)\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var bytes = Array<byte>(8)\n"
-                      "    const view: Slice<byte> = bytes[:]\n"
+                      "fn run() -> i64 {\n"
+                      "    var bytes = Array<u8>(8)\n"
+                      "    const view: Slice<u8> = bytes[:]\n"
                       "    return windowLen(view, 2, 4)\n"
                       "}\n"
                       "print(run())\n";
@@ -6652,7 +6652,7 @@ TEST(cgen_span_slice_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Slice<byte> slice should generate");
+    assert(!had_error && "Slice<u8> slice should generate");
 
     const char *fn = strstr(code, "static int64_t test_windowLen_");
     assert(fn != NULL && "windowLen declaration should exist");
@@ -6662,24 +6662,24 @@ TEST(cgen_span_slice_elides_dead_err_check) {
     assert(fn_end != NULL && "windowLen function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_span_from_span_slice(") > 0 &&
-           "Slice<byte> slice-of-slice must stay in native span storage");
+           "Slice<u8> slice-of-slice must stay in native span storage");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "Slice<byte> slice-of-slice must not keep a dead ERR_CHECK");
+           "Slice<u8> slice-of-slice must not keep a dead ERR_CHECK");
 
-    printf("  Generated Slice<byte> slice fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Slice<u8> slice fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
     const char *src =
-        "fn appendRange(out: ref Array<byte>, src: Slice<byte>, start: int, n: int) {\n"
+        "fn appendRange(out: ref Array<u8>, src: Slice<u8>, start: i64, n: i64) {\n"
         "    out.appendFrom(src[start:start + n])\n"
         "}\n"
-        "fn run() -> int {\n"
-        "    var out = Array<byte>()\n"
-        "    var src = Array<byte>(8)\n"
-        "    const view: Slice<byte> = src[:]\n"
+        "fn run() -> i64 {\n"
+        "    var out = Array<u8>()\n"
+        "    var src = Array<u8>(8)\n"
+        "    const view: Slice<u8> = src[:]\n"
         "    appendRange(ref out, view, 2, 4)\n"
         "    return len(out)\n"
         "}\n"
@@ -6691,7 +6691,7 @@ TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Slice<byte> append should generate");
+    assert(!had_error && "Slice<u8> append should generate");
 
     const char *fn = strstr(code, "static void test_appendRange_");
     assert(fn != NULL && "appendRange declaration should exist");
@@ -6701,24 +6701,24 @@ TEST(cgen_byte_array_append_from_slice_elides_dead_err_check) {
     assert(fn_end != NULL && "appendRange function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_span_from_span_slice(") > 0 &&
-           "appendRange must keep the Slice<byte> slice in native span storage");
+           "appendRange must keep the Slice<u8> slice in native span storage");
     assert(count_between(fn, fn_end, "xrt_byte_array_append_from_span_raw(") > 0 &&
-           "appendRange must lower appendFrom(Slice<byte>) through the stable owner adapter");
+           "appendRange must lower appendFrom(Slice<u8>) through the stable owner adapter");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "appendFrom(Slice<byte> slice) must not keep dead ERR_CHECKs after proven native paths");
+           "appendFrom(Slice<u8> slice) must not keep dead ERR_CHECKs after proven native paths");
 
-    printf("  Generated Slice<byte> append-from-slice fast path %zu bytes of C code\n",
+    printf("  Generated Slice<u8> append-from-slice fast path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
-    const char *src = "fn extend(out: ref Array<byte>) {\n"
+    const char *src = "fn extend(out: ref Array<u8>) {\n"
                       "    out.repeatFrom(2, 4)\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var out = Array<byte>()\n"
+                      "fn run() -> i64 {\n"
+                      "    var out = Array<u8>()\n"
                       "    out.push(1)\n"
                       "    out.push(2)\n"
                       "    extend(ref out)\n"
@@ -6732,7 +6732,7 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "Array<byte>.repeatFrom should generate");
+    assert(!had_error && "Array<u8>.repeatFrom should generate");
 
     const char *fn = strstr(code, "static void test_extend_");
     assert(fn != NULL && "extend declaration should exist");
@@ -6742,26 +6742,26 @@ TEST(cgen_byte_array_repeat_from_tail_elides_dead_err_check) {
     assert(fn_end != NULL && "extend function body should be bounded");
 
     assert(count_between(fn, fn_end, "xrt_byte_array_repeat_from_tail_raw(") > 0 &&
-           "Array<byte>.repeatFrom must lower to the raw tail repeat helper");
+           "Array<u8>.repeatFrom must lower to the raw tail repeat helper");
     assert(count_between(fn, fn_end, "xrt_has_pending_error(") == 0 &&
-           "Array<byte>.repeatFrom native helper must not keep a dead ERR_CHECK");
+           "Array<u8>.repeatFrom native helper must not keep a dead ERR_CHECK");
 
-    printf("  Generated Array<byte>.repeatFrom fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated Array<u8>.repeatFrom fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
 TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
-    const char *src = "fn hot(dst: ref Slice<byte>, src: Slice<byte>) -> int {\n"
-                      "    var copied: Slice<byte> = dst.copyFrom(src)\n"
+    const char *src = "fn hot(dst: ref Slice<u8>, src: Slice<u8>) -> i64 {\n"
+                      "    var copied: Slice<u8> = dst.copyFrom(src)\n"
                       "    var word: u16 = dst.load<u16>(0, Endian.LE)\n"
                       "    dst.store<u16>(0, word + 1, Endian.LE)\n"
                       "    return len(copied) + dst.compare(src)\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var dst = Array<byte>(8, 0)\n"
-                      "    var src = Array<byte>(8, 1)\n"
-                      "    var dstView: Slice<byte> = dst[:]\n"
+                      "fn run() -> i64 {\n"
+                      "    var dst = Array<u8>(8, 0)\n"
+                      "    var src = Array<u8>(8, 1)\n"
+                      "    var dstView: Slice<u8> = dst[:]\n"
                       "    return hot(ref dstView, src[:])\n"
                       "}\n"
                       "print(run())\n";
@@ -6788,20 +6788,20 @@ TEST(cgen_verified_span_helper_drop_elides_pending_error_checks) {
 
 TEST(cgen_mem_load_uses_pointer_helper) {
     const char *src = "import mem\n"
-                      "fn read(src: Array<byte>) -> int {\n"
-                      "    var view: Slice<byte> = src[:]\n"
+                      "fn read(src: Array<u8>) -> i64 {\n"
+                      "    var view: Slice<u8> = src[:]\n"
                       "    var sum = 0\n"
                       "    unsafe {\n"
                       "        var p = view.ptr()\n"
                       "        var v16: u16 = mem.load<u16>(p, 1, Endian.LE)\n"
                       "        var v32: u32 = mem.load<u32>(p, 0, Endian.LE)\n"
                       "        var v64: u64 = mem.load<u64>(p, 0, Endian.LE)\n"
-                      "        sum = int(v16) + int(v32) + int(v64)\n"
+                      "        sum = i64(v16) + i64(v32) + i64(v64)\n"
                       "    }\n"
                       "    return sum\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var src = Array<byte>(8)\n"
+                      "fn run() -> i64 {\n"
+                      "    var src = Array<u8>(8)\n"
                       "    src[0] = 1\n"
                       "    src[1] = 2\n"
                       "    src[2] = 3\n"
@@ -6843,7 +6843,7 @@ TEST(cgen_mem_load_uses_pointer_helper) {
     assert(count_between(fn, fn_end, "xrt_byte_array_load_u16_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u32_le_") == 0 &&
            count_between(fn, fn_end, "xrt_byte_array_load_u64_le_") == 0 &&
-           "mem.load must not route back through Array<byte>/Slice<byte> helpers");
+           "mem.load must not route back through Array<u8>/Slice<u8> helpers");
     assert(count_between(fn, fn_end, "xr_array_core_bytes_") == 0 &&
            count_between(fn, fn_end, "bool ok") == 0 &&
            "unchecked loads must not contain checked Array core state");
@@ -6857,8 +6857,8 @@ TEST(cgen_mem_load_uses_pointer_helper) {
 
 TEST(cgen_mem_store_uses_pointer_helper) {
     const char *src = "import mem\n"
-                      "fn write(dst: Array<byte>) {\n"
-                      "    var view: Slice<byte> = dst[:]\n"
+                      "fn write(dst: Array<u8>) {\n"
+                      "    var view: Slice<u8> = dst[:]\n"
                       "    unsafe {\n"
                       "        var p = view.mutPtr()\n"
                       "        mem.store<u16>(p, 1, 0x1234, Endian.LE)\n"
@@ -6866,10 +6866,10 @@ TEST(cgen_mem_store_uses_pointer_helper) {
                       "        mem.store<u64>(p, 8, 0x0102030405060708, Endian.LE)\n"
                       "    }\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var dst = Array<byte>(16)\n"
+                      "fn run() -> i64 {\n"
+                      "    var dst = Array<u8>(16)\n"
                       "    write(dst)\n"
-                      "    return int(dst[1]) + int(dst[4]) + int(dst[8])\n"
+                      "    return i64(dst[1]) + i64(dst[4]) + i64(dst[8])\n"
                       "}\n"
                       "print(run())\n";
 
@@ -6900,7 +6900,7 @@ TEST(cgen_mem_store_uses_pointer_helper) {
     assert(count_between(fn, fn_end, "(uintptr_t)") == 0 &&
            "mem.store hot path must not round-trip through integer pointer casts");
     assert(count_between(fn, fn_end, "xrt_byte_slice_store_") == 0 &&
-           "mem.store must not route back through Slice<byte> helpers");
+           "mem.store must not route back through Slice<u8> helpers");
     assert(count_between(fn, fn_end, "xr_array_core_bytes_") == 0 &&
            count_between(fn, fn_end, "bool ok") == 0 &&
            "unchecked stores must not contain checked Array core state");
@@ -6913,16 +6913,16 @@ TEST(cgen_mem_store_uses_pointer_helper) {
 }
 
 TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
-    const char *src = "fn readByteAt(src: Slice<byte>, pos: int) -> int {\n"
+    const char *src = "fn readByteAt(src: Slice<u8>, pos: i64) -> i64 {\n"
                       "    unsafe {\n"
-                      "        return int(src.ptr().offset(pos)[0])\n"
+                      "        return i64(src.ptr().offset(pos)[0])\n"
                       "    }\n"
                       "}\n"
-                      "fn callWindow(bytes: Array<byte>) -> int {\n"
-                      "    var view: Slice<byte> = bytes[1:3]\n"
+                      "fn callWindow(bytes: Array<u8>) -> i64 {\n"
+                      "    var view: Slice<u8> = bytes[1:3]\n"
                       "    return readByteAt(view, 1)\n"
                       "}\n"
-                      "var bytes = Array<byte>(4)\n"
+                      "var bytes = Array<u8>(4)\n"
                       "bytes[0] = 5\n"
                       "bytes[1] = 7\n"
                       "bytes[2] = 11\n"
@@ -6937,9 +6937,9 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "local Ptr read chain should generate");
     assert(contains(code, "xrt_span_from_array_slice(") &&
-           "read Slice<byte> call should pass a native span slice view");
+           "read Slice<u8> call should pass a native span slice view");
     assert(!contains(code, "xrt_array_stack_slice_view_release(") &&
-           "borrowed read Slice<byte> stack slice must not release storage");
+           "borrowed read Slice<u8> stack slice must not release storage");
     assert(!contains(code, "xrt_slice(") &&
            "local Ptr read chain must not force a heap slice view");
     const char *read_fn = find_static_function_definition(code, "readByteAt_");
@@ -6960,19 +6960,19 @@ TEST(cgen_stack_borrow_slice_allows_local_rawptr_read_chain) {
 }
 
 TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
-    const char *src = "fn leakPtr(src: Slice<byte>) -> Ptr<u8> {\n"
+    const char *src = "fn leakPtr(src: Slice<u8>) -> Ptr<u8> {\n"
                       "    unsafe {\n"
                       "        return src.ptr()\n"
                       "    }\n"
                       "}\n"
-                      "fn callWindow(bytes: Array<byte>) -> int {\n"
-                      "    var view: Slice<byte> = bytes[1:3]\n"
+                      "fn callWindow(bytes: Array<u8>) -> i64 {\n"
+                      "    var view: Slice<u8> = bytes[1:3]\n"
                       "    var p = leakPtr(view)\n"
                       "    unsafe {\n"
-                      "        return int(p[0])\n"
+                      "        return i64(p[0])\n"
                       "    }\n"
                       "}\n"
-                      "var bytes = Array<byte>(4)\n"
+                      "var bytes = Array<u8>(4)\n"
                       "bytes[0] = 5\n"
                       "bytes[1] = 7\n"
                       "bytes[2] = 11\n"
@@ -6986,12 +6986,12 @@ TEST(cgen_stack_borrow_slice_rejects_returned_rawptr) {
 }
 
 TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
-    const char *src = "fn mix() -> int {\n"
+    const char *src = "fn mix() -> i64 {\n"
                       "    var i16s: Array<i16> = []\n"
                       "    var u32s: Array<u32> = []\n"
                       "    i16s.push(32767)\n"
                       "    u32s.push(4294967295)\n"
-                      "    return int(i16s[0]) + int(u32s[0]) + len(i16s) + len(u32s)\n"
+                      "    return i64(i16s[0]) + i64(u32s[0]) + len(i16s) + len(u32s)\n"
                       "}\n"
                       "print(mix())\n";
 
@@ -7023,8 +7023,8 @@ TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
 }
 
 TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
-    const char *src = "fn mix() -> float {\n"
-                      "    var values: Array<float> = []\n"
+    const char *src = "fn mix() -> f64 {\n"
+                      "    var values: Array<f64> = []\n"
                       "    var samples: Array<f32> = []\n"
                       "    var flags: Array<bool> = []\n"
                       "    values.push(3.5)\n"
@@ -7043,15 +7043,15 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "typed float/bool array fast path should generate");
-    assert(contains(code, "XR_ELEM_F64") && "Array<float> must use the F64 typed element layout");
+    assert(!had_error && "typed f64/bool array fast path should generate");
+    assert(contains(code, "XR_ELEM_F64") && "Array<f64> must use the F64 typed element layout");
     assert(contains(code, "((double*)_a->data)") &&
-           "Array<float> index reads and writes must access raw double storage");
+           "Array<f64> index reads and writes must access raw double storage");
     assert(contains(code, "XR_ELEM_F32") && "Array<f32> must use the F32 typed element layout");
-    assert(contains(code, "((float*)_a->data)") &&
-           "Array<f32> index reads and writes must access raw float storage");
-    assert(!contains(code, "(double)(float)((float*)") &&
-           "Array<f32> raw loads are already float-rounded");
+    assert(contains(code, "((f64*)_a->data)") &&
+           "Array<f32> index reads and writes must access raw f64 storage");
+    assert(!contains(code, "(double)(f64)((f64*)") &&
+           "Array<f32> raw loads are already f64-rounded");
     assert(contains(code, "XR_ELEM_BOOL") && "Array<bool> must use the BOOL typed element layout");
     assert(contains(code, "((uint8_t*)_a->data)") &&
            "Array<bool> index reads and writes must access raw byte storage");
@@ -7062,7 +7062,7 @@ TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
     assert(!contains(code, "xrt_index_get(") &&
            "typed array index read must not fall back to runtime index dispatch");
 
-    printf("  Generated typed float/bool array fast path %zu bytes of C code\n", strlen(code));
+    printf("  Generated typed f64/bool array fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -7101,17 +7101,17 @@ TEST(cgen_typed_array_rune_uses_scalar_storage_with_rune_boxing) {
 
 TEST(cgen_inlined_struct_uses_native_field_storage) {
     const char *src = "struct Sample {\n"
-                      "    x: int\n"
-                      "    y: float\n"
+                      "    x: i64\n"
+                      "    y: f64\n"
                       "    ok: bool\n"
                       "    octet: u8\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var p = Sample{x: 41, y: 2.5, ok: true, octet: 200}\n"
                       "    p.x = p.x + 1\n"
                       "    p.octet = p.octet + 1\n"
                       "    if (p.ok) {\n"
-                      "        return p.x + int(p.octet)\n"
+                      "        return p.x + i64(p.octet)\n"
                       "    }\n"
                       "    return 0\n"
                       "}\n"
@@ -7141,8 +7141,8 @@ TEST(cgen_inlined_struct_uses_native_field_storage) {
 
 TEST(cgen_escaping_struct_uses_heap_native_storage) {
     const char *src = "struct Sample {\n"
-                      "    x: int\n"
-                      "    y: float\n"
+                      "    x: i64\n"
+                      "    y: f64\n"
                       "    ok: bool\n"
                       "    octet: u8\n"
                       "}\n"
@@ -7150,7 +7150,7 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
                       "p.x = p.x + 1\n"
                       "p.octet = p.octet + 1\n"
                       "if (p.ok) {\n"
-                      "    print(p.x + int(p.octet))\n"
+                      "    print(p.x + i64(p.octet))\n"
                       "} else {\n"
                       "    print(0)\n"
                       "}\n"
@@ -7183,12 +7183,12 @@ TEST(cgen_escaping_struct_uses_heap_native_storage) {
 
 TEST(cgen_same_shape_structs_keep_distinct_source_field_names) {
     const char *src = "struct Point {\n"
-                      "    x: int\n"
-                      "    y: int\n"
+                      "    x: i64\n"
+                      "    y: i64\n"
                       "}\n"
                       "struct Pair {\n"
-                      "    a: int\n"
-                      "    b: int\n"
+                      "    a: i64\n"
+                      "    b: i64\n"
                       "}\n"
                       "var p = Point{x: 1, y: 2}\n"
                       "var q = Pair{a: 3, b: 4}\n"
@@ -7218,7 +7218,7 @@ TEST(cgen_same_shape_structs_keep_distinct_source_field_names) {
 
 TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
     const char *src = "struct Item {\n"
-                      "    count: int\n"
+                      "    count: i64\n"
                       "    name: string\n"
                       "}\n"
                       "var item = Item{count: 2, name: \"hi\"}\n"
@@ -7291,12 +7291,12 @@ TEST(cgen_fixed_layout_struct_omits_native_header) {
 
 TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
     const char *src = "struct Point {\n"
-                      "    x: int\n"
-                      "    y: int\n"
+                      "    x: i64\n"
+                      "    y: i64\n"
                       "}\n"
                       "struct Box {\n"
                       "    p: Point\n"
-                      "    z: int\n"
+                      "    z: i64\n"
                       "}\n"
                       "var b = Box{p: Point{x: 1, y: 2}, z: 3}\n"
                       "b.p.x = b.p.x + 4\n"
@@ -7330,17 +7330,17 @@ TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
 TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
     const char *src = "struct Buf {\n"
                       "    data: [u8; 4]\n"
-                      "    bias: int\n"
+                      "    bias: i64\n"
                       "}\n"
                       "var buf = Buf{data: [1, 2, 3, 4], bias: 5}\n"
-                      "fn run(n: int) -> int {\n"
+                      "fn run(n: i64) -> i64 {\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        buf.data[0] = i as u8\n"
                       "        buf.data[1] = buf.data[0]\n"
                       "        i = i + 1\n"
                       "    }\n"
-                      "    return int(buf.data[1])\n"
+                      "    return i64(buf.data[1])\n"
                       "}\n"
                       "print(run(10))\n";
 
@@ -7383,16 +7383,16 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
 }
 
 TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
-    const char *src = "fn first(key: [u8; 4]) -> int {\n"
-                      "    return int(key[0])\n"
+    const char *src = "fn first(key: [u8; 4]) -> i64 {\n"
+                      "    return i64(key[0])\n"
                       "}\n"
-                      "fn at(key: [u8; 4], i: int) -> int {\n"
-                      "    return int(key[i])\n"
+                      "fn at(key: [u8; 4], i: i64) -> i64 {\n"
+                      "    return i64(key[i])\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var key: [u8; 4] = [1, 2, 3, 4]\n"
                       "    key[1] = 9\n"
-                      "    return len(key) + first(key) + int(key[1]) + at(key, 2)\n"
+                      "    return len(key) + first(key) + i64(key[1]) + at(key, 2)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -7460,10 +7460,10 @@ TEST(cgen_fixed_array_local_return_clones_borrowed_stack_storage) {
 }
 
 TEST(cgen_fixed_array_index_ops_elide_boxed_operands) {
-    const char *src = "fn run(i: int) -> int {\n"
+    const char *src = "fn run(i: i64) -> i64 {\n"
                       "    var lanes: [u64; 4] = [1, 2, 3, 4]\n"
                       "    lanes[1] = lanes[i]\n"
-                      "    return lanes[1] as int\n"
+                      "    return lanes[1] as i64\n"
                       "}\n"
                       "print(run(2))\n";
 
@@ -7552,13 +7552,13 @@ TEST(cgen_static_method_call_elides_class_descriptor_receiver) {
 TEST(cgen_map_class_static_factory_is_not_constructor) {
     const char *src = "class Box {\n"
                       "    kind: string\n"
-                      "    value: int\n"
+                      "    value: i64\n"
                       "    constructor(kind: string) {\n"
                       "        this.kind = kind\n"
                       "        this.value = 0\n"
                       "    }\n"
-                      "    static Int(value: int) -> Box {\n"
-                      "        var out = Box(\"int\")\n"
+                      "    static Int(value: i64) -> Box {\n"
+                      "        var out = Box(\"i64\")\n"
                       "        out.value = value\n"
                       "        return out\n"
                       "    }\n"
@@ -7589,12 +7589,12 @@ TEST(cgen_map_class_static_factory_is_not_constructor) {
 
 TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     const char *src = "struct Cell {\n"
-                      "    a: int\n"
-                      "    b: int\n"
-                      "    step: int\n"
+                      "    a: i64\n"
+                      "    b: i64\n"
+                      "    step: i64\n"
                       "}\n"
                       "var cell = Cell{a: 1, b: 2, step: 3}\n"
-                      "fn run(n: int) -> int {\n"
+                      "fn run(n: i64) -> i64 {\n"
                       "    var p = cell\n"
                       "    var i = 0\n"
                       "    var sum = 0\n"
@@ -7645,13 +7645,13 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
 
 TEST(cgen_class_method_caches_receiver_scalar_fields) {
     const char *src = "class Counter {\n"
-                      "    value: int\n"
-                      "    step: int\n"
-                      "    constructor(init: int, step: int) {\n"
+                      "    value: i64\n"
+                      "    step: i64\n"
+                      "    constructor(init: i64, step: i64) {\n"
                       "        this.value = init\n"
                       "        this.step = step\n"
                       "    }\n"
-                      "    bump(n: int) -> int {\n"
+                      "    bump(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        var sum = 0\n"
                       "        while (i < n) {\n"
@@ -7703,15 +7703,15 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
 
 TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     const char *src = "class Counter {\n"
-                      "    value: int\n"
-                      "    constructor(init: int) { this.value = init }\n"
-                      "    bump(n: int) -> int {\n"
+                      "    value: i64\n"
+                      "    constructor(init: i64) { this.value = init }\n"
+                      "    bump(n: i64) -> i64 {\n"
                       "        this.value = this.value + n\n"
                       "        return this.value\n"
                       "    }\n"
-                      "    get() -> int { return this.value }\n"
+                      "    get() -> i64 { return this.value }\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var c = Counter(2)\n"
                       "    var a = c.bump(5)\n"
                       "    return a + c.get()\n"
@@ -7754,14 +7754,14 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
 
 TEST(cgen_native_receiver_static_cleanup_borrows_without_closure_arc) {
     const char *src = "class Box {\n"
-                      "    n: int\n"
-                      "    constructor(n: int) { this.n = n }\n"
-                      "    bump() -> int {\n"
+                      "    n: i64\n"
+                      "    constructor(n: i64) { this.n = n }\n"
+                      "    bump() -> i64 {\n"
                       "        defer { this.n = this.n + 100 }\n"
                       "        return this.n\n"
                       "    }\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var b = Box(5)\n"
                       "    return b.bump()\n"
                       "}\n"
@@ -7802,22 +7802,22 @@ TEST(cgen_native_receiver_static_cleanup_borrows_without_closure_arc) {
 
 TEST(cgen_class_constructor_returns_heap_native_instance) {
     const char *src = "class Counter {\n"
-                      "    value: int\n"
-                      "    constructor(init: int) { this.value = init }\n"
-                      "    bump(n: int) -> int {\n"
+                      "    value: i64\n"
+                      "    constructor(init: i64) { this.value = init }\n"
+                      "    bump(n: i64) -> i64 {\n"
                       "        this.value = this.value + n\n"
                       "        return this.value\n"
                       "    }\n"
-                      "    get() -> int { return this.value }\n"
+                      "    get() -> i64 { return this.value }\n"
                       "}\n"
-                      "fn make(n: int) -> Counter {\n"
+                      "fn make(n: i64) -> Counter {\n"
                       "    return Counter(n)\n"
                       "}\n"
-                      "fn touch(c: ref Counter) -> int {\n"
+                      "fn touch(c: ref Counter) -> i64 {\n"
                       "    c.value = c.value + 1\n"
                       "    return c.get()\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var c = make(2)\n"
                       "    var a = c.bump(5)\n"
                       "    var b = c.value\n"
@@ -7896,9 +7896,9 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
 
 TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     const char *src = "class IntBag {\n"
-                      "    values: Array<int>\n"
-                      "    constructor(values: Array<int>) { this.values = values }\n"
-                      "    scan(rounds: int) -> int {\n"
+                      "    values: Array<i64>\n"
+                      "    constructor(values: Array<i64>) { this.values = values }\n"
+                      "    scan(rounds: i64) -> i64 {\n"
                       "        var r = 0\n"
                       "        var sum = 0\n"
                       "        while (r < rounds) {\n"
@@ -7912,8 +7912,8 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
                       "        return sum\n"
                       "    }\n"
                       "}\n"
-                      "fn make_values(n: int) -> Array<int> {\n"
-                      "    var values: Array<int> = []\n"
+                      "fn make_values(n: i64) -> Array<i64> {\n"
+                      "    var values: Array<i64> = []\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
                       "        values.push(i * 3 + 1)\n"
@@ -7921,7 +7921,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
                       "    }\n"
                       "    return values\n"
                       "}\n"
-                      "fn run(rounds: int) -> int {\n"
+                      "fn run(rounds: i64) -> i64 {\n"
                       "    var bag = IntBag(make_values(8))\n"
                       "    return bag.scan(rounds)\n"
                       "}\n"
@@ -7964,31 +7964,31 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
 
 TEST(cgen_native_class_collection_ref_fields_use_arc) {
     const char *src = "class Bag {\n"
-                      "    values: Array<int>\n"
-                      "    constructor(values: Array<int>) {\n"
+                      "    values: Array<i64>\n"
+                      "    constructor(values: Array<i64>) {\n"
                       "        this.values = values\n"
                       "    }\n"
-                      "    replace(next: Array<int>) -> int {\n"
+                      "    replace(next: Array<i64>) -> i64 {\n"
                       "        this.values = next\n"
                       "        return len(this.values)\n"
                       "    }\n"
-                      "    selfAssign() -> int {\n"
+                      "    selfAssign() -> i64 {\n"
                       "        this.values = this.values\n"
                       "        return len(this.values)\n"
                       "    }\n"
                       "}\n"
-                      "fn make(values: Array<int>) -> Bag {\n"
+                      "fn make(values: Array<i64>) -> Bag {\n"
                       "    return Bag(values)\n"
                       "}\n"
-                      "fn swap(b: ref Bag, next: Array<int>) -> int {\n"
+                      "fn swap(b: ref Bag, next: Array<i64>) -> i64 {\n"
                       "    b.values = next\n"
                       "    return len(b.values)\n"
                       "}\n"
-                      "fn local(values: Array<int>) -> int {\n"
+                      "fn local(values: Array<i64>) -> i64 {\n"
                       "    var bag = Bag(values)\n"
                       "    return len(bag.values)\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var a = [1]\n"
                       "    var b = [2, 3]\n"
                       "    var bag = make(a)\n"
@@ -8104,11 +8104,11 @@ TEST(cgen_native_class_collection_ref_fields_use_arc) {
 
 TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     const char *src = "class Bag {\n"
-                      "    values: Set<int>\n"
+                      "    values: Set<i64>\n"
                       "    constructor() {\n"
                       "        this.values = #[]\n"
                       "    }\n"
-                      "    fill(n: int) -> int {\n"
+                      "    fill(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        while (i < n) {\n"
                       "            this.values.add(i)\n"
@@ -8126,7 +8126,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "class Set<int> length/size sum should generate");
+    assert(!had_error && "class Set<i64> length/size sum should generate");
 
     const char *fn = strstr(code, "static int64_t test_fill_");
     assert(fn != NULL && "fill method should use typed ABI");
@@ -8135,20 +8135,20 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     const char *fn_end = next_static_after(fn);
 
     assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_I64)") &&
-           "Set<int> class field constructor should use typed i64 set storage");
+           "Set<i64> class field constructor should use typed i64 set storage");
     assert(count_between(fn, fn_end, "xrt_set_add_i64(") == 1 &&
-           "Set<int>.add should use the i64 direct helper");
+           "Set<i64>.add should use the i64 direct helper");
     assert(count_between(fn, fn_end, "int64_t v") > 0 && count_between(fn, fn_end, "->len") > 0 &&
-           "len(Set<int>) should be materialized as a scalar field load");
+           "len(Set<i64>) should be materialized as a scalar field load");
     assert(count_between(fn, fn_end, "XR_FROM_INT((p0)->") == 0 &&
-           "len(Set<int>) should not box the native length field");
+           "len(Set<i64>) should not box the native length field");
     assert(count_between(fn, fn_end, "xrt_add(") == 0 &&
-           "repeated len(Set<int>) should use native integer arithmetic");
+           "repeated len(Set<i64>) should use native integer arithmetic");
     assert(count_between(fn, fn_end, "(int64_t)((uint64_t)(") > 0 &&
            count_between(fn, fn_end, "xrt_i64_add(") == 0 &&
-           "repeated len(Set<int>) should emit inline native wrap arithmetic");
+           "repeated len(Set<i64>) should emit inline native wrap arithmetic");
 
-    printf("  Generated class Set<int> scalar length/size fast path %zu bytes of C code\n",
+    printf("  Generated class Set<i64> scalar length/size fast path %zu bytes of C code\n",
            strlen(code));
     xr_free(code);
     xi_func_free(ir);
@@ -8160,7 +8160,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "    constructor() {\n"
                       "        this.values = #[]\n"
                       "    }\n"
-                      "    fill(n: int) -> int {\n"
+                      "    fill(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        while (i < n) {\n"
                       "            this.values.add(i as u8)\n"
@@ -8168,7 +8168,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        }\n"
                       "        return len(this.values)\n"
                       "    }\n"
-                      "    scan(n: int) -> int {\n"
+                      "    scan(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        var hits = 0\n"
                       "        while (i < n) {\n"
@@ -8179,7 +8179,7 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
                       "        }\n"
                       "        return hits\n"
                       "    }\n"
-                      "    prune(n: int) -> int {\n"
+                      "    prune(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        var removed = 0\n"
                       "        while (i < n) {\n"
@@ -8236,11 +8236,11 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
 }
 TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
     const char *src = "class Bag {\n"
-                      "    values: Map<int, int>\n"
+                      "    values: Map<i64, i64>\n"
                       "    constructor() {\n"
                       "        this.values = #{}\n"
                       "    }\n"
-                      "    fill(n: int) -> int {\n"
+                      "    fill(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        while (i < n) {\n"
                       "            this.values.set(i, i * 3 + 1)\n"
@@ -8248,7 +8248,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        }\n"
                       "        return len(this.values)\n"
                       "    }\n"
-                      "    scan(n: int) -> int {\n"
+                      "    scan(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        var hits = 0\n"
                       "        while (i < n) {\n"
@@ -8259,7 +8259,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
                       "        }\n"
                       "        return hits\n"
                       "    }\n"
-                      "    prune(n: int) -> int {\n"
+                      "    prune(n: i64) -> i64 {\n"
                       "        var i = 0\n"
                       "        var removed = 0\n"
                       "        while (i < n) {\n"
@@ -8280,7 +8280,7 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "class Map<int,int> direct helpers should generate");
+    assert(!had_error && "class Map<i64,i64> direct helpers should generate");
 
     const char *fill = strstr(code, "static int64_t test_fill_");
     assert(fill != NULL && "fill method should use typed ABI");
@@ -8299,27 +8299,27 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
     const char *prune_end = next_static_after(prune);
 
     assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)") &&
-           "Map<int,int> class field constructor should use typed map storage");
+           "Map<i64,i64> class field constructor should use typed map storage");
     assert(count_between(fill, fill_end, "xrt_map_set_i64_i64_typed(") == 1 &&
-           "Map<int,int>.set should use the typed integer direct helper");
+           "Map<i64,i64>.set should use the typed integer direct helper");
     assert(count_between(scan, scan_end, "xrt_map_has_i64_typed(") == 0 &&
-           "Map<int,int>.has guarding a get fuses into the get's find, not a separate has probe");
+           "Map<i64,i64>.has guarding a get fuses into the get's find, not a separate has probe");
     assert(count_between(scan, scan_end, "xrt_map_find_i64_typed(") == 1 &&
            count_between(scan, scan_end, "xrt_map_get_i64_value_typed(") == 1 &&
-           "Map<int,int>.has+get guarded should share one typed find plus one typed value load");
+           "Map<i64,i64>.has+get guarded should share one typed find plus one typed value load");
     assert(count_between(scan, scan_end, "_mf") >= 2 &&
            "the fused has should write _mf and the guarded get should read it back");
     assert(count_between(scan, scan_end, "\n    XrValue v") == 0 &&
            count_between(scan, scan_end, "XR_FROM_INT(") == 0 &&
            count_between(scan, scan_end, "xrt_add(") == 0 &&
-           "Map<int,int>.get guarded by has should avoid tagged result and arithmetic");
+           "Map<i64,i64>.get guarded by has should avoid tagged result and arithmetic");
     assert(count_between(prune, prune_end, "xrt_map_delete_i64_typed(") == 1 &&
-           "Map<int,int>.delete should use the typed integer direct helper");
+           "Map<i64,i64>.delete should use the typed integer direct helper");
     assert(count_between(fill, fill_end, "xrt_map_set(") == 0 &&
            count_between(scan, scan_end, "xrt_map_has(") == 0 &&
            count_between(scan, scan_end, "xrt_map_get(") == 0 &&
            count_between(prune, prune_end, "xrt_map_delete(") == 0 &&
-           "Map<int,int> class hot methods should not fall back to boxed map helpers");
+           "Map<i64,i64> class hot methods should not fall back to boxed map helpers");
 
     xr_free(code);
     xi_func_free(ir);
@@ -8327,20 +8327,20 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
 TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     const char *src =
         "class Bag { values: Map<bool, f32>\n"
-        "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 1.5); "
+        "constructor() { this.values = #{} } fill() -> i64 { this.values.set(true, 1.5); "
         "this.values.set(false, 2.25); return len(this.values) } "
-        "scan() -> float { var sum = 0.0; if (this.values.containsKey(true)) { sum = sum + "
+        "scan() -> f64 { var sum = 0.0; if (this.values.containsKey(true)) { sum = sum + "
         "this.values.get(true)! }; if (this.values.containsKey(false)) { sum = sum + "
         "this.values.get(false)! "
-        "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
+        "}; return sum } prune() -> i64 { if (this.values.delete(false)) { return "
         "len(this.values) }; return 0 }\n"
-        "} class IntBag { values: Map<bool, int>\n"
-        "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 11); "
+        "} class IntBag { values: Map<bool, i64>\n"
+        "constructor() { this.values = #{} } fill() -> i64 { this.values.set(true, 11); "
         "this.values.set(false, 23); return len(this.values) } "
-        "scan() -> int { var sum = 0; if (this.values.containsKey(true)) { sum = sum + "
+        "scan() -> i64 { var sum = 0; if (this.values.containsKey(true)) { sum = sum + "
         "this.values.get(true)! }; if (this.values.containsKey(false)) { sum = sum + "
         "this.values.get(false)! "
-        "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
+        "}; return sum } prune() -> i64 { if (this.values.delete(false)) { return "
         "len(this.values) }; return 0 }\n"
         "} var bag = Bag(); print(bag.fill() + bag.prune()); print(bag.scan())\n"
         "var int_bag = IntBag(); print(int_bag.fill() + int_bag.prune()); print(int_bag.scan())\n";
@@ -8387,11 +8387,11 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
 
 TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
     const char *src =
-        "class Bag { values: Map<int, bool>\n"
+        "class Bag { values: Map<i64, bool>\n"
         "constructor() { this.values = #{} } "
-        "fill(n: int) -> int { var i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
+        "fill(n: i64) -> i64 { var i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
         "i = i + 1 }; return len(this.values) } "
-        "count(n: int) -> int { var i = 0; var total = 0; while (i < n) { "
+        "count(n: i64) -> i64 { var i = 0; var total = 0; while (i < n) { "
         "if (this.values.containsKey(i)) { if (this.values.get(i) == true) { total = total + 1 } "
         "}; "
         "i = i + 1 }; return total }\n"
@@ -8409,11 +8409,11 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
     const char *count_end = next_static_after(count);
     assert(count_between(code, code_end, "xrt_map_find_i64_typed(") >= 1 &&
            count_between(code, code_end, "xrt_map_get_i64_value_typed(") >= 1 &&
-           "Map<int,bool>.get guarded by has should keep typed storage");
+           "Map<i64,bool>.get guarded by has should keep typed storage");
     assert(count_between(count, count_end, "\n    XrValue v") == 0 &&
            count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
            count_between(count, count_end, "xr_truthy(") >= 1 &&
-           "Map<int,bool>.get condition should consume the stable truthiness owner adapter");
+           "Map<i64,bool>.get condition should consume the stable truthiness owner adapter");
 
     printf("  Generated guarded bool map condition %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -8421,9 +8421,9 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
 }
 
 TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
-    const char *src = "class Bag { values: Map<int, bool>\n"
+    const char *src = "class Bag { values: Map<i64, bool>\n"
                       "constructor() { this.values = #{}; this.values.set(1, true) } "
-                      "count() -> int { if (this.values.get(1) == true) { return 1 }; return 0 }\n"
+                      "count() -> i64 { if (this.values.get(1) == true) { return 1 }; return 0 }\n"
                       "} var bag = Bag(); print(bag.count())\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -8439,7 +8439,7 @@ TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
            count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
            count_between(count, count_end, "xrt_eq(") >= 1 &&
            count_between(count, count_end, "xr_truthy(") >= 1 &&
-           "unguarded Map<int,bool>.get comparison should consume the stable truthiness owner adapter");
+           "unguarded Map<i64,bool>.get comparison should consume the stable truthiness owner adapter");
 
     printf("  Generated unguarded bool map explicit comparison %zu bytes of C code\n",
            strlen(code));
@@ -8449,29 +8449,29 @@ TEST(cgen_class_map_bool_value_unguarded_explicit_true_uses_tagged_compare) {
 
 TEST(cgen_inherited_class_uses_native_base_layout) {
     const char *src = "class Shape {\n"
-                      "    kind: int\n"
-                      "    constructor(kind: int) {\n"
+                      "    kind: i64\n"
+                      "    constructor(kind: i64) {\n"
                       "        this.kind = kind\n"
                       "    }\n"
-                      "    kind_plus() -> int {\n"
+                      "    kind_plus() -> i64 {\n"
                       "        return this.kind + 7\n"
                       "    }\n"
                       "}\n"
                       "class Rect extends Shape {\n"
-                      "    w: int\n"
-                      "    h: int\n"
-                      "    constructor(w: int, h: int) {\n"
+                      "    w: i64\n"
+                      "    h: i64\n"
+                      "    constructor(w: i64, h: i64) {\n"
                       "        super(1)\n"
                       "        this.w = w\n"
                       "        this.h = h\n"
                       "    }\n"
-                      "    area() -> int {\n"
+                      "    area() -> i64 {\n"
                       "        return this.w * this.h\n"
                       "    }\n"
-                      "    kind_plus() -> int {\n"
+                      "    kind_plus() -> i64 {\n"
                       "        return this.kind + this.w\n"
                       "    }\n"
-                      "    score_with_area() -> int {\n"
+                      "    score_with_area() -> i64 {\n"
                       "        return this.area() + this.kind\n"
                       "    }\n"
                       "}\n"
@@ -8540,13 +8540,13 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
 }
 
 TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
-    const char *src = "fn sum() -> int {\n"
+    const char *src = "fn sum() -> i64 {\n"
                       "    var bytes: Array<u8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
                       "    var mid: Slice<u8> = bytes[1:3]\n"
-                      "    return int(mid[0]) + len(mid)\n"
+                      "    return i64(mid[0]) + len(mid)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -8577,8 +8577,8 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
 }
 
 TEST(cgen_typename_as_and_slice_use_direct_drivers) {
-    const char *src = "fn run() -> int {\n"
-                      "    var arr: Array<int> = [1, 2, 3]\n"
+    const char *src = "fn run() -> i64 {\n"
+                      "    var arr: Array<i64> = [1, 2, 3]\n"
                       "    var s = copy(arr[0:2])\n"
                       "    var label = 42 as string\n"
                       "    if (typeName(s) == \"Array\" && label == \"42\") {\n"
@@ -8611,7 +8611,7 @@ TEST(cgen_typename_as_and_slice_use_direct_drivers) {
 }
 
 TEST(cgen_typeid_uses_stable_owner_adapter) {
-    const char *src = "var stableType = Type.int\n"
+    const char *src = "var stableType = Type.i64\n"
                       "stableType = typeOf(42)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -8648,7 +8648,7 @@ TEST(cgen_bits_not_uses_stable_owner_adapter) {
     assert(adapter != NULL && strcmp(adapter, "xrt_bits_not_eval") == 0 &&
            "CGen must resolve the stable bitwise-not owner adapter");
 
-    const char *src = "fn bitsNotOwner(value: int) -> int {\n"
+    const char *src = "fn bitsNotOwner(value: i64) -> i64 {\n"
                       "    return ~value\n"
                       "}\n"
                       "print(bitsNotOwner(-1))\n";
@@ -8675,8 +8675,8 @@ TEST(cgen_numeric_neg_uses_stable_owner_adapter) {
     assert(adapter != NULL && strcmp(adapter, "xrt_numeric_neg_eval") == 0 &&
            "CGen must resolve the stable numeric-neg owner adapter");
 
-    const char *src = "fn negInt(value: int) -> int { return -value }\n"
-                      "fn negFloat(value: float) -> float { return -value }\n"
+    const char *src = "fn negInt(value: i64) -> i64 { return -value }\n"
+                      "fn negFloat(value: f64) -> f64 { return -value }\n"
                       "fn negBig(value: BigInt) -> BigInt { return -value }\n"
                       "print(negInt(42))\n"
                       "print(negFloat(1.5))\n";
@@ -8706,9 +8706,9 @@ TEST(cgen_bitwise_binary_uses_stable_owner_adapter) {
     assert(adapter != NULL && strcmp(adapter, "xrt_bitwise_binary_eval") == 0 &&
            "CGen must resolve the stable bitwise-binary owner adapter");
 
-    const char *src = "fn ownerAnd(a: int, b: int) -> int { return a & b }\n"
-                      "fn ownerOr(a: int, b: int) -> int { return a | b }\n"
-                      "fn ownerXor(a: int, b: int) -> int { return a ^ b }\n"
+    const char *src = "fn ownerAnd(a: i64, b: i64) -> i64 { return a & b }\n"
+                      "fn ownerOr(a: i64, b: i64) -> i64 { return a | b }\n"
+                      "fn ownerXor(a: i64, b: i64) -> i64 { return a ^ b }\n"
                       "print(ownerAnd(-1, 85))\n"
                       "print(ownerOr(-8, 3))\n"
                       "print(ownerXor(-1, -9223372036854775807 - 1))\n";
@@ -8765,10 +8765,10 @@ TEST(cgen_byte_slice_compare_uses_stable_owner_adapter) {
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_compare_checked_raw") == 0 &&
            "CGen must resolve the stable byte-slice compare owner adapter");
 
-    const char *src = "fn compareBytes() -> int {\n"
-                      "    var left = Array<byte>(2)\n"
-                      "    var right = Array<byte>(3)\n"
-                      "    var leftView: Slice<byte> = left[:]\n"
+    const char *src = "fn compareBytes() -> i64 {\n"
+                      "    var left = Array<u8>(2)\n"
+                      "    var right = Array<u8>(3)\n"
+                      "    var leftView: Slice<u8> = left[:]\n"
                       "    return leftView.compare(right[:])\n"
                       "}\n"
                       "print(compareBytes())\n";
@@ -8800,9 +8800,9 @@ TEST(cgen_byte_slice_fill_uses_stable_owner_adapter) {
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_fill_checked_raw") == 0 &&
            "CGen must resolve the stable byte-slice fill owner adapter");
 
-    const char *src = "fn fillBytes(value: u8) -> byte {\n"
-                      "    var bytes = Array<byte>(4)\n"
-                      "    var view: Slice<byte> = bytes[:]\n"
+    const char *src = "fn fillBytes(value: u8) -> u8 {\n"
+                      "    var bytes = Array<u8>(4)\n"
+                      "    var view: Slice<u8> = bytes[:]\n"
                       "    view.fill(value)\n"
                       "    return view[0]\n"
                       "}\n"
@@ -8842,14 +8842,14 @@ TEST(cgen_byte_slice_mutation_uses_stable_owner_adapters) {
                       XR_SEM_OWNER_ID_SHARED_BYTE_SLICE_REPEAT_LO),
                   "xrt_byte_slice_repeat_from_checked_raw") == 0);
 
-    const char *src = "fn mutate() -> int {\n"
-                      "    var bytes = Array<byte>(8)\n"
-                      "    var view: Slice<byte> = bytes[:]\n"
-                      "    var dst: Slice<byte> = view[2:6]\n"
-                      "    var source: Slice<byte> = view[0:4]\n"
+    const char *src = "fn mutate() -> i64 {\n"
+                      "    var bytes = Array<u8>(8)\n"
+                      "    var view: Slice<u8> = bytes[:]\n"
+                      "    var dst: Slice<u8> = view[2:6]\n"
+                      "    var source: Slice<u8> = view[0:4]\n"
                       "    dst.copyFrom(source)\n"
                       "    view.repeatFrom(4, 2, 4)\n"
-                      "    return int(view[7])\n"
+                      "    return i64(view[7])\n"
                       "}\n"
                       "print(mutate())\n";
     XiFunc *ir = compile_to_ir(src);
@@ -8883,10 +8883,10 @@ TEST(cgen_byte_slice_common_prefix_uses_stable_owner_adapter) {
     assert(adapter != NULL && strcmp(adapter, "xrt_byte_slice_common_prefix_checked_raw") == 0 &&
            "CGen must resolve the stable byte-slice common-prefix owner adapter");
 
-    const char *src = "fn commonPrefix() -> int {\n"
-                      "    var left = Array<byte>(9)\n"
-                      "    var right = Array<byte>(9)\n"
-                      "    var leftView: Slice<byte> = left[:]\n"
+    const char *src = "fn commonPrefix() -> i64 {\n"
+                      "    var left = Array<u8>(9)\n"
+                      "    var right = Array<u8>(9)\n"
+                      "    var leftView: Slice<u8> = left[:]\n"
                       "    return leftView.commonPrefix(right[:])\n"
                       "}\n"
                       "print(commonPrefix())\n";
@@ -8946,9 +8946,9 @@ TEST(cgen_pod_slice_view_uses_stable_owner_adapter) {
                       XR_SEM_OWNER_ID_SHARED_POD_SLICE_VIEW_LO),
                   "xrt_pod_slice_view_checked_raw") == 0);
 
-    const char *src = "fn views(values: Array<u32>) -> int {\n"
+    const char *src = "fn views(values: Array<u32>) -> i64 {\n"
                       "    var words: Slice<u32> = values[:]\n"
-                      "    var bytes: Slice<byte> = words.asBytes()\n"
+                      "    var bytes: Slice<u8> = words.asBytes()\n"
                       "    var roundtrip: Slice<u32> = bytes.reinterpret<u32>()\n"
                       "    return len(roundtrip)\n"
                       "}\n";
@@ -9041,7 +9041,7 @@ TEST(cgen_cell_access_uses_stable_owner_adapter) {
     TEST_REQUIRE(adapter != NULL && strcmp(adapter, "xrt_cell_access") == 0,
                  "cell access publishes its stable CGen adapter");
 
-    const char *src = "fn mutateCell() -> int {\n"
+    const char *src = "fn mutateCell() -> i64 {\n"
                       "    var n = 1\n"
                       "    fn bump() { n = n + 2 }\n"
                       "    bump()\n"
@@ -9113,10 +9113,10 @@ TEST(cgen_null_test_uses_stable_owner_adapter) {
 }
 
 TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
-    const char *src = "fn forceUtf8(data: Array<byte>) -> string {\n"
+    const char *src = "fn forceUtf8(data: Array<u8>) -> string {\n"
                       "    return string.fromUtf8(data[:])!\n"
                       "}\n"
-                      "var bytes = Array<byte>(1)\n"
+                      "var bytes = Array<u8>(1)\n"
                       "bytes[0] = 65\n"
                       "print(forceUtf8(bytes))\n";
 
@@ -9141,12 +9141,12 @@ TEST(cgen_force_unwrap_checktype_uses_portable_borrowed_helper) {
 }
 
 TEST(cgen_span_index_set_checks_readonly_flag) {
-    const char *src = "fn write(dst: ref Slice<byte>) {\n"
+    const char *src = "fn write(dst: ref Slice<u8>) {\n"
                       "    dst[0] = 7\n"
                       "}\n"
                       "fn run() {\n"
-                      "    var values = Array<byte>(1)\n"
-                      "    var view: Slice<byte> = values[:]\n"
+                      "    var values = Array<u8>(1)\n"
+                      "    var view: Slice<u8> = values[:]\n"
                       "    write(ref view)\n"
                       "}\n"
                       "run()\n";
@@ -9173,8 +9173,8 @@ TEST(cgen_span_index_set_checks_readonly_flag) {
 
 TEST(cgen_same_type_as_lowers_away_without_arc) {
     const char *src = "class Box {\n"
-                      "    value: int\n"
-                      "    constructor(value: int) { this.value = value }\n"
+                      "    value: i64\n"
+                      "    constructor(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn pass(box: move Box) -> Box { return box }\n"
                       "fn cast(box: move Box) -> Box { return pass(move box) as Box }\n"
@@ -9196,11 +9196,11 @@ TEST(cgen_same_type_as_lowers_away_without_arc) {
 }
 
 TEST(cgen_closure_values_and_indirect_calls_use_portable_c) {
-    const char *src = "fn bump(value: ref int) -> int {\n"
+    const char *src = "fn bump(value: ref i64) -> i64 {\n"
                       "    value = value + 1\n"
                       "    return value\n"
                       "}\n"
-                      "fn invoke(action: fn(ref int) -> int, value: ref int) -> int {\n"
+                      "fn invoke(action: fn(ref i64) -> i64, value: ref i64) -> i64 {\n"
                       "    return action(ref value)\n"
                       "}\n"
                       "var value = 4\n"
@@ -9274,7 +9274,7 @@ TEST(cgen_range_uses_direct_aot_driver) {
 }
 
 TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
-    const char *src = "fn sum(n: int) -> int {\n"
+    const char *src = "fn sum(n: i64) -> i64 {\n"
                       "    var bytes: Array<u8> = []\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
@@ -9285,7 +9285,7 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
                       "    var total = 0\n"
                       "    i = 0\n"
                       "    while (i < len(mid)) {\n"
-                      "        total = total + int(mid[i])\n"
+                      "        total = total + i64(mid[i])\n"
                       "        i = i + 1\n"
                       "    }\n"
                       "    return total\n"
@@ -9336,8 +9336,8 @@ TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
 }
 
 TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
-    const char *src = "fn sum(n: int) -> float {\n"
-                      "    var values: Array<float> = []\n"
+    const char *src = "fn sum(n: i64) -> f64 {\n"
+                      "    var values: Array<f64> = []\n"
                       "    var i = 0\n"
                       "    var x = 1.0\n"
                       "    while (i < n) {\n"
@@ -9367,9 +9367,9 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
     assert(!had_error && "typed array branchy fill loop should generate");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
-           "branchy Array<float> fill loop must preallocate uninitialized typed storage");
+           "branchy Array<f64> fill loop must preallocate uninitialized typed storage");
     assert((contains(code, "double *_ad") || contains(code, "double *XRT_RESTRICT _ad")) &&
-           "branchy Array<float> fill loop must cache raw double storage (optionally restrict)");
+           "branchy Array<f64> fill loop must cache raw double storage (optionally restrict)");
     assert(!contains(code, "_a->len =") &&
            "branchy typed array fill loop must use final len store outside the push body");
     assert(!contains(code, "_a->len >= _a->cap") &&
@@ -9389,14 +9389,14 @@ TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
 }
 
 TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
-    const char *src = "fn sum() -> int {\n"
+    const char *src = "fn sum() -> i64 {\n"
                       "    var bytes: Array<u8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
                       "    bytes.push(3)\n"
                       "    var kept = bytes.filter(fn(x: u8) -> bool { return x > 1 })\n"
                       "    kept.push(9)\n"
-                      "    return int(kept[0]) + int(kept[2]) + len(kept)\n"
+                      "    return i64(kept[0]) + i64(kept[2]) + len(kept)\n"
                       "}\n"
                       "print(sum())\n";
 
@@ -9441,12 +9441,12 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
 }
 
 TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
-    const char *src = "fn sum() -> int {\n"
-                      "    var values: Array<int> = []\n"
+    const char *src = "fn sum() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
                       "    values.push(1)\n"
                       "    values.push(2)\n"
                       "    values.push(3)\n"
-                      "    var mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
+                      "    var mapped = values.map(fn(x: i64) -> i64 { return x + 2 })\n"
                       "    mapped.push(9)\n"
                       "    return mapped[0] + mapped[3] + len(mapped)\n"
                       "}\n"
@@ -9460,32 +9460,32 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed array map fast path should generate");
     assert(!contains(code, "xrt_array_map_typed(") &&
-           "pure Array<int>.map callback must inline instead of using boxed runtime helper");
+           "pure Array<i64>.map callback must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "pure inlined Array<int>.map must not allocate a callback closure");
+           "pure inlined Array<i64>.map must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
-           "pure inlined Array<int>.map must not emit a dead boxed callback adapter");
+           "pure inlined Array<i64>.map must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
-           "inlined Array<int>.map must preallocate typed result storage");
+           "inlined Array<i64>.map must preallocate typed result storage");
     assert(contains(code, "XR_ELEM_I64") &&
-           "Array<int>.map result must use the I64 typed element layout");
+           "Array<i64>.map result must use the I64 typed element layout");
     assert(contains(code, "int64_t *_dstd") &&
-           "inlined Array<int>.map must write through a typed result pointer");
+           "inlined Array<i64>.map must write through a typed result pointer");
     assert(contains(code, "int64_t *_srcd") &&
-           "inlined Array<int>.map must read through a typed source pointer");
+           "inlined Array<i64>.map must read through a typed source pointer");
     assert(contains(code, "test___anonymous__") &&
-           "inlined Array<int>.map must call the callback's native function");
+           "inlined Array<i64>.map must call the callback's native function");
     assert((contains(code, "((int64_t*)_a->data)") || contains(code, "int64_t *_dstd")) &&
-           "Array<int>.map result reads and writes must access raw i64 storage");
+           "Array<i64>.map result reads and writes must access raw i64 storage");
     assert(!contains(code, "xrt_method_1(") &&
-           "Array<int>.map must not fall back to dynamic method dispatch");
+           "Array<i64>.map must not fall back to dynamic method dispatch");
     assert(!contains(code, "({") &&
-           "Array<int>.map must emit portable C11 statements");
+           "Array<i64>.map must emit portable C11 statements");
     assert(!contains(code, "xrt_index_get(") &&
-           "Array<int>.map result index read must not fall back to runtime index dispatch");
+           "Array<i64>.map result index read must not fall back to runtime index dispatch");
     assert(!contains(code, "xrt_getprop(") &&
-           "Array<int>.map result length must not fall back to dynamic property dispatch");
+           "Array<i64>.map result length must not fall back to dynamic property dispatch");
 
     printf("  Generated typed array map fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -9493,12 +9493,12 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
 }
 
 TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
-    const char *src = "fn sum() -> int {\n"
-                      "    var values: Array<int> = []\n"
+    const char *src = "fn sum() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
                       "    values.push(1)\n"
                       "    values.push(2)\n"
                       "    values.push(3)\n"
-                      "    var mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
+                      "    var mapped = values.map(fn(x: i64) -> i64 { return x + 2 })\n"
                       "    var i = 0\n"
                       "    var total = 0\n"
                       "    while (i < len(mapped)) {\n"
@@ -9518,14 +9518,14 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
     const char *code_end = code + strlen(code);
     assert(!had_error && "read-only typed array map scan should generate");
     assert(!contains(code, "xrt_array_map_typed(") &&
-           "read-only pure Array<int>.map must inline instead of using boxed runtime helper");
+           "read-only pure Array<i64>.map must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "read-only pure Array<int>.map must not allocate a callback closure");
+           "read-only pure Array<i64>.map must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
-           "read-only pure Array<int>.map must not emit a dead boxed callback adapter");
+           "read-only pure Array<i64>.map must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
-           "read-only pure Array<int>.map must preallocate typed result storage");
+           "read-only pure Array<i64>.map must preallocate typed result storage");
     assert(contains(code, "int64_t *_ad") &&
            "read-only map result must cache the typed data pointer");
     assert(count_between(code, code_end, "int64_t *_ad") >= 1 &&
@@ -9535,7 +9535,7 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
     assert(!contains(code, "xrt_index_get(") &&
            "read-only map result scan must not fall back to runtime index dispatch");
     assert(!contains(code, "({") &&
-           "read-only Array<int>.map must emit portable C11 statements");
+           "read-only Array<i64>.map must emit portable C11 statements");
 
     printf("  Generated read-only typed array map scan %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -9543,12 +9543,12 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
 }
 
 TEST(cgen_typed_array_map_captured_callback_fails_closed) {
-    const char *src = "fn sum() -> int {\n"
-                      "    var values: Array<int> = []\n"
+    const char *src = "fn sum() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
                       "    values.push(1)\n"
                       "    values.push(2)\n"
                       "    var offset = 3\n"
-                      "    var mapped = values.map(fn(x: int) -> int { return x + offset })\n"
+                      "    var mapped = values.map(fn(x: i64) -> i64 { return x + offset })\n"
                       "    return mapped[0] + mapped[1]\n"
                       "}\n"
                       "print(sum())\n";
@@ -9559,9 +9559,9 @@ TEST(cgen_typed_array_map_captured_callback_fails_closed) {
 }
 
 TEST(cgen_typed_array_direct_hof_callback_extra_use_fails_closed) {
-    const char *src = "fn run() -> int {\n"
+    const char *src = "fn run() -> i64 {\n"
                       "    var values = [1, 2]\n"
-                      "    var callback = fn(x: int) -> int { return x + 1 }\n"
+                      "    var callback = fn(x: i64) -> i64 { return x + 1 }\n"
                       "    var mapped = values.map(callback)\n"
                       "    return mapped[0] + callback(3)\n"
                       "}\n"
@@ -9573,11 +9573,11 @@ TEST(cgen_typed_array_direct_hof_callback_extra_use_fails_closed) {
 }
 
 TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
-    const char *src = "fn apply(f: fn(int) -> int, x: int) -> int {\n"
+    const char *src = "fn apply(f: fn(i64) -> i64, x: i64) -> i64 {\n"
                       "    return f(x)\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    return apply(fn(n: int) -> int { return n + 1 }, 41)\n"
+                      "fn run() -> i64 {\n"
+                      "    return apply(fn(n: i64) -> i64 { return n + 1 }, 41)\n"
                       "}\n"
                       "print(run())\n";
 
@@ -9924,7 +9924,7 @@ TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
 }
 
 TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
-    const char *src = "fn sum() -> int {\n"
+    const char *src = "fn sum() -> i64 {\n"
                       "    var bytes: Array<u8> = []\n"
                       "    bytes.push(1)\n"
                       "    bytes.push(2)\n"
@@ -9974,12 +9974,12 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
 }
 
 TEST(cgen_typed_array_filter_captured_callback_fails_closed) {
-    const char *src = "fn sum() -> int {\n"
-                      "    var values: Array<int> = []\n"
+    const char *src = "fn sum() -> i64 {\n"
+                      "    var values: Array<i64> = []\n"
                       "    values.push(1)\n"
                       "    values.push(4)\n"
                       "    var limit = 2\n"
-                      "    var kept = values.filter(fn(x: int) -> bool { return x > limit })\n"
+                      "    var kept = values.filter(fn(x: i64) -> bool { return x > limit })\n"
                       "    return kept[0]\n"
                       "}\n"
                       "print(sum())\n";
@@ -9991,12 +9991,12 @@ TEST(cgen_typed_array_filter_captured_callback_fails_closed) {
 
 TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
     const char *src =
-        "fn sum() -> int {\n"
-        "    var values: Array<int> = []\n"
+        "fn sum() -> i64 {\n"
+        "    var values: Array<i64> = []\n"
         "    values.push(1)\n"
         "    values.push(2)\n"
         "    values.push(3)\n"
-        "    return values.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)\n"
+        "    return values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)\n"
         "}\n"
         "print(sum())\n";
 
@@ -10008,21 +10008,21 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "typed array reduce fast path should generate");
     assert(!contains(code, "xrt_array_reduce_typed(") &&
-           "pure Array<int>.reduce callback must inline instead of using boxed runtime helper");
+           "pure Array<i64>.reduce callback must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new(&_xr_callable_") &&
-           "pure inlined Array<int>.reduce must not allocate a callback closure");
+           "pure inlined Array<i64>.reduce must not allocate a callback closure");
     assert(!contains(code, "static XrValue test___anonymous__") &&
-           "pure inlined Array<int>.reduce must not emit a dead boxed callback adapter");
+           "pure inlined Array<i64>.reduce must not emit a dead boxed callback adapter");
     assert(contains(code, "int64_t _acc") &&
-           "inlined Array<int>.reduce must use a native accumulator");
+           "inlined Array<i64>.reduce must use a native accumulator");
     assert(contains(code, "int64_t *_srcd") &&
-           "inlined Array<int>.reduce must read through a typed source pointer");
+           "inlined Array<i64>.reduce must read through a typed source pointer");
     assert(contains(code, "test___anonymous__") &&
-           "inlined Array<int>.reduce must call the callback's native function");
+           "inlined Array<i64>.reduce must call the callback's native function");
     assert(!contains(code, "xrt_method_2(") &&
-           "Array<int>.reduce must not fall back to dynamic method dispatch");
+           "Array<i64>.reduce must not fall back to dynamic method dispatch");
     assert(!contains(code, "({") &&
-           "Array<int>.reduce must emit portable C11 statements");
+           "Array<i64>.reduce must emit portable C11 statements");
 
     printf("  Generated typed array reduce fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -10031,11 +10031,11 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
 
 TEST(cgen_typed_array_unused_reduce_still_executes_callback_loop) {
     const char *src =
-        "fn run() -> int {\n"
-        "    var values: Array<int> = []\n"
+        "fn run() -> i64 {\n"
+        "    var values: Array<i64> = []\n"
         "    values.push(1)\n"
         "    values.push(2)\n"
-        "    values.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)\n"
+        "    values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)\n"
         "    return 7\n"
         "}\n"
         "print(run())\n";
@@ -10087,10 +10087,10 @@ static bool cgen_array_hof_emit_with_prepared_plan(TestAotPlan *plan,
 
 TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
     const char *src =
-        "fn run() -> int {\n"
-        "    var values: Array<int> = []\n"
+        "fn run() -> i64 {\n"
+        "    var values: Array<i64> = []\n"
         "    values.push(1)\n"
-        "    var mapped = values.map(fn(x: int) -> int { return x + 1 })\n"
+        "    var mapped = values.map(fn(x: i64) -> i64 { return x + 1 })\n"
         "    return mapped[0]\n"
         "}\n"
         "print(run())\n";
@@ -10238,12 +10238,12 @@ TEST(cgen_typed_array_direct_hof_requires_exact_callback_abi_plan) {
 
 TEST(cgen_typed_array_reduce_captured_callback_fails_closed) {
     const char *src =
-        "fn sum() -> int {\n"
-        "    var values: Array<int> = []\n"
+        "fn sum() -> i64 {\n"
+        "    var values: Array<i64> = []\n"
         "    values.push(1)\n"
         "    values.push(2)\n"
         "    var offset = 3\n"
-        "    return values.reduce(fn(acc: int, x: int) -> int { return acc + x + offset }, 0)\n"
+        "    return values.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x + offset }, 0)\n"
         "}\n"
         "print(sum())\n";
 
@@ -10253,10 +10253,10 @@ TEST(cgen_typed_array_reduce_captured_callback_fails_closed) {
 }
 
 TEST(cgen_int_const_div_mod_uses_native_ops) {
-    const char *src = "fn fast(n: int) -> int {\n"
+    const char *src = "fn fast(n: i64) -> i64 {\n"
                       "    return (n / 5) + (n % 7)\n"
                       "}\n"
-                      "fn checked(n: int, d: int) -> int {\n"
+                      "fn checked(n: i64, d: i64) -> i64 {\n"
                       "    return n % d\n"
                       "}\n"
                       "print(fast(42))\n"
@@ -10293,24 +10293,24 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
 }
 
 TEST(cgen_shift_uses_stable_owner_adapter) {
-    const char *src = "fn fast(b: u8) -> int {\n"
-                      "    var x = int(b)\n"
+    const char *src = "fn fast(b: u8) -> i64 {\n"
+                      "    var x = i64(b)\n"
                       "    return x >> 4\n"
                       "}\n"
-                      "fn widen(b: u8) -> int {\n"
-                      "    var x = int(b)\n"
+                      "fn widen(b: u8) -> i64 {\n"
+                      "    var x = i64(b)\n"
                       "    return x << 8\n"
                       "}\n"
-                      "fn checked(n: int, s: int) -> int {\n"
+                      "fn checked(n: i64, s: i64) -> i64 {\n"
                       "    return n >> s\n"
                       "}\n"
-                      "fn checkedLeft(n: int, s: int) -> int {\n"
+                      "fn checkedLeft(n: i64, s: i64) -> i64 {\n"
                       "    return n << s\n"
                       "}\n"
-                      "fn wrapLeft(n: int) -> int {\n"
+                      "fn wrapLeft(n: i64) -> i64 {\n"
                       "    return n << 8\n"
                       "}\n"
-                      "fn wrapRight(n: int) -> int {\n"
+                      "fn wrapRight(n: i64) -> i64 {\n"
                       "    return n >> 8\n"
                       "}\n"
                       "print(fast(240))\n"
@@ -10379,7 +10379,7 @@ TEST(cgen_unsigned_shift_uses_stable_owner_adapter) {
                       "    var shifted = x << 24\n"
                       "    return shifted >> 52\n"
                       "}\n"
-                      "fn dynamicShift(x: u64, s: int) -> u64 {\n"
+                      "fn dynamicShift(x: u64, s: i64) -> u64 {\n"
                       "    return x >> s\n"
                       "}\n"
                       "print(unsignedShift(889523592379))\n"
@@ -10426,7 +10426,7 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
                       "    var prime: u64 = 889523592379\n"
                       "    return (seq + prime) * prime\n"
                       "}\n"
-                      "fn signedMul(a: int, b: int) -> int {\n"
+                      "fn signedMul(a: i64, b: i64) -> i64 {\n"
                       "    return a * b\n"
                       "}\n"
                       "print(hash32(123456))\n"
@@ -10463,7 +10463,7 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
     assert(signed_mul != NULL && "signedMul function should be generated");
     const char *signed_mul_end = next_static_after(signed_mul);
     assert(count_between(signed_mul, signed_mul_end, "(int64_t)((uint64_t)") == 1 &&
-           "signed int multiplication must keep signed-wrap-safe lowering");
+           "signed i64 multiplication must keep signed-wrap-safe lowering");
 
     printf("  Generated unsigned arithmetic fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -10471,16 +10471,16 @@ TEST(cgen_unsigned_arith_uses_native_unsigned_expr) {
 }
 
 TEST(cgen_elides_dead_err_checks_after_nothrow_scalar_helper_chain) {
-    const char *src = "fn packParts(high: int, low: int) -> int {\n"
+    const char *src = "fn packParts(high: i64, low: i64) -> i64 {\n"
                       "    return (high << 32) | (low & 0xFFFFFFFF)\n"
                       "}\n"
-                      "fn highPart(bits: int) -> int {\n"
+                      "fn highPart(bits: i64) -> i64 {\n"
                       "    return bits >> 32\n"
                       "}\n"
-                      "fn lowPart(bits: int) -> int {\n"
+                      "fn lowPart(bits: i64) -> i64 {\n"
                       "    return bits & 0xFFFFFFFF\n"
                       "}\n"
-                      "fn combine(a: int, b: int) -> int {\n"
+                      "fn combine(a: i64, b: i64) -> i64 {\n"
                       "    if (a < 0 || b < 0) { return -1 }\n"
                       "    return packParts(highPart(a) + highPart(b), "
                       "(lowPart(a) + lowPart(b)) & 0xFFFFFFFF)\n"
@@ -10566,17 +10566,17 @@ TEST(cgen_codegen_controls_emit_provider_constructs_without_runtime_calls) {
 }
 
 TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
-    const char *src = "fn layer0(value: int) -> int { return value + 1 }\n"
-                      "fn layer1(value: int) -> int { return layer0(value) + 1 }\n"
-                      "fn layer2(value: int) -> int { return layer1(value) + 1 }\n"
-                      "fn layer3(value: int) -> int { return layer2(value) + 1 }\n"
-                      "fn layer4(value: int) -> int { return layer3(value) + 1 }\n"
-                      "fn layer5(value: int) -> int { return layer4(value) + 1 }\n"
-                      "fn layer6(value: int) -> int { return layer5(value) + 1 }\n"
-                      "fn layer7(value: int) -> int { return layer6(value) + 1 }\n"
-                      "fn layer8(value: int) -> int { return layer7(value) + 1 }\n"
-                      "fn layer9(value: int) -> int { return layer8(value) + 1 }\n"
-                      "fn caller(value: int) -> int {\n"
+    const char *src = "fn layer0(value: i64) -> i64 { return value + 1 }\n"
+                      "fn layer1(value: i64) -> i64 { return layer0(value) + 1 }\n"
+                      "fn layer2(value: i64) -> i64 { return layer1(value) + 1 }\n"
+                      "fn layer3(value: i64) -> i64 { return layer2(value) + 1 }\n"
+                      "fn layer4(value: i64) -> i64 { return layer3(value) + 1 }\n"
+                      "fn layer5(value: i64) -> i64 { return layer4(value) + 1 }\n"
+                      "fn layer6(value: i64) -> i64 { return layer5(value) + 1 }\n"
+                      "fn layer7(value: i64) -> i64 { return layer6(value) + 1 }\n"
+                      "fn layer8(value: i64) -> i64 { return layer7(value) + 1 }\n"
+                      "fn layer9(value: i64) -> i64 { return layer8(value) + 1 }\n"
+                      "fn caller(value: i64) -> i64 {\n"
                       "    var result = layer9(value)\n"
                       "    return result + 1\n"
                       "}\n"
@@ -10650,9 +10650,9 @@ TEST(cgen_uses_closed_world_effects_for_conservative_direct_call_checks) {
 }
 
 TEST(cgen_static_cleanup_isolates_existing_pending_error) {
-    const char *src = "enum E { Bad(code: int) }\n"
-                      "fn run() -> int {\n"
-                      "    var log: Array<int> = []\n"
+    const char *src = "enum E { Bad(code: i64) }\n"
+                      "fn run() -> i64 {\n"
+                      "    var log: Array<i64> = []\n"
                       "    fn body() {\n"
                       "        defer { log.push(100) }\n"
                       "        throw E.Bad(1)\n"
@@ -10691,7 +10691,7 @@ TEST(cgen_static_cleanup_isolates_existing_pending_error) {
 
 TEST(cgen_err_return_stops_unreachable_tail) {
     const char *src = "enum E { Msg(s: string) }\n"
-                      "fn failing() -> int {\n"
+                      "fn failing() -> i64 {\n"
                       "    throw E.Msg(\"boom\")\n"
                       "    return 0\n"
                       "}\n"
@@ -10706,14 +10706,14 @@ TEST(cgen_err_return_stops_unreachable_tail) {
     assert(!had_error && "throw plus unreachable return should generate");
 
     const char *fn = find_static_function_definition(code, "test_failing_");
-    assert(fn != NULL && "failing function should be generated with native int ABI");
+    assert(fn != NULL && "failing function should be generated with native i64 ABI");
     const char *fn_end = next_static_after(fn);
     assert(count_between(fn, fn_end, "xrt_pending_error =") == 1 &&
            "throw outside try should lower to exactly one pending-error write");
     const char *err_set = strstr(fn, "xrt_pending_error =");
     assert(err_set != NULL && err_set < fn_end && "throw pending-error write should be in failing");
     assert(count_between(err_set, fn_end, "return 0;") == 1 &&
-           "throw outside try should return the int ABI default once");
+           "throw outside try should return the i64 ABI default once");
     assert(count_between(fn, fn_end, "return 0;\n    v") == 0 &&
            "AOT must not emit unreachable SSA statements after ERR_RETURN");
     assert(count_between(fn, fn_end, "return (int64_t)(v") == 0 &&
@@ -10932,7 +10932,7 @@ TEST(cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action) {
 }
 
 TEST(cgen_suspendable_function_has_no_sync_wrapper) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
@@ -10957,7 +10957,7 @@ TEST(cgen_suspendable_function_has_no_sync_wrapper) {
 }
 
 TEST(cgen_direct_suspend_call_propagates_cps) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
@@ -10995,7 +10995,7 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
 }
 
 TEST(cgen_direct_suspend_call_borrows_read_argument) {
-    const char *src = "fn worker(xs: Array<int>) -> int {\n"
+    const char *src = "fn worker(xs: Array<i64>) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return len(xs)\n"
                       "}\n"
@@ -11023,16 +11023,16 @@ TEST(cgen_direct_suspend_enum_result_consumes_owned_box) {
     const char *src =
         "import mem\n"
         "export enum Failure { Closed, Failed }\n"
-        "export enum Outcome { Unit(id: int, generation: int), Echo(id: int, generation: int, "
-        "payload: Buffer?), State(id: int, generation: int, n: int), Failed(reason: Failure) }\n"
+        "export enum Outcome { Unit(id: i64, generation: i64), Echo(id: i64, generation: i64, "
+        "payload: Buffer?), State(id: i64, generation: i64, n: i64), Failed(reason: Failure) }\n"
         "fn pause() { Coro.yield() }\n"
         "fn step() { pause() }\n"
-        "fn worker(n: int) -> Outcome {\n"
+        "fn worker(n: i64) -> Outcome {\n"
         "    var owned = Outcome.Echo(1, 2, mem.allocZeroed(n))\n"
         "    step()\n"
         "    return owned\n"
         "}\n"
-        "fn run() -> int {\n"
+        "fn run() -> i64 {\n"
         "    var result = worker(41)\n"
         "    return match (result) { Outcome.Echo(_id, _generation, payload) -> "
         "len(payload!.asBytes()), _ -> 0 }\n"
@@ -11068,8 +11068,8 @@ TEST(cgen_direct_suspend_enum_result_consumes_owned_box) {
 }
 
 TEST(cgen_returned_suspendable_closure_uses_verified_child_frame) {
-    const char *src = "fn makeWorker() -> fn() -> int {\n"
-                      "    return fn() -> int {\n"
+    const char *src = "fn makeWorker() -> fn() -> i64 {\n"
+                      "    return fn() -> i64 {\n"
                       "        Coro.yield()\n"
                       "        return 41\n"
                       "    }\n"
@@ -11099,8 +11099,8 @@ TEST(cgen_returned_suspendable_closure_uses_verified_child_frame) {
 }
 
 TEST(cgen_mixed_callable_targets_use_stable_descriptor_switch) {
-    const char *src = "fn syncWorker() -> int { return 40 }\n"
-                      "fn suspendWorker() -> int { Coro.yield(); return 41 }\n"
+    const char *src = "fn syncWorker() -> i64 { return 40 }\n"
+                      "fn suspendWorker() -> i64 { Coro.yield(); return 41 }\n"
                       "var worker = syncWorker\n"
                       "fn choose(suspend: bool) {\n"
                       "    if (suspend) { worker = suspendWorker }\n"
@@ -11134,12 +11134,12 @@ TEST(cgen_mixed_callable_targets_use_stable_descriptor_switch) {
 TEST(cgen_direct_suspend_method_call_propagates_cps) {
     const char *src = "class Box {\n"
                       "    constructor() {}\n"
-                      "    bump(n: int) -> int {\n"
+                      "    bump(n: i64) -> i64 {\n"
                       "        Coro.yield()\n"
                       "        return n + 1\n"
                       "    }\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var box = Box()\n"
                       "    return box.bump(41)\n"
                       "}\n"
@@ -11167,7 +11167,7 @@ TEST(cgen_direct_suspend_method_call_propagates_cps) {
 }
 
 TEST(cgen_shared_static_function_retain_is_elided) {
-    const char *src = "fn inc(n: int) -> int {\n"
+    const char *src = "fn inc(n: i64) -> i64 {\n"
                       "    return n + 1\n"
                       "}\n"
                       "var result = inc(41)\n"
@@ -11190,10 +11190,10 @@ TEST(cgen_shared_static_function_retain_is_elided) {
 }
 
 TEST(cgen_coro_shared_static_function_retain_is_elided) {
-    const char *src = "fn inc(n: int) -> int {\n"
+    const char *src = "fn inc(n: i64) -> i64 {\n"
                       "    return n + 1\n"
                       "}\n"
-                      "fn worker(n: int) -> int {\n"
+                      "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return inc(n)\n"
                       "}\n"
@@ -11257,7 +11257,7 @@ TEST(cgen_suspendable_dependency_init_fails_fast) {
 }
 
 TEST(cgen_coro_frame_params_use_typed_storage) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
@@ -11273,9 +11273,9 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT coroutine with typed params should generate");
     assert(contains(code, "uint32_t state;\n    int64_t p0;") &&
-           "AOT coroutine int params should be stored unboxed in the frame");
+           "AOT coroutine i64 params should be stored unboxed in the frame");
     assert(contains(code, "f->p0 = XR_TO_INT(p0);") &&
-           "AOT coroutine frame factory should unbox int params at the boundary");
+           "AOT coroutine frame factory should unbox i64 params at the boundary");
     assert(!contains(code, "p0.i") &&
            "AOT coroutine typed params must not be unboxed as tagged values");
     assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
@@ -11301,7 +11301,7 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
 }
 
 TEST(cgen_coro_frame_skips_dead_ssa_slots) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    var a = n + 1\n"
                       "    var b = a + 2\n"
                       "    Coro.yield()\n"
@@ -11338,14 +11338,14 @@ TEST(cgen_coro_frame_skips_dead_ssa_slots) {
 }
 
 TEST(cgen_coro_loop_tail_phi_uses_shared_suspend_plan) {
-    const char *src = "fn worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {\n"
+    const char *src = "fn worker(ch: Channel<i64>, timeout_ms: i64, value: i64) -> bool {\n"
                       "    return match (ch.sendTimeout(value, timeout_ms)) {\n"
                       "        SendResult.Timeout -> true\n"
                       "        _ -> false\n"
                       "    }\n"
                       "}\n"
-                      "fn run_once(count: int, timeout_ms: int) -> int {\n"
-                      "    const ch = Channel<int>(1)\n"
+                      "fn run_once(count: i64, timeout_ms: i64) -> i64 {\n"
+                      "    const ch = Channel<i64>(1)\n"
                       "    ch.send(1)\n"
                       "    var tasks: Array<Task<bool>> = []\n"
                       "    for (var i = 0; i < count; i++) {\n"
@@ -11407,8 +11407,8 @@ TEST(cgen_coro_loop_tail_phi_uses_shared_suspend_plan) {
  * with no user-reachable type surface, so a source-level guard cannot spell
  * it. */
 TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
-    const char *src = "const ch: Channel<int> = Channel<int>(1)\n"
-                      "fn worker(workerId: int) -> int {\n"
+    const char *src = "const ch: Channel<i64> = Channel<i64>(1)\n"
+                      "fn worker(workerId: i64) -> i64 {\n"
                       "    var seen = 0\n"
                       "    while (true) {\n"
                       "        match (ch.recv()) {\n"
@@ -11446,14 +11446,14 @@ TEST(cgen_coro_wait_driven_loop_omits_redundant_poll) {
 
 TEST(cgen_countdown_latch_methods_use_native_helpers) {
     const char *src = "const latch: CountdownLatch = CountdownLatch(0)\n"
-                      "fn syncUse() -> int {\n"
+                      "fn syncUse() -> i64 {\n"
                       "    var ok = latch.reset(2)\n"
                       "    var left = latch.done()\n"
                       "    var ready = latch.tryWait()\n"
                       "    latch.close()\n"
                       "    return (ok ? left : 0) + (ready ? 1 : 0)\n"
                       "}\n"
-                      "fn worker() -> int {\n"
+                      "fn worker() -> i64 {\n"
                       "    Coro.yield()\n"
                       "    var ok = latch.reset(1)\n"
                       "    var left = latch.done(1)\n"
@@ -11480,7 +11480,7 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
     assert(contains(code, "xr_aot_countdown_latch_reset_bool_sync(") &&
            "sync CountdownLatch.reset should use the native bool helper");
     assert(contains(code, "xr_aot_countdown_latch_done_i64_sync(") &&
-           "sync CountdownLatch.done should use the native int helper");
+           "sync CountdownLatch.done should use the native i64 helper");
     assert(contains(code, "xr_aot_countdown_latch_try_wait_bool_sync(") &&
            "sync CountdownLatch.tryWait should use the native bool helper");
     assert(contains(code, "xr_aot_countdown_latch_close_void_sync(") &&
@@ -11488,7 +11488,7 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
     assert(contains(code, "xr_aot_countdown_latch_reset_bool(ctx,") &&
            "coroutine CountdownLatch.reset should use the native bool helper");
     assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
-           "coroutine CountdownLatch.done should use the native int helper");
+           "coroutine CountdownLatch.done should use the native i64 helper");
     assert(contains(code, "xr_aot_countdown_latch_try_wait_bool(ctx,") &&
            "coroutine CountdownLatch.tryWait should use the native bool helper");
     assert(contains(code, "xr_aot_countdown_latch_close_void(ctx,") &&
@@ -11513,13 +11513,13 @@ TEST(cgen_countdown_latch_methods_use_native_helpers) {
 
 TEST(cgen_semaphore_methods_use_native_helpers) {
     const char *src = "const sem: Semaphore = Semaphore(0)\n"
-                      "fn syncUse() -> int {\n"
+                      "fn syncUse() -> i64 {\n"
                       "    var released = sem.release(2)\n"
                       "    var ok = sem.tryAcquire()\n"
                       "    sem.close()\n"
                       "    return released + (ok ? 1 : 0)\n"
                       "}\n"
-                      "fn worker() -> int {\n"
+                      "fn worker() -> i64 {\n"
                       "    Coro.yield()\n"
                       "    var released = sem.release()\n"
                       "    var ok = sem.tryAcquire()\n"
@@ -11541,13 +11541,13 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT Semaphore methods should generate");
     assert(contains(code, "xr_aot_semaphore_release_i64_sync(") &&
-           "sync Semaphore.release should use the native int helper");
+           "sync Semaphore.release should use the native i64 helper");
     assert(contains(code, "xr_aot_semaphore_try_acquire_bool_sync(") &&
            "sync Semaphore.tryAcquire should use the native bool helper");
     assert(contains(code, "xr_aot_semaphore_close_void_sync(") &&
            "sync Semaphore.close should use the native void helper");
     assert(contains(code, "xr_aot_semaphore_release_i64(ctx,") &&
-           "coroutine Semaphore.release should use the native int helper");
+           "coroutine Semaphore.release should use the native i64 helper");
     assert(contains(code, "xr_aot_semaphore_try_acquire_bool(ctx,") &&
            "coroutine Semaphore.tryAcquire should use the native bool helper");
     assert(contains(code, "xr_aot_semaphore_close_void(ctx,") &&
@@ -11573,7 +11573,7 @@ TEST(cgen_semaphore_methods_use_native_helpers) {
 TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
     const char *src = "const sem: Semaphore = Semaphore(0)\n"
                       "const latch: CountdownLatch = CountdownLatch(1)\n"
-                      "fn worker() -> int {\n"
+                      "fn worker() -> i64 {\n"
                       "    if (!sem.acquire()) {\n"
                       "        return -1\n"
                       "    }\n"
@@ -11599,9 +11599,9 @@ TEST(cgen_sync_blocking_direct_methods_mark_aot_coroutines) {
     assert(contains(code, "xr_aot_countdown_latch_wait(ctx,") &&
            "CountdownLatch.wait should lower through the coroutine wait helper");
     assert(contains(code, "xr_aot_countdown_latch_done_i64(ctx,") &&
-           "CountdownLatch.done in the coroutine body should use the native int helper");
+           "CountdownLatch.done in the coroutine body should use the native i64 helper");
     assert(contains(code, "xr_aot_semaphore_release_i64(ctx,") &&
-           "Semaphore.release in the coroutine main should use the native int helper");
+           "Semaphore.release in the coroutine main should use the native i64 helper");
     assert(!contains(code, "unsupported AOT method") &&
            "sync primitive direct calls must not fall through to unsupported method dispatch");
 
@@ -11775,7 +11775,7 @@ TEST(cgen_coro_owner_forward_clears_moved_frame_root) {
 }
 
 TEST(cgen_coro_go_clones_tagged_args) {
-    const char *src = "fn worker(xs: move Array<int>) -> int {\n"
+    const char *src = "fn worker(xs: move Array<i64>) -> i64 {\n"
                       "    xs.push(99)\n"
                       "    Coro.yield()\n"
                       "    return len(xs)\n"
@@ -11801,14 +11801,14 @@ TEST(cgen_coro_go_clones_tagged_args) {
 }
 
 TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
-    const char *src = "fn compute(n: int) -> int {\n"
+    const char *src = "fn compute(n: i64) -> i64 {\n"
                       "    return n * n\n"
                       "}\n"
-                      "fn mutate_copy(xs: move Array<int>) -> int {\n"
+                      "fn mutate_copy(xs: move Array<i64>) -> i64 {\n"
                       "    xs.push(99)\n"
                       "    return len(xs)\n"
                       "}\n"
-                      "fn identity_copy(xs: move Array<int>) -> Array<int> {\n"
+                      "fn identity_copy(xs: move Array<i64>) -> Array<i64> {\n"
                       "    return xs\n"
                       "}\n"
                       "var high = go(name: \"compute\") compute(5)\n"
@@ -11859,7 +11859,7 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
 }
 
 TEST(cgen_coro_go_sync_scalar_wrapper_skips_param_roots) {
-    const char *src = "fn compute(n: int, flag: bool) -> int {\n"
+    const char *src = "fn compute(n: i64, flag: bool) -> i64 {\n"
                       "    if (flag) { return n + 1 }\n"
                       "    return n\n"
                       "}\n"
@@ -11897,7 +11897,7 @@ TEST(cgen_coro_go_sync_scalar_wrapper_skips_param_roots) {
 }
 
 TEST(cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame) {
-    const char *src = "fn one() -> int {\n"
+    const char *src = "fn one() -> i64 {\n"
                       "    return 1\n"
                       "}\n"
                       "var task = go one()\n"
@@ -11925,7 +11925,7 @@ TEST(cgen_coro_go_zero_state_sync_wrapper_has_nonempty_frame) {
 }
 
 TEST(cgen_sync_functions_without_go_emit_no_aot_wrappers) {
-    const char *src = "fn helper(n: int) -> int {\n"
+    const char *src = "fn helper(n: i64) -> i64 {\n"
                       "    return n + 1\n"
                       "}\n"
                       "print(helper(2))\n";
@@ -11950,10 +11950,10 @@ TEST(cgen_sync_functions_without_go_emit_no_aot_wrappers) {
 }
 
 TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
-    const char *src = "fn unused(n: int) -> int {\n"
+    const char *src = "fn unused(n: i64) -> i64 {\n"
                       "    return n + 1\n"
                       "}\n"
-                      "fn used(n: int) -> int {\n"
+                      "fn used(n: i64) -> i64 {\n"
                       "    return n * 2\n"
                       "}\n"
                       "var task = go used(3)\n"
@@ -11984,7 +11984,7 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
 }
 
 TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
-    const char *non_go_loop_src = "fn unused(n: int) -> int {\n"
+    const char *non_go_loop_src = "fn unused(n: i64) -> i64 {\n"
                                   "    var i = 0\n"
                                   "    var sum = 0\n"
                                   "    while (i < n) {\n"
@@ -11993,7 +11993,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
                                   "    }\n"
                                   "    return sum\n"
                                   "}\n"
-                                  "fn used(n: int) -> int {\n"
+                                  "fn used(n: i64) -> i64 {\n"
                                   "    return n + 1\n"
                                   "}\n"
                                   "var task = go used(3)\n"
@@ -12011,7 +12011,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
     xr_free(code);
     xi_func_free(ir);
 
-    const char *go_loop_src = "fn used(n: int) -> int {\n"
+    const char *go_loop_src = "fn used(n: i64) -> i64 {\n"
                               "    var i = 0\n"
                               "    var sum = 0\n"
                               "    while (i < n) {\n"
@@ -12038,7 +12038,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
     xr_free(code);
     xi_func_free(ir);
 
-    const char *coro_direct_sync_loop_src = "fn syncLoop(n: int) -> int {\n"
+    const char *coro_direct_sync_loop_src = "fn syncLoop(n: i64) -> i64 {\n"
                                             "    var i = 0\n"
                                             "    var sum = 0\n"
                                             "    while (i < n) {\n"
@@ -12047,7 +12047,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
                                             "    }\n"
                                             "    return sum\n"
                                             "}\n"
-                                            "fn used(n: int) -> int {\n"
+                                            "fn used(n: i64) -> i64 {\n"
                                             "    return n + 1\n"
                                             "}\n"
                                             "var x = syncLoop(3)\n"
@@ -12073,7 +12073,7 @@ TEST(cgen_sync_aot_backedge_heartbeat_only_for_runtime_reachable_loops) {
 }
 
 TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
-    const char *src = "const ch: Channel<Array<int>> = Channel(1)\n"
+    const char *src = "const ch: Channel<Array<i64>> = Channel(1)\n"
                       "var xs = [1, 2]\n"
                       "ch.send(copy(xs))\n";
 
@@ -12106,7 +12106,7 @@ TEST(cgen_coro_channel_send_copy_uses_transfer_helper) {
 }
 
 TEST(cgen_coro_scalar_channel_send_skips_clone) {
-    const char *src = "const ch = Channel<int>(1)\n"
+    const char *src = "const ch = Channel<i64>(1)\n"
                       "ch.send(42)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -12135,14 +12135,14 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
 }
 
 TEST(cgen_coro_unit_match_send_omits_void_phi) {
-    const char *src = "fn recv_timeout_until_close(ch: Channel<int>, done: Channel<int>) {\n"
+    const char *src = "fn recv_timeout_until_close(ch: Channel<i64>, done: Channel<i64>) {\n"
                       "    match (ch.recvTimeout(1)) {\n"
                       "        Recv.Value(value) -> done.send(value)\n"
                       "        _ -> done.send(-1)\n"
                       "    }\n"
                       "}\n"
-                      "const ch = Channel<int>(0)\n"
-                      "const done = Channel<int>(1)\n"
+                      "const ch = Channel<i64>(0)\n"
+                      "const done = Channel<i64>(1)\n"
                       "go recv_timeout_until_close(ch, done)\n"
                       "ch.close()\n";
 
@@ -12163,7 +12163,7 @@ TEST(cgen_coro_unit_match_send_omits_void_phi) {
 }
 
 TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
-    const char *src = "const ch = Channel<int>(1)\n"
+    const char *src = "const ch = Channel<i64>(1)\n"
                       "var ok = ch.trySend(42)\n"
                       "print(ok)\n";
 
@@ -12198,11 +12198,11 @@ TEST(cgen_descriptor_scalar_channel_try_send_uses_typed_sync_bridge) {
 }
 
 TEST(cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope) {
-    const char *src = "fn try_tuple(ch: Channel<(int, int)>) -> SendResult {\n"
+    const char *src = "fn try_tuple(ch: Channel<(i64, i64)>) -> SendResult {\n"
                       "    var frame = (1, 2)\n"
                       "    return ch.trySend(move frame)\n"
                       "}\n"
-                      "const ch = Channel<(int, int)>(1)\n"
+                      "const ch = Channel<(i64, i64)>(1)\n"
                       "print(try_tuple(ch))\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -12232,7 +12232,7 @@ TEST(cgen_descriptor_tagged_channel_try_send_normalizes_runtime_envelope) {
 }
 
 TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
-    const char *src = "fn read_builtin_enums() -> int {\n"
+    const char *src = "fn read_builtin_enums() -> i64 {\n"
                       "    Coro.yield()\n"
                       "    var sent = SendResult.Sent\n"
                       "    var closed = Recv.Closed\n"
@@ -12266,7 +12266,7 @@ TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
 }
 
 TEST(cgen_coro_await_clones_tagged_result) {
-    const char *src = "fn worker() -> Array<int> {\n"
+    const char *src = "fn worker() -> Array<i64> {\n"
                       "    Coro.yield()\n"
                       "    return [1, 2]\n"
                       "}\n"
@@ -12370,7 +12370,7 @@ TEST(cgen_hosted_string_array_boundary_uses_deep_value_bridge) {
 }
 
 TEST(cgen_hosted_byte_slice_boundary_uses_layout_neutral_view) {
-    const char *src = "fn bridge(data: Slice<byte>) -> int { return len(data) }\n"
+    const char *src = "fn bridge(data: Slice<u8>) -> i64 { return len(data) }\n"
                       "var text = \"abc\"\n"
                       "bridge(text.bytes())\n";
     XiFunc *ir = compile_to_ir(src);
@@ -12414,7 +12414,7 @@ TEST(cgen_hosted_byte_slice_boundary_uses_layout_neutral_view) {
 }
 
 TEST(cgen_hosted_runtime_capability_installs_scoped_vm_context) {
-    const char *src = "fn bridge(value: int) -> int {\n"
+    const char *src = "fn bridge(value: i64) -> i64 {\n"
                       "    var cell = Atomic(value)\n"
                       "    return cell.load(Ordering.Relaxed)\n"
                       "}\n"
@@ -12455,7 +12455,7 @@ TEST(cgen_hosted_runtime_capability_installs_scoped_vm_context) {
 }
 
 TEST(cgen_hosted_coroutine_export_publishes_resumable_continuation) {
-    const char *src = "fn bridge(value: int) -> int {\n"
+    const char *src = "fn bridge(value: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return value\n"
                       "}\n"
@@ -12511,8 +12511,8 @@ TEST(cgen_hosted_coroutine_export_publishes_resumable_continuation) {
 
 TEST(cgen_hosted_class_boundary_uses_nominal_opaque_proxy) {
     const char *src = "class Box {\n"
-                      "    value: int\n"
-                      "    constructor(value: int) { this.value = value }\n"
+                      "    value: i64\n"
+                      "    constructor(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn bridge(value: Box) -> Box { return value }\n"
                       "bridge(Box(7))\n";
@@ -12623,7 +12623,7 @@ TEST(cgen_hosted_native_field_store_uses_portable_c_statements) {
 }
 
 TEST(cgen_hosted_non_escaping_string_argument_stays_zero_copy) {
-    const char *src = "fn stringLength(text: string) -> int { return len(text) }\n"
+    const char *src = "fn stringLength(text: string) -> i64 { return len(text) }\n"
                       "stringLength(\"value\")\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "hosted non-escaping string fixture compiled");
@@ -12667,8 +12667,8 @@ TEST(cgen_hosted_non_escaping_string_argument_stays_zero_copy) {
 
 TEST(cgen_hosted_normal_class_result_call_is_not_a_constructor) {
     const char *src = "class Box {\n"
-                      "    value: int\n"
-                      "    constructor(value: int) { this.value = value }\n"
+                      "    value: i64\n"
+                      "    constructor(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn makeBox() -> Box { return Box(7) }\n"
                       "fn forward() -> Box { return makeBox() }\n"
@@ -12707,14 +12707,14 @@ TEST(cgen_hosted_normal_class_result_call_is_not_a_constructor) {
 
 TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
     const char *src = "class Box {\n"
-                      "    value: int\n"
-                      "    constructor(value: int) { this.value = value }\n"
+                      "    value: i64\n"
+                      "    constructor(value: i64) { this.value = value }\n"
                       "}\n"
                       "fn worker() -> Box {\n"
                       "    Coro.yield()\n"
                       "    return Box(41)\n"
                       "}\n"
-                      "fn consume() -> int {\n"
+                      "fn consume() -> i64 {\n"
                       "    var task = go worker()\n"
                       "    var box = await task\n"
                       "    return box.value + 1\n"
@@ -12788,11 +12788,11 @@ TEST(cgen_coro_native_class_await_uses_tagged_boundary_slot) {
 }
 
 TEST(cgen_coro_scalar_await_uses_tagged_slot) {
-    const char *src = "fn worker() -> int {\n"
+    const char *src = "fn worker() -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return 41\n"
                       "}\n"
-                      "fn main_plus() -> int {\n"
+                      "fn main_plus() -> i64 {\n"
                       "    var task = go worker()\n"
                       "    var v = await task\n"
                       "    return v + 1\n"
@@ -12814,7 +12814,7 @@ TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     const char *frame_end = strstr(frame, "} test_main_plus_");
     assert(frame_end != NULL && "main_plus coroutine frame should close");
     assert(count_between(frame, frame_end, "int64_t v") >= 1 &&
-           "await Task<int> should reserve a native scalar frame slot");
+           "await Task<i64> should reserve a native scalar frame slot");
 
     const char *main_plus = strstr(code, "test_main_plus_");
     const char *resume =
@@ -12838,12 +12838,12 @@ TEST(cgen_coro_scalar_await_uses_tagged_slot) {
 }
 
 TEST(cgen_coro_await_array_task_index_borrows_checked_slot) {
-    const char *src = "fn worker() -> int {\n"
+    const char *src = "fn worker() -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return 7\n"
                       "}\n"
-                      "fn run() -> int {\n"
-                      "    var tasks: Array<Task<int>> = []\n"
+                      "fn run() -> i64 {\n"
+                      "    var tasks: Array<Task<i64>> = []\n"
                       "    tasks.push(go worker())\n"
                       "    var result = await tasks[0]\n"
                       "    return result + len(tasks)\n"
@@ -12857,20 +12857,20 @@ TEST(cgen_coro_await_array_task_index_borrows_checked_slot) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT await from Array<Task<int>> should generate");
+    assert(!had_error && "AOT await from Array<Task<i64>> should generate");
     assert(contains(code, "xr_aot_await_task(ctx,") &&
-           "checked Array<Task<int>> slot await should use a normal await while the task array "
+           "checked Array<Task<i64>> slot await should use a normal await while the task array "
            "stays live");
     assert(contains(code, "xr_aot_await_task_resume(ctx,") &&
-           "resumed Array<Task<int>> slot await should use the normal await resume path");
+           "resumed Array<Task<i64>> slot await should use the normal await resume path");
     assert(!contains(code, "xr_aot_await_deferred_task_from_array(ctx,") &&
            "task-array deferred submit requires the producer/await/clear batch shape");
     assert(contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
                           "((XrValue*)_a->data)[_idx]") &&
-           "checked Array<Task<int>> slot await should borrow the array element");
+           "checked Array<Task<i64>> slot await should borrow the array element");
     assert(!contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
                            "xrt_value_to_owned(((XrValue*)_a->data)[_idx])") &&
-           "direct await of a checked Array<Task<int>> slot must not retain every task handle");
+           "direct await of a checked Array<Task<i64>> slot must not retain every task handle");
     assert(contains(code, "xr_slot_aot_frame_offset") &&
            "scalar await result should still use a native AOT frame slot");
 
@@ -12880,12 +12880,12 @@ TEST(cgen_coro_await_array_task_index_borrows_checked_slot) {
 }
 
 TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n + 1\n"
                       "}\n"
-                      "fn run(n: int) -> int {\n"
-                      "    var tasks: Array<Task<int>> = []\n"
+                      "fn run(n: i64) -> i64 {\n"
+                      "    var tasks: Array<Task<i64>> = []\n"
                       "    tasks.reserve(n)\n"
                       "    var i = 0\n"
                       "    while (i < n) {\n"
@@ -12910,20 +12910,20 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT sequential await over Array<Task<int>> should generate");
+    assert(!had_error && "AOT sequential await over Array<Task<i64>> should generate");
     assert(contains(code, "xr_aot_await_deferred_task_from_array(ctx,") &&
-           "sequential Array<Task<int>> slot await must fuse deferred batch submit with await");
+           "sequential Array<Task<i64>> slot await must fuse deferred batch submit with await");
     assert(contains(code, "xr_aot_await_deferred_task_from_array_resume(ctx,") &&
-           "sequential Array<Task<int>> slot await resume must consume the array slot");
+           "sequential Array<Task<i64>> slot await resume must consume the array slot");
     assert(contains(code, ", false, true);") &&
            "counted task array await loop should keep the one-shot await flag");
     assert(contains(code, "((XrValue*)_a->data)[phi") &&
            !contains(code, "((XrValue*)_a->data)[XR_TO_INT(") &&
-           "one-shot guarded Array<Task<int>> loop await should borrow with its native index");
+           "one-shot guarded Array<Task<i64>> loop await should borrow with its native index");
     assert(
         !contains(code, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? "
                         "xrt_value_to_owned(((XrValue*)_a->data)[_idx])") &&
-        "one-shot direct await of checked Array<Task<int>> slot must not retain every task handle");
+        "one-shot direct await of checked Array<Task<i64>> slot must not retain every task handle");
 
     printf("  Generated one-shot Array<Task> await-loop borrow path %zu bytes of C code\n",
            strlen(code));
@@ -12932,13 +12932,13 @@ TEST(cgen_coro_one_shot_await_task_array_loop_borrows_checked_slot) {
 }
 
 TEST(cgen_coro_await_timeout_passes_deadline) {
-    const char *src = "fn worker(ch: Channel<int>) -> int {\n"
+    const char *src = "fn worker(ch: Channel<i64>) -> i64 {\n"
                       "    match (ch.recv()) {\n"
                       "        Recv.Value(value) -> { return value }\n"
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
-                      "const ch = Channel<int>(0)\n"
+                      "const ch = Channel<i64>(0)\n"
                       "var task = go worker(ch)\n"
                       "var result = task.awaitTimeout(25)\n"
                       "print(result)\n";
@@ -12968,7 +12968,7 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
 }
 
 TEST(cgen_tagged_null_equality_keeps_null_literal) {
-    const char *src = "fn maybe() -> int? {\n"
+    const char *src = "fn maybe() -> i64? {\n"
                       "    return null\n"
                       "}\n"
                       "\n"
@@ -12991,7 +12991,7 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
     assert(count_between(eq, eq_end, "XR_NULL_VAL") == 1 &&
            "tagged null equality must compare against XR_NULL_VAL");
     assert(count_between(eq, eq_end, "XR_FROM_INT") == 0 &&
-           "tagged null equality must not turn null into int zero");
+           "tagged null equality must not turn null into i64 zero");
 
     printf("  Generated tagged null equality %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -12999,7 +12999,7 @@ TEST(cgen_tagged_null_equality_keeps_null_literal) {
 }
 
 TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
-    const char *src = "const ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<i64>(0)\n"
                       "var value = ch.recv()\n"
                       "print(value)\n";
 
@@ -13029,11 +13029,11 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
 }
 
 TEST(cgen_coro_discarded_recv_does_not_materialize_result) {
-    const char *src = "fn wait_then_return(ch: Channel<int>) -> int {\n"
+    const char *src = "fn wait_then_return(ch: Channel<i64>) -> i64 {\n"
                       "    ch.recv()\n"
                       "    return 7\n"
                       "}\n"
-                      "const ch: Channel<int> = Channel(0)\n"
+                      "const ch: Channel<i64> = Channel(0)\n"
                       "var task = go wait_then_return(ch)\n"
                       "ch.send(1)\n"
                       "print(await task)\n";
@@ -13060,13 +13060,13 @@ TEST(cgen_coro_discarded_recv_does_not_materialize_result) {
 }
 
 TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
-    const char *src = "fn recv_or(ch: Channel<int>, fallback: int) -> int {\n"
+    const char *src = "fn recv_or(ch: Channel<i64>, fallback: i64) -> i64 {\n"
                       "    return match (ch.recv()) {\n"
                       "        Recv.Value(n) -> n\n"
                       "        _ -> fallback\n"
                       "    }\n"
                       "}\n"
-                      "const ch = Channel<int>(1)\n"
+                      "const ch = Channel<i64>(1)\n"
                       "ch.send(9)\n"
                       "var task = go recv_or(ch, -1)\n"
                       "var result = await task\n"
@@ -13092,14 +13092,14 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
 }
 
 TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
-    const char *src = "fn recv_plus(ch: Channel<int>) -> int {\n"
+    const char *src = "fn recv_plus(ch: Channel<i64>) -> i64 {\n"
                       "    var v = ch.recv()\n"
                       "    return match (v) {\n"
                       "        Recv.Value(n) -> n + 1\n"
                       "        _ -> -1\n"
                       "    }\n"
                       "}\n"
-                      "const ch = Channel<int>(1)\n"
+                      "const ch = Channel<i64>(1)\n"
                       "ch.send(9)\n"
                       "var task = go recv_plus(ch)\n"
                       "var result = await task\n"
@@ -13144,7 +13144,7 @@ TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
 }
 
 TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
-    const char *src = "fn read_or_stop(ch: Channel<int>) {\n"
+    const char *src = "fn read_or_stop(ch: Channel<i64>) {\n"
                       "    var v = ch.recv()\n"
                       "    match (v) {\n"
                       "        Recv.Value(n) -> { print(n) }\n"
@@ -13152,7 +13152,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
                       "        _ -> { print(\"other\") }\n"
                       "    }\n"
                       "}\n"
-                      "const ch = Channel<int>(1)\n"
+                      "const ch = Channel<i64>(1)\n"
                       "ch.send(0)\n"
                       "var task = go read_or_stop(ch)\n"
                       "await task\n";
@@ -13184,7 +13184,7 @@ TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
 }
 
 TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
-    const char *src = "const ch = Channel<int>(1)\n"
+    const char *src = "const ch = Channel<i64>(1)\n"
                       "var recv = ch.tryRecv()\n"
                       "print(recv)\n";
 
@@ -13211,7 +13211,7 @@ TEST(cgen_descriptor_scalar_channel_try_recv_returns_recv_enum) {
 }
 
 TEST(cgen_descriptor_select_try_recv_uses_ready_bit) {
-    const char *src = "const ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<i64>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "    _ -> { print(0) }\n"
@@ -13384,7 +13384,7 @@ TEST(cgen_runtime_needed_main_uses_aot_runtime) {
 }
 
 TEST(cgen_coro_select_publishes_state_before_block) {
-    const char *src = "const ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<i64>(0)\n"
                       "select {\n"
                       "    value from ch -> { print(value) }\n"
                       "}\n";
@@ -13406,7 +13406,7 @@ TEST(cgen_coro_select_publishes_state_before_block) {
 }
 
 TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
-    const char *src = "const ch = Channel<int>(0)\n"
+    const char *src = "const ch = Channel<i64>(0)\n"
                       "var sent = ch.sendTimeout(7, 10)\n"
                       "var recv = ch.recvTimeout(10)\n"
                       "print(sent)\n"
@@ -13467,11 +13467,11 @@ TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
 }
 
 TEST(cgen_coro_await_all_uses_aggregate_bridge) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var results = await all [go worker(2), go worker(3)]\n"
                       "    return results[0] + results[1]\n"
                       "}\n"
@@ -13489,7 +13489,7 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
            "fresh await all literals with scalar uses must write result slots directly");
     assert(contains(code, "xr_aot_await_all_task_values_to_slots(ctx,") &&
            contains(code, "XR_ELEM_I64") &&
-           "await all over Task<int> must pass the typed result element layout");
+           "await all over Task<i64> must pass the typed result element layout");
     assert(contains(code, "XR_ELEM_I64, true") &&
            "fresh await all task literals must use aggregate one-shot");
     assert(nonzero_state_precedes_call(code, "xr_aot_await_all_task_values_to_slots(ctx,") &&
@@ -13513,14 +13513,14 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
 }
 
 TEST(cgen_coro_await_all_named_task_array_skips_task_list_clone) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    var t1 = go worker(2)\n"
                       "    var t2 = go worker(3)\n"
-                      "    var tasks: Array<Task<int>> = []\n"
+                      "    var tasks: Array<Task<i64>> = []\n"
                       "    tasks.push(t1)\n"
                       "    tasks.push(t2)\n"
                       "    var results = await all tasks\n"
@@ -13541,7 +13541,7 @@ TEST(cgen_coro_await_all_named_task_array_skips_task_list_clone) {
     assert(!contains(code, "xr_aot_await_all_tasks(ctx,") &&
            "fixed pushed named task arrays should scalarize to task value slots");
     assert(contains(code, "XR_ELEM_I64") &&
-           "await all over named Array<Task<int>> must keep typed result layout");
+           "await all over named Array<Task<i64>> must keep typed result layout");
     assert(contains(code, "XR_ELEM_I64, true") &&
            "named task arrays whose pushed tasks have no other users may use aggregate one-shot");
     assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
@@ -13568,12 +13568,12 @@ TEST(cgen_coro_await_all_named_task_array_skips_task_list_clone) {
 }
 
 TEST(cgen_coro_await_all_reused_push_task_array_uses_one_shot) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "fn run(n: int) -> int {\n"
-                      "    var tasks: Array<Task<int>> = []\n"
+                      "fn run(n: i64) -> i64 {\n"
+                      "    var tasks: Array<Task<i64>> = []\n"
                       "    tasks.reserve(n)\n"
                       "    tasks.clear()\n"
                       "    var i = 0\n"
@@ -13626,13 +13626,13 @@ TEST(cgen_coro_await_all_reused_push_task_array_uses_one_shot) {
 }
 
 TEST(cgen_coro_await_all_into_reuses_result_array) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "fn run(n: int) -> int {\n"
-                      "    var tasks: Array<Task<int>> = []\n"
-                      "    var results: Array<int> = []\n"
+                      "fn run(n: i64) -> i64 {\n"
+                      "    var tasks: Array<Task<i64>> = []\n"
+                      "    var results: Array<i64> = []\n"
                       "    tasks.reserve(n)\n"
                       "    results.reserve(n)\n"
                       "    tasks.clear()\n"
@@ -13675,9 +13675,9 @@ TEST(cgen_coro_await_all_into_reuses_result_array) {
     assert(!contains(code, "xr_aot_await_all_tasks_collect_into_array(ctx,") &&
            "await all into should not emit a second post-await collect helper");
     assert(contains(code, "XR_ELEM_I64, true") &&
-           "await all into Array<int> must keep typed result layout and one-shot tasks");
+           "await all into Array<i64> must keep typed result layout and one-shot tasks");
     assert(!contains(code, "XR_ELEM_I64, false") &&
-           "await all into Array<int> must not lose aggregate one-shot marking");
+           "await all into Array<i64> must not lose aggregate one-shot marking");
     assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
            "await all into task producers should use deferred batch submission");
     assert(!contains(code, "xr_aot_spawn(ctx, &") &&
@@ -13699,12 +13699,12 @@ TEST(cgen_coro_await_all_into_reuses_result_array) {
 }
 
 TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
-    const char *src = "fn worker(n: int) -> int {\n"
+    const char *src = "fn worker(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n * n\n"
                       "}\n"
-                      "var tasks: Array<Task<int>> = []\n"
-                      "var results: Array<int> = []\n"
+                      "var tasks: Array<Task<i64>> = []\n"
+                      "var results: Array<i64> = []\n"
                       "tasks.reserve(4)\n"
                       "results.reserve(4)\n"
                       "var i = 0\n"
@@ -13740,7 +13740,7 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
     assert(!contains(code, "xr_aot_await_all_tasks_collect_into_array(ctx,") &&
            "top-level await all into should not emit a second post-await collect helper");
     assert(contains(code, "XR_ELEM_I64, true") &&
-           "top-level await all into Array<int> should keep typed one-shot collection");
+           "top-level await all into Array<i64> should keep typed one-shot collection");
     const char *await_into = strstr(code, "xr_aot_await_all_tasks_into_array(ctx,");
     unsigned task_slot = 0;
     unsigned result_slot = 0;
@@ -13775,13 +13775,13 @@ TEST(cgen_coro_top_level_await_all_into_keeps_result_array_alive) {
 
 TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
     const char *src = "import { ResultGroup } from sync\n"
-                      "fn worker(group: ResultGroup, n: int) {\n"
+                      "fn worker(group: ResultGroup, n: i64) {\n"
                       "    group.add(n)\n"
                       "    if (n == 3) {\n"
                       "        group.close()\n"
                       "    }\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    const group: ResultGroup = ResultGroup(4)\n"
                       "    var i = 0\n"
                       "    while (i < 4) {\n"
@@ -13804,7 +13804,7 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
      * and its presence flag are separate unboxed frame slots, so nothing is
      * tagged across the suspend. */
     const char *recv_call = strstr(code, "xr_aot_result_group_recv_i64_optional(ctx,");
-    assert(recv_call != NULL && "ResultGroup<int>.recv should use the typed optional helper");
+    assert(recv_call != NULL && "ResultGroup<i64>.recv should use the typed optional helper");
     assert(!contains(code, "xr_aot_result_group_recv_value(") &&
            "a typed ResultGroup recv must not fall back to the tagged helper");
     assert(contains(code, "xr_aot_spawn_deferred(ctx, &") &&
@@ -13830,7 +13830,7 @@ TEST(cgen_coro_result_group_fire_and_forget_go_uses_deferred_batch) {
 
 TEST(cgen_coro_result_group_reset_uses_native_helper) {
     const char *src = "import { ResultGroup } from sync\n"
-                      "fn run(n: int) -> bool {\n"
+                      "fn run(n: i64) -> bool {\n"
                       "    const group: ResultGroup = ResultGroup(n)\n"
                       "    group.add(1)\n"
                       "    group.add(2)\n"
@@ -13873,14 +13873,14 @@ TEST(cgen_coro_result_group_reset_uses_native_helper) {
 
 TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
     const char *src = "import { ResultGroup } from sync\n"
-                      "fn useGroup(group: ResultGroup, n: int) -> int {\n"
+                      "fn useGroup(group: ResultGroup, n: i64) -> i64 {\n"
                       "    if (!group.add(n)) { return -1 }\n"
                       "    group.flush()\n"
                       "    if (!group.reset(1)) { return -2 }\n"
                       "    group.close()\n"
                       "    return 0\n"
                       "}\n"
-                      "fn run() -> int {\n"
+                      "fn run() -> i64 {\n"
                       "    const group: ResultGroup = ResultGroup(1)\n"
                       "    return useGroup(group, 1)\n"
                       "}\n"
@@ -13923,12 +13923,12 @@ TEST(cgen_result_group_sync_methods_elide_dead_err_checks) {
 }
 
 TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
-    const char *src = "fn delayed(ch: Channel<int>, n: int) -> int {\n"
+    const char *src = "fn delayed(ch: Channel<i64>, n: i64) -> i64 {\n"
                       "    ch.recv()\n"
                       "    return n\n"
                       "}\n"
-                      "const ch1 = Channel<int>(0)\n"
-                      "const ch2 = Channel<int>(1)\n"
+                      "const ch1 = Channel<i64>(0)\n"
+                      "const ch2 = Channel<i64>(1)\n"
                       "var t1 = go delayed(ch1, 1)\n"
                       "var t2 = go delayed(ch2, 2)\n"
                       "ch2.send(9)\n"
@@ -13957,11 +13957,11 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
 }
 
 TEST(cgen_coro_scope_exit_publishes_state_before_block) {
-    const char *src = "fn child(ch: Channel<int>) {\n"
+    const char *src = "fn child(ch: Channel<i64>) {\n"
                       "    ch.recv()\n"
                       "}\n"
                       "fn scoped() {\n"
-                      "    const ch = Channel<int>(0)\n"
+                      "    const ch = Channel<i64>(0)\n"
                       "    scope {\n"
                       "        go child(ch)\n"
                       "    }\n"
@@ -13985,7 +13985,7 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
 }
 
 TEST(cgen_channel_fields_use_aot_helpers) {
-    const char *src = "const ch = Channel<int>(2)\n"
+    const char *src = "const ch = Channel<i64>(2)\n"
                       "print(len(ch))\n"
                       "print(ch.capacity)\n"
                       "print(ch.isClosed)\n";
@@ -14012,25 +14012,25 @@ TEST(cgen_channel_fields_use_aot_helpers) {
 }
 
 TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
-    const char *src = "fn recv_value(r: Recv<int>) -> int {\n"
+    const char *src = "fn recv_value(r: Recv<i64>) -> i64 {\n"
                       "    return match (r) {\n"
                       "        Recv.Value(v) -> v\n"
                       "        _ -> 0\n"
                       "    }\n"
                       "}\n"
-                      "fn producer(ch: Channel<int>) -> int {\n"
+                      "fn producer(ch: Channel<i64>) -> i64 {\n"
                       "    ch.trySend(1)\n"
                       "    ch.trySend(2)\n"
                       "    return 0\n"
                       "}\n"
-                      "fn consumer(ch: Channel<int>) -> int {\n"
+                      "fn consumer(ch: Channel<i64>) -> i64 {\n"
                       "    return recv_value(ch.tryRecv())\n"
                       "}\n"
-                      "fn close_and_check(ch: Channel<int>) -> bool {\n"
+                      "fn close_and_check(ch: Channel<i64>) -> bool {\n"
                       "    ch.close()\n"
                       "    return ch.isClosed()\n"
                       "}\n"
-                      "const ch = Channel<int>(2)\n"
+                      "const ch = Channel<i64>(2)\n"
                       "var p = go producer(ch)\n"
                       "print(await p)\n"
                       "var c = go consumer(ch)\n"
@@ -14062,8 +14062,8 @@ TEST(cgen_sync_go_channel_try_methods_use_aot_helpers) {
 }
 
 TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
-    const char *src = "const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
-                      "fn consumer() -> int {\n"
+    const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(1, 4)\n"
+                      "fn consumer() -> i64 {\n"
                       "    var item = queue.pop(0)\n"
                       "    return item ?? 0\n"
                       "}\n"
@@ -14087,7 +14087,7 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
      * WorkQueue<int>.pop keeps the typed has/value slot pair here too — nothing
      * about the coalescing form justifies a tagged round trip. */
     assert(contains(code, "xr_aot_work_queue_pop_i64_optional(ctx,") &&
-           "WorkQueue<int>.pop feeding ?? must still use the typed optional bridge");
+           "WorkQueue<i64>.pop feeding ?? must still use the typed optional bridge");
     assert(!contains(code, "xr_aot_work_queue_pop_value(ctx,") &&
            "a typed WorkQueue.pop must not write its result through XrValue*");
     assert(contains(code, "S1:;\n    f->state = 1;") &&
@@ -14109,8 +14109,8 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
 }
 
 TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
-    const char *src = "const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
-                      "fn consumer() -> int {\n"
+    const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(1, 4)\n"
+                      "fn consumer() -> i64 {\n"
                       "    var item = queue.pop(0)\n"
                       "    if (item == null) { return -1 }\n"
                       "    var value = item!\n"
@@ -14130,11 +14130,11 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
     TEST_REQUIRE(contains(code, "xr_aot_work_queue_push_bool(ctx,"),
                  "coroutine WorkQueue.push should use the native bool helper");
     TEST_REQUIRE(contains(code, "xr_aot_work_queue_pop_i64_optional(ctx,"),
-                 "WorkQueue<int>.pop should use typed optional i64 AOT helper");
+                 "WorkQueue<i64>.pop should use typed optional i64 AOT helper");
     TEST_REQUIRE(contains(code, "xr_aot_work_queue_pop_i64_optional_resume(ctx,"),
-                 "WorkQueue<int>.pop resume should use typed optional i64 AOT helper");
+                 "WorkQueue<i64>.pop resume should use typed optional i64 AOT helper");
     TEST_REQUIRE(contains(code, "_opt_has") && contains(code, "_opt_value"),
-                 "WorkQueue<int>.pop should store nullable state as has/value slots");
+                 "WorkQueue<i64>.pop should store nullable state as has/value slots");
     TEST_REQUIRE(!contains(code, "_wq_pop_slot_"),
                  "typed optional WorkQueue.pop should not materialize a generic slot ref");
     TEST_REQUIRE(!contains(code, "xr_aot_work_queue_pop_value(ctx,"),
@@ -14160,7 +14160,7 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
 
 TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
     const char *src = "import { ResultGroup } from sync\n"
-                      "fn consumer() -> int {\n"
+                      "fn consumer() -> i64 {\n"
                       "    const group: ResultGroup = ResultGroup(1)\n"
                       "    group.add(21)\n"
                       "    var item = group.recv()\n"
@@ -14197,8 +14197,8 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
 }
 
 TEST(cgen_work_queue_native_methods_use_aot_helpers) {
-    const char *src = "const queue: WorkQueue<int> = WorkQueue<int>(4, 2)\n"
-                      "fn use_queue() -> int {\n"
+    const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(4, 2)\n"
+                      "fn use_queue() -> i64 {\n"
                       "    assert_true(queue.push(1, 0))\n"
                       "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"
                       "    var (value, ok) = queue.tryPop(0)\n"
@@ -14219,7 +14219,7 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     assert(contains(code, "xr_aot_work_queue_push_bool_sync(") &&
            "WorkQueue.push should use the native bool sync AOT bridge");
     assert(contains(code, "xr_aot_work_queue_push_range_i64_sync(") &&
-           "WorkQueue.pushRange should use the native int sync AOT bridge");
+           "WorkQueue.pushRange should use the native i64 sync AOT bridge");
     assert(contains(code, "xr_aot_work_queue_close_void_sync(") &&
            "WorkQueue.close should use the native void sync AOT bridge");
     assert(contains(code, "xr_aot_work_queue_try_pop_sync(") &&
@@ -14251,26 +14251,26 @@ TEST(cgen_work_queue_native_methods_use_aot_helpers) {
 }
 
 TEST(cgen_coro_task_status_uses_native_enum_status) {
-    const char *src = "fn wait_for_value(ch: Channel<int>) -> int {\n"
+    const char *src = "fn wait_for_value(ch: Channel<i64>) -> i64 {\n"
                       "    match (ch.recv()) {\n"
                       "        Recv.Value(value) -> { return value }\n"
                       "        _ -> { return -1 }\n"
                       "    }\n"
                       "}\n"
-                      "fn quick_value(n: int) -> int {\n"
+                      "fn quick_value(n: i64) -> i64 {\n"
                       "    Coro.yield()\n"
                       "    return n * 2\n"
                       "}\n"
-                      "fn task_done(task: Task<int>) -> bool {\n"
+                      "fn task_done(task: Task<i64>) -> bool {\n"
                       "    return task.done\n"
                       "}\n"
-                      "fn task_status(task: Task<int>) -> TaskStatus {\n"
+                      "fn task_status(task: Task<i64>) -> TaskStatus {\n"
                       "    return task.status\n"
                       "}\n"
-                      "fn task_poll(task: ref Task<int>) -> TaskResult<int> {\n"
+                      "fn task_poll(task: ref Task<i64>) -> TaskResult<i64> {\n"
                       "    return task.poll()\n"
                       "}\n"
-                      "const ch = Channel<int>(0)\n"
+                      "const ch = Channel<i64>(0)\n"
                       "var blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
                       "var cancelled_result = blocked.awaitResult()\n"
@@ -14324,8 +14324,8 @@ TEST(cgen_coro_task_status_uses_native_enum_status) {
 }
 
 TEST(cgen_structural_field_named_like_builtin_property_uses_ordinal) {
-    const char *src = "type Counted = {count: int}\n"
-                      "fn read_count(data: Counted) -> int {\n"
+    const char *src = "type Counted = {count: i64}\n"
+                      "fn read_count(data: Counted) -> i64 {\n"
                       "    return data.count\n"
                       "}\n"
                       "var data: Counted = {count: 10}\n"

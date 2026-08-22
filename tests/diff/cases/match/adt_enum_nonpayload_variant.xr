@@ -9,8 +9,8 @@
 // crashed on AOT (array-tag read of a singleton).
 
 enum Shape {
-    Circle(int),
-    Square(int),
+    Circle(i64),
+    Square(i64),
     Point,
     Unknown,
 }
@@ -34,7 +34,7 @@ for (sh in shapes) {
 
 // Non-payload variant matched alongside a payload arm, then falling to a
 // wildcard — exercises the ordinal read on a bare variant value.
-fn radius_or(s: Shape) -> int {
+fn radius_or(s: Shape) -> i64 {
     return match (s) {
         Shape.Circle(r) -> r
         Shape.Point -> -1

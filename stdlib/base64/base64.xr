@@ -15,10 +15,10 @@ export enum Base64PaddingPolicy {
 }
 
 export enum Base64Error {
-    InvalidLength(length: int),
-    InvalidByte(byteOffset: int, value: byte),
-    InvalidPadding(byteOffset: int),
-    NonCanonicalTrailingBits(byteOffset: int)
+    InvalidLength(length: i64),
+    InvalidByte(byteOffset: i64, value: u8),
+    InvalidPadding(byteOffset: i64),
+    NonCanonicalTrailingBits(byteOffset: i64)
 }
 
 export class Base64EncodeOptions {
@@ -41,7 +41,7 @@ export class Base64DecodeOptions {
     }
 }
 
-fn _encodeRune(index: int, alphabet: Base64Alphabet) -> rune {
+fn _encodeRune(index: i64, alphabet: Base64Alphabet) -> rune {
     if (index < 26) { return rune(65 + index)! }
     if (index < 52) { return rune(97 + index - 26)! }
     if (index < 62) { return rune(48 + index - 52)! }
@@ -51,7 +51,7 @@ fn _encodeRune(index: int, alphabet: Base64Alphabet) -> rune {
     return alphabet == Base64Alphabet.UrlSafe ? '_' : '/'
 }
 
-fn _decodeChar(c: int, alphabet: Base64Alphabet) -> int {
+fn _decodeChar(c: i64, alphabet: Base64Alphabet) -> i64 {
     if (c >= 65 && c <= 90) { return c - 65 }    // A-Z -> 0..25
     if (c >= 97 && c <= 122) { return c - 71 }   // a-z -> 26..51
     if (c >= 48 && c <= 57) { return c + 4 }     // 0-9 -> 52..61
@@ -69,12 +69,12 @@ fn _decodeChar(c: int, alphabet: Base64Alphabet) -> int {
 //   kind: 0 valid, 1 length, 2 byte, 3 padding, 4 trailing bits
 //   arg: error length/offset; byteValue: InvalidByte payload
 //   end/rem/outLen: validated decode plan
-fn _scan(text: string, options: Base64DecodeOptions) -> (int, int, byte, int, int, int) {
-    var src: Slice<byte> = text.bytes()
+fn _scan(text: string, options: Base64DecodeOptions) -> (i64, i64, u8, i64, i64, i64) {
+    var src: Slice<u8> = text.bytes()
     var end = len(src)
     while (end > 0 && src[end - 1] == 61) { end = end - 1 }
 
-    var zero: byte = 0
+    var zero: u8 = 0
     var paddingCount = len(src) - end
     var rem = end % 4
     if (paddingCount > 2) {
@@ -108,14 +108,14 @@ fn _scan(text: string, options: Base64DecodeOptions) -> (int, int, byte, int, in
     }
 
     for (var i = 0; i < end; i++) {
-        if (_decodeChar(src[i] as int, options.alphabet) < 0) {
+        if (_decodeChar(src[i] as i64, options.alphabet) < 0) {
             return (2, i, src[i], 0, 0, 0)
         }
     }
-    if (rem == 2 && (_decodeChar(src[end - 1] as int, options.alphabet) & 15) != 0) {
+    if (rem == 2 && (_decodeChar(src[end - 1] as i64, options.alphabet) & 15) != 0) {
         return (4, end - 1, zero, 0, 0, 0)
     }
-    if (rem == 3 && (_decodeChar(src[end - 1] as int, options.alphabet) & 3) != 0) {
+    if (rem == 3 && (_decodeChar(src[end - 1] as i64, options.alphabet) & 3) != 0) {
         return (4, end - 1, zero, 0, 0, 0)
     }
 
@@ -125,14 +125,14 @@ fn _scan(text: string, options: Base64DecodeOptions) -> (int, int, byte, int, in
     return (0, 0, zero, end, rem, outLen)
 }
 
-fn _encodeAlpha(data: Slice<byte>, alphabet: Base64Alphabet, padding: bool) -> string {
+fn _encodeAlpha(data: Slice<u8>, alphabet: Base64Alphabet, padding: bool) -> string {
     var n = len(data)
     var out = StringBuilder()
     var i = 0
     while (i + 3 <= n) {
-        var b0 = data[i] as int
-        var b1 = data[i + 1] as int
-        var b2 = data[i + 2] as int
+        var b0 = data[i] as i64
+        var b1 = data[i + 1] as i64
+        var b2 = data[i + 2] as i64
         out.append(_encodeRune(b0 >> 2, alphabet))
         out.append(_encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet))
         out.append(_encodeRune(((b1 & 15) << 2) | (b2 >> 6), alphabet))
@@ -141,13 +141,13 @@ fn _encodeAlpha(data: Slice<byte>, alphabet: Base64Alphabet, padding: bool) -> s
     }
     var rem = n - i
     if (rem == 1) {
-        var b0 = data[i] as int
+        var b0 = data[i] as i64
         out.append(_encodeRune(b0 >> 2, alphabet))
         out.append(_encodeRune((b0 & 3) << 4, alphabet))
         if (padding) { out.append("==") }
     } else if (rem == 2) {
-        var b0 = data[i] as int
-        var b1 = data[i + 1] as int
+        var b0 = data[i] as i64
+        var b1 = data[i + 1] as i64
         out.append(_encodeRune(b0 >> 2, alphabet))
         out.append(_encodeRune(((b0 & 3) << 4) | (b1 >> 4), alphabet))
         out.append(_encodeRune((b1 & 15) << 2, alphabet))
@@ -156,52 +156,52 @@ fn _encodeAlpha(data: Slice<byte>, alphabet: Base64Alphabet, padding: bool) -> s
     return out.toString()
 }
 
-fn _decodeValidated(src: Slice<byte>, end: int, rem: int, outLen: int,
-                    options: Base64DecodeOptions) -> Array<byte> {
-    var out = Array<byte>(outLen)
+fn _decodeValidated(src: Slice<u8>, end: i64, rem: i64, outLen: i64,
+                    options: Base64DecodeOptions) -> Array<u8> {
+    var out = Array<u8>(outLen)
     var oi = 0
     var i = 0
     while (i + 4 <= end) {
-        var c0 = _decodeChar(src[i] as int, options.alphabet)
-        var c1 = _decodeChar(src[i + 1] as int, options.alphabet)
-        var c2 = _decodeChar(src[i + 2] as int, options.alphabet)
-        var c3 = _decodeChar(src[i + 3] as int, options.alphabet)
-        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as byte
-        out[oi + 1] = ((((c1 & 15) << 4) | (c2 >> 2)) & 255) as byte
-        out[oi + 2] = ((((c2 & 3) << 6) | c3) & 255) as byte
+        var c0 = _decodeChar(src[i] as i64, options.alphabet)
+        var c1 = _decodeChar(src[i + 1] as i64, options.alphabet)
+        var c2 = _decodeChar(src[i + 2] as i64, options.alphabet)
+        var c3 = _decodeChar(src[i + 3] as i64, options.alphabet)
+        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as u8
+        out[oi + 1] = ((((c1 & 15) << 4) | (c2 >> 2)) & 255) as u8
+        out[oi + 2] = ((((c2 & 3) << 6) | c3) & 255) as u8
         oi = oi + 3
         i = i + 4
     }
     if (rem == 2) {
-        var c0 = _decodeChar(src[i] as int, options.alphabet)
-        var c1 = _decodeChar(src[i + 1] as int, options.alphabet)
-        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as byte
+        var c0 = _decodeChar(src[i] as i64, options.alphabet)
+        var c1 = _decodeChar(src[i + 1] as i64, options.alphabet)
+        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as u8
     } else if (rem == 3) {
-        var c0 = _decodeChar(src[i] as int, options.alphabet)
-        var c1 = _decodeChar(src[i + 1] as int, options.alphabet)
-        var c2 = _decodeChar(src[i + 2] as int, options.alphabet)
-        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as byte
-        out[oi + 1] = ((((c1 & 15) << 4) | (c2 >> 2)) & 255) as byte
+        var c0 = _decodeChar(src[i] as i64, options.alphabet)
+        var c1 = _decodeChar(src[i + 1] as i64, options.alphabet)
+        var c2 = _decodeChar(src[i + 2] as i64, options.alphabet)
+        out[oi] = (((c0 << 2) | (c1 >> 4)) & 255) as u8
+        out[oi + 1] = ((((c1 & 15) << 4) | (c2 >> 2)) & 255) as u8
     }
     return out
 }
 
-fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<byte> {
+fn _decodeImpl(text: string, options: Base64DecodeOptions) -> Array<u8> {
     var scan = _scan(text, options)
     if (scan.0 == 1) { throw Base64Error.InvalidLength(scan.1) }
     if (scan.0 == 2) { throw Base64Error.InvalidByte(scan.1, scan.2) }
     if (scan.0 == 3) { throw Base64Error.InvalidPadding(scan.1) }
     if (scan.0 == 4) { throw Base64Error.NonCanonicalTrailingBits(scan.1) }
 
-    var src: Slice<byte> = text.bytes()
+    var src: Slice<u8> = text.bytes()
     return _decodeValidated(src, scan.3, scan.4, scan.5, options)
 }
 
-export fn encode(data: Slice<byte>, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
+export fn encode(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
     return _encodeAlpha(data, options.alphabet, options.padding)
 }
 
-export fn decode(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> Array<byte> {
+export fn decode(text: string, options: Base64DecodeOptions = Base64DecodeOptions()) -> Array<u8> {
     return _decodeImpl(text, options)
 }
 

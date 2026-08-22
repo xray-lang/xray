@@ -172,18 +172,6 @@ static int verify_string_boundary(void) {
     ASSERT_TRUE(XR_IS_BOOL(valid));
     ASSERT_TRUE(XR_TO_BOOL(valid));
 
-    XrStdlibVmFastpathFn parse_int = xr_stdlib_vm_fastpath_lookup("strconv", "parseInt");
-    ASSERT_TRUE(parse_int != NULL);
-    XrString *decimal = xr_string_new(isolate, "12345", 5);
-    ASSERT_TRUE(decimal != NULL);
-    XrValue decimal_argument = xr_string_value(decimal);
-    XrValue parsed = parse_int(isolate, &decimal_argument, 1);
-    ASSERT_TRUE(XR_IS_INT(parsed) && XR_TO_INT(parsed) == 12345);
-    XrString *invalid_decimal = xr_string_new(isolate, "12x", 3);
-    ASSERT_TRUE(invalid_decimal != NULL);
-    XrValue invalid_argument = xr_string_value(invalid_decimal);
-    ASSERT_TRUE(XR_IS_NULL(parse_int(isolate, &invalid_argument, 1)));
-
     xray_vm_delete(isolate);
     return 0;
 }
@@ -313,7 +301,6 @@ int main(void) {
     ASSERT_TRUE(xr_stdlib_vm_fastpath_count() >= 40);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("codegen", "compilerFence") != NULL);
     ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("text", "trim") != NULL);
-    ASSERT_TRUE(xr_stdlib_vm_fastpath_lookup("strconv", "parseInt") != NULL);
     /* A module whose Xray source reaches its private native primitives keeps
      * every entry point on the interpreted path: a freestanding fragment
      * cannot link those primitives, and an opaque hosted proxy would strip the

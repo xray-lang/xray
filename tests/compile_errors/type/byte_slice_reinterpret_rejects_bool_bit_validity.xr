@@ -1,5 +1,5 @@
 fn main() {
-    var bytes: Array<byte> = [0, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [0, 2]
+    var view: Slice<u8> = bytes[:]
     var flags: Slice<bool> = view.reinterpret<bool>()
 }

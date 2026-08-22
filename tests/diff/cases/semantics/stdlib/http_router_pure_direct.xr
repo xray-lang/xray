@@ -36,7 +36,7 @@ print(r.add("GET", "/users/:id", "replacement"))
 var replaced = r.find("GET", "/users/7")!
 print(replaced.value)
 
-var r2 = http.Router<int>()
+var r2 = http.Router<i64>()
 print(r2.add("GET", "/x/*tail", 1))
 var tail = r2.find("GET", "/x/a/b")!
 print(tail.value + 1)

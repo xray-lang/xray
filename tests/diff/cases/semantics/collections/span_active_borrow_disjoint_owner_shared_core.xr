@@ -1,14 +1,14 @@
 class Pair {
-    left: Array<byte> = Array<byte>(0)
-    right: Array<byte> = Array<byte>(0)
+    left: Array<u8> = Array<u8>(0)
+    right: Array<u8> = Array<u8>(0)
 }
 
 fn disjointField() {
     var box = Pair()
     box.left.push(1)
     box.right.push(9)
-    var view: Slice<byte> = box.left[:]
-    box.right = Array<byte>(0)
+    var view: Slice<u8> = box.left[:]
+    box.right = Array<u8>(0)
     box.right.push(10)
     print(len(view))
     print(view[0])
@@ -17,11 +17,11 @@ fn disjointField() {
 }
 
 fn disjointIndex() {
-    var chunks: Array<Array<byte>> = [Array<byte>(0), Array<byte>(0)]
+    var chunks: Array<Array<u8>> = [Array<u8>(0), Array<u8>(0)]
     chunks[0].push(3)
     chunks[1].push(7)
-    var view: Slice<byte> = chunks[0][:]
-    chunks[1] = Array<byte>(0)
+    var view: Slice<u8> = chunks[0][:]
+    chunks[1] = Array<u8>(0)
     chunks[1].push(8)
     print(len(view))
     print(view[0])

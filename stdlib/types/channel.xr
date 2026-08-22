@@ -14,7 +14,7 @@ enum SendResult {
     Closed
 }
 class Channel<T> {
-    capacity: int
+    capacity: i64
     isClosed: bool
 
     // @receiver_write
@@ -30,9 +30,9 @@ class Channel<T> {
     tryRecv() -> Recv<T>
 
     // @receiver_write
-    sendTimeout(value: T, timeout: int) -> SendResult
+    sendTimeout(value: T, timeout: i64) -> SendResult
     // @receiver_write
-    recvTimeout(timeout: int) -> Recv<T>
+    recvTimeout(timeout: i64) -> Recv<T>
 
     // @receiver_write
     close()

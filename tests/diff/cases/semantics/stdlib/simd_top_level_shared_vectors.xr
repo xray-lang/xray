@@ -11,7 +11,7 @@ assert_eq(global32.extract(3), 0)
 var round64 = global32.reinterpretU64()
 assert_eq(round64.extract(0), lanes64[0])
 assert_eq(round64.extract(1), lanes64[1])
-var bytes: [byte; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+var bytes: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 var globalBytes = U8x16.fromLanes(bytes)
 var globalWords = globalBytes.reinterpretU32()
 assert_eq(globalWords.extract(0), 67305985)

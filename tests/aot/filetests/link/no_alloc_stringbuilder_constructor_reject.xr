@@ -1,4 +1,4 @@
-fn xray_no_alloc_stringbuilder_constructor_reject() -> int {
+fn xray_no_alloc_stringbuilder_constructor_reject() -> i64 {
     var sb = StringBuilder()
     return len(sb)
 }

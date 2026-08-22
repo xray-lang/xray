@@ -1,9 +1,9 @@
 // anchor: fixed-array-index-oob-panic-shape
 struct Buf {
-    data: [int; 4]
+    data: [i64; 4]
 }
 
-fn show_direct_read(i: int) {
+fn show_direct_read(i: i64) {
     var buf = Buf{data: [1, 2, 3, 4]}
     try {
         print(buf.data[i])
@@ -13,7 +13,7 @@ fn show_direct_read(i: int) {
     }
 }
 
-fn show_direct_write(i: int) {
+fn show_direct_write(i: i64) {
     var buf = Buf{data: [1, 2, 3, 4]}
     try {
         buf.data[i] = 9
@@ -24,11 +24,11 @@ fn show_direct_write(i: int) {
     }
 }
 
-fn write_view(view: ref [int; 4], i: int) {
+fn write_view(view: ref [i64; 4], i: i64) {
     view[i] = 9
 }
 
-fn show_view_write(i: int) {
+fn show_view_write(i: i64) {
     var buf = Buf{data: [1, 2, 3, 4]}
     try {
         write_view(ref buf.data, i)

@@ -4,12 +4,12 @@
 */
 
 enum OptErr { Msg(string) }
-type User = { id: int, name: string }
-type Database = { host: string, port: int }
+type User = { id: i64, name: string }
+type Database = { host: string, port: i64 }
 type Config = { database: Database }
-type ServerConfig = { port: int, host: string }
+type ServerConfig = { port: i64, host: string }
 
-fn maybeFailInt(should_throw: bool) -> int {
+fn maybeFailInt(should_throw: bool) -> i64 {
     if (should_throw) {
         throw OptErr.Msg("intentional int failure")
     }
@@ -108,7 +108,7 @@ fn test_catch_object_default() {
     print("   PASS")
 }
 
-fn findUser(id: int) -> User? {
+fn findUser(id: i64) -> User? {
     try {
         return maybeFailJson(id < 0)
     } catch (e) {
@@ -133,7 +133,7 @@ fn test_catch_function_return() {
 fn test_catch_batch() {
     print("9. batch try-catch for multiple independent fallible ops")
     fn fetchName() -> string { throw OptErr.Msg("no name") }
-    fn fetchAge() -> int { return 27 }
+    fn fetchAge() -> i64 { return 27 }
     fn fetchEmail() -> string { throw OptErr.Msg("no email") }
 
     var name = "unknown"

@@ -1,4 +1,4 @@
-fn xray_no_alloc_range_literal_reject() -> int {
+fn xray_no_alloc_range_literal_reject() -> i64 {
     return (1..4).count()
 }
 

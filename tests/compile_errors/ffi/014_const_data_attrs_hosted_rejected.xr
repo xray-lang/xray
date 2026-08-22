@@ -1,4 +1,4 @@
 @section("__DATA,.xray_magic")
-const MAGIC: int = comptime 41
+const MAGIC: i64 = comptime 41
 
 print(MAGIC)

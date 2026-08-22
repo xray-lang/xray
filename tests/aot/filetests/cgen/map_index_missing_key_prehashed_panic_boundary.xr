@@ -1,4 +1,4 @@
-const SCORES: Map<string, int> = #{"ada": 7}
+const SCORES: Map<string, i64> = #{"ada": 7}
 
 print(SCORES.get("missing") == null)
 try {

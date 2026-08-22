@@ -1,4 +1,4 @@
-fn copyNative(source: Slice<byte>, destination: ref Slice<byte>, offset: int) -> u64 {
+fn copyNative(source: Slice<u8>, destination: ref Slice<u8>, offset: i64) -> u64 {
     unsafe {
         var value16 = source.load<u16>(offset, Endian.Native)
         var value32 = source.load<u32>(offset + 2, Endian.Native)
@@ -11,10 +11,10 @@ fn copyNative(source: Slice<byte>, destination: ref Slice<byte>, offset: int) ->
 }
 
 fn exerciseNativeStorage() -> u64 {
-    var source = Array<byte>(16, 0)
-    var destination = Array<byte>(16, 0)
-    var sourceView: Slice<byte> = source[:]
-    var destinationView: Slice<byte> = destination[:]
+    var source = Array<u8>(16, 0)
+    var destination = Array<u8>(16, 0)
+    var sourceView: Slice<u8> = source[:]
+    var destinationView: Slice<u8> = destination[:]
     return copyNative(sourceView, ref destinationView, 1)
 }
 

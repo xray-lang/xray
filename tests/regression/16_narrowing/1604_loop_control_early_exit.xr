@@ -7,9 +7,9 @@
 
 // ===== N-8: continue in for-in narrows the fallthrough =====
 
-fn pickFirstString(xs: Array<int | string>) -> string {
+fn pickFirstString(xs: Array<i64 | string>) -> string {
     for (x in xs) {
-        if (x is int) { continue }
+        if (x is i64) { continue }
         return x
     }
     return ""
@@ -23,13 +23,13 @@ fn test_n8_continue_for_in() {
 
 // ===== N-8: continue in while narrows the fallthrough =====
 
-fn sumStringsWhile(xs: Array<int | string>) -> int {
+fn sumStringsWhile(xs: Array<i64 | string>) -> i64 {
     var total = 0
     var i = 0
     while (i < len(xs)) {
         var x = xs[i]
         i = i + 1
-        if (x is int) { continue }
+        if (x is i64) { continue }
         total = total + len(x)
     }
     return total
@@ -42,11 +42,11 @@ fn test_n8_continue_while() {
 
 // ===== N-8: continue in a classic for narrows the fallthrough =====
 
-fn sumStringsFor(xs: Array<int | string>) -> int {
+fn sumStringsFor(xs: Array<i64 | string>) -> i64 {
     var total = 0
     for (var i = 0; i < len(xs); i = i + 1) {
         var x = xs[i]
-        if (x is int) { continue }
+        if (x is i64) { continue }
         total = total + len(x)
     }
     return total
@@ -59,10 +59,10 @@ fn test_n8_continue_classic_for() {
 
 // ===== N-8: break narrows the fallthrough inside the body =====
 
-fn firstLenBeforeInt(xs: Array<int | string>) -> int {
+fn firstLenBeforeInt(xs: Array<i64 | string>) -> i64 {
     var total = 0
     for (x in xs) {
-        if (x is int) { break }
+        if (x is i64) { break }
         total = total + len(x)
     }
     return total
@@ -75,7 +75,7 @@ fn test_n8_break_for_in() {
 
 // ===== N-8: null test with continue =====
 
-fn joinNonNull(xs: Array<string?>) -> int {
+fn joinNonNull(xs: Array<string?>) -> i64 {
     var total = 0
     for (x in xs) {
         if (x == null) { continue }
@@ -91,11 +91,11 @@ fn test_n8_continue_null_check() {
 
 // ===== N-8: labeled continue targeting the outer loop =====
 
-fn countPairs(xs: Array<int | string>) -> int {
+fn countPairs(xs: Array<i64 | string>) -> i64 {
     var count = 0
     outer: for (x in xs) {
         for (y in xs) {
-            if (x is int) { continue outer }
+            if (x is i64) { continue outer }
             count = count + len(x)
             break
         }
@@ -110,7 +110,7 @@ fn test_n8_labeled_continue() {
 
 // ===== N-10: a write on the jump path survives to the loop header =====
 
-fn drainWithContinue(first: string?) -> int {
+fn drainWithContinue(first: string?) -> i64 {
     var cur = first
     var rounds = 0
     while (cur != null) {

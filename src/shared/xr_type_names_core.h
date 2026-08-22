@@ -24,20 +24,18 @@
 
 /* ========== Primitive Types ========== */
 
-#define TYPE_NAME_INT "int"
 #define TYPE_NAME_I8 "i8"
-#define TYPE_NAME_U8 "byte"
+#define TYPE_NAME_U8 "u8"
 #define TYPE_NAME_I16 "i16"
 #define TYPE_NAME_U16 "u16"
 #define TYPE_NAME_I32 "i32"
 #define TYPE_NAME_U32 "u32"
-#define TYPE_NAME_I64 "int"
+#define TYPE_NAME_I64 "i64"
 #define TYPE_NAME_U64 "u64"
 #define TYPE_NAME_ISIZE "isize"
 #define TYPE_NAME_USIZE "usize"
-#define TYPE_NAME_FLOAT "float"
 #define TYPE_NAME_F32 "f32"
-#define TYPE_NAME_F64 "float"
+#define TYPE_NAME_F64 "f64"
 #define TYPE_NAME_STRING "string"
 #define TYPE_NAME_BOOL "bool"
 #define TYPE_NAME_RUNE "rune"
@@ -141,8 +139,10 @@ typedef enum {
 #include "xr_type_names.def"
 #undef XR_TYPE_NAME
 
-#define XR_TID_IS_INT(tid) ((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64)
-#define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_FLOAT)
+#define XR_TID_IS_INT(tid)                                                                    \
+    (((tid) >= XR_TID_I8 && (tid) <= XR_TID_U64) || (tid) == XR_TID_ISIZE ||                  \
+     (tid) == XR_TID_USIZE)
+#define XR_TID_IS_FLOAT(tid) ((tid) == XR_TID_F32 || (tid) == XR_TID_F64)
 #define XR_TID_IS_NUMBER(tid) (XR_TID_IS_INT(tid) || XR_TID_IS_FLOAT(tid))
 
 /* The canonical display name for a public type id. Every consumer -- VM,

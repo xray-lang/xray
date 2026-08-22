@@ -2,19 +2,19 @@ import parallel
 import sys
 
 struct Totals {
-    sum: int
-    count: int
+    sum: i64
+    count: i64
 }
 
-const initCount = Atomic<int>(0)
-const tls = sys.ThreadLocal<int>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
-const touched = Atomic<int>(0)
-const lane0 = Atomic<int>(0)
-const lane1 = Atomic<int>(0)
-const lane2 = Atomic<int>(0)
-const lane3 = Atomic<int>(0)
+const initCount = Atomic<i64>(0)
+const tls = sys.ThreadLocal<i64>(() -> initCount.fetchAdd(1, Ordering.AcquireRelease))
+const touched = Atomic<i64>(0)
+const lane0 = Atomic<i64>(0)
+const lane1 = Atomic<i64>(0)
+const lane2 = Atomic<i64>(0)
+const lane3 = Atomic<i64>(0)
 
-var plan = parallel.Plan<int>(parallel.Options(4), (lane) -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(4), (lane) -> lane)
 
 var totals = plan.reduce(
     0..20000,

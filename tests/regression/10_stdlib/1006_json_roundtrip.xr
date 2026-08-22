@@ -21,8 +21,8 @@ fn test_nested_roundtrip() {
     }
     var parsed = JSON.parseValue(JSON.stringify(original))
     assert_eq(JSON.require<string>(parsed, ["users", 0, "name"]), "Alice")
-    assert_eq(JSON.require<int>(parsed, ["users", 1, "scores", 2]), 92)
-    assert_eq(JSON.require<int>(parsed, ["metadata", "version"]), 1)
+    assert_eq(JSON.require<i64>(parsed, ["users", 1, "scores", 2]), 92)
+    assert_eq(JSON.require<i64>(parsed, ["metadata", "version"]), 1)
     assert_eq(JSON.require<bool>(parsed, ["metadata", "valid"]), true)
 }
 

@@ -1,6 +1,6 @@
 // A cleanup block reads outer bindings when the block executes. Programs that
 // need a registration-time value must create an explicit copy first.
-fn show(label: string, n: int) { print(label + "=" + string(n)) }
+fn show(label: string, n: i64) { print(label + "=" + string(n)) }
 
 fn late_binding() {
     var x = 1

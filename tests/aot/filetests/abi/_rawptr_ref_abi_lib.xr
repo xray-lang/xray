@@ -1,4 +1,4 @@
-export fn resetRawConst(p: ref Ptr<byte>) -> bool {
-    p = Ptr<byte>.null()
+export fn resetRawConst(p: ref Ptr<u8>) -> bool {
+    p = Ptr<u8>.null()
     return p.isNull()
 }

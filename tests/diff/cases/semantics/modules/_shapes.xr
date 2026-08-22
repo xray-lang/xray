@@ -2,17 +2,17 @@
 // because its basename starts with '_').  Exercises cross-module static method
 // dispatch: the importer calls static factory methods defined here.
 export class Shape {
-    side: int
-    constructor(s: int) {
+    side: i64
+    constructor(s: i64) {
         this.side = s
     }
     static unit() -> Shape {
         return Shape(1)
     }
-    static square(n: int) -> Shape {
+    static square(n: i64) -> Shape {
         return Shape(n)
     }
-    area() -> int {
+    area() -> i64 {
         return this.side * this.side
     }
 }

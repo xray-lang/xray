@@ -1,12 +1,12 @@
-fn run(n: int) -> int {
-    var values: Array<int> = []
+fn run(n: i64) -> i64 {
+    var values: Array<i64> = []
     var i = 0
     while (i < n) {
         values.push((i * 17) % 251)
         i = i + 1
     }
 
-    return values.reduce(fn(acc: int, x: int) -> int {
+    return values.reduce(fn(acc: i64, x: i64) -> i64 {
         return acc + x * 3
     }, 5)
 }

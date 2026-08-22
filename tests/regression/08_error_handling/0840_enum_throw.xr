@@ -12,7 +12,7 @@ enum IoErr {
     PermissionDenied
 }
 
-fn might_fail(s: string) -> int {
+fn might_fail(s: string) -> i64 {
     if (s == "") {
         throw ParseErr.Empty
     }
@@ -62,7 +62,7 @@ fn readConfig() -> string {
 }
 
 @test fn enum_throw_multiple_types() {
-    fn riskyOp(mode: int) -> string {
+    fn riskyOp(mode: i64) -> string {
         if (mode == 0) {
             throw ParseErr.Empty
         }

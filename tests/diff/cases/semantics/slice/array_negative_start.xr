@@ -1,12 +1,12 @@
 // anchor: slice-array-negative-start
 fn main() {
     var arr = [1, 2, 3, 4]
-    var tail: Slice<int> = arr[-2:]
+    var tail: Slice<i64> = arr[-2:]
     print(tail)
     print(copy(arr[-2:]))
-    var hugeTail: Slice<int> = arr[-999:]
+    var hugeTail: Slice<i64> = arr[-999:]
     print(hugeTail)
-    var pastEnd: Slice<int> = arr[999:]
+    var pastEnd: Slice<i64> = arr[999:]
     print(pastEnd)
 }
 

@@ -3,16 +3,16 @@ enum FsMode {
     Run,
     Halt
 
-    fn code(offset: int) -> int {
+    fn code(offset: i64) -> i64 {
         return this.ordinal + offset
     }
 
-    static fn base() -> int {
+    static fn base() -> i64 {
         return 40
     }
 }
 
-fn xray_enum_method_static(flag: int) -> int {
+fn xray_enum_method_static(flag: i64) -> i64 {
     var mode = FsMode.Boot
     if (flag == 1) {
         mode = FsMode.Run

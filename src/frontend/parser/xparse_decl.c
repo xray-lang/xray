@@ -671,10 +671,10 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
                         AstNode *dv = param->default_value;
                         switch (dv->type) {
                             case AST_LITERAL_INT:
-                                param->type = xr_tref_int(parser->compiler_session);
+                                param->type = xr_tref_i64(parser->compiler_session);
                                 break;
                             case AST_LITERAL_FLOAT:
-                                param->type = xr_tref_float(parser->compiler_session);
+                                param->type = xr_tref_f64(parser->compiler_session);
                                 break;
                             case AST_LITERAL_STRING:
                             case AST_TEMPLATE_STRING:
@@ -729,7 +729,7 @@ AstNode *xr_parse_function_declaration(Parser *parser) {
         // the function still parses.
         xr_parser_advance(parser);  // consume ':'
         xr_parser_error(parser, "use '->' instead of ':' for function return type, "
-                                "e.g. fn foo() -> int");
+                                "e.g. fn foo() -> i64");
         parser->panic_mode = 0;
         return_type = xr_parse_type_annotation(parser);
     }
@@ -1161,9 +1161,9 @@ AstNode *xr_parse_object_literal(Parser *parser) {
         }
         // Identifier or keyword as key (allow keywords like 'type', 'int', etc.)
         else if (xr_parser_check(parser, TK_NAME) ||
+                 (parser->current.type >= TK_I8 && parser->current.type <= TK_USIZE) ||
                  // Type keywords
-                 xr_parser_check(parser, TK_TYPE_ALIAS) || xr_parser_check(parser, TK_INT) ||
-                 xr_parser_check(parser, TK_FLOAT) || xr_parser_check(parser, TK_STRING) ||
+                 xr_parser_check(parser, TK_TYPE_ALIAS) || xr_parser_check(parser, TK_STRING) ||
                  xr_parser_check(parser, TK_BOOL) ||
                  // Common keywords
                  xr_parser_check(parser, TK_CLASS) || xr_parser_check(parser, TK_ENUM) ||
@@ -1862,10 +1862,7 @@ AstNode *xr_parse_declaration(Parser *parser) {
     // Type keyword followed by identifier means user intended a declaration
     {
         XrTokenType t = parser->current.type;
-        if (t == TK_INT || t == TK_I8 || t == TK_I16 || t == TK_I32 || t == TK_I64 ||
-            t == TK_BYTE || t == TK_U8 || t == TK_U16 || t == TK_U32 || t == TK_U64 ||
-            t == TK_FLOAT || t == TK_F32 || t == TK_F64 || t == TK_ISIZE || t == TK_USIZE ||
-            t == TK_STRING || t == TK_BOOL || t == TK_RUNE) {
+        if ((t >= TK_I8 && t <= TK_USIZE) || t == TK_STRING || t == TK_BOOL || t == TK_RUNE) {
             // Peek ahead: if next token is TK_NAME, this is a C-style declaration
             Token saved = parser->current;
             Parser checkpoint = *parser;

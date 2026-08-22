@@ -24,17 +24,17 @@ XR_ENUM_METADATA_TYPE(PAYLOAD_FIELD, EnumPayloadField,
                       "Typed descriptor for one declared payload field.",
                       "all", "pure", "none")
 
-XR_ENUM_METADATA_PROPERTY(VARIANTS, length, "int",
+XR_ENUM_METADATA_PROPERTY(VARIANTS, length, "i64",
                           "Number of declared variants in the owning enum.",
                           "all", "pure", "none")
 
-XR_ENUM_METADATA_PROPERTY(VARIANT, ordinal, "int",
+XR_ENUM_METADATA_PROPERTY(VARIANT, ordinal, "i64",
                           "Zero-based declaration ordinal of this variant.",
                           "all", "pure", "none")
 XR_ENUM_METADATA_PROPERTY(VARIANT, name, "string",
                           "Declared variant name; retains the cold name sidecar when used.",
                           "hosted-or-name-metadata", "pure", "materializes-string")
-XR_ENUM_METADATA_PROPERTY(VARIANT, payloadCount, "int",
+XR_ENUM_METADATA_PROPERTY(VARIANT, payloadCount, "i64",
                           "Number of declared payload fields.",
                           "all", "pure", "none")
 XR_ENUM_METADATA_PROPERTY(VARIANT, isUnit, "bool",
@@ -44,17 +44,17 @@ XR_ENUM_METADATA_PROPERTY(VARIANT, payloads, "EnumPayloads<E>",
                           "Read-only declaration-order view of this variant's payload fields.",
                           "profile-with-payload-metadata", "pure", "none")
 
-XR_ENUM_METADATA_PROPERTY(PAYLOADS, length, "int",
+XR_ENUM_METADATA_PROPERTY(PAYLOADS, length, "i64",
                           "Number of payload fields in the selected variant.",
                           "profile-with-payload-metadata", "pure", "none")
 
-XR_ENUM_METADATA_PROPERTY(PAYLOAD_FIELD, index, "int",
+XR_ENUM_METADATA_PROPERTY(PAYLOAD_FIELD, index, "i64",
                           "Zero-based declaration index of this payload field.",
                           "profile-with-payload-metadata", "pure", "none")
 XR_ENUM_METADATA_PROPERTY(PAYLOAD_FIELD, name, "string",
                           "Declared payload field name; retains the cold name sidecar when used.",
                           "hosted-or-name-metadata", "pure", "materializes-string")
-XR_ENUM_METADATA_PROPERTY(PAYLOAD_FIELD, type, "int",
+XR_ENUM_METADATA_PROPERTY(PAYLOAD_FIELD, type, "i64",
                           "Canonical TypeId token for the concrete payload field type.",
                           "profile-with-type-metadata", "pure", "none")
 

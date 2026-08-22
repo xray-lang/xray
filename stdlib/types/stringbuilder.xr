@@ -1,7 +1,7 @@
 // Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c
 class StringBuilder {
     // @receiver_write
-    append(value: string | rune | int | float | bool | null) -> StringBuilder
+    append(value: string | rune | i64 | f64 | bool | null) -> StringBuilder
     toString() -> string
     // @receiver_write
     clear() -> StringBuilder

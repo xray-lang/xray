@@ -1,18 +1,18 @@
 // A build-time no-throw contract does not change generated C. plain_calc and
 // asserted_calc have identical bodies; both must have the same shape and
 // neither must emit an error-channel check.
-fn plain_calc(x: int, y: int) -> int {
+fn plain_calc(x: i64, y: i64) -> i64 {
     return x * y + 1
 }
 
-fn asserted_calc(x: int, y: int) -> int {
+fn asserted_calc(x: i64, y: i64) -> i64 {
     return x * y + 1
 }
 
-fn xray_call_plain(a: int) -> int {
+fn xray_call_plain(a: i64) -> i64 {
     return plain_calc(a, a)
 }
 
-fn xray_call_asserted(a: int) -> int {
+fn xray_call_asserted(a: i64) -> i64 {
     return asserted_calc(a, a)
 }

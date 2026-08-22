@@ -7,15 +7,15 @@ class Box<T> {
     constructor(v: T) { this.value = v }
 }
 
-class Plain { n: int  constructor() { this.n = 1 } }
+class Plain { n: i64  constructor() { this.n = 1 } }
 
-fn f(x: Box<int> | int) -> bool { return x is Box<int> }
+fn f(x: Box<i64> | i64) -> bool { return x is Box<i64> }
 
 fn main() {
     print(f(42))
-    print(f(Box<int>(1)))
-    var a = Box<int>(7)
-    print(a is Box<int>)
+    print(f(Box<i64>(1)))
+    var a = Box<i64>(7)
+    print(a is Box<i64>)
     print(a is Box<string>)
     print(Plain() is Plain)
 }

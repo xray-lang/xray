@@ -1,4 +1,4 @@
-fn fill_refs(values: ref Array<string>, value: string) -> int {
+fn fill_refs(values: ref Array<string>, value: string) -> i64 {
     values.fill(value)
     return len(values[0]) + len(values[2])
 }

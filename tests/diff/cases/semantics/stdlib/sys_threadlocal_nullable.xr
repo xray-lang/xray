@@ -4,14 +4,14 @@
 
 import sys
 
-const calls = Atomic<int>(0)
-const local = sys.ThreadLocal<int?>(fn() -> int? {
+const calls = Atomic<i64>(0)
+const local = sys.ThreadLocal<i64?>(fn() -> i64? {
     calls.fetchAdd(1, Ordering.AcquireRelease)
     return null
 })
 
-var first: int? = local.get()
-var second: int? = local.get()
+var first: i64? = local.get()
+var second: i64? = local.get()
 print(first == null)
 print(second == null)
 print(calls.load(Ordering.Acquire))

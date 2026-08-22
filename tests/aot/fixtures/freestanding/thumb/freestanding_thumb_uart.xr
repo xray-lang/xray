@@ -5,14 +5,14 @@ const UART0_CTRL = 0x40004008
 const MPS2_LEDS = 0x40028000
 
 fn kernel_entry() -> i32 {
-    mem.volatileStore(mem.mutPtr<byte>(MPS2_LEDS), 0x5a, 4)
+    mem.volatileStore(mem.mutPtr<u8>(MPS2_LEDS), 0x5a, 4)
     // CMSDK APB UART reset leaves transmit disabled; enable TX explicitly.
-    mem.volatileStore(mem.mutPtr<byte>(UART0_CTRL), 1, 4)
+    mem.volatileStore(mem.mutPtr<u8>(UART0_CTRL), 1, 4)
     // Keep the boot fixture below the freestanding runtime boundary: rune
     // methods require hosted builtin initialization and are tested elsewhere.
-    mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), 77, 4)
-    mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), 52, 4)
-    mem.volatileStore(mem.mutPtr<byte>(UART0_DATA), 10, 4)
+    mem.volatileStore(mem.mutPtr<u8>(UART0_DATA), 77, 4)
+    mem.volatileStore(mem.mutPtr<u8>(UART0_DATA), 52, 4)
+    mem.volatileStore(mem.mutPtr<u8>(UART0_DATA), 10, 4)
     while (true) {
     }
     return 0

@@ -1,5 +1,5 @@
-fn roundtrip(words: Slice<u32>) -> int {
-    var bytes: Slice<byte> = words.asBytes()
+fn roundtrip(words: Slice<u32>) -> i64 {
+    var bytes: Slice<u8> = words.asBytes()
     var words_again: Slice<u32> = bytes.reinterpret<u32>()
     return len(words_again)
 }

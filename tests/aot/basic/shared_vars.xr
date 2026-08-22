@@ -1,12 +1,12 @@
 // AOT basic test: shared variables (GETSHARED/SETSHARED)
 var counter = 0
 
-fn increment() -> int {
+fn increment() -> i64 {
     counter = counter + 1
     return counter
 }
 
-fn get_counter() -> int {
+fn get_counter() -> i64 {
     return counter
 }
 

@@ -1,9 +1,9 @@
 import parallel
 
 class Options {
-    workers: int
+    workers: i64
 
-    constructor(workers: int) {
+    constructor(workers: i64) {
         this.workers = workers
     }
 }

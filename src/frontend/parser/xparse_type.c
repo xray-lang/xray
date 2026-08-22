@@ -189,10 +189,8 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
         return xr_tref_error(parser->compiler_session);
 
     switch ((XrTypeRefKind) src->kind) {
-        case XR_TREF_INT:
-            return xr_tref_int(parser->compiler_session);
-        case XR_TREF_FLOAT:
-            return xr_tref_float(parser->compiler_session);
+        case XR_TREF_SCALAR:
+            return xr_tref_scalar(parser->compiler_session, src->scalar_rep);
         case XR_TREF_STRING:
             return xr_tref_string(parser->compiler_session);
         case XR_TREF_BOOL:
@@ -205,14 +203,6 @@ static XrTypeRef *clone_subst_type_ref(Parser *parser, const XrTypeRef *src,
             return xr_tref_null(parser->compiler_session);
         case XR_TREF_ERROR:
             return xr_tref_error(parser->compiler_session);
-        case XR_TREF_INT_WIDTH:
-            return xr_tref_scalar(parser->compiler_session,
-                                  (XrSourceTypeSpelling) src->builtin_spelling, src->scalar_rep,
-                                  false);
-        case XR_TREF_FLOAT_WIDTH:
-            return xr_tref_scalar(parser->compiler_session,
-                                  (XrSourceTypeSpelling) src->builtin_spelling, src->scalar_rep,
-                                  true);
         case XR_TREF_TYPE_PARAM: {
             int idx = alias_param_index(subst_alias, src->name);
             if (idx >= 0 && type_args)
@@ -599,10 +589,6 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     }
 
     /* Primitive type keywords */
-    if (xr_parser_match(parser, TK_INT))
-        return xr_tref_int(parser->compiler_session);
-    if (xr_parser_match(parser, TK_FLOAT))
-        return xr_tref_float(parser->compiler_session);
     if (xr_parser_match(parser, TK_STRING))
         return xr_tref_string(parser->compiler_session);
     if (xr_parser_match(parser, TK_BOOL))
@@ -612,15 +598,12 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
     if (xr_parser_match(parser, TK_NULL))
         return xr_tref_null(parser->compiler_session);
 
-    /* Exact/domain scalar spellings are generated from the shared registry.
-     * int/float were consumed above so their established TRef kinds remain. */
-#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
-                       canonical_display, public_type_id, range_class)                             \
-    if (lexer_token != TK_INT && lexer_token != TK_FLOAT && xr_parser_match(parser, lexer_token))  \
-        return xr_tref_scalar(parser->compiler_session, XR_SOURCE_TYPE_##source_id, scalar_rep,    \
-                              xr_scalar_rep_is_float(scalar_rep));
-#include "../../shared/xr_scalar_type.def"
-#undef XR_SCALAR_TYPE
+    /* The exact scalar registry is the only public scalar spelling owner. */
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    if (xr_parser_match(parser, TK_##id))                                                          \
+        return xr_tref_scalar(parser->compiler_session, native_type);
+#include "../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
 
     /* Exact struct type literal: { x: float, y: float }. */
     if (xr_parser_match(parser, TK_LBRACE)) {
@@ -663,7 +646,7 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             if (is_optional)
                 xr_parser_error(parser,
                                 "object field `?` suffix was removed; write the nullable type "
-                                "after `:`, for example `age: int?`");
+                                "after `:`, for example `age: i64?`");
             if (!xr_parser_match(parser, TK_COLON)) {
                 xr_parser_error(parser, "expected ':'");
                 xr_free((void *) fnames[field_count]);
@@ -882,13 +865,13 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         }
         if (strcmp(temp_name, "Int") == 0 || strcmp(temp_name, "Integer") == 0 ||
             strcmp(temp_name, "integer") == 0) {
-            xr_parser_error(parser, "use 'int' (lowercase) for integer type in Xray");
-            return xr_tref_int(parser->compiler_session);
+            xr_parser_error(parser, "use 'i64' (lowercase) for integer type in Xray");
+            return xr_tref_i64(parser->compiler_session);
         }
         if (strcmp(temp_name, "Float") == 0 || strcmp(temp_name, "Double") == 0 ||
             strcmp(temp_name, "double") == 0) {
-            xr_parser_error(parser, "use 'float' (lowercase) for floating-point type in Xray");
-            return xr_tref_float(parser->compiler_session);
+            xr_parser_error(parser, "use 'f64' (lowercase) for floating-point type in Xray");
+            return xr_tref_f64(parser->compiler_session);
         }
         if (strcmp(temp_name, "Bool") == 0 || strcmp(temp_name, "Boolean") == 0 ||
             strcmp(temp_name, "boolean") == 0) {

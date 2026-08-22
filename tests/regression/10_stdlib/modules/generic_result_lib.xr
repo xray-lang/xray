@@ -4,7 +4,7 @@
 */
 export enum Result<T> {
     Ok(T),
-    Err(int)
+    Err(i64)
 }
 
 export enum Traffic {
@@ -13,7 +13,7 @@ export enum Traffic {
     Go
 }
 
-export fn makeByteArray() -> Result<Array<byte>> {
-    var bytes: Array<byte> = [65, 66]
+export fn makeByteArray() -> Result<Array<u8>> {
+    var bytes: Array<u8> = [65, 66]
     return Result.Ok(bytes)
 }

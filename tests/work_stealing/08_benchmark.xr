@@ -87,7 +87,7 @@ fn benchmark_speedup(work_size) {
         parallel_sum = parallel_sum + value
     }
     var parallel_time = time.monotonic() - parallel_start
-    return { "serial_time": serial_time, "parallel_time": parallel_time, "speedup": float(serial_time) / float(parallel_time) }
+    return { "serial_time": serial_time, "parallel_time": parallel_time, "speedup": (serial_time as f64) / (parallel_time as f64) }
 }
 
 /* 运行基准测试 */
@@ -97,13 +97,13 @@ var configs = [{ "count": 100, "work": 100 }, { "count": 500, "work": 100 }, { "
 for (var i = 0; i < len(configs); i++) {
     var cfg = configs[i]
     var result = benchmark_throughput(cfg.count, cfg.work)
-    var throughput = float(result.count) / (float(result.elapsed) / 1000)
-    print("  协程数=" + string(cfg.count) + ", 工作量=" + string(cfg.work) + " → " + string(int(throughput)) + " 协程/秒, 耗时=" + string(result.elapsed) + "ms")
+    var throughput = (result.count as f64) / ((result.elapsed as f64) / 1000)
+    print("  协程数=" + string(cfg.count) + ", 工作量=" + string(cfg.work) + " → " + string((throughput as i64)) + " 协程/秒, 耗时=" + string(result.elapsed) + "ms")
 }
 print("\n[基准2] 协程切换延迟测试")
 print("─────────────────────────────────────")
 var switch_result = benchmark_switch_latency(1000)
-var latency_us = (float(switch_result.elapsed) * 1000) / float(switch_result.iterations * 2)
+var latency_us = ((switch_result.elapsed as f64) * 1000) / (switch_result.iterations * 2 as f64)
 print("  Ping-Pong 迭代: " + string(switch_result.iterations))
 print("  总耗时: " + string(switch_result.elapsed) + " ms")
 print("  平均切换延迟: " + string(latency_us) + " μs")

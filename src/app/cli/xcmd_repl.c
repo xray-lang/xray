@@ -27,6 +27,7 @@
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include "../../os/os_fd.h"
 #include <stdio.h>
 #include <string.h>
@@ -89,9 +90,9 @@ static const char *const k_repl_keywords[] = {
     "await",      "select",   "defer",       "scope",        "after",
     "try",        "catch",    "throw",       "new",          "this",
     "super",      "extends",  "implements",  "static",       "private",
-    "final",      "operator", "void",        "int",          "float",
+    "final",      "operator", "void",
     "string",     "bool",     "Array",       "Map",          "Set",
-    "JSON.Value", "Channel",  "Array<byte>", "BigInt",       "StringBuilder",
+    "JSON.Value", "Channel",  "Array<u8>", "BigInt",       "StringBuilder",
     "PanicInfo",  "Regex",    "print",       "dump",         "typeOf",
     "typeName",   "assert",   "assert_true", "assert_false", "assert_eq",
     "assert_ne",  "copy",     "chr",         "Coro",         "CoroPool",
@@ -111,7 +112,7 @@ static ReplState *g_completion_state = NULL;
  * iff the word starts with '.', then keywords / builtins, then live
  * REPL bindings. */
 static char *repl_completion_generator(const char *text, int state) {
-    static int phase;     /* 0 = dots, 1 = keywords, 2 = repl symbols */
+    static int phase;     /* 0 = dots, 1 = keywords, 2 = exact scalars, 3 = repl symbols */
     static int idx;       /* index within the current phase list */
     static size_t len;    /* cached strlen(text) for prefix match */
     static bool dot_only; /* true when text begins with '.' */
@@ -150,8 +151,21 @@ static char *repl_completion_generator(const char *text, int state) {
         idx = 0;
     }
 
-    /* Phase 2: user-defined top-level REPL bindings. */
-    if (phase == 2 && g_completion_state && g_completion_state->isolate) {
+    /* Phase 2: exact scalar keywords come from their semantic registry. */
+    if (phase == 2) {
+        size_t scalar_count = 0;
+        const XrExactScalarDesc *scalars = xr_exact_scalar_rows(&scalar_count);
+        while ((size_t) idx < scalar_count) {
+            const char *name = scalars[idx++].source_name;
+            if (strncmp(name, text, len) == 0)
+                return xr_strdup(name);
+        }
+        phase = 3;
+        idx = 0;
+    }
+
+    /* Phase 3: user-defined top-level REPL bindings. */
+    if (phase == 3 && g_completion_state && g_completion_state->isolate) {
         XrReplSymbolTable *table = xr_repl_symbols_of(g_completion_state->isolate);
         if (table) {
             while (idx < table->count) {
@@ -163,13 +177,13 @@ static char *repl_completion_generator(const char *text, int state) {
                     return xr_strdup(name);
             }
         }
-        phase = 3;
+        phase = 4;
         idx = 0;
     }
 
-    /* Phase 3: the virtual last-result binding.  Its versioned storage
+    /* Phase 4: the virtual last-result binding.  Its versioned storage
      * names are deliberately absent from completion. */
-    if (phase == 3 && g_completion_state && g_completion_state->isolate && idx == 0) {
+    if (phase == 4 && g_completion_state && g_completion_state->isolate && idx == 0) {
         idx++;
         if (xr_repl_has_last_result(g_completion_state->isolate) && strncmp("it", text, len) == 0)
             return xr_strdup("it");
@@ -278,8 +292,8 @@ static void print_help_syntax(ReplState *state) {
     print_colored(state, XR_CLR_BOLD, "Basic Syntax:\n");
     printf("  var x = 1              // mutable variable\n");
     printf("  const PI = 3.14        // constant\n");
-    printf("  fn add(a: int, b: int) -> int { return a + b }\n");
-    printf("  (x: int) -> x * 2      // arrow function\n");
+    printf("  fn add(a: i64, b: i64) -> i64 { return a + b }\n");
+    printf("  (x: i64) -> x * 2      // arrow function\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Control Flow:\n");
     printf("  if (x > 0) { } else { }\n");
@@ -301,26 +315,27 @@ static void print_help_syntax(ReplState *state) {
 static void print_help_types(ReplState *state) {
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Basic Types:\n");
-    printf("  int, float, string, bool, null\n");
+    printf("  i8, i16, i32, i64, u8, u16, u32, u64\n");
+    printf("  f32, f64, isize, usize, string, bool, null\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Container Types:\n");
     printf("  Array       [1, 2, 3]\n");
     printf("  Map         #{\"a\": 1, \"b\": 2}\n");
     printf("  Set         #[1, 2, 3]\n");
     printf("  JSON.Value  JSON.value({name: \"xray\", version: 1})\n");
-    printf("  Array<byte> Array<byte>(1024, 0)\n");
+    printf("  Array<u8> Array<u8>(1024, 0)\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Annotations:\n");
-    printf("  var x: int = 1\n");
-    printf("  var arr: Array<int> = [1, 2]\n");
-    printf("  fn add(a: int, b: int) -> int { return a + b }\n");
+    printf("  var x: i64 = 1\n");
+    printf("  var arr: Array<i64> = [1, 2]\n");
+    printf("  fn add(a: i64, b: i64) -> i64 { return a + b }\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Type Conversion:\n");
-    printf("  int(3.14)      // 3\n");
-    printf("  float(\"3.14\")  // 3.14\n");
+    printf("  3.14 as i64       // 3\n");
+    printf("  f64.parse(\"3.14\") // 3.14\n");
     printf("  string(123)    // \"123\"\n");
-    printf("  typeOf(x)      // Type.int\n");
-    printf("  typeName(x)    // \"int\"\n");
+    printf("  typeOf(x)      // Type.i64\n");
+    printf("  typeName(x)    // \"i64\"\n");
     printf("  typeName<T>()  // static type display name\n");
     printf("\n");
 }
@@ -334,8 +349,8 @@ static void print_help_coro(ReplState *state) {
     printf("  yield                  // yield execution\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Channel:\n");
-    printf("  const ch = new Channel<int>()\n");
-    printf("  const ch = new Channel<int>(10)\n");
+    printf("  const ch = new Channel<i64>()\n");
+    printf("  const ch = new Channel<i64>(10)\n");
     printf("  ch.send(value)         // blocking send\n");
     printf("  match (ch.recv()) { Recv.Value(v) -> print(v); _ -> {} }\n");
     printf("  ch.close()             // close channel\n");

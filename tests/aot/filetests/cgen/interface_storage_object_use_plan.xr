@@ -1,13 +1,13 @@
 interface Drawable {
-    draw() -> int
+    draw() -> i64
 }
 
 class Sprite implements Drawable {
-    draw() -> int { return 1 }
+    draw() -> i64 { return 1 }
 }
 
 class Icon implements Drawable {
-    draw() -> int { return 2 }
+    draw() -> i64 { return 2 }
 }
 
 class Scene {

@@ -1,4 +1,4 @@
-fn values() -> Array<int> {
+fn values() -> Array<i64> {
     return [1, 2, 3]
 }
 

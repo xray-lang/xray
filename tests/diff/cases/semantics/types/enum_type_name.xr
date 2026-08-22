@@ -11,7 +11,7 @@
 enum Color { Red, Green }
 
 enum Shape {
-    Circle(int),
+    Circle(i64),
     Point
 }
 

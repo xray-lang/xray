@@ -3,16 +3,16 @@
 @test
 fn test_go_lambda_call() {
     // 基本形式
-    var t1 = go fn() -> int {
+    var t1 = go fn() -> i64 {
         return 100
     }()
     print(await t1)  // 100
 
     // 多个匿名协程
-    var t2 = go fn() -> int {
+    var t2 = go fn() -> i64 {
         return 200
     }()
-    var t3 = go fn() -> int {
+    var t3 = go fn() -> i64 {
         return 300
     }()
 

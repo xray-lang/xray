@@ -1,7 +1,7 @@
-fn mutate_pair(left: ref Array<int>, right: ref Array<int>) {
+fn mutate_pair(left: ref Array<i64>, right: ref Array<i64>) {
     left.push(1)
     right.push(2)
 }
 
-var values: Array<int> = []
+var values: Array<i64> = []
 mutate_pair(ref values, ref values)

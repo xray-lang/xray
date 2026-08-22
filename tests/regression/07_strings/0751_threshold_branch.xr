@@ -167,7 +167,7 @@ fn test_threshold_continuity() {
         var half = total_len / 2
         var splits = [0, 1, half, total_len - 1, total_len]
         for (var si = 0; si < len(splits); si++) {
-            var len_a = int(splits[si])
+            var len_a = (splits[si] as i64)
             if (len_a < 0 || len_a > total_len) { continue }
             var len_b = total_len - len_a
             var a = "x".repeat(len_a)
@@ -243,7 +243,7 @@ fn test_concurrent_threshold_boundary() {
     // **Validates: Requirements 2.1, 2.2**
     // 多协程并发测试阈值边界
     
-    fn concat_task(len_a: int, len_b: int) -> int {
+    fn concat_task(len_a: i64, len_b: i64) -> i64 {
         var a = "a".repeat(len_a)
         var b = "b".repeat(len_b)
         var result = a + b
@@ -260,7 +260,7 @@ fn test_concurrent_threshold_boundary() {
         [30, 35]   // 65 (XrStrBuf)
     ]
     
-    var tasks: Array<Task<int>> = []
+    var tasks: Array<Task<i64>> = []
     for (var i = 0; i < len(test_cases); i++) {
         var len_a = test_cases[i][0]
         var len_b = test_cases[i][1]

@@ -1,4 +1,4 @@
-fn uncheckedMod(n: int, d: int) -> int {
+fn uncheckedMod(n: i64, d: i64) -> i64 {
     return n % d
 }
 

@@ -215,7 +215,7 @@ TEST(references_function_name) {
     XrLspServer *server = xlsp_server_new();
     ASSERT(server != NULL);
 
-    const char *code = "fn add(a: int, b: int) -> int {\n"
+    const char *code = "fn add(a: i64, b: i64) -> i64 {\n"
                        "    return a + b\n"
                        "}\n"
                        "var result = add(1, 2)\n"

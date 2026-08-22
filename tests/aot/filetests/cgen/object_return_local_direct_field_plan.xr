@@ -1,10 +1,10 @@
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 fn makeObjectReturnLocalPlan() -> User {
     return { name: "ada", age: 7 }
 }
 
-fn objectReturnLocalPlan() -> int {
+fn objectReturnLocalPlan() -> i64 {
     var user = makeObjectReturnLocalPlan()
     return user.age
 }

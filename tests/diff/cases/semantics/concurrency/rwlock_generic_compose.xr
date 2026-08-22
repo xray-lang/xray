@@ -11,7 +11,7 @@ class RwLock<T> {
     _entry: Semaphore
     _gate: Semaphore
     _rflag: Atomic<bool>
-    _readers: int
+    _readers: i64
     value: T
 
     constructor(v: T) {
@@ -65,7 +65,7 @@ class RwLock<T> {
     }
 }
 
-var rw = RwLock<int>(100)
+var rw = RwLock<i64>(100)
 print(rw.read((v) -> v + 1))     // 101 (shared read)
 print(rw.replace((v) -> v * 2))  // 200 (exclusive mutate)
 print(rw.write((v) -> v - 50))   // 150 (exclusive read via write gate)

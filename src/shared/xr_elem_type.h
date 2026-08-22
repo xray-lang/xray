@@ -69,9 +69,9 @@ static const uint8_t XR_ELEM_SIZES[XR_ELEM_COUNT] = {
 static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
     switch (tid) {
         case 8:
-            return XR_ELEM_I64; /* XR_TID_INT */
+            return XR_ELEM_I64; /* XR_TID_I64 */
         case 11:
-            return XR_ELEM_F64; /* XR_TID_FLOAT */
+            return XR_ELEM_F64; /* XR_TID_F64 */
         case 1:
             return XR_ELEM_BOOL; /* XR_TID_BOOL */
         case 2:
@@ -90,6 +90,10 @@ static inline XrArrayElemType xr_tid_to_elem_type(uint8_t tid) {
             return XR_ELEM_U64; /* XR_TID_U64 */
         case 10:
             return XR_ELEM_F32; /* XR_TID_F32 */
+        case 45:
+            return XR_ELEM_I64; /* XR_TID_ISIZE on the current 64-bit targets */
+        case 46:
+            return XR_ELEM_U64; /* XR_TID_USIZE on the current 64-bit targets */
         case 43:
             return XR_ELEM_RUNE; /* XR_TID_RUNE */
         default:

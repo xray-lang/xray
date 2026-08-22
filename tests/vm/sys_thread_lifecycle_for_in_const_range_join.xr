@@ -3,7 +3,7 @@ import sys
 fn run() {
     const count = 2
     const end = count - 1
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
     for (i in 0..end) {

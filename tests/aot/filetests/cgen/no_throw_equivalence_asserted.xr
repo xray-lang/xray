@@ -1,7 +1,7 @@
-fn addOne(value: int) -> int {
+fn addOne(value: i64) -> i64 {
     return value + 1
 }
 
-fn xray_add_one(value: int) -> int {
+fn xray_add_one(value: i64) -> i64 {
     return addOne(value)
 }

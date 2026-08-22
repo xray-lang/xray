@@ -4,7 +4,7 @@
 
 import sys
 
-const local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<i64>(fn() -> i64 {
     return local.get()
 })
 
@@ -14,6 +14,6 @@ try {
     print("recursive")
 }
 
-var recovered = sys.ThreadLocal<int>(fn() -> int { return 0 })
+var recovered = sys.ThreadLocal<i64>(fn() -> i64 { return 0 })
 recovered.set(7)
 print(recovered.get())

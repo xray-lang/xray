@@ -8,13 +8,13 @@ enum LoanError {
 }
 
 fn main() {
-    var storage = Array<byte>(1)
+    var storage = Array<u8>(1)
     var raw = unsafe { storage.mutPtr() }
     var guard = raw
 
     try {
         unsafe {
-            mem.withSliceMut<byte>(raw, 1, ref guard, fn(view: ref Slice<byte>) {
+            mem.withSliceMut<u8>(raw, 1, ref guard, fn(view: ref Slice<u8>) {
                 view[0] = 7
                 throw LoanError.Stop
             })
@@ -24,7 +24,7 @@ fn main() {
     }
 
     var result = unsafe {
-        mem.withSliceMut<byte>(raw, 1, ref guard, fn(view: ref Slice<byte>) -> byte {
+        mem.withSliceMut<u8>(raw, 1, ref guard, fn(view: ref Slice<u8>) -> u8 {
             view[0] = 9
             return view[0]
         })

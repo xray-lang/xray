@@ -1,9 +1,9 @@
-fn mapSetClosureCapturePlan(value: int) -> int {
-    var scores: Map<int, int> = #{}
+fn mapSetClosureCapturePlan(value: i64) -> i64 {
+    var scores: Map<i64, i64> = #{}
     scores.set(1, value)
-    var seen: Set<int> = #[]
+    var seen: Set<i64> = #[]
     seen.add(1)
-    const read = fn() -> int {
+    const read = fn() -> i64 {
         var one = scores.get(1) ?? 0
         if (seen.contains(1)) {
             return one + scores[1]

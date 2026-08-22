@@ -1,4 +1,4 @@
-const table: [int; 2] = comptime [1, 2]
+const table: [i64; 2] = comptime [1, 2]
 
 var value = comptime table[2]
 print(value)

@@ -1,15 +1,15 @@
-fn first(key: [byte; 4]) -> int {
-    return key[0] as int
+fn first(key: [u8; 4]) -> i64 {
+    return key[0] as i64
 }
 
-fn at(key: [byte; 4], i: int) -> int {
-    return key[i] as int
+fn at(key: [u8; 4], i: i64) -> i64 {
+    return key[i] as i64
 }
 
-fn run() -> int {
-    var key: [byte; 4] = [1, 2, 3, 4]
+fn run() -> i64 {
+    var key: [u8; 4] = [1, 2, 3, 4]
     key[1] = 9
-    return len(key) + first(key) + (key[1] as int) + at(key, 2)
+    return len(key) + first(key) + (key[1] as i64) + at(key, 2)
 }
 
 print(run())

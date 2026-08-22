@@ -1,21 +1,21 @@
 // anchor: pass-tail-call-accumulator
 // Tail call promotion: the recursive call is the whole return expression, so the
 // frame can be reused. The self-recursive and mutually-recursive shapes differ.
-fn sum_to(n: int, acc: int) -> int {
+fn sum_to(n: i64, acc: i64) -> i64 {
     if (n == 0) {
         return acc
     }
     return sum_to(n - 1, acc + n)
 }
 
-fn is_even(n: int) -> bool {
+fn is_even(n: i64) -> bool {
     if (n == 0) {
         return true
     }
     return is_odd(n - 1)
 }
 
-fn is_odd(n: int) -> bool {
+fn is_odd(n: i64) -> bool {
     if (n == 0) {
         return false
     }

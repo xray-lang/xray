@@ -2,9 +2,9 @@
 
 import http
 
-fn isRedirect(s: int) -> bool { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308 }
-fn isPermanent(s: int) -> bool { return s == 301 || s == 308 }
-fn isTemporary(s: int) -> bool { return s == 302 || s == 303 || s == 307 }
+fn isRedirect(s: i64) -> bool { return s == 301 || s == 302 || s == 303 || s == 307 || s == 308 }
+fn isPermanent(s: i64) -> bool { return s == 301 || s == 308 }
+fn isTemporary(s: i64) -> bool { return s == 302 || s == 303 || s == 307 }
 
 @test
 fn test_redirect_codes() {

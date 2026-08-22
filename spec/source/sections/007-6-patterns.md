@@ -100,8 +100,8 @@ match (msg) {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 match (event) {
@@ -111,13 +111,13 @@ match (event) {
 }
 ```
 
-> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；只要包含 `_` 兜底分支即可跳过检查。对非 enum 变量（如 `int`）不强制。
+> 简单枚举（无 payload）与 ADT enum 均**强制**穷举；只要包含 `_` 兜底分支即可跳过检查。对非 enum 变量（如 `i64`）不强制。
 
 ### 6.4 类型模式 `is T`
 
 ```xray
 match (value) {
-    is int n -> "int: ${n}"       // 绑定窄化值
+    is i64 n -> "i64: ${n}"       // 绑定窄化值
     is string -> "a string"
     is User u -> "user: ${u.name}"
     _ -> "unknown"
@@ -296,8 +296,8 @@ When `match` is performed on an ADT enum, the compiler runs **exhaustiveness ana
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 match (event) {
@@ -307,13 +307,13 @@ match (event) {
 }
 ```
 
-> Both simple enums (no payload) and ADT enums **require** exhaustiveness; including a `_` catch-all suffices to skip the check. Non-enum operands (such as `int`) are not subject to the check.
+> Both simple enums (no payload) and ADT enums **require** exhaustiveness; including a `_` catch-all suffices to skip the check. Non-enum operands (such as `i64`) are not subject to the check.
 
 ### 6.4 Type Patterns `is T`
 
 ```xray
 match (value) {
-    is int n -> "int: ${n}"       // bind the narrowed value
+    is i64 n -> "i64: ${n}"       // bind the narrowed value
     is string -> "a string"
     is User u -> "user: ${u.name}"
     _ -> "unknown"

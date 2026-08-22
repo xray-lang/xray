@@ -10,7 +10,7 @@ import net
 import { NetError } from net
 import time
 
-fn tryListen(backlog: int) -> NetListener? {
+fn tryListen(backlog: i64) -> NetListener? {
     try {
         return net.listen(0, backlog)
     } catch (e: NetError) {
@@ -23,7 +23,7 @@ fn acceptSlowWrite(lst: NetListener) {
     if (conn != null) {
         time.sleep(100)
         // "late"
-        net.writeBytes(conn!, Array<byte>([108, 97, 116, 101]))
+        net.writeBytes(conn!, Array<u8>([108, 97, 116, 101]))
         net.close(conn!)
     }
 }
@@ -98,7 +98,7 @@ fn test_closed_handle_error() {
     var c = net.dial("127.0.0.1", port)
     net.close(c)
 
-    assert_eq(net.writeBytes(c, Array<byte>([120])), -1)
+    assert_eq(net.writeBytes(c, Array<u8>([120])), -1)
     assert_eq(net.lastError(c), NetError.Closed)
 
     net.close(lst)

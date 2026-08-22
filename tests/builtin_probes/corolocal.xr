@@ -1,2 +1,2 @@
-fn use(c: CoroLocal<int>) -> bool { return true }
+fn use(c: CoroLocal<i64>) -> bool { return true }
 print(true)

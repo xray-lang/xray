@@ -1,4 +1,4 @@
-fn run() -> int {
+fn run() -> i64 {
     var i8s: Array<i8> = []
     var i16s: Array<i16> = []
     var u16s: Array<u16> = []
@@ -13,9 +13,9 @@ fn run() -> int {
     u32s.push(4294967295)
     u32s.push(4294967295 + 1)
 
-    return (i8s[0] as int) + (i8s[1] as int) + (i16s[0] as int) +
-        (i16s[1] as int) + (u16s[0] as int) + (u16s[1] as int) +
-        (u32s[0] as int) + (u32s[1] as int)
+    return (i8s[0] as i64) + (i8s[1] as i64) + (i16s[0] as i64) +
+        (i16s[1] as i64) + (u16s[0] as i64) + (u16s[1] as i64) +
+        (u32s[0] as i64) + (u32s[1] as i64)
 }
 
 print(run())

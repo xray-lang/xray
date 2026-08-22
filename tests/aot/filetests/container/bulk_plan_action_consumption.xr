@@ -1,22 +1,22 @@
-fn byte_ops() -> int {
-    var bytes: Array<byte> = Array<byte>(8, 0)
-    var sourceBytes: Array<byte> = Array<byte>(4, 3)
-    var view: Slice<byte> = bytes[:]
-    var source: Slice<byte> = sourceBytes[:]
+fn byte_ops() -> i64 {
+    var bytes: Array<u8> = Array<u8>(8, 0)
+    var sourceBytes: Array<u8> = Array<u8>(4, 3)
+    var view: Slice<u8> = bytes[:]
+    var source: Slice<u8> = sourceBytes[:]
     view.fill(7)
     view.copyFrom(source)
-    var overlap: Slice<byte> = view[2:6]
+    var overlap: Slice<u8> = view[2:6]
     view.copyFrom(overlap)
     view.repeatFrom(4, 2, 2)
     var cmp = view.compare(source)
 
-    var out: Array<byte> = Array.withCapacity(0)
+    var out: Array<u8> = Array.withCapacity(0)
     out.appendFrom(source)
     out.repeatFrom(1, 2)
     return cmp + len(out)
 }
 
-fn word_ops() -> int {
+fn word_ops() -> i64 {
     var words: Array<u32> = Array<u32>(4, 0)
     var sourceWords: Array<u32> = Array<u32>(2, 9)
     words.fill(6)
@@ -25,7 +25,7 @@ fn word_ops() -> int {
     view.fill(7)
     view.copyFrom(source)
     view.fill(0)
-    return int(view[0]) + int(view[1])
+    return (view[0] as i64) + (view[1] as i64)
 }
 
 print(byte_ops())

@@ -1,4 +1,4 @@
-fn hotGuard(a: int, b: int, c: int, d: int, e: int, f: int) -> int {
+fn hotGuard(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64) -> i64 {
     if (a < b && c + 16 <= d && e + 32 <= f) {
         return 1
     }

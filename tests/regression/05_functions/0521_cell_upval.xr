@@ -7,9 +7,9 @@
 
 @test
 fn test_cell_counter_basic() {
-    fn make() -> fn() -> int {
+    fn make() -> fn() -> i64 {
         var n = 0
-        fn inc() -> int {
+        fn inc() -> i64 {
             n++
             return n
         }
@@ -25,10 +25,10 @@ fn test_cell_counter_basic() {
 
 @test
 fn test_two_cells() {
-    fn make() -> fn(bool) -> int {
+    fn make() -> fn(bool) -> i64 {
         var a = 0
         var b = 100
-        fn step(use_a: bool) -> int {
+        fn step(use_a: bool) -> i64 {
             if (use_a) {
                 a++
                 return a
@@ -50,10 +50,10 @@ fn test_two_cells() {
 
 @test
 fn test_transitive_capture() {
-    fn outer() -> fn() -> int {
+    fn outer() -> fn() -> i64 {
         var x = 10
-        fn middle() -> fn() -> int {
-            fn inner() -> int {
+        fn middle() -> fn() -> i64 {
+            fn inner() -> i64 {
                 x += 5
                 return x
             }
@@ -70,9 +70,9 @@ fn test_transitive_capture() {
 
 @test
 fn test_const_capture() {
-    fn make(base: int) -> fn(int) -> int {
+    fn make(base: i64) -> fn(i64) -> i64 {
         const FACTOR = 3
-        fn calc(x: int) -> int {
+        fn calc(x: i64) -> i64 {
             return base + x * FACTOR
         }
         return calc
@@ -89,7 +89,7 @@ fn test_cell_shared_by_closures() {
     var count = 0
     fn inc() { count++ }
     fn dec() { count-- }
-    fn get() -> int { return count }
+    fn get() -> i64 { return count }
 
     inc()
     inc()
@@ -103,9 +103,9 @@ fn test_cell_shared_by_closures() {
 
 @test
 fn test_cell_hot_loop() {
-    fn make() -> fn(int) -> int {
+    fn make() -> fn(i64) -> i64 {
         var total = 0
-        fn add(n: int) -> int {
+        fn add(n: i64) -> i64 {
             total += n
             return total
         }
@@ -139,9 +139,9 @@ fn test_cell_string_value() {
 
 @test
 fn test_cell_float_value() {
-    fn make() -> fn(float) -> float {
+    fn make() -> fn(f64) -> f64 {
         var total = 0.0
-        fn add(x: float) -> float {
+        fn add(x: f64) -> f64 {
             total += x
             return total
         }
@@ -156,15 +156,15 @@ fn test_cell_float_value() {
 
 @test
 fn test_many_instances() {
-    fn make() -> fn() -> int {
+    fn make() -> fn() -> i64 {
         var n = 0
-        fn inc() -> int {
+        fn inc() -> i64 {
             n++
             return n
         }
         return inc
     }
-    var counters: Array<fn() -> int> = []
+    var counters: Array<fn() -> i64> = []
     for (var i = 0; i < 10; i++) {
         counters.push(make())
     }

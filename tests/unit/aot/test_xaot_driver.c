@@ -56,7 +56,7 @@ static bool write_temp_source(char *path, size_t path_sz) {
     f = fopen(path, "w");
     if (!f)
         return false;
-    if (fputs("fn value() -> int {\n    return 7\n}\n", f) < 0) {
+    if (fputs("fn value() -> i64 {\n    return 7\n}\n", f) < 0) {
         fclose(f);
         xr_test_unlink(path);
         return false;
@@ -636,7 +636,7 @@ static void test_driver_dumps_subject_bound_local_evidence(void) {
 
     memset(&result, 0, sizeof(result));
     ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
-    ASSERT_TRUE(write_file_text(source_path, "fn first(input: Slice<byte>) -> byte {\n"
+    ASSERT_TRUE(write_file_text(source_path, "fn first(input: Slice<u8>) -> u8 {\n"
                                              "    return input[0]\n"
                                              "}\n"));
     ASSERT_TRUE(xaot_target_init(&target, NULL));
@@ -697,7 +697,7 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
     ASSERT_TRUE(write_file_text(
         source_path, "import mem\n"
                      "struct TargetPair {\n"
-                     "    ptr: Ptr<byte>\n"
+                     "    ptr: Ptr<u8>\n"
                      "    size: usize\n"
                      "}\n"
                      "comptime {\n"
@@ -705,7 +705,7 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
                      "    compile_assert(mem.alignOf<TargetPair>() == 4)\n"
                      "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 4)\n"
                      "}\n"
-                     "fn target_pair_size() -> int { return mem.sizeOf<TargetPair>() }\n"));
+                     "fn target_pair_size() -> i64 { return mem.sizeOf<TargetPair>() }\n"));
     ASSERT_TRUE(xaot_target_init(&target, "riscv32-freestanding-none"));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
@@ -733,7 +733,7 @@ static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
     ASSERT_TRUE(write_file_text(
         source_path, "import mem\n"
                      "struct TargetPair {\n"
-                     "    ptr: Ptr<byte>\n"
+                     "    ptr: Ptr<u8>\n"
                      "    size: usize\n"
                      "}\n"
                      "comptime {\n"
@@ -741,7 +741,7 @@ static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
                      "    compile_assert(mem.alignOf<TargetPair>() == 8)\n"
                      "    compile_assert(mem.offsetOf<TargetPair>(\"size\") == 8)\n"
                      "}\n"
-                     "fn target_pair_size() -> int { return mem.sizeOf<TargetPair>() }\n"));
+                     "fn target_pair_size() -> i64 { return mem.sizeOf<TargetPair>() }\n"));
     ASSERT_TRUE(xaot_target_init(&target, "riscv64-freestanding-none"));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
@@ -842,7 +842,7 @@ static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
         const char *source = result.sources[i].c_source;
         ASSERT_TRUE(source != NULL);
         ASSERT_TRUE(strstr(source, "#define XRT_IMPL") == NULL);
-        ASSERT_TRUE(strstr(source, "int main(") == NULL);
+        ASSERT_TRUE(strstr(source, "i64 main(") == NULL);
         ASSERT_TRUE(strstr(source, "xrt_shared_lib_ctor") == NULL);
     }
 
@@ -868,7 +868,7 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
 
     snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-provider-%ld.xr",
              (long) xr_test_getpid());
-    ASSERT_TRUE(write_file_text(source_path, "fn worker() -> int {\n"
+    ASSERT_TRUE(write_file_text(source_path, "fn worker() -> i64 {\n"
                                              "    return 1\n"
                                              "}\n"
                                              "await go worker()\n"));
@@ -915,12 +915,12 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
     payload = install_package_payload(home_dir, cache_dir, "codex/pkg",
-                                      "fn package_value() -> int {\n"
+                                      "fn package_value() -> i64 {\n"
                                       "    return 5\n"
                                       "}\n");
     ASSERT_TRUE(payload != NULL);
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkg\" as pkg\n"
-                                              "fn value() -> int {\n"
+                                              "fn value() -> i64 {\n"
                                               "    return 7\n"
                                               "}\n"));
     payloads[0] = payload;
@@ -975,11 +975,11 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     snprintf(cache_dir_wide, sizeof(cache_dir_wide),
              "%s/cache-wide/aot/native", root);
     payload_a = install_package_payload(home_dir, cache_dir, "codex/pkga",
-                                        "fn package_a() -> int {\n"
+                                        "fn package_a() -> i64 {\n"
                                         "    return 11\n"
                                         "}\n");
     payload_b = install_package_payload(home_dir, cache_dir, "codex/pkgb",
-                                        "fn package_b() -> int {\n"
+                                        "fn package_b() -> i64 {\n"
                                         "    return 13\n"
                                         "}\n");
     ASSERT_TRUE(payload_a != NULL);
@@ -990,7 +990,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     ASSERT_TRUE(write_global_payload_to_cache(cache_dir_wide, payload_b));
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
                                               "import \"codex/pkgb\" as b\n"
-                                              "fn value() -> int {\n"
+                                              "fn value() -> i64 {\n"
                                               "    return 17\n"
                                               "}\n"));
     payloads[0] = payload_a;
@@ -1068,7 +1068,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
 
         ASSERT_TRUE(write_package_source(
             home_dir, "codex/pkga",
-            "fn package_a() -> int {\n"
+            "fn package_a() -> i64 {\n"
             "    return 31\n"
             "}\n",
             edited_source, sizeof(edited_source)));
@@ -1157,13 +1157,13 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
     ASSERT_TRUE(write_package_source(home_dir, "codex/pkgb",
-                                     "fn package_b() -> int {\n"
+                                     "fn package_b() -> i64 {\n"
                                      "    return 23\n"
                                      "}\n",
                                      pkg_b_source, sizeof(pkg_b_source)));
     ASSERT_TRUE(write_package_source(home_dir, "codex/pkga",
                                      "import \"codex/pkgb\" as b\n"
-                                     "fn package_a() -> int {\n"
+                                     "fn package_a() -> i64 {\n"
                                      "    return 19\n"
                                      "}\n",
                                      pkg_a_source, sizeof(pkg_a_source)));
@@ -1176,7 +1176,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_ab));
     ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_b));
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
-                                              "fn value() -> int {\n"
+                                              "fn value() -> i64 {\n"
                                               "    return 29\n"
                                               "}\n"));
     payloads[0] = payload_ab;

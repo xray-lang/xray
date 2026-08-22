@@ -1,6 +1,6 @@
 fn main() {
-    var bytes = Array<byte>(2, 0)
-    const alias = bytes as Array<byte>
+    var bytes = Array<u8>(2, 0)
+    const alias = bytes as Array<u8>
     print(len(alias))
 }
 

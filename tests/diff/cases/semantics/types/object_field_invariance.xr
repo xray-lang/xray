@@ -1,8 +1,8 @@
 // A literal written for a declared shape adopts that shape, so a nullable field
 // still accepts a non-null value and an omitted nullable field stays optional.
 // Both backends must agree on the values read back.
-type PageOpts = { limit: int?, cursor: string? }
-type User = { name: string, age: int? }
+type PageOpts = { limit: i64?, cursor: string? }
+type User = { name: string, age: i64? }
 
 fn describe(o: PageOpts) -> string {
     var lim = o.limit ?? -1

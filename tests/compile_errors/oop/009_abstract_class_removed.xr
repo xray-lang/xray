@@ -1,5 +1,5 @@
 abstract class Shape {
-    area() -> float {
+    area() -> f64 {
         return 0.0
     }
 }

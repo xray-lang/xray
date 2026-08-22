@@ -1,11 +1,11 @@
-const maps = Channel<Map<int, int>>(256)
-const done = Channel<int>(8)
+const maps = Channel<Map<i64, i64>>(256)
+const done = Channel<i64>(8)
 
 var PRODUCERS = 4
 var SENDS_PER_PRODUCER = 5000
 
-fn producer(id: int) -> int {
-    var m: Map<int, int> = #{}
+fn producer(id: i64) -> i64 {
+    var m: Map<i64, i64> = #{}
     m.set(id, id + 1)
     m.set(id + 1000, id + 2)
 
@@ -17,14 +17,14 @@ fn producer(id: int) -> int {
     return SENDS_PER_PRODUCER
 }
 
-fn recv_map_size() -> int {
+fn recv_map_size() -> i64 {
     return match (maps.recv()) {
         Recv.Value(m) -> len(m)
         _ -> -1
     }
 }
 
-fn recv_done_count() -> int {
+fn recv_done_count() -> i64 {
     return match (done.recv()) {
         Recv.Value(v) -> v
         _ -> -1

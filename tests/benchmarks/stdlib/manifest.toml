@@ -5,7 +5,7 @@ governed_suites = [
   "stdlib/_probe", "stdlib/base64", "stdlib/cluster", "stdlib/codegen", "stdlib/compress", "stdlib/crypto", "stdlib/http2",
   "stdlib/csv", "stdlib/datetime", "stdlib/encoding", "stdlib/http", "stdlib/io",
   "stdlib/log", "stdlib/math", "stdlib/mem", "stdlib/net", "stdlib/os", "stdlib/parallel",
-  "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/simd", "stdlib/strconv",
+  "stdlib/path", "stdlib/prelude", "stdlib/regex", "stdlib/runtime", "stdlib/simd",
   "stdlib/sync", "stdlib/sys", "stdlib/test_yield", "stdlib/text", "stdlib/time",
   "stdlib/toml", "stdlib/url", "stdlib/ws", "stdlib/xml", "stdlib/yaml",
 ]
@@ -376,19 +376,6 @@ module = "simd"
 suite = "stdlib/simd"
 kind = "cpu_kernel"
 source = "tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr"
-warmup = 1
-iterations = 5
-quick_iterations = 2
-metrics = ["wall_ns"]
-compare = ["vm", "aot"]
-vm_budget_ratio = 80.0
-
-[[benchmark]]
-id = "strconv.parse.contract"
-module = "strconv"
-suite = "stdlib/strconv"
-kind = "cpu_kernel"
-source = "tests/benchmarks/stdlib/strconv/strconv_parse_kernel.xr"
 warmup = 1
 iterations = 5
 quick_iterations = 2

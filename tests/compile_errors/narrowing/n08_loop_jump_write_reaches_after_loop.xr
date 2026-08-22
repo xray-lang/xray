@@ -2,7 +2,7 @@
 // before the jump still reaches the code after the loop. Dropping the jump
 // edge from the flow graph would wrongly keep `s` narrowed to string here;
 // the access after the loop must still see the possibly-null state.
-fn firstFlag(xs: Array<int>) -> int {
+fn firstFlag(xs: Array<i64>) -> i64 {
     var s: string? = "abc"
     for (v in xs) {
         if (v > 0) { s = null; break }

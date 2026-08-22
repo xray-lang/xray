@@ -78,7 +78,7 @@ fn test_bare_lambda_closure() {
 
 @test
 fn test_bare_lambda_fn_arg() {
-    fn apply(f: fn(int) -> int, x: int) -> int {
+    fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
         return f(x)
     }
     var result = apply(x -> x * 5, 4)

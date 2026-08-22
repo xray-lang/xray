@@ -22,7 +22,7 @@ struct Wrapper<T> {
 fn test_struct_generic() {
 
     // === int, string instantiation ===
-    var p1 = Pair<int, string>{first: 42, second: "hello"}
+    var p1 = Pair<i64, string>{first: 42, second: "hello"}
     assert(p1.first == 42)
     assert(p1.second == "hello")
     assert(p1.toString() == "(42, hello)")
@@ -37,14 +37,14 @@ fn test_struct_generic() {
     assert(p2.second == "world")
 
     // === float, bool instantiation ===
-    var p3 = Pair<float, bool>{first: 3.14, second: true}
+    var p3 = Pair<f64, bool>{first: 3.14, second: true}
     assert(p3.first == 3.14)
     assert(p3.second == true)
     assert(p3.toString() == "(3.14, true)")
 
     // === Wrapper struct ===
 
-    var w1 = Wrapper<int>{value: 100, label: "score"}
+    var w1 = Wrapper<i64>{value: 100, label: "score"}
     assert(w1.describe() == "score: 100")
 
     var w2 = Wrapper<string>{value: "Alice", label: "name"}

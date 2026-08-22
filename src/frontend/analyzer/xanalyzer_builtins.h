@@ -59,7 +59,7 @@ static inline int xa_builtin_return_ownership_param_index(XaBuiltinReturnOwnersh
 // Built-in member info
 typedef struct XaBuiltinMember {
     const char *name;
-    const char *signature;             // e.g., "(index: int): T"
+    const char *signature;             // e.g., "(index: i64): T"
     const char *doc;                   // Documentation
     bool is_method;                    // true = method, false = property
     bool is_static;                    // true = static member
@@ -82,7 +82,7 @@ typedef struct XaBuiltinType {
 // Handle type field info (for C module handle types like Connection, Listener)
 typedef struct XaBuiltinHandleField {
     const char *name;
-    const char *type_str;  // e.g., "int", "string", "bool"
+    const char *type_str;  // e.g., "i64", "string", "bool"
     bool is_const;
 } XaBuiltinHandleField;
 
@@ -290,14 +290,14 @@ XR_FUNC const char *xa_builtin_find_handle_module(const char *handle_name);
 // Set script directory for .xrd file search
 XR_FUNC void xa_builtin_set_script_dir(const char *dir);
 
-// Parse a type string (e.g., "float", "int?", "Array<string>") into XrType
+// Parse a type string (e.g., "f64", "i64?", "Array<string>") into XrType
 XR_FUNC XrType *xa_builtin_parse_type_string(XrVMRuntime *X, const char *s);
 
-// Parse return type from signature string (e.g., "(x: int): string" -> string type)
+// Parse return type from signature string (e.g., "(x: i64): string" -> string type)
 XR_FUNC XrType *xa_builtin_parse_return_type_from_sig(XrVMRuntime *X, const char *sig);
 
 // Parse full function signature including parameter types
-// e.g., "(data: string, level?: int): string?" -> fn(string, int): string?
+// e.g., "(data: string, level?: i64): string?" -> fn(string, int): string?
 XR_FUNC XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig);
 
 #endif  // XANALYZER_BUILTINS_H

@@ -1,8 +1,8 @@
 // Static object fields and explicit JSON paths agree across hot VM/JIT code.
 
-type State = { count: int, last: int?, flag: bool }
+type State = { count: i64, last: i64?, flag: bool }
 
-fn update(state: ref State, value: int) {
+fn update(state: ref State, value: i64) {
     state.count += 1
     state.last = value
     state.flag = value % 2 == 0
@@ -24,6 +24,6 @@ fn test_dynamic_json_path_chain() {
         JSON.set(root, ["nodes", string(i), "value"], i * i, true)
     }
     var sum = 0
-    for (i in 0..10) { sum += JSON.require<int>(root, ["nodes", string(i), "value"]) }
+    for (i in 0..10) { sum += JSON.require<i64>(root, ["nodes", string(i), "value"]) }
     assert_eq(sum, 285)
 }

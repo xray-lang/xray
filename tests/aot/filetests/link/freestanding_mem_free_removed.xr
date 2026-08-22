@@ -1,6 +1,6 @@
 import mem
 
-fn xray_bad_mem_free(p: MutPtr<byte>) -> int {
+fn xray_bad_mem_free(p: MutPtr<u8>) -> i64 {
     mem.free(p)
     return 0
 }

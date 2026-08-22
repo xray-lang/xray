@@ -6,7 +6,7 @@
 // ===== Nullable Type Annotation =====
 @test
 fn test_nullable_annotation() {
-    var x: int? = null
+    var x: i64? = null
     assert_eq(x, null)
     x = 42
     assert_eq(x, 42)
@@ -14,7 +14,7 @@ fn test_nullable_annotation() {
 
 @test
 fn test_nullable_assignment() {
-    var x: int? = 10
+    var x: i64? = 10
     assert_eq(x, 10)
     x = null
     assert_eq(x, null)
@@ -23,7 +23,7 @@ fn test_nullable_assignment() {
 // ===== Null Check Narrowing =====
 @test
 fn test_null_check_if() {
-    var x: int? = 42
+    var x: i64? = 42
     if (x != null) {
         var y = x + 1
         assert_eq(y, 43)
@@ -32,7 +32,7 @@ fn test_null_check_if() {
 
 @test
 fn test_null_check_else() {
-    var x: int? = null
+    var x: i64? = null
     var result = 0
     if (x == null) {
         result = -1
@@ -44,10 +44,10 @@ fn test_null_check_else() {
 
 @test
 fn test_null_coalescing() {
-    var x: int? = null
+    var x: i64? = null
     var y = x ?? 100
     assert_eq(y, 100)
-    var z: int? = 50
+    var z: i64? = 50
     var w = z ?? 100
     assert_eq(w, 50)
 }
@@ -73,7 +73,7 @@ fn test_optional_chain_basic() {
 
 @test
 fn test_optional_chain_method() {
-    var arr: Array<int>? = null
+    var arr: Array<i64>? = null
     var count = arr == null ? null : len(arr!)
     assert_eq(count, null)
     arr = [1, 2, 3]
@@ -96,7 +96,7 @@ fn test_nullable_param() {
 
 @test
 fn test_nullable_return() {
-    fn findIndex(arr: Array<int>, target: int) -> int? {
+    fn findIndex(arr: Array<i64>, target: i64) -> i64? {
         for (var i = 0; i < len(arr); i++) {
             if (arr[i] == target) {
                 return i
@@ -156,15 +156,15 @@ fn test_nullable_presence_string() {
 
 @test
 fn test_nullable_presence_number() {
-    var n: int? = null
+    var n: i64? = null
     if (n) {
         assert(false)
     }
-    var zero: int? = 0
+    var zero: i64? = 0
     if (zero) {
         assert_eq(zero + 1, 1)
     }
-    var forty: int? = 42
+    var forty: i64? = 42
     if (forty) {
         assert_eq(forty + 1, 43)
     }

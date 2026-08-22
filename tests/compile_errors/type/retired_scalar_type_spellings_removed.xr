@@ -1,0 +1,3 @@
+fn oldInteger(value: int) -> int { return value }
+fn oldByte(value: byte) -> byte { return value }
+fn oldFloat(value: float) -> float { return value }

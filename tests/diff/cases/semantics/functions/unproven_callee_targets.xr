@@ -33,11 +33,11 @@
 // provenance and suggests a rewrite, while the VM runs the program. This case
 // checks the VM run; the native rejection is a compile-time diagnostic and is
 // covered as the symmetric AOT rejection half of this differential contract.
-type Mapper = fn(int) -> int
-type IntThunk = fn() -> int
+type Mapper = fn(i64) -> i64
+type IntThunk = fn() -> i64
 
-fn double(x: int) -> int { return x * 2 }
-fn negate(x: int) -> int { return 0 - x }
+fn double(x: i64) -> i64 { return x * 2 }
+fn negate(x: i64) -> i64 { return 0 - x }
 
 fn compose(f: Mapper, g: Mapper) -> Mapper { return (x) -> g(f(x)) }
 

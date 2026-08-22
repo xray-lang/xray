@@ -31,17 +31,15 @@ static int type_member_to_tid(AstNode *node) {
 static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
     if (!type || !tref)
         return false;
-    /* Primitive keyword type refs (`x is int`) carry their own kind rather than
+    /* Primitive keyword type refs carry their own representation rather than
      * a name, so they must be matched before the NAMED/GENERIC path. Spec
      * §2.13 N-6 requires both narrowing directions to treat them exactly like
      * named types. */
     switch (tref->kind) {
-        case XR_TREF_INT:
-        case XR_TREF_INT_WIDTH:
-            return type->kind == XR_KIND_INT;
-        case XR_TREF_FLOAT:
-        case XR_TREF_FLOAT_WIDTH:
-            return type->kind == XR_KIND_FLOAT;
+        case XR_TREF_SCALAR:
+            return type->scalar_rep == tref->scalar_rep &&
+                   (xr_scalar_rep_is_float(tref->scalar_rep) ? type->kind == XR_KIND_FLOAT
+                                                             : type->kind == XR_KIND_INT);
         case XR_TREF_STRING:
             return type->kind == XR_KIND_STRING;
         case XR_TREF_BOOL:
@@ -89,10 +87,6 @@ static bool flow_type_matches_tref(const XrType *type, const XrTypeRef *tref) {
             }
             return true;
         }
-        if (strcmp(name, "int") == 0)
-            return type->kind == XR_KIND_INT;
-        if (strcmp(name, "float") == 0)
-            return type->kind == XR_KIND_FLOAT;
         if (strcmp(name, "bool") == 0)
             return type->kind == XR_KIND_BOOL;
         if (strcmp(name, "string") == 0)
@@ -737,12 +731,12 @@ XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true) {
         case XR_TID_U16:
         case XR_TID_I32:
         case XR_TID_U32:
-        case XR_TID_INT:
+        case XR_TID_I64:
         case XR_TID_U64:
             target_kind = XR_KIND_INT;
             break;
         case XR_TID_F32:
-        case XR_TID_FLOAT:
+        case XR_TID_F64:
             target_kind = XR_KIND_FLOAT;
             break;
         case XR_TID_STRING:

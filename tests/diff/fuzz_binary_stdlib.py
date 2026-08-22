@@ -75,9 +75,9 @@ def generate_program(cases: list[bytes]) -> tuple[str, bytes]:
         hexed = data.hex()
         if data:
             values = ", ".join(str(value) for value in data)
-            lines.append(f"var data{index}: Array<byte> = [{values}]")
+            lines.append(f"var data{index}: Array<u8> = [{values}]")
         else:
-            lines.append(f"var data{index} = Array<byte>(0)")
+            lines.append(f"var data{index} = Array<u8>(0)")
         lines.extend(
             [
                 f"print(base64.encode(data{index}[:]))",

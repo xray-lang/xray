@@ -1,4 +1,4 @@
-fn xray_no_alloc_range_query_methods_ok(value: Range) -> int {
+fn xray_no_alloc_range_query_methods_ok(value: Range) -> i64 {
     var score = len(value)
     if (value.count() != 0) {
         score = score + 10

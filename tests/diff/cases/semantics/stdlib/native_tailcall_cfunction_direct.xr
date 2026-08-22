@@ -1,6 +1,6 @@
 import { isFinite } from math
 
-fn finite_tail(x: float) -> bool {
+fn finite_tail(x: f64) -> bool {
     return isFinite(x)
 }
 

@@ -1,9 +1,9 @@
 import { Plan, Options } from parallel
 
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
@@ -16,8 +16,8 @@ class GBox<T> {
     }
 }
 
-var plan = Plan<int>(Options(2), lane -> lane + 1)
+var plan = Plan<i64>(Options(2), lane -> lane + 1)
 var total = plan.reduce(0..8, Box(0), (state, i) -> Box(state + i), (a, b) -> Box(a.value + b.value))
-var genericTotal = plan.reduce(0..8, GBox<int>(0), (state, i) -> GBox<int>(state + i), (a, b) -> GBox<int>(a.value + b.value))
+var genericTotal = plan.reduce(0..8, GBox<i64>(0), (state, i) -> GBox<i64>(state + i), (a, b) -> GBox<i64>(a.value + b.value))
 print(total.value)
 print(genericTotal.value)

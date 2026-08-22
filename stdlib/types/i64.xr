@@ -1,0 +1,26 @@
+// Built-in int type — implementation in src/runtime/value/xint_methods.c
+class i64 {
+    static parse(text: string) -> i64
+    static tryParse(text: string) -> i64?
+    abs() -> i64
+    toString() -> string
+    toBigInt() -> BigInt
+    toF64() -> f64
+    toHex() -> string
+    max(other: i64) -> i64
+    min(other: i64) -> i64
+    sqrt() -> f64
+    pow(exp: f64) -> f64
+    checkedAdd(other: i64) -> i64?
+    checkedSub(other: i64) -> i64?
+    checkedMul(other: i64) -> i64?
+    saturatingAdd(other: i64) -> i64
+    saturatingSub(other: i64) -> i64
+    saturatingMul(other: i64) -> i64
+    wrappingAdd(other: i64) -> i64
+    wrappingSub(other: i64) -> i64
+    wrappingMul(other: i64) -> i64
+    addOverflows(other: i64) -> bool
+    subOverflows(other: i64) -> bool
+    mulOverflows(other: i64) -> bool
+}

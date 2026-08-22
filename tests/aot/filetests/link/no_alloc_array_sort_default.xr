@@ -1,7 +1,7 @@
-fn xray_no_alloc_array_sort_default(values: ref Array<int>) -> int {
+fn xray_no_alloc_array_sort_default(values: ref Array<i64>) -> i64 {
     values.sort()
     return values[0]
 }
 
-var xray_no_alloc_array_sort_default_values: Array<int> = [3, 1, 2]
+var xray_no_alloc_array_sort_default_values: Array<i64> = [3, 1, 2]
 print(xray_no_alloc_array_sort_default(ref xray_no_alloc_array_sort_default_values))

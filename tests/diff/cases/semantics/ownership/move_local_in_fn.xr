@@ -5,7 +5,7 @@
 // local (`XrValue t = <xrt_array_t*>`). Top-level move and `return move x`
 // were unaffected, so this exercises the in-function bind-to-local path.
 // Must agree across VM/JIT/AOT.
-fn take_owned() -> Array<int> {
+fn take_owned() -> Array<i64> {
     var buf = [10, 20, 30]
     var taken = move buf
     taken.push(40)

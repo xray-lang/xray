@@ -12,12 +12,12 @@
 
 const ITERATIONS = 4000
 
-fn producer(data: Atomic<int>, flag: Atomic<bool>) {
+fn producer(data: Atomic<i64>, flag: Atomic<bool>) {
     data.store(42, Ordering.Relaxed)
     flag.store(true, Ordering.Release)
 }
 
-fn consumer(data: Atomic<int>, flag: Atomic<bool>) -> int {
+fn consumer(data: Atomic<i64>, flag: Atomic<bool>) -> i64 {
     while (!flag.load(Ordering.Acquire)) {
         Coro.yield()
     }

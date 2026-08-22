@@ -2,12 +2,10 @@
 import net
 import { DialOptions } from net
 import os
-import strconv
-
-var port = strconv.parseInt(os.getenv("XRAY_BENCH_PORT")!)!
+var port = i64.tryParse(os.getenv("XRAY_BENCH_PORT")!)!
 var conn = net.dial("127.0.0.1", port, DialOptions(5000))
 var ping = "ping".copyBytes()
-var buf = Array<byte>(4)
+var buf = Array<u8>(4)
 var attempts = 64
 var completed = 0
 while (completed < attempts) {

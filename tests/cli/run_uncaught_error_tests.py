@@ -87,7 +87,7 @@ go fn() { throw GoErr.Failed("in-go") }()
 #   (a) a Task handle: the error is delivered to whoever awaits it.
 OBSERVED = '''enum GoErr { Failed(reason: string) }
 
-fn fail() -> int {
+fn fail() -> i64 {
     throw GoErr.Failed("observed")
     return 0
 }

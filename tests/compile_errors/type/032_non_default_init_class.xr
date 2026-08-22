@@ -4,8 +4,8 @@
 
 class User {
     name: string
-    age: int
-    constructor(name: string, age: int) {
+    age: i64
+    constructor(name: string, age: i64) {
         this.name = name
         this.age = age
     }

@@ -16,10 +16,10 @@
 // A.6 本应在编译期硬拒。此处能编译通过，说明 `if (false)` 这层包装让它绕开
 // 了检测 —— 值得在 A.6 的覆盖面里单独跟进。
 
-fn churn_self_capture(count: int) {
+fn churn_self_capture(count: i64) {
     var i = 0
     while (i < count) {
-        var f = fn() -> int {
+        var f = fn() -> i64 {
             if (false) {
                 return f()
             }

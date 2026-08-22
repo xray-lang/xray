@@ -10,17 +10,17 @@ enum Color {
 @derive(Eq, Hash)
 class Key {
     color: Color
-    n: int
+    n: i64
     label: string
 
-    constructor(color: Color, n: int, label: string) {
+    constructor(color: Color, n: i64, label: string) {
         this.color = color
         this.n = n
         this.label = label
     }
 }
 
-var m: Map<Key, int> = #{}
+var m: Map<Key, i64> = #{}
 m.set(Key(Color.Red, 1, "a"), 10)
 m.set(Key(Color.Green, 2, "b"), 20)
 m.set(Key(Color.Red, 1, "a"), 11)

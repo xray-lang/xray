@@ -1,11 +1,11 @@
 struct LargeState {
     lanes: [u64; 8]
 
-    bump(index: int, delta: u64) {
+    bump(index: i64, delta: u64) {
         this.lanes[index] = this.lanes[index] + delta
     }
 
-    read(index: int) -> u64 {
+    read(index: i64) -> u64 {
         return this.lanes[index]
     }
 }

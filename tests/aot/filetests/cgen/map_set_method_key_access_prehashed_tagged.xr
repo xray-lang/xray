@@ -1,5 +1,5 @@
-fn methodTagged() -> int {
-    var scores: Map<string, int> = #{}
+fn methodTagged() -> i64 {
+    var scores: Map<string, i64> = #{}
     scores.set("ada", 8)
     var hasAda = scores.containsKey("ada")
     var one = scores.get("ada")

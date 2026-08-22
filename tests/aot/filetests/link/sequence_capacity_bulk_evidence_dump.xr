@@ -1,8 +1,8 @@
-fn touch(xs: ref Array<int>, b: ref Array<byte>, s: string, span: Slice<byte>,
-         sb: ref StringBuilder) -> int {
+fn touch(xs: ref Array<i64>, b: ref Array<u8>, s: string, span: Slice<u8>,
+         sb: ref StringBuilder) -> i64 {
     xs.push(1)
     var first = xs[0]
-    var part: Slice<int> = xs[0:1]
+    var part: Slice<i64> = xs[0:1]
     var n = len(xs)
     b.appendFrom(span)
     b.fill(0)

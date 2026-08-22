@@ -3,13 +3,13 @@
 // AOT agree on the permanent L1 container/string semantics.
 import text
 
-var a: Array<int> = [3, 1, 2]
+var a: Array<i64> = [3, 1, 2]
 a.sort()
 print(a[0])
 print(a[2])
 print(len(a))
 
-var m: Map<string, int> = #{}
+var m: Map<string, i64> = #{}
 m["x"] = 1
 m["y"] = 2
 print(m["x"] ?? 0)

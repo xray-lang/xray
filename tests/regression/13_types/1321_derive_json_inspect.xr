@@ -4,9 +4,9 @@
 @derive(JSON, Inspect)
 class User {
     name: string
-    age: int
+    age: i64
 
-    constructor(name: string, age: int) {
+    constructor(name: string, age: i64) {
         this.name = name
         this.age = age
     }
@@ -14,18 +14,18 @@ class User {
 
 @derive(Inspect)
 class InspectOnly {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
 @derive(JSON)
 class JsonOnly {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
@@ -42,7 +42,7 @@ fn test_derive_json_encode() {
     var encoded = JSON.value(user)
     assert_eq(typeName(encoded), "Map")
     assert_eq(JSON.require<string>(encoded, ["name"]), "Ada")
-    assert_eq(JSON.require<int>(encoded, ["age"]), 42)
+    assert_eq(JSON.require<i64>(encoded, ["age"]), 42)
 }
 
 @test
@@ -58,6 +58,6 @@ fn test_derive_flags_are_independent() {
 
     var json_only = JsonOnly(9)
     var encoded = JSON.value(json_only)
-    assert_eq(JSON.require<int>(encoded, ["value"]), 9)
+    assert_eq(JSON.require<i64>(encoded, ["value"]), 9)
     assert_eq(string(json_only), "JsonOnly{...}")
 }

@@ -5,7 +5,7 @@
 fn identity<T>(x: T) -> T {
     return x
 }
-fn compare(a: int, b: int) -> bool {
+fn compare(a: i64, b: i64) -> bool {
     return a < b
 }
 fn getFirstComparison() -> bool {
@@ -46,7 +46,7 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
     // Test 1: Generic call without space (should work)
     // =============================================================================
-    var n1 = identity<int>(42)
+    var n1 = identity<i64>(42)
     assert_eq(n1, 42)
     var s1 = identity<string>("hello")
     assert_eq(s1, "hello")
@@ -90,10 +90,10 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
 
     // Nested generic - tests >> split handling
-    var nested = Box<Array<int>>([1, 2, 3])
+    var nested = Box<Array<i64>>([1, 2, 3])
     assert_eq(nested.get()[0], 1)
     // Double nested
-    var deep = Box<Box<int>>(Box<int>(42))
+    var deep = Box<Box<i64>>(Box<i64>(42))
     assert_eq(deep.get().get(), 42)
 
     // =============================================================================
@@ -101,7 +101,7 @@ fn test_generic_space_sensitivity() {
     // =============================================================================
 
     var u = Utils()
-    var arr = u.wrap<int>(100)
+    var arr = u.wrap<i64>(100)
     assert_eq(arr[0], 100)
     // =============================================================================
     // Test 7: Type inference (no explicit type args needed)

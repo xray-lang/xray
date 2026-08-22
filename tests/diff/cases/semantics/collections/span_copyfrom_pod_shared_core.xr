@@ -8,10 +8,10 @@ fn main() {
     var srcSlice: Slice<u32> = src[:]
     var dstWindow: Slice<u32> = dstSlice[1:3]
     var copied: Slice<u32> = dstWindow.copyFrom(srcSlice)
-    print(int(dst[0]))
-    print(int(dst[1]))
-    print(int(dst[2]))
-    print(int(dst[3]))
+    print((dst[0] as i64))
+    print((dst[1] as i64))
+    print((dst[2] as i64))
+    print((dst[3] as i64))
     print(len(copied))
     var overlap = Array<u16>(4, 0)
     overlap[0] = 1
@@ -22,10 +22,10 @@ fn main() {
     var overlapDst: Slice<u16> = overlapSlice[1:4]
     var overlapSrc: Slice<u16> = overlapSlice[0:3]
     overlapDst.copyFrom(overlapSrc)
-    print(int(overlap[0]))
-    print(int(overlap[1]))
-    print(int(overlap[2]))
-    print(int(overlap[3]))
+    print((overlap[0] as i64))
+    print((overlap[1] as i64))
+    print((overlap[2] as i64))
+    print((overlap[3] as i64))
     try {
         var tooSmall: Slice<u32> = dstSlice[0:1]
         tooSmall.copyFrom(srcSlice)

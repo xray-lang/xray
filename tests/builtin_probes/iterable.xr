@@ -1,2 +1,2 @@
-fn use(xs: Iterable<int>) -> bool { return true }
+fn use(xs: Iterable<i64>) -> bool { return true }
 print(true)

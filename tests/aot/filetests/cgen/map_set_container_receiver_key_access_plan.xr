@@ -1,20 +1,20 @@
-fn makeScores(value: int) -> Map<int, int> {
-    var scores: Map<int, int> = #{}
+fn makeScores(value: i64) -> Map<i64, i64> {
+    var scores: Map<i64, i64> = #{}
     scores.set(1, value)
     scores[2] = value
     return scores
 }
 
-fn makeSeen(value: int) -> Set<int> {
-    var seen: Set<int> = #[]
+fn makeSeen(value: i64) -> Set<i64> {
+    var seen: Set<i64> = #[]
     seen.add(value)
     return seen
 }
 
-fn mapSetContainerReceiverPlan(value: int) -> int {
-    var scoreMaps: Array<Map<int, int>> = []
+fn mapSetContainerReceiverPlan(value: i64) -> i64 {
+    var scoreMaps: Array<Map<i64, i64>> = []
     scoreMaps.push(makeScores(value))
-    var seenSets: Array<Set<int>> = []
+    var seenSets: Array<Set<i64>> = []
     seenSets.push(makeSeen(value))
     var one = scoreMaps[0].get(1) ?? 0
     var two = scoreMaps[0][2]

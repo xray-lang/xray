@@ -1,4 +1,4 @@
-fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) -> int {
+fn wait_select_close(ch: Channel<i64>, ready: Channel<i64>, done: Channel<i64>) -> i64 {
     ready.send(1)
     select {
         value from ch -> {
@@ -8,9 +8,9 @@ fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) 
     return 1
 }
 
-const ch = Channel<int>(0)
-const ready = Channel<int>(0)
-const done = Channel<int>(1)
+const ch = Channel<i64>(0)
+const ready = Channel<i64>(0)
+const done = Channel<i64>(1)
 
 go wait_select_close(ch, ready, done)
 print(match (ready.recv()) {

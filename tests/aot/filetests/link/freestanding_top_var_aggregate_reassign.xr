@@ -1,11 +1,11 @@
 struct CounterState {
-    value: int
-    limit: int
+    value: i64
+    limit: i64
 }
 
 var STATE = CounterState{value: 1, limit: 10}
 
-fn xray_top_var_aggregate_reassign() -> int {
+fn xray_top_var_aggregate_reassign() -> i64 {
     STATE = CounterState{value: STATE.value + 2, limit: 20}
     return STATE.value + STATE.limit
 }

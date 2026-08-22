@@ -1,5 +1,5 @@
-fn add_with_capture(delta: int) -> int {
-    fn add(x: int) -> int {
+fn add_with_capture(delta: i64) -> i64 {
+    fn add(x: i64) -> i64 {
         var acc = x
         var i = 0
         while (i < 4) {

@@ -1,14 +1,14 @@
-fn worker(ch: Channel<Array<int>>) -> int {
-    var xs: Array<int> = match (ch.recv()) {
+fn worker(ch: Channel<Array<i64>>) -> i64 {
+    var xs: Array<i64> = match (ch.recv()) {
         Recv.Value(value) -> value
-        _ -> Array<int>(0)
+        _ -> Array<i64>(0)
     }
     xs.push(99)
     Coro.yield()
     return len(xs)
 }
 
-const ch = Channel<Array<int>>(1)
+const ch = Channel<Array<i64>>(1)
 var xs = [1, 2]
 ch.send(copy(xs))
 var task = go worker(ch)

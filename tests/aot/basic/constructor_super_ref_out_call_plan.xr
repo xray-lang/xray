@@ -1,38 +1,38 @@
 class RefCtorBase {
-    value: int = 0
+    value: i64 = 0
 
-    constructor(value: ref int) {
+    constructor(value: ref i64) {
         value = value + 1
         this.value = value
     }
 }
 
 class RefCtorChild extends RefCtorBase {
-    constructor(value: ref int) {
+    constructor(value: ref i64) {
         super(ref value)
     }
 }
 
 class OutMethodBase {
-    fill(value: ref int) {
+    fill(value: ref i64) {
         value = 42
     }
 }
 
 class OutMethodChild extends OutMethodBase {
-    forward(value: ref int) {
+    forward(value: ref i64) {
         super.fill(ref value)
     }
 }
 
 class OutCtorBase {
-    constructor(value: ref int) {
+    constructor(value: ref i64) {
         value = 7
     }
 }
 
 class OutCtorChild extends OutCtorBase {
-    constructor(value: ref int) {
+    constructor(value: ref i64) {
         super(ref value)
     }
 }

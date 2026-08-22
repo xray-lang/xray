@@ -1,13 +1,13 @@
 struct Pair {
-    left: int
-    right: byte
+    left: i64
+    right: u8
     ok: bool
 }
 
-fn score() -> int {
+fn score() -> i64 {
     var p = Pair{left: 40, right: 2, ok: true}
     if (p.ok) {
-        return p.left + (p.right as int)
+        return p.left + (p.right as i64)
     }
     return 0
 }

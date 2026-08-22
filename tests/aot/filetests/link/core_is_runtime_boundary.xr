@@ -1,14 +1,14 @@
-var xs: Array<int> = [1, 2]
-var scores: Map<string, int> = #{"a": 1}
+var xs: Array<i64> = [1, 2]
+var scores: Map<string, i64> = #{"a": 1}
 var seen: Set<string> = #["x"]
 
-print(42 is int)
-print(3.5 is float)
+print(42 is i64)
+print(3.5 is f64)
 print("hello" is string)
 print(true is bool)
 print(null is null)
 print(42 is string)
-print("hello" is int)
-print(xs is Array<int>)
-print(scores is Map<string, int>)
+print("hello" is i64)
+print(xs is Array<i64>)
+print(scores is Map<string, i64>)
 print(seen is Set<string>)

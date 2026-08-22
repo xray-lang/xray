@@ -1,4 +1,4 @@
-const counter: Atomic<int> = Atomic<int>(0)
+const counter: Atomic<i64> = Atomic<i64>(0)
 
 counter.store(7, Ordering.Relaxed)
 print(counter.load(Ordering.Relaxed))

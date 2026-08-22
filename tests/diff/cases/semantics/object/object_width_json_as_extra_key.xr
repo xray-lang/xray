@@ -1,6 +1,6 @@
 // anchor: object-width-json-bridge
 // Unknown JSON keys are ignored only when the boundary policy says so.
-type Point = { x: int, y: int }
+type Point = { x: i64, y: i64 }
 
 fn main() {
     var p = JSON.parse<Point>(

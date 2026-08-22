@@ -5,14 +5,14 @@ import time
 var N = 1000000
 // 默认100万次
 if (len(process.args) > 0) {
-    N = int(process.args[0]) ?? N
+    N = i64.tryParse(process.args[0]) ?? N
 }
 print("=== Pingpong 测试 ===")
 print("消息次数:", N)
 const ch1 = Channel(1)
 const ch2 = Channel(1)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -20,7 +20,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // Ping 协程（通过参数传递 N，避免闭包捕获）
-fn ping(n: int, c1: Channel<int>, c2: Channel<int>) {
+fn ping(n: i64, c1: Channel<i64>, c2: Channel<i64>) {
     for (var i = 0; i < n; i++) {
         c1.send(i)
         recv_int(c2, 0)
@@ -28,7 +28,7 @@ fn ping(n: int, c1: Channel<int>, c2: Channel<int>) {
 }
 
 // Pong 协程（通过参数传递 N，避免闭包捕获）
-fn pong(n: int, c1: Channel<int>, c2: Channel<int>) {
+fn pong(n: i64, c1: Channel<i64>, c2: Channel<i64>) {
     for (var i = 0; i < n; i++) {
         var msg = recv_int(c1, 0)
         c2.send(msg)
@@ -46,8 +46,8 @@ var elapsed = time.monotonic() - start
 print("总时间:", elapsed, "ms")
 print("消息总数:", N * 2)
 if (elapsed > 0) {
-    print("吞吐量:", int(N * 2 * 1000 / elapsed), "msg/sec")
-    print("单次切换:", int(elapsed * 1000000 / (N * 2)), "ns")
+    print("吞吐量:", (N * 2 * 1000 / elapsed as i64), "msg/sec")
+    print("单次切换:", (elapsed * 1000000 / (N * 2) as i64), "ns")
 } else {
     print("吞吐量: 太快无法测量")
     print("单次切换: 太快无法测量")

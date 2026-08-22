@@ -5,7 +5,7 @@ export fn lower(value: string) -> string {
     var iter = value.runes()
     while (iter.hasNext()) {
         var r = iter.next()
-        var cp = int(r.toUInt32())
+        var cp = (r.toUInt32() as i64)
         if (cp >= 65 && cp <= 90) {
             out.append(rune(cp + 32)!)
         } else {
@@ -20,7 +20,7 @@ export fn upper(value: string) -> string {
     var iter = value.runes()
     while (iter.hasNext()) {
         var r = iter.next()
-        var cp = int(r.toUInt32())
+        var cp = (r.toUInt32() as i64)
         if (cp >= 97 && cp <= 122) {
             out.append(rune(cp - 32)!)
         } else {
@@ -56,7 +56,7 @@ export fn reverseRunes(value: string) -> string {
     return out.toString()
 }
 
-export fn padStart(value: string, targetLength: int, padding: string = " ") -> string {
+export fn padStart(value: string, targetLength: i64, padding: string = " ") -> string {
     if (targetLength <= len(value) || len(padding) == 0) { return value }
     var out = StringBuilder()
     var needed = targetLength - len(value)
@@ -65,7 +65,7 @@ export fn padStart(value: string, targetLength: int, padding: string = " ") -> s
     return out.toString()
 }
 
-export fn padEnd(value: string, targetLength: int, padding: string = " ") -> string {
+export fn padEnd(value: string, targetLength: i64, padding: string = " ") -> string {
     if (targetLength <= len(value) || len(padding) == 0) { return value }
     var out = StringBuilder()
     out.append(value)

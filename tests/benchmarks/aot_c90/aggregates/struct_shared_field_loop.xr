@@ -1,12 +1,12 @@
 struct Cell {
-    a: int
-    b: int
-    step: int
+    a: i64
+    b: i64
+    step: i64
 }
 
 var cell = Cell{a: 1, b: 2, step: 3}
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var p = cell
     var i = 0
     var sum = 0

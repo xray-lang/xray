@@ -1,13 +1,13 @@
 // 203 boundary: build a local mutable map, publish an independent shared
 // snapshot, alias that same shared identity, then pass it across two goroutines.
-fn reader(t: Map<int, int>) -> int {
+fn reader(t: Map<i64, i64>) -> i64 {
     return len(t)
 }
 
-var local: Map<int, int> = #{}
+var local: Map<i64, i64> = #{}
 local.set(1, 10)
 local.set(2, 20)
-const table: Map<int, int> = copy(local)
+const table: Map<i64, i64> = copy(local)
 const ro = table
 var a = go reader(ro)
 var b = go reader(ro)

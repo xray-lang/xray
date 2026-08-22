@@ -64,7 +64,7 @@ static XiFunc *make_func(const char *name, XrType *ret) {
 /* ========== Test: type classification ========== */
 
 static void test_type_is_rc(void) {
-    ASSERT_EQ(xi_own_type_is_rc(&t_int), false, "int is not RC");
+    ASSERT_EQ(xi_own_type_is_rc(&t_int), false, "i64 is not RC");
     ASSERT_EQ(xi_own_type_is_rc(&t_array), true, "array is RC");
     ASSERT_EQ(xi_own_type_is_rc(&t_str), true, "string is RC");
     ASSERT_EQ(xi_own_type_is_rc(NULL), true, "NULL type is conservatively RC");
@@ -301,7 +301,7 @@ static void test_borrow_only(void) {
 
     /* The returned int element is RC=false → not tracked as owned. */
     const XiOwnInfo *gi = &own.values[get->id];
-    ASSERT_EQ(gi->rc_managed, false, "int element is not RC managed");
+    ASSERT_EQ(gi->rc_managed, false, "i64 element is not RC managed");
 
     xi_own_free(&own);
     xi_func_free(f);
@@ -440,8 +440,8 @@ static void test_scalar_not_tracked(void) {
     XiOwnResult own;
     ASSERT_TRUE(xi_own_analyze(f, &own), "analyze scalar_add");
 
-    ASSERT_EQ(own.values[a->id].rc_managed, false, "int const not RC");
-    ASSERT_EQ(own.values[sum->id].rc_managed, false, "int sum not RC");
+    ASSERT_EQ(own.values[a->id].rc_managed, false, "i64 const not RC");
+    ASSERT_EQ(own.values[sum->id].rc_managed, false, "i64 sum not RC");
     ASSERT_EQ(own.n_owned, 0u, "no owned RC values in scalar function");
 
     xi_own_free(&own);

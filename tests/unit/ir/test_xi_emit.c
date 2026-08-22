@@ -577,16 +577,38 @@ TEST(emit_numeric_conversion_packs_typed_witness) {
             continue;
         uint16_t packed = (uint16_t) GETARG_C(inst);
         assert(xr_conversion_bytecode_is_numeric(packed));
+        assert(!xr_conversion_bytecode_is_parse_required(packed));
+        assert(!xr_conversion_bytecode_is_parse_optional(packed));
         assert(xr_conversion_bytecode_kind(packed) == XR_CONVERSION_EXPLICIT_INT_FLOAT);
         assert(xr_conversion_bytecode_source_rep(packed) == XR_NATIVE_U64);
         assert(xr_conversion_bytecode_target_rep(packed) == XR_NATIVE_F64);
         assert(xr_conversion_bytecode_pointer_bits(packed) == 64);
         found = true;
     }
-    assert(found && "typed integer-to-float witness must reach VM bytecode");
+    assert(found && "typed integer-to-f64 witness must reach VM bytecode");
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
+}
+
+TEST(conversion_bytecode_modes_are_disjoint) {
+    for (int kind = XR_CONVERSION_IDENTITY; kind <= XR_CONVERSION_EXPLICIT_INT_FLOAT; kind++) {
+        XrConversionWitness witness = {
+            .kind = (XrConversionKind) kind,
+            .source_scalar_rep = XR_NATIVE_F64,
+            .target_scalar_rep = XR_NATIVE_I64,
+        };
+        uint16_t packed = xr_conversion_bytecode_pack(&witness, 64);
+        assert(xr_conversion_bytecode_is_numeric(packed));
+        assert(!xr_conversion_bytecode_is_parse_required(packed));
+        assert(!xr_conversion_bytecode_is_parse_optional(packed));
+    }
+    assert(!xr_conversion_bytecode_is_numeric(XR_CONVERSION_BC_PARSE_REQUIRED));
+    assert(xr_conversion_bytecode_is_parse_required(XR_CONVERSION_BC_PARSE_REQUIRED));
+    assert(!xr_conversion_bytecode_is_parse_optional(XR_CONVERSION_BC_PARSE_REQUIRED));
+    assert(!xr_conversion_bytecode_is_numeric(XR_CONVERSION_BC_PARSE_OPTIONAL));
+    assert(!xr_conversion_bytecode_is_parse_required(XR_CONVERSION_BC_PARSE_OPTIONAL));
+    assert(xr_conversion_bytecode_is_parse_optional(XR_CONVERSION_BC_PARSE_OPTIONAL));
 }
 
 /* ========== Float Constants ========== */
@@ -604,7 +626,7 @@ TEST(emit_const_float_small) {
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
-    assert(GET_OPCODE(i0) == OP_LOADF && "small float should use LOADF");
+    assert(GET_OPCODE(i0) == OP_LOADF && "small f64 should use LOADF");
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
@@ -623,7 +645,7 @@ TEST(emit_const_float_large) {
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
-    assert(GET_OPCODE(i0) == OP_LOADK && "non-integer float should use LOADK");
+    assert(GET_OPCODE(i0) == OP_LOADK && "non-integer f64 should use LOADK");
     assert(PROTO_CONST_COUNT(proto) == 1 && "should have 1 constant");
 
     xr_instruction_unit_free(proto);
@@ -645,7 +667,7 @@ TEST(emit_const_int_large) {
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
-    assert(GET_OPCODE(i0) == OP_LOADI && "widened sBx int should use LOADI");
+    assert(GET_OPCODE(i0) == OP_LOADI && "widened sBx i64 should use LOADI");
     assert(GETARG_sBx(i0) == 100000);
     assert(PROTO_CONST_COUNT(proto) == 0);
 
@@ -667,7 +689,7 @@ TEST(emit_const_int_beyond_sbx) {
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
-    assert(GET_OPCODE(i0) == OP_LOADK && "int beyond sBx should use LOADK");
+    assert(GET_OPCODE(i0) == OP_LOADK && "i64 beyond sBx should use LOADK");
     assert(PROTO_CONST_COUNT(proto) == 1);
 
     xr_instruction_unit_free(proto);
@@ -1213,7 +1235,7 @@ TEST(emit_is_check) {
     XiValue *p0 = xi_param(f, entry, 0, &stub_int);
     XiValue *type_const = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
     assert(type_const != NULL);
-    type_const->aux_int = 8; /* XR_TID_INT */
+    type_const->aux_int = 8; /* XR_TID_I64 */
     XiValue *v = xi_value_new(f, entry, XI_IS, &stub_bool, 2);
     assert(v != NULL);
     v->args[0] = p0;
@@ -1371,6 +1393,7 @@ int main(void) {
     run_emit_copy_becomes_move();
     run_emit_codegen_compiler_fence_projects_to_void_without_runtime_effect();
     run_emit_numeric_conversion_packs_typed_witness();
+    run_conversion_bytecode_modes_are_disjoint();
 
     /* Float constants */
     run_emit_const_float_small();

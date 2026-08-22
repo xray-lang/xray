@@ -6,27 +6,27 @@ fn test_byte_array_basic() {
     // ========== Create Array<byte> ==========
 
     // Empty Array<byte>
-    var b1 = Array<byte>()
+    var b1 = Array<u8>()
     print(len(b1))  // 0
 
     // Specified length (initialized to 0)
-    var b2 = Array<byte>(5)
+    var b2 = Array<u8>(5)
     print(len(b2))  // 5
     print(b2[0])      // 0
 
     // Specified length and fill value
-    var b3 = Array<byte>(3, 255)
+    var b3 = Array<u8>(3, 255)
     print(b3[0])  // 255
     print(b3[1])  // 255
     print(b3[2])  // 255
 
     // From array
-    var b4 = Array<byte>([72, 101, 108, 108, 111])
+    var b4 = Array<u8>([72, 101, 108, 108, 111])
     print(len(b4))  // 5
 
     // ========== Index get/set ==========
 
-    var b5 = Array<byte>(3)
+    var b5 = Array<u8>(3)
     b5[0] = 65   // 'A'
     b5[1] = 66   // 'B'
     b5[2] = 67   // 'C'
@@ -36,7 +36,7 @@ fn test_byte_array_basic() {
 
     // ========== push ==========
 
-    var b6 = Array<byte>()
+    var b6 = Array<u8>()
     b6.push(88)  // 'X'
     b6.push(89)  // 'Y'
     b6.push(90)  // 'Z'

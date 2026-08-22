@@ -5,46 +5,46 @@
 
 @test
 fn test_is_basic() {
-    var x: int | string | bool = 42
-    assert_eq(x is int, true)
+    var x: i64 | string | bool = 42
+    assert_eq(x is i64, true)
     assert_eq(x is string, false)
     assert_eq(x is bool, false)
 }
 
 @test
 fn test_is_string() {
-    var x: int | string | bool = "hello"
+    var x: i64 | string | bool = "hello"
     assert_eq(x is string, true)
-    assert_eq(x is int, false)
+    assert_eq(x is i64, false)
 }
 
 @test
 fn test_is_bool() {
-    var x: int | string | bool = true
+    var x: i64 | string | bool = true
     assert_eq(x is bool, true)
-    assert_eq(x is int, false)
+    assert_eq(x is i64, false)
 }
 
 @test
 fn test_is_null() {
-    var x: int? = null
+    var x: i64? = null
     assert_eq(x is null, true)
-    assert_eq(x is int, false)
+    assert_eq(x is i64, false)
 }
 
 @test
 fn test_is_array() {
-    var x: Array<int> = [1, 2, 3]
-    assert_eq(x is Array<int>, true)
-    assert_eq(x is int, false)
+    var x: Array<i64> = [1, 2, 3]
+    assert_eq(x is Array<i64>, true)
+    assert_eq(x is i64, false)
 }
 
 // ===== as type assertion =====
 
 @test
 fn test_as_safe() {
-    var x: int | string | bool = 42
-    var n = x as int?
+    var x: i64 | string | bool = 42
+    var n = x as i64?
     assert_eq(n, 42)
     
     var s = x as string?
@@ -53,18 +53,18 @@ fn test_as_safe() {
 
 @test
 fn test_as_unsafe() {
-    var x: int | string | bool = "hello"
+    var x: i64 | string | bool = "hello"
     var s = x as string
     assert_eq(s, "hello")
 }
 
 @test
 fn test_as_safe_chain() {
-    var x: int | float | string = 3.14
-    var n = x as int?
+    var x: i64 | f64 | string = 3.14
+    var n = x as i64?
     assert_eq(n, null)
     
-    var f = x as float?
+    var f = x as f64?
     assert_eq(f, 3.14)
 }
 
@@ -72,9 +72,9 @@ fn test_as_safe_chain() {
 
 @test
 fn test_is_narrowing_in_if() {
-    var x: int | string | bool = 42
-    var result: int = 0
-    if (x is int) {
+    var x: i64 | string | bool = 42
+    var result: i64 = 0
+    if (x is i64) {
         result = x + 1
     }
     assert_eq(result, 43)
@@ -82,7 +82,7 @@ fn test_is_narrowing_in_if() {
 
 @test
 fn test_is_narrowing_string() {
-    var x: int | string | bool = "hello"
+    var x: i64 | string | bool = "hello"
     var result: string = ""
     if (x is string) {
         result = x + " world"
@@ -94,17 +94,17 @@ fn test_is_narrowing_string() {
 
 @test
 fn test_union_variable() {
-    var x: int | string = 42
-    assert_eq(x is int, true)
+    var x: i64 | string = 42
+    assert_eq(x is i64, true)
     
-    var y: int | string = "hello"
+    var y: i64 | string = "hello"
     assert_eq(y is string, true)
 }
 
 @test
 fn test_union_function_param() {
-    fn process(x: int | string) -> string {
-        if (x is int) {
+    fn process(x: i64 | string) -> string {
+        if (x is i64) {
             return "int"
         }
         return "other"
@@ -115,11 +115,11 @@ fn test_union_function_param() {
 
 @test
 fn test_union_nullable() {
-    var x: int? = null
+    var x: i64? = null
     assert_eq(x is null, true)
-    assert_eq(x is int, false)
+    assert_eq(x is i64, false)
     
-    var y: int? = 42
-    assert_eq(y is int, true)
+    var y: i64? = 42
+    assert_eq(y is i64, true)
     assert_eq(y is null, false)
 }

@@ -1,16 +1,16 @@
 // Task 260: JSON.parse<T> constructs the exact target directly from tokens.
-type Geo = { lat: float, verified: bool }
+type Geo = { lat: f64, verified: bool }
 type Address = { city: string, geo: Geo }
-type Item = { id: int, label: string }
+type Item = { id: i64, label: string }
 type Profile = {
     name: string,
-    age: int,
+    age: i64,
     address: Address,
     tags: Array<JSON.Value>,
-    ids: Array<int>,
+    ids: Array<i64>,
     items: Array<Item>,
-    scores: Map<string, int>,
-    buckets: Map<string, Array<int>>
+    scores: Map<string, i64>,
+    buckets: Map<string, Array<i64>>
 }
 
 var profile: Profile = JSON.parse<Profile>(

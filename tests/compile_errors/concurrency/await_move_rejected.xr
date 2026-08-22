@@ -1,4 +1,4 @@
-fn worker() -> Array<int> {
+fn worker() -> Array<i64> {
     return [1, 2, 3]
 }
 

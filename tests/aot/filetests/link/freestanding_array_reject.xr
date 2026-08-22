@@ -1,4 +1,4 @@
-fn xray_array_reject() -> int {
+fn xray_array_reject() -> i64 {
     var xs = [1, 2, 3]
     return xs[0]
 }

@@ -328,7 +328,7 @@ TEST(const_fold_float_add) {
 
     xi_opt_const_fold(f);
 
-    assert(add->op == XI_CONST && "float add should be folded");
+    assert(add->op == XI_CONST && "f64 add should be folded");
     double result;
     memcpy(&result, &add->aux_int, sizeof(double));
     assert(result == 4.0 && "1.5 + 2.5 should be 4.0");
@@ -494,7 +494,7 @@ TEST(const_fold_float_sub) {
 
     xi_opt_const_fold(f);
 
-    assert(sub->op == XI_CONST && "float sub should be folded");
+    assert(sub->op == XI_CONST && "f64 sub should be folded");
     double result;
     memcpy(&result, &sub->aux_int, sizeof(double));
     assert(result == 3.5 && "5.0 - 1.5 should be 3.5");
@@ -1690,7 +1690,7 @@ TEST(select_rep_unbox_param_for_arith) {
 
     /* Typed int param is already I64: ADD uses it directly */
     assert(add->args[0] == p0 && "typed param used directly by ADD");
-    assert(p0->rep == XR_REP_I64 && "int param should have I64 rep");
+    assert(p0->rep == XR_REP_I64 && "i64 param should have I64 rep");
     /* ADD result is I64, return needs TAGGED: should have BOX */
     assert(blk->control->op == XI_BOX && "return should BOX the ADD result");
     xi_func_free(f);
@@ -1782,7 +1782,7 @@ TEST(select_rep_native_policy_keeps_return_unboxed) {
     xi_opt_select_rep_with_policy(f, &policy);
 
     assert(blk->control == c42 && "native return policy should not BOX scalar return");
-    assert(c42->rep == XR_REP_I64 && "int return should stay I64");
+    assert(c42->rep == XR_REP_I64 && "i64 return should stay I64");
 
     char errbuf[256] = {0};
     bool ok = xi_verify(f, errbuf, sizeof(errbuf));
@@ -1819,7 +1819,7 @@ TEST(select_rep_aot_policy_keeps_scalar_phi_unboxed) {
     XiRepPolicy policy = xi_rep_policy_aot_transition();
     xi_opt_select_rep_with_policy(f, &policy);
 
-    assert(phi->value.rep == XR_REP_I64 && "AOT transition policy should keep int phi I64");
+    assert(phi->value.rep == XR_REP_I64 && "AOT transition policy should keep i64 phi I64");
     assert(phi->value.args[0] == c1 && "I64 phi arg should not be boxed");
     assert(phi->value.args[1] == c2 && "I64 phi arg should not be boxed");
     assert(add->args[0] == &phi->value && "arithmetic should consume native phi directly");

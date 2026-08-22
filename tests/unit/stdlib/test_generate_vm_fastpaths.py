@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -19,6 +21,63 @@ SPEC.loader.exec_module(generator)
 
 
 class HostedSignatureTest(unittest.TestCase):
+    def test_retired_scalar_signature_is_not_hostable(self) -> None:
+        value_types = dict(generator.VALUE_TYPES)
+        self.assertIsNone(generator.hosted_signature("(value: int): int", value_types))
+        self.assertEqual(
+            ([("p0", "i64", None)], "bool"),
+            generator.hosted_signature("(value: i64): bool", value_types),
+        )
+
+    def test_retired_benchmark_abi_identity_fails_closed(self) -> None:
+        entry = {
+            "symbol": "sample.accept",
+            "module": "sample",
+            "member": "accept",
+            "reference": "stdlib/sample/sample.xr::accept",
+            "native": "xr_generated_sample_accept",
+            "abi": "i64->bool",
+            "batch": "scalar",
+            "kind": "function",
+            "class_name": "",
+        }
+        with tempfile.TemporaryDirectory(prefix="xray-fastpath-retired-abi-") as raw:
+            root = Path(raw)
+            source = root / "stdlib" / "sample" / "sample.xr"
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "export fn accept(value: i64) -> bool { return value != 0 }\n",
+                encoding="utf-8",
+            )
+            manifest = root / "stdlib" / "stdlib_boundary.toml"
+            manifest.write_text(
+                """[object_abi]
+version = 1
+value_layout = "include/xray_value_abi.h"
+entry_abi = "XrValue(XrHostedFragmentContext*,XrValue*,uint32_t;signal)"
+unsupported_policy = "fail_closed"
+
+[[vm_fastpath]]
+symbol = "sample.accept"
+module = "sample"
+member = "accept"
+reference = "stdlib/sample/sample.xr::accept"
+native = "xr_generated_sample_accept"
+abi = "int->bool"
+batch = "scalar"
+""",
+                encoding="utf-8",
+            )
+            with mock.patch.object(generator, "derive_hosted_entries", return_value=[entry]), \
+                    mock.patch.object(generator, "source_runtime_exports", return_value=[]), \
+                    mock.patch.object(
+                        generator, "enforce_atomic_class_coverage", return_value=([entry], [])
+                    ):
+                with self.assertRaisesRegex(
+                    ValueError, "benchmark baseline abi disagrees with source-derived entry"
+                ):
+                    generator.load_entries(root)
+
     def test_callback_arrow_does_not_hide_the_final_parameter(self) -> None:
         value_types = dict(generator.VALUE_TYPES)
         self.assertIsNone(
@@ -29,7 +88,7 @@ class HostedSignatureTest(unittest.TestCase):
 
     def test_nested_generic_commas_remain_inside_one_parameter(self) -> None:
         value_types = dict(generator.VALUE_TYPES)
-        value_types["Map<string, Array<int>>"] = (
+        value_types["Map<string, Array<i64>>"] = (
             "map",
             "XrValue",
             "",
@@ -37,9 +96,9 @@ class HostedSignatureTest(unittest.TestCase):
             "",
         )
         self.assertEqual(
-            ([("p0", "Map<string, Array<int>>", None), ("p1", "bool", None)], "int"),
+            ([("p0", "Map<string, Array<i64>>", None), ("p1", "bool", None)], "i64"),
             generator.hosted_signature(
-                "(values: Map<string, Array<int>>, strict: bool): int", value_types
+                "(values: Map<string, Array<i64>>, strict: bool): i64", value_types
             ),
         )
 
@@ -52,10 +111,10 @@ class HostedSignatureTest(unittest.TestCase):
                     ("p0", "string", '"a,b"'),
                     ("p1", "Options", "Options()"),
                 ],
-                "int",
+                "i64",
             ),
             generator.hosted_signature(
-                '(name: string = "a,b", options: Options = Options()): int',
+                '(name: string = "a,b", options: Options = Options()): i64',
                 value_types,
             ),
         )
@@ -65,7 +124,7 @@ class HostedSignatureTest(unittest.TestCase):
         }
         self.assertEqual(
             [
-                ("_provided", "int", None),
+                ("_provided", "i64", None),
                 ("p0", "string?", None),
                 ("p1", "Options?", None),
             ],

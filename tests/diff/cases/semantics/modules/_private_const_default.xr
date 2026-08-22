@@ -1,11 +1,11 @@
-const DEFAULT_LIMIT: int = 192
+const DEFAULT_LIMIT: i64 = 192
 
-export fn defaultLimit(limit: int = DEFAULT_LIMIT) -> int {
+export fn defaultLimit(limit: i64 = DEFAULT_LIMIT) -> i64 {
     return limit
 }
 
 export class PrivateConstDefault {
-    static scale(value: int, factor: int = DEFAULT_LIMIT / 64) -> int {
+    static scale(value: i64, factor: i64 = DEFAULT_LIMIT / 64) -> i64 {
         return value * factor
     }
 }

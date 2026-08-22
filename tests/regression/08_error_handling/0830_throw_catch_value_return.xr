@@ -5,7 +5,7 @@ enum AppErr { NotFound(string), Timeout }
 enum IoErr { Closed, Timeout }
 enum ParseErr { Invalid }
 
-fn safe_div(a: int, b: int) -> int {
+fn safe_div(a: i64, b: i64) -> i64 {
     if (b == 0) {
         throw MathErr.DivByZero
     }
@@ -43,7 +43,7 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn auto_propagation() {
-    fn wrapper() -> int {
+    fn wrapper() -> i64 {
         var x = safe_div(10, 0)
         return x + 1
     }
@@ -94,7 +94,7 @@ fn safe_div(a: int, b: int) -> int {
 @test fn defer_runs_on_throw() {
     var cleaned = false
     var caught = false
-    fn work() -> int {
+    fn work() -> i64 {
         defer { cleaned = true }
         throw MathErr.Overflow
         return 0
@@ -109,7 +109,7 @@ fn safe_div(a: int, b: int) -> int {
 }
 
 @test fn multi_catch_typed() {
-    fn process(input: string) -> int {
+    fn process(input: string) -> i64 {
         if (input == "closed") { throw IoErr.Closed }
         if (input == "bad") { throw ParseErr.Invalid }
         return len(input)

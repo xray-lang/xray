@@ -3,8 +3,8 @@
 import mem
 
 fn run() {
-    var bytes = Array<byte>(64)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(64)
+    var view: Slice<u8> = bytes[:]
     unsafe {
         var raw = view.mutPtr()
         var allBits: u64 = 0xffff_ffff_ffff_ffff

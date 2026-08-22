@@ -1,28 +1,28 @@
-fn wait_for_value(ch: Channel<int>) -> int {
+fn wait_for_value(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> -1
     }
 }
 
-fn quick_value(n: int) -> int {
+fn quick_value(n: i64) -> i64 {
     Coro.yield()
     return n * 2
 }
 
-fn task_done(task: Task<int>) -> bool {
+fn task_done(task: Task<i64>) -> bool {
     return task.done
 }
 
-fn task_status(task: Task<int>) -> TaskStatus {
+fn task_status(task: Task<i64>) -> TaskStatus {
     return task.status
 }
 
-fn task_poll(task: ref Task<int>) -> TaskResult<int> {
+fn task_poll(task: ref Task<i64>) -> TaskResult<i64> {
     return task.poll()
 }
 
-const ch = Channel<int>(0)
+const ch = Channel<i64>(0)
 var blocked = go wait_for_value(ch)
 blocked.cancel()
 var cancelled_result = blocked.awaitResult()

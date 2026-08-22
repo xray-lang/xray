@@ -1,8 +1,8 @@
-fn sumAfterGrowth(n: int) -> float {
-    var values: Array<float> = []
+fn sumAfterGrowth(n: i64) -> f64 {
+    var values: Array<f64> = []
     var i = 0
     while (i < n) {
-        values.push(float(i) + 0.5)
+        values.push((i as f64) + 0.5)
         i = i + 1
     }
     var sum = 0.0

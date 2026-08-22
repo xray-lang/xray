@@ -1,7 +1,7 @@
 fn touch() {
 }
 
-fn pick<T>(items: Array<T>, index: int) -> T {
+fn pick<T>(items: Array<T>, index: i64) -> T {
     touch()
     touch()
     touch()
@@ -69,8 +69,8 @@ fn pick<T>(items: Array<T>, index: int) -> T {
     return items[index]
 }
 
-fn run(n: int) -> int {
-    var values: Array<int> = []
+fn run(n: i64) -> i64 {
+    var values: Array<i64> = []
     var seed = 0
     while (seed < 64) {
         values.push((seed % 17) + 1)
@@ -80,7 +80,7 @@ fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        sum = sum + pick<int>(values, i % 64)
+        sum = sum + pick<i64>(values, i % 64)
         i = i + 1
     }
     return sum

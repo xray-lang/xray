@@ -1,6 +1,6 @@
 import mem
 
-fn xray_mem_addr_roundtrip(p: MutPtr<u32>, q: Ptr<u64>) -> int {
+fn xray_mem_addr_roundtrip(p: MutPtr<u32>, q: Ptr<u64>) -> i64 {
     var a = mem.addr(p)
     var b = mem.addr(q)
     return a + b

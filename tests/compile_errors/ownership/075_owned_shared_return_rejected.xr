@@ -1,5 +1,5 @@
-fn buildConfig() -> Array<byte> {
-    var result = Array<byte>(1, 0)
+fn buildConfig() -> Array<u8> {
+    var result = Array<u8>(1, 0)
     const frozen = move result
     return frozen
 }

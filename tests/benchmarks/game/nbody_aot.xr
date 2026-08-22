@@ -3,13 +3,13 @@
 ** Uses typed Json struct for Body.
 */
 
-const PI: float = 3.141592653589793
-const SOLAR_MASS: float = 4.0 * PI * PI
-const DAYS_PER_YEAR: float = 365.24
+const PI: f64 = 3.141592653589793
+const SOLAR_MASS: f64 = 4.0 * PI * PI
+const DAYS_PER_YEAR: f64 = 365.24
 
-type Body = { x: float, y: float, z: float, vx: float, vy: float, vz: float, mass: float }
+type Body = { x: f64, y: f64, z: f64, vx: f64, vy: f64, vz: f64, mass: f64 }
 
-fn applyPair(bi: Body, bj: Body, dt: float) {
+fn applyPair(bi: Body, bj: Body, dt: f64) {
     var dx = bi.x - bj.x
     var dy = bi.y - bj.y
     var dz = bi.z - bj.z
@@ -24,7 +24,7 @@ fn applyPair(bi: Body, bj: Body, dt: float) {
     bj.vz = bj.vz + dz * bi.mass * mag
 }
 
-fn advance(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body, dt: float) {
+fn advance(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body, dt: f64) {
     applyPair(b0, b1, dt)
     applyPair(b0, b2, dt)
     applyPair(b0, b3, dt)
@@ -42,7 +42,7 @@ fn advance(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body, dt: float) {
     b4.x = b4.x + dt * b4.vx; b4.y = b4.y + dt * b4.vy; b4.z = b4.z + dt * b4.vz
 }
 
-fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body): float {
+fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body): f64 {
     var e = 0.5 * b0.mass * (b0.vx*b0.vx + b0.vy*b0.vy + b0.vz*b0.vz)
     e = e + 0.5 * b1.mass * (b1.vx*b1.vx + b1.vy*b1.vy + b1.vz*b1.vz)
     e = e + 0.5 * b2.mass * (b2.vx*b2.vx + b2.vy*b2.vy + b2.vz*b2.vz)
@@ -71,7 +71,7 @@ fn energy(b0: Body, b1: Body, b2: Body, b3: Body, b4: Body): float {
     return e
 }
 
-fn run(n: int) {
+fn run(n: i64) {
     var sm = SOLAR_MASS
     var dpy = DAYS_PER_YEAR
 

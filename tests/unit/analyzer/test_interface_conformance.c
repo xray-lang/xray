@@ -118,10 +118,10 @@ static void test_class_implements_all_methods_no_error(void) {
 
 static void test_interface_accepts_pure_implementation(void) {
     const char *src = "interface PureActionOk {\n"
-                      "    run(value: int) -> int\n"
+                      "    run(value: i64) -> i64\n"
                       "}\n"
                       "class PureActionImpl implements PureActionOk {\n"
-                      "    run(value: int) -> int { return value + 1 }\n"
+                      "    run(value: i64) -> i64 { return value + 1 }\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
@@ -146,11 +146,11 @@ static void test_class_missing_method_reports_error(void) {
 
 static void test_class_missing_property_reports_error(void) {
     const char *src = "interface Sized {\n"
-                      "    size: int\n"
+                      "    size: i64\n"
                       "}\n"
                       "class Buf implements Sized {\n"
-                      "    payload: int\n"
-                      "    constructor(p: int) { this.payload = p }\n"
+                      "    payload: i64\n"
+                      "    constructor(p: i64) { this.payload = p }\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_INTERFACE_NOT_IMPLEMENTED, &total);
@@ -159,12 +159,12 @@ static void test_class_missing_property_reports_error(void) {
 
 static void test_class_property_as_getter_accepted(void) {
     const char *src = "interface Sized2 {\n"
-                      "    size: int\n"
+                      "    size: i64\n"
                       "}\n"
                       "class Buf2 implements Sized2 {\n"
-                      "    internal: int\n"
-                      "    constructor(p: int) { this.internal = p }\n"
-                      "    size: int {\n"
+                      "    internal: i64\n"
+                      "    constructor(p: i64) { this.internal = p }\n"
+                      "    size: i64 {\n"
                       "        fn() { return this.internal }\n"
                       "    }\n"
                       "}\n";
@@ -188,17 +188,17 @@ static void test_unknown_interface_is_not_audited(void) {
 
 static void test_user_interface_constraint_accepts_implementor(void) {
     const char *src = "interface Shape {\n"
-                      "    area() -> int\n"
+                      "    area() -> i64\n"
                       "}\n"
                       "class Circle implements Shape {\n"
-                      "    r: int\n"
-                      "    constructor(r: int) { this.r = r }\n"
-                      "    area() -> int { return this.r * this.r }\n"
+                      "    r: i64\n"
+                      "    constructor(r: i64) { this.r = r }\n"
+                      "    area() -> i64 { return this.r * this.r }\n"
                       "}\n"
-                      "fn score<T: Shape>(shape: T) -> int {\n"
+                      "fn score<T: Shape>(shape: T) -> i64 {\n"
                       "    return shape.area()\n"
                       "}\n"
-                      "fn main() -> int {\n"
+                      "fn main() -> i64 {\n"
                       "    return score<Circle>(Circle(7))\n"
                       "}\n";
     int total = 0;
@@ -208,17 +208,17 @@ static void test_user_interface_constraint_accepts_implementor(void) {
 
 static void test_user_interface_constraint_accepts_same_interface_object(void) {
     const char *src = "interface Shape {\n"
-                      "    area() -> int\n"
+                      "    area() -> i64\n"
                       "}\n"
                       "class Circle implements Shape {\n"
-                      "    r: int\n"
-                      "    constructor(r: int) { this.r = r }\n"
-                      "    area() -> int { return this.r * this.r }\n"
+                      "    r: i64\n"
+                      "    constructor(r: i64) { this.r = r }\n"
+                      "    area() -> i64 { return this.r * this.r }\n"
                       "}\n"
-                      "fn score<T: Shape>(shape: T) -> int {\n"
+                      "fn score<T: Shape>(shape: T) -> i64 {\n"
                       "    return shape.area()\n"
                       "}\n"
-                      "fn main() -> int {\n"
+                      "fn main() -> i64 {\n"
                       "    var shape: Shape = Circle(7)\n"
                       "    return score<Shape>(shape)\n"
                       "}\n";
@@ -229,17 +229,17 @@ static void test_user_interface_constraint_accepts_same_interface_object(void) {
 
 static void test_user_interface_constraint_rejects_non_implementor(void) {
     const char *src = "interface Shape {\n"
-                      "    area() -> int\n"
+                      "    area() -> i64\n"
                       "}\n"
                       "class Circle {\n"
-                      "    r: int\n"
-                      "    constructor(r: int) { this.r = r }\n"
-                      "    area() -> int { return this.r * this.r }\n"
+                      "    r: i64\n"
+                      "    constructor(r: i64) { this.r = r }\n"
+                      "    area() -> i64 { return this.r * this.r }\n"
                       "}\n"
-                      "fn score<T: Shape>(shape: T) -> int {\n"
+                      "fn score<T: Shape>(shape: T) -> i64 {\n"
                       "    return shape.area()\n"
                       "}\n"
-                      "fn main() -> int {\n"
+                      "fn main() -> i64 {\n"
                       "    return score<Circle>(Circle(7))\n"
                       "}\n";
     int total = 0;
@@ -252,12 +252,12 @@ static void test_user_interface_constraint_rejects_non_implementor(void) {
 // ============================================================================
 
 static void test_iterable_int_satisfied_by_array_int(void) {
-    const char *src = "fn consume<T: Iterable<int>>(xs: T) -> int {\n"
+    const char *src = "fn consume<T: Iterable<i64>>(xs: T) -> i64 {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main() -> int {\n"
-                      "    var xs: Array<int> = [1, 2, 3]\n"
-                      "    return consume<Array<int>>(xs)\n"
+                      "fn main() -> i64 {\n"
+                      "    var xs: Array<i64> = [1, 2, 3]\n"
+                      "    return consume<Array<i64>>(xs)\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, &total);
@@ -265,10 +265,10 @@ static void test_iterable_int_satisfied_by_array_int(void) {
 }
 
 static void test_iterable_int_rejects_array_string(void) {
-    const char *src = "fn consume<T: Iterable<int>>(xs: T) -> int {\n"
+    const char *src = "fn consume<T: Iterable<i64>>(xs: T) -> i64 {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main() -> int {\n"
+                      "fn main() -> i64 {\n"
                       "    var xs: Array<string> = [\"a\"]\n"
                       "    return consume<Array<string>>(xs)\n"
                       "}\n";
@@ -280,12 +280,12 @@ static void test_iterable_int_rejects_array_string(void) {
 static void test_indexable_string_int_rejects_array_int(void) {
     // Indexable<string, int> requires a Map-like keyed container; Array<int>
     // is indexed by int, not string.
-    const char *src = "fn consume<T: Indexable<string, int>>(xs: T) -> int {\n"
+    const char *src = "fn consume<T: Indexable<string, i64>>(xs: T) -> i64 {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main() -> int {\n"
-                      "    var xs: Array<int> = [1, 2]\n"
-                      "    return consume<Array<int>>(xs)\n"
+                      "fn main() -> i64 {\n"
+                      "    var xs: Array<i64> = [1, 2]\n"
+                      "    return consume<Array<i64>>(xs)\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, &total);
@@ -293,12 +293,12 @@ static void test_indexable_string_int_rejects_array_int(void) {
 }
 
 static void test_indexable_int_int_accepts_array_int(void) {
-    const char *src = "fn consume<T: Indexable<int, int>>(xs: T) -> int {\n"
+    const char *src = "fn consume<T: Indexable<i64, i64>>(xs: T) -> i64 {\n"
                       "    return 0\n"
                       "}\n"
-                      "fn main() -> int {\n"
-                      "    var xs: Array<int> = [1, 2]\n"
-                      "    return consume<Array<int>>(xs)\n"
+                      "fn main() -> i64 {\n"
+                      "    var xs: Array<i64> = [1, 2]\n"
+                      "    return consume<Array<i64>>(xs)\n"
                       "}\n";
     int total = 0;
     int n = count_diagnostics(src, XR_ERR_ANALYZE_GENERIC_CONSTRAINT, &total);

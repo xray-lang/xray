@@ -5,9 +5,9 @@
 // storage once a method leaks `this`).
 
 class Box {
-    n: int
+    n: i64
 
-    constructor(n: int) {
+    constructor(n: i64) {
         this.n = n
     }
 
@@ -15,16 +15,16 @@ class Box {
         return this
     }
 
-    bump() -> int {
+    bump() -> i64 {
         defer { this.n = this.n + 100 }
         return this.n
     }
 }
 
 class Chain {
-    v: int
+    v: i64
 
-    constructor(v: int) {
+    constructor(v: i64) {
         this.v = v
     }
 
@@ -33,12 +33,12 @@ class Chain {
         return this
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.v
     }
 }
 
-fn readBox(b: Box) -> int {
+fn readBox(b: Box) -> i64 {
     return b.n
 }
 
@@ -49,7 +49,7 @@ print(moduleBox.bump())
 print(moduleBox.bump())
 print(readBox(moduleBox.self()))
 
-fn run() -> int {
+fn run() -> i64 {
     var b = Box(5)
     var aliased = b.self()
     aliased.n = aliased.n + 10

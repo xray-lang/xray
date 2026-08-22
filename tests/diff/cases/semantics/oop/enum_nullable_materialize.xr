@@ -13,7 +13,7 @@
 // is misjudged null when the module also mentions E? (tracked in known_bugs).
 
 enum E {
-    A(int),
+    A(i64),
     B
 }
 
@@ -29,7 +29,7 @@ fn make(b: bool) -> E? {
     return E.A(5)
 }
 
-fn describe(e: E?) -> int {
+fn describe(e: E?) -> i64 {
     if (e == null) { return -1 }
     return match (e!) { E.A(v) -> v, E.B -> 0 }
 }

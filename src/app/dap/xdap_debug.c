@@ -244,9 +244,9 @@ static XrDebugHooks g_debug_hooks = {
 
 const char *xr_value_type_name(XrValue val) {
     if (XR_IS_INT(val))
-        return TYPE_NAME_INT;
+        return TYPE_NAME_I64;
     if (XR_IS_FLOAT(val))
-        return TYPE_NAME_FLOAT;
+        return TYPE_NAME_F64;
     if (XR_IS_BOOL(val))
         return TYPE_NAME_BOOL;
     if (XR_IS_NULL(val))

@@ -3,7 +3,7 @@
 // Error should mention: not default-initializable
 
 struct Item {
-    count: int
+    count: i64
     name: string
 }
 

@@ -1,7 +1,7 @@
-fn bytesView(bytes: Slice<byte>) -> int {
-    var raw: Slice<byte> = bytes.asBytes()
+fn bytesView(bytes: Slice<u8>) -> i64 {
+    var raw: Slice<u8> = bytes.asBytes()
     return len(raw)
 }
 
-var bytes = Array<byte>(4, 0)
+var bytes = Array<u8>(4, 0)
 print(bytesView(bytes[:]))

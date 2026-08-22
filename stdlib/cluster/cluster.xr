@@ -20,7 +20,7 @@ export type ClusterTlsOptions = {
 
 export type ClusterConfig = {
     name: string,
-    port: int,
+    port: i64,
     secret: string?,
     tls: ClusterTlsOptions?,
 }
@@ -33,9 +33,9 @@ export enum AddressError {
 
 export class NodeAddress {
     host: string
-    port: int
+    port: i64
 
-    constructor(host: string, port: int) {
+    constructor(host: string, port: i64) {
         this.host = host
         this.port = port
     }
@@ -49,7 +49,7 @@ fn _asciiPrintable(s: string) -> bool {
     return true
 }
 
-fn _validName(s: string, maxLen: int) -> bool {
+fn _validName(s: string, maxLen: i64) -> bool {
     return len(s) > 0 && len(s) <= maxLen && _asciiPrintable(s)
 }
 
@@ -57,13 +57,13 @@ export fn validNodeName(name: string) -> bool {
     return _validName(name, NODE_NAME_MAX)
 }
 
-fn _parsePort(raw: string) -> int {
+fn _parsePort(raw: string) -> i64 {
     if (len(raw) == 0) { return 0 }
     var out = 0
     for (var i = 0; i < len(raw); i++) {
         var c = raw.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return 0 }
-        out = out * 10 + ((c - 48) as int)
+        out = out * 10 + ((c - 48) as i64)
         if (out > 65535) { return 0 }
     }
     return out
@@ -158,6 +158,6 @@ export fn join(addr: string) -> bool { return __join(addr) }
 
 export fn stop() { __stop() }
 
-export fn listen(pattern: string, capacity: int = 1024) -> Channel<Buffer>? {
+export fn listen(pattern: string, capacity: i64 = 1024) -> Channel<Buffer>? {
     return __listen(pattern, capacity)
 }

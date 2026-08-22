@@ -2,9 +2,9 @@
 // Expected: static factory methods work, computed properties work
 
 struct Color {
-    r: int
-    g: int
-    b: int
+    r: i64
+    g: i64
+    b: i64
 
     // Computed property
     hex() -> string {

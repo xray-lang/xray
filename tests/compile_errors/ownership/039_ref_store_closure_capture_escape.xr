@@ -1,11 +1,11 @@
-var closures: Array<fn() -> int> = []
+var closures: Array<fn() -> i64> = []
 
-fn stash(data: ref Array<int>) {
-    closures.push(fn() -> int {
+fn stash(data: ref Array<i64>) {
+    closures.push(fn() -> i64 {
         return len(data)
     })
 }
 
-var values: Array<int> = [1, 2, 3, 4]
+var values: Array<i64> = [1, 2, 3, 4]
 stash(ref values)
 print(closures[0]())

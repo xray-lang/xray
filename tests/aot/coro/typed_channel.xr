@@ -1,8 +1,8 @@
-fn send_int(ch: Channel<int>) {
+fn send_int(ch: Channel<i64>) {
     ch.send(41)
 }
 
-const buffered = Channel<int>(1)
+const buffered = Channel<i64>(1)
 buffered.send(9)
 var buffered_value = buffered.recv()
 print(match (buffered_value) {
@@ -11,7 +11,7 @@ print(match (buffered_value) {
 })
 buffered.close()
 
-const rendezvous = Channel<int>(0)
+const rendezvous = Channel<i64>(0)
 var task = go send_int(rendezvous)
 var direct_value = rendezvous.recv()
 await task

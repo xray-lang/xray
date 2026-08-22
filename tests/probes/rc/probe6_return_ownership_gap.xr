@@ -26,7 +26,7 @@ enum UnwindErr {
 }
 
 class Node {
-    v: int
+    v: i64
     constructor(v) { this.v = v }
 }
 
@@ -36,7 +36,7 @@ class Holder {
 }
 
 // ① 被 return 转移：所有权跨函数边界移交，调用方负责释放
-fn make(v: int) -> Node {
+fn make(v: i64) -> Node {
     return Node(v)
 }
 
@@ -48,13 +48,13 @@ fn forward_node(value: move Node) -> Node {
     return value
 }
 
-fn move_roundtrip_once(i: int) -> int {
+fn move_roundtrip_once(i: i64) -> i64 {
     var source = Node(i)
     var result = forward_node(move source)
     return result.v
 }
 
-fn recursive_factory(depth: int, value: int) -> Node {
+fn recursive_factory(depth: i64, value: i64) -> Node {
     if (depth > 0) {
         recursive_factory(depth - 1, value)
     }

@@ -8,7 +8,7 @@ struct Box<T> {
 
 // Materialize both Box$i64 and Box$str so the rejection is between two concrete
 // monomorphized instances.
-var ok = Box<int>{value: 1}
-var bad: Box<int> = Box<string>{value: "x"}
+var ok = Box<i64>{value: 1}
+var bad: Box<i64> = Box<string>{value: "x"}
 print(ok.value)
 print(bad.value)

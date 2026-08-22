@@ -3,7 +3,7 @@ enum FsStatus {
     Done
 }
 
-fn xrayEnumToStringStatic(flag: int) -> int {
+fn xrayEnumToStringStatic(flag: i64) -> i64 {
     var s = FsStatus.Ready
     if (flag != 0) {
         s = FsStatus.Done
@@ -12,7 +12,7 @@ fn xrayEnumToStringStatic(flag: int) -> int {
     return s.ordinal
 }
 
-fn xrayPreludeEnumToStringStatic(flag: int) -> int {
+fn xrayPreludeEnumToStringStatic(flag: i64) -> i64 {
     var e = Endian.LE
     if (flag != 0) {
         e = Endian.BE

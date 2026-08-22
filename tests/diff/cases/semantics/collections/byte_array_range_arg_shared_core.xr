@@ -1,11 +1,11 @@
 // anchor: bytes-range-arg-shared-core
 fn main() {
-    var bytes = Array<byte>(8, 1)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(8, 1)
+    var view: Slice<u8> = bytes[:]
     var offset = 4294967296
     print("before-range")
     var value: u32 = view.load<u32>(offset, Endian.LE)
-    print(int(value))
+    print((value as i64))
     print("unreachable")
 }
 

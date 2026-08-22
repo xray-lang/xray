@@ -1,1 +1,1 @@
-Slice<byte>.load<T>() expects exactly one type argument
+Slice<u8>.load<T>() expects exactly one type argument

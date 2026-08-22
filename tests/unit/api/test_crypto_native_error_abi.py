@@ -63,14 +63,14 @@ class CryptoNativeErrorAbiTest(unittest.TestCase):
             core_def.index("fn decrypt {") : core_def.index("fn timingSafeEqual {")
         ]
 
-        self.assertIn('fn randomBytes {\n    signature: "(n: int): string"', core_def)
+        self.assertIn('fn randomBytes {\n    signature: "(n: i64): string"', core_def)
         self.assertIn('effect: "CryptoError.InvalidLength"', random_bytes_def)
         self.assertNotIn("@errors(", random_bytes_def)
-        self.assertNotIn("Array<byte>", random_bytes_def)
+        self.assertNotIn("Array<u8>", random_bytes_def)
         self.assertIn('fn decrypt {\n    signature: "(key: string, ciphertext: string): string?"', core_def)
         self.assertIn('effect: "CryptoError.InvalidLength"', decrypt_def)
         self.assertNotIn("@errors(", decrypt_def)
-        self.assertIn('"randomBytes", "(n: int): string"', generated)
+        self.assertIn('"randomBytes", "(n: i64): string"', generated)
         self.assertIn('"decrypt", "(key: string, ciphertext: string): string?"', generated)
         self.assertIn("XA_EFFECT_CONTRACT_ERRORS", generated)
         self.assertIn('"CryptoError.InvalidLength"', generated)

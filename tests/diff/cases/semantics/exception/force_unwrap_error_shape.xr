@@ -2,7 +2,7 @@
 // `expr!` uses the value-return error channel, not `catch panic`. AOT must
 // construct the same lightweight Exception-shaped value as VM.
 
-var value: int? = null
+var value: i64? = null
 
 try {
     print(value!)

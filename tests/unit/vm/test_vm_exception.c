@@ -79,7 +79,7 @@ TEST(runtime_error_records_trace) {
      * by zero. Division by zero is a PANIC (unrecoverable runtime
      * fault), not a value-return error: it uses the unwind channel
      * and is reported via current_exception, never pending_error. */
-    const char *src = "fn divider(a: int, b: int) -> int { return a / b }\n"
+    const char *src = "fn divider(a: i64, b: i64) -> i64 { return a / b }\n"
                       "var r = divider(10, 0)\n";
 
     int rc = xr_isolate_dostring(iso, src, &k_vm_exception_memory_authority);

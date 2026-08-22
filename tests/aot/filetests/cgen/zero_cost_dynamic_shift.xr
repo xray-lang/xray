@@ -1,7 +1,7 @@
-fn shiftLane(value: u32, count: int) -> u32 {
+fn shiftLane(value: u32, count: i64) -> u32 {
     return value << count
 }
 
-export fn callShift(value: u32, count: int) -> u32 {
+export fn callShift(value: u32, count: i64) -> u32 {
     return shiftLane(value, count)
 }

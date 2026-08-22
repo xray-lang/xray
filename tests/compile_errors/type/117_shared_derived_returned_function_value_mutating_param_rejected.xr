@@ -1,14 +1,14 @@
-fn overwrite(view: ref Slice<byte>) {
+fn overwrite(view: ref Slice<u8>) {
     view[0] = 1
 }
 
-fn choose() -> fn(ref Slice<byte>) {
+fn choose() -> fn(ref Slice<u8>) {
     return overwrite
 }
 
 fn main() {
-    const bytes = Array<byte>(4, 0)
-    var view: const Slice<byte> = bytes[:]
+    const bytes = Array<u8>(4, 0)
+    var view: const Slice<u8> = bytes[:]
     const f = choose()
     f(ref view)
 }

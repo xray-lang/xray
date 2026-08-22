@@ -1,4 +1,4 @@
-fn smallLookup() -> int {
+fn smallLookup() -> i64 {
     var scores = #{"ada": 7, "lin": 9}
     var seen: Set<string> = #["ada", "lin"]
     var fromIndex = scores["ada"]

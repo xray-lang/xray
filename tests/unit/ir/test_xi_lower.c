@@ -484,7 +484,7 @@ TEST(while_loop) {
 }
 
 TEST(loop_invariant_rc_trivial_phi_is_rewritten) {
-    XiFunc *f = lower_source("fn invariant(xs: Array<int>) -> int {\n"
+    XiFunc *f = lower_source("fn invariant(xs: Array<i64>) -> i64 {\n"
                              "    var i = 0\n"
                              "    while (i < 2) {\n"
                              "        print(len(xs))\n"
@@ -658,8 +658,8 @@ TEST(type_propagation) {
         if (v->op == XI_GT && v->type && v->type->kind == XR_KIND_BOOL)
             found_bool_gt = 1;
     }
-    assert(found_int_add && "int + int should produce int");
-    assert(found_float_add && "float + float should produce float");
+    assert(found_int_add && "i64 + i64 should produce i64");
+    assert(found_float_add && "f64 + f64 should produce f64");
     assert(found_bool_gt && "a > 0 should produce bool");
     xi_func_free(f);
 }
@@ -713,7 +713,7 @@ TEST(member_access) {
 }
 
 TEST(member_access_field_symbols_are_distinct) {
-    XiFunc *f = lower_source("fn worker() -> int {\n"
+    XiFunc *f = lower_source("fn worker() -> i64 {\n"
                              "    Coro.yield()\n"
                              "    return 1\n"
                              "}\n"
@@ -746,9 +746,9 @@ TEST(member_access_field_symbols_are_distinct) {
 
 TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     XiFunc *f = lower_source("fn exerciseBytes() {\n"
-                             "  var src = Array<byte>(8)\n"
-                             "  var view: Slice<byte> = src[:]\n"
-                             "  var dst = Array<byte>(0)\n"
+                             "  var src = Array<u8>(8)\n"
+                             "  var view: Slice<u8> = src[:]\n"
+                             "  var dst = Array<u8>(0)\n"
                              "  var h = view.load<u16>(0, Endian.LE)\n"
                              "  var a = view.load<u32>(0, Endian.LE)\n"
                              "  var b = view.load<u64>(0, Endian.LE)\n"
@@ -762,13 +762,13 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
                              "exerciseBytes()\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U16) &&
-           "load<u16> should lower to Array<byte> op");
+           "load<u16> should lower to Array<u8> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U32) &&
-           "load<u32> should lower to Array<byte> op");
+           "load<u32> should lower to Array<u8> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_LOAD_U64) &&
-           "load<u64> should lower to Array<byte> op");
+           "load<u64> should lower to Array<u8> op");
     assert(func_tree_has_op(f, XI_BYTE_SLICE_STORE_U16) &&
-           "store<u16> should lower to Array<byte> op");
+           "store<u16> should lower to Array<u8> op");
     XiValue *load_u16 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U16);
     XiValue *load_u32 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U32);
     XiValue *load_u64 = func_tree_find_op(f, XI_BYTE_SLICE_LOAD_U64);
@@ -780,9 +780,9 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
     assert(store_u16 && store_u16->xa_intrinsic_id == XA_INTRINSIC_BYTE_SLICE_STORE &&
            "typed store must retain the canonical analyzer intrinsic id");
     assert(func_tree_has_op(f, XI_BYTE_ARRAY_APPEND_FROM) &&
-           "appendFrom should lower to stable Array<byte> append op");
+           "appendFrom should lower to stable Array<u8> append op");
     assert(func_tree_has_op(f, XI_BYTE_ARRAY_REPEAT_FROM) &&
-           "repeatFrom should lower to stable Array<byte> repeat op");
+           "repeatFrom should lower to stable Array<u8> repeat op");
     assert(!func_tree_find_method(f, "appendFrom") &&
            "appendFrom should not remain an explicit method call");
     assert(!func_tree_find_method(f, "repeatFrom") &&
@@ -796,7 +796,7 @@ TEST(bytes_new_low_level_methods_lower_to_semantic_ops) {
 }
 
 TEST(unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access) {
-    XiFunc *f = lower_source("fn copyNative(source: Slice<byte>, destination: ref Slice<byte>) {\n"
+    XiFunc *f = lower_source("fn copyNative(source: Slice<u8>, destination: ref Slice<u8>) {\n"
                              "  unsafe {\n"
                              "    var value = source.load<u64>(0, Endian.Native)\n"
                              "    destination.store<u64>(0, value, Endian.Native)\n"
@@ -815,9 +815,9 @@ TEST(unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access) {
 
 TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
     XiFunc *f = lower_source("import mem\n"
-                             "fn rawLength(source: Slice<byte>) -> int {\n"
+                             "fn rawLength(source: Slice<u8>) -> i64 {\n"
                              "  var view = unsafe {\n"
-                             "    mem.slice<byte>(source.ptr(), len(source), source)\n"
+                             "    mem.slice<u8>(source.ptr(), len(source), source)\n"
                              "  }\n"
                              "  return len(view)\n"
                              "}\n");
@@ -837,7 +837,7 @@ TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
 }
 
 TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
-    XiFunc *f = lower_source("fn update(counter: Atomic<int>) -> int {\n"
+    XiFunc *f = lower_source("fn update(counter: Atomic<i64>) -> i64 {\n"
                              "  var before = counter.load(Ordering.Relaxed)\n"
                              "  counter.store(before + 1, Ordering.Release)\n"
                              "  var old = counter.fetchAdd(2, Ordering.AcquireRelease)\n"
@@ -868,9 +868,9 @@ TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
 
 TEST(user_method_named_fetch_add_remains_ordinary_call) {
     XiFunc *f = lower_source("class Counter {\n"
-                             "  fetchAdd(delta: int) -> int { return delta }\n"
+                             "  fetchAdd(delta: i64) -> i64 { return delta }\n"
                              "}\n"
-                             "fn use(counter: Counter) -> int {\n"
+                             "fn use(counter: Counter) -> i64 {\n"
                              "  return counter.fetchAdd(2)\n"
                              "}\n");
     assert(f != NULL);
@@ -891,7 +891,7 @@ TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
                              "print(swapped)\n"
                              "print(octet.popcount())\n"
                              "print(octet.leadingZeros())\n"
-                             "var wide: int = 256\n"
+                             "var wide: i64 = 256\n"
                              "print(wide.trailingZeros())\n");
     assert(f != NULL);
 
@@ -913,9 +913,9 @@ TEST(exact_integer_bit_methods_lower_to_typed_semantic_ops) {
            "byteswap should preserve signed exact-width receiver type");
     assert(popcount->aux_int == XR_NATIVE_U8 && popcount->type &&
            popcount->type->kind == XR_KIND_INT && popcount->type->scalar_rep == 0 &&
-           "bit queries should return canonical int while retaining receiver width metadata");
+           "bit queries should return canonical i64 while retaining receiver width metadata");
     assert(ctz->aux_int == 0 && ctz->type && ctz->type->scalar_rep == 0 &&
-           "canonical int should retain its zero native-width tag and 64-bit bit semantics");
+           "canonical i64 should retain its zero native-width tag and 64-bit bit semantics");
     assert(!func_tree_find_method(f, "rotateLeft") && !func_tree_find_method(f, "byteswap") &&
            !func_tree_find_method(f, "popcount") &&
            "exact-width bit methods should not survive as string-dispatched method calls");
@@ -984,7 +984,7 @@ TEST(for_in_loop) {
 }
 
 TEST(nullish_coalesce) {
-    XiFunc *f = lower_source("var x: int? = null\n"
+    XiFunc *f = lower_source("var x: i64? = null\n"
                              "var y = x ?? 42\n"
                              "print(y)\n");
     assert(f != NULL);
@@ -1124,21 +1124,21 @@ TEST(class_field_access_lowers_with_global_evidence_id) {
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func =
         lower_source_with_global_evidence("class Base {\n"
-                                          "    wide: int\n"
-                                          "    constructor(wide: int) {\n"
+                                          "    wide: i64\n"
+                                          "    constructor(wide: i64) {\n"
                                           "        this.wide = wide\n"
                                           "    }\n"
                                           "}\n"
                                           "\n"
                                           "class Child extends Base {\n"
                                           "    flag: bool\n"
-                                          "    constructor(wide: int, flag: bool) {\n"
+                                          "    constructor(wide: i64, flag: bool) {\n"
                                           "        super(wide)\n"
                                           "        this.flag = flag\n"
                                           "    }\n"
                                           "}\n"
                                           "\n"
-                                          "fn touch(c: ref Child) -> int {\n"
+                                          "fn touch(c: ref Child) -> i64 {\n"
                                           "    c.flag = false\n"
                                           "    return c.wide\n"
                                           "}\n"
@@ -1207,7 +1207,7 @@ TEST(class_field_default_initializer_store_lowers_with_global_evidence_id) {
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func = lower_source_with_global_evidence("class Holder {\n"
-                                                          "    values: Array<int> = []\n"
+                                                          "    values: Array<i64> = []\n"
                                                           "}\n"
                                                           "\n"
                                                           "var h = Holder()\n"
@@ -1258,7 +1258,7 @@ TEST(json_alias_shape_access_lowers_with_global_evidence_id) {
 
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func = lower_source_with_global_evidence("fn readAlias() -> int {\n"
+    XiFunc *main_func = lower_source_with_global_evidence("fn readAlias() -> i64 {\n"
                                                           "    var a = { name: \"ada\", age: 1 }\n"
                                                           "    var b = a\n"
                                                           "    return b.age\n"
@@ -1315,7 +1315,7 @@ TEST(json_static_key_index_lowers_to_direct_field_with_global_evidence_id) {
 
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
-    XiFunc *main_func = lower_source_with_global_evidence("fn updateKey() -> int {\n"
+    XiFunc *main_func = lower_source_with_global_evidence("fn updateKey() -> i64 {\n"
                                                           "    var j = { name: \"ada\", age: 1 }\n"
                                                           "    j[\"age\"] = 2\n"
                                                           "    return j[\"age\"]\n"
@@ -1404,7 +1404,7 @@ TEST(object_access_lowers_with_global_evidence_id) {
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func =
-        lower_source_with_global_evidence("fn readAge() -> int {\n"
+        lower_source_with_global_evidence("fn readAge() -> i64 {\n"
                                           "    var user = { name: \"ada\", age: 1 }\n"
                                           "    return user.age\n"
                                           "}\n"
@@ -1533,7 +1533,7 @@ TEST(structural_object_dot_and_static_index_share_fixed_field_lowering) {
 }
 
 static const char *json_codec_same_line_source(void) {
-    return "type User = { name: string, age: int }\n"
+    return "type User = { name: string, age: i64 }\n"
            "fn codecs() -> string {\n"
            "    var parsed: JSON.Value = "
            "JSON.parseValue(\"{\\\"name\\\":\\\"A\\\",\\\"age\\\":1}\"); var "
@@ -1670,7 +1670,7 @@ TEST(map_key_access_lowers_with_global_evidence_id) {
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func =
-        lower_source_with_global_evidence("fn updateScore() -> int {\n"
+        lower_source_with_global_evidence("fn updateScore() -> i64 {\n"
                                           "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                                           "    scores[\"ada\"] = 8\n"
                                           "    return scores[\"ada\"]\n"
@@ -1748,11 +1748,11 @@ TEST(map_key_access_alias_shape_lowers_with_global_evidence_id) {
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func =
-        lower_source_with_global_evidence("fn updateAlias() -> int {\n"
+        lower_source_with_global_evidence("fn updateAlias() -> i64 {\n"
                                           "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                                           "    var alias = scores\n"
                                           "    alias[\"ada\"] = 8\n"
-                                          "    var assigned: Map<string, int> = #{}\n"
+                                          "    var assigned: Map<string, i64> = #{}\n"
                                           "    assigned = alias\n"
                                           "    return assigned[\"ada\"]\n"
                                           "}\n"
@@ -1808,7 +1808,7 @@ TEST(map_set_method_key_access_lowers_with_global_evidence_id) {
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func =
-        lower_source_with_global_evidence("fn touch() -> int {\n"
+        lower_source_with_global_evidence("fn touch() -> i64 {\n"
                                           "    var scores = #{\"ada\": 7, \"lin\": 9}\n"
                                           "    var seen: Set<string> = #[\"ada\"]\n"
                                           "    scores.get(\"ada\")\n"
@@ -1925,11 +1925,11 @@ TEST(strong_source_node_identity_binds_same_line_calls_and_same_name_bodies) {
     XgGlobalEvidence ev;
     memset(&ev, 0, sizeof(ev));
     XiFunc *main_func = lower_source_with_global_evidence_ex(
-        "interface Valued { value() -> int }; "
-        "class Left implements Valued { value() -> int { return 1 } }; "
-        "class Right implements Valued { value() -> int { return 2 } }; "
-        "fn value() -> int { return 3 }; "
-        "fn exercise(left: Left, right: Right, named: Valued) -> int { "
+        "interface Valued { value() -> i64 }; "
+        "class Left implements Valued { value() -> i64 { return 1 } }; "
+        "class Right implements Valued { value() -> i64 { return 2 } }; "
+        "fn value() -> i64 { return 3 }; "
+        "fn exercise(left: Left, right: Right, named: Valued) -> i64 { "
         "return left.value() + right.value() + named.value() }",
         &ev, scramble_legacy_xi_identity_fields);
     REQUIRE_STRONG_IDENTITY(main_func != NULL, "source should lower with global evidence");
@@ -2039,13 +2039,13 @@ TEST(nested_body_identity_binds_method_calls_through_frozen_parent) {
     memset(&ev, 0, sizeof(ev));
     XiFunc *root = lower_source_with_global_evidence(
         "class Counter {\n"
-        "    value: int\n"
-        "    constructor(value: int) { this.value = value }\n"
-        "    read() -> int { return this.value }\n"
+        "    value: i64\n"
+        "    constructor(value: i64) { this.value = value }\n"
+        "    read() -> i64 { return this.value }\n"
         "}\n"
-        "fn exerciseNestedBody() -> int {\n"
+        "fn exerciseNestedBody() -> i64 {\n"
         "    const counter = Counter(7)\n"
-        "    const read = fn() -> int {\n"
+        "    const read = fn() -> i64 {\n"
         "        return counter.read()\n"
         "    }\n"
         "    return read()\n"
@@ -2099,7 +2099,7 @@ TEST(nested_body_identity_binds_method_calls_through_frozen_parent) {
 }
 
 TEST(nested_function) {
-    XiFunc *f = lower_source("fn add(a: int, b: int) -> int {\n"
+    XiFunc *f = lower_source("fn add(a: i64, b: i64) -> i64 {\n"
                              "    return a + b\n"
                              "}\n"
                              "var r = add(1, 2)\n"
@@ -2127,7 +2127,7 @@ TEST(nested_function) {
 }
 
 TEST(function_expr) {
-    XiFunc *f = lower_source("var double = fn(x: int) -> int { return x * 2 }\n"
+    XiFunc *f = lower_source("var double = fn(x: i64) -> i64 { return x * 2 }\n"
                              "var r = double(5)\n"
                              "print(r)\n");
     assert(f != NULL);
@@ -2139,8 +2139,8 @@ TEST(function_expr) {
 }
 
 TEST(multiple_functions) {
-    XiFunc *f = lower_source("fn foo() -> int { return 1 }\n"
-                             "fn bar() -> int { return 2 }\n"
+    XiFunc *f = lower_source("fn foo() -> i64 { return 1 }\n"
+                             "fn bar() -> i64 { return 2 }\n"
                              "print(foo() + bar())\n");
     assert(f != NULL);
     assert(f->nchildren == 2);
@@ -2162,7 +2162,7 @@ TEST(template_string) {
 }
 
 TEST(go_await) {
-    XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
+    XiFunc *f = lower_source("fn work() -> i64 { return 42 }\n"
                              "var t = go work()\n"
                              "var r = await t\n"
                              "print(r)\n");
@@ -2193,8 +2193,8 @@ TEST(go_await) {
 TEST(local_class_cycle_storage_domain) {
     XiFunc *f = lower_source("class Node {\n"
                              "  peer: Node?\n"
-                             "  value: int\n"
-                             "  constructor(value: int) { this.peer = null; this.value = value }\n"
+                             "  value: i64\n"
+                             "  constructor(value: i64) { this.peer = null; this.value = value }\n"
                              "}\n"
                              "fn localPair() {\n"
                              "  var left = Node(1)\n"
@@ -2249,7 +2249,7 @@ TEST(local_class_cycle_storage_domain) {
 #undef STORAGE_DOMAIN_REQUIRE
 
 TEST(direct_await_go_one_shot) {
-    XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
+    XiFunc *f = lower_source("fn work() -> i64 { return 42 }\n"
                              "var r = await go work()\n"
                              "print(r)\n");
     assert(f != NULL);
@@ -2266,7 +2266,7 @@ TEST(direct_await_go_one_shot) {
 }
 
 TEST(unique_result_task_await_consumes_handle) {
-    XiFunc *f = lower_source("fn values() -> Array<int> { return [1, 2, 3] }\n"
+    XiFunc *f = lower_source("fn values() -> Array<i64> { return [1, 2, 3] }\n"
                              "fn run() {\n"
                              "  var task = go values()\n"
                              "  var result = await task\n"
@@ -2295,7 +2295,7 @@ TEST(unique_result_task_await_consumes_handle) {
     } while (0)
 
 TEST(tuple_result_task_await_consumes_handle) {
-    XiFunc *f = lower_source("fn pair() -> (int, int) { return (10, 20) }\n"
+    XiFunc *f = lower_source("fn pair() -> (i64, i64) { return (10, 20) }\n"
                              "var task = go pair()\n"
                              "var result = await task\n"
                              "print(result)\n");
@@ -2315,7 +2315,7 @@ TEST(tuple_result_task_await_consumes_handle) {
 #undef TUPLE_TASK_REQUIRE
 
 TEST(copy_struct_task_result_plans_shared_publication) {
-    XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
+    XiFunc *f = lower_source("struct Pair { a: i64; b: i64 }\n"
                              "fn pair() -> Pair { return Pair{a: 10, b: 20} }\n"
                              "var task = go pair()\n"
                              "var result = await task\n"
@@ -2330,7 +2330,7 @@ TEST(copy_struct_task_result_plans_shared_publication) {
            "Copy result Task remains multi-observer");
     xi_func_free(f);
 
-    XiFunc *object_f = lower_source("type PairObject = { a: int, b: int }\n"
+    XiFunc *object_f = lower_source("type PairObject = { a: i64, b: i64 }\n"
                                     "fn objectPair() -> PairObject { return {a: 10, b: 20} }\n"
                                     "var objectTask = go objectPair()\n"
                                     "var objectResult = await objectTask\n"
@@ -2347,7 +2347,7 @@ TEST(copy_struct_task_result_plans_shared_publication) {
 }
 
 TEST(go_arg_transfer_modes) {
-    XiFunc *copy_ir = lower_source("fn worker(xs: Array<int>) -> int { return len(xs) }\n"
+    XiFunc *copy_ir = lower_source("fn worker(xs: Array<i64>) -> i64 { return len(xs) }\n"
                                    "var xs = [1, 2]\n"
                                    "var task = go worker(copy(xs))\n"
                                    "print(await task)\n");
@@ -2361,9 +2361,9 @@ TEST(go_arg_transfer_modes) {
            "go boundary copy(...) must not lower to a separate copy op before GO");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("fn take(xs: move Array<int>) -> int { return len(xs) }\n"
+    XiFunc *move_ir = lower_source("fn take(xs: move Array<i64>) -> i64 { return len(xs) }\n"
                                    "fn moveCase() {\n"
-                                   "  var xs: Array<int> = [1, 2]\n"
+                                   "  var xs: Array<i64> = [1, 2]\n"
                                    "  var task = go take(move xs)\n"
                                    "  print(await task)\n"
                                    "}\n"
@@ -2377,8 +2377,8 @@ TEST(go_arg_transfer_modes) {
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *share_ir = lower_source("fn observe(ch: Channel<int>) -> int { return 1 }\n"
-                                    "var ch = Channel<int>(1)\n"
+    XiFunc *share_ir = lower_source("fn observe(ch: Channel<i64>) -> i64 { return 1 }\n"
+                                    "var ch = Channel<i64>(1)\n"
                                     "var task = go observe(ch)\n"
                                     "print(await task)\n");
     assert(share_ir != NULL);
@@ -2388,7 +2388,7 @@ TEST(go_arg_transfer_modes) {
            "sync-handle go arguments should be encoded as zero-copy SHARE transfer");
     xi_func_free(share_ir);
 
-    XiFunc *string_ir = lower_source("fn consume(value: string) -> int { return len(value) }\n"
+    XiFunc *string_ir = lower_source("fn consume(value: string) -> i64 { return len(value) }\n"
                                      "var task = go consume(\"hello\")\n"
                                      "print(await task)\n");
     assert(string_ir != NULL);
@@ -2401,7 +2401,7 @@ TEST(go_arg_transfer_modes) {
 TEST(hoisted_sync_handle_capture_is_shared) {
     XiFunc *f = lower_source("fn launch() {\n"
                              "  const gate = Atomic(0)\n"
-                             "  fn worker() -> int { return gate.load() }\n"
+                             "  fn worker() -> i64 { return gate.load() }\n"
                              "  var task = go worker()\n"
                              "  print(await task)\n"
                              "}\n"
@@ -2421,7 +2421,7 @@ TEST(hoisted_sync_handle_capture_is_shared) {
 }
 
 TEST(channel_send_transfer_modes) {
-    XiFunc *copy_ir = lower_source("const ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *copy_ir = lower_source("const ch: Channel<Array<i64>> = Channel(1)\n"
                                    "var xs = [1, 2]\n"
                                    "ch.send(copy(xs))\n");
     assert(copy_ir != NULL);
@@ -2433,9 +2433,9 @@ TEST(channel_send_transfer_modes) {
            "channel boundary copy(...) must not lower to a separate copy op before send");
     xi_func_free(copy_ir);
 
-    XiFunc *move_ir = lower_source("const ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *move_ir = lower_source("const ch: Channel<Array<i64>> = Channel(1)\n"
                                    "fn sendMove() {\n"
-                                   "  var xs: Array<int> = [1, 2]\n"
+                                   "  var xs: Array<i64> = [1, 2]\n"
                                    "  ch.send(move xs)\n"
                                    "}\n"
                                    "sendMove()\n");
@@ -2448,7 +2448,7 @@ TEST(channel_send_transfer_modes) {
            "move transfer should still consume source ownership");
     xi_func_free(move_ir);
 
-    XiFunc *try_ir = lower_source("const ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *try_ir = lower_source("const ch: Channel<Array<i64>> = Channel(1)\n"
                                   "var xs = [1, 2]\n"
                                   "print(ch.trySend(copy(xs)))\n");
     assert(try_ir != NULL);
@@ -2458,7 +2458,7 @@ TEST(channel_send_transfer_modes) {
            "copy(...) at trySend boundary must be encoded as COPY transfer");
     xi_func_free(try_ir);
 
-    XiFunc *timeout_ir = lower_source("const ch: Channel<Array<int>> = Channel(1)\n"
+    XiFunc *timeout_ir = lower_source("const ch: Channel<Array<i64>> = Channel(1)\n"
                                       "var xs = [1, 2]\n"
                                       "print(ch.sendTimeout(copy(xs), 0))\n");
     assert(timeout_ir != NULL);
@@ -2468,7 +2468,7 @@ TEST(channel_send_transfer_modes) {
            "copy(...) at sendTimeout boundary must be encoded as COPY transfer");
     xi_func_free(timeout_ir);
 
-    XiFunc *tuple_ir = lower_source("const ch: Channel<(int, string)> = Channel(1)\n"
+    XiFunc *tuple_ir = lower_source("const ch: Channel<(i64, string)> = Channel(1)\n"
                                     "ch.send(copy((1, \"value\")))\n");
     assert(tuple_ir != NULL);
     XiValue *tuple_send = func_tree_find_op(tuple_ir, XI_CHAN_SEND);
@@ -2513,7 +2513,7 @@ TEST(defer_block_uses_late_binding) {
 }
 
 TEST(defer_loop_cleanup_place_dominates_zero_iteration_exit) {
-    XiFunc *f = lower_source("fn run(count: int) -> int {\n"
+    XiFunc *f = lower_source("fn run(count: i64) -> i64 {\n"
                              "  var observed = 0\n"
                              "  for (var i = 0; i < count; i = i + 1) {\n"
                              "    defer { observed = observed + 1 }\n"
@@ -2547,7 +2547,7 @@ TEST(set_literal) {
 
 TEST(is_expr) {
     XiFunc *f = lower_source("var x = 42\n"
-                             "var ok = x is int\n"
+                             "var ok = x is i64\n"
                              "print(ok)\n");
     assert(f != NULL);
     XiValue *found_is = NULL;
@@ -2564,11 +2564,11 @@ TEST(is_expr) {
 TEST(is_fixed_width_and_union_patterns_reify_runtime_targets) {
     XiFunc *f = lower_source("var erased: JSON.Value = 7\n"
                              "print(erased is i32)\n"
-                             "var value: int | float = 1\n"
-                             "print(value is int)\n"
+                             "var value: i64 | f64 = 1\n"
+                             "print(value is i64)\n"
                              "match (value) {\n"
-                             "  is float -> print(0),\n"
-                             "  is int -> print(1),\n"
+                             "  is f64 -> print(0),\n"
+                             "  is i64 -> print(1),\n"
                              "}\n");
     assert(f != NULL);
     int found = 0;
@@ -2590,7 +2590,7 @@ TEST(is_fixed_width_and_union_patterns_reify_runtime_targets) {
 TEST(slice_expr) {
     XiFunc *f = lower_source("fn sliceLocal() {\n"
                              "  var arr = [1, 2, 3, 4]\n"
-                             "  var sub: Slice<int> = arr[1:3]\n"
+                             "  var sub: Slice<i64> = arr[1:3]\n"
                              "  print(sub)\n"
                              "}\n"
                              "sliceLocal()\n");
@@ -2639,8 +2639,8 @@ TEST(optional_chain) {
 }
 
 TEST(optional_call) {
-    XiFunc *f = lower_source("type IntFn = fn(int) -> int\n"
-                             "fn bump(x: int) -> int { return x + 1 }\n"
+    XiFunc *f = lower_source("type IntFn = fn(i64) -> i64\n"
+                             "fn bump(x: i64) -> i64 { return x + 1 }\n"
                              "var fnv: IntFn? = bump\n"
                              "var n = fnv?.(41)\n"
                              "print(n)\n");
@@ -2652,8 +2652,8 @@ TEST(optional_call) {
 
 TEST(struct_literal) {
     XiFunc *f = lower_source("struct Point {\n"
-                             "    x: float\n"
-                             "    y: float\n"
+                             "    x: f64\n"
+                             "    y: f64\n"
                              "}\n"
                              "var p = Point{x: 1.0, y: 2.0}\n"
                              "print(p)\n");
@@ -2675,10 +2675,10 @@ TEST(struct_literal) {
 
 TEST(struct_literal_inside_function) {
     XiFunc *f = lower_source("struct Pair {\n"
-                             "    a: int\n"
-                             "    b: int\n"
+                             "    a: i64\n"
+                             "    b: i64\n"
                              "}\n"
-                             "fn run() -> int {\n"
+                             "fn run() -> i64 {\n"
                              "    var p = Pair{a: 1, b: 2}\n"
                              "    return p.a + p.b\n"
                              "}\n"
@@ -2695,9 +2695,9 @@ TEST(struct_literal_inside_function) {
 TEST(zero_arg_struct_with_methods_lowers_to_value_aggregate) {
     XiFunc *f =
         lower_source("struct Vec2 {\n"
-                     "    x: float\n"
-                     "    y: float\n"
-                     "    magnitudeSq() -> float { return this.x * this.x + this.y * this.y }\n"
+                     "    x: f64\n"
+                     "    y: f64\n"
+                     "    magnitudeSq() -> f64 { return this.x * this.x + this.y * this.y }\n"
                      "}\n"
                      "fn make() -> Vec2 { return Vec2() }\n"
                      "print(make().magnitudeSq())\n");
@@ -2718,9 +2718,9 @@ TEST(unresolved_struct_literal_does_not_lower_to_json) {
 
 TEST(struct_field_store_narrows_scalar_rep) {
     XiFunc *f = lower_source("struct Sample {\n"
-                             "    octet: byte\n"
+                             "    octet: u8\n"
                              "}\n"
-                             "fn run() -> byte {\n"
+                             "fn run() -> u8 {\n"
                              "    var p = Sample{octet: 200}\n"
                              "    p.octet = p.octet + 1\n"
                              /* Returns the field as-is: the narrowing under test
@@ -2743,15 +2743,15 @@ TEST(struct_field_store_narrows_scalar_rep) {
 
 TEST(struct_method_receivers_use_call_bound_places) {
     XiFunc *f = lower_source("struct Counter {\n"
-                             "    value: int\n"
-                             "    bump(delta: int) {\n"
+                             "    value: i64\n"
+                             "    bump(delta: i64) {\n"
                              "        this.value = this.value + delta\n"
                              "    }\n"
-                             "    read() -> int {\n"
+                             "    read() -> i64 {\n"
                              "        return this.value\n"
                              "    }\n"
                              "}\n"
-                             "fn exercise() -> int {\n"
+                             "fn exercise() -> i64 {\n"
                              "    var counter = Counter{value: 1}\n"
                              "    counter.bump(2)\n"
                              "    return counter.read()\n"
@@ -2778,10 +2778,10 @@ TEST(struct_method_receivers_use_call_bound_places) {
 TEST(large_mutable_struct_local_reuses_stable_place) {
     XiFunc *f = lower_source("struct State {\n"
                              "    lanes: [u64; 8]\n"
-                             "    bump(index: int, delta: u64) {\n"
+                             "    bump(index: i64, delta: u64) {\n"
                              "        this.lanes[index] = this.lanes[index] + delta\n"
                              "    }\n"
-                             "    read(index: int) -> u64 {\n"
+                             "    read(index: i64) -> u64 {\n"
                              "        return this.lanes[index]\n"
                              "    }\n"
                              "}\n"
@@ -2815,7 +2815,7 @@ TEST(large_mutable_struct_local_reuses_stable_place) {
 TEST(large_readonly_struct_local_stays_in_ssa) {
     XiFunc *f = lower_source("struct State {\n"
                              "    lanes: [u64; 8]\n"
-                             "    read(index: int) -> u64 { return this.lanes[index] }\n"
+                             "    read(index: i64) -> u64 { return this.lanes[index] }\n"
                              "}\n"
                              "fn exercise() -> u64 {\n"
                              "    var state = State{lanes: [1, 2, 3, 4, 5, 6, 7, 8]}\n"
@@ -2911,13 +2911,13 @@ TEST(struct_method_fixed_array_args_preserve_caller_places) {
 }
 
 TEST(collection_storage_mutators_take_owned_value_struct_copies) {
-    XiFunc *f = lower_source("struct Point { x: int }\n"
-                             "fn exercise(point: Point) -> int {\n"
+    XiFunc *f = lower_source("struct Point { x: i64 }\n"
+                             "fn exercise(point: Point) -> i64 {\n"
                              "    var points: Array<Point> = [Point{x: 0}]\n"
                              "    points.push(point)\n"
                              "    points.unshift(point)\n"
                              "    points.fill(point)\n"
-                             "    var byId: Map<int, Point> = #{}\n"
+                             "    var byId: Map<i64, Point> = #{}\n"
                              "    byId.set(1, point)\n"
                              "    return points[0].x + byId[1].x\n"
                              "}\n"
@@ -2951,11 +2951,11 @@ TEST(collection_storage_mutators_take_owned_value_struct_copies) {
 }
 
 TEST(read_value_struct_param_uses_internal_call_place) {
-    XiFunc *f = lower_source("struct Pair { a: int; b: int }\n"
-                             "fn sum(p: Pair) -> int {\n"
+    XiFunc *f = lower_source("struct Pair { a: i64; b: i64 }\n"
+                             "fn sum(p: Pair) -> i64 {\n"
                              "    return p.a + p.b\n"
                              "}\n"
-                             "fn exercise() -> int {\n"
+                             "fn exercise() -> i64 {\n"
                              "    var pair = Pair{a: 1, b: 2}\n"
                              "    return sum(pair)\n"
                              "}\n"
@@ -2976,14 +2976,14 @@ TEST(read_value_struct_param_uses_internal_call_place) {
 }
 
 TEST(as_to_scalar_rep_int_lowers_to_narrow) {
-    XiFunc *f = lower_source("fn run(i: int) -> int {\n"
+    XiFunc *f = lower_source("fn run(i: i64) -> i64 {\n"
                              "    var v = i as u16\n"
-                             "    return int(v)\n"
+                             "    return i64(v)\n"
                              "}\n"
                              "print(run(65537))\n");
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_NARROW_U16) &&
-           "int as u16 should lower to native-width narrowing");
+           "i64 as u16 should lower to native-width narrowing");
     assert(!func_tree_has_op(f, XI_AS) && "numeric width cast should not use tagged XI_AS");
     XiValue *narrow = func_tree_find_op(f, XI_NARROW_U16);
     assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
@@ -3013,7 +3013,7 @@ TEST(codegen_controls_lower_to_first_class_semantic_ops) {
 }
 
 TEST(numeric_as_carries_typed_conversion_evidence) {
-    XiFunc *f = lower_source("fn run(x: float, y: u64) -> u8 {\n"
+    XiFunc *f = lower_source("fn run(x: f64, y: u64) -> u8 {\n"
                              "    var rounded = y as f64\n"
                              "    return x as u8\n"
                              "}\n"
@@ -3023,7 +3023,7 @@ TEST(numeric_as_carries_typed_conversion_evidence) {
     assert(convert && convert->conversion.kind == XR_CONVERSION_EXPLICIT_INT_FLOAT &&
            convert->conversion.source_scalar_rep == XR_NATIVE_U64 &&
            convert->conversion.target_scalar_rep == XR_NATIVE_F64 &&
-           "integer-to-float lowering must retain the analyzer conversion witness");
+           "integer-to-f64 lowering must retain the analyzer conversion witness");
     XiFunc *run = func_tree_find_func_name(f, "run");
     XiValue *float_to_int = NULL;
     for (uint32_t b = 0; run && b < run->nblocks; b++) {
@@ -3037,7 +3037,7 @@ TEST(numeric_as_carries_typed_conversion_evidence) {
     }
     assert(float_to_int && float_to_int->conversion.kind == XR_CONVERSION_EXPLICIT_INT_FLOAT &&
            (float_to_int->flags & XI_FLAG_MAY_THROW) != 0 &&
-           "float-to-int lowering must retain overflow behavior in Xi");
+           "f64-to-i64 lowering must retain overflow behavior in Xi");
     assert(!func_tree_has_op(f, XI_AS) && "numeric casts must never lower through XI_AS");
     xi_func_free(f);
 }
@@ -3086,7 +3086,7 @@ TEST(implicit_numeric_boundaries_carry_lossless_widen_evidence) {
 }
 
 TEST(force_unwrap) {
-    XiFunc *f = lower_source("var x: int? = 42\n"
+    XiFunc *f = lower_source("var x: i64? = 42\n"
                              "var y = x!\n"
                              "print(y)\n");
     assert(f != NULL);
@@ -3188,7 +3188,7 @@ TEST(yield_stmt) {
 }
 
 TEST(canonical_effect_sidecars_reach_xi) {
-    XiFunc *f = lower_source("fn grow(data: ref Array<int>) { data.push(1) }\n");
+    XiFunc *f = lower_source("fn grow(data: ref Array<i64>) { data.push(1) }\n");
     assert(f != NULL);
     XiFunc *grow = func_tree_find_func_name(f, "grow");
     assert(grow != NULL);

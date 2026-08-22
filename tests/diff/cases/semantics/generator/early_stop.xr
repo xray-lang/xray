@@ -3,7 +3,7 @@
 // does not run (LANGUAGE_SPEC 3.16.3). VM and AOT must agree on exactly how much
 // of the body executed, which is what makes the laziness observable.
 
-fn trace(n: int) -> Iterator<int> {
+fn trace(n: i64) -> Iterator<i64> {
     print("enter")
     for (var i = 0; i < n; i++) {
         print("produce " + string(i))

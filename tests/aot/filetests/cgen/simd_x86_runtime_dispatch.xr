@@ -25,7 +25,7 @@ fn runtimeSelected() -> bool {
 }
 
 struct Runner {
-    marker: int
+    marker: i64
 
     wide(values: U64x4) -> u64 {
         return sumWideIsland(values)

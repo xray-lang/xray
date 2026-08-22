@@ -1,12 +1,12 @@
 class Cell {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
-fn opaque_mix(x: int) -> int {
+fn opaque_mix(x: i64) -> i64 {
     var acc = x
     for (var i = 0; i < 4; i++) {
         acc = (acc * 13 + i * 11) % 97
@@ -14,7 +14,7 @@ fn opaque_mix(x: int) -> int {
     return acc
 }
 
-fn run(cell: Cell, rounds: int) -> int {
+fn run(cell: Cell, rounds: i64) -> i64 {
     var total = 0
     for (var i = 0; i < rounds; i++) {
         total = total + cell.value

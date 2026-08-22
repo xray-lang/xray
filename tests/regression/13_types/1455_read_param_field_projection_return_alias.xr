@@ -1,12 +1,12 @@
 class Holder {
-    items: Array<int>
+    items: Array<i64>
 
     constructor() {
         this.items = [1, 2]
     }
 }
 
-fn leak(holder: Holder) -> Array<int> {
+fn leak(holder: Holder) -> Array<i64> {
     return holder.items
 }
 

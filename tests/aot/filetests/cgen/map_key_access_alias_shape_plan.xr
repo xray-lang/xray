@@ -1,8 +1,8 @@
-fn updateAlias() -> int {
+fn updateAlias() -> i64 {
     var scores = #{"ada": 7, "lin": 9}
     var alias = scores
     alias["ada"] = 8
-    var assigned: Map<string, int> = #{}
+    var assigned: Map<string, i64> = #{}
     assigned = alias
     return assigned["ada"]
 }

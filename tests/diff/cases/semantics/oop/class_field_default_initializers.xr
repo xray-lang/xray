@@ -9,8 +9,8 @@
 // `Scalars().i` read back 0 in a native build and 10 under the VM.
 
 class Scalars {
-    i: int = 10
-    f: float = 1.5
+    i: i64 = 10
+    f: f64 = 1.5
     b: bool = true
     s: string = "hi"
 }
@@ -20,14 +20,14 @@ class Scalars {
 class Boxed {
     n: string? = null
     tag: string = "boxed"
-    count: int = 3
+    count: i64 = 3
 }
 
 // Defaults are applied before the constructor body: `kept` survives, `taken`
 // is overwritten.
 class WithCtor {
-    kept: int = 10
-    taken: int = 20
+    kept: i64 = 10
+    taken: i64 = 20
 
     constructor() {
         this.taken = 99
@@ -35,12 +35,12 @@ class WithCtor {
 }
 
 class Parent {
-    p: int = 5
+    p: i64 = 5
     label: string = "parent"
 }
 
 class Child extends Parent {
-    c: int = 6
+    c: i64 = 6
 }
 
 // A subclass that declares no fields of its own still inherits the defaults.

@@ -1,14 +1,14 @@
 import test_yield
 
-fn simpleTask() -> int {
+fn simpleTask() -> i64 {
     return test_yield.simple()
 }
 
-fn addTask() -> int {
+fn addTask() -> i64 {
     return test_yield.add(19, 23)
 }
 
-fn incrementTask() -> int {
+fn incrementTask() -> i64 {
     return test_yield.counter_inc()
 }
 

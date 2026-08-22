@@ -5,8 +5,8 @@ class GraphemeProbe {
         this.text = text
     }
 
-    graphemes() -> Iterator<Slice<byte>> {
-        var view: Slice<byte> = this.text.bytes()
+    graphemes() -> Iterator<Slice<u8>> {
+        var view: Slice<u8> = this.text.bytes()
         if (len(view) > 0) {
             print(len(view))
         }

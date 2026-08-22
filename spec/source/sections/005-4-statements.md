@@ -54,7 +54,7 @@ if (x > 0) {
 
 **约束**：
 - 条件**必须**用括号包裹（与 Go/Rust 不同）。
-- 条件必须是 `bool` 或 `T?`（`T != bool`）存在性检查；`bool?` 与裸 `int` / `string` / 集合等均为编译错误（见 §2.3.3）。
+- 条件必须是 `bool` 或 `T?`（`T != bool`）存在性检查；`bool?` 与裸 `i64` / `string` / 集合等均为编译错误（见 §2.3.3）。
 - 分支体必须是块 `{...}`，**不允许**单语句省略括号。
 - `if` 不是表达式；要表达式形式用三元 `? :` 或 `match`。
 
@@ -147,7 +147,7 @@ for ((i, c) in "hi".entries()) { print("${i}-${c}") }
 | `Map<K, V>` | key | (key, value) |
 | `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
-| `Range`（`a..b`） | int | — |
+| `Range`（`a..b`） | i64 | — |
 | 仅含无 payload 变体的具体 enum 类型 `E` | `E` 的实际值（声明顺序） | — |
 | 含 payload 变体的 enum 类型 `E` | **编译错误**；使用 `E.variants` | — |
 | `EnumVariants<E>` | `EnumVariant<E>` 描述符（声明顺序） | — |
@@ -224,11 +224,11 @@ fn done() {
     return                 // 隐式返回 ()（Unit）
 }
 
-fn answer() -> int {
+fn answer() -> i64 {
     return 42
 }
 
-fn pair(a: int, b: int) -> (int, int) {
+fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // 多返回值，必须用括号包裹元组
 }
 ```
@@ -250,7 +250,7 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray @id=stmt-try
-enum AppError { NotFound, Timeout(ms: int) }
+enum AppError { NotFound, Timeout(ms: i64) }
 
 // 可恢复错误：enum 值经值返回通道传播，由 catch (e) 捕获
 try { throw AppError.NotFound } catch (e) {
@@ -341,7 +341,7 @@ dump(some_obj)                 // 调试输出，含类型信息与结构布局
 综合 `if` / `match` / `for-in` 的控制流：
 
 ```xray
-fn classify(n: int) -> string {
+fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
         0 -> "zero"
@@ -421,7 +421,7 @@ if (x > 0) {
 
 **Constraints**:
 - The condition **must** be parenthesized (unlike Go/Rust).
-- The condition must be `bool` or nullable presence `T?` (`T != bool`); bare `bool?`, `int`, `string`, collections, etc. are compile errors (see §2.3.3).
+- The condition must be `bool` or nullable presence `T?` (`T != bool`); bare `bool?`, `i64`, `string`, collections, etc. are compile errors (see §2.3.3).
 - Branch bodies must be blocks `{...}`; **no** single-statement-without-braces form.
 - `if` is not an expression; for an expression form use the ternary `? :` or `match`.
 
@@ -514,7 +514,7 @@ Iteration source / yield mapping:
 | `Map<K, V>` | key | (key, value) |
 | `JSON.Object` / Map | key | (key, value) |
 | `string` | `rune` | (index, rune) |
-| `Range` (`a..b`) | int | — |
+| `Range` (`a..b`) | i64 | — |
 | Concrete enum type `E` with unit-only variants | actual `E` values (declaration order) | — |
 | Enum type `E` containing a payload variant | **compile error**; use `E.variants` | — |
 | `EnumVariants<E>` | `EnumVariant<E>` descriptors (declaration order) | — |
@@ -591,11 +591,11 @@ fn done() {
     return                 // implicitly returns () (Unit)
 }
 
-fn answer() -> int {
+fn answer() -> i64 {
     return 42
 }
 
-fn pair(a: int, b: int) -> (int, int) {
+fn pair(a: i64, b: i64) -> (i64, i64) {
     return (a, b)          // multi-value return must wrap a tuple in parens
 }
 ```
@@ -617,7 +617,7 @@ CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
 ```
 
 ```xray @id=stmt-try
-enum AppError { NotFound, Timeout(ms: int) }
+enum AppError { NotFound, Timeout(ms: i64) }
 
 // Recoverable errors: enum values flow through the value-return channel,
 // caught by catch (e)
@@ -710,7 +710,7 @@ dump(some_obj)                 // debug output, with type info and structure
 Combining `if` / `match` / `for-in` control flow:
 
 ```xray
-fn classify(n: int) -> string {
+fn classify(n: i64) -> string {
     if (n < 0) { return "negative" }
     return match (n) {
         0 -> "zero"

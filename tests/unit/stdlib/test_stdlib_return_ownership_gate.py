@@ -23,15 +23,15 @@ from stdlibgen import (  # noqa: E402
 class ReturnOwnershipManifestTests(unittest.TestCase):
     def test_nested_signature_shape_is_parsed_at_top_level(self) -> None:
         params, result = parse_function_signature_shape(
-            "(callback: fn(Array<int>): string, value: int): Array<string>?"
+            "(callback: fn(Array<i64>): string, value: i64): Array<string>?"
         )
         self.assertEqual(2, len(params))
         self.assertEqual("Array<string>?", result)
 
     def test_reference_capable_shapes_require_contracts(self) -> None:
-        for result in ("string", "Array<int>?", "Channel", "any", "(int, string)"):
+        for result in ("string", "Array<i64>?", "Channel", "any", "(i64, string)"):
             self.assertTrue(return_type_requires_ownership_contract(result), result)
-        for result in ("()", "bool", "int?", "float", "Ptr<byte>?", "Slice<int>"):
+        for result in ("()", "bool", "i64?", "f64", "Ptr<u8>?", "Slice<i64>"):
             self.assertFalse(return_type_requires_ownership_contract(result), result)
 
     def test_repository_manifest_has_no_implicit_reference_returns(self) -> None:

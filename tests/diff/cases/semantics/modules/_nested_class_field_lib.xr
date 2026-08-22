@@ -1,7 +1,7 @@
 export class Inner {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
@@ -9,7 +9,7 @@ export class Inner {
 export class Outer {
     inner: Inner
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.inner = Inner(value)
     }
 }

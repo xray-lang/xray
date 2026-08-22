@@ -1,1 +1,1 @@
-var b: byte = 256
+var b: u8 = 256

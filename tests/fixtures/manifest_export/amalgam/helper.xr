@@ -5,12 +5,12 @@ export class Label {
         this.text = text
     }
 
-    length() -> int {
+    length() -> i64 {
         return len(this.text)
     }
 }
 
-export fn helperLength() -> int {
+export fn helperLength() -> i64 {
     var label = Label("helper")
     return label.length()
 }

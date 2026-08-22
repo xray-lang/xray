@@ -11,7 +11,7 @@
 // by a hard-coded number, so editing this file cannot silently retarget it.
 import os
 
-fn compute(a: int, b: int) -> int {
+fn compute(a: i64, b: i64) -> i64 {
     var s = a + b
     return s
 }

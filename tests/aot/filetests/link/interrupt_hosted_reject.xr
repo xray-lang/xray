@@ -2,7 +2,7 @@ extern "C" {
     fn xray_timer_irq()
 }
 
-fn answer() -> int {
+fn answer() -> i64 {
     return 42
 }
 

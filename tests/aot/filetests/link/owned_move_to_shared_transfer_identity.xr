@@ -1,5 +1,5 @@
-fn publish_len() -> int {
-    var bytes = Array<byte>(3, 0)
+fn publish_len() -> i64 {
+    var bytes = Array<u8>(3, 0)
     bytes[0] = 1
     bytes[1] = 2
     bytes[2] = 3
@@ -8,8 +8,8 @@ fn publish_len() -> int {
     return len(frozen)
 }
 
-fn publish_grouped_len() -> int {
-    var bytes = Array<byte>(2, 0)
+fn publish_grouped_len() -> i64 {
+    var bytes = Array<u8>(2, 0)
     bytes[0] = 4
     bytes[1] = 5
 
@@ -17,12 +17,12 @@ fn publish_grouped_len() -> int {
     return len(frozen)
 }
 
-fn publish_cast_len() -> int {
-    var bytes = Array<byte>(2, 0)
+fn publish_cast_len() -> i64 {
+    var bytes = Array<u8>(2, 0)
     bytes[0] = 6
     bytes[1] = 7
 
-    const frozen = move bytes as Array<byte>
+    const frozen = move bytes as Array<u8>
     return len(frozen)
 }
 

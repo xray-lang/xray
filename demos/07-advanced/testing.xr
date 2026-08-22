@@ -35,7 +35,7 @@ fn test_arrays() {
 
 @test
 fn test_nullable() {
-    var x: int? = null
+    var x: i64? = null
     assert_eq(x, null)
     assert_eq(x ?? 42, 42)
 

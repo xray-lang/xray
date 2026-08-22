@@ -1,14 +1,14 @@
 import sys
 
-var xs = Array<int>(3, 0)
+var xs = Array<i64>(3, 0)
 xs[0] = 10
 xs[1] = 20
 xs[2] = 30
 
-var t = sys.Thread.spawn(fn() -> int {
+var t = sys.Thread.spawn(fn() -> i64 {
     return 2
 })
 
-var ys: Array<int> = copy(xs[0:t.join()])
+var ys: Array<i64> = copy(xs[0:t.join()])
 print(len(ys))
 print(ys[1])

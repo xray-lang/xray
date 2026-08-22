@@ -2,8 +2,8 @@ fn lookup<K: Hashable, V>(items: Map<K, V>, key: K, fallback: V) -> V {
     return items.get(key) ?? fallback
 }
 
-fn run(n: int) -> int {
-    var values: Map<int, int> = #{}
+fn run(n: i64) -> i64 {
+    var values: Map<i64, i64> = #{}
     var seed = 0
     while (seed < 64) {
         values.set(seed, (seed % 17) + 1)
@@ -13,7 +13,7 @@ fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        sum = sum + lookup<int, int>(values, i % 64, 0)
+        sum = sum + lookup<i64, i64>(values, i % 64, 0)
         i = i + 1
     }
     return sum

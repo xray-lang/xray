@@ -1,5 +1,5 @@
 // Object width rule at a return position: extra field is rejected.
-type Point = { x: int, y: int }
+type Point = { x: i64, y: i64 }
 
 fn make() -> Point { return { x: 1, y: 2, z: 3 } }
 

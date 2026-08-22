@@ -1,4 +1,4 @@
 import { dependencyValue } from "./modules/bytecode_build_entry_failure_lib"
 
-var invalid: int = "entry compilation must fail"
+var invalid: i64 = "entry compilation must fail"
 print(dependencyValue() + invalid)

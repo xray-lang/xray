@@ -1,9 +1,9 @@
-fn square_after_yield(n: int) -> int {
+fn square_after_yield(n: i64) -> i64 {
     Coro.yield()
     return n * n
 }
 
-fn recv_then_return(ch: Channel<int>, n: int) -> int {
+fn recv_then_return(ch: Channel<i64>, n: i64) -> i64 {
     ch.recv()
     return n
 }
@@ -14,8 +14,8 @@ var t3 = go square_after_yield(4)
 var results = await all [t1, t2, t3]
 print(results[0] + results[1] + results[2])
 
-const ch1 = Channel<int>(0)
-const ch2 = Channel<int>(1)
+const ch1 = Channel<i64>(0)
+const ch2 = Channel<i64>(1)
 var a = go recv_then_return(ch1, 10)
 var b = go recv_then_return(ch2, 20)
 ch2.send(1)

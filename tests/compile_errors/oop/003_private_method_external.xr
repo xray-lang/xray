@@ -1,5 +1,5 @@
 class Account {
-    private secret() -> int { return 42 }
+    private secret() -> i64 { return 42 }
     constructor() {}
 }
 var a = Account()

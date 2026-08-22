@@ -11,9 +11,9 @@ export enum ParallelError {
 }
 
 export class Options {
-    workers: int
+    workers: i64
 
-    constructor(workers: int = 0) {
+    constructor(workers: i64 = 0) {
         this.workers = workers
     }
 }
@@ -24,20 +24,20 @@ fn _checkOptions(options: Options) {
     }
 }
 
-fn _referenceLaneCount(options: Options) -> int {
+fn _referenceLaneCount(options: Options) -> i64 {
     _checkOptions(options)
     if (options.workers > 0) {
         return options.workers
     }
     return 1
 }
-export fn forEach(range: Range, body: fn(int), options: Options = Options()) {
+export fn forEach(range: Range, body: fn(i64), options: Options = Options()) {
     _checkOptions(options)
     for (offset in 0..range.count()) {
         body(range[offset])
     }
 }
-export fn map<T>(range: Range, body: fn(int) -> T, options: Options = Options()) -> Array<T> {
+export fn map<T>(range: Range, body: fn(i64) -> T, options: Options = Options()) -> Array<T> {
     _checkOptions(options)
     var out: Array<T> = []
     for (offset in 0..range.count()) {
@@ -45,14 +45,14 @@ export fn map<T>(range: Range, body: fn(int) -> T, options: Options = Options())
     }
     return out
 }
-export fn mapInto<T>(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()) {
+export fn mapInto<T>(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()) {
     _checkOptions(options)
     output.clear()
     for (offset in 0..range.count()) {
         output.push(body(range[offset]))
     }
 }
-export fn reduce<A>(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()) -> A {
+export fn reduce<A>(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()) -> A {
     _checkOptions(options)
     var acc = initial
     for (offset in 0..range.count()) {
@@ -68,7 +68,7 @@ export class Plan<S> {
     private _active: bool
     private _releasePending: bool
 
-    constructor(options: Options, init: fn(int) -> S) {
+    constructor(options: Options, init: fn(i64) -> S) {
         var laneCount = _referenceLaneCount(options)
         var states: Array<S> = []
         for (lane in 0..laneCount) {
@@ -99,12 +99,12 @@ export class Plan<S> {
         }
     }
 
-    private _stateFor(offset: int) -> S {
+    private _stateFor(offset: i64) -> S {
         var laneCount = len(this._states)
         var lane = offset % laneCount
         return this._states[lane]
     }
-    forEach(range: Range, body: fn(S, int)) {
+    forEach(range: Range, body: fn(S, i64)) {
         this._begin()
         defer {
             this._end()
@@ -113,7 +113,7 @@ export class Plan<S> {
             body(this._stateFor(offset), range[offset])
         }
     }
-    map<T>(range: Range, body: fn(S, int) -> T) -> Array<T> {
+    map<T>(range: Range, body: fn(S, i64) -> T) -> Array<T> {
         this._begin()
         defer {
             this._end()
@@ -124,7 +124,7 @@ export class Plan<S> {
         }
         return out
     }
-    mapInto<T>(range: Range, output: ref Array<T>, body: fn(S, int) -> T) {
+    mapInto<T>(range: Range, output: ref Array<T>, body: fn(S, i64) -> T) {
         this._begin()
         defer {
             this._end()
@@ -134,7 +134,7 @@ export class Plan<S> {
             output.push(body(this._stateFor(offset), range[offset]))
         }
     }
-    reduce<A>(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A) -> A {
+    reduce<A>(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A) -> A {
         this._begin()
         defer {
             this._end()

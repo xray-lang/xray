@@ -21,7 +21,7 @@ assert(probeMakeAdder(10)(5) == 15)
 assert(probeApply(7, (v) -> v * 3) == 21)
 assert(probeReadBox(probeMakeBox("n", 5)) == "n:5")
 assert(ProbeBox.tagged("s", 3).describe() == "tag:s:3")
-assert(ProbeCell<int>(21).map((v) -> v * 2) == 42)
+assert(ProbeCell<i64>(21).map((v) -> v * 2) == 42)
 assert(probeMakeBag().labels() == "a:1|tag:b:2")
 print("{\"case\":\"shape-matrix\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
 

@@ -10,7 +10,7 @@ import {
 } from base64
 
 fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return base64.encode(view, options)
 }
 
@@ -125,7 +125,7 @@ fn test_encode_chinese() {
 
 @test
 fn test_encode_url_basic() {
-    var raw = Array<byte>(2)
+    var raw = Array<u8>(2)
     raw[0] = 251
     raw[1] = 255
     assert_eq(base64.encode(raw[:]), "+/8=")
@@ -222,7 +222,7 @@ fn test_forbidden_padding_rejects_padding() {
 
 @test
 fn test_encode_bytes_basic() {
-    var bytes = Array<byte>(3)
+    var bytes = Array<u8>(3)
     bytes[0] = 72   // 'H'
     bytes[1] = 101  // 'e'
     bytes[2] = 108  // 'l'
@@ -241,7 +241,7 @@ fn test_decode_to_bytes_basic() {
 
 @test
 fn test_byte_array_roundtrip() {
-    var original = Array<byte>(5)
+    var original = Array<u8>(5)
     original[0] = 0
     original[1] = 127
     original[2] = 255
@@ -264,7 +264,7 @@ fn test_decode_to_bytes_invalid() {
 
 @test
 fn test_encode_bytes_empty() {
-    var bytes = Array<byte>(0)
+    var bytes = Array<u8>(0)
     var encoded = base64.encode(bytes[:])
     assert_eq(encoded, "")
 }

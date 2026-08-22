@@ -1,4 +1,4 @@
 import mem
 
-var p = mem.ptr<byte>(0)
-unsafe { print(mem.load<Ptr<byte>>(p, 0, Endian.LE)) }
+var p = mem.ptr<u8>(0)
+unsafe { print(mem.load<Ptr<u8>>(p, 0, Endian.LE)) }

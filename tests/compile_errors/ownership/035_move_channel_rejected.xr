@@ -1,5 +1,5 @@
 fn main() {
-    const ch: Channel<int> = Channel(1)
+    const ch: Channel<i64> = Channel(1)
     var moved = move ch
     print(moved)
 }

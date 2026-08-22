@@ -1,9 +1,9 @@
 class Base {
-    private constructor(v: int) {}
+    private constructor(v: i64) {}
 }
 
 class Child extends Base {
-    constructor(v: int) {
+    constructor(v: i64) {
         super(v)
     }
 }

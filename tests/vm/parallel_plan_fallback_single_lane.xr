@@ -1,10 +1,10 @@
 import parallel
 
-const maxForState = Atomic<int>(0)
-const maxMapState = Atomic<int>(0)
-const maxReduceState = Atomic<int>(0)
+const maxForState = Atomic<i64>(0)
+const maxMapState = Atomic<i64>(0)
+const maxReduceState = Atomic<i64>(0)
 
-var plan = parallel.Plan<int>(parallel.Options(128), (lane) -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(128), (lane) -> lane)
 
 plan.forEach(0..128, (state, i) -> {
     if (state > maxForState.load(Ordering.Relaxed)) {

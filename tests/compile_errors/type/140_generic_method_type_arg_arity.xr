@@ -17,4 +17,4 @@ class C {
 }
 
 var c = C()
-print(c.id<int, string>(1))
+print(c.id<i64, string>(1))

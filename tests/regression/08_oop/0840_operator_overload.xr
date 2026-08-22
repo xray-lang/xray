@@ -5,8 +5,8 @@
 // ===== 加法运算符 =====
 
 class Vector2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
     
     constructor(x, y) {
         this.x = x
@@ -21,7 +21,7 @@ class Vector2 {
         return Vector2(this.x - other.x, this.y - other.y)
     }
     
-    operator*(scalar: float) -> Vector2 {
+    operator*(scalar: f64) -> Vector2 {
         return Vector2(this.x * scalar, this.y * scalar)
     }
     
@@ -70,17 +70,17 @@ fn test_operator_eq() {
 // ===== 下标运算符 =====
 
 class Matrix {
-    data: Array<int>
+    data: Array<i64>
     
     constructor() {
         this.data = [0, 0, 0, 0]
     }
     
-    operator[](index: int) -> int {
+    operator[](index: i64) -> i64 {
         return this.data[index]
     }
     
-    operator[]=(index: int, value: int) {
+    operator[]=(index: i64, value: i64) {
         this.data[index] = value
     }
 }
@@ -106,7 +106,7 @@ fn test_subscript_set() {
 // ===== 比较运算符 =====
 
 class Money {
-    amount: int
+    amount: i64
     
     constructor(amount) {
         this.amount = amount

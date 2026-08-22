@@ -517,8 +517,8 @@ class StaticChecker:
 
         # Primitive types should be lowercase
         primitives = {
-            'TYPE_NAME_INT': 'int',
-            'TYPE_NAME_FLOAT': 'float',
+            'TYPE_NAME_I64': 'int',
+            'TYPE_NAME_F64': 'float',
             'TYPE_NAME_STRING': 'string',
             'TYPE_NAME_BOOL': 'bool',
             'TYPE_NAME_NULL': 'null',

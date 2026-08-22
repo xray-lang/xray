@@ -1,12 +1,12 @@
 // Test TaskResult failure/success status
 // Author: xingleixu@gmail.com
 
-fn bad() -> int {
+fn bad() -> i64 {
     var x = 1 / 0
     return x
 }
 
-fn good() -> int {
+fn good() -> i64 {
     return 42
 }
 

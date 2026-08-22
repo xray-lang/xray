@@ -1,4 +1,4 @@
-fn count_args() -> int {
+fn count_args() -> i64 {
     Coro.yield()
     return len(process.args)
 }

@@ -227,7 +227,7 @@ XrValue h2_supported(XrVMRuntime *X, XrValue *args, int argc) {
 
 /*
  * http.__h2Request(url, method, headerNames, headerValues, body, timeoutMs)
- *     -> (int, Array<byte>)?
+ *     -> (int, Array<u8>)?
  */
 XrValue h2_request_typed(XrVMRuntime *X, XrValue *args, int argc) {
     if (argc < 6 || !XR_IS_STRING(args[0]) || !XR_IS_STRING(args[1]) || !XR_IS_ARRAY(args[2]) ||

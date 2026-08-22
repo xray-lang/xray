@@ -1,25 +1,25 @@
 class SeenSet {
-    values: Set<int>
+    values: Set<i64>
 
     constructor() {
-        var values: Set<int> = #[]
+        var values: Set<i64> = #[]
         this.values = values
     }
 
-    add(value: int) -> int {
+    add(value: i64) -> i64 {
         this.values.add(value)
         return len(this.values)
     }
 
-    contains(value: int) -> bool {
+    contains(value: i64) -> bool {
         return this.values.contains(value)
     }
 
-    remove(value: int) -> bool {
+    remove(value: i64) -> bool {
         return this.values.delete(value)
     }
 
-    count() -> int {
+    count() -> i64 {
         return len(this.values)
     }
 }

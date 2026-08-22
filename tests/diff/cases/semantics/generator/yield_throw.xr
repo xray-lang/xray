@@ -2,7 +2,7 @@ enum GenErr {
     Msg(s: string)
 }
 
-fn gen() -> Iterator<int> {
+fn gen() -> Iterator<i64> {
     yield 1
     throw GenErr.Msg("boom")
 }

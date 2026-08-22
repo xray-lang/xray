@@ -9,11 +9,11 @@ enum Color {
 
 enum Event {
     Ready,
-    Data(value: int),
+    Data(value: i64),
     Error(message: string)
 }
 
-fn firstPayloadVariantOrdinal() -> int {
+fn firstPayloadVariantOrdinal() -> i64 {
     for (variant in Event.variants) {
         if (!variant.isUnit) {
             return variant.ordinal
@@ -70,10 +70,10 @@ fn test_enum_descriptor_checked_indexing() {
 
 @test
 fn test_enum_descriptor_closure_capture_keeps_iteration_value() {
-    var readers: Array<fn() -> int> = []
+    var readers: Array<fn() -> i64> = []
     for (variant in Event.variants) {
         var captured = variant
-        fn readOrdinal() -> int {
+        fn readOrdinal() -> i64 {
             return captured.ordinal
         }
         readers.push(readOrdinal)

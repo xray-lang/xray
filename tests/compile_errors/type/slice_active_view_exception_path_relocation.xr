@@ -1,13 +1,13 @@
 enum Failure { Broken }
 
-fn grow(data: ref Array<byte>) {
+fn grow(data: ref Array<u8>) {
     data.push(99)
     throw Failure.Broken
 }
 
 fn main() {
-    var owner: Array<byte> = [1, 2]
-    var view: Slice<byte> = owner[:]
+    var owner: Array<u8> = [1, 2]
+    var view: Slice<u8> = owner[:]
     try {
         grow(ref owner)
     } catch (error: Failure) {

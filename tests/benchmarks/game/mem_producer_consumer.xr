@@ -7,7 +7,7 @@
 // Usage: xray gc_producer_consumer.xr -- [iterations]
 
 // Ring buffer queue using array
-fn createQueue(capacity: int) {
+fn createQueue(capacity: i64) {
     var data = []
     var i = 0
     while (i < capacity) {
@@ -31,7 +31,7 @@ fn dequeue(q) {
     return item
 }
 
-fn run(n: int) {
+fn run(n: i64) {
     var queueSize = 1000
 
     // Phase 1: Steady-state producer-consumer
@@ -108,5 +108,5 @@ fn run(n: int) {
     print("Phase 3 (cross-ref x" + (n * 100) + "): checksum=" + checksum)
 }
 
-var n = len(process.args) > 0 ? int(process.args[0]) ?? 500 : 500
+var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 500 : 500
 run(n)

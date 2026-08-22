@@ -1,6 +1,6 @@
 import sys
 
-fn makeLocal(init: fn() -> int) {
-    var local = sys.ThreadLocal<int>(init)
+fn makeLocal(init: fn() -> i64) {
+    var local = sys.ThreadLocal<i64>(init)
     print(local.get())
 }

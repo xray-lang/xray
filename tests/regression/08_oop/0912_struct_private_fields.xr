@@ -2,14 +2,14 @@
 // Expected: private fields accessible within struct methods, not from outside
 
 struct Account {
-    private _balance: float = 0.0
+    private _balance: f64 = 0.0
     name: string
 
-    deposit(amount: float) {
+    deposit(amount: f64) {
         this._balance = this._balance + amount
     }
 
-    withdraw(amount: float) -> bool {
+    withdraw(amount: f64) -> bool {
         if (amount > this._balance) {
             return false
         }
@@ -17,18 +17,18 @@ struct Account {
         return true
     }
 
-    balance() -> float {
+    balance() -> f64 {
         return this._balance
     }
 }
 struct Counter {
-    private _count: int = 0
+    private _count: i64 = 0
 
     increment() {
         this._count = this._count + 1
     }
 
-    count() -> int {
+    count() -> i64 {
         return this._count
     }
 

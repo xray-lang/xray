@@ -920,7 +920,6 @@
         "src/shared/xr_bits_core.h",
         "src/shared/xr_exact_scalar_registry.h",
         "src/shared/xr_numeric_conversion_core.h",
-        "src/shared/xr_scalar_type.h",
         "src/shared/xr_semantic_owner_ids_gen.h",
         "src/vm/xvm.c",
         "src/vm/xvm_dispatch_collection.inc.c",

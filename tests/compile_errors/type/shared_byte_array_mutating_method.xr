@@ -1,2 +1,2 @@
-const bytes = copy(Array<byte>(2, 0))
+const bytes = copy(Array<u8>(2, 0))
 bytes.appendFrom(bytes[:])

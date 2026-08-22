@@ -10,7 +10,7 @@
 // arguments and the two paths must print the same digits.
 import math
 
-fn pinned(low: int) -> int {
+fn pinned(low: i64) -> i64 {
     return math.randomInt(low, low)
 }
 

@@ -32,7 +32,7 @@ fn rotate(perm, n) {
 }
 
 // 计算单个排列的翻转次数
-fn countFlips(perm, n): int {
+fn countFlips(perm, n): i64 {
     // 复制数组
     var work = []
     for (var i = 0; i < n; i++) {
@@ -107,6 +107,6 @@ fn fannkuch(n) {
 // 获取命令行参数或使用默认值
 var n = 10
 if (len(process.args) > 0) {
-    n = int(process.args[0])
+    n = i64.parse(process.args[0])
 }
 fannkuch(n)

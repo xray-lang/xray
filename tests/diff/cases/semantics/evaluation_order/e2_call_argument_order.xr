@@ -1,16 +1,16 @@
 // anchor: eval-order-call
 // §3.0 E2: callee (or receiver) before arguments, arguments left to right,
 // defaults after every explicit argument.
-fn t(tag: string, v: int) -> int { print(tag); return v }
-fn three(a: int, b: int, c: int) -> int { return a + b + c }
-fn add(a: int, b: int) -> int { return a + b }
-fn pick(tag: string) -> fn(int, int) -> int { print(tag); return add }
-fn withDefault(a: int, b: int = 99) -> int { return a + b }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
+fn three(a: i64, b: i64, c: i64) -> i64 { return a + b + c }
+fn add(a: i64, b: i64) -> i64 { return a + b }
+fn pick(tag: string) -> fn(i64, i64) -> i64 { print(tag); return add }
+fn withDefault(a: i64, b: i64 = 99) -> i64 { return a + b }
 
 class Holder {
-    base: int
+    base: i64
     constructor() { this.base = 10 }
-    bump(n: int) -> int {
+    bump(n: i64) -> i64 {
         return this.base + n
     }
 }

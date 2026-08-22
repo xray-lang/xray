@@ -1,5 +1,5 @@
 // anchor: ownership-converged-capability-positive
-fn build() -> Array<int> {
+fn build() -> Array<i64> {
     var result = [1, 2, 3]
     return result
 }
@@ -13,7 +13,7 @@ fn run() {
     const sealed = move sealSource
     print(sealed[0] + sealed[1])
 
-    const ch: Channel<int> = Channel(1)
+    const ch: Channel<i64> = Channel(1)
     ch.send(7)
     print(ch.recv())
     ch.close()

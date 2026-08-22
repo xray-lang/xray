@@ -1,7 +1,7 @@
 import net
 
-fn exchange(conn: NetConn) -> int {
-    var buffer = Array<byte>(32)
+fn exchange(conn: NetConn) -> i64 {
+    var buffer = Array<u8>(32)
     var read = net.readInto(conn, ref buffer, 16)
     if (read <= 0) {
         return read

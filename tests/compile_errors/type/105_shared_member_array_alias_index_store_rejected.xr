@@ -1,5 +1,5 @@
 class Box {
-    items: Array<int> = Array<int>(1, 0)
+    items: Array<i64> = Array<i64>(1, 0)
 }
 
 const box = Box()

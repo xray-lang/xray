@@ -1,5 +1,5 @@
 // anchor: go-lambda-local-scope-task-255
-var task = go fn(limit: int) -> int {
+var task = go fn(limit: i64) -> i64 {
     var sum = 0
     for (i in 1..limit) {
         sum += i

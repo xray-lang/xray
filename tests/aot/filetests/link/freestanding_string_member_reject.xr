@@ -1,20 +1,20 @@
-fn xray_string_to_bytes_reject() -> int {
+fn xray_string_to_bytes_reject() -> i64 {
     var s = "abc"
     var b = s.copyBytes()
     return len(b)
 }
 
-fn xray_string_bytes_reject() -> int {
+fn xray_string_bytes_reject() -> i64 {
     var s = "abc"
     return len(s.bytes())
 }
 
-fn xray_string_index_reject() -> int {
+fn xray_string_index_reject() -> i64 {
     var s = "abc"
-    return s[0] as int
+    return s[0] as i64
 }
 
-fn xray_string_slice_reject() -> int {
+fn xray_string_slice_reject() -> i64 {
     var s = "abc"
     var part = s[0:1]
     print(part)

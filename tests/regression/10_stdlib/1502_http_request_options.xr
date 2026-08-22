@@ -13,7 +13,7 @@ fn recv_line(ch: Channel<string>) -> string {
 
 // listen now throws; restricted environments without socket access should
 // still skip these tests quietly instead of failing them.
-fn tryListen(port: int, backlog: int) -> NetListener? {
+fn tryListen(port: i64, backlog: i64) -> NetListener? {
     try {
         return net.listen(port, backlog)
     } catch (e) {
@@ -21,7 +21,7 @@ fn tryListen(port: int, backlog: int) -> NetListener? {
     }
 }
 
-fn readText(conn: NetConn, maxBytes: int) -> string {
+fn readText(conn: NetConn, maxBytes: i64) -> string {
     var bytes = net.readBytes(conn, maxBytes)
     if (bytes == null) { return "" }
     return string.fromUtf8(bytes![:]) ?? ""
@@ -92,17 +92,17 @@ fn serve_binary_response(lst: NetListener, framing: string) {
             conn!,
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n3\r\n"
         )
-        net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
+        net.writeBytes(conn!, Array<u8>([0xff, 0x00, 0x7f]))
         writeText(conn!, "\r\n0\r\n\r\n")
     } else if (framing == "close") {
         writeText(conn!, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
-        net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
+        net.writeBytes(conn!, Array<u8>([0xff, 0x00, 0x7f]))
     } else {
         writeText(
             conn!,
             "HTTP/1.1 200 OK\r\nContent-Length: 3\r\nConnection: close\r\n\r\n"
         )
-        net.writeBytes(conn!, Array<byte>([0xff, 0x00, 0x7f]))
+        net.writeBytes(conn!, Array<u8>([0xff, 0x00, 0x7f]))
     }
     net.close(conn!)
     net.close(lst)
@@ -260,7 +260,7 @@ fn test_request_body_is_written_as_bytes() {
         url: "http://127.0.0.1:" + string(lst.port()) + "/bytes",
         method: HttpMethod.post(),
         headers: headers,
-        body: Array<byte>([0x78, 0x72]),
+        body: Array<u8>([0x78, 0x72]),
         timeoutMs: 1000
     })
 

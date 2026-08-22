@@ -5,7 +5,7 @@
 // ===== 全字面量 tuple =====
 @test
 fn test_match_tuple_all_literal() {
-    var p: (int, int) = (0, 0)
+    var p: (i64, i64) = (0, 0)
     var result = match (p) {
         (0, 0) -> "origin"
         (1, 1) -> "one-one"
@@ -17,7 +17,7 @@ fn test_match_tuple_all_literal() {
 // ===== tuple 中混合通配符 =====
 @test
 fn test_match_tuple_wildcard_slot() {
-    fn axis(p: (int, int)) -> string {
+    fn axis(p: (i64, i64)) -> string {
         return match (p) {
             (0, 0) -> "origin"
             (0, _) -> "y-axis"
@@ -34,7 +34,7 @@ fn test_match_tuple_wildcard_slot() {
 // ===== tuple 中绑定捕获 =====
 @test
 fn test_match_tuple_binding() {
-    fn first_or_zero(p: (int, int)) -> int {
+    fn first_or_zero(p: (i64, i64)) -> i64 {
         return match (p) {
             (0, _) -> 0
             (x, _) -> x
@@ -47,7 +47,7 @@ fn test_match_tuple_binding() {
 // ===== tuple binding + guard =====
 @test
 fn test_match_tuple_binding_with_guard() {
-    fn classify(p: (int, int)) -> string {
+    fn classify(p: (i64, i64)) -> string {
         return match (p) {
             (x, y) if (x == y) -> "diagonal"
             (x, y) if (x + y == 0) -> "anti-diagonal"
@@ -62,7 +62,7 @@ fn test_match_tuple_binding_with_guard() {
 // ===== 嵌套 tuple pattern =====
 @test
 fn test_match_tuple_nested() {
-    fn extract(p: ((int, int), int)) -> int {
+    fn extract(p: ((i64, i64), i64)) -> i64 {
         return match (p) {
             ((0, _), _) -> -1
             ((a, _), _) -> a
@@ -75,7 +75,7 @@ fn test_match_tuple_nested() {
 // ===== tuple-of-tuple 完整解构 =====
 @test
 fn test_match_tuple_full_destructure() {
-    fn flatten(p: ((int, int), int)) -> int {
+    fn flatten(p: ((i64, i64), i64)) -> i64 {
         return match (p) {
             ((a, b), c) -> a + b + c
         }
@@ -86,7 +86,7 @@ fn test_match_tuple_full_destructure() {
 // ===== 异构元素类型 =====
 @test
 fn test_match_tuple_heterogeneous() {
-    fn describe(p: (int, string)) -> string {
+    fn describe(p: (i64, string)) -> string {
         return match (p) {
             (0, _) -> "zero with anything"
             (_, "key") -> "anything with key"

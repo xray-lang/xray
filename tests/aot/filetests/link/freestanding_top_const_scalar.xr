@@ -1,10 +1,10 @@
-const MAGIC: int = 40 + 1
+const MAGIC: i64 = 40 + 1
 
 const ENABLED: bool = true
 
 const CODE: rune = 'A'
 
-const SCALE: float = 0.5
+const SCALE: f64 = 0.5
 
 const NOTHING = null
 
@@ -12,14 +12,14 @@ const LABEL = comptime "scalar"
 
 const LOCAL_LABEL = comptime "local"
 
-fn xray_magic() -> int {
+fn xray_magic() -> i64 {
     if (ENABLED && CODE == 'A' && SCALE < 1.0) {
         return MAGIC + 1
     }
     return 0
 }
 
-fn xray_scalar_string_print() -> int {
+fn xray_scalar_string_print() -> i64 {
     print(LABEL)
     if (NOTHING == null) {
         return MAGIC

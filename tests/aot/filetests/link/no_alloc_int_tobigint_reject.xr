@@ -1,4 +1,4 @@
-fn xray_no_alloc_int_tobigint_reject(value: int) -> BigInt {
+fn xray_no_alloc_int_tobigint_reject(value: i64) -> BigInt {
     return value.toBigInt()
 }
 

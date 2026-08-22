@@ -1,11 +1,11 @@
 class IntBag {
-    values: Array<int>
+    values: Array<i64>
 
-    constructor(values: Array<int>) {
+    constructor(values: Array<i64>) {
         this.values = values
     }
 
-    sum() -> int {
+    sum() -> i64 {
         var i = 0
         var total = 0
         while (i < len(this.values)) {
@@ -15,14 +15,14 @@ class IntBag {
         return total
     }
 
-    append(x: int) -> int {
+    append(x: i64) -> i64 {
         this.values.push(x)
         return len(this.values)
     }
 }
 
-fn make_values(n: int) -> Array<int> {
-    var values: Array<int> = []
+fn make_values(n: i64) -> Array<i64> {
+    var values: Array<i64> = []
     var i = 0
     while (i < n) {
         values.push(i + 1)

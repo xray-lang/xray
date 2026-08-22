@@ -1,6 +1,6 @@
 import parallel
 
-const ch: Channel<int> = Channel<int>(4)
+const ch: Channel<i64> = Channel<i64>(4)
 
 parallel.forEach(0..4, (i) -> {
     var result = ch.recvTimeout(0)

@@ -2,10 +2,10 @@
 // Output is validated by diffing the VM and AOT runs.
 
 enum AppErr {
-    Bad(code: int)
+    Bad(code: i64)
 }
 
-fn test_normal() -> int {
+fn test_normal() -> i64 {
     var result = 0
     try {
         result = 10
@@ -15,7 +15,7 @@ fn test_normal() -> int {
     return result
 }
 
-fn test_caught() -> int {
+fn test_caught() -> i64 {
     var result = 0
     try {
         throw AppErr.Bad(7)
@@ -26,8 +26,8 @@ fn test_caught() -> int {
     return result
 }
 
-fn test_defer_cleanup() -> int {
-    var log: Array<int> = []
+fn test_defer_cleanup() -> i64 {
+    var log: Array<i64> = []
     fn body() {
         defer { log.push(100) }
         throw AppErr.Bad(1)

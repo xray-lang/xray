@@ -1,4 +1,4 @@
-fn bad(x: ref int) {
+fn bad(x: ref i64) {
     123(ref x)
 }
 

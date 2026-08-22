@@ -1,13 +1,13 @@
 class SharedFillBag {
-    values: Array<int>
+    values: Array<i64>
 
     constructor() {
-        var values: Array<int> = []
+        var values: Array<i64> = []
         this.values = values
     }
 
-    fill(n: int, rounds: int) -> int {
-        var values: Array<int> = []
+    fill(n: i64, rounds: i64) -> i64 {
+        var values: Array<i64> = []
         this.values = values
 
         var i = 0
@@ -32,7 +32,7 @@ class SharedFillBag {
 
 var shared_bag = SharedFillBag()
 
-fn class_shared_array_field_fill_loop_run(rounds: int) -> int {
+fn class_shared_array_field_fill_loop_run(rounds: i64) -> i64 {
     return shared_bag.fill(256, rounds)
 }
 

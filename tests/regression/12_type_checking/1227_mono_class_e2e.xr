@@ -27,12 +27,12 @@ class Pair<K, V> {
 fn test_mono_class_e2e() {
 
     // Box<int>
-    var intBox = Box<int>(42)
+    var intBox = Box<i64>(42)
     assert_eq(intBox.value, 42)
     assert_eq(intBox.get(), 42)
 
     // Box<float>
-    var floatBox = Box<float>(3.14)
+    var floatBox = Box<f64>(3.14)
     assert_eq(floatBox.value, 3.14)
     assert_eq(floatBox.get(), 3.14)
 
@@ -47,27 +47,27 @@ fn test_mono_class_e2e() {
 
     // === Multi-type-parameter class ===
 
-    var p1 = Pair<string, int>("age", 30)
+    var p1 = Pair<string, i64>("age", 30)
     assert_eq(p1.key, "age")
     assert_eq(p1.val, 30)
 
-    var p2 = Pair<int, float>(1, 2.5)
+    var p2 = Pair<i64, f64>(1, 2.5)
     assert_eq(p2.key, 1)
     assert_eq(p2.val, 2.5)
 
     // === Multiple instances of same class ===
-    var a = Box<int>(1)
-    var b = Box<int>(2)
-    var c = Box<int>(3)
+    var a = Box<i64>(1)
+    var b = Box<i64>(2)
+    var c = Box<i64>(3)
     assert_eq(a.get() + b.get() + c.get(), 6)
 
     // === Nested generic class usage ===
-    var inner = Box<int>(100)
-    var outer = Box<Box<int>>(inner)
+    var inner = Box<i64>(100)
+    var outer = Box<Box<i64>>(inner)
     assert_eq(outer.get().get(), 100)
 
     // === Array of generic class instances ===
-    var boxes = [Box<int>(10), Box<int>(20), Box<int>(30)]
+    var boxes = [Box<i64>(10), Box<i64>(20), Box<i64>(30)]
     assert_eq(boxes[0].get(), 10)
     assert_eq(boxes[1].get(), 20)
     assert_eq(boxes[2].get(), 30)

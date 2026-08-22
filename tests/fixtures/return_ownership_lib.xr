@@ -1,22 +1,22 @@
 import mem
 
 export struct OwnedValue {
-    value: int
+    value: i64
 }
 
-export fn makeOwnedArray(value: int) -> Array<int> {
+export fn makeOwnedArray(value: i64) -> Array<i64> {
     return [value]
 }
 
-export fn makeOwnedBuffer(size: int) -> Buffer {
+export fn makeOwnedBuffer(size: i64) -> Buffer {
     var buffer = mem.allocZeroed(size)
     return buffer
 }
 
-export fn makeOwnedValue(value: int) -> OwnedValue {
+export fn makeOwnedValue(value: i64) -> OwnedValue {
     return OwnedValue{value: value}
 }
 
-export fn borrowImportedArray(value: Array<int>) -> Array<int> {
+export fn borrowImportedArray(value: Array<i64>) -> Array<i64> {
     return value
 }

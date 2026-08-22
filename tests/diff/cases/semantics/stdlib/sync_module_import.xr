@@ -15,11 +15,11 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 import { Mutex, RwLock, Once, Barrier, Condvar } from sync
 
 // --- Single-coroutine surface of every primitive -----------------------------
-var m = Mutex<int>(10)
+var m = Mutex<i64>(10)
 print(m.lock((v) -> v * 2))       // 20
 print(m.tryLock((v) -> v + 1) ?? -1) // 11
 print(m.lock((v) -> {
-    var nested: int? = m.tryLock((w) -> w)
+    var nested: i64? = m.tryLock((w) -> w)
     if (nested == null) { return -7 }
     return nested!
 }))                               // -7
@@ -33,7 +33,7 @@ print(rw.write((s) -> s + "c"))   // abc
 // A shared imported RwLock<T> must be mutated only through its audited public
 // methods; direct writes to its fields remain rejected by the shared deep
 // readonly gate.
-const fair = RwLock<int>(0)
+const fair = RwLock<i64>(0)
 const fairDone = CountdownLatch(2)
 
 go fn() {
@@ -49,7 +49,7 @@ go fn() {
 fairDone.wait()
 print(fair.read((v) -> v))        // 11
 
-const onceCount = Atomic<int>(0)
+const onceCount = Atomic<i64>(0)
 var once = Once()
 once.call(() -> { onceCount.fetchAdd(1) })
 once.call(() -> { onceCount.fetchAdd(1) })
@@ -62,7 +62,7 @@ print(barrier.wait())             // true
 // A `shared` instance of the imported generic class must be shared by
 // reference across coroutines; the mutation under the lock in the spawned
 // coroutine must be visible after synchronisation.
-const shared_m = Mutex<int>(0)
+const shared_m = Mutex<i64>(0)
 const done = CountdownLatch(1)
 
 go fn() {
@@ -75,7 +75,7 @@ print(shared_m.lock((v) -> v))    // 100
 
 // --- Condvar producer/consumer through the imported class --------------------
 const cv = Condvar()
-const box = Atomic<int>(-1)
+const box = Atomic<i64>(-1)
 const consumed = CountdownLatch(1)
 
 go fn() {

@@ -16,7 +16,7 @@ enum UnwindErr {
 }
 
 class Node {
-    v: int
+    v: i64
     constructor(v) { this.v = v }
 }
 
@@ -41,7 +41,7 @@ fn test_construction_result_stored_into_field() {
 
 // ④ 在错误边上死亡：构造成功但随即被 throw 跳过正常出口，
 //    释放必须发生在展开路径上，且只发生一次
-fn boom(v: int) {
+fn boom(v: i64) {
     var n = Node(v)
     if (n.v >= 0) {
         throw UnwindErr.Boom

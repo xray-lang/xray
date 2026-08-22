@@ -1,4 +1,4 @@
 fn bad() {
-    var bytes = Array<byte>(2)
+    var bytes = Array<u8>(2)
     bytes.resize(4)
 }

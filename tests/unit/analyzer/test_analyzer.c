@@ -144,14 +144,15 @@ TEST(type_scalar_alias_identity) {
     ASSERT(xr_type_equals(xr_type_new_function(g_isolate, default_params, 1, byte_type, false),
                           xr_type_new_function(g_isolate, exact_params, 1, u8_type, false)));
 
-    ASSERT(xr_type_from_name("int") == XR_TID_INT);
-    ASSERT(xr_type_from_name("i64") == XR_TID_INT);
-    ASSERT(xr_type_from_name("float") == XR_TID_FLOAT);
-    ASSERT(xr_type_from_name("f64") == XR_TID_FLOAT);
-    ASSERT(xr_type_from_name("byte") == XR_TID_U8);
+    ASSERT(xr_type_from_name("int") == -1);
+    ASSERT(xr_type_from_name("i64") == XR_TID_I64);
+    ASSERT(xr_type_from_name("float") == -1);
+    ASSERT(xr_type_from_name("f64") == XR_TID_F64);
+    ASSERT(xr_type_from_name("byte") == -1);
     ASSERT(xr_type_from_name("u8") == XR_TID_U8);
     static const char *retired[] = {
-        "int8",   "int16",  "int32",   "int64",   "uint8",   "uint16",
+        "int",    "byte",   "float",   "int8",    "int16",   "int32", "int64",
+        "uint8",  "uint16",
         "uint32", "uint64", "float32", "float64", "intsize", "uintsize",
     };
     for (size_t i = 0; i < sizeof(retired) / sizeof(retired[0]); i++)
@@ -165,7 +166,7 @@ TEST(type_const_capability_is_part_of_identity_and_format) {
     ASSERT(mutable_array != const_array);
     ASSERT(!xr_type_equals(mutable_array, const_array));
     ASSERT(xr_type_equals(const_array, xr_type_make_const(g_isolate, const_array)));
-    ASSERT(strcmp(xr_type_to_string(const_array), "const Array<int>") == 0);
+    ASSERT(strcmp(xr_type_to_string(const_array), "const Array<i64>") == 0);
 
     XrType *scalar = xr_type_new_int(NULL);
     ASSERT(xr_type_make_const(g_isolate, scalar) == scalar);
@@ -373,15 +374,15 @@ TEST(type_to_string) {
     ASSERT(xr_type_function_set_param_mode(t_mode_fn, 1, XR_PARAM_REF));
     ASSERT(xr_type_function_set_param_mode(t_mode_fn, 2, XR_PARAM_MOVE));
 
-    ASSERT(strcmp(xr_type_to_string(t_int), "int") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_u8), "byte") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_int), "i64") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_u8), "u8") == 0);
     ASSERT(strcmp(xr_type_to_string(t_u64), "u64") == 0);
     ASSERT(strcmp(xr_type_to_string(t_arr), "Array<string>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_byte_arr), "Array<byte>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<byte>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_arr), "Array<u8>") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_slice), "Slice<u8>") == 0);
     ASSERT(strcmp(xr_type_to_string(t_cfn), "CFn<fn(i32) -> i32>") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(byte) -> byte") == 0);
-    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(int, ref string, move bool)") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_byte_fn), "fn(u8) -> u8") == 0);
+    ASSERT(strcmp(xr_type_to_string(t_mode_fn), "fn(i64, ref string, move bool)") == 0);
 }
 
 TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
@@ -410,7 +411,7 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(empty_union != NULL);
     ASSERT(XR_TYPE_IS_ERROR(empty_union));
 
-    XrType *bad_map = xa_builtin_parse_type_string(g_isolate, "Map<int>");
+    XrType *bad_map = xa_builtin_parse_type_string(g_isolate, "Map<i64>");
     ASSERT(bad_map != NULL);
     ASSERT(XR_TYPE_IS_ERROR(bad_map));
 
@@ -418,7 +419,7 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(bad_fn != NULL);
     ASSERT(XR_TYPE_IS_ERROR(bad_fn));
 
-    XrType *bad_param = xa_builtin_parse_type_string(g_isolate, "fn(value): int");
+    XrType *bad_param = xa_builtin_parse_type_string(g_isolate, "fn(value): i64");
     ASSERT(bad_param != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(bad_param));
     ASSERT(bad_param->function.param_count == 1);
@@ -429,12 +430,12 @@ TEST(type_string_parser_uses_error_recovery_for_invalid_types) {
     ASSERT(XR_TYPE_IS_FUNCTION(missing_signature));
     ASSERT(XR_TYPE_IS_ERROR(missing_signature->function.return_type));
 
-    XrType *missing_parens = xa_builtin_parse_full_signature(g_isolate, "value: int");
+    XrType *missing_parens = xa_builtin_parse_full_signature(g_isolate, "value: i64");
     ASSERT(missing_parens != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(missing_parens));
     ASSERT(XR_TYPE_IS_ERROR(missing_parens->function.return_type));
 
-    XrType *bad_signature_param = xa_builtin_parse_full_signature(g_isolate, "(value): int");
+    XrType *bad_signature_param = xa_builtin_parse_full_signature(g_isolate, "(value): i64");
     ASSERT(bad_signature_param != NULL);
     ASSERT(XR_TYPE_IS_FUNCTION(bad_signature_param));
     ASSERT(bad_signature_param->function.param_count == 1);
@@ -723,25 +724,25 @@ TEST(narrow_by_typeof) {
     XrType *t_int = xr_type_new_int(NULL);
     XrType *t_null = xr_type_new_null(NULL);
 
-    // Create nullable int (int | null = int?)
+    // Create nullable i64 (i64 | null = i64?)
     XrType *nullable_int = xr_type_union(g_isolate, t_int, t_null);
     ASSERT(nullable_int != NULL);
     ASSERT(nullable_int->is_nullable);
 
-    // typeof x === "int" on nullable int -> int
-    XrType *narrowed = xa_narrow_by_typeof(nullable_int, "int", true);
+    // typeof x === "i64" on nullable i64 -> i64
+    XrType *narrowed = xa_narrow_by_typeof(nullable_int, "i64", true);
     ASSERT(XR_TYPE_IS_INT(narrowed));
 
     // typeof narrowing on pure null type
     XrType *narrowed_null = xa_narrow_by_typeof(t_null, "null", true);
     ASSERT(XR_TYPE_IS_NULL(narrowed_null));
 
-    // typeof narrowing on pure int type
-    XrType *narrowed_int = xa_narrow_by_typeof(t_int, "int", true);
+    // typeof narrowing on pure i64 type
+    XrType *narrowed_int = xa_narrow_by_typeof(t_int, "i64", true);
     ASSERT(XR_TYPE_IS_INT(narrowed_int));
 
-    // typeof x !== "int" on int -> never (no other type remaining)
-    XrType *excluded_int = xa_narrow_by_typeof(t_int, "int", false);
+    // typeof x !== "i64" on i64 -> never (no other type remaining)
+    XrType *excluded_int = xa_narrow_by_typeof(t_int, "i64", false);
     ASSERT(XR_TYPE_IS_NEVER(excluded_int));
 
     // NOTE: 'any' type is a special marker type (XR_KIND_ANY flag only),
@@ -998,7 +999,7 @@ TEST(compile_type_function) {
 
 TEST(compile_type_ref_function_modes) {
     AstNode *program =
-        xr_parse(g_session, "type Handler = fn(int, ref string, move Array<bool>) -> int");
+        xr_parse(g_session, "type Handler = fn(i64, ref string, move Array<bool>) -> i64");
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count == 1);
@@ -1196,7 +1197,7 @@ TEST(analyzer_typed_json_calls_complete_all_analysis_passes) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source =
-        "type User = { name: string, age: int }\n"
+        "type User = { name: string, age: i64 }\n"
         "fn main() {\n"
         "    var data = JSON.parseValue(\"{\\\"name\\\":\\\"Ada\\\",\\\"age\\\":37}\")\n"
         "    var decoded = JSON.decode<User>(data)\n"
@@ -1220,9 +1221,9 @@ TEST(analyzer_json_path_result_context_writes_codec_type_evidence) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "var root = JSON.parseObject(\"{\\\"count\\\":7}\")\n"
-                         "fn takesInt(value: int) -> int { return value }\n"
+                         "fn takesInt(value: i64) -> i64 { return value }\n"
                          "var count = takesInt(JSON.require(root, [\"count\"]))\n"
-                         "var maybe: int? = JSON.get(root, [\"missing\"])\n";
+                         "var maybe: i64? = JSON.get(root, [\"missing\"])\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "json_path_contextual_result.xr", program);
@@ -1282,7 +1283,7 @@ static int analyzer_diag_message_count(XaAnalyzer *analyzer, const char *message
 TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "type User = { const name: string, age: int }\n"
+    const char *source = "type User = { const name: string, age: i64 }\n"
                          "fn probe(key: string) {\n"
                          "    var user: User = { name: \"Ada\", age: 37 }\n"
                          "    print(user.missing)\n"
@@ -1302,7 +1303,7 @@ TEST(analyzer_structural_object_dot_and_static_index_diagnostics_match) {
     ASSERT(analyzer_diag_message_count(
                a, "cannot assign to read-only field 'User.name' (declared const)") == 2);
     ASSERT(analyzer_diag_message_count(
-               a, "Type 'string' is not assignable to member 'age' (type 'int')") == 2);
+               a, "Type 'string' is not assignable to member 'age' (type 'i64')") == 2);
     ASSERT(analyzer_diag_message_count(
                a, "structural object index requires a string literal field name") == 2);
     ASSERT(!analyzer_diag_contains(a, "Record"));
@@ -1357,7 +1358,7 @@ TEST(analyzer_structural_constraint_limits_visible_fields_and_dynamic_indexing) 
 TEST(analyzer_named_structural_constraint_erases_readonly_for_body_analysis) {
     XaAnalyzer *a =
         analyzer_run_source("object_constraint_readonly_erasure.xr",
-                            "type Entity = { const id: int }\n"
+                            "type Entity = { const id: i64 }\n"
                             "fn bump<T: Entity>(value: ref T) { value.id = value.id + 1 }\n"
                             "var mutable = { id: 1, age: 2 }\n"
                             "bump(ref mutable)\n");
@@ -1417,7 +1418,7 @@ static const XaMemoryRootEffect *memory_effect_root(const XaMemoryEffectSummary 
 TEST(analyzer_inferred_unique_alias_nll_guards_move) {
     XaAnalyzer *bad = xa_analyzer_new(g_session);
     ASSERT(bad != NULL);
-    const char *bad_source = "fn consume(xs: move Array<int>) -> int { return len(xs) }\n"
+    const char *bad_source = "fn consume(xs: move Array<i64>) -> i64 { return len(xs) }\n"
                              "fn bad() {\n"
                              "  var data = [1, 2]\n"
                              "  var alias = data\n"
@@ -1439,7 +1440,7 @@ TEST(analyzer_inferred_unique_alias_nll_guards_move) {
 
     XaAnalyzer *ok = xa_analyzer_new(g_session);
     ASSERT(ok != NULL);
-    const char *ok_source = "fn consume(xs: move Array<int>) -> int { return len(xs) }\n"
+    const char *ok_source = "fn consume(xs: move Array<i64>) -> i64 { return len(xs) }\n"
                             "fn ok() {\n"
                             "  var data = [1, 2]\n"
                             "  var alias = data\n"
@@ -1461,8 +1462,8 @@ TEST(analyzer_parameter_effect_is_canonical_product) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source =
-        "fn summarize(input: Array<int>, target: ref Array<int>, job: move Array<int>) "
-        "-> Array<int> {\n"
+        "fn summarize(input: Array<i64>, target: ref Array<i64>, job: move Array<i64>) "
+        "-> Array<i64> {\n"
         "  target.push(1)\n"
         "  var alias = input\n"
         "  return alias\n"
@@ -1503,13 +1504,13 @@ TEST(analyzer_parameter_effect_is_canonical_product) {
 TEST(analyzer_memory_effect_infers_and_instantiates_root_relative_facts) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn grow(data: ref Array<int>) { data.push(1) }\n"
-                         "fn growViaCall(data: ref Array<int>) { grow(data) }\n"
-                         "fn shrink(data: ref Array<int>) { data.pop() }\n"
-                         "fn rebind(data: ref Array<int>) { data = [1, 2] }\n"
-                         "fn dynamic(cb: fn(ref Array<int>), data: ref Array<int>) { cb(data) }\n"
-                         "fn readOnly(data: ref Array<int>) -> int { return data.length }\n"
-                         "fn sliceLen(data: Slice<byte>) -> int { return len(data) }\n";
+    const char *source = "fn grow(data: ref Array<i64>) { data.push(1) }\n"
+                         "fn growViaCall(data: ref Array<i64>) { grow(data) }\n"
+                         "fn shrink(data: ref Array<i64>) { data.pop() }\n"
+                         "fn rebind(data: ref Array<i64>) { data = [1, 2] }\n"
+                         "fn dynamic(cb: fn(ref Array<i64>), data: ref Array<i64>) { cb(data) }\n"
+                         "fn readOnly(data: ref Array<i64>) -> i64 { return data.length }\n"
+                         "fn sliceLen(data: Slice<u8>) -> i64 { return len(data) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "memory_effect_summary.xr", program);
@@ -1548,18 +1549,18 @@ TEST(analyzer_mem_scalar_access_is_stable_for_pointer_owner_borrows) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "import mem\n"
-                         "fn loadU64(p: Ptr<byte>) -> u64 {\n"
+                         "fn loadU64(p: Ptr<u8>) -> u64 {\n"
                          "  return unsafe { mem.load<u64>(p, 0, Endian.LE) }\n"
                          "}\n"
-                         "fn storeU64(p: MutPtr<byte>, value: u64) {\n"
+                         "fn storeU64(p: MutPtr<u8>, value: u64) {\n"
                          "  unsafe { mem.store<u64>(p, 0, value, Endian.LE) }\n"
                          "}\n"
-                         "fn isPresent(p: Ptr<byte>) -> bool { return !p.isNull() }\n"
+                         "fn isPresent(p: Ptr<u8>) -> bool { return !p.isNull() }\n"
                          "fn exercise() -> u64 {\n"
-                         "  var data = Array<byte>(8)\n"
+                         "  var data = Array<u8>(8)\n"
                          "  var p = unsafe { data.mutPtr() }\n"
                          "  storeU64(p, 7)\n"
-                         "  var read: Ptr<byte> = p\n"
+                         "  var read: Ptr<u8> = p\n"
                          "  return loadU64(read)\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -1668,8 +1669,8 @@ TEST(analyzer_finalizes_local_fresh_return_ownership_after_body_inference) {
                          "  var result = mem.allocZeroed(64)\n"
                          "  return result\n"
                          "}\n"
-                         "struct LocalValue { value: int }\n"
-                         "fn makeLocalValue(value: int) -> LocalValue {\n"
+                         "struct LocalValue { value: i64 }\n"
+                         "fn makeLocalValue(value: i64) -> LocalValue {\n"
                          "  return LocalValue{value: value}\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -1743,11 +1744,11 @@ TEST(symbol_export_view_rekeys_foreign_symbol_identity) {
 TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn keepResult(dst: ref Slice<u32>) -> int {\n"
+    const char *source = "fn keepResult(dst: ref Slice<u32>) -> i64 {\n"
                          "  var filled: Slice<u32> = dst.fill(7)\n"
                          "  return len(filled)\n"
                          "}\n"
-                         "fn discardResult(dst: ref Slice<u32>) -> int {\n"
+                         "fn discardResult(dst: ref Slice<u32>) -> i64 {\n"
                          "  dst.fill(0)\n"
                          "  return len(dst)\n"
                          "}\n";
@@ -1778,7 +1779,7 @@ TEST(analyzer_slice_mutator_effect_is_independent_of_discarded_result) {
 TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn worker() -> int { return 1 }\n"
+    const char *source = "fn worker() -> i64 { return 1 }\n"
                          "fn suspends() { var task = go worker(); await task }\n"
                          "fn transitive() { suspends() }\n"
                          "fn dynamic(cb: fn()) { cb() }\n";
@@ -1810,15 +1811,15 @@ TEST(analyzer_canonical_effect_product_publishes_suspend_fixpoint) {
 TEST(analyzer_generator_suspend_is_separate_from_scheduler_suspend) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn counter(n: int) -> Iterator<int> {\n"
+    const char *source = "fn counter(n: i64) -> Iterator<i64> {\n"
                          "    for (var i = 0; i < n; i++) { yield i }\n"
                          "}\n"
-                         "fn drive() -> int {\n"
+                         "fn drive() -> i64 {\n"
                          "    var sum = 0\n"
                          "    for (x in counter(3)) { sum = sum + x }\n"
                          "    return sum\n"
                          "}\n"
-                         "fn asyncGen() -> Iterator<int> {\n"
+                         "fn asyncGen() -> Iterator<i64> {\n"
                          "    var task = go drive()\n"
                          "    yield await task\n"
                          "}\n";
@@ -1876,48 +1877,48 @@ TEST(analyzer_allocation_effect_propagates_and_validates_contracts) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "import mem\n"
-                         "fn scalar(x: int) -> int { return x + 1 }\n"
-                         "fn cycleA(n: int) -> int {\n"
+                         "fn scalar(x: i64) -> i64 { return x + 1 }\n"
+                         "fn cycleA(n: i64) -> i64 {\n"
                          "  if (n <= 0) { return 0 }\n"
                          "  return cycleB(n - 1)\n"
                          "}\n"
-                         "fn cycleB(n: int) -> int {\n"
+                         "fn cycleB(n: i64) -> i64 {\n"
                          "  if (n <= 0) { return 0 }\n"
                          "  return cycleA(n - 1)\n"
                          "}\n"
-                         "fn cycleEntry(n: int) -> int { return cycleA(n) }\n"
+                         "fn cycleEntry(n: i64) -> i64 { return cycleA(n) }\n"
                          "fn allocateLeaf() { var values = [1, 2, 3] }\n"
                          "fn twoHop() { allocateLeaf() }\n"
                          "fn unknownCall(cb: fn()) { cb() }\n"
-                         "fn callbackOk(xs: Array<int>) {\n"
-                         "  xs.forEach(fn(value: int, index: int) { var sum = value + index })\n"
+                         "fn callbackOk(xs: Array<i64>) {\n"
+                         "  xs.forEach(fn(value: i64, index: i64) { var sum = value + index })\n"
                          "}\n"
-                         "fn callbackBad(xs: Array<int>) {\n"
-                         "  xs.forEach(fn(value: int, index: int) { var copy = [value, index] })\n"
+                         "fn callbackBad(xs: Array<i64>) {\n"
+                         "  xs.forEach(fn(value: i64, index: i64) { var copy = [value, index] })\n"
                          "}\n"
-                         "fn slicePointerViews(data: Slice<byte>) {\n"
+                         "fn slicePointerViews(data: Slice<u8>) {\n"
                          "  unsafe {\n"
                          "    var readPtr = data.ptr()\n"
                          "    var writePtr = data.mutPtr()\n"
                          "  }\n"
                          "}\n"
-                         "fn pointerOffsetNoHeap(data: Ptr<byte>, write: MutPtr<byte>) {\n"
+                         "fn pointerOffsetNoHeap(data: Ptr<u8>, write: MutPtr<u8>) {\n"
                          "  var nextRead = data.offset(1)\n"
                          "  var nextWrite = write.offset(1)\n"
                          "}\n"
-                         "fn rawSliceProjection(data: Ptr<byte>, count: int) -> Slice<byte> {\n"
-                         "  return unsafe { mem.slice<byte>(data, count, data) }\n"
+                         "fn rawSliceProjection(data: Ptr<u8>, count: i64) -> Slice<u8> {\n"
+                         "  return unsafe { mem.slice<u8>(data, count, data) }\n"
                          "}\n"
-                         "enum ValueError { Bad(actual: int, minimum: int) }\n"
-                         "fn fixedValueCopy(data: [byte; 4]) -> [byte; 4] {\n"
+                         "enum ValueError { Bad(actual: i64, minimum: i64) }\n"
+                         "fn fixedValueCopy(data: [u8; 4]) -> [u8; 4] {\n"
                          "  return copy(data)\n"
                          "}\n"
-                         "fn valueError(actual: int) {\n"
+                         "fn valueError(actual: i64) {\n"
                          "  if (actual < 4) { throw ValueError.Bad(actual, 4) }\n"
                          "}\n"
                          "struct Counter {\n"
-                         "  value: int\n"
-                         "  read() -> int { return this.value }\n"
+                         "  value: i64\n"
+                         "  read() -> i64 { return this.value }\n"
                          "  bad() { var copy = [this.value] }\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -2060,7 +2061,7 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
     ASSERT(a != NULL);
 
     const char *source = "enum IoErr { Boom }\n"
-                         "fn pureAdd(x: int, y: int) -> int { return x + y }\n"
+                         "fn pureAdd(x: i64, y: i64) -> i64 { return x + y }\n"
                          "fn throwsDirect() { throw IoErr.Boom }\n"
                          "fn propagates() { throwsDirect() }\n"
                          "fn guarded() { try { throwsDirect() } catch (e: IoErr) {} }\n"
@@ -2087,12 +2088,12 @@ TEST(analyzer_throw_effect_bit_matches_effect_summary) {
 TEST(analyzer_inferred_effects_accept_function_values) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn increment(value: int) -> int { return value + 1 }\n"
-                         "fn applyPure(callback: fn(int) -> int, value: int) -> int {\n"
+    const char *source = "fn increment(value: i64) -> i64 { return value + 1 }\n"
+                         "fn applyPure(callback: fn(i64) -> i64, value: i64) -> i64 {\n"
                          "  return callback(value)\n"
                          "}\n"
-                         "fn main() -> int {\n"
-                         "  const local: fn(int) -> int = fn(value: int) -> int {\n"
+                         "fn main() -> i64 {\n"
+                         "  const local: fn(i64) -> i64 = fn(value: i64) -> i64 {\n"
                          "    return value * 2\n"
                          "  }\n"
                          "  return applyPure(increment, local(2))\n"
@@ -2112,7 +2113,7 @@ TEST(analyzer_codegen_controls_are_semantic_neutral_and_type_closed) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     AstNode *program = xr_parse(g_session, "import codegen\n"
-                                           "fn guarded(value: u64, pointer: Ptr<byte>) -> u64 {\n"
+                                           "fn guarded(value: u64, pointer: Ptr<u8>) -> u64 {\n"
                                            "  var hidden = codegen.opaque(value)\n"
                                            "  var samePointer = codegen.opaque(pointer)\n"
                                            "  codegen.compilerFence()\n"
@@ -2170,7 +2171,7 @@ TEST(analyzer_call_context_accepts_u64_only_literals) {
 TEST(analyzer_effect_inference_handles_redundant_try_catch) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn guarded(value: int) -> int {\n"
+    const char *source = "fn guarded(value: i64) -> i64 {\n"
                          "  try {\n"
                          "    return value + 1\n"
                          "  } catch (e) {\n"
@@ -2192,8 +2193,8 @@ TEST(analyzer_deprecated_message_reaches_use_diagnostic) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "@deprecated(\"use modern\")\n"
-                         "fn legacy(value: int) -> int { return value }\n"
-                         "fn caller() -> int { return legacy(1) }\n";
+                         "fn legacy(value: i64) -> i64 { return value }\n"
+                         "fn caller() -> i64 { return legacy(1) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "deprecated_message.xr", program);
@@ -2211,8 +2212,8 @@ TEST(analyzer_stored_function_value_defaults_may_throw) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     const char *source = "enum StoredEffectErr { Boom }\n"
-                         "fn pure(value: int) -> int { return value + 1 }\n"
-                         "fn checked(value: int) -> int {\n"
+                         "fn pure(value: i64) -> i64 { return value + 1 }\n"
+                         "fn checked(value: i64) -> i64 {\n"
                          "  if (value < 0) { throw StoredEffectErr.Boom }\n"
                          "  return value\n"
                          "}\n"
@@ -2243,15 +2244,15 @@ TEST(analyzer_generic_hof_splits_throw_effect_dimension) {
     const char *source =
         "enum HofEffectErr { Boom }\n"
         "fn apply<T>(callback: fn(T) -> T, value: T) -> T { return callback(value) }\n"
-        "fn plusOne(value: int) -> int { return value + 1 }\n"
-        "fn plusTwo(value: int) -> int { return value + 2 }\n"
-        "fn checked(value: int) -> int {\n"
+        "fn plusOne(value: i64) -> i64 { return value + 1 }\n"
+        "fn plusTwo(value: i64) -> i64 { return value + 2 }\n"
+        "fn checked(value: i64) -> i64 {\n"
         "  if (value < 0) { throw HofEffectErr.Boom }\n"
         "  return value\n"
         "}\n"
-        "fn viaPureOne(value: int) -> int { return apply<int>(plusOne, value) }\n"
-        "fn viaPureTwo(value: int) -> int { return apply<int>(plusTwo, value) }\n"
-        "fn viaChecked(value: int) -> int { return apply<int>(checked, value) }\n";
+        "fn viaPureOne(value: i64) -> i64 { return apply<i64>(plusOne, value) }\n"
+        "fn viaPureTwo(value: i64) -> i64 { return apply<i64>(plusTwo, value) }\n"
+        "fn viaChecked(value: i64) -> i64 { return apply<i64>(checked, value) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
 
@@ -2280,11 +2281,11 @@ TEST(analyzer_error_effect_records_direct_throw_variant) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "enum DirectErr { First, Second, Payload(code: int), Third }\n"
+    const char *source = "enum DirectErr { First, Second, Payload(code: i64), Third }\n"
                          "enum PayloadArgErr { Boom }\n"
                          "fn throwsSecond() { throw DirectErr.Second }\n"
                          "fn throwsPayload() { throw DirectErr.Payload(1) }\n"
-                         "fn payloadCode() -> int { throw PayloadArgErr.Boom\n"
+                         "fn payloadCode() -> i64 { throw PayloadArgErr.Boom\n"
                          "  return 1 }\n"
                          "fn throwsPayloadArg() { throw DirectErr.Payload(payloadCode()) }\n"
                          "fn throwsVariable(e: DirectErr) { throw e }\n";
@@ -2737,17 +2738,17 @@ TEST(analyzer_error_effect_propagates_generic_specialization_target_sets) {
         "enum GenericIntErr { Boom }\n"
         "enum GenericOtherIntErr { Boom }\n"
         "enum GenericStringErr { Boom }\n"
-        "fn failGenericInt(x: int) -> int { throw GenericIntErr.Boom }\n"
-        "fn failGenericOtherInt(x: int) -> int { throw GenericOtherIntErr.Boom }\n"
+        "fn failGenericInt(x: i64) -> i64 { throw GenericIntErr.Boom }\n"
+        "fn failGenericOtherInt(x: i64) -> i64 { throw GenericOtherIntErr.Boom }\n"
         "fn failGenericString(x: string) -> string { throw GenericStringErr.Boom }\n"
         "fn runGeneric<T>(x: T, cb: fn(T) -> T) -> T {\n"
         "  return cb(x)\n"
         "}\n"
         "fn viaGenericInt() {\n"
-        "  runGeneric<int>(1, failGenericInt)\n"
+        "  runGeneric<i64>(1, failGenericInt)\n"
         "}\n"
         "fn viaGenericIntOther() {\n"
-        "  runGeneric<int>(2, failGenericOtherInt)\n"
+        "  runGeneric<i64>(2, failGenericOtherInt)\n"
         "}\n"
         "fn viaGenericString() {\n"
         "  runGeneric<string>(\"x\", failGenericString)\n"
@@ -2932,17 +2933,17 @@ TEST(cycle_candidate_marks_every_field_shape) {
                                         "class MapA { peers: Map<string, MapB> }\n"
                                         "class MapB { peers: Map<string, MapA> }\n"
                                         /* Map key: G1, produced no edge */
-                                        "class KeyA { peers: Map<KeyB, int> }\n"
-                                        "class KeyB { peers: Map<KeyA, int> }\n"
+                                        "class KeyA { peers: Map<KeyB, i64> }\n"
+                                        "class KeyB { peers: Map<KeyA, i64> }\n"
                                         /* Set element: G1, produced no edge */
                                         "class SetA { peers: Set<SetB> }\n"
                                         "class SetB { peers: Set<SetA> }\n"
                                         /* union beyond the first member: G3 */
-                                        "class UniA { peer: int | string | UniB | null }\n"
-                                        "class UniB { peer: int | string | UniA | null }\n"
+                                        "class UniA { peer: i64 | string | UniB | null }\n"
+                                        "class UniB { peer: i64 | string | UniA | null }\n"
                                         /* tuple member */
-                                        "class TupA { peer: (int, TupB)? }\n"
-                                        "class TupB { peer: (int, TupA)? }\n");
+                                        "class TupA { peer: (i64, TupB)? }\n"
+                                        "class TupB { peer: (i64, TupA)? }\n");
     ASSERT(a != NULL);
 
     ASSERT(analyzer_class_is_cycle_candidate(a, "DirectA"));
@@ -3010,9 +3011,9 @@ TEST(cycle_candidate_follows_inherited_fields) {
     XaAnalyzer *a = analyzer_run_source("cycle_inherited_field.xr",
                                         "class Base { peer: Derived?\n"
                                         "  constructor() { this.peer = null } }\n"
-                                        "class Derived extends Base { n: int\n"
+                                        "class Derived extends Base { n: i64\n"
                                         "  constructor() { super(); this.n = 0 } }\n"
-                                        "class LoneBase { n: int\n"
+                                        "class LoneBase { n: i64\n"
                                         "  constructor() { this.n = 0 } }\n"
                                         "class LoneDerived extends LoneBase { label: string\n"
                                         "  constructor() { super(); this.label = \"\" } }\n");
@@ -3040,7 +3041,7 @@ TEST(cycle_candidate_marks_recursive_tree_types) {
                                         "  constructor() { this.children = [] } }\n"
                                         "class ListNode { next: ListNode?\n"
                                         "  constructor() { this.next = null } }\n"
-                                        "class Leaf { value: int\n"
+                                        "class Leaf { value: i64\n"
                                         "  constructor() { this.value = 0 } }\n");
     ASSERT(a != NULL);
 
@@ -3057,14 +3058,14 @@ TEST(analyzer_error_effect_handles_recursive_function_expr_cycles) {
 
     const char *source = "enum RecursiveLambdaErr { Boom }\n"
                          "fn viaRecursiveLambdaNoThrow() {\n"
-                         "  var loop = fn(n: int) -> int {\n"
+                         "  var loop = fn(n: i64) -> i64 {\n"
                          "    if (n <= 0) { return 0 }\n"
                          "    return loop(n - 1)\n"
                          "  }\n"
                          "  loop(2)\n"
                          "}\n"
                          "fn viaRecursiveLambdaThrow() {\n"
-                         "  var loop = fn(n: int) -> int {\n"
+                         "  var loop = fn(n: i64) -> i64 {\n"
                          "    if (n <= 0) { throw RecursiveLambdaErr.Boom }\n"
                          "    return loop(n - 1)\n"
                          "  }\n"
@@ -3230,7 +3231,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
                              "export fn failSelective() { throw ImportedErr.Selective }\n"
                              "export fn failNamespace() { throw ImportedErr.Namespace }\n"
                              "export fn applyImported(cb: fn()) { cb() }\n"
-                             "export fn importedScalar(x: int) -> int { return x + 1 }\n"
+                             "export fn importedScalar(x: i64) -> i64 { return x + 1 }\n"
                              "export fn importedAlloc() { var values = [1, 2, 3] }\n";
     const char *reexport_source =
         "export { failSelective as failReexported, failNamespace, applyImported as "
@@ -3635,12 +3636,12 @@ TEST(analyzer_xrd_signatures_fail_closed_without_typed_contracts) {
 
     char xrd_path[256];
     snprintf(xrd_path, sizeof(xrd_path), "%s/native_effects.xrd", tmpdir);
-    ASSERT(write_text_file(xrd_path, "export fn failNative(): int\n"
-                                     "export fn noThrowNative(): int\n"
-                                     "export fn missingNative(): int\n"
+    ASSERT(write_text_file(xrd_path, "export fn failNative(): i64\n"
+                                     "export fn noThrowNative(): i64\n"
+                                     "export fn missingNative(): i64\n"
                                      "export fn makeBox(): NativeBox\n"
-                                     "type NativeBox = { const id: int }\n"
-                                     "fn NativeBox.failMethod(): int\n"));
+                                     "type NativeBox = { const id: i64 }\n"
+                                     "fn NativeBox.failMethod(): i64\n"));
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
@@ -3721,13 +3722,13 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     snprintf(legacy_path, sizeof(legacy_path), "%s/native_legacy_byte_effects.xrd", tmpdir);
     snprintf(span_only_path, sizeof(span_only_path), "%s/native_legacy_bytespan_only.xrd", tmpdir);
     snprintf(view_only_path, sizeof(view_only_path), "%s/native_legacy_byteview_only.xrd", tmpdir);
-    ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<byte>): Array<byte>\n"));
+    ASSERT(write_text_file(ok_path, "export fn decode(input: Slice<u8>): Array<u8>\n"));
     ASSERT(write_text_file(legacy_path, "export fn decodeOld(input: ByteSlice): Bytes\n"
-                                        "export fn viewOld(input: ByteView): int\n"));
+                                        "export fn viewOld(input: ByteView): i64\n"));
     ASSERT(write_text_file(span_only_path, "export fn spanOnly(input: Byte"
-                                           "Slice): int\n"));
+                                           "Slice): i64\n"));
     ASSERT(write_text_file(view_only_path, "export fn viewOnly(input: Byte"
-                                           "View): int\n"));
+                                           "View): i64\n"));
 
     const char *old_typepath = getenv("XRAY_TYPEPATH");
     char *old_typepath_copy = old_typepath ? strdup(old_typepath) : NULL;
@@ -3738,7 +3739,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     ASSERT(ok != NULL);
     const char *ok_source = "enum NativeByteErr { BadInput }\n"
                             "import { decode } from native_byte_effects\n"
-                            "fn viaNative(input: Slice<byte>) { decode(input) }\n";
+                            "fn viaNative(input: Slice<u8>) { decode(input) }\n";
     AstNode *ok_program = xr_parse(g_session, ok_source);
     ASSERT(ok_program != NULL);
     xa_analyzer_analyze(ok, "effect_xrd_native_byte_contracts.xr", ok_program);
@@ -3768,7 +3769,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     XaAnalyzer *span_only = xa_analyzer_new(g_session);
     ASSERT(span_only != NULL);
     const char *span_only_source = "import { spanOnly } from native_legacy_bytespan_only\n"
-                                   "fn viaSlice(input: Slice<byte>) { spanOnly(input) }\n";
+                                   "fn viaSlice(input: Slice<u8>) { spanOnly(input) }\n";
     AstNode *span_only_program = xr_parse(g_session, span_only_source);
     ASSERT(span_only_program != NULL);
     xa_analyzer_analyze(span_only, "effect_xrd_legacy_bytespan_only.xr", span_only_program);
@@ -3779,7 +3780,7 @@ TEST(analyzer_xrd_native_typed_byte_contracts_reject_legacy_aliases) {
     XaAnalyzer *view_only = xa_analyzer_new(g_session);
     ASSERT(view_only != NULL);
     const char *view_only_source = "import { viewOnly } from native_legacy_byteview_only\n"
-                                   "fn viaViewOnly(input: Slice<byte>) { viewOnly(input) }\n";
+                                   "fn viaViewOnly(input: Slice<u8>) { viewOnly(input) }\n";
     AstNode *view_only_program = xr_parse(g_session, view_only_source);
     ASSERT(view_only_program != NULL);
     xa_analyzer_analyze(view_only, "effect_xrd_legacy_byteview_only.xr", view_only_program);
@@ -3945,11 +3946,11 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
     XaAnalyzer *current = xa_analyzer_new(g_session);
     ASSERT(current != NULL);
     const char *current_source = "import crypto\n"
-                                 "fn currentStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
+                                 "fn currentStatic(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n"
                                  "fn currentInstance(s: string) { s.sliceBytes(0, 1) }\n"
                                  "fn currentDecrypt(ciphertext: string) { "
                                  "crypto.decrypt(\"secret\", ciphertext) }\n"
-                                 "fn currentLossy(bytes: Slice<byte>) { "
+                                 "fn currentLossy(bytes: Slice<u8>) { "
                                  "string.fromUtf8Lossy(bytes) }\n";
     AstNode *current_program = xr_parse(g_session, current_source);
     ASSERT(current_program != NULL);
@@ -3991,7 +3992,7 @@ TEST(analyzer_error_effect_consumes_builtin_type_member_contracts) {
 
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    const char *source = "fn viaStatic(bytes: Slice<byte>) { string.fromUtf8(bytes) }\n"
+    const char *source = "fn viaStatic(bytes: Slice<u8>) { string.fromUtf8(bytes) }\n"
                          "fn viaInstance(s: string) { s.sliceBytes(0, 1) }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
@@ -4026,7 +4027,7 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
     const char *source =
         "enum CatchErr { Boom, Other }\n"
         "enum OtherErr { Boom }\n"
-        "enum PayloadErr { Boom, Other, Payload(int) }\n"
+        "enum PayloadErr { Boom, Other, Payload(i64) }\n"
         "struct CatchBox { value: CatchErr }\n"
         "struct CatchPair { kept: CatchErr; changed: CatchErr }\n"
         "fn fail() { throw CatchErr.Boom }\n"
@@ -4198,14 +4199,14 @@ TEST(analyzer_error_effect_subtracts_typed_catches) {
         "    throw box[0]\n"
         "  }\n"
         "}\n"
-        "fn catchDynamicIndexRethrows(i: int) {\n"
+        "fn catchDynamicIndexRethrows(i: i64) {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    var box = [CatchErr.Other, CatchErr.Other]\n"
         "    box[i] = e\n"
         "    throw box[i]\n"
         "  }\n"
         "}\n"
-        "fn catchDynamicIndexMismatchRethrows(i: int, j: int) {\n"
+        "fn catchDynamicIndexMismatchRethrows(i: i64, j: i64) {\n"
         "  try { fail() } catch (e: CatchErr) {\n"
         "    var box = [CatchErr.Other, CatchErr.Other]\n"
         "    box[i] = e\n"
@@ -5725,7 +5726,7 @@ TEST(analyzer_error_effect_len_shadow_does_not_preserve_map_provenance) {
 
     const char *source = "enum MapErr { Boom, Other }\n"
                          "fn failMap() { throw MapErr.Boom }\n"
-                         "fn len(box: Map<string, MapErr>) -> int {\n"
+                         "fn len(box: Map<string, MapErr>) -> i64 {\n"
                          "  box.clear()\n"
                          "  return 0\n"
                          "}\n"
@@ -6132,7 +6133,7 @@ TEST(analyzer_empty_array_uses_unsolved_infer_var) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = []\nvar ys: Array<int> = []\n");
+    AstNode *program = xr_parse(g_session, "var xs = []\nvar ys: Array<i64> = []\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "empty_array_infer_var.xr", program);
 
@@ -6148,7 +6149,7 @@ TEST(analyzer_empty_set_uses_unsolved_infer_var) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = #[]\nvar ys: Set<int> = #[]\n");
+    AstNode *program = xr_parse(g_session, "var xs = #[]\nvar ys: Set<i64> = #[]\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "empty_set_infer_var.xr", program);
 
@@ -6164,7 +6165,7 @@ TEST(analyzer_empty_map_uses_unsolved_infer_var) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var xs = #{}\nvar ys: Map<string, int> = #{}\n");
+    AstNode *program = xr_parse(g_session, "var xs = #{}\nvar ys: Map<string, i64> = #{}\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "empty_map_infer_var.xr", program);
 
@@ -6180,8 +6181,8 @@ TEST(analyzer_struct_literal_unknown_fields_offer_lambda_return_hint) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "struct Point { x: int; y: int }\n"
-                         "var f: fn(int) -> Point = value -> Point{result: value}\n";
+    const char *source = "struct Point { x: i64; y: i64 }\n"
+                         "var f: fn(i64) -> Point = value -> Point{result: value}\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "lambda_struct_literal_hint.xr", program);
@@ -6226,17 +6227,17 @@ TEST(analyzer_ref_arrow_hint_is_advisory_and_fail_closed) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    const char *source = "fn mutate(value: ref int) { value *= 2 }\n"
-                         "var readOnly = (x: ref int) -> x * 2\n"
-                         "var direct = (x: ref int) -> { x = x * 2 }\n"
-                         "var compound = (x: ref int) -> { x *= 2 }\n"
-                         "var increment = (x: ref int) -> { x++ }\n"
-                         "var delegated = (x: ref int) -> { mutate(ref x) }\n"
-                         "var indexed = (xs: ref Array<int>) -> { xs[0] = 1 }\n"
-                         "var receiver = (xs: ref Array<int>) -> { xs.push(1) }\n"
-                         "var required: fn(ref int) -> int = (x: ref int) -> x * 2\n"
-                         "var inferred: fn(ref int) -> int = x -> x * 2\n"
-                         "var uncertain = (x: ref int, callback: fn(ref int)) -> {\n"
+    const char *source = "fn mutate(value: ref i64) { value *= 2 }\n"
+                         "var readOnly = (x: ref i64) -> x * 2\n"
+                         "var direct = (x: ref i64) -> { x = x * 2 }\n"
+                         "var compound = (x: ref i64) -> { x *= 2 }\n"
+                         "var increment = (x: ref i64) -> { x++ }\n"
+                         "var delegated = (x: ref i64) -> { mutate(ref x) }\n"
+                         "var indexed = (xs: ref Array<i64>) -> { xs[0] = 1 }\n"
+                         "var receiver = (xs: ref Array<i64>) -> { xs.push(1) }\n"
+                         "var required: fn(ref i64) -> i64 = (x: ref i64) -> x * 2\n"
+                         "var inferred: fn(ref i64) -> i64 = x -> x * 2\n"
+                         "var uncertain = (x: ref i64, callback: fn(ref i64)) -> {\n"
                          "    callback(ref x)\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -6281,7 +6282,7 @@ TEST(analyzer_rejects_builtin_generic_arity) {
     ASSERT(short_map != NULL);
     ASSERT(XR_TYPE_IS_ERROR(short_map));
 
-    XrTypeRef *array_args[] = {xr_tref_int(g_session), xr_tref_string(g_session)};
+    XrTypeRef *array_args[] = {xr_tref_i64(g_session), xr_tref_string(g_session)};
     XrType *wide_array =
         xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Array", array_args, 2));
     ASSERT(wide_array != NULL);
@@ -6320,7 +6321,7 @@ TEST(analyzer_rejects_generator_yield_value_mismatch) {
     ASSERT(xr_compiler_session_push_arena(g_session, &arena, "generator_yield_value_mismatch.xr",
                                           &scope));
 
-    XrTypeRef *iter_args[] = {xr_tref_int(g_session)};
+    XrTypeRef *iter_args[] = {xr_tref_i64(g_session)};
     XrType *iter_type =
         xr_tref_resolve_in_analyzer(a, xr_tref_generic(g_session, "Iterator", iter_args, 1));
     ASSERT(iter_type != NULL);
@@ -6335,14 +6336,14 @@ TEST(analyzer_rejects_generator_yield_value_mismatch) {
     ASSERT(XR_TYPE_IS_INT(iter_elem));
     ASSERT(!xa_typecheck_assignable(iter_elem, xr_type_new_string(NULL)));
 
-    const char *source = "fn bad() -> Iterator<int> { yield \"x\" }";
+    const char *source = "fn bad() -> Iterator<i64> { yield \"x\" }";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
 
     xa_analyzer_analyze(a, "generator_yield_value_mismatch.xr", program);
 
     ASSERT(analyzer_diag_contains(
-        a, "yielded value of type 'string' is not assignable to generator element type 'int'"));
+        a, "yielded value of type 'string' is not assignable to generator element type 'i64'"));
 
     xr_compiler_session_pop_arena(&scope);
     xr_arena_destroy(&arena);
@@ -6403,13 +6404,13 @@ TEST(analyzer_type_ref_failures_use_error_recovery) {
     ASSERT(removed != NULL);
     ASSERT(XR_TYPE_IS_ERROR(removed));
 
-    XrTypeRef *missing_args[] = {xr_tref_int(g_session)};
+    XrTypeRef *missing_args[] = {xr_tref_i64(g_session)};
     XrType *missing_generic = xr_tref_resolve_in_analyzer(
         a, xr_tref_generic(g_session, "DefinitelyMissingGeneric", missing_args, 1));
     ASSERT(missing_generic != NULL);
     ASSERT(XR_TYPE_IS_ERROR(missing_generic));
 
-    XrTypeRef *invalid_fixed = xr_tref_fixed_array_expr(g_session, xr_tref_int(g_session), NULL, 0);
+    XrTypeRef *invalid_fixed = xr_tref_fixed_array_expr(g_session, xr_tref_i64(g_session), NULL, 0);
     XrType *fixed = xr_tref_resolve_in_analyzer(a, invalid_fixed);
     ASSERT(fixed != NULL);
     ASSERT(XR_TYPE_IS_ERROR(fixed));
@@ -6445,7 +6446,7 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
     a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
     program = xr_parse(g_session, "var value: string | bool = \"text\"\n"
-                                  "var result = value as int\n");
+                                  "var result = value as i64\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "cast_disjoint_union.xr", program);
 
@@ -6453,14 +6454,14 @@ TEST(analyzer_cast_error_recovery_and_union_overlap) {
     xa_analyzer_get_diagnostics(a, &count);
     ASSERT(count == 1);
     ASSERT(analyzer_diag_contains(a, "Cannot cast type"));
-    ASSERT(analyzer_diag_contains(a, "to unrelated type 'int'"));
+    ASSERT(analyzer_diag_contains(a, "to unrelated type 'i64'"));
 
     xa_analyzer_free(a);
     setup_pool();
 
     a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "var value: int | string = 1\n"
+    program = xr_parse(g_session, "var value: i64 | string = 1\n"
                                   "var result = value as string\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "cast_overlapping_union.xr", program);
@@ -6507,7 +6508,7 @@ TEST(analyzer_enum_identity_is_nominal) {
     program = xr_parse(g_session, "enum Color { Red, Green, Blue }\n"
                                   "var c: Color = Color.Red\n"
                                   "var same: Color = c\n"
-                                  "var n = c as int\n");
+                                  "var n = c as i64\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "enum_same_ok.xr", program);
     int count = 0;
@@ -6579,7 +6580,7 @@ TEST(analyzer_nullable_numeric_equality_uses_nonnull_literal_context) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "fn value() -> int? { return 7 }\n"
+    AstNode *program = xr_parse(g_session, "fn value() -> i64? { return 7 }\n"
                                            "var a = value() == 7\n"
                                            "var b = -7 == value()\n"
                                            "var c = value() != null\n");
@@ -6635,10 +6636,10 @@ TEST(analyzer_container_recovery_rejects_poisoned_success_types) {
 
     a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
-    program = xr_parse(g_session, "var typed = Array<int>()\n"
-                                  "var value: int = typed[0]\n"
-                                  "var contextualArray: Array<int> = Array()\n"
-                                  "var contextualMap: Map<string, int> = Map()\n"
+    program = xr_parse(g_session, "var typed = Array<i64>()\n"
+                                  "var value: i64 = typed[0]\n"
+                                  "var contextualArray: Array<i64> = Array()\n"
+                                  "var contextualMap: Map<string, i64> = Map()\n"
                                   "var contextualSet: Set<string> = Set()\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "typed_container_constructor.xr", program);
@@ -6658,7 +6659,7 @@ TEST(analyzer_weak_containers_are_unknown_types) {
     XaAnalyzer *a = xa_analyzer_new(g_session);
     ASSERT(a != NULL);
 
-    AstNode *program = xr_parse(g_session, "var wm = WeakMap<string, int>()\n"
+    AstNode *program = xr_parse(g_session, "var wm = WeakMap<string, i64>()\n"
                                            "var ws = WeakSet<string>()\n");
     ASSERT(program != NULL);
     xa_analyzer_analyze(a, "weak_containers_removed.xr", program);
@@ -6698,7 +6699,7 @@ TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
     xa_analyzer_free(a);
     setup_pool();
 
-    AstNode *program = xr_parse(g_session, "fn id<T: Iterable<int>>(x: T) -> T { return x }\n");
+    AstNode *program = xr_parse(g_session, "fn id<T: Iterable<i64>>(x: T) -> T { return x }\n");
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
     ASSERT(program->as.program.count == 1);
@@ -6726,8 +6727,8 @@ TEST(analyzer_rejects_error_type_generic_argument_and_constraint) {
 }
 
 TEST(export_symbols_invalidate_table_on_nested_error_type) {
-    const char *source = "export fn bad() -> int { return 1 }\n"
-                         "export fn good() -> int { return 1 }\n";
+    const char *source = "export fn bad() -> i64 { return 1 }\n"
+                         "export fn good() -> i64 { return 1 }\n";
     AstNode *program = xr_parse(g_session, source);
     ASSERT(program != NULL);
     ASSERT(program->type == AST_PROGRAM);
@@ -6780,7 +6781,7 @@ TEST(compile_type_class) {
 }
 
 TEST(compile_type_optional) {
-    // int? -> nullable type (unified representation)
+    // i64? -> nullable type (unified representation)
     XrType *opt = xr_type_new_optional(g_isolate, xr_type_new_int(NULL));
     ASSERT(opt->is_nullable);
     ASSERT(XR_TYPE_IS_INT(opt));

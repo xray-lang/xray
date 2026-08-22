@@ -4,9 +4,9 @@
 // resolution runs on the static type of the operand, which is the subclass.
 
 class Base {
-    x: int
+    x: i64
 
-    constructor(x: int) {
+    constructor(x: i64) {
         this.x = x
     }
 
@@ -14,15 +14,15 @@ class Base {
         return Base(this.x + other.x)
     }
 
-    operator*(k: int) -> Base {
+    operator*(k: i64) -> Base {
         return Base(this.x * k)
     }
 }
 
 class Derived extends Base {
-    tag: int
+    tag: i64
 
-    constructor(x: int, tag: int) {
+    constructor(x: i64, tag: i64) {
         super(x)
         this.tag = tag
     }

@@ -40,8 +40,6 @@ GLOBAL_SIGNATURES = {
     "assert_true": "(value: any): ()",
     "assert_false": "(value: any): ()",
     "assert_throws": "(fn: function, ...): ()",
-    "int": "(value: any): int",
-    "float": "(value: any): float",
     "string": "(value: any): string",
     "bool": "(value: any): bool",
     "char": "(value: any): char",
@@ -52,7 +50,7 @@ GLOBAL_SIGNATURES = {
     "WeakSet": "(...items: any): Set<any>",
     "typeOf": "(value: any): Type",
     "typeName": "(value: any): string | <T>(): string",
-    "chr": "(codepoint: int): string",
+    "chr": "(codepoint: i64): string",
     "copy": "(value: any): any",
     "dump": "(value: any, ...): ()",
     "print": "(...values: any): ()",
@@ -65,8 +63,6 @@ GLOBAL_SUMMARIES = {
     "assert_true": "Assert that a value is true.",
     "assert_false": "Assert that a value is false.",
     "assert_throws": "Assert that a callable throws.",
-    "int": "Convert a value to int.",
-    "float": "Convert a value to float.",
     "string": "Convert a value to string.",
     "bool": "Convert a value to bool.",
     "char": "Construct a char from a codepoint.",
@@ -307,9 +303,9 @@ def infer_const_type(value: str, annotation: str | None) -> str:
     if value in {"true", "false"}:
         return "bool"
     if re.fullmatch(r"-?(?:0x[0-9A-Fa-f]+|\d+)", value):
-        return "int"
+        return "i64"
     if re.fullmatch(r"-?\d+\.\d+", value):
-        return "float"
+        return "f64"
     return "unknown"
 
 

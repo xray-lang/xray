@@ -3,18 +3,18 @@
 // the native body, producing all-null values silently.
 @derive(JSON)
 struct S {
-    i: int
-    f: float
+    i: i64
+    f: f64
     b: bool
     s: string
 }
 
 @derive(JSON)
-struct Inner { v: int }
+struct Inner { v: i64 }
 
 @derive(JSON)
 struct Outer {
-    a: int
+    a: i64
     inner: Inner
 }
 

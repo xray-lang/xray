@@ -1509,7 +1509,7 @@ static inline xrt_net_try_result_t xrt_net_write_bytes_try(XrValue conn_value, X
     return xrt_net_write_try(conn_value, (const char *) data->data, data->length, progress);
 }
 
-/* readInto fills a caller-supplied Array<byte>; it never allocates, so the
+/* readInto fills a caller-supplied Array<u8>; it never allocates, so the
  * attempt reports the byte count and leaves the data in the caller's buffer. */
 static inline xrt_net_try_result_t xrt_net_read_into_try(XrValue conn_value, XrValue buffer_value,
                                                          XrValue maxlen_value) {

@@ -1,7 +1,7 @@
-fn stash(data: Array<int>, slots: ref Array<Array<int>>) {
+fn stash(data: Array<i64>, slots: ref Array<Array<i64>>) {
     slots[0] = data
 }
 
-var values: Array<int> = [1, 2]
-var slots: Array<Array<int>> = [[0]]
+var values: Array<i64> = [1, 2]
+var slots: Array<Array<i64>> = [[0]]
 stash(values, ref slots)

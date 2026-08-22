@@ -1,6 +1,6 @@
 import { Options, ParallelError, Plan } from parallel
 
-var mapPlan = Plan<int>(Options(2), lane -> lane + 1)
+var mapPlan = Plan<i64>(Options(2), lane -> lane + 1)
 
 fn closeMapPlan() {
     mapPlan.close()
@@ -28,13 +28,13 @@ try {
     }
 }
 
-var intoPlan = Plan<int>(Options(2), lane -> lane + 3)
+var intoPlan = Plan<i64>(Options(2), lane -> lane + 3)
 
 fn closeIntoPlan() {
     intoPlan.close()
 }
 
-var out: Array<int> = []
+var out: Array<i64> = []
 intoPlan.mapInto(0..20000, ref out, (state, i) -> {
     if (i == 10000) {
         closeIntoPlan()

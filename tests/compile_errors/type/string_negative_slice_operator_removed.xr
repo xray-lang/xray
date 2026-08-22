@@ -1,13 +1,13 @@
 fn main() {
     var arr = [1, 2, 3, 4]
     var str = "abcd"
-    var arrTail: Slice<int> = arr[-2:]
+    var arrTail: Slice<i64> = arr[-2:]
     print(arrTail)
     print(str[-2:])
-    var arrDropLast: Slice<int> = arr[:-1]
+    var arrDropLast: Slice<i64> = arr[:-1]
     print(arrDropLast)
     print(str[:-1])
-    var arrMiddle: Slice<int> = arr[-3:-1]
+    var arrMiddle: Slice<i64> = arr[-3:-1]
     print(arrMiddle)
     print(str[-3:-1])
 }

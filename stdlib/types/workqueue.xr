@@ -1,16 +1,16 @@
 // Built-in WorkQueue<T> type; implemented by the runtime.
 class WorkQueue<T> {
-    shardCount: int
+    shardCount: i64
     isClosed: bool
     // @receiver_write
-    push(value: T, shard?: int) -> bool
+    push(value: T, shard?: i64) -> bool
     // WorkQueue<int> only: enqueue count consecutive integer jobs and return the accepted count.
     // @receiver_write
-    pushRange(start: int, count: int, shardStart?: int) -> int
+    pushRange(start: i64, count: i64, shardStart?: i64) -> i64
     // @receiver_write
-    pop(workerId?: int): T?
+    pop(workerId?: i64): T?
     // @receiver_write
-    tryPop(workerId?: int): (T?, bool)
+    tryPop(workerId?: i64): (T?, bool)
     // @receiver_write
     close()
 }

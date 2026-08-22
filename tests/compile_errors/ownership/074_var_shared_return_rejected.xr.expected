@@ -1,1 +1,1 @@
-Return type mismatch: expected 'Array<byte>', got 'const Array<byte>'
+Return type mismatch: expected 'Array<u8>', got 'const Array<u8>'

@@ -1,4 +1,4 @@
-fn guardedMod(n: int, d: int) -> int {
+fn guardedMod(n: i64, d: i64) -> i64 {
     if (d <= 0) {
         return -1
     }

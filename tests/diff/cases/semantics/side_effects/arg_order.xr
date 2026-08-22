@@ -1,11 +1,11 @@
 // anchor: arg-evaluation-order
 // Function arguments evaluate left-to-right across VM / JIT / AOT.
-fn tap(tag: string, v: int) -> int {
+fn tap(tag: string, v: i64) -> i64 {
     print(tag)
     return v
 }
 
-fn sum3(a: int, b: int, c: int) -> int {
+fn sum3(a: i64, b: i64, c: i64) -> i64 {
     return a + b + c
 }
 

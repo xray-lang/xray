@@ -1,8 +1,8 @@
 import mem
 
-const TABLE: [int; 4] = comptime [2, 4, 6, 8]
-const BYTES: [byte; 3] = comptime [11, 22, 33]
+const TABLE: [i64; 4] = comptime [2, 4, 6, 8]
+const BYTES: [u8; 3] = comptime [11, 22, 33]
 
-fn xray_fixed_array_ptr_addr() -> int {
+fn xray_fixed_array_ptr_addr() -> i64 {
     return mem.addr(unsafe { TABLE.ptr() }) + mem.addr(unsafe { BYTES.ptr() })
 }

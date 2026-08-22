@@ -74,7 +74,7 @@ fn test_expression_init() {
 
 @test
 fn test_function_call_init() {
-    fn getValue() -> int {
+    fn getValue() -> i64 {
         return 42
     }
     var x = getValue()
@@ -84,13 +84,13 @@ fn test_function_call_init() {
 // ===== 类型注解 =====
 @test
 fn test_type_annotation_int() {
-    var x: int = 100
+    var x: i64 = 100
     assert_eq(x, 100)
 }
 
 @test
 fn test_type_annotation_float() {
-    var f: float = 2.5
+    var f: f64 = 2.5
     assert_eq(f, 2.5)
 }
 

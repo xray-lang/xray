@@ -1,40 +1,40 @@
-fn takeByte(x: byte) -> int {
-    return x as int
+fn takeByte(x: u8) -> i64 {
+    return x as i64
 }
 
-fn takeU8(x: u8) -> int {
-    return x as int
+fn takeU8(x: u8) -> i64 {
+    return x as i64
 }
 
-fn firstByteArray(xs: Array<byte>) -> int {
-    return xs[0] as int
+fn firstByteArray(xs: Array<u8>) -> i64 {
+    return xs[0] as i64
 }
 
-fn secondU8Array(xs: Array<u8>) -> int {
-    return xs[1] as int
+fn secondU8Array(xs: Array<u8>) -> i64 {
+    return xs[1] as i64
 }
 
-fn sumByteSlice(xs: Slice<byte>) -> int {
-    return (xs[0] as int) + (xs[1] as int)
+fn sumByteSlice(xs: Slice<u8>) -> i64 {
+    return (xs[0] as i64) + (xs[1] as i64)
 }
 
-fn sumU8Slice(xs: Slice<u8>) -> int {
-    return (xs[0] as int) + (xs[1] as int)
+fn sumU8Slice(xs: Slice<u8>) -> i64 {
+    return (xs[0] as i64) + (xs[1] as i64)
 }
 
 @test
 fn test_byte_u8_scalar_and_container_identity() {
     var u: u8 = 250
-    var b: byte = u
+    var b: u8 = u
     var u2: u8 = b
 
     assert_eq(takeByte(u), 250)
     assert_eq(takeU8(b), 250)
     assert_eq(u2, 250)
 
-    var byteArray: Array<byte> = [1, 2, 3]
+    var byteArray: Array<u8> = [1, 2, 3]
     var uint8Array: Array<u8> = [4, 5, 6]
-    var byteFromUint8: Array<byte> = uint8Array
+    var byteFromUint8: Array<u8> = uint8Array
     var uint8FromByte: Array<u8> = byteArray
 
     assert_eq(firstByteArray(uint8Array), 4)
@@ -45,10 +45,10 @@ fn test_byte_u8_scalar_and_container_identity() {
 
 @test
 fn test_byte_u8_slice_and_method_identity() {
-    var byteArray: Array<byte> = [10, 20, 30]
+    var byteArray: Array<u8> = [10, 20, 30]
     var uint8Array: Array<u8> = [40, 50, 60]
 
-    var byteView: Slice<byte> = uint8Array[:]
+    var byteView: Slice<u8> = uint8Array[:]
     var uint8View: Slice<u8> = byteArray[:]
 
     assert_eq(sumByteSlice(uint8Array[:]), 90)
@@ -56,7 +56,7 @@ fn test_byte_u8_slice_and_method_identity() {
     assert_eq(byteView[2], 60)
     assert_eq(uint8View[1], 20)
 
-    var appendToByte: Array<byte> = [1]
+    var appendToByte: Array<u8> = [1]
     appendToByte.appendFrom(uint8Array[0:2])
     assert_eq(len(appendToByte), 3)
     assert_eq(appendToByte[2], 50)

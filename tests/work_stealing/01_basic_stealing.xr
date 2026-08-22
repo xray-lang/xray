@@ -17,7 +17,7 @@ var completed = 0
 var all_correct = true
 
 /* 计算密集型工作函数 */
-fn compute_work(id: int, iterations: int) -> int {
+fn compute_work(id: i64, iterations: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < iterations; i++) {
         sum = sum + i * id
@@ -36,7 +36,7 @@ for (var i = 0; i < CORO_COUNT; i++) {
 /* 等待所有协程完成 */
 print("等待所有协程完成...")
 for (var i = 0; i < len(tasks); i++) {
-    var result: int = await tasks[i]
+    var result: i64 = await tasks[i]
     var expected = compute_work(i, WORK_PER_CORO)
     if (result != expected) {
         print("✗ 协程 " + string(i) + " 结果错误")

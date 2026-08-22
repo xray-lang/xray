@@ -35,16 +35,16 @@ legacy_public_surface = [
 intentional_semantic_changes = [
   "the WebSocket connection layer (connect, sendText, sendBytes, recv, ping, close, serve) is implemented in pure Xray over the net module instead of native runtime code",
   "connect never returns optional and never throws: a failed connection is a WsConn whose error field explains why, matching the streaming recv/send surface",
-  "WsMessage carries an Array<byte>? body with a text() decoder, so binary frames are never forced through UTF-8 and text and binary payloads are never aliased",
+  "WsMessage carries an Array<u8>? body with a text() decoder, so binary frames are never forced through UTF-8 and text and binary payloads are never aliased",
   "serve stops when its running Atomic<bool> flag clears, replacing the process-global stopServer singleton",
   "the connection layer does not offer permessage-deflate; the wire stays uncompressed until a bounded inflate primitive lands",
-  "WebSocket protocol helpers carry frame payloads as Array<byte>",
+  "WebSocket protocol helpers carry frame payloads as Array<u8>",
   "close payload reason decoding remains strict UTF-8 and rejects malformed bytes",
   "masking and frame parsing preserve exact byte payloads across VM and AOT"
 ]
 known_legacy_bugs = [
   "the native connection layer advertised permessage-deflate during the handshake without a working inflate path; the pure-Xray layer stops offering it until a bounded inflate primitive lands",
-  "legacy connection message APIs aliased text and binary payloads through a string-or-bytes union; WsMessage now carries Array<byte>? with an explicit text() decoder",
+  "legacy connection message APIs aliased text and binary payloads through a string-or-bytes union; WsMessage now carries Array<u8>? with an explicit text() decoder",
   "legacy close reason decoding rendered UTF-8 bytes through Array.toString instead of constructing a string"
 ]
 equivalence = ["value", "error", "effect", "complexity"]
@@ -94,9 +94,9 @@ new_behavior = "the process-global ws.stopServer singleton is removed; serve tak
 [[legacy_behavior]]
 id = "string-binary-message-alias"
 classification = "removed"
-new_behavior = "WsMessage distinguishes text and binary payloads through an Array<byte>? body and a text() decoder instead of treating arbitrary bytes as string"
+new_behavior = "WsMessage distinguishes text and binary payloads through an Array<u8>? body and a text() decoder instead of treating arbitrary bytes as string"
 
 [[legacy_behavior]]
 id = "close-reason-array-render"
 classification = "bug"
-new_behavior = "valid UTF-8 close reason bytes decode to their text string rather than an Array<byte> debug rendering"
+new_behavior = "valid UTF-8 close reason bytes decode to their text string rather than an Array<u8> debug rendering"

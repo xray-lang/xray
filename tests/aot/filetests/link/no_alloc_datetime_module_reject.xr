@@ -1,6 +1,6 @@
 import datetime
 
-fn xray_no_alloc_datetime_create_reject() -> int {
+fn xray_no_alloc_datetime_create_reject() -> i64 {
     var dt = datetime.createUTC(2024, 2, 29)
     return dt.year
 }

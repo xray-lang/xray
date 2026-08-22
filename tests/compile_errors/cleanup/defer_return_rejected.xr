@@ -1,4 +1,4 @@
-fn owner() -> int {
+fn owner() -> i64 {
     defer { return 2 }
     return 1
 }

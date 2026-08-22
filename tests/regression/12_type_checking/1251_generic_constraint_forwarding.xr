@@ -67,11 +67,11 @@ fn test_forward_hashable() {
 // Returns a derived value rather than the parameter itself: an Array argument
 // is an owned value, and returning a read parameter is a separate ownership
 // error that would mask what this case is meant to check.
-fn innerIt<U: Iterable<int>>(y: U) -> int {
+fn innerIt<U: Iterable<i64>>(y: U) -> i64 {
     return len(y)
 }
 
-fn outerIt<T: Iterable<int>>(x: T) -> int {
+fn outerIt<T: Iterable<i64>>(x: T) -> i64 {
     return innerIt(x)
 }
 
@@ -136,26 +136,26 @@ fn test_forward_class_bound_to_superclass() {
 
 // ===== User-defined interface constraint =====
 interface Shape {
-    area() -> float
+    area() -> f64
 }
 
 class Square implements Shape {
-    side: float
+    side: f64
 
     constructor(side) {
         this.side = side
     }
 
-    area() -> float {
+    area() -> f64 {
         return this.side * this.side
     }
 }
 
-fn innerShape<U: Shape>(y: U) -> float {
+fn innerShape<U: Shape>(y: U) -> f64 {
     return y.area()
 }
 
-fn outerShape<T: Shape>(x: T) -> float {
+fn outerShape<T: Shape>(x: T) -> f64 {
     return innerShape(x)
 }
 
@@ -184,7 +184,7 @@ class Holder<T: Comparable> {
 
 @test
 fn test_forward_class_type_param() {
-    assert_eq(Holder<int>(11).forwarded(), 11)
+    assert_eq(Holder<i64>(11).forwarded(), 11)
     assert_eq(Holder<string>("cls").forwarded(), "cls")
 }
 

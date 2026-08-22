@@ -1,9 +1,9 @@
-fn worker(n: int) -> int {
+fn worker(n: i64) -> i64 {
     Coro.yield()
     return n + 1
 }
 
-fn sumFour() -> int {
+fn sumFour() -> i64 {
     var t1 = go worker(1)
     var t2 = go worker(2)
     var t3 = go worker(3)

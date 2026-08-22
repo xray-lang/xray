@@ -1,5 +1,5 @@
-fn read(cfg: JSON.Object) -> int {
-    return JSON.require<int>(cfg, ["value"])
+fn read(cfg: JSON.Object) -> i64 {
+    return JSON.require<i64>(cfg, ["value"])
 }
 
 var cfg: JSON.Object = JSON.parseObject("{\"value\":42}")

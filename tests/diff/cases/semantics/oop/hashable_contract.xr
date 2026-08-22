@@ -1,9 +1,9 @@
 // anchor: hashable-contract
 
 class Token implements Hashable {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
@@ -11,7 +11,7 @@ class Token implements Hashable {
         return this.value == other.value
     }
 
-    hash() -> int {
+    hash() -> i64 {
         return this.value
     }
 }
@@ -21,7 +21,7 @@ fn passHashable<T: Hashable>(value: move T) -> T {
 }
 
 var token = Token(7)
-var values: Map<Token, int> = #{}
+var values: Map<Token, i64> = #{}
 values.set(token, 99)
 print(values.containsKey(token))
 print(values[token])

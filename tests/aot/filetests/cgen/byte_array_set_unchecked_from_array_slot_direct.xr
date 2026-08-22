@@ -1,15 +1,15 @@
-fn patchFirst(outputs: ref Array<Array<byte>>) {
+fn patchFirst(outputs: ref Array<Array<u8>>) {
     unsafe {
         var block = outputs.get(0)
         block.set(0, 0x2A)
     }
 }
 
-var block: Array<byte> = Array.withCapacity(1)
+var block: Array<u8> = Array.withCapacity(1)
 unsafe {
     block.push(0)
 }
-var outputs: Array<Array<byte>> = []
+var outputs: Array<Array<u8>> = []
 outputs.push(block)
 patchFirst(ref outputs)
 print(outputs[0][0])

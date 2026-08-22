@@ -1,9 +1,9 @@
 // `defer` runs on every exit edge, cancellation included. A cancelled
 // coroutine dispatches its fixed-layout active cleanup frontier on its own
 // worker and is reported cancelled only after cleanup completes.
-const started = Channel<int>(1)
+const started = Channel<i64>(1)
 
-fn body() -> int {
+fn body() -> i64 {
     defer { print("defer: cleanup ran") }
     started.send(1)
     for (var i = 0; i < 100000000; i++) {

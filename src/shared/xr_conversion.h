@@ -36,9 +36,12 @@ typedef struct XrConversionWitness {
 
 static inline bool xr_conversion_kind_is_numeric(XrConversionKind kind);
 
-/* Compact VM-bytecode evidence for statically classified numeric XI_CONVERT.
- * Zero remains reserved for the dynamic built-in int()/float() conversions. */
+/* Compact VM-bytecode evidence for statically classified conversion. Numeric
+ * conversion and text parsing are disjoint modes; zero has no public source
+ * conversion meaning. */
 #define XR_CONVERSION_BC_PRESENT UINT16_C(0x8000)
+#define XR_CONVERSION_BC_PARSE_REQUIRED UINT16_C(0x4000)
+#define XR_CONVERSION_BC_PARSE_OPTIONAL UINT16_C(0x2000)
 #define XR_CONVERSION_BC_POINTER32 UINT16_C(0x0400)
 
 static inline uint16_t xr_conversion_bytecode_pack(const XrConversionWitness *witness,
@@ -54,6 +57,19 @@ static inline uint16_t xr_conversion_bytecode_pack(const XrConversionWitness *wi
 
 static inline bool xr_conversion_bytecode_is_numeric(uint16_t packed) {
     return (packed & XR_CONVERSION_BC_PRESENT) != 0;
+}
+
+/* Numeric kind bits share the upper payload region with parse tags.  PRESENT
+ * is therefore the mode discriminator: parse tags are valid only when the
+ * numeric witness bit is clear. */
+static inline bool xr_conversion_bytecode_is_parse_required(uint16_t packed) {
+    return (packed & XR_CONVERSION_BC_PRESENT) == 0 &&
+           (packed & XR_CONVERSION_BC_PARSE_REQUIRED) != 0;
+}
+
+static inline bool xr_conversion_bytecode_is_parse_optional(uint16_t packed) {
+    return (packed & XR_CONVERSION_BC_PRESENT) == 0 &&
+           (packed & XR_CONVERSION_BC_PARSE_OPTIONAL) != 0;
 }
 
 static inline uint8_t xr_conversion_bytecode_source_rep(uint16_t packed) {

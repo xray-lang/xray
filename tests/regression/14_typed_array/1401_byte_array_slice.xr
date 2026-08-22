@@ -4,7 +4,7 @@
 fn test_byte_array_slice() {
 
     // ========== Basic slice ==========
-    var bytes = Array<byte>(5)
+    var bytes = Array<u8>(5)
     bytes[0] = 10
     bytes[1] = 20
     bytes[2] = 30
@@ -12,14 +12,14 @@ fn test_byte_array_slice() {
     bytes[4] = 50
     print(len(bytes))  // 5
 
-    var s1: Slice<byte> = bytes[1:4]
+    var s1: Slice<u8> = bytes[1:4]
     print(len(s1))  // 3
     print(s1[0])      // 20
     print(s1[1])      // 30
     print(s1[2])      // 40
 
     // ========== Slice boundaries ==========
-    var b = Array<byte>(5)
+    var b = Array<u8>(5)
     b[0] = 1
     b[1] = 2
     b[2] = 3
@@ -27,23 +27,23 @@ fn test_byte_array_slice() {
     b[4] = 5
 
     // Omit start
-    var s3: Slice<byte> = b[:3]
+    var s3: Slice<u8> = b[:3]
     print(len(s3))  // 3
 
     // Omit end
-    var s4: Slice<byte> = b[2:]
+    var s4: Slice<u8> = b[2:]
     print(len(s4))  // 3
 
     // Full slice
-    var s5: Slice<byte> = b[:]
+    var s5: Slice<u8> = b[:]
     print(len(s5))  // 5
 
     // Empty slice
-    var s6: Slice<byte> = b[2:2]
+    var s6: Slice<u8> = b[2:2]
     print(len(s6))  // 0
 
     // Negative bounds
-    var s7: Slice<byte> = b[-4:-1]
+    var s7: Slice<u8> = b[-4:-1]
     print(len(s7))  // 3
     print(s7[0])      // 2
     print(s7[2])      // 4

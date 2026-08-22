@@ -1,6 +1,6 @@
 class Pair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 
     constructor() {
         this.left = 0
@@ -8,12 +8,12 @@ class Pair {
     }
 }
 
-fn fill_pair(left: ref int, right: ref int) {
+fn fill_pair(left: ref i64, right: ref i64) {
     left = 3
     right = 7
 }
 
-fn read_and_fill(snapshot: int, target: ref int) {
+fn read_and_fill(snapshot: i64, target: ref i64) {
     target = snapshot + 5
 }
 

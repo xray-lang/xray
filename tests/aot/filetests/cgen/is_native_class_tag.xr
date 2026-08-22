@@ -1,10 +1,10 @@
 // Prelude native classes have no shared class slot, so an `is` test against
 // them must compile to a value-tag compare, never to the unresolved-class
 // pointer fallback.
-fn isConn(x: NetConn | int) -> bool { return x is NetConn }
-fn isListener(x: NetListener | int) -> bool { return x is NetListener }
-fn isBig(x: BigInt | int) -> bool { return x is BigInt }
-fn isSb(x: StringBuilder | int) -> bool { return x is StringBuilder }
+fn isConn(x: NetConn | i64) -> bool { return x is NetConn }
+fn isListener(x: NetListener | i64) -> bool { return x is NetListener }
+fn isBig(x: BigInt | i64) -> bool { return x is BigInt }
+fn isSb(x: StringBuilder | i64) -> bool { return x is StringBuilder }
 
 print(isConn(1))
 print(isListener(2))

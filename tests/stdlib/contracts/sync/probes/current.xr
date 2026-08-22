@@ -12,7 +12,7 @@ const event = EventCount(0)
 assert(event.advance())
 assert(event.epoch == 1)
 
-const queue: WorkQueue<int> = WorkQueue<int>(2, 2)
+const queue: WorkQueue<i64> = WorkQueue<i64>(2, 2)
 assert(queue.push(7))
 var (popped, poppedOk) = queue.tryPop()
 assert(poppedOk)

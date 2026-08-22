@@ -9,7 +9,7 @@ fn takes_bool(x: bool) {
 var dyn: JSON.Object = JSON.parseObject("{\"badInt\":3.5,\"badBool\":1}")
 
 try {
-    var value: int = JSON.require<int>(dyn, ["badInt"])
+    var value: i64 = JSON.require<i64>(dyn, ["badInt"])
     print(value)
 } catch panic (p) {
     print(p.message)
@@ -25,7 +25,7 @@ try {
 }
 
 try {
-    print(JSON.require<int>(dyn, ["badInt"]))
+    print(JSON.require<i64>(dyn, ["badInt"]))
     print("bad-return")
 } catch panic (p) {
     print(p.message)

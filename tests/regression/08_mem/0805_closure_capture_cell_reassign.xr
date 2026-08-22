@@ -13,12 +13,12 @@
 
 class Parent {
     children: Array<Child>
-    tag: int
+    tag: i64
     constructor(tag) { this.children = []; this.tag = tag }
 }
 
 class Child {
-    tag: int
+    tag: i64
     constructor(tag) { this.tag = tag }
 }
 
@@ -56,7 +56,7 @@ fn test_multiple_instance_captures_stay_distinct() {
 @test
 fn test_reassign_after_capture_visible_in_closure() {
     var h = Child(0)
-    fn read() -> int {
+    fn read() -> i64 {
         return h.tag
     }
     h = Child(3)
@@ -84,7 +84,7 @@ fn test_closure_write_visible_to_enclosing_frame() {
 @test
 fn test_repeated_closure_writes_through_cell() {
     var h = Child(0)
-    fn step(n: int) {
+    fn step(n: i64) {
         h = Child(n)
     }
     var i = 1

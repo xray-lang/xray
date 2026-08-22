@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_byte_array_repeat_core.h - Canonical growable Array<byte>.repeatFrom semantics.
+ * xr_byte_array_repeat_core.h - Canonical growable Array<u8>.repeatFrom semantics.
  */
 
 #ifndef XR_BYTE_ARRAY_REPEAT_CORE_H

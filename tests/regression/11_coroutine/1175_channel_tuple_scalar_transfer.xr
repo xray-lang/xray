@@ -1,9 +1,9 @@
-fn publish(results: Channel<(int, int, int)>, producer: int) {
+fn publish(results: Channel<(i64, i64, i64)>, producer: i64) {
     var result = (producer + 1, producer + 2, producer + 3)
     results.send(move result)
 }
 
-const results = Channel<(int, int, int)>(4)
+const results = Channel<(i64, i64, i64)>(4)
 var total = 0
 scope {
     for (var producer = 0; producer < 4; producer++) {

@@ -2,23 +2,23 @@
 -7
 42
 9223372036854775807
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
-451 int(string) expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
+451 i64.parse expects a decimal integer
 1500.0
 0.5
 1.0
 2.5
 -0.125
-451 float(string) expects a decimal number
-451 float(string) expects a decimal number
-451 float(string) expects a decimal number
-451 float(string) expects a decimal number
-451 float(string) expects a decimal number
-451 float(string) expects a decimal number
-451 float(string) expects a decimal number
+451 f64.parse expects a decimal number
+451 f64.parse expects a decimal number
+451 f64.parse expects a decimal number
+451 f64.parse expects a decimal number
+451 f64.parse expects a decimal number
+451 f64.parse expects a decimal number
+451 f64.parse expects a decimal number

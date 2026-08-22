@@ -1,6 +1,6 @@
 // anchor: object-width-nullable-omission
 // A nullable Object field may be omitted; every other field must match exactly.
-type Opt = { name: string, age: int? }
+type Opt = { name: string, age: i64? }
 
 fn main() {
     var full: Opt = { name: "Ann", age: 30 }

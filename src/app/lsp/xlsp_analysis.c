@@ -95,10 +95,8 @@ static const XlspDocEntry builtin_docs[] = {
      "```xray\nassert_eq(actual, expected)\n```\n\nAsserts that actual equals expected."},
     {"assert_ne", "```xray\nassert_ne(actual, unexpected)\n```\n\nAsserts that actual does not "
                   "equal unexpected."},
-    {"len", "```xray\nlen(value): int\n```\n\nReturns the length of a string, array, or map."},
+    {"len", "```xray\nlen(value): i64\n```\n\nReturns the length of a string, array, or map."},
     {"range", "```xray\nrange(start, end, step?): Array\n```\n\nCreates an array of numbers."},
-    {"int", "```xray\nint(value): int\n```\n\nConverts value to integer."},
-    {"float", "```xray\nfloat(value): float\n```\n\nConverts value to float."},
     {"string", "```xray\nstring(value): string\n```\n\nConverts value to string."},
     {"input", "```xray\ninput(prompt?): string\n```\n\nReads a line from stdin."},
     {NULL, NULL}};
@@ -1426,7 +1424,7 @@ XrJsonValue *xlsp_analyze_signature_help(XrLspDocument *doc, XrLspPosition pos) 
 
         XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
 
-        // Build signature label: fn name(a: int, b: str): ReturnType
+        // Build signature label: fn name(a: i64, b: str): ReturnType
         char sig_label[512];
         int sig_len = 0;
         sig_len += snprintf(sig_label + sig_len, sizeof(sig_label) - sig_len, "fn %s(", sym->name);

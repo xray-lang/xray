@@ -1,4 +1,4 @@
-fn raw() -> Ptr<byte> {
+fn raw() -> Ptr<u8> {
     const local = c"local"
     return unsafe { local.ptr() }
 }

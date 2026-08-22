@@ -1,8 +1,8 @@
-fn stashLength(data: Array<int>, out: ref Array<int>) {
+fn stashLength(data: Array<i64>, out: ref Array<i64>) {
     out.push(len(data))
 }
 
-var values: Array<int> = [1, 2, 3, 4, 5]
-var out: Array<int> = []
+var values: Array<i64> = [1, 2, 3, 4, 5]
+var out: Array<i64> = []
 stashLength(values, ref out)
 print(out[0])

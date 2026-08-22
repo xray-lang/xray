@@ -1,27 +1,27 @@
 // VM/AOT/generated-C KAT for shared.raw-memory-copy. Source and destination
 // allocations are disjoint, and sentinels detect writes outside each count.
-fn run_copy(count: int) -> int {
-    var src = Array<byte>(40)
-    var dst = Array<byte>(40)
+fn run_copy(count: i64) -> i64 {
+    var src = Array<u8>(40)
+    var dst = Array<u8>(40)
     unsafe {
         var i = 0
         while (i < 40) {
-            src[i] = (i + 11) as byte
+            src[i] = (i + 11) as u8
             dst[i] = 205
             i += 1
         }
         dst.mutPtr().copyFromNonOverlapping(src.ptr(), count)
-        var checksum = int(dst[0]) + int(dst[count - 1]) * 257
+        var checksum = (dst[0] as i64) + (dst[count - 1] as i64) * 257
         if (count < 40) {
-            checksum += int(dst[count]) * 65537
+            checksum += (dst[count] as i64) * 65537
         }
         return checksum
     }
 }
 
 unsafe {
-    MutPtr<byte>.null().copyFromNonOverlapping(Ptr<byte>.null(), 0)
-    MutPtr<byte>.null().copyFromNonOverlapping(Ptr<byte>.null(), -1)
+    MutPtr<u8>.null().copyFromNonOverlapping(Ptr<u8>.null(), 0)
+    MutPtr<u8>.null().copyFromNonOverlapping(Ptr<u8>.null(), -1)
 }
 print(1)
 print(run_copy(1))

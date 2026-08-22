@@ -1,4 +1,4 @@
-fn wait_timeout() -> int {
+fn wait_timeout() -> i64 {
     select {
         after 1 -> {
             return 7

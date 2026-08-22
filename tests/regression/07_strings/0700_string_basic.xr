@@ -1,5 +1,3 @@
-import strconv
-
 import text
 
 // 0700_string_basic.xr
@@ -148,20 +146,20 @@ fn test_pad() {
 
 @test
 fn test_toInt() {
-    assert_eq(strconv.parseInt("123"), 123)
-    assert_eq(strconv.parseInt(" \t\r\n-17tail"), null)
-    assert_eq(strconv.parseInt("+42"), 42)
-    assert_eq(strconv.parseInt("abc"), null)
-    assert_eq(strconv.parseInt("   "), null)
+    assert_eq(i64.tryParse("123"), 123)
+    assert_eq(i64.tryParse(" \t\r\n-17tail"), null)
+    assert_eq(i64.tryParse("+42"), 42)
+    assert_eq(i64.tryParse("abc"), null)
+    assert_eq(i64.tryParse("   "), null)
 }
 
 @test
 fn test_toFloat() {
-    assert_eq(strconv.parseFloat("3.5"), 3.5)
-    assert_eq(strconv.parseFloat(" \n-3.5e2tail"), null)
-    assert_eq(strconv.parseFloat("+0.25"), 0.25)
-    assert_eq(strconv.parseFloat("abc"), null)
-    assert_eq(strconv.parseFloat("\t"), null)
+    assert_eq(f64.tryParse("3.5"), 3.5)
+    assert_eq(f64.tryParse(" \n-3.5e2tail"), null)
+    assert_eq(f64.tryParse("+0.25"), 0.25)
+    assert_eq(f64.tryParse("abc"), null)
+    assert_eq(f64.tryParse("\t"), null)
 }
 
 // ===== split =====

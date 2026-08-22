@@ -5,7 +5,7 @@ enum ProcessAliasMergeErr {
     Msg(s: string)
 }
 
-const processAliasMergeCh = Channel<int>(1)
+const processAliasMergeCh = Channel<i64>(1)
 processAliasMergeCh.trySend(1)
 
 var tryTarget = sys.Process.spawn("sh", ["-c", "exit 0"])

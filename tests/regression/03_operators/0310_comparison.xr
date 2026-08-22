@@ -57,7 +57,7 @@ fn test_ne_strings() {
 
 @test
 fn test_ne_mixed() {
-    var one: int? = 1
+    var one: i64? = 1
     var text: string? = ""
     assert_eq(one != null, true)
     assert_eq(text != null, true)
@@ -155,15 +155,15 @@ fn test_chain_comparison() {
     assert_eq(0 <= x && x <= 10, true)
 }
 
-fn rt_numeric_lt(a: int | float, b: int | float) -> bool {
+fn rt_numeric_lt(a: i64 | f64, b: i64 | f64) -> bool {
     return a < b
 }
 
-fn rt_numeric_le(a: int | float, b: int | float) -> bool {
+fn rt_numeric_le(a: i64 | f64, b: i64 | f64) -> bool {
     return a <= b
 }
 
-fn rt_numeric_eq(a: int | float, b: int | float) -> bool {
+fn rt_numeric_eq(a: i64 | f64, b: i64 | f64) -> bool {
     return a == b
 }
 

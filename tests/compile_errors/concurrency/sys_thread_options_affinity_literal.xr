@@ -1,7 +1,7 @@
 import sys
 
 var cpu = 0
-var t = sys.Thread.spawn(ThreadOptions{ affinity: [cpu] }, fn() -> int {
+var t = sys.Thread.spawn(ThreadOptions{ affinity: [cpu] }, fn() -> i64 {
     return 1
 })
 print(t.join())

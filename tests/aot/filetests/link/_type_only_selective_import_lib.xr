@@ -1,4 +1,4 @@
 export type TypeOnlyConfig = {
     name: string,
-    count: int,
+    count: i64,
 }

@@ -298,9 +298,9 @@ static void cleanup(AnalysisResult *r) {
 
 TEST(class_field_access_has_selection) {
     AnalysisResult r = analyze("class Point {\n"
-                               "    x: int\n"
-                               "    y: int\n"
-                               "    constructor(x: int, y: int) {\n"
+                               "    x: i64\n"
+                               "    y: i64\n"
+                               "    constructor(x: i64, y: i64) {\n"
                                "        this.x = x\n"
                                "        this.y = y\n"
                                "    }\n"
@@ -407,11 +407,11 @@ TEST(enum_member_has_selection) {
 
 TEST(selection_table_has_entries_after_analysis) {
     AnalysisResult r = analyze("class Box {\n"
-                               "    value: int\n"
-                               "    constructor(v: int) {\n"
+                               "    value: i64\n"
+                               "    constructor(v: i64) {\n"
                                "        this.value = v\n"
                                "    }\n"
-                               "    get() -> int {\n"
+                               "    get() -> i64 {\n"
                                "        return this.value\n"
                                "    }\n"
                                "}\n"

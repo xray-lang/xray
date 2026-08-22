@@ -10,9 +10,9 @@
 // must agree with the VM, and with the absolute values in the .expected file.
 
 class Box {
-    f: int = 0
+    f: i64 = 0
     label: string = "none"
-    constructor(v: int, s: string) {
+    constructor(v: i64, s: string) {
         this.f = v
         this.label = s
     }
@@ -21,20 +21,20 @@ class Box {
 // Implicit constructors with field default initializers, so the case also
 // pins the construction path that feeds `?.` rather than only explicit stores.
 class Base {
-    id: int = 7
+    id: i64 = 7
 }
 
 class Derived extends Base {
-    extra: int = 9
+    extra: i64 = 9
 }
 
 class Node {
-    value: int = 0
+    value: i64 = 0
     next: Node? = null
-    constructor(v: int) { this.value = v }
+    constructor(v: i64) { this.value = v }
 }
 
-fn read_field(b: Box?) -> int? {
+fn read_field(b: Box?) -> i64? {
     return b?.f
 }
 

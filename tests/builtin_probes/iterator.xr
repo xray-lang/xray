@@ -1,2 +1,2 @@
-fn use(it: Iterator<int>) -> bool { return true }
+fn use(it: Iterator<i64>) -> bool { return true }
 print(true)

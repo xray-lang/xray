@@ -3,7 +3,7 @@ import sys
 import time
 import { Signal } from sys
 
-const hits = Atomic<int>(0)
+const hits = Atomic<i64>(0)
 
 print(sys.onSignal(Signal.INT, () -> { hits.fetchAdd(1) }))
 print(sys.onSignal(Signal.KILL, () -> { hits.fetchAdd(100) }))

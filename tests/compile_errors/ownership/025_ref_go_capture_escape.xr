@@ -1,4 +1,4 @@
-fn launch(data: ref Array<int>) {
+fn launch(data: ref Array<i64>) {
     var task = go fn() {
         data.push(4)
         return len(data)
@@ -6,5 +6,5 @@ fn launch(data: ref Array<int>) {
     print(await task)
 }
 
-var values: Array<int> = [1, 2, 3]
+var values: Array<i64> = [1, 2, 3]
 launch(ref values)

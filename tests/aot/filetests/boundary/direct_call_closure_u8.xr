@@ -1,5 +1,5 @@
-fn wrap_byte(seed: int) -> byte {
-    fn inner(x: byte) -> byte {
+fn wrap_byte(seed: i64) -> u8 {
+    fn inner(x: u8) -> u8 {
         if (seed > 0) {
             return x + 1
         }

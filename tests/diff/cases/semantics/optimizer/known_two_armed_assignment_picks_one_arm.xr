@@ -8,7 +8,7 @@
 // The condition kind does not matter: a bool value and a comparison behave the
 // same. What matters is that the merge is read afterwards, so the diamond is a
 // select candidate.
-fn from_bool(flag: bool, x: int) -> int {
+fn from_bool(flag: bool, x: i64) -> i64 {
     var out = 0
     if (flag) {
         out = x * 2
@@ -18,7 +18,7 @@ fn from_bool(flag: bool, x: int) -> int {
     return out
 }
 
-fn from_comparison(a: int, b: int) -> int {
+fn from_comparison(a: i64, b: i64) -> i64 {
     var out = 0
     if (a > b) {
         out = 100

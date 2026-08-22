@@ -1,9 +1,9 @@
-fn touch(values: ref Array<int>) -> int {
+fn touch(values: ref Array<i64>) -> i64 {
     unsafe {
         values.set(1, 41)
         return values.get(1) + values.get(2)
     }
 }
 
-var values = Array<int>(3, 1)
+var values = Array<i64>(3, 1)
 print(touch(ref values))

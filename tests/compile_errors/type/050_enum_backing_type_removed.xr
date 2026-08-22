@@ -1,4 +1,4 @@
-enum Code : int {
+enum Code : i64 {
     OK
 }
 

@@ -1,8 +1,8 @@
-fn makeByteArray(n: int) -> Array<byte> {
-    var out = Array<byte>(0)
+fn makeByteArray(n: i64) -> Array<u8> {
+    var out = Array<u8>(0)
     var i = 0
     while (i < n) {
-        out.push((i & 0xFF) as byte)
+        out.push((i & 0xFF) as u8)
         i = i + 1
     }
     return out

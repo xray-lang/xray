@@ -1,15 +1,15 @@
-var COUNTER: int = 1
+var COUNTER: i64 = 1
 var ENABLED: bool = true
-var SCALE: float = 0.5
+var SCALE: f64 = 0.5
 var LETTER: rune = 'A'
 var NOTHING = null
 var LABEL: string = "boot"
-var OFFSET: int = -3
-var DRIFT: float = -0.25
+var OFFSET: i64 = -3
+var DRIFT: f64 = -0.25
 var WORD: isize = -5
 var COUNT: usize = 8
 
-fn xray_top_var_static() -> int {
+fn xray_top_var_static() -> i64 {
     COUNTER = COUNTER + 2
     if (ENABLED && OFFSET == -3 && DRIFT == -0.25 && WORD == -5 && COUNT == 8) {
         return COUNTER

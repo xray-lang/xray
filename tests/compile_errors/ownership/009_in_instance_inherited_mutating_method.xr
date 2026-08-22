@@ -1,5 +1,5 @@
 class CounterBase {
-    value: int
+    value: i64
 
     constructor(v) {
         this.value = v

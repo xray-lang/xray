@@ -4,17 +4,17 @@ import math
 
 // ===== Basic Class Type =====
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
-    constructor(x: int, y: int) {
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
 
-    distance() -> float {
+    distance() -> f64 {
         var sum = this.x * this.x + this.y * this.y
-        return math.sqrt(float(sum))
+        return math.sqrt((sum as f64))
     }
 
     toString() -> string {
@@ -39,7 +39,7 @@ fn test_class_field_access() {
 fn test_class_method_call() {
     var p = Point(3, 4)
     var d = p.distance()
-    assert_eq(typeName(d), "float")
+    assert_eq(typeName(d), "f64")
     assert(d > 4.9 && d < 5.1)
 }
 
@@ -120,13 +120,13 @@ fn test_array_literal_contextual_supertype() {
 
 // ===== Static Members =====
 class Counter {
-    static count: int = 0
+    static count: i64 = 0
 
     static increment() {
         Counter.count = Counter.count + 1
     }
 
-    static getCount() -> int {
+    static getCount() -> i64 {
         return Counter.count
     }
 }
@@ -151,17 +151,17 @@ fn test_static_method() {
 
 // ===== Class with Generic-like Patterns =====
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
 
-    set(value: int) {        this.value = value
+    set(value: i64) {        this.value = value
     }
 }
 
@@ -195,7 +195,7 @@ fn test_is_operator_class() {
 @test
 fn test_is_operator_primitives() {
     var x = 42
-    assert(x is int)
+    assert(x is i64)
     var s = "hello"
     assert(s is string)
     var b = true
@@ -204,27 +204,27 @@ fn test_is_operator_primitives() {
 
 // ===== Multiple Classes =====
 class Rectangle {
-    width: int
-    height: int
+    width: i64
+    height: i64
 
-    constructor(w: int, h: int) {
+    constructor(w: i64, h: i64) {
         this.width = w
         this.height = h
     }
 
-    area() -> int {
+    area() -> i64 {
         return this.width * this.height
     }
 }
 
 class Circle {
-    radius: float
+    radius: f64
 
-    constructor(r: float) {
+    constructor(r: f64) {
         this.radius = r
     }
 
-    area() -> float {
+    area() -> f64 {
         return 3.14159 * this.radius * this.radius
     }
 }

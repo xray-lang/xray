@@ -1,13 +1,13 @@
-export fn simple(): int
-export fn add(a: int, b: int): int
-export fn sync(): int
-export fn blocking_sleep(ms?: int): int
-export fn multi_yield(steps?: int): int
-export fn chain(n?: int): int
-export fn error_test(should_error?: int, error_code?: int): int
-export fn cancel_test(resource_id?: int): int
-export fn counter_inc(): int
-export fn counter_get(): int
-export fn counter_reset(): int
-export fn nested(): int
-export fn long_task(iterations?: int): int
+export fn simple(): i64
+export fn add(a: i64, b: i64): i64
+export fn sync(): i64
+export fn blocking_sleep(ms?: i64): i64
+export fn multi_yield(steps?: i64): i64
+export fn chain(n?: i64): i64
+export fn error_test(should_error?: i64, error_code?: i64): i64
+export fn cancel_test(resource_id?: i64): i64
+export fn counter_inc(): i64
+export fn counter_get(): i64
+export fn counter_reset(): i64
+export fn nested(): i64
+export fn long_task(iterations?: i64): i64

@@ -2,7 +2,7 @@
 
 import { FastResult, pick } from "./enum_result_lib"
 
-fn score(ok: bool) -> int {
+fn score(ok: bool) -> i64 {
     var result = pick(ok)
     match (result) {
         FastResult.Ok(value) -> {

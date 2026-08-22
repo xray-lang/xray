@@ -1,6 +1,6 @@
-fn mutate_through_capture(i: int) -> int {
+fn mutate_through_capture(i: i64) -> i64 {
     var value = i
-    fn read() -> int {
+    fn read() -> i64 {
         return value
     }
     value = i + 1

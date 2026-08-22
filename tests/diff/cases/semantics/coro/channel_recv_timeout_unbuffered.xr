@@ -1,6 +1,6 @@
 // recvTimeout on an empty unbuffered channel must come back as Timeout after
 // the deadline instead of blocking forever: the timer wake is the only wake.
-const ch = Channel<int>(0)
+const ch = Channel<i64>(0)
 var got = ch.recvTimeout(10)
 print(match (got) {
     Recv.Timeout -> "timeout"

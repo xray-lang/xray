@@ -5560,7 +5560,7 @@ static bool aot_u8_slice_type_is_exact(const XrSemanticPlan *semantic, uint32_t 
     return true;
 }
 
-/* A borrowed Slice<byte> parameter is the one view value whose identity is
+/* A borrowed Slice<u8> parameter is the one view value whose identity is
  * fixed before the backend starts: its SemanticPlan parameter row names the
  * function, value, and type, and the TargetPlan binds that exact subject to a
  * VIEW rep, parameter slot, and unique view layout.  Re-prove every storage

@@ -1,5 +1,5 @@
 class Config {
-    final value() -> int {
+    final value() -> i64 {
         return 1
     }
 }

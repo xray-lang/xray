@@ -2,36 +2,36 @@
 // Arrow parameters may be annotated or inferred independently. Return types
 // remain inferred, and a user-type struct literal is always an expression body.
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 
-fn apply(f: fn(int) -> int, value: int) -> int {
+fn apply(f: fn(i64) -> i64, value: i64) -> i64 {
     return f(value)
 }
 
 fn main() {
-    var bound: fn(int) -> int = x -> x + 1
+    var bound: fn(i64) -> i64 = x -> x + 1
     print(bound(2))
     print(apply(x -> x * 3, 4))
-    var transforms: Array<fn(int) -> int> = [x -> x - 1]
+    var transforms: Array<fn(i64) -> i64> = [x -> x - 1]
     print(transforms[0](9))
-    var add: fn(int, int) -> int = (x: int, y) -> x + y
+    var add: fn(i64, i64) -> i64 = (x: i64, y) -> x + y
     print(add(4, 5))
-    var make: fn(float) -> Point = a -> Point{x: a, y: a}
+    var make: fn(f64) -> Point = a -> Point{x: a, y: a}
     print(make(1.0).x)
     var value = 5
-    var mutate = (x: ref int) -> {
+    var mutate = (x: ref i64) -> {
         x = x * 2
     }
     mutate(ref value)
     print(value)
     // A ref parameter can be read without being written. The expected
     // callable contract deliberately suppresses the advisory lint here.
-    var calculate: fn(ref int) -> int = (x: ref int) -> x * 2
+    var calculate: fn(ref i64) -> i64 = (x: ref i64) -> x * 2
     print(calculate(ref value))
     print(value)
-    var update = (x: ref int) -> {
+    var update = (x: ref i64) -> {
         x = x + 1
         return x
     }

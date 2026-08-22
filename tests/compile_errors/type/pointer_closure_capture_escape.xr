@@ -3,7 +3,7 @@ import mem
 fn run() {
     var buffer = mem.alloc(8)
     var ptr = unsafe { buffer.borrowPtr() }
-    var read = fn() -> byte {
+    var read = fn() -> u8 {
         return unsafe { ptr.deref() }
     }
     print(read())

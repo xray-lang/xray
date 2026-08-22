@@ -1,17 +1,17 @@
-fn makeScores(value: int) -> Map<int, int> {
-    var scores: Map<int, int> = #{}
+fn makeScores(value: i64) -> Map<i64, i64> {
+    var scores: Map<i64, i64> = #{}
     scores.set(1, value)
     scores[2] = value
     return scores
 }
 
-fn makeSeen(value: int) -> Set<int> {
-    var seen: Set<int> = #[]
+fn makeSeen(value: i64) -> Set<i64> {
+    var seen: Set<i64> = #[]
     seen.add(value)
     return seen
 }
 
-fn mapSetReturnReceiverPlan(value: int) -> int {
+fn mapSetReturnReceiverPlan(value: i64) -> i64 {
     var one = makeScores(value).get(1) ?? 0
     var two = makeScores(value)[2]
     var hasOne = makeScores(value).containsKey(1)

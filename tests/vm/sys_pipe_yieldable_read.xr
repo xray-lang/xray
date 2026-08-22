@@ -6,14 +6,14 @@ const proc = sys.Process.spawn("sh", ["-c", "sleep 0.05; printf ok"],
     ProcessOptions(null, null, null, pipe.writeEnd()))!
 pipe.closeWrite()
 
-fn readPipe() -> int {
+fn readPipe() -> i64 {
     var chunk = pipe.read(16)
     var n = chunk == null ? -1 : len(chunk!)
     print("read " + string(n))
     return n
 }
 
-fn tick() -> int {
+fn tick() -> i64 {
     print("tick")
     return 1
 }

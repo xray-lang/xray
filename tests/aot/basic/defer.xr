@@ -1,14 +1,14 @@
 // AOT test: defer statement support
 // Tests basic defer, multiple defers (LIFO), and late-bound local reads.
 
-fn test_basic() -> int {
+fn test_basic() -> i64 {
     var result = 0
     defer { result = 99 }
     result = 42
     return result
 }
 
-fn test_multi_defer() -> int {
+fn test_multi_defer() -> i64 {
     var order = 0
     defer { order = order + 1 }
     defer { order = order + 10 }
@@ -16,7 +16,7 @@ fn test_multi_defer() -> int {
     return order
 }
 
-fn test_defer_late_binding() -> int {
+fn test_defer_late_binding() -> i64 {
     var x = 0
     defer { x = 1 }
     return x

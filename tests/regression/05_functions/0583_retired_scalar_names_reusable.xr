@@ -1,0 +1,21 @@
+// Removed scalar spellings are ordinary identifiers, not reserved words.
+// Expected output:
+// 42
+// 7
+// 3.5
+
+fn int(value: i64) -> i64 {
+    return value + 1
+}
+
+fn byte(value: u8) -> u8 {
+    return value
+}
+
+fn float(value: f64) -> f64 {
+    return value
+}
+
+print(int(41))
+print(byte(7))
+print(float(3.5))

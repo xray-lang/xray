@@ -1,12 +1,12 @@
 // Generator value-yield: `yield expr` produces Iterator<T>, consumable by for-in.
 
-fn counter(n: int) -> Iterator<int> {
+fn counter(n: i64) -> Iterator<i64> {
     for (var i = 0; i < n; i++) {
         yield i
     }
 }
 
-fn rangeSum(n: int) -> int {
+fn rangeSum(n: i64) -> i64 {
     var sum = 0
     for (x in counter(n)) {
         sum = sum + x
@@ -14,7 +14,7 @@ fn rangeSum(n: int) -> int {
     return sum
 }
 
-fn firstTwoTotal(n: int) -> int {
+fn firstTwoTotal(n: i64) -> i64 {
     var sum = 0
     for (x in counter(n)) {
         sum = sum + x

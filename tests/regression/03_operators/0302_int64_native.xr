@@ -9,42 +9,42 @@
 
 @test
 fn test_int64_add() {
-    var a: int = 100
-    var b: int = 200
+    var a: i64 = 100
+    var b: i64 = 200
     assert_eq(a + b, 300)
 }
 
 @test
 fn test_int64_sub() {
-    var a: int = 100
-    var b: int = 200
+    var a: i64 = 100
+    var b: i64 = 200
     assert_eq(a - b, -100)
 }
 
 @test
 fn test_int64_mul() {
-    var a: int = 1000000
-    var b: int = 1000000
+    var a: i64 = 1000000
+    var b: i64 = 1000000
     assert_eq(a * b, 1000000000000)
 }
 
 @test
 fn test_int64_div() {
-    var a: int = 100
-    var b: int = 3
+    var a: i64 = 100
+    var b: i64 = 3
     assert_eq(a / b, 33)
 }
 
 @test
 fn test_int64_mod() {
-    var a: int = 100
-    var b: int = 3
+    var a: i64 = 100
+    var b: i64 = 3
     assert_eq(a % b, 1)
 }
 
 @test
 fn test_int64_neg() {
-    var a: int = 42
+    var a: i64 = 42
     assert_eq(-a, -42)
 }
 
@@ -52,27 +52,27 @@ fn test_int64_neg() {
 
 @test
 fn test_int64_beyond_48bit_add() {
-    var a: int = 140737488355327
-    var b: int = 1
-    var result: int = a + b
+    var a: i64 = 140737488355327
+    var b: i64 = 1
+    var result: i64 = a + b
     // Both sides are I64 — should use OP_EQ_I64, no boxing
     assert_eq(result - b, a)
 }
 
 @test
 fn test_int64_large_multiply_verify() {
-    var a: int = 1000000000
-    var b: int = 1000000000
-    var result: int = a * b
+    var a: i64 = 1000000000
+    var b: i64 = 1000000000
+    var result: i64 = a * b
     // Both sides are I64 — should use OP_EQ_I64
     assert_eq(result / a, b)
 }
 
 @test
 fn test_int64_negative_large() {
-    var a: int = -140737488355328
-    var b: int = -1
-    var result: int = a + b
+    var a: i64 = -140737488355328
+    var b: i64 = -1
+    var result: i64 = a + b
     assert_eq(result + 1, a)
 }
 
@@ -82,10 +82,10 @@ fn test_int64_negative_large() {
 
 @test
 fn test_int64_assert_eq_large_literal() {
-    var a: int = 140737488355327
-    var b: int = a + 1
+    var a: i64 = 140737488355327
+    var b: i64 = a + 1
     // b = 140737488355328 (>48-bit), assert_eq second arg is I64 expr
-    var expected: int = 140737488355328
+    var expected: i64 = 140737488355328
     assert_eq(b, expected)
 }
 
@@ -94,24 +94,24 @@ fn test_int64_assert_eq_large_literal() {
 
 @test
 fn test_int64_comparison_expr() {
-    var a: int = 140737488355327
-    var b: int = 1
-    var result: int = a + b
+    var a: i64 = 140737488355327
+    var b: i64 = 1
+    var result: i64 = a + b
     // This tests if > comparison boxes I64 operands
     assert(result > a)
 }
 
 @test
 fn test_int64_comparison_expr_lt() {
-    var a: int = 140737488355327
-    var result: int = a + 1000
+    var a: i64 = 140737488355327
+    var result: i64 = a + 1000
     assert(a < result)
 }
 
 @test
 fn test_int64_comparison_eq_expr() {
-    var a: int = 140737488355327
-    var b: int = a
+    var a: i64 = 140737488355327
+    var b: i64 = a
     assert(a == b)
 }
 
@@ -119,15 +119,15 @@ fn test_int64_comparison_eq_expr() {
 
 @test
 fn test_int64_div_by_zero() {
-    var a: int = 42
-    var zero: int = 0
+    var a: i64 = 42
+    var zero: i64 = 0
     assert_throws(fn() { var r = a / zero })
 }
 
 @test
 fn test_int64_mod_by_zero() {
-    var a: int = 42
-    var zero: int = 0
+    var a: i64 = 42
+    var zero: i64 = 0
     assert_throws(fn() { var r = a % zero })
 }
 
@@ -135,8 +135,8 @@ fn test_int64_mod_by_zero() {
 
 @test
 fn test_int64_bitwise() {
-    var a: int = 0xFF00
-    var b: int = 0x0FF0
+    var a: i64 = 0xFF00
+    var b: i64 = 0x0FF0
     assert_eq(a & b, 0x0F00)
     assert_eq(a | b, 0xFFF0)
     assert_eq(a ^ b, 0xF0F0)
@@ -146,16 +146,16 @@ fn test_int64_bitwise() {
 
 @test
 fn test_int64_shift_large() {
-    var a: int = 1
-    var r47: int = a << 47
+    var a: i64 = 1
+    var r47: i64 = a << 47
     // 2^47 = 140737488355328, verify via shift back
     assert_eq(r47 >> 47, 1)
 }
 
 @test
 fn test_int64_shift_62() {
-    var a: int = 1
-    var r62: int = a << 62
+    var a: i64 = 1
+    var r62: i64 = a << 62
     assert_eq(r62 >> 62, 1)
 }
 
@@ -163,14 +163,14 @@ fn test_int64_shift_62() {
 
 @test
 fn test_int64_compound_add_large() {
-    var x: int = 140737488355327
+    var x: i64 = 140737488355327
     x += 1000
     assert_eq(x - 1000, 140737488355327)
 }
 
 @test
 fn test_int64_compound_mul_large() {
-    var x: int = 1000000000
+    var x: i64 = 1000000000
     x *= 1000000000
     assert_eq(x / 1000000000, 1000000000)
 }
@@ -179,12 +179,12 @@ fn test_int64_compound_mul_large() {
 
 @test
 fn test_typeof_int64() {
-    var a: int = 42
-    assert_eq(typeName(a), "int")
+    var a: i64 = 42
+    assert_eq(typeName(a), "i64")
 }
 
 @test
 fn test_typeof_float64() {
-    var a: float = 3.14
-    assert_eq(typeName(a), "float")
+    var a: f64 = 3.14
+    assert_eq(typeName(a), "f64")
 }

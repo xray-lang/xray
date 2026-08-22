@@ -1,16 +1,16 @@
 // VM/AOT/generated-C differential KAT for shared.byte-slice-fill.
 fn main() {
-    var bytes = Array<byte>(4, 1)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(4, 1)
+    var view: Slice<u8> = bytes[:]
     view.fill(255)
     print(bytes[0])
     print(bytes[3])
 
-    var empty: Slice<byte> = view[0:0]
+    var empty: Slice<u8> = view[0:0]
     empty.fill(7)
     print(len(empty))
 
-    var middle: Slice<byte> = view[1:3]
+    var middle: Slice<u8> = view[1:3]
     middle.fill(0)
     print(bytes[0])
     print(bytes[1])

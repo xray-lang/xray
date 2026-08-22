@@ -1,8 +1,8 @@
 @derive(Clone)
 class Packet {
-    id: int
+    id: i64
 
-    constructor(id: int) {
+    constructor(id: i64) {
         this.id = id
     }
 }

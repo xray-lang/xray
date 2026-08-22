@@ -39,7 +39,7 @@
     },
     {
       "heading": "Atomic",
-      "markdown": "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
+      "markdown": "`Atomic<T>` wraps `i64`/`f64`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
     },
     {
       "heading": "Synchronization handles",

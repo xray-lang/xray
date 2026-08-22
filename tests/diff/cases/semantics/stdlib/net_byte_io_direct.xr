@@ -2,16 +2,16 @@ import net
 
 // The server connection is accepted in the parent and moved into the echo
 // coroutine, mirroring how real servers hand each connection to its own task.
-fn echoThree(conn: move NetConn) -> int {
-    var buffer = Array<byte>()
+fn echoThree(conn: move NetConn) -> i64 {
+    var buffer = Array<u8>()
     while (len(buffer) < 4) {
-        var chunk = Array<byte>(4 - len(buffer))
+        var chunk = Array<u8>(4 - len(buffer))
         var read = net.readInto(conn, ref chunk, 4 - len(buffer))
         if (read <= 0) { break }
         buffer.appendFrom(chunk[:])
     }
     net.writeBytes(conn, buffer)
-    var drain = Array<byte>(8)
+    var drain = Array<u8>(8)
     while (net.readInto(conn, ref drain, 8) > 0) {}
     net.close(conn)
     return len(buffer)
@@ -24,11 +24,11 @@ fn main() {
     var accepted = net.accept(listener)!
     var server = go echoThree(move accepted)
 
-    var request = Array<byte>([0xff, 0x00, 0x7f, 0x41])
+    var request = Array<u8>([0xff, 0x00, 0x7f, 0x41])
     print(net.writeBytes(client, request))
     net.shutdownWrite(client)
 
-    var response = Array<byte>(8)
+    var response = Array<u8>(8)
     var read = net.readInto(client, ref response, 4)
     print(read)
     print(response[0])

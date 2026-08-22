@@ -1,2 +1,2 @@
-var f: fn(ref int) = fn(x: int) {
+var f: fn(ref i64) = fn(x: i64) {
 }

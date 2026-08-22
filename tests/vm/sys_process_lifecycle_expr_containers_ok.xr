@@ -1,22 +1,22 @@
 import sys
 
 var pMap = sys.Process.spawn("sh", ["-c", "exit 0"])
-var m: Map<string, int> = #{"code": pMap!.wait()}
+var m: Map<string, i64> = #{"code": pMap!.wait()}
 print(m.get("code") ?? -1)
 
 var pSet = sys.Process.spawn("sh", ["-c", "exit 0"])
-var s: Set<int> = #[pSet!.wait()]
+var s: Set<i64> = #[pSet!.wait()]
 print(s.contains(0))
 
 var pTemplate = sys.Process.spawn("sh", ["-c", "exit 0"])
 print("code ${pTemplate!.wait()}")
 
-var xs = Array<int>(3, 0)
+var xs = Array<i64>(3, 0)
 xs[0] = 10
 xs[1] = 20
 xs[2] = 30
 var pSlice = sys.Process.spawn("sh", ["-c", "exit 0"])
-var ys: Array<int> = copy(xs[0:pSlice!.wait() + 2])
+var ys: Array<i64> = copy(xs[0:pSlice!.wait() + 2])
 print(len(ys))
 
 var pUnsafe = sys.Process.spawn("sh", ["-c", "exit 0"])

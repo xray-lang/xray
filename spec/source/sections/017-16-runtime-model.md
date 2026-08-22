@@ -14,20 +14,20 @@ order: 017
 
 Xray 值统一用 `XrValue` 表示。当前实现要求 64 位平台，并采用 **16 字节 tagged struct-of-union**：
 
-- **Descriptor（8 字节）**：`tag: byte`、`flags: byte`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
+- **Descriptor（8 字节）**：`tag: u8`、`flags: u8`、`heap_type: u16`、`ext: u32`。`tag` 是类型判定的唯一入口；`heap_type` 只在 `tag == PTR` 时表示堆对象类型。
 - **Payload（8 字节）**：`i64` / `double` / 指针三选一，按 `tag` 解释。
 - **无 NaN-boxing / 无指针低位标记**：整数保留完整 64 位；对象引用是普通堆指针，类型信息在 descriptor 中。
 - **字符串不是值级 SSO**：`string` 始终是 `XrString` 堆对象，字符数据存放在对象内的 `data[]` flexible array 中。运行期短串默认协程本地无锁分配，仅字面量/符号、显式 `intern()` 与 map/set 键驻留全局池；跨协程边界（channel send、`go` 实参、task/scope 结果）按需提升为共享原子 RC。这些都是对象层存储策略，不改变 `XrValue` 表示。
 
 | 值类型 | 内部表示 |
 |--|--|
-| `int` | `XR_TAG_I64` + 64-bit signed payload |
-| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `i64` | `XR_TAG_I64` + 64-bit signed payload |
+| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
+| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`，元素布局为 byte |
 | 其他对象 | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed array 元素布局是容器元数据的一部分。`Array<rune>` 使用 `XR_ELEM_RUNE`，数据区是连续 `uint32_t[]` Unicode scalar；load 时重新装箱为 `XR_TAG_RUNE`，store 时拒绝非 `rune` 值，因此不会与 `Array<u32>` 混淆。
@@ -170,7 +170,7 @@ class PanicInfo {
     message: string             // 人类可读消息
     stack: Array<string>        // 自动 capture 的调用栈，每帧一行格式化字符串
     cause: PanicInfo?           // 链式 cause
-    code: int                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
+    code: i64                   // 错误码（从 "E0xxx: ..." 前缀自动解析，默认 0）
     data: JSON.Value            // 运行时故障的结构化附加数据；无数据时为 JSON null
 
     constructor(message: string = "", cause: PanicInfo? = null)
@@ -301,20 +301,20 @@ class PanicInfo {
 
 Xray values are uniformly represented as `XrValue`. The current implementation requires a 64-bit platform and uses a **16-byte tagged struct-of-union**:
 
-- **Descriptor (8 bytes)**: `tag: byte`, `flags: byte`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
+- **Descriptor (8 bytes)**: `tag: u8`, `flags: u8`, `heap_type: u16`, and `ext: u32`. The `tag` is the single entry point for type dispatch; `heap_type` is meaningful only when `tag == PTR`.
 - **Payload (8 bytes)**: one of `i64`, `double`, or pointer, interpreted by the tag.
 - **No NaN-boxing / no low-bit pointer tagging**: integers keep the full 64-bit payload; object references are ordinary heap pointers, with type metadata in the descriptor.
 - **Strings are not value-level SSO**: `string` is always an `XrString` heap object, with bytes stored inside the object's `data[]` flexible array. Runtime short strings are coroutine-local with lock-free allocation by default; literals/symbols, explicit `intern()`, and map/set keys use the global pool. Cross-execution storage is selected from verified context at construction/publication time; a boundary never copies or promotes the payload implicitly. These are object-storage policies and do not change the `XrValue` representation.
 
 | Value type | Internal representation |
 |--|--|
-| `int` | `XR_TAG_I64` + 64-bit signed payload |
-| `float` | `XR_TAG_F64` + IEEE-754 double payload |
+| `i64` | `XR_TAG_I64` + 64-bit signed payload |
+| `f64` | `XR_TAG_F64` + IEEE-754 double payload |
 | `bool` | `XR_TAG_BOOL` + `0/1` payload |
 | `rune` | `XR_TAG_RUNE` + Unicode scalar payload |
 | `null` | `XR_TAG_NULL` + zero payload |
 | `string` | `XR_TAG_PTR` + `XR_TSTRING` + `XrString*` |
-| `Array<byte>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
+| `Array<u8>` | `XR_TAG_PTR` + `XR_TARRAY`, with byte element layout |
 | Other objects | `XR_TAG_PTR` + heap type + heap pointer |
 
 Typed-array element layout is part of the container metadata. `Array<rune>` uses `XR_ELEM_RUNE`; its data area is a contiguous `uint32_t[]` of Unicode scalars. Loads re-box values as `XR_TAG_RUNE`, and stores reject non-`rune` values, so it cannot be confused with `Array<u32>`.
@@ -457,7 +457,7 @@ class PanicInfo {
     message: string             // human-readable message
     stack: Array<string>        // automatically captured call stack, one formatted line per frame
     cause: PanicInfo?           // chained cause
-    code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
+    code: i64                   // error code (auto-parsed from "E0xxx: ..." prefix; default 0)
     data: JSON.Value            // structured data for a runtime fault; JSON null when absent
 
     constructor(message: string = "", cause: PanicInfo? = null)

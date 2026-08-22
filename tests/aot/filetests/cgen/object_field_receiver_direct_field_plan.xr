@@ -1,4 +1,4 @@
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 class Holder {
     user: User
@@ -7,12 +7,12 @@ class Holder {
         this.user = user
     }
 
-    objectFieldReceiverPlan() -> int {
+    objectFieldReceiverPlan() -> i64 {
         return this.user.age
     }
 }
 
-fn mainValue() -> int {
+fn mainValue() -> i64 {
     var user: User = { name: "ada", age: 7 }
     return Holder(user).objectFieldReceiverPlan()
 }

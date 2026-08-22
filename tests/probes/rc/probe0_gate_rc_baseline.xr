@@ -18,7 +18,7 @@
 import runtime
 
 class Node {
-    id: int
+    id: i64
 
     constructor(id) {
         this.id = id
@@ -36,25 +36,25 @@ class Pair {
 }
 
 // churn 一批立即死亡的局部实例；回收正确时残留应当回到基线。
-fn churn_plain(n: int) {
+fn churn_plain(n: i64) {
     for (var i = 0; i < n; i++) {
         var a = Node(i)
     }
 }
 
 // 构造结果被存入另一个对象的字段，随持有者一起死亡。
-fn churn_nested(n: int) {
+fn churn_nested(n: i64) {
     for (var i = 0; i < n; i++) {
         var p = Pair(Node(i), Node(i + 1))
     }
 }
 
 // 构造结果经 return 转移出去，在调用方死亡。
-fn make(id: int) -> Node {
+fn make(id: i64) -> Node {
     return Node(id)
 }
 
-fn churn_returned(n: int) {
+fn churn_returned(n: i64) {
     for (var i = 0; i < n; i++) {
         var a = make(i)
     }

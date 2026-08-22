@@ -1,11 +1,11 @@
-fn safeAppendRepeat(src: Slice<byte>) -> Array<byte> {
-    var out = Array<byte>(0)
+fn safeAppendRepeat(src: Slice<u8>) -> Array<u8> {
+    var out = Array<u8>(0)
     out.appendFrom(src)
     out.repeatFrom(len(src), len(src))
     return out
 }
 
-var src = Array<byte>(3, 0)
+var src = Array<u8>(3, 0)
 src[0] = 1
 src[1] = 2
 src[2] = 3

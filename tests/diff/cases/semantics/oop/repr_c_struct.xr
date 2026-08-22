@@ -5,7 +5,7 @@ struct CPoint {
 
 struct CBox {
     p: CPoint
-    tag: byte
+    tag: u8
 }
 
 fn make_point() -> CPoint {

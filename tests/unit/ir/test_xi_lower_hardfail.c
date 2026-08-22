@@ -116,7 +116,7 @@ TEST(unresolved_variable_in_expression) {
 
 TEST(unresolved_variable_in_function) {
     /* Undeclared variable inside a function body. */
-    XiFunc *f = try_lower("fn foo() -> int {\n"
+    XiFunc *f = try_lower("fn foo() -> i64 {\n"
                           "    return missing_z\n"
                           "}\n");
     assert(f == NULL && "lowerer must reject unresolved variable in function");
@@ -130,7 +130,7 @@ TEST(error_return_type_rejected) {
 }
 
 TEST(error_parameter_type_rejected) {
-    XiFunc *f = try_lower("fn bad(x: unknown) -> int {\n"
+    XiFunc *f = try_lower("fn bad(x: unknown) -> i64 {\n"
                           "    return 1\n"
                           "}\n");
     assert(f == NULL && "lowerer must reject ErrorType function parameters");

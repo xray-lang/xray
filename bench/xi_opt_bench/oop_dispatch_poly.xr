@@ -1,36 +1,36 @@
 class AnimalBench {
-    seed: int
+    seed: i64
 
-    constructor(seed: int) {
+    constructor(seed: i64) {
         this.seed = seed
     }
 
-    score(x: int) -> int {
+    score(x: i64) -> i64 {
         return this.seed + x
     }
 }
 
 class DogBench extends AnimalBench {
-    constructor(seed: int) {
+    constructor(seed: i64) {
         super(seed)
     }
 
-    score(x: int) -> int {
+    score(x: i64) -> i64 {
         return this.seed + x * 2
     }
 }
 
 class CatBench extends AnimalBench {
-    constructor(seed: int) {
+    constructor(seed: i64) {
         super(seed)
     }
 
-    score(x: int) -> int {
+    score(x: i64) -> i64 {
         return this.seed + x * 3
     }
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var animals = [DogBench(5), CatBench(7)]
     var total = 0
     for (var i = 0; i < rounds; i++) {

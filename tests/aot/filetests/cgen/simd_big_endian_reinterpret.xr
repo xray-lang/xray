@@ -1,8 +1,8 @@
 import { U8x16 } from simd
 
-fn firstWord(bytes: Slice<byte>) -> u64 {
+fn firstWord(bytes: Slice<u8>) -> u64 {
     return U8x16.load(bytes).reinterpretU64().extract(0)
 }
 
-var bytes: [byte; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+var bytes: [u8; 16] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 print(firstWord(bytes[:]))

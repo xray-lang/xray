@@ -1,3 +1,3 @@
-fn xray_add(a: int, b: int) -> int {
+fn xray_add(a: i64, b: i64) -> i64 {
     return a + b
 }

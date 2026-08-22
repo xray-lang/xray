@@ -5,21 +5,21 @@
 
 // Test 1: basic union type variable
 
-fn to_string_value(v: int | string) -> string {
-    if (typeName(v) == "int") {
+fn to_string_value(v: i64 | string) -> string {
+    if (typeName(v) == "i64") {
         return "int"
     } else {
         return "str"
     }
 }
-fn parse_value(s: string) -> int | string {
+fn parse_value(s: string) -> i64 | string {
     if (s == "42") {
         return 42
     }
     return s
 }
-fn classify(v: int | string | bool) -> string {
-    if (typeName(v) == "int") {
+fn classify(v: i64 | string | bool) -> string {
+    if (typeName(v) == "i64") {
         return "number"
     } else if (typeName(v) == "string") {
         return "text"
@@ -40,8 +40,8 @@ class Cat {
 
 @test
 fn test_union_types() {
-    var x: int | string = 42
-    assert_eq(typeName(x), "int")
+    var x: i64 | string = 42
+    assert_eq(typeName(x), "i64")
     x = "hello"
     assert_eq(typeName(x), "string")
 
@@ -51,17 +51,17 @@ fn test_union_types() {
 
     // Test 3: union return type
     var a = parse_value("42")
-    assert_eq(typeName(a), "int")
+    assert_eq(typeName(a), "i64")
     var b = parse_value("hello")
     assert_eq(typeName(b), "string")
 
     // Test 4: union with null normalizes to nullable (int | null -> int?)
-    var n: int | null = 42
-    assert_eq(typeName(n), "int")
+    var n: i64 | null = 42
+    assert_eq(typeName(n), "i64")
 
     // Test 5: numeric alternatives remain distinct; the runtime value is float.
-    var f: int | float = 3.14
-    assert_eq(typeName(f), "float")
+    var f: i64 | f64 = 3.14
+    assert_eq(typeName(f), "f64")
 
     // Test 6: three-member union
     assert_eq(classify(42), "number")
@@ -69,29 +69,29 @@ fn test_union_types() {
     assert_eq(classify(true), "flag")
 
     // Test 7: union assignability - int is assignable to int | string
-    var u: int | string = 100
-    assert_eq(typeName(u), "int")
+    var u: i64 | string = 100
+    assert_eq(typeName(u), "i64")
     u = "world"
     assert_eq(typeName(u), "string")
 
     // Test 8: type alias with union
-    type Result = int | string
+    type Result = i64 | string
     var r: Result = 42
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
     r = "ok"
     assert_eq(typeName(r), "string")
 
     // Test 9: JSON type alias as union member (non-union alias allowed)
-    type User = {id: int, name: string}
+    type User = {id: i64, name: string}
     type Response = User | bool
     var resp: Response = true
     assert_eq(typeName(resp), "bool")
 
     // Test 10: nullable union member (int? | string)
-    var m: int? | string = null
+    var m: i64? | string = null
     assert_eq(typeName(m), "null")
     m = 42
-    assert_eq(typeName(m), "int")
+    assert_eq(typeName(m), "i64")
     m = "hi"
     assert_eq(typeName(m), "string")
 
@@ -108,9 +108,9 @@ fn test_union_types() {
     assert_eq(pet2 is Cat, false)
 
     // Test 13: container with union element type
-    var arr: Array<int | string> = [1, "hello", 2, "world"]
+    var arr: Array<i64 | string> = [1, "hello", 2, "world"]
     assert_eq(len(arr), 4)
-    assert_eq(typeName(arr[0]), "int")
+    assert_eq(typeName(arr[0]), "i64")
     assert_eq(typeName(arr[1]), "string")
 }
 

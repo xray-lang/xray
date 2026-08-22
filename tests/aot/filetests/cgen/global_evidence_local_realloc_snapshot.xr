@@ -1,5 +1,5 @@
-fn score() -> int {
-    var a0: Array<int> = [1, 2, 3]
+fn score() -> i64 {
+    var a0: Array<i64> = [1, 2, 3]
     var a1 = a0
     var a2 = a1
     var a3 = a2

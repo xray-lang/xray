@@ -1,4 +1,4 @@
-type IntFn = fn(int) -> int
+type IntFn = fn(i64) -> i64
 
 var double: IntFn = x -> x * 2
 print(double(21))
@@ -9,7 +9,7 @@ for (i in 1..100) {
 }
 print(fns[10](300))
 
-fn offsetter(offset: int) -> IntFn {
+fn offsetter(offset: i64) -> IntFn {
     return value -> offset + value
 }
 print(offsetter(7)(35))

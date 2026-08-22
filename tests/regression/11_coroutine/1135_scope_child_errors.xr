@@ -5,23 +5,23 @@ import time
 
 enum SvErr { Msg(string) }
 
-fn ok_report(ch: Channel<int>, value: int) -> int {
+fn ok_report(ch: Channel<i64>, value: i64) -> i64 {
     ch.send(value)
     return value
 }
 
-fn fail_report(ch: Channel<int>, value: int) -> int {
+fn fail_report(ch: Channel<i64>, value: i64) -> i64 {
     ch.send(value)
     throw SvErr.Msg("error_" + string(value))
     return 0
 }
 
-fn slow() -> int {
+fn slow() -> i64 {
     time.sleep(1000)
     return 7
 }
 
-fn recv_sum(ch: Channel<int>, count: int) -> int {
+fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
@@ -33,7 +33,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
 }
 
 fn test_scope_waits_for_success_and_failure() {
-    const ch = Channel<int>(3)
+    const ch = Channel<i64>(3)
     scope {
         go ok_report(ch, 1)
         go fail_report(ch, 10)
@@ -44,7 +44,7 @@ fn test_scope_waits_for_success_and_failure() {
 }
 
 fn test_explicit_task_handle_observes_failure() {
-    const ch = Channel<int>(1)
+    const ch = Channel<i64>(1)
     scope {
         var task = go fail_report(ch, 5)
         var result = task.awaitResult()

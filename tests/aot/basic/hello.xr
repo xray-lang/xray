@@ -1,5 +1,5 @@
 // AOT basic test: simple print
-fn double_it(x: int) -> int {
+fn double_it(x: i64) -> i64 {
     return x * 2
 }
 

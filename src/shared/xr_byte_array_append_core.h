@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_byte_array_append_core.h - Canonical growable Array<byte>.appendFrom semantics.
+ * xr_byte_array_append_core.h - Canonical growable Array<u8>.appendFrom semantics.
  */
 
 #ifndef XR_BYTE_ARRAY_APPEND_CORE_H

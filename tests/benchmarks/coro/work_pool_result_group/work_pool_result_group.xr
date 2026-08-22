@@ -7,13 +7,13 @@ var WORKERS = 8
 var TASKS = 100000
 var BATCH = 64
 if (len(process.args) > 0) {
-    WORKERS = int(process.args[0]) ?? WORKERS
+    WORKERS = i64.tryParse(process.args[0]) ?? WORKERS
 }
 if (len(process.args) > 1) {
-    TASKS = int(process.args[1]) ?? TASKS
+    TASKS = i64.tryParse(process.args[1]) ?? TASKS
 }
 if (len(process.args) > 2) {
-    BATCH = int(process.args[2]) ?? BATCH
+    BATCH = i64.tryParse(process.args[2]) ?? BATCH
 }
 if (WORKERS < 1) {
     WORKERS = 1
@@ -33,14 +33,14 @@ print("Result batch:", BATCH)
 const task_ch = Channel(1000)
 const result_group: ResultGroup = ResultGroup(BATCH)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
     }
 }
 
-fn fib(n: int) -> int {
+fn fib(n: i64) -> i64 {
     if (n <= 1) { return n }
     var a = 0
     var b = 1
@@ -52,7 +52,7 @@ fn fib(n: int) -> int {
     return b
 }
 
-fn expected_checksum(count: int) -> int {
+fn expected_checksum(count: i64) -> i64 {
     var total = 0
     for (var i = 0; i < count; i++) {
         total = total + fib(i % 20)
@@ -60,7 +60,7 @@ fn expected_checksum(count: int) -> int {
     return total
 }
 
-fn worker(id: int) -> int {
+fn worker(id: i64) -> i64 {
     var processed = 0
     while (true) {
         var task = recv_int(task_ch, -1)
@@ -71,14 +71,14 @@ fn worker(id: int) -> int {
     return processed
 }
 
-fn submit_tasks(count: int) {
+fn submit_tasks(count: i64) {
     for (var i = 0; i < count; i++) {
         task_ch.send(i)
     }
     task_ch.close()
 }
 
-fn reduce_results() -> int {
+fn reduce_results() -> i64 {
     var total = 0
     while (true) {
         var value = result_group.recv()
@@ -101,7 +101,7 @@ for (var i = 0; i < WORKERS; i++) {
 var submitter = go submit_tasks(TASKS)
 await submitter
 
-var worker_loads: Array<int> = []
+var worker_loads: Array<i64> = []
 for (w in workers) {
     var processed = await w
     worker_loads.push(processed)
@@ -111,7 +111,7 @@ var total = await reducer
 
 var elapsed = time.monotonic() - start
 var expected = expected_checksum(TASKS)
-var result_events = int((TASKS + BATCH - 1) / BATCH)
+var result_events = ((TASKS + BATCH - 1) / BATCH as i64)
 
 print("结果校验和:", total)
 print("预期:", expected)
@@ -119,7 +119,7 @@ print("正确:", total == expected)
 print("结果事件数:", result_events)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+    print("吞吐量:", (TASKS * 1000 / elapsed as i64), "tasks/sec")
 } else {
     print("吞吐量: 太快无法测量")
 }
@@ -130,4 +130,4 @@ for (load in worker_loads) {
     if (load < min_load) { min_load = load }
     if (load > max_load) { max_load = load }
 }
-print("负载均衡: min=", min_load, "max=", max_load, "ratio=", float(max_load) / float(min_load + 1))
+print("负载均衡: min=", min_load, "max=", max_load, "ratio=", (max_load as f64) / (min_load + 1 as f64))

@@ -1,6 +1,6 @@
 import sys
 
-var t = sys.Thread.spawn(fn() -> Array<int> {
+var t = sys.Thread.spawn(fn() -> Array<i64> {
     return [20, 22]
 })
 var values = t.join()

@@ -1,1 +1,1 @@
-tuple type '(int, string, bool)' is not iterable
+tuple type '(i64, string, bool)' is not iterable

@@ -17,14 +17,14 @@ fn run() {
         mem.store<u64>(p, 24, 72623859790382856, Endian.BE)
         mem.store<f32>(p, 32, 1.5, Endian.LE)
         mem.store<f64>(p, 40, -2.25, Endian.BE)
-        print(int(mem.load<i8>(p)))
-        print(int(mem.load<u8>(p, 1)))
-        print(int(mem.load<i16>(p, 2, Endian.LE)))
-        print(int(mem.load<u16>(p, 4, Endian.BE)))
-        print(int(mem.load<i32>(p, 8, Endian.LE)))
-        print(int(mem.load<u32>(p, 12, Endian.BE)))
+        print((mem.load<i8>(p) as i64))
+        print((mem.load<u8>(p, 1) as i64))
+        print((mem.load<i16>(p, 2, Endian.LE) as i64))
+        print((mem.load<u16>(p, 4, Endian.BE) as i64))
+        print((mem.load<i32>(p, 8, Endian.LE) as i64))
+        print((mem.load<u32>(p, 12, Endian.BE) as i64))
         print(mem.load<i64>(p, 16, Endian.LE))
-        print(int(mem.load<u64>(p, 24, Endian.BE)))
+        print((mem.load<u64>(p, 24, Endian.BE) as i64))
         print(mem.load<f32>(p, 32, Endian.LE))
         print(mem.load<f64>(p, 40, Endian.BE))
         var q: Ptr<u8> = p
@@ -37,9 +37,9 @@ fn run() {
     }
     unsafe {
         mem.store<u32>(p, 72, 270544960, Endian.LE)
-        print(int(mem.load<u32>(p, 72, Endian.LE)))
+        print((mem.load<u32>(p, 72, Endian.LE) as i64))
         mem.store<u32>(p, 76, 270544960, Endian.BE)
-        print(int(mem.load<u32>(p, 76, Endian.BE)))
+        print((mem.load<u32>(p, 76, Endian.BE) as i64))
     }
 }
 

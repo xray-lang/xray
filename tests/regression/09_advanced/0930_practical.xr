@@ -6,7 +6,7 @@
 
 @test
 fn test_fibonacci() {
-    fn fib(n: int) -> int {
+    fn fib(n: i64) -> i64 {
         if (n <= 1) { return n }
         return fib(n - 1) + fib(n - 2)
     }
@@ -21,7 +21,7 @@ fn test_fibonacci() {
 
 @test
 fn test_factorial() {
-    fn fact(n: int) -> int {
+    fn fact(n: i64) -> i64 {
         if (n <= 1) { return 1 }
         return n * fact(n - 1)
     }
@@ -35,7 +35,7 @@ fn test_factorial() {
 
 @test
 fn test_is_prime() {
-    fn isPrime(n: int) -> bool {
+    fn isPrime(n: i64) -> bool {
         if (n < 2) { return false }
         if (n == 2) { return true }
         if (n % 2 == 0) { return false }
@@ -58,7 +58,7 @@ fn test_is_prime() {
 
 @test
 fn test_gcd() {
-    fn gcd(a: int, b: int) -> int {
+    fn gcd(a: i64, b: i64) -> i64 {
         var x = a
         var y = b
         while (y != 0) {
@@ -78,7 +78,7 @@ fn test_gcd() {
 
 @test
 fn test_binary_search() {
-    fn binarySearch(arr: Array<int>, target: int) -> int {
+    fn binarySearch(arr: Array<i64>, target: i64) -> i64 {
         var low = 0
         var high = len(arr) - 1
         while (low <= high) {
@@ -104,7 +104,7 @@ fn test_binary_search() {
 
 @test
 fn test_bubble_sort() {
-    fn bubbleSort(arr: ref Array<int>) {
+    fn bubbleSort(arr: ref Array<i64>) {
         var n = len(arr)
         for (i in 0..n) {
             for (j in 0..(n - i - 1)) {
@@ -147,9 +147,9 @@ fn test_reverse_string() {
 @test
 fn test_counter_class() {
     class Counter {
-        value: int
+        value: i64
         constructor() { this.value = 0 }
-        inc() { this.value += 1 }        dec() { this.value -= 1 }        getValue() -> int { return this.value }    }
+        inc() { this.value += 1 }        dec() { this.value -= 1 }        getValue() -> i64 { return this.value }    }
     
     var c = Counter()
     c.inc()
@@ -164,13 +164,13 @@ fn test_counter_class() {
 @test
 fn test_stack() {
     class Stack implements Lengthable {
-        items: Array<int>
+        items: Array<i64>
         constructor() { this.items = [] }
-        push(x: int) { this.items.push(x) }
-        pop() -> int? { return this.items.pop() }
-        peek() -> int { return this.items[len(this.items) - 1] }
+        push(x: i64) { this.items.push(x) }
+        pop() -> i64? { return this.items.pop() }
+        peek() -> i64 { return this.items[len(this.items) - 1] }
         isEmpty() -> bool { return len(this.items) == 0 }
-        operator len() -> int { return len(this.items) }
+        operator len() -> i64 { return len(this.items) }
     }
     
     var s = Stack()

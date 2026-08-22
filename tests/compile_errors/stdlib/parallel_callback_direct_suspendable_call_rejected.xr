@@ -1,10 +1,10 @@
 import parallel
 
-fn worker() -> int {
+fn worker() -> i64 {
     return 1
 }
 
-fn suspends() -> int {
+fn suspends() -> i64 {
     var value = await go worker()
     return value
 }

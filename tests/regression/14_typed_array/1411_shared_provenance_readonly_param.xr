@@ -1,10 +1,10 @@
-fn readFirst(view: Slice<byte>) -> int {
-    return int(view[0]) + len(view)
+fn readFirst(view: Slice<u8>) -> i64 {
+    return (view[0] as i64) + len(view)
 }
 
 @test
 fn test_shared_provenance_readonly_param() {
-    const bytes = Array<byte>(2, 4)
-    const view: Slice<byte> = bytes[:]
+    const bytes = Array<u8>(2, 4)
+    const view: Slice<u8> = bytes[:]
     assert_eq(readFirst(view), 6)
 }

@@ -1,5 +1,5 @@
-fn widenF32(value: f32) -> float {
-    return value as float
+fn widenF32(value: f32) -> f64 {
+    return value as f64
 }
 
 print(widenF32(16777217 as f32))

@@ -1,6 +1,6 @@
 import math
 import { random } from math
 
-fn xray_math_call_reject(x: float) -> float {
+fn xray_math_call_reject(x: f64) -> f64 {
     return math.sqrt(x) + random()
 }

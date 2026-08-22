@@ -1,5 +1,5 @@
 struct Holder {
-    view: Slice<byte>
+    view: Slice<u8>
 }
 
 fn main() {

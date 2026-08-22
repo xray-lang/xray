@@ -1,1 +1,1 @@
-Integer literal 256 is out of range for type 'byte' (expected 0..255)
+Integer literal 256 is out of range for type 'u8' (expected 0..255)

@@ -1,13 +1,13 @@
-fn compute(n: int) -> int {
+fn compute(n: i64) -> i64 {
     return n * n
 }
 
-fn mutate_copy(xs: move Array<int>) -> int {
+fn mutate_copy(xs: move Array<i64>) -> i64 {
     xs.push(99)
     return len(xs)
 }
 
-fn identity_copy(xs: move Array<int>) -> Array<int> {
+fn identity_copy(xs: move Array<i64>) -> Array<i64> {
     return xs
 }
 

@@ -3,7 +3,7 @@ import { HttpRequest, HttpResponse } from http
 import net
 import time
 
-fn serveStaticRoutes(port: int, running: Atomic<bool>) -> bool {
+fn serveStaticRoutes(port: i64, running: Atomic<bool>) -> bool {
     var server = http.Server()
     server.route("GET", "/plain", "hello static")
     server.route("GET", "/empty", "")
@@ -13,7 +13,7 @@ fn serveStaticRoutes(port: int, running: Atomic<bool>) -> bool {
     return server.listen(port, running)
 }
 
-fn tryDial(port: int) -> NetConn? {
+fn tryDial(port: i64) -> NetConn? {
     try {
         return net.dial("127.0.0.1", port)
     } catch (e) {
@@ -21,7 +21,7 @@ fn tryDial(port: int) -> NetConn? {
     }
 }
 
-fn waitForServer(port: int) -> bool {
+fn waitForServer(port: i64) -> bool {
     for (var i = 0; i < 50; i = i + 1) {
         var conn = tryDial(port)
         if (conn != null) {
@@ -33,7 +33,7 @@ fn waitForServer(port: int) -> bool {
     return false
 }
 
-fn sendRaw(port: int, request: string) -> string {
+fn sendRaw(port: i64, request: string) -> string {
     var conn = tryDial(port)
     if (conn == null) {
         return ""
@@ -44,8 +44,8 @@ fn sendRaw(port: int, request: string) -> string {
         net.close(conn!)
         return ""
     }
-    var response = Array<byte>()
-    var chunk = Array<byte>(4096)
+    var response = Array<u8>()
+    var chunk = Array<u8>(4096)
     while (true) {
         var got = net.readInto(conn!, ref chunk, 4096)
         if (got <= 0) { break }

@@ -1,4 +1,4 @@
-fn plus_one(x: int) -> int {
+fn plus_one(x: i64) -> i64 {
     return x + 1
 }
 

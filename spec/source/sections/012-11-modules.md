@@ -109,7 +109,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 // 1. 声明自身携带 export 可见性
 export fn helper() { return }
 export final class MyClass {
-    value: int
+    value: i64
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"
@@ -289,7 +289,7 @@ ExportSpec ::= Identifier ('as' Identifier)?
 // 1. visibility belongs to the declaration
 export fn helper() { return }
 export final class MyClass {
-    value: int
+    value: i64
     constructor() { this.value = 1 }
 }
 export const VERSION = "1.0"

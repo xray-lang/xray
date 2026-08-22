@@ -1,4 +1,4 @@
-fn read(value: int) -> int {
+fn read(value: i64) -> i64 {
     return value
 }
 

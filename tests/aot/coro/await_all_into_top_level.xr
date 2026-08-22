@@ -1,10 +1,10 @@
-fn worker(n: int) -> int {
+fn worker(n: i64) -> i64 {
     Coro.yield()
     return n * n
 }
 
-var tasks: Array<Task<int>> = []
-var results: Array<int> = []
+var tasks: Array<Task<i64>> = []
+var results: Array<i64> = []
 tasks.reserve(4)
 results.reserve(4)
 

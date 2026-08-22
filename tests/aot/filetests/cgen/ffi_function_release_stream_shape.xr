@@ -1,7 +1,7 @@
 import mem
 
 struct Task208Function {
-    code: Ptr<byte>
+    code: Ptr<u8>
     codeSize: usize
     locals: [u32; 4]
     constants: [u64; 4]
@@ -9,8 +9,8 @@ struct Task208Function {
 }
 
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>) -> ()
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>) -> ()
 }
 
 fn functionReleaseLike(count: usize) -> usize {

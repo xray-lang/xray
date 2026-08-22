@@ -6,10 +6,10 @@ import time
 var WORKERS = 8
 var TASKS = 100000
 if (len(process.args) > 0) {
-    WORKERS = int(process.args[0]) ?? WORKERS
+    WORKERS = i64.tryParse(process.args[0]) ?? WORKERS
 }
 if (len(process.args) > 1) {
-    TASKS = int(process.args[1]) ?? TASKS
+    TASKS = i64.tryParse(process.args[1]) ?? TASKS
 }
 if (WORKERS < 1) {
     WORKERS = 1
@@ -18,7 +18,7 @@ if (TASKS < 0) {
     TASKS = 0
 }
 
-const work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+const work_queue: WorkQueue<i64> = WorkQueue<i64>(WORKERS, 1024)
 
 print("=== Work Queue Pool 测试 ===")
 print("Worker数:", WORKERS)
@@ -26,14 +26,14 @@ print("任务总数:", TASKS)
 
 const result_ch = Channel(1000)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
     }
 }
 
-fn fib(n: int) -> int {
+fn fib(n: i64) -> i64 {
     if (n <= 1) { return n }
     var a = 0
     var b = 1
@@ -45,7 +45,7 @@ fn fib(n: int) -> int {
     return b
 }
 
-fn expected_total(count: int) -> int {
+fn expected_total(count: i64) -> i64 {
     var total = 0
     for (var i = 0; i < count; i++) {
         total = total + fib(i % 20)
@@ -53,7 +53,7 @@ fn expected_total(count: int) -> int {
     return total
 }
 
-fn worker(id: int) -> int {
+fn worker(id: i64) -> i64 {
     var processed = 0
     while (true) {
         var task = work_queue.pop(id)
@@ -67,7 +67,7 @@ fn worker(id: int) -> int {
     return processed
 }
 
-fn submit_tasks(count: int) -> int {
+fn submit_tasks(count: i64) -> i64 {
     for (var i = 0; i < count; i++) {
         assert_true(work_queue.push(i, i))
     }
@@ -77,7 +77,7 @@ fn submit_tasks(count: int) -> int {
 
 var start = time.monotonic()
 
-var workers: Array<Task<int>> = []
+var workers: Array<Task<i64>> = []
 for (var i = 0; i < WORKERS; i++) {
     workers.push(go worker(i))
 }
@@ -90,7 +90,7 @@ for (var i = 0; i < TASKS; i++) {
 }
 await submitter
 
-var worker_loads: Array<int> = []
+var worker_loads: Array<i64> = []
 for (w in workers) {
     var processed = await w
     worker_loads.push(processed)
@@ -105,7 +105,7 @@ print("预期:", expected)
 print("正确:", total == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+    print("吞吐量:", (TASKS * 1000 / elapsed as i64), "tasks/sec")
 } else {
     print("吞吐量: 太快无法测量")
 }
@@ -116,4 +116,4 @@ for (load in worker_loads) {
     if (load < min_load) { min_load = load }
     if (load > max_load) { max_load = load }
 }
-print("负载均衡: min=", min_load, "max=", max_load, "ratio=", float(max_load) / float(min_load + 1))
+print("负载均衡: min=", min_load, "max=", max_load, "ratio=", (max_load as f64) / (min_load + 1 as f64))

@@ -1,7 +1,7 @@
 import parallel
 
-const ch: Channel<int> = Channel<int>(8)
-const hits = Atomic<int>(0)
+const ch: Channel<i64> = Channel<i64>(8)
+const hits = Atomic<i64>(0)
 
 parallel.forEach(0..4, (i) -> {
     var sent = ch.trySend(i)

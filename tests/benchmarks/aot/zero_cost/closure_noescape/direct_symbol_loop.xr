@@ -1,5 +1,5 @@
-fn run(n: int) -> int {
-    const inc = fn(x: int) -> int {
+fn run(n: i64) -> i64 {
+    const inc = fn(x: i64) -> i64 {
         return x + 1
     }
     var i = 0

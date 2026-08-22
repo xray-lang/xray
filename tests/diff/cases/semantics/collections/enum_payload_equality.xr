@@ -1,8 +1,8 @@
 // Payload enum equality is nominal identity plus payload-wise comparison on
 // both backends. The hosted AOT runtime once compared identity only, so equal
 // tags with different payloads answered true and Map/Set keys merged.
-enum E { A(int), B(string), C }
-enum K { Id(int), Name(string) }
+enum E { A(i64), B(string), C }
+enum K { Id(i64), Name(string) }
 
 fn main() {
     print(E.A(1) == E.A(1))

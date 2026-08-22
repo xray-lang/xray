@@ -6,11 +6,11 @@
 // built only from those forms is still no-throw, so it needs no catch at all.
 enum E { Boom }
 
-fn failing() -> int {
+fn failing() -> i64 {
     throw E.Boom
 }
 
-fn ok(n: int) -> int {
+fn ok(n: i64) -> i64 {
     return n + 1
 }
 
@@ -35,7 +35,7 @@ fn observe_timeout() -> string {
 }
 
 // Aggregates collect outcomes; no raise reaches this frame.
-fn aggregate() -> int {
+fn aggregate() -> i64 {
     var a = go ok(1)
     var b = go ok(2)
     var results = await all [a, b]

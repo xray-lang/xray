@@ -1,11 +1,11 @@
-fn local_bump() -> int {
+fn local_bump() -> i64 {
     var words = Array<u32>(3, 0)
     words[0] = 1
     words[1] = 2
     words[2] = 3
     var view: Slice<u32> = words[:]
     view[1] = view[1] + 7
-    return int(view[1])
+    return (view[1] as i64)
 }
 
 print(local_bump())

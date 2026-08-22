@@ -1,16 +1,16 @@
-fn worker(n: int) -> int {
+fn worker(n: i64) -> i64 {
     Coro.yield()
     return n * n
 }
 
-fn evenWorker(n: int) -> bool {
+fn evenWorker(n: i64) -> bool {
     Coro.yield()
     return (n & 1) == 0
 }
 
 fn run() {
-    var tasks: Array<Task<int>> = []
-    var results: Array<int> = []
+    var tasks: Array<Task<i64>> = []
+    var results: Array<i64> = []
     tasks.reserve(4)
     results.reserve(4)
 

@@ -12,7 +12,7 @@
 // 所以这里只断言语义，内存量级由 CI 之外的 RSS 探针守（tests/probes/rc/）。
 
 class Target {
-    tag: int
+    tag: i64
     constructor(tag) { this.tag = tag }
 }
 
@@ -34,7 +34,7 @@ assert(live == 7)
 
 // 顶层调用的普通函数同属主执行流：分配上下文是 per-execution 的，不是
 // per-frame 的，所以这里的 weak 也必须成立。
-fn in_called_function() -> int {
+fn in_called_function() -> i64 {
     var hh = Holder()
     var tt = Target(11)
     hh.t = tt
@@ -48,8 +48,8 @@ assert(in_called_function() == 11)
 
 // 顶层的容器字面量同样是执行局部的，不该是永生的。这里只验证它们可用；
 // 回收由 RSS 探针守。
-var arr: Array<int> = [1, 2, 3]
-var m = Map<int, int>()
+var arr: Array<i64> = [1, 2, 3]
+var m = Map<i64, i64>()
 m.set(1, 2)
 assert(len(arr) == 3)
 assert(m.get(1) == 2)

@@ -76,7 +76,7 @@ fn test_mixed_types() {
 // ===== 对象作为函数参数 =====
 @test
 fn test_object_as_param() {
-    fn getX(p: { x: int, y: int }) -> int {
+    fn getX(p: { x: i64, y: i64 }) -> i64 {
         return p.x
     }
     var point = { x: 42, y: 0 }
@@ -86,7 +86,7 @@ fn test_object_as_param() {
 // ===== 对象作为返回值 =====
 @test
 fn test_object_as_return() {
-    fn makePoint(x: int, y: int) -> { x: int, y: int } {
+    fn makePoint(x: i64, y: i64) -> { x: i64, y: i64 } {
         return { x, y }
     }
     var p = makePoint(3, 4)

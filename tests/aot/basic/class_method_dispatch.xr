@@ -3,24 +3,24 @@
 // the receiver is a function parameter with a class type annotation.
 
 class Counter {
-    value: int
-    constructor(init: int) {
+    value: i64
+    constructor(init: i64) {
         this.value = init
     }
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
-    increment() -> int {
+    increment() -> i64 {
         this.value = this.value + 1
         return this.value
     }
 }
 
-fn use_counter(c: Counter) -> int {
+fn use_counter(c: Counter) -> i64 {
     return c.get()
 }
 
-fn bump_counter(c: ref Counter) -> int {
+fn bump_counter(c: ref Counter) -> i64 {
     return c.increment()
 }
 

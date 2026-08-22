@@ -6,13 +6,13 @@
 // float32, boolean - through both a runtime value and a folded constant, so a
 // backend that went back to a private operator shows up as a diff.
 
-fn opaque_int(a: int, b: int) -> int { return a }
-fn opaque_float(a: float, b: int) -> float { return a }
-fn opaque_bool(a: bool, b: int) -> bool { return a }
+fn opaque_int(a: i64, b: i64) -> i64 { return a }
+fn opaque_float(a: f64, b: i64) -> f64 { return a }
+fn opaque_bool(a: bool, b: i64) -> bool { return a }
 
 // 有符号整数：两端与零点
-var lo: int = -9223372036854775807 - 1
-var hi: int = 9223372036854775807
+var lo: i64 = -9223372036854775807 - 1
+var hi: i64 = 9223372036854775807
 var vlo = opaque_int(lo, 0)
 var vhi = opaque_int(hi, 0)
 var vzero = opaque_int(0, 0)
@@ -51,8 +51,8 @@ print(utop == utop)                   // true
 var u32a: u32 = 0x8000_0000
 var u32b: u32 = 1
 print(u32a > u32b)                    // true
-var byteA: byte = 200
-var byteB: byte = 3
+var byteA: u8 = 200
+var byteB: u8 = 3
 print(byteA > byteB)                  // true
 print(byteB >= byteA)                 // false
 
@@ -101,7 +101,7 @@ print(bt == bf)                       // false
 print(bt != bf)                       // true
 
 // 循环守卫由同一个所有者下降
-fn count_below(limit: int) -> int {
+fn count_below(limit: i64) -> i64 {
     var total = 0
     var i = 0
     while (i < limit) {

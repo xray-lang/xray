@@ -1,15 +1,15 @@
 class Box {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
 
-    set(value: int) {
+    set(value: i64) {
         this.value = value
     }
 }

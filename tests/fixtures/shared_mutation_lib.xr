@@ -1,7 +1,7 @@
-export fn overwrite(view: ref Slice<byte>) {
+export fn overwrite(view: ref Slice<u8>) {
     view[0] = 1
 }
 
-export fn readFirst(view: Slice<byte>) -> int {
-    return int(view[0]) + len(view)
+export fn readFirst(view: Slice<u8>) -> i64 {
+    return (view[0] as i64) + len(view)
 }

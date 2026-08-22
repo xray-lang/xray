@@ -1,6 +1,6 @@
 export struct State {
     private value: u64
-    private tail: [byte; 4]
+    private tail: [u8; 4]
 
     reset(value: u64) {
         this.value = value

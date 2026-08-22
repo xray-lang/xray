@@ -75,8 +75,8 @@ fn large<T>(x: T) -> T {
     return x
 }
 
-fn wrapper() -> int {
-    return large<int>(42)
+fn wrapper() -> i64 {
+    return large<i64>(42)
 }
 
 print(wrapper())

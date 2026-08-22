@@ -1,7 +1,7 @@
 const xray_no_alloc_atomic_scalar_int = Atomic(10)
 const xray_no_alloc_atomic_scalar_flag = Atomic(false)
 
-fn xray_no_alloc_atomic_scalar_methods_ok(counter: Atomic<int>, flag: Atomic<bool>) -> int {
+fn xray_no_alloc_atomic_scalar_methods_ok(counter: Atomic<i64>, flag: Atomic<bool>) -> i64 {
     counter.store(11, Ordering.Relaxed)
     counter.add(2, Ordering.Relaxed)
     counter.sub(1, Ordering.Relaxed)

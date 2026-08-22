@@ -10,7 +10,7 @@ enum Color {
 
 enum WireEvent {
     Ready,
-    Data(bytes: string, code: int),
+    Data(bytes: string, code: i64),
     Error(message: string)
 }
 
@@ -21,7 +21,7 @@ enum GenericResult<T> {
 }
 
 enum PositionalPayload {
-    Pair(int, int)
+    Pair(i64, i64)
 }
 
 type PaletteColor = Color
@@ -38,7 +38,7 @@ fn firstColorVariant() -> EnumVariant<Color> {
     return Color.variants[0]
 }
 
-fn variantOrdinal(variant: EnumVariant<Color>) -> int {
+fn variantOrdinal(variant: EnumVariant<Color>) -> i64 {
     return variant.ordinal
 }
 
@@ -119,11 +119,11 @@ fn test_payload_enum_variant_descriptors() {
 
 @test
 fn test_concrete_generic_enum_variant_descriptors() {
-    assert_eq(GenericResult<int>.variants.length, 3)
-    assert_eq(GenericResult<int>.variants[0].name, "Ok")
-    assert_eq(GenericResult<int>.variants[0].payloadCount, 1)
-    assert_eq(GenericResult<int>.variants[0].payloads[0].name, "value")
-    assert_eq(GenericResult<int>.variants[0].payloads[0].type > 0, true)
+    assert_eq(GenericResult<i64>.variants.length, 3)
+    assert_eq(GenericResult<i64>.variants[0].name, "Ok")
+    assert_eq(GenericResult<i64>.variants[0].payloadCount, 1)
+    assert_eq(GenericResult<i64>.variants[0].payloads[0].name, "value")
+    assert_eq(GenericResult<i64>.variants[0].payloads[0].type > 0, true)
 }
 
 @test

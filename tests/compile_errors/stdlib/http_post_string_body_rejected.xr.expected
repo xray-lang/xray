@@ -1,1 +1,1 @@
-type 'string' is not assignable to parameter type 'Array<byte>'
+type 'string' is not assignable to parameter type 'Array<u8>'

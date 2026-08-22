@@ -1,4 +1,4 @@
-export fn observeOnly(value: int) {
+export fn observeOnly(value: i64) {
     var next = value + 1
     if (next < value) {
         return

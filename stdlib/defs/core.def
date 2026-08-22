@@ -1,6 +1,6 @@
 module time {
   fn now {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Current time in milliseconds since epoch"
     effect: "nothrow"
     vm: "xr_time_now"
@@ -13,7 +13,7 @@ module time {
   }
 
   fn clock {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "CPU clock time in milliseconds"
     effect: "nothrow"
     vm: "xr_time_clock"
@@ -26,7 +26,7 @@ module time {
   }
 
   fn monotonic {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Monotonic time in milliseconds"
     effect: "nothrow"
     vm: "xr_time_monotonic"
@@ -39,7 +39,7 @@ module time {
   }
 
   fn nanos {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Monotonic time in nanoseconds"
     effect: "nothrow"
     vm: "xr_time_nanos"
@@ -52,7 +52,7 @@ module time {
   }
 
   fn micros {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Monotonic time in microseconds"
     effect: "nothrow"
     vm: "xr_time_micros"
@@ -65,7 +65,7 @@ module time {
   }
 
   fn localOffset {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Local UTC offset in minutes for the current wall time"
     effect: "nothrow"
     vm: "xr_time_local_offset"
@@ -78,7 +78,7 @@ module time {
   }
 
   fn localOffsetAt {
-    signature: "(timestamp: int): int"
+    signature: "(timestamp: i64): i64"
     doc: "Local UTC offset in minutes at a Unix timestamp"
     effect: "nothrow"
     vm: "xr_time_local_offset_at"
@@ -91,7 +91,7 @@ module time {
   }
 
   fn sleep {
-    signature: "(ms: int): ()"
+    signature: "(ms: i64): ()"
     doc: "Sleep for milliseconds"
     vm: "xr_time_sleep"
     vm_binding: "yieldable"
@@ -106,7 +106,7 @@ module time {
 
 module math {
   const PI {
-    signature: ": float"
+    signature: ": f64"
     doc: "Ratio of a circle's circumference to its diameter"
     vm: "math.PI"
     vm_value: "xr_float(M_PI)"
@@ -116,7 +116,7 @@ module math {
   }
 
   const E {
-    signature: ": float"
+    signature: ": f64"
     doc: "Euler's number"
     vm: "math.E"
     vm_value: "xr_float(M_E)"
@@ -126,7 +126,7 @@ module math {
   }
 
   const TAU {
-    signature: ": float"
+    signature: ": f64"
     doc: "Full-circle radians, 2 * PI"
     vm: "math.TAU"
     vm_value: "xr_float(2.0 * M_PI)"
@@ -136,7 +136,7 @@ module math {
   }
 
   const SQRT2 {
-    signature: ": float"
+    signature: ": f64"
     doc: "Square root of 2"
     vm: "math.SQRT2"
     vm_value: "xr_float(M_SQRT2)"
@@ -146,7 +146,7 @@ module math {
   }
 
   const LN2 {
-    signature: ": float"
+    signature: ": f64"
     doc: "Natural logarithm of 2"
     vm: "math.LN2"
     vm_value: "xr_float(M_LN2)"
@@ -156,7 +156,7 @@ module math {
   }
 
   const LN10 {
-    signature: ": float"
+    signature: ": f64"
     doc: "Natural logarithm of 10"
     vm: "math.LN10"
     vm_value: "xr_float(M_LN10)"
@@ -166,7 +166,7 @@ module math {
   }
 
   const LOG2E {
-    signature: ": float"
+    signature: ": f64"
     doc: "Base-2 logarithm of e"
     vm: "math.LOG2E"
     vm_value: "xr_float(M_LOG2E)"
@@ -176,7 +176,7 @@ module math {
   }
 
   const LOG10E {
-    signature: ": float"
+    signature: ": f64"
     doc: "Base-10 logarithm of e"
     vm: "math.LOG10E"
     vm_value: "xr_float(M_LOG10E)"
@@ -186,7 +186,7 @@ module math {
   }
 
   const EPSILON {
-    signature: ": float"
+    signature: ": f64"
     doc: "Smallest representable difference above 1.0"
     vm: "math.EPSILON"
     vm_value: "xr_float(DBL_EPSILON)"
@@ -195,30 +195,30 @@ module math {
     layer: "core"
   }
 
-  const MAX_INT {
-    signature: ": int"
+  const MAX_I64 {
+    signature: ": i64"
     doc: "Largest signed 64-bit integer"
-    vm: "math.MAX_INT"
+    vm: "math.MAX_I64"
     vm_value: "xr_int(INT64_MAX)"
     aot_const: "int64"
     value: 9223372036854775807
     layer: "core"
   }
 
-  const MIN_INT {
-    signature: ": int"
+  const MIN_I64 {
+    signature: ": i64"
     doc: "Smallest signed 64-bit integer"
-    vm: "math.MIN_INT"
+    vm: "math.MIN_I64"
     vm_value: "xr_int(INT64_MIN)"
     aot_const: "int64"
     value: -9223372036854775808
     layer: "core"
   }
 
-  const MAX_FLOAT {
-    signature: ": float"
+  const MAX_F64 {
+    signature: ": f64"
     doc: "Largest finite IEEE-754 double"
-    vm: "math.MAX_FLOAT"
+    vm: "math.MAX_F64"
     vm_value: "xr_float(DBL_MAX)"
     aot_const: "float64"
     value: 1.79769313486231570815e+308
@@ -226,7 +226,7 @@ module math {
   }
 
   const INF {
-    signature: ": float"
+    signature: ": f64"
     doc: "Positive infinity"
     vm: "math.INF"
     vm_value: "xr_float(INFINITY)"
@@ -236,7 +236,7 @@ module math {
   }
 
   const NAN {
-    signature: ": float"
+    signature: ": f64"
     doc: "Quiet NaN value"
     vm: "math.NAN"
     vm_value: "xr_float(NAN)"
@@ -246,8 +246,8 @@ module math {
   }
 
   fn abs {
-    signature: "(x: float): float"
-    doc: "Absolute value (preserves int)"
+    signature: "(x: f64): f64"
+    doc: "Absolute value"
     effect: "nothrow"
     vm: "math_abs"
     aot: "builtin"
@@ -259,7 +259,7 @@ module math {
   }
 
   fn floor {
-    signature: "(x: float): int"
+    signature: "(x: f64): i64"
     doc: "Floor to integer"
     effect: "nothrow"
     vm: "math_floor"
@@ -272,7 +272,7 @@ module math {
   }
 
   fn ceil {
-    signature: "(x: float): int"
+    signature: "(x: f64): i64"
     doc: "Ceiling to integer"
     effect: "nothrow"
     vm: "math_ceil"
@@ -285,7 +285,7 @@ module math {
   }
 
   fn round {
-    signature: "(x: float): int"
+    signature: "(x: f64): i64"
     doc: "Round to nearest integer"
     effect: "nothrow"
     vm: "math_round"
@@ -298,7 +298,7 @@ module math {
   }
 
   fn sqrt {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Square root"
     effect: "nothrow"
     vm: "math_sqrt"
@@ -311,7 +311,7 @@ module math {
   }
 
   fn pow {
-    signature: "(base: float, exp: float): float"
+    signature: "(base: f64, exp: f64): f64"
     doc: "Power"
     effect: "nothrow"
     vm: "math_pow"
@@ -324,7 +324,7 @@ module math {
   }
 
   fn sin {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Sine"
     effect: "nothrow"
     vm: "math_sin"
@@ -337,7 +337,7 @@ module math {
   }
 
   fn cos {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Cosine"
     effect: "nothrow"
     vm: "math_cos"
@@ -350,7 +350,7 @@ module math {
   }
 
   fn tan {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Tangent"
     effect: "nothrow"
     vm: "math_tan"
@@ -363,7 +363,7 @@ module math {
   }
 
   fn asin {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Arc sine"
     effect: "nothrow"
     vm: "math_asin"
@@ -376,7 +376,7 @@ module math {
   }
 
   fn acos {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Arc cosine"
     effect: "nothrow"
     vm: "math_acos"
@@ -389,7 +389,7 @@ module math {
   }
 
   fn atan {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Arc tangent"
     effect: "nothrow"
     vm: "math_atan"
@@ -402,7 +402,7 @@ module math {
   }
 
   fn atan2 {
-    signature: "(y: float, x: float): float"
+    signature: "(y: f64, x: f64): f64"
     doc: "Arc tangent of y/x"
     effect: "nothrow"
     vm: "math_atan2"
@@ -415,7 +415,7 @@ module math {
   }
 
   fn log {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Natural logarithm"
     effect: "nothrow"
     vm: "math_log"
@@ -428,7 +428,7 @@ module math {
   }
 
   fn log10 {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Base-10 logarithm"
     effect: "nothrow"
     vm: "math_log10"
@@ -441,7 +441,7 @@ module math {
   }
 
   fn log2 {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Base-2 logarithm"
     effect: "nothrow"
     vm: "math_log2"
@@ -454,7 +454,7 @@ module math {
   }
 
   fn exp {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Exponential e^x"
     effect: "nothrow"
     vm: "math_exp"
@@ -467,8 +467,8 @@ module math {
   }
 
   fn min {
-    signature: "(...args: float): float"
-    doc: "Minimum (preserves int)"
+    signature: "(...args: f64): f64"
+    doc: "Minimum value"
     effect: "nothrow"
     vm: "math_min"
     aot: "builtin"
@@ -480,8 +480,8 @@ module math {
   }
 
   fn max {
-    signature: "(...args: float): float"
-    doc: "Maximum (preserves int)"
+    signature: "(...args: f64): f64"
+    doc: "Maximum value"
     effect: "nothrow"
     vm: "math_max"
     aot: "builtin"
@@ -493,8 +493,8 @@ module math {
   }
 
   fn clamp {
-    signature: "(x: float, min: float, max: float): float"
-    doc: "Clamp (preserves int)"
+    signature: "(x: f64, min: f64, max: f64): f64"
+    doc: "Clamp to a closed interval"
     effect: "nothrow"
     vm: "math_clamp"
     aot: "builtin"
@@ -506,8 +506,8 @@ module math {
   }
 
   fn random {
-    signature: "(): float"
-    doc: "Random float in [0, 1)"
+    signature: "(): f64"
+    doc: "Random f64 in [0, 1)"
     effect: "nothrow"
     vm: "math_random"
     aot: "xrt_math_random"
@@ -519,7 +519,7 @@ module math {
   }
 
   fn randomInt {
-    signature: "(min: int, max: int): int"
+    signature: "(min: i64, max: i64): i64"
     doc: "Random integer in [min, max]"
     effect: "nothrow"
     vm: "math_randomInt"
@@ -532,7 +532,7 @@ module math {
   }
 
   fn sign {
-    signature: "(x: float): int"
+    signature: "(x: f64): i64"
     doc: "Sign of value (-1, 0, 1)"
     effect: "nothrow"
     vm: "math_sign"
@@ -545,7 +545,7 @@ module math {
   }
 
   fn sinh {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Hyperbolic sine"
     effect: "nothrow"
     vm: "math_sinh"
@@ -558,7 +558,7 @@ module math {
   }
 
   fn cosh {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Hyperbolic cosine"
     effect: "nothrow"
     vm: "math_cosh"
@@ -571,7 +571,7 @@ module math {
   }
 
   fn tanh {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Hyperbolic tangent"
     effect: "nothrow"
     vm: "math_tanh"
@@ -584,7 +584,7 @@ module math {
   }
 
   fn hypot {
-    signature: "(x: float, y: float): float"
+    signature: "(x: f64, y: f64): f64"
     doc: "Hypotenuse sqrt(x*x+y*y)"
     effect: "nothrow"
     vm: "math_hypot"
@@ -597,7 +597,7 @@ module math {
   }
 
   fn cbrt {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "Cube root"
     effect: "nothrow"
     vm: "math_cbrt"
@@ -610,7 +610,7 @@ module math {
   }
 
   fn trunc {
-    signature: "(x: float): int"
+    signature: "(x: f64): i64"
     doc: "Truncate toward zero"
     effect: "nothrow"
     vm: "math_trunc"
@@ -623,7 +623,7 @@ module math {
   }
 
   fn fmod {
-    signature: "(x: float, y: float): float"
+    signature: "(x: f64, y: f64): f64"
     doc: "Floating-point remainder"
     effect: "nothrow"
     vm: "math_fmod"
@@ -636,7 +636,7 @@ module math {
   }
 
   fn log1p {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "log(1+x) accurate for small x"
     effect: "nothrow"
     vm: "math_log1p"
@@ -649,7 +649,7 @@ module math {
   }
 
   fn expm1 {
-    signature: "(x: float): float"
+    signature: "(x: f64): f64"
     doc: "exp(x)-1 accurate for small x"
     effect: "nothrow"
     vm: "math_expm1"
@@ -662,7 +662,7 @@ module math {
   }
 
   fn lerp {
-    signature: "(a: float, b: float, t: float): float"
+    signature: "(a: f64, b: f64, t: f64): f64"
     doc: "Linear interpolation"
     effect: "nothrow"
     vm: "math_lerp"
@@ -675,7 +675,7 @@ module math {
   }
 
   fn degToRad {
-    signature: "(deg: float): float"
+    signature: "(deg: f64): f64"
     doc: "Degrees to radians"
     effect: "nothrow"
     vm: "math_degToRad"
@@ -688,7 +688,7 @@ module math {
   }
 
   fn radToDeg {
-    signature: "(rad: float): float"
+    signature: "(rad: f64): f64"
     doc: "Radians to degrees"
     effect: "nothrow"
     vm: "math_radToDeg"
@@ -701,7 +701,7 @@ module math {
   }
 
   fn isNaN {
-    signature: "(x: float): bool"
+    signature: "(x: f64): bool"
     doc: "Check if NaN"
     effect: "nothrow"
     vm: "math_isNaN"
@@ -714,7 +714,7 @@ module math {
   }
 
   fn isFinite {
-    signature: "(x: float): bool"
+    signature: "(x: f64): bool"
     doc: "Check if finite"
     effect: "nothrow"
     vm: "math_isFinite"
@@ -729,7 +729,7 @@ module math {
 
 module compress {
   fn crc32 {
-    signature: "(data: string): int"
+    signature: "(data: string): i64"
     doc: "Compute CRC-32 checksum"
     vm: "compress_crc32"
     aot: "xrt_compress_crc32"
@@ -741,7 +741,7 @@ module compress {
   }
 
   fn adler32 {
-    signature: "(data: string): int"
+    signature: "(data: string): i64"
     doc: "Compute Adler-32 checksum"
     vm: "compress_adler32"
     aot: "xrt_compress_adler32"
@@ -753,7 +753,7 @@ module compress {
   }
 
   fn gzip {
-    signature: "(data: string, level?: int): string?"
+    signature: "(data: string, level?: i64): string?"
     doc: "Gzip compress"
     vm: "compress_gzip"
     aot: "xrt_compress_gzip_default"
@@ -766,7 +766,7 @@ module compress {
   }
 
   fn gzip {
-    signature: "(data: string, level?: int): string?"
+    signature: "(data: string, level?: i64): string?"
     doc: "Gzip compress"
     vm: "compress_gzip"
     aot: "xrt_compress_gzip"
@@ -793,7 +793,7 @@ module compress {
   }
 
   fn deflate {
-    signature: "(data: string, level?: int): string?"
+    signature: "(data: string, level?: i64): string?"
     doc: "Deflate compress"
     vm: "compress_deflate"
     aot: "xrt_compress_deflate_default"
@@ -806,7 +806,7 @@ module compress {
   }
 
   fn deflate {
-    signature: "(data: string, level?: int): string?"
+    signature: "(data: string, level?: i64): string?"
     doc: "Deflate compress"
     vm: "compress_deflate"
     aot: "xrt_compress_deflate"
@@ -833,7 +833,7 @@ module compress {
   }
 
   fn zlibCompress {
-    signature: "(data: string, level?: int): string?"
+    signature: "(data: string, level?: i64): string?"
     doc: "Zlib compress"
     vm: "compress_zlib_compress"
     aot: "xrt_compress_zlib_compress_default"
@@ -846,7 +846,7 @@ module compress {
   }
 
   fn zlibCompress {
-    signature: "(data: string, level?: int): string?"
+    signature: "(data: string, level?: i64): string?"
     doc: "Zlib compress"
     vm: "compress_zlib_compress"
     aot: "xrt_compress_zlib_compress"
@@ -964,7 +964,7 @@ module crypto {
   }
 
   fn randomBytes {
-    signature: "(n: int): string"
+    signature: "(n: i64): string"
     doc: "Generate random bytes"
     effect: "CryptoError.InvalidLength"
     vm: "crypto_random_bytes"
@@ -1190,7 +1190,7 @@ module sys {
   }
 
   fn OsBarrier {
-    signature: "(parties: int): OsBarrier"
+    signature: "(parties: i64): OsBarrier"
     doc: "Create a reusable OS-domain barrier"
     vm: "sys_barrier_new"
     aot: "xrt_sys_barrier_new"
@@ -1216,7 +1216,7 @@ module sys {
   }
 
   fn cpuCount {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Return the number of CPUs available to OS-thread work"
     vm: "sys_cpu_count"
     aot: "xrt_sys_cpu_count"
@@ -1240,7 +1240,7 @@ module sys {
   }
 
   fn sleepMs {
-    signature: "(ms: int): ()"
+    signature: "(ms: i64): ()"
     doc: "Block the current OS thread for at least ms milliseconds"
     vm: "sys_sleep_ms"
     aot: "xrt_sys_sleep_ms"
@@ -1252,7 +1252,7 @@ module sys {
   }
 
   fn pinToCpu {
-    signature: "(cpu: int): bool"
+    signature: "(cpu: i64): bool"
     doc: "Best-effort pin of the current OS thread to a CPU index"
     vm: "sys_pin_to_cpu"
     aot: "xrt_sys_pin_to_cpu"
@@ -1264,7 +1264,7 @@ module sys {
   }
 
   fn __threadLocalId {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Return a stable token for the current OS thread"
     vm: "sys_thread_local_id"
     aot: "xrt_sys_thread_local_id"
@@ -1277,7 +1277,7 @@ module sys {
   }
 
   fn __threadLocalAlive {
-    signature: "(id: int): bool"
+    signature: "(id: i64): bool"
     doc: "Return whether an internal sys.ThreadLocal OS-thread token is still live"
     vm: "sys_thread_local_alive"
     aot: "xrt_sys_thread_local_alive"
@@ -1290,7 +1290,7 @@ module sys {
   }
 
   fn __onSignal {
-    signature: "(signal: int, handler: fn(): ()): bool"
+    signature: "(signal: i64, handler: fn(): ()): bool"
     doc: "Register a VM-hosted safe-point handler for a portable process signal"
     vm: "sys_on_signal"
     aot: "xrt_sys_on_signal"
@@ -1303,7 +1303,7 @@ module sys {
   }
 
   fn __dylibOpen {
-    signature: "(path: Path): int"
+    signature: "(path: Path): i64"
     doc: "Open a dynamic library and return an opaque handle token, or 0 on failure"
     vm: "sys_dylib_open"
     aot: "xrt_sys_dylib_open"
@@ -1316,7 +1316,7 @@ module sys {
   }
 
   fn __dylibSymbol {
-    signature: "(handle: int, name: string): Ptr<byte>?"
+    signature: "(handle: i64, name: string): Ptr<u8>?"
     doc: "Resolve a dynamic-library symbol to a raw address, or null on failure"
     vm: "sys_dylib_symbol"
     aot: "xrt_sys_dylib_symbol"
@@ -1329,7 +1329,7 @@ module sys {
   }
 
   fn __dylibClose {
-    signature: "(handle: int): bool"
+    signature: "(handle: i64): bool"
     doc: "Close a dynamic library handle token"
     vm: "sys_dylib_close"
     aot: "xrt_sys_dylib_close"
@@ -1356,7 +1356,7 @@ module sys {
   }
 
   fn __processSpawn {
-    signature: "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: int?, stdoutWrite: int?, stderrWrite: int?, detached: bool): int"
+    signature: "(program: string, args: Array<string>, cwd: string?, envKeys: Array<string>?, envValues: Array<string>?, stdinRead: i64?, stdoutWrite: i64?, stderrWrite: i64?, detached: bool): i64"
     doc: "Spawn a process and return an opaque process handle token, or -1 on failure"
     vm: "sys_process_spawn"
     aot: "xrt_sys_process_spawn"
@@ -1369,7 +1369,7 @@ module sys {
   }
 
   fn __processWait {
-    signature: "(id: int): int"
+    signature: "(id: i64): i64"
     doc: "Wait for a process handle token and return its exit code, or -1 on failure"
     vm: "sys_process_wait_yieldable"
     vm_binding: "yieldable"
@@ -1383,7 +1383,7 @@ module sys {
   }
 
   fn __processTryWait {
-    signature: "(id: int): int?"
+    signature: "(id: i64): i64?"
     doc: "Poll a process handle token; return null while running, exit code when finished, or -1 on failure"
     vm: "sys_process_try_wait"
     aot: "xrt_sys_process_try_wait"
@@ -1396,7 +1396,7 @@ module sys {
   }
 
   fn __processKill {
-    signature: "(id: int, signal: int): bool"
+    signature: "(id: i64, signal: i64): bool"
     doc: "Send a portable process signal to a process handle token"
     vm: "sys_process_kill"
     aot: "xrt_sys_process_kill"
@@ -1409,7 +1409,7 @@ module sys {
   }
 
   fn __pipeOpen {
-    signature: "(): Array<int>?"
+    signature: "(): Array<i64>?"
     doc: "Create an anonymous pipe and return read/write endpoint tokens"
     vm: "sys_pipe_open"
     aot: "xrt_sys_pipe_open"
@@ -1423,7 +1423,7 @@ module sys {
   }
 
   fn __pipeRead {
-    signature: "(handle: int, maxBytes: int): Array<byte>?"
+    signature: "(handle: i64, maxBytes: i64): Array<u8>?"
     doc: "Read one chunk from a pipe endpoint"
     vm: "sys_pipe_read_yieldable"
     vm_binding: "yieldable"
@@ -1438,7 +1438,7 @@ module sys {
   }
 
   fn __pipeWrite {
-    signature: "(handle: int, data: Array<byte>): int"
+    signature: "(handle: i64, data: Array<u8>): i64"
     doc: "Write one chunk to a pipe endpoint"
     vm: "sys_pipe_write_yieldable"
     vm_binding: "yieldable"
@@ -1452,7 +1452,7 @@ module sys {
   }
 
   fn __pipeClose {
-    signature: "(handle: int): bool"
+    signature: "(handle: i64): bool"
     doc: "Close a pipe endpoint"
     vm: "sys_pipe_close"
     aot: "xrt_sys_pipe_close"
@@ -1513,7 +1513,7 @@ module sys {
   }
 
   type_method OsCondvar.waitFor {
-    signature: "(m: OsMutex, timeoutNs: int): bool"
+    signature: "(m: OsMutex, timeoutNs: i64): bool"
     receiver: "OsCondvar"
     doc: "Wait on the condition variable until signalled or timeout elapses"
   }
@@ -1651,7 +1651,7 @@ module regex {
   }
 
   fn count {
-    signature: "(pattern: Regex, s: string): int"
+    signature: "(pattern: Regex, s: string): i64"
     doc: "Count matches"
     vm: "regex_count"
     aot: "xrt_regex_count"
@@ -1680,7 +1680,7 @@ module regex {
   }
 
   fn findGroup {
-    signature: "(pattern: Regex, s: string, index: int): string?"
+    signature: "(pattern: Regex, s: string, index: i64): string?"
     doc: "Find capture group"
     vm: "regex_find_group"
     aot: "xrt_regex_find_group"
@@ -1695,7 +1695,7 @@ module regex {
   }
 
   fn find {
-    signature: "(pattern: Regex, s: string, offset?: int): RegexMatch?"
+    signature: "(pattern: Regex, s: string, offset?: i64): RegexMatch?"
     doc: "Find first match"
     vm: "regex_find"
     aot: "xrt_regex_find"
@@ -1710,7 +1710,7 @@ module regex {
   }
 
   fn find {
-    signature: "(pattern: Regex, s: string, offset?: int): RegexMatch?"
+    signature: "(pattern: Regex, s: string, offset?: i64): RegexMatch?"
     doc: "Find first match"
     vm: "regex_find"
     aot: "xrt_regex_find_offset"
@@ -1740,7 +1740,7 @@ module regex {
   }
 
   fn findAll {
-    signature: "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>"
+    signature: "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>"
     doc: "Find all matches"
     vm: "regex_find_all"
     aot: "xrt_regex_find_all"
@@ -1755,7 +1755,7 @@ module regex {
   }
 
   fn findAll {
-    signature: "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>"
+    signature: "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>"
     doc: "Find all matches"
     vm: "regex_find_all"
     aot: "xrt_regex_find_all_limit"
@@ -1800,7 +1800,7 @@ module regex {
   }
 
   fn split {
-    signature: "(pattern: Regex, s: string, limit?: int): Array<string>"
+    signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
     doc: "Split string by regex"
     vm: "regex_split"
     aot: "xrt_regex_split"
@@ -1815,7 +1815,7 @@ module regex {
   }
 
   fn split {
-    signature: "(pattern: Regex, s: string, limit?: int): Array<string>"
+    signature: "(pattern: Regex, s: string, limit?: i64): Array<string>"
     doc: "Split string by regex"
     vm: "regex_split"
     aot: "xrt_regex_split_limit"
@@ -1857,7 +1857,7 @@ module regex {
 
 module os {
   handle __ExecResult {
-    fields: "const stdout: string, const stderr: string, const exitCode: int"
+    fields: "const stdout: string, const stderr: string, const exitCode: i64"
   }
 
   const platform {
@@ -1951,7 +1951,7 @@ module os {
   }
 
   fn __exit {
-    signature: "(code?: int): ()"
+    signature: "(code?: i64): ()"
     doc: "Exit process"
     vm: "os_exit"
     aot: "xrt_os_exit"
@@ -1962,7 +1962,7 @@ module os {
   }
 
   fn __getpid {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get process ID"
     vm: "os_getpid"
     aot: "xrt_os_getpid"
@@ -2039,7 +2039,7 @@ module os {
   }
 
   fn __uid {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get user ID"
     vm: "os_uid"
     aot: "xrt_os_uid"
@@ -2051,7 +2051,7 @@ module os {
   }
 
   fn __gid {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get group ID"
     vm: "os_gid"
     aot: "xrt_os_gid"
@@ -2063,7 +2063,7 @@ module os {
   }
 
   fn __cpuCount {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get number of CPU cores"
     vm: "os_cpuCount"
     aot: "xrt_os_cpu_count"
@@ -2075,7 +2075,7 @@ module os {
   }
 
   fn __ppid {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get parent process ID"
     vm: "os_ppid"
     aot: "xrt_os_ppid"
@@ -2087,7 +2087,7 @@ module os {
   }
 
   fn __kill {
-    signature: "(pid: int, signal?: int): bool"
+    signature: "(pid: i64, signal?: i64): bool"
     doc: "Send signal to process"
     vm: "os_kill"
     aot: "xrt_os_kill"
@@ -2099,7 +2099,7 @@ module os {
   }
 
   fn __kill {
-    signature: "(pid: int, signal?: int): bool"
+    signature: "(pid: i64, signal?: i64): bool"
     doc: "Send signal to process"
     vm: "os_kill"
     aot: "xrt_os_kill_signal"
@@ -2111,7 +2111,7 @@ module os {
   }
 
   fn __totalMemory {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get total system memory in bytes"
     vm: "os_totalMemory"
     aot: "xrt_os_total_memory"
@@ -2123,7 +2123,7 @@ module os {
   }
 
   fn __freeMemory {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get available system memory in bytes"
     vm: "os_freeMemory"
     aot: "xrt_os_free_memory"
@@ -2135,7 +2135,7 @@ module os {
   }
 
   fn __uptime {
-    signature: "(): float"
+    signature: "(): f64"
     doc: "Get system uptime in seconds"
     vm: "os_uptime"
     aot: "xrt_os_uptime"
@@ -2147,7 +2147,7 @@ module os {
   }
 
   fn __loadavg {
-    signature: "(): Array<float>"
+    signature: "(): Array<f64>"
     doc: "Get system load averages (1, 5, 15 min)"
     vm: "os_loadavg"
     aot: "xrt_os_loadavg"
@@ -2160,7 +2160,7 @@ module os {
   }
 
   fn __clock {
-    signature: "(): float"
+    signature: "(): f64"
     doc: "Get process CPU time in seconds"
     vm: "os_clock"
     aot: "xrt_os_clock"
@@ -2172,7 +2172,7 @@ module os {
   }
 
   fn __sleep {
-    signature: "(ms: int): ()"
+    signature: "(ms: i64): ()"
     doc: "Sleep for milliseconds"
     vm: "os_sleep"
     vm_binding: "yieldable"
@@ -2212,7 +2212,7 @@ module os {
 
 module io {
   handle __FileStat {
-    fields: "const size: int, const mode: int, const mtime: int, const atime: int, const ctime: int, const uid: int, const gid: int, const isFile: bool, const isDir: bool, const isSymlink: bool"
+    fields: "const size: i64, const mode: i64, const mtime: i64, const atime: i64, const ctime: i64, const uid: i64, const gid: i64, const isFile: bool, const isDir: bool, const isSymlink: bool"
   }
 
   fn __appendFile {
@@ -2228,7 +2228,7 @@ module io {
   }
 
   fn __chmod {
-    signature: "(path: Path, mode: int): bool"
+    signature: "(path: Path, mode: i64): bool"
     doc: "Change file permissions"
     vm: "io_chmod"
     aot: "xrt_io_chmod_value"
@@ -2290,7 +2290,7 @@ module io {
   }
 
   fn __fileClose {
-    signature: "(handle: int): bool"
+    signature: "(handle: i64): bool"
     doc: "Close an owned binary file handle"
     vm: "io_fileClose"
     aot: "xrt_io_file_close"
@@ -2303,7 +2303,7 @@ module io {
   }
 
   fn __fileOpen {
-    signature: "(path: Path): int"
+    signature: "(path: Path): i64"
     doc: "Open a file for binary reading and return an opaque handle"
     vm: "io_fileOpen"
     aot: "xrt_io_file_open"
@@ -2316,7 +2316,7 @@ module io {
   }
 
   fn __fileRead {
-    signature: "(handle: int, maxBytes: int): Array<byte>?"
+    signature: "(handle: i64, maxBytes: i64): Array<u8>?"
     doc: "Read at most maxBytes from an opaque binary stream; empty means EOF"
     vm: "io_fileRead"
     aot: "xrt_io_read_handle_chunk"
@@ -2330,7 +2330,7 @@ module io {
   }
 
   fn __fileSize {
-    signature: "(path: Path): int"
+    signature: "(path: Path): i64"
     doc: "Get file size in bytes"
     vm: "io_fileSize"
     aot: "xrt_io_file_size"
@@ -2444,7 +2444,7 @@ module io {
   }
 
   fn __readFileBytes {
-    signature: "(path: Path): Array<byte>?"
+    signature: "(path: Path): Array<u8>?"
     doc: "Read entire file as byte array"
     vm: "io_readFileBytes"
     vm_binding: "yieldable"
@@ -2484,7 +2484,7 @@ module io {
   }
 
   fn __readStdinBytes {
-    signature: "(): Array<byte>?"
+    signature: "(): Array<u8>?"
     doc: "Read all standard input as binary bytes"
     vm: "io_readStdinBytes"
     aot: "xrt_io_read_stdin_bytes"
@@ -2639,7 +2639,7 @@ module io {
   }
 
   fn __writeFileBytes {
-    signature: "(path: Path, data: Array<byte>): bool"
+    signature: "(path: Path, data: Array<u8>): bool"
     doc: "Write byte array to file"
     vm: "io_writeFileBytes"
     vm_binding: "yieldable"
@@ -2678,13 +2678,13 @@ module io {
 
 module runtime {
   object RuntimeInfo {
-    fields: "const liveBytes: int, const liveKB: float, const liveObjects: int, const finalizerCount: int, const blocks: int, const freeBlocks: int, const fullBlocks: int"
+    fields: "const liveBytes: i64, const liveKB: f64, const liveObjects: i64, const finalizerCount: i64, const blocks: i64, const freeBlocks: i64, const fullBlocks: i64"
     exact: true
     doc: "Typed snapshot of the current execution-local reclamation domain"
   }
 
   fn liveBytes {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get live memory usage in bytes"
     vm: "runtime_live_bytes"
     aot: "xr_aot_runtime_live_bytes"
@@ -2696,7 +2696,7 @@ module runtime {
   }
 
   fn liveObjects {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Get live object count"
     vm: "runtime_live_objects"
     aot: "xr_aot_runtime_live_objects"
@@ -2708,7 +2708,7 @@ module runtime {
   }
 
   fn sharedBytes {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak"
     vm: "runtime_shared_bytes"
     aot: "xr_aot_runtime_shared_bytes"
@@ -2720,7 +2720,7 @@ module runtime {
   }
 
   fn staticBytes {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)"
     vm: "runtime_static_bytes"
     aot: "xr_aot_runtime_static_bytes"
@@ -2775,7 +2775,7 @@ module mem {
   }
 
   fn fence {
-    signature: "(ordering: int): ()"
+    signature: "(ordering: i64): ()"
     doc: "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)"
     vm: "mem_fence"
     aot: "xrt_mem_fence"
@@ -2787,7 +2787,7 @@ module mem {
   }
 
   fn prefetch {
-    signature: "(ptr: Ptr<byte>, rw: int): ()"
+    signature: "(ptr: Ptr<u8>, rw: i64): ()"
     doc: "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch"
     vm: "mem_prefetch"
     aot: "xrt_mem_prefetch"
@@ -2800,7 +2800,7 @@ module mem {
   }
 
   fn cacheFlush {
-    signature: "(ptr: Ptr<byte>, n: int): ()"
+    signature: "(ptr: Ptr<u8>, n: i64): ()"
     doc: "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_flush"
     aot: "xrt_mem_cache_flush"
@@ -2812,7 +2812,7 @@ module mem {
   }
 
   fn cacheInvalidate {
-    signature: "(ptr: Ptr<byte>, n: int): ()"
+    signature: "(ptr: Ptr<u8>, n: i64): ()"
     doc: "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available"
     vm: "mem_cache_invalidate"
     aot: "xrt_mem_cache_invalidate"
@@ -2824,7 +2824,7 @@ module mem {
   }
 
   fn nontemporalStore {
-    signature: "(ptr: MutPtr<byte>, v: int, size: int): ()"
+    signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available"
     vm: "mem_nontemporal_store"
     aot: "xrt_mem_nontemporal_store"
@@ -2836,7 +2836,7 @@ module mem {
   }
 
   fn cacheLineSize {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "CPU cache line size in bytes"
     vm: "mem_cache_line_size"
     aot: "xrt_mem_cache_line_size"
@@ -2848,7 +2848,7 @@ module mem {
   }
 
   fn sizeOf {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Compile-time size in bytes of a statically laid out type T"
     vm: "mem_size_of"
     argc: 0
@@ -2859,7 +2859,7 @@ module mem {
   }
 
   fn alignOf {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Compile-time alignment in bytes of a statically laid out type T"
     vm: "mem_align_of"
     argc: 0
@@ -2870,7 +2870,7 @@ module mem {
   }
 
   fn offsetOf {
-    signature: "(field: string): int"
+    signature: "(field: string): i64"
     doc: "Compile-time byte offset of a field in a fixed-layout struct T"
     vm: "mem_offset_of"
     argc: 1
@@ -2881,7 +2881,7 @@ module mem {
   }
 
   fn slice {
-    signature: "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>"
+    signature: "(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>"
     doc: "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked"
     vm: "mem_slice_intrinsic"
     argc: 3
@@ -2906,7 +2906,7 @@ module mem {
   }
 
   const PROT_NONE {
-    signature: ": int"
+    signature: ": i64"
     doc: "No access protection for mem.pageAlloc/pageProtect"
     vm: "mem.PROT_NONE"
     vm_value: "xr_int(XR_MEM_PROT_NONE)"
@@ -2916,7 +2916,7 @@ module mem {
   }
 
   const PROT_READ {
-    signature: ": int"
+    signature: ": i64"
     doc: "Readable page protection bit for mem.pageAlloc/pageProtect"
     vm: "mem.PROT_READ"
     vm_value: "xr_int(XR_MEM_PROT_READ)"
@@ -2926,7 +2926,7 @@ module mem {
   }
 
   const PROT_WRITE {
-    signature: ": int"
+    signature: ": i64"
     doc: "Writable page protection bit for mem.pageAlloc/pageProtect"
     vm: "mem.PROT_WRITE"
     vm_value: "xr_int(XR_MEM_PROT_WRITE)"
@@ -2936,7 +2936,7 @@ module mem {
   }
 
   const PROT_EXEC {
-    signature: ": int"
+    signature: ": i64"
     doc: "Executable page protection bit for mem.pageAlloc/pageProtect"
     vm: "mem.PROT_EXEC"
     vm_value: "xr_int(XR_MEM_PROT_EXEC)"
@@ -2946,7 +2946,7 @@ module mem {
   }
 
   fn alloc {
-    signature: "(n: int): Buffer"
+    signature: "(n: i64): Buffer"
     doc: "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped"
     vm: "mem_alloc"
     aot: "xrt_mem_alloc"
@@ -2960,7 +2960,7 @@ module mem {
   }
 
   fn allocZeroed {
-    signature: "(n: int): Buffer"
+    signature: "(n: i64): Buffer"
     doc: "Allocate n zero-initialized bytes as a managed Buffer"
     vm: "mem_alloc_zeroed"
     aot: "xrt_mem_alloc_zeroed"
@@ -2974,7 +2974,7 @@ module mem {
   }
 
   fn allocAligned {
-    signature: "(n: int, align: int): Buffer"
+    signature: "(n: i64, align: i64): Buffer"
     doc: "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))"
     vm: "mem_alloc_aligned"
     aot: "xrt_mem_alloc_aligned"
@@ -2988,7 +2988,7 @@ module mem {
   }
 
   fn pageAlloc {
-    signature: "(bytes: int, prot?: int): MutPtr<byte>"
+    signature: "(bytes: i64, prot?: i64): MutPtr<u8>"
     doc: "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
     allocation: "may_heap"
     vm: "mem_page_alloc"
@@ -3001,7 +3001,7 @@ module mem {
   }
 
   fn pageAlloc {
-    signature: "(bytes: int, prot?: int): MutPtr<byte>"
+    signature: "(bytes: i64, prot?: i64): MutPtr<u8>"
     doc: "Allocate zero-filled anonymous pages with protection bits PROT_READ/PROT_WRITE/PROT_EXEC (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree"
     allocation: "may_heap"
     vm: "mem_page_alloc"
@@ -3014,7 +3014,7 @@ module mem {
   }
 
   fn pageProtect {
-    signature: "(ptr: MutPtr<byte>, bytes: int, prot: int): bool"
+    signature: "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool"
     doc: "Change anonymous page protection bits; returns false on OS failure"
     vm: "mem_page_protect"
     aot: "xrt_mem_page_protect"
@@ -3026,7 +3026,7 @@ module mem {
   }
 
   fn pageFree {
-    signature: "(ptr: MutPtr<byte>, bytes: int): bool"
+    signature: "(ptr: MutPtr<u8>, bytes: i64): bool"
     doc: "Release anonymous pages from mem.pageAlloc; returns false on OS failure"
     vm: "mem_page_free"
     aot: "xrt_mem_page_free"
@@ -3038,7 +3038,7 @@ module mem {
   }
 
   fn ptr {
-    signature: "(addr: int): Ptr<byte>"
+    signature: "(addr: i64): Ptr<u8>"
     doc: "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe"
     vm: "mem_ptr"
     aot: "xrt_mem_ptr"
@@ -3051,7 +3051,7 @@ module mem {
   }
 
   fn withSliceMut {
-    signature: "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any"
+    signature: "(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any"
     doc: "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked"
     vm: "mem_with_slice_mut_intrinsic"
     argc: 4
@@ -3064,7 +3064,7 @@ module mem {
   }
 
   fn mutPtr {
-    signature: "(addr: int): MutPtr<byte>"
+    signature: "(addr: i64): MutPtr<u8>"
     doc: "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe"
     vm: "mem_mut_ptr"
     aot: "xrt_mem_mut_ptr"
@@ -3077,7 +3077,7 @@ module mem {
   }
 
   fn addr {
-    signature: "(ptr: Ptr<byte>): int"
+    signature: "(ptr: Ptr<u8>): i64"
     doc: "Numeric address of any Ptr<T> or MutPtr<T>"
     vm: "mem_addr"
     aot: "xrt_mem_addr"
@@ -3090,7 +3090,7 @@ module mem {
   }
 
   fn load {
-    signature: "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int"
+    signature: "(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64"
     doc: "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset"
     vm: "mem_load_intrinsic"
     argc: 3
@@ -3102,7 +3102,7 @@ module mem {
   }
 
   fn store {
-    signature: "(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()"
+    signature: "(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()"
     doc: "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset"
     vm: "mem_store_intrinsic"
     argc: 4
@@ -3114,7 +3114,7 @@ module mem {
   }
 
   fn copy {
-    signature: "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()"
+    signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (non-overlapping; memcpy)"
     allocation: "no_heap"
     vm: "mem_copy"
@@ -3127,7 +3127,7 @@ module mem {
   }
 
   fn move {
-    signature: "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()"
+    signature: "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()"
     doc: "Copy n bytes from src to dst (may overlap; memmove)"
     vm: "mem_move"
     aot: "xrt_mem_move"
@@ -3140,7 +3140,7 @@ module mem {
   }
 
   fn set {
-    signature: "(dst: MutPtr<byte>, byte: int, n: int): ()"
+    signature: "(dst: MutPtr<u8>, u8: i64, n: i64): ()"
     doc: "Fill n bytes at dst with byte (memset)"
     vm: "mem_set"
     aot: "xrt_mem_set"
@@ -3153,7 +3153,7 @@ module mem {
   }
 
   fn compare {
-    signature: "(a: Ptr<byte>, b: Ptr<byte>, n: int): int"
+    signature: "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64"
     doc: "Compare n bytes at a and b (memcmp: <0, 0, >0)"
     vm: "mem_compare"
     aot: "xrt_mem_compare"
@@ -3165,7 +3165,7 @@ module mem {
   }
 
   fn volatileLoad {
-    signature: "(ptr: Ptr<byte>, size: int): int"
+    signature: "(ptr: Ptr<u8>, size: i64): i64"
     doc: "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_load"
     aot: "xrt_mem_volatile_load"
@@ -3177,7 +3177,7 @@ module mem {
   }
 
   fn volatileStore {
-    signature: "(ptr: MutPtr<byte>, v: int, size: int): ()"
+    signature: "(ptr: MutPtr<u8>, v: i64, size: i64): ()"
     doc: "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)"
     vm: "mem_volatile_store"
     aot: "xrt_mem_volatile_store"
@@ -3189,28 +3189,28 @@ module mem {
   }
 
   type_method Buffer.asBytes {
-    signature: "(): Slice<byte>"
+    signature: "(): Slice<u8>"
     receiver: "Buffer"
-    doc: "Borrow this buffer as a readonly Slice<byte> view"
+    doc: "Borrow this buffer as a readonly Slice<u8> view"
     allocation: "no_heap"
   }
 
   type_method Buffer.asMutBytes {
-    signature: "(): Slice<byte>"
+    signature: "(): Slice<u8>"
     receiver: "Buffer"
-    doc: "Borrow this buffer as a mutable Slice<byte> view"
+    doc: "Borrow this buffer as a mutable Slice<u8> view"
     allocation: "no_heap"
   }
 
   type_method Buffer.borrowPtr {
-    signature: "(): MutPtr<byte>"
+    signature: "(): MutPtr<u8>"
     receiver: "Buffer"
     doc: "Borrow the underlying mutable pointer; requires unsafe at the call site"
     allocation: "no_heap"
   }
 
   type_method Buffer.resize {
-    signature: "(n: int): bool"
+    signature: "(n: i64): bool"
     receiver: "Buffer"
     doc: "Resize this buffer; returns false on allocation failure"
     allocation: "may_heap"
@@ -3249,13 +3249,13 @@ module Coro {
   }
 
   object CoroStats {
-    fields: "const active: int, const blocked: int, const ready: int, const total: int, const created: int"
+    fields: "const active: i64, const blocked: i64, const ready: i64, const total: i64, const created: i64"
     exact: true
     doc: "Typed aggregate counters for the coroutine scheduler"
   }
 
   object CoroInfo {
-    fields: "const id: int, const name: string?, const state: CoroState, const reductions: int, const source: string?"
+    fields: "const id: i64, const name: string?, const state: CoroState, const reductions: i64, const source: string?"
     exact: true
     doc: "Typed diagnostic snapshot for one coroutine"
   }
@@ -3274,7 +3274,7 @@ module net {
   }
 
   object __CopyBidirectionalResult {
-    fields: "const aToB: int, const bToA: int"
+    fields: "const aToB: i64, const bToA: i64"
     exact: true
     doc: "Byte counts copied in each direction by copyBidirectional"
   }
@@ -3349,7 +3349,7 @@ module net {
   }
 
   fn __connectFd {
-    signature: "(addr: string, port: int, timeoutMs: int): NetConn?"
+    signature: "(addr: string, port: i64, timeoutMs: i64): NetConn?"
     doc: "Connect one literal address; null on failure with the code on __lastConnectCode"
     vm: "net_connect_fd_yieldable"
     vm_binding: "yieldable"
@@ -3364,7 +3364,7 @@ module net {
   }
 
   fn __nowMs {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Monotonic clock in milliseconds for net's own deadline arithmetic"
     vm: "net_now_ms_fn"
     argc: 0
@@ -3376,7 +3376,7 @@ module net {
   }
 
   fn __lastConnectCode {
-    signature: "(): int"
+    signature: "(): i64"
     doc: "Portable error code from the most recent __connectFd on this worker; 0 when the last attempt connected"
     vm: "net_last_connect_code"
     argc: 0
@@ -3388,7 +3388,7 @@ module net {
   }
 
   fn __listenFd {
-    signature: "(port: int, backlog: int, forceV4: bool): NetListener?"
+    signature: "(port: i64, backlog: i64, forceV4: bool): NetListener?"
     doc: "Bind and listen; dual-stack preferred unless forceV4"
     vm: "net_listen_fd"
     argc: 3
@@ -3416,7 +3416,7 @@ module net {
   }
 
   fn __readInto {
-    signature: "(conn: NetConn, buffer: Array<byte>, maxlen: int): int"
+    signature: "(conn: NetConn, buffer: Array<u8>, maxlen: i64): i64"
     doc: "Read once into a caller buffer; 0 is EOF, -1 is a stored error"
     vm: "net_read_into_yieldable"
     vm_binding: "yieldable"
@@ -3430,7 +3430,7 @@ module net {
   }
 
   fn __writeBytes {
-    signature: "(conn: NetConn, data: Array<byte>): int"
+    signature: "(conn: NetConn, data: Array<u8>): i64"
     doc: "Write the whole buffer; returns bytes written, -1 when nothing was sent"
     vm: "net_write_bytes_yieldable"
     vm_binding: "yieldable"
@@ -3511,7 +3511,7 @@ module net {
   }
 
   fn __fd {
-    signature: "(handle: NetConn | NetListener): int"
+    signature: "(handle: NetConn | NetListener): i64"
     doc: "Raw fd of a handle, -1 when closed"
     vm: "net_fd_handle"
     argc: 1
@@ -3523,7 +3523,7 @@ module net {
   }
 
   fn __setReadDeadline {
-    signature: "(conn: NetConn, deadline: int): bool"
+    signature: "(conn: NetConn, deadline: i64): bool"
     doc: "Absolute monotonic read deadline in ms; 0 clears"
     vm: "net_set_read_deadline"
     argc: 2
@@ -3535,7 +3535,7 @@ module net {
   }
 
   fn __setWriteDeadline {
-    signature: "(conn: NetConn, deadline: int): bool"
+    signature: "(conn: NetConn, deadline: i64): bool"
     doc: "Absolute monotonic write deadline in ms; 0 clears"
     vm: "net_set_write_deadline"
     argc: 2
@@ -3547,7 +3547,7 @@ module net {
   }
 
   fn __setDeadline {
-    signature: "(conn: NetConn, deadline: int): bool"
+    signature: "(conn: NetConn, deadline: i64): bool"
     doc: "Set both read and write deadlines"
     vm: "net_set_deadline"
     argc: 2
@@ -3559,7 +3559,7 @@ module net {
   }
 
   fn __setAcceptDeadline {
-    signature: "(listener: NetListener, deadline: int): bool"
+    signature: "(listener: NetListener, deadline: i64): bool"
     doc: "Absolute monotonic accept deadline in ms; 0 clears"
     vm: "net_set_accept_deadline"
     argc: 2
@@ -3571,7 +3571,7 @@ module net {
   }
 
   fn __lastCode {
-    signature: "(handle: NetConn | NetListener): int"
+    signature: "(handle: NetConn | NetListener): i64"
     doc: "Portable error code of the last failed operation; 0 when none"
     vm: "net_last_code"
     argc: 1
@@ -3583,7 +3583,7 @@ module net {
   }
 
   fn __lastErrno {
-    signature: "(handle: NetConn | NetListener): int"
+    signature: "(handle: NetConn | NetListener): i64"
     doc: "Raw errno captured for the last failed operation"
     vm: "net_last_errno"
     argc: 1
@@ -3607,7 +3607,7 @@ module net {
   }
 
   fn __tlsHandshake {
-    signature: "(conn: NetConn, hostname: string, deadlineMs: int): int"
+    signature: "(conn: NetConn, hostname: string, deadlineMs: i64): i64"
     doc: "Client TLS handshake under one absolute deadline; 0 promotes the conn in place, else closes it and returns a net error code"
     vm: "net_tls_handshake_yieldable"
     vm_binding: "yieldable"
@@ -3621,7 +3621,7 @@ module net {
   }
 
   fn __udpBind {
-    signature: "(port: int, addr: string): NetConn?"
+    signature: "(port: i64, addr: string): NetConn?"
     doc: "Bind a UDP socket; empty addr binds the wildcard address"
     vm: "net_udp_bind_handle"
     argc: 2
@@ -3634,7 +3634,7 @@ module net {
   }
 
   fn __udpSendTo {
-    signature: "(conn: NetConn, data: Array<byte>, addr: string, port: int, timeoutMs: int): int"
+    signature: "(conn: NetConn, data: Array<u8>, addr: string, port: i64, timeoutMs: i64): i64"
     doc: "Send one datagram to a literal address; bytes sent or -1 with a stored code"
     vm: "net_udp_send_to_yieldable"
     vm_binding: "yieldable"
@@ -3648,7 +3648,7 @@ module net {
   }
 
   fn __udpRecvInto {
-    signature: "(conn: NetConn, buffer: Array<byte>, timeoutMs: int): int"
+    signature: "(conn: NetConn, buffer: Array<u8>, timeoutMs: i64): i64"
     doc: "Receive one datagram into a caller buffer; bytes received, or -1 with a stored code"
     vm: "net_udp_recv_into_yieldable"
     vm_binding: "yieldable"
@@ -3675,7 +3675,7 @@ module net {
   }
 
   fn __udpFromPort {
-    signature: "(conn: NetConn): int"
+    signature: "(conn: NetConn): i64"
     doc: "Sender port of the last successful datagram receive; 0 when none"
     vm: "net_udp_from_port"
     argc: 1
@@ -3701,7 +3701,7 @@ module http2 {
   }
 
   fn request {
-    signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?"
+    signature: "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?"
     doc: "Execute one typed HTTP/2 request"
     vm: "h2_request_typed"
     argc: 6
@@ -3733,19 +3733,19 @@ module cluster {
   }
 
   object ClusterNodeInfo {
-    fields: "const name: string, const host: string, const port: int, const state: ClusterNodeState, const framesSent: int, const framesReceived: int, const bytesSent: int, const bytesReceived: int, const sendErrors: int, const slowConsumerEvents: int, const rttMs: int, const outQueueBytes: int, const outQueueFrames: int, const slow: bool, const phi: float, const missedHeartbeats: int"
+    fields: "const name: string, const host: string, const port: i64, const state: ClusterNodeState, const framesSent: i64, const framesReceived: i64, const bytesSent: i64, const bytesReceived: i64, const sendErrors: i64, const slowConsumerEvents: i64, const rttMs: i64, const outQueueBytes: i64, const outQueueFrames: i64, const slow: bool, const phi: f64, const missedHeartbeats: i64"
     exact: true
     doc: "Typed diagnostic snapshot for one remote cluster node"
   }
 
   object ClusterInfo {
-    fields: "const self: string, const port: int, const running: bool, const nodes: Array<ClusterNodeInfo>, const listeners: int, const deadNodes: int, const heartbeatIntervalMs: int, const heartbeatTimeoutMs: int, const maxMissedHeartbeats: int, const tls: ClusterTlsStatus"
+    fields: "const self: string, const port: i64, const running: bool, const nodes: Array<ClusterNodeInfo>, const listeners: i64, const deadNodes: i64, const heartbeatIntervalMs: i64, const heartbeatTimeoutMs: i64, const maxMissedHeartbeats: i64, const tls: ClusterTlsStatus"
     exact: true
     doc: "Typed diagnostic snapshot for the local cluster runtime"
   }
 
   fn __start {
-    signature: "(name: string, port: int, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool"
+    signature: "(name: string, port: i64, secret: string, tlsEnabled: bool, caFile: string, certFile: string, keyFile: string, insecure: bool): bool"
     doc: "Start the backend-neutral cluster runtime from normalized scalar configuration"
     vm: "cluster_start_primitive"
     argc: 8
@@ -3862,7 +3862,7 @@ module cluster {
   }
 
   fn __listen {
-    signature: "(pattern: string, capacity: int): Channel<Buffer>?"
+    signature: "(pattern: string, capacity: i64): Channel<Buffer>?"
     doc: "Create a bounded receiver for opaque canonical service envelopes"
     vm: "cluster_listen_fn"
     argc: 2

@@ -2,7 +2,7 @@ enum NativeAbiErr {
     Bad
 }
 
-fn mayThrow(x: int) -> int {
+fn mayThrow(x: i64) -> i64 {
     if (x < 0) {
         throw NativeAbiErr.Bad
     }

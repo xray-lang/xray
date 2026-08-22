@@ -1,1 +1,1 @@
-Cannot cast type 'string' to unrelated type 'int'
+Cannot cast type 'string' to unrelated type 'i64'

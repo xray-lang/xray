@@ -2,7 +2,7 @@ import sys
 import { Process } from sys
 
 fn run() {
-    const waitProcess = fn(p: Process) -> int {
+    const waitProcess = fn(p: Process) -> i64 {
         var code = p.wait()
         print("fn-value waited " + string(code))
         return code

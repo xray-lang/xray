@@ -1,11 +1,11 @@
 import sys
 
-fn worker() -> int {
+fn worker() -> i64 {
     return 1
 }
 
 fn main() {
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         var y = await go worker()
         return y
     })

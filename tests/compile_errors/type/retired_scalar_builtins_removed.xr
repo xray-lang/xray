@@ -1,0 +1,3 @@
+var integerValue = int("42")
+var byteValue = byte(7)
+var floatValue = float("3.5")

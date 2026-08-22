@@ -1,7 +1,7 @@
 // parallel_unknown_effect_native.xrd
 
-export fn nativeOp(x: int): int
+export fn nativeOp(x: i64): i64
 export fn makeBox(): NativeBox
 
-type NativeBox = { const id: int }
-fn NativeBox.nativeMethod(): int
+type NativeBox = { const id: i64 }
+fn NativeBox.nativeMethod(): i64

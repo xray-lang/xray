@@ -137,9 +137,9 @@ fn has<K: Hashable>(items: Set<K>, key: K) -> bool {
     return items.contains(key)
 }
 
-fn run(n: int) -> int {
-    var scores: Map<int, int> = #{}
-    var seen: Set<int> = #[]
+fn run(n: i64) -> i64 {
+    var scores: Map<i64, i64> = #{}
+    var seen: Set<i64> = #[]
     var seed = 0
     while (seed < 64) {
         scores.set(seed, (seed % 17) + 1)
@@ -150,8 +150,8 @@ fn run(n: int) -> int {
     var i = 0
     var sum = 0
     while (i < n) {
-        sum = sum + lookup<int, int>(scores, i % 64, 0)
-        if (has<int>(seen, i % 64)) {
+        sum = sum + lookup<i64, i64>(scores, i % 64, 0)
+        if (has<i64>(seen, i % 64)) {
             sum = sum + 1
         }
         i = i + 1

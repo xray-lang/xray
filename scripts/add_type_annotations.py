@@ -12,25 +12,25 @@ import os
 # Heuristic type inference from parameter names
 NAME_TYPE_MAP = {
     # Integer names
-    'n': 'int', 'i': 'int', 'j': 'int', 'k': 'int', 'x': 'int', 'y': 'int',
-    'z': 'int', 'a': 'int', 'b': 'int', 'c': 'int', 'count': 'int', 'num': 'int',
-    'size': 'int', 'len': 'int', 'length': 'int', 'index': 'int', 'idx': 'int',
-    'start': 'int', 'end': 'int', 'step': 'int', 'depth': 'int', 'level': 'int',
-    'width': 'int', 'height': 'int', 'age': 'int', 'port': 'int', 'id': 'int',
-    'limit': 'int', 'max': 'int', 'min': 'int', 'total': 'int', 'sum': 'int',
-    'left': 'int', 'right': 'int', 'low': 'int', 'high': 'int', 'mid': 'int',
-    'row': 'int', 'col': 'int', 'r': 'int', 'amount': 'int', 'base': 'int',
-    'exp': 'int', 'power': 'int', 'target': 'int', 'capacity': 'int',
-    'expected': 'int', 'actual': 'int', 'result': 'int', 'val': 'int',
-    'first': 'int', 'second': 'int', 'third': 'int',
-    'rows': 'int', 'cols': 'int', 'times': 'int', 'iterations': 'int',
-    'threshold': 'int', 'repeat_count': 'int',
+    'n': 'i64', 'i': 'i64', 'j': 'i64', 'k': 'i64', 'x': 'i64', 'y': 'i64',
+    'z': 'i64', 'a': 'i64', 'b': 'i64', 'c': 'i64', 'count': 'i64', 'num': 'i64',
+    'size': 'i64', 'len': 'i64', 'length': 'i64', 'index': 'i64', 'idx': 'i64',
+    'start': 'i64', 'end': 'i64', 'step': 'i64', 'depth': 'i64', 'level': 'i64',
+    'width': 'i64', 'height': 'i64', 'age': 'i64', 'port': 'i64', 'id': 'i64',
+    'limit': 'i64', 'max': 'i64', 'min': 'i64', 'total': 'i64', 'sum': 'i64',
+    'left': 'i64', 'right': 'i64', 'low': 'i64', 'high': 'i64', 'mid': 'i64',
+    'row': 'i64', 'col': 'i64', 'r': 'i64', 'amount': 'i64', 'base': 'i64',
+    'exp': 'i64', 'power': 'i64', 'target': 'i64', 'capacity': 'i64',
+    'expected': 'i64', 'actual': 'i64', 'result': 'i64', 'val': 'i64',
+    'first': 'i64', 'second': 'i64', 'third': 'i64',
+    'rows': 'i64', 'cols': 'i64', 'times': 'i64', 'iterations': 'i64',
+    'threshold': 'i64', 'repeat_count': 'i64',
     
     # Float names
-    'rate': 'float', 'price': 'float', 'balance': 'float', 'salary': 'float',
-    'pi': 'float', 'radius': 'float', 'area': 'float', 'weight': 'float',
-    'temperature': 'float', 'temp': 'float', 'ratio': 'float',
-    'dx': 'float', 'dy': 'float',
+    'rate': 'f64', 'price': 'f64', 'balance': 'f64', 'salary': 'f64',
+    'pi': 'f64', 'radius': 'f64', 'area': 'f64', 'weight': 'f64',
+    'temperature': 'f64', 'temp': 'f64', 'ratio': 'f64',
+    'dx': 'f64', 'dy': 'f64',
     
     # String names
     'name': 'string', 'msg': 'string', 'message': 'string', 's': 'string',
@@ -52,7 +52,7 @@ NAME_TYPE_MAP = {
     
     # Array names
     'arr': 'Array<any>', 'list': 'Array<any>', 'items': 'Array<any>',
-    'data': 'Array<any>', 'numbers': 'Array<int>', 'strings': 'Array<string>',
+    'data': 'Array<any>', 'numbers': 'Array<i64>', 'strings': 'Array<string>',
     'elements': 'Array<any>', 'values': 'Array<any>', 'args': 'Array<any>',
     'tasks': 'Array<any>', 'results': 'Array<any>', 'parts': 'Array<any>',
     'lines': 'Array<string>', 'words': 'Array<string>',
@@ -61,7 +61,7 @@ NAME_TYPE_MAP = {
     'fn_arg': 'fn(): any', 'callback': 'fn(): void', 'handler': 'fn(): void',
     'f': 'fn(any): any', 'func': 'fn(any): any', 'predicate': 'fn(any): bool',
     'transform': 'fn(any): any', 'mapper': 'fn(any): any',
-    'compareFn': 'fn(any, any): int',
+    'compareFn': 'fn(any, any): i64',
     
     # Map names
     'map': 'Map<string, any>', 'dict': 'Map<string, any>',
@@ -84,7 +84,7 @@ def infer_param_type(param_name, fn_name, fn_body_lines):
     if clean.startswith('is_') or clean.startswith('has_') or clean.startswith('can_') or clean.startswith('should_'):
         return 'bool'
     if clean.endswith('_count') or clean.endswith('_size') or clean.endswith('_index') or clean.endswith('_num'):
-        return 'int'
+        return 'i64'
     if clean.endswith('_name') or clean.endswith('_str') or clean.endswith('_text') or clean.endswith('_msg'):
         return 'string'
     if clean.endswith('_list') or clean.endswith('_arr') or clean.endswith('_array'):
@@ -103,17 +103,17 @@ def infer_param_type(param_name, fn_name, fn_body_lines):
     
     # If compared with a number
     if re.search(rf'\b{re.escape(clean)}\s*[<>=!]+\s*\d', body_text):
-        return 'int'
+        return 'i64'
     if re.search(rf'\d\s*[<>=!]+\s*{re.escape(clean)}\b', body_text):
-        return 'int'
+        return 'i64'
     
     # If used in arithmetic
     if re.search(rf'\b{re.escape(clean)}\s*[\+\-\*/%]', body_text):
-        return 'int'
+        return 'i64'
     
     # If used as array index
     if re.search(rf'\[{re.escape(clean)}\]', body_text):
-        return 'int'
+        return 'i64'
     
     # If .length or .push called on it
     if re.search(rf'\b{re.escape(clean)}\.length\b', body_text):
@@ -148,9 +148,9 @@ def infer_return_type(fn_name, fn_body_lines):
         if ret == 'true' or ret == 'false':
             return 'bool'
         if re.match(r'^-?\d+$', ret):
-            return 'int'
+            return 'i64'
         if re.match(r'^-?\d+\.\d+$', ret):
-            return 'float'
+            return 'f64'
         if ret.startswith('"') or ret.startswith("'"):
             return 'string'
         if ret.startswith('['):
@@ -234,9 +234,9 @@ def process_file(filepath, dry_run=False):
                     if default_val == 'true' or default_val == 'false':
                         ptype = 'bool'
                     elif re.match(r'^-?\d+$', default_val):
-                        ptype = 'int'
+                        ptype = 'i64'
                     elif re.match(r'^-?\d+\.\d+$', default_val):
-                        ptype = 'float'
+                        ptype = 'f64'
                     elif default_val.startswith('"') or default_val.startswith("'"):
                         ptype = 'string'
                     elif default_val == 'null':

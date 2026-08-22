@@ -1,5 +1,5 @@
 // 113 FFI: raw pointer indexing reads through a C pointer and must be unsafe.
-extern "C" { fn raw_addr() -> Ptr<byte> }
+extern "C" { fn raw_addr() -> Ptr<u8> }
 
 var p = unsafe { raw_addr() }
 var x = p[0]

@@ -9,15 +9,15 @@
 // right value under the VM.
 
 enum Shape {
-    Circle(int),
-    Square(int),
+    Circle(i64),
+    Square(i64),
     Point,
     Unknown
 }
 
 enum Tree {
-    Leaf(int),
-    Branch(int),
+    Leaf(i64),
+    Branch(i64),
     Empty
 }
 
@@ -30,7 +30,7 @@ fn describe(s: Shape) -> string {
     }
 }
 
-fn radius_or(s: Shape) -> int {
+fn radius_or(s: Shape) -> i64 {
     return match (s) {
         Shape.Circle(r) -> r
         Shape.Point -> -1

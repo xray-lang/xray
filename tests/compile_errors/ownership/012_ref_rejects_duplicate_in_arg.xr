@@ -1,7 +1,7 @@
-fn mutate_and_read(target: ref Array<int>, snapshot: Array<int>) {
+fn mutate_and_read(target: ref Array<i64>, snapshot: Array<i64>) {
     target.push(1)
     print(snapshot[0])
 }
 
-var values: Array<int> = [0]
+var values: Array<i64> = [0]
 mutate_and_read(ref values, values)

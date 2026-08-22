@@ -1,7 +1,7 @@
 import math
 import { min, max, clamp } from math
 
-fn xray_math_int_core(a: int, b: int) -> int {
+fn xray_math_int_core(a: i64, b: i64) -> i64 {
     var lo = min(a, b, 5)
     var hi = math.max(a, b, 10)
     var c1 = clamp(a, 0, b)

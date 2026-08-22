@@ -1,6 +1,6 @@
-fn write(dst: Slice<byte>) {
+fn write(dst: Slice<u8>) {
     unsafe {
         var p = dst.mutPtr()
-        p.storeLE<byte>(0, 1)
+        p.storeLE<u8>(0, 1)
     }
 }

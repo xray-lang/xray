@@ -5,20 +5,20 @@ fn sent(r: SendResult) -> bool {
     }
 }
 
-fn recv_array(ch: Channel<Array<int>>) -> Array<int> {
+fn recv_array(ch: Channel<Array<i64>>) -> Array<i64> {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> []
     }
 }
 
-fn forward_array(ch: Channel<Array<int>>, data: move Array<int>) {
+fn forward_array(ch: Channel<Array<i64>>, data: move Array<i64>) {
     ch.send(move data)
 }
 
 @test
 fn test_channel_send_copy_preserves_source() {
-    const ch: Channel<Array<int>> = Channel(1)
+    const ch: Channel<Array<i64>> = Channel(1)
     var xs = [1, 2]
     ch.send(copy(xs))
     xs.push(3)
@@ -36,7 +36,7 @@ fn test_channel_send_copy_preserves_source() {
 
 @test
 fn test_channel_try_send_copy_preserves_source() {
-    const ch: Channel<Array<int>> = Channel(1)
+    const ch: Channel<Array<i64>> = Channel(1)
     var xs = [4, 5]
     assert(sent(ch.trySend(copy(xs))))
     xs.push(6)
@@ -51,7 +51,7 @@ fn test_channel_try_send_copy_preserves_source() {
 
 @test
 fn test_channel_send_timeout_copy_preserves_source() {
-    const ch: Channel<Array<int>> = Channel(1)
+    const ch: Channel<Array<i64>> = Channel(1)
     var xs = [7, 8]
     assert(sent(ch.sendTimeout(copy(xs), 0)))
     xs.push(9)
@@ -66,8 +66,8 @@ fn test_channel_send_timeout_copy_preserves_source() {
 
 @test
 fn test_channel_send_move_transfers_source() {
-    const ch: Channel<Array<int>> = Channel(1)
-    var xs = Array<int>(2, 0)
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
     xs[0] = 10
     xs[1] = 11
     ch.send(move xs)
@@ -81,8 +81,8 @@ fn test_channel_send_move_transfers_source() {
 
 @test
 fn test_channel_send_helper_move_transfers_owned_param() {
-    const ch: Channel<Array<int>> = Channel(1)
-    var xs = Array<int>(2, 0)
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
     xs[0] = 12
     xs[1] = 13
     forward_array(ch, move xs)

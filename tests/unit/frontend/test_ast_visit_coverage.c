@@ -620,7 +620,7 @@ TEST(unary_and_grouping) {
 TEST(ternary_and_nullish) {
     return assert_all_typed("var x = 10\n"
                             "var a = x > 5 ? \"big\" : \"small\"\n"
-                            "var y: int? = null\n"
+                            "var y: i64? = null\n"
                             "var b = y ?? 42\n",
                             "ternary_and_nullish");
 }
@@ -657,7 +657,7 @@ TEST(template_string) {
 }
 
 TEST(function_decl_and_call) {
-    return assert_all_typed("fn add(a: int, b: int) -> int {\n"
+    return assert_all_typed("fn add(a: i64, b: i64) -> i64 {\n"
                             "    return a + b\n"
                             "}\n"
                             "var r = add(1, 2)\n"
@@ -666,7 +666,7 @@ TEST(function_decl_and_call) {
 }
 
 TEST(function_expr) {
-    return assert_all_typed("var double = fn(x: int) -> int { return x * 2\n }"
+    return assert_all_typed("var double = fn(x: i64) -> i64 { return x * 2\n }"
                             "print(double(5))\n",
                             "function_expr");
 }
@@ -813,8 +813,8 @@ TEST(nested_expressions) {
 }
 
 TEST(closure_capture) {
-    return assert_all_typed("fn make_adder(n: int) -> int {\n"
-                            "    var inner = fn(x: int) -> int { return x + n\n }"
+    return assert_all_typed("fn make_adder(n: i64) -> i64 {\n"
+                            "    var inner = fn(x: i64) -> i64 { return x + n\n }"
                             "    return inner(10)\n"
                             "}\n"
                             "var r = make_adder(5)\n"

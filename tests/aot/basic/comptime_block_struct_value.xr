@@ -1,11 +1,11 @@
 struct CtBlockPoint {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 struct CtBlockBox {
     p: CtBlockPoint
-    tag: int
+    tag: i64
 }
 
 const BASE = comptime {

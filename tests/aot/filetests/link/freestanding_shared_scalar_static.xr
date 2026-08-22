@@ -1,5 +1,5 @@
-const COUNTER: int = 41
+const COUNTER: i64 = 41
 
-fn xray_shared_magic() -> int {
+fn xray_shared_magic() -> i64 {
     return COUNTER + 1
 }

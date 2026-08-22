@@ -1,4 +1,4 @@
-var scores: Map<int, int> = #{}
+var scores: Map<i64, i64> = #{}
 scores.set(1, 10)
 scores.set(2, 20)
 scores.set(1, 30)
@@ -9,7 +9,7 @@ print(scores.delete(2))
 print(scores.containsKey(2))
 print(scores.get(2) == null)
 
-var flags: Map<bool, int> = #{}
+var flags: Map<bool, i64> = #{}
 flags.set(true, 7)
 flags.set(false, 11)
 flags.set(true, 13)
@@ -20,7 +20,7 @@ print(flags.containsKey(false))
 print(flags.delete(false))
 print(flags.containsKey(false))
 
-var weights: Map<float, int> = #{}
+var weights: Map<f64, i64> = #{}
 weights.set(1.25, 4)
 weights.set(2.5, 8)
 weights.set(1.25, 16)
@@ -29,7 +29,7 @@ print(weights.get(1.25))
 print(weights.delete(2.5))
 print(weights.containsKey(2.5))
 
-var ints: Set<int> = #[]
+var ints: Set<i64> = #[]
 ints.add(3)
 ints.add(5)
 ints.add(3)
@@ -38,7 +38,7 @@ print(ints.contains(5))
 print(ints.delete(5))
 print(ints.contains(5))
 
-var bytes: Set<byte> = #[]
+var bytes: Set<u8> = #[]
 bytes.add(255)
 bytes.add(0)
 print(len(bytes))
@@ -46,7 +46,7 @@ print(bytes.contains(0))
 print(bytes.delete(255))
 print(bytes.contains(255))
 
-var floats: Set<float> = #[]
+var floats: Set<f64> = #[]
 floats.add(1.5)
 floats.add(2.5)
 floats.add(1.5)

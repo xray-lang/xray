@@ -1,6 +1,6 @@
 import parallel
 
-const seqPlan = parallel.Plan<int>(parallel.Options(1), (lane) -> lane)
+const seqPlan = parallel.Plan<i64>(parallel.Options(1), (lane) -> lane)
 
 try {
     seqPlan.forEach(0..4, (state, i) -> {
@@ -18,13 +18,13 @@ try {
     }
 }
 
-const seqTouched = Atomic<int>(0)
+const seqTouched = Atomic<i64>(0)
 seqPlan.forEach(0..4, (state, i) -> {
     seqTouched.add(1, Ordering.Relaxed)
 })
 print(seqTouched.load(Ordering.Relaxed) == 4)
 
-const vmPlan = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+const vmPlan = parallel.Plan<i64>(parallel.Options(2), (lane) -> lane)
 
 try {
     vmPlan.forEach(0..20000, (state, i) -> {
@@ -42,7 +42,7 @@ try {
     }
 }
 
-const vmTouched = Atomic<int>(0)
+const vmTouched = Atomic<i64>(0)
 vmPlan.forEach(0..4, (state, i) -> {
     vmTouched.add(1, Ordering.Relaxed)
 })

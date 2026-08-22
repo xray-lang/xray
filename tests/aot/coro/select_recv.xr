@@ -1,4 +1,4 @@
-fn wait_recv(ch: Channel<int>) -> int {
+fn wait_recv(ch: Channel<i64>) -> i64 {
     var result = 0
     select {
         value from ch -> {
@@ -8,7 +8,7 @@ fn wait_recv(ch: Channel<int>) -> int {
     return result
 }
 
-const ch = Channel<int>(1)
+const ch = Channel<i64>(1)
 ch.send(41)
 var task = go wait_recv(ch)
 

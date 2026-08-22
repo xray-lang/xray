@@ -11,9 +11,9 @@ fn test_is_operator() {
     var arr = [1, 2, 3]
     var map = #{"a": 1}
     // Test basic types
-    print(a is int)
+    print(a is i64)
     // true
-    print(b is float)
+    print(b is f64)
     // true
     print(c is string)
     // true
@@ -24,12 +24,12 @@ fn test_is_operator() {
     // Test negative cases
     print(a is string)
     // false
-    print(c is int)
+    print(c is i64)
     // false
     // Test container types
-    print(arr is Array<int>)
+    print(arr is Array<i64>)
     // true
-    print(map is Map<string, int>)
+    print(map is Map<string, i64>)
     // true
     print("is operator test completed")
 }

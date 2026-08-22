@@ -1,12 +1,12 @@
 // anchor: slice-array-negative-end
 fn main() {
     var arr = [1, 2, 3, 4]
-    var endDrop: Slice<int> = arr[:-1]
+    var endDrop: Slice<i64> = arr[:-1]
     print(endDrop)
     print(copy(arr[:-1]))
-    var hugeDrop: Slice<int> = arr[:-999]
+    var hugeDrop: Slice<i64> = arr[:-999]
     print(hugeDrop)
-    var reversed: Slice<int> = arr[3:1]
+    var reversed: Slice<i64> = arr[3:1]
     print(reversed)
 }
 

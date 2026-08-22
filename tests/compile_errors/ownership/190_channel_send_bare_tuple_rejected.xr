@@ -1,2 +1,2 @@
-const results: Channel<(int, int, int)> = Channel(1)
+const results: Channel<(i64, i64, i64)> = Channel(1)
 results.send((1, 2, 3))

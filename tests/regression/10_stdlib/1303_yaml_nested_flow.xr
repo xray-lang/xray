@@ -8,13 +8,13 @@ import yaml
 import { YamlValue } from yaml
 
 fn getV(v: YamlValue, k: string) -> YamlValue { return yaml.get(v, k)! }
-fn getInt(v: YamlValue, k: string) -> int { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
+fn getInt(v: YamlValue, k: string) -> i64 { return yaml.asInt(yaml.get(v, k)!) ?? -1 }
 fn getStr(v: YamlValue, k: string) -> string { return yaml.asString(yaml.get(v, k)!) ?? "" }
 fn getBool(v: YamlValue, k: string) -> bool { return yaml.asBool(yaml.get(v, k)!) ?? false }
-fn getFloat(v: YamlValue, k: string) -> float { return yaml.asFloat(yaml.get(v, k)!) ?? 0.0 }
-fn atV(v: YamlValue, i: int) -> YamlValue { return yaml.at(v, i)! }
-fn atInt(v: YamlValue, i: int) -> int { return yaml.asInt(yaml.at(v, i)!) ?? -1 }
-fn atStr(v: YamlValue, i: int) -> string { return yaml.asString(yaml.at(v, i)!) ?? "" }
+fn getFloat(v: YamlValue, k: string) -> f64 { return yaml.asFloat(yaml.get(v, k)!) ?? 0.0 }
+fn atV(v: YamlValue, i: i64) -> YamlValue { return yaml.at(v, i)! }
+fn atInt(v: YamlValue, i: i64) -> i64 { return yaml.asInt(yaml.at(v, i)!) ?? -1 }
+fn atStr(v: YamlValue, i: i64) -> string { return yaml.asString(yaml.at(v, i)!) ?? "" }
 
 // ===== Flow mapping nested in flow mapping =====
 

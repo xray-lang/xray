@@ -1,12 +1,12 @@
 // anchor: array-class-throw-cleanup-lifetime
 enum ParseError {
-    Invalid(int)
+    Invalid(i64)
 }
 
 class ParsedType {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }

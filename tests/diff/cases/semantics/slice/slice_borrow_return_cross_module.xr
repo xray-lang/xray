@@ -1,8 +1,8 @@
 import { importedTail } from "./_borrow_return_lib"
 
 fn run() {
-    var owner: Array<byte> = [5, 6, 7, 8]
-    var source: Slice<byte> = owner[:]
+    var owner: Array<u8> = [5, 6, 7, 8]
+    var source: Slice<u8> = owner[:]
     var result = importedTail(source)
     print(len(result))
     print(result[0])

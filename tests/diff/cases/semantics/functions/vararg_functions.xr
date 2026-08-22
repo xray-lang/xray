@@ -3,19 +3,19 @@
 // AOT collects them at the direct call site into a typed array (scalar elements)
 // or a tagged array (reference elements), matching the callee's element reads.
 
-fn sumInts(...n: int) -> int {
+fn sumInts(...n: i64) -> i64 {
     var t = 0
     for (var i = 0; i < len(n); i++) { t = t + n[i] }
     return t
 }
 
-fn sumFloats(...x: float) -> float {
+fn sumFloats(...x: f64) -> f64 {
     var t = 0.0
     for (var i = 0; i < len(x); i++) { t = t + x[i] }
     return t
 }
 
-fn countTrue(...b: bool) -> int {
+fn countTrue(...b: bool) -> i64 {
     var t = 0
     for (var i = 0; i < len(b); i++) { if (b[i]) { t = t + 1 } }
     return t
@@ -31,7 +31,7 @@ fn joinStrings(sep: string, ...p: string) -> string {
 }
 
 // Nested variadic: a fixed-arg function forwarding into another variadic.
-fn wrapSum(base: int, a: int, b: int) -> int {
+fn wrapSum(base: i64, a: i64, b: i64) -> i64 {
     return base + sumInts(a, b, base)
 }
 

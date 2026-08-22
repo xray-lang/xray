@@ -24,6 +24,7 @@
 #include "xa_selection.h"
 #include "../../runtime/value/xtype_internal.h"
 #include "../../runtime/value/xenum_layout.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_types.h"
@@ -95,6 +96,32 @@ static void register_builtin_var(XaAnalyzer *analyzer, const char *name, XrType 
     if (links) {
         links->type = type;
         links->declared_type = type;
+        links->is_definitely_assigned = true;
+    }
+}
+
+/* Exact scalar keywords are compile-time type namespaces. Build their symbols
+ * from the canonical registry so static members such as i64.parse resolve
+ * without a hand-written name table or a generic identifier fallback. */
+static void register_exact_scalar_namespaces(XaAnalyzer *analyzer) {
+    size_t count = 0;
+    const XrExactScalarDesc *rows = xr_exact_scalar_rows(&count);
+    for (size_t i = 0; i < count; i++) {
+        const XrExactScalarDesc *row = &rows[i];
+        XaSymbol *sym = xa_symbol_new(row->source_name, XA_SYM_CLASS);
+        if (!sym)
+            continue;
+        sym->location.line = 0;
+        sym->is_builtin = true;
+        sym->is_const = true;
+        xa_scope_add_symbol(analyzer->global_scope, sym);
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (!links)
+            continue;
+        links->type = xr_scalar_rep_is_float(row->native_type)
+                          ? xr_type_new_float_width(analyzer->isolate, row->native_type)
+                          : xr_type_new_int_width(analyzer->isolate, row->native_type);
+        links->declared_type = links->type;
         links->is_definitely_assigned = true;
     }
 }
@@ -251,6 +278,8 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     XrType *t_bool = xr_type_new_bool(NULL);
     XrType *t_char = xr_type_new_rune(NULL);
 
+    register_exact_scalar_namespaces(analyzer);
+
     // Test framework: fn(...any) -> void
     XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
     fn_assert->function.min_params = 1;
@@ -263,11 +292,8 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_func(analyzer, "assert_false", fn_assert);
     register_builtin_func(analyzer, "assert_throws", fn_assert);
 
-    // Type conversion: fn(any) -> T (precise return type)
-    XrType *fn_to_int = xr_type_new_function(analyzer->isolate, &p_any, 1, t_int, false);
-    register_builtin_func(analyzer, "int", fn_to_int);
-    XrType *fn_to_float = xr_type_new_function(analyzer->isolate, &p_any, 1, t_float, false);
-    register_builtin_func(analyzer, "float", fn_to_float);
+    // The exact numeric surface uses `as` for numeric conversion and
+    // i64/f64.parse for text. No numeric type name is a global callable.
     XrType *fn_to_string = xr_type_new_function(analyzer->isolate, &p_any, 1, t_string, false);
     register_builtin_func(analyzer, "string", fn_to_string);
     XrType *fn_to_bool = xr_type_new_function(analyzer->isolate, &p_any, 1, t_bool, false);

@@ -10,7 +10,7 @@ const ITERATIONS = 50
 const FAILING_PER_SCOPE = 200
 const SUCCEEDING_PER_SCOPE = 50
 
-fn make_failing(id: int) -> int {
+fn make_failing(id: i64) -> i64 {
     var x = 0
     for (var k = 0; k < 50; k++) {
         x = x + k
@@ -19,7 +19,7 @@ fn make_failing(id: int) -> int {
     return x
 }
 
-fn make_failing_report(ch: Channel<int>, id: int) -> int {
+fn make_failing_report(ch: Channel<i64>, id: i64) -> i64 {
     var x = 0
     for (var k = 0; k < 50; k++) {
         x = x + k
@@ -29,7 +29,7 @@ fn make_failing_report(ch: Channel<int>, id: int) -> int {
     return x
 }
 
-fn make_ok_report(ch: Channel<int>, id: int) -> int {
+fn make_ok_report(ch: Channel<i64>, id: i64) -> i64 {
     var x = 0
     for (var k = 0; k < 50; k++) {
         x = x + k
@@ -38,8 +38,8 @@ fn make_ok_report(ch: Channel<int>, id: int) -> int {
     return x + id
 }
 
-fn drain_counts(ch: Channel<int>, expected: int) -> Array<int> {
-    var counts: Array<int> = [0, 0]
+fn drain_counts(ch: Channel<i64>, expected: i64) -> Array<i64> {
+    var counts: Array<i64> = [0, 0]
     for (var i = 0; i < expected; i++) {
         match (ch.recv()) {
             Recv.Value(v) -> {
@@ -58,7 +58,7 @@ fn drain_counts(ch: Channel<int>, expected: int) -> Array<int> {
 @test
 fn test_scope_loses_no_children() {
     for (var iter = 0; iter < ITERATIONS; iter++) {
-        const ch = Channel<int>(FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
+        const ch = Channel<i64>(FAILING_PER_SCOPE + SUCCEEDING_PER_SCOPE)
         scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_failing_report(ch, i)
@@ -77,7 +77,7 @@ fn test_scope_loses_no_children() {
 @test
 fn test_scope_all_success() {
     for (var iter = 0; iter < 5; iter++) {
-        const ch = Channel<int>(FAILING_PER_SCOPE)
+        const ch = Channel<i64>(FAILING_PER_SCOPE)
         scope {
             for (var i = 0; i < FAILING_PER_SCOPE; i++) {
                 go make_ok_report(ch, i)

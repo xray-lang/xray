@@ -8,10 +8,10 @@ import time
 var SHORT_TASKS = 100    // 短任务数量
 var DURATION_MS = 2000   // 最长持续时间(ms)
 if (len(process.args) > 0) {
-    SHORT_TASKS = int(process.args[0]) ?? SHORT_TASKS
+    SHORT_TASKS = i64.tryParse(process.args[0]) ?? SHORT_TASKS
 }
 if (len(process.args) > 1) {
-    DURATION_MS = int(process.args[1]) ?? DURATION_MS
+    DURATION_MS = i64.tryParse(process.args[1]) ?? DURATION_MS
 }
 
 print("=== Starvation 测试 ===")
@@ -20,7 +20,7 @@ print("最长持续时间:", DURATION_MS, "ms")
 
 const result_ch = Channel(SHORT_TASKS)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -28,7 +28,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // CPU 密集型长任务：持续计算直到被取消
-fn cpu_hog() -> int {
+fn cpu_hog() -> i64 {
     var count = 0
     var deadline = time.monotonic() + DURATION_MS
     while (time.monotonic() < deadline) {
@@ -42,7 +42,7 @@ fn cpu_hog() -> int {
 }
 
 // 短任务：简单计算后立即返回
-fn short_task(id: int) -> int {
+fn short_task(id: i64) -> i64 {
     var start = time.monotonic()
     // 少量计算
     var sum = 0
@@ -89,7 +89,7 @@ var max_latency = 0
 
 for (task in short_tasks) {
     var sum = await task
-    if ((int(sum) ?? -1) == 4950) {
+    if ((i64.tryParse(sum) ?? -1) == 4950) {
         completed++
     }
 }
@@ -113,7 +113,7 @@ var elapsed = time.monotonic() - start
 print("短任务完成:", completed, "/", SHORT_TASKS)
 print("总时间:", elapsed, "ms")
 if (completed > 0) {
-    print("平均延迟:", float(total_latency) / float(completed), "ms")
+    print("平均延迟:", (total_latency as f64) / (completed as f64), "ms")
     print("最大延迟:", max_latency, "ms")
 }
 print("公平调度:", completed == SHORT_TASKS)

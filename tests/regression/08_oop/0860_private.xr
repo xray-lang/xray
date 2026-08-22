@@ -5,23 +5,23 @@
 // ===== 私有字段 =====
 
 class Account {
-    private balance: int
+    private balance: i64
 
-    constructor(initial: int) {
+    constructor(initial: i64) {
         this.balance = initial
     }
 
-    deposit(amount: int) {        this.balance = this.balance + amount
+    deposit(amount: i64) {        this.balance = this.balance + amount
     }
 
-    withdraw(amount: int) -> bool {        if (amount <= this.balance) {
+    withdraw(amount: i64) -> bool {        if (amount <= this.balance) {
             this.balance = this.balance - amount
             return true
         }
         return false
     }
 
-    getBalance() -> int {        return this.balance
+    getBalance() -> i64 {        return this.balance
     }
 }
 
@@ -77,28 +77,28 @@ fn test_multiple_private_fields() {
 // ===== 私有字段与继承 =====
 
 class BankAccount {
-    private balance: int
+    private balance: i64
 
-    constructor(initial: int) {
+    constructor(initial: i64) {
         this.balance = initial
     }
 
-    getBalance() -> int {        return this.balance
+    getBalance() -> i64 {        return this.balance
     }
 
-    addAmount(amount: int) {        this.balance = this.balance + amount
+    addAmount(amount: i64) {        this.balance = this.balance + amount
     }
 }
 
 class SavingsAccount extends BankAccount {
-    interestRate: float
+    interestRate: f64
 
-    constructor(initial: int, rate: float) {
+    constructor(initial: i64, rate: f64) {
         super(initial)
         this.interestRate = rate
     }
 
-    applyInterest() {        var interest = ((this.getBalance() as float) * this.interestRate).floor()
+    applyInterest() {        var interest = ((this.getBalance() as f64) * this.interestRate).floor()
         this.addAmount(interest)
     }
 }

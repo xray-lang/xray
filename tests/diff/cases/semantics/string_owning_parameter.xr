@@ -9,7 +9,7 @@ fn owning(label: string) -> string {
     return label + "!"
 }
 
-fn owning_second(n: int, label: string) -> string {
+fn owning_second(n: i64, label: string) -> string {
     return label + "/"
 }
 

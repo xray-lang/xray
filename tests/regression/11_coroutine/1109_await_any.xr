@@ -1,10 +1,10 @@
 // 测试 await any - 等待任一协程完成
 
-fn compute(n: int) -> int {
+fn compute(n: i64) -> i64 {
     return n * 100
 }
 
-fn blocked(ch: Channel<int>) -> int {
+fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
@@ -33,8 +33,8 @@ fn test_await_any() {
     print(third)
 
     // Test 4: slow path - two blocked tasks, unblock one specifically
-    const ch1 = Channel<int>(1)
-    const ch2 = Channel<int>(1)
+    const ch1 = Channel<i64>(1)
+    const ch2 = Channel<i64>(1)
     var b1 = go blocked(ch1)
     var b2 = go blocked(ch2)
     ch2.send(999)

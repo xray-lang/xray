@@ -2,14 +2,14 @@
 // typed parameter and bound to a typed `shared`. Guards the analyzer
 // inference for the deep-copy builtin (116 copy / shared-promotion demos).
 class Box {
-    value: int
+    value: i64
 
-    constructor(v: int) {
+    constructor(v: i64) {
         this.value = v
     }
 }
 
-fn readValue(b: Box) -> int {
+fn readValue(b: Box) -> i64 {
     return b.value
 }
 
@@ -20,7 +20,7 @@ print(readValue(duplicate))
 const frozen = copy(original)
 print(readValue(frozen))
 
-fn total(a: Array<int>) -> int {
+fn total(a: Array<i64>) -> i64 {
     var s = 0
     for (x in a) {
         s = s + x
@@ -28,5 +28,5 @@ fn total(a: Array<int>) -> int {
     return s
 }
 
-var xs: Array<int> = [1, 2, 3]
+var xs: Array<i64> = [1, 2, 3]
 print(total(copy(xs)))

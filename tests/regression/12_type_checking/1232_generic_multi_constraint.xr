@@ -109,19 +109,19 @@ fn test_explicit_type_args_multi_constraint() {
     fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
-    assert_eq(passThrough<int>(11), 11)
+    assert_eq(passThrough<i64>(11), 11)
     assert_eq(passThrough<string>("xy"), "xy")
 }
 
 // ===== User class with explicit `implements` satisfies builtin interface =====
 class CmpPoint implements Comparable {
-    x: int
+    x: i64
 
     constructor(x) {
         this.x = x
     }
 
-    compareTo(other: CmpPoint) -> int {
+    compareTo(other: CmpPoint) -> i64 {
         return this.x - other.x
     }
 }

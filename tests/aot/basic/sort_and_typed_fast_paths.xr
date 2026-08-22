@@ -2,11 +2,11 @@
 // fill/indexOf fast paths. Run as a VM/AOT diff: outputs must match.
 
 // --- int array sort: duplicates, reverse, already sorted ---
-var ints: Array<int> = [5, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
+var ints: Array<i64> = [5, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
 ints.sort()
 print(ints.join(","))           // 1,1,2,3,4,5,5,5,5,6,9
 
-var rev: Array<int> = []
+var rev: Array<i64> = []
 var i = 100
 while (i > 0) {
     rev.push(i)
@@ -17,7 +17,7 @@ print(rev[0])                   // 1
 print(rev[99])                  // 100
 
 // Large array exercises the deep recursion / ninther pivot path.
-var big: Array<int> = []
+var big: Array<i64> = []
 var seed = 42
 i = 0
 while (i < 5000) {
@@ -38,7 +38,7 @@ print(sorted)                   // true
 print(big[0] <= big[2500])      // true
 
 // --- float array sort ---
-var floats: Array<float> = [3.5, -1.25, 0.0, 2.5, -1.25, 10.125]
+var floats: Array<f64> = [3.5, -1.25, 0.0, 2.5, -1.25, 10.125]
 floats.sort()
 print(floats[0])                // -1.25
 print(floats[5])                // 10.125
@@ -53,22 +53,22 @@ strs.sort()
 print(strs.join("|"))           // apple|apple|banana|cherry
 
 // --- comparator: descending ints, and by string length ---
-var desc: Array<int> = [3, 1, 4, 1, 5, 9, 2, 6]
-desc.sort(fn(a: int, b: int) -> int { return b - a })
+var desc: Array<i64> = [3, 1, 4, 1, 5, 9, 2, 6]
+desc.sort(fn(a: i64, b: i64) -> i64 { return b - a })
 print(desc.join(","))           // 9,6,5,4,3,2,1,1
 
 // --- typed fill fast path ---
-var filled: Array<int> = [1, 2, 3, 4, 5]
+var filled: Array<i64> = [1, 2, 3, 4, 5]
 filled.fill(7)
 print(filled.join(","))         // 7,7,7,7,7
 
 // --- typed indexOf / contains fast paths ---
-var nums: Array<int> = [10, 20, 30, 40, 50]
+var nums: Array<i64> = [10, 20, 30, 40, 50]
 print(nums.indexOf(30))         // 2
 print(nums.indexOf(99))         // -1
 print(nums.contains(40))        // true
 print(nums.contains(41))        // false
 
-var fnums: Array<float> = [1.5, 2.5, 3.5]
+var fnums: Array<f64> = [1.5, 2.5, 3.5]
 print(fnums.indexOf(2.5))       // 1
 print(fnums.indexOf(9.5))       // -1

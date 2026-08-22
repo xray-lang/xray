@@ -3,7 +3,7 @@
 
 // ===== Basic type alias =====
 
-type Age = int
+type Age = i64
 type Name = string
 
 @test
@@ -16,7 +16,7 @@ fn test_basic_alias() {
 
 // ===== Struct type alias =====
 
-type Point = { x: float, y: float }
+type Point = { x: f64, y: f64 }
 
 @test
 fn test_struct_alias() {
@@ -27,12 +27,12 @@ fn test_struct_alias() {
 
 // ===== Function type alias =====
 
-type Mapper = fn(int) -> int
-type Predicate = fn(int) -> bool
+type Mapper = fn(i64) -> i64
+type Predicate = fn(i64) -> bool
 
 @test
 fn test_fn_type_alias() {
-    fn apply(x: int, f: Mapper) -> int {
+    fn apply(x: i64, f: Mapper) -> i64 {
         return f(x)
     }
     
@@ -53,7 +53,7 @@ fn test_container_alias() {
 
 // ===== Optional type alias =====
 
-type MaybeInt = int?
+type MaybeInt = i64?
 
 @test
 fn test_optional_alias() {
@@ -65,11 +65,11 @@ fn test_optional_alias() {
 
 // ===== Nested type alias =====
 
-type Callback = fn(int) -> int
+type Callback = fn(i64) -> i64
 
 @test
 fn test_nested_alias() {
-    fn applyTwice(x: int, f: Callback) -> int {
+    fn applyTwice(x: i64, f: Callback) -> i64 {
         return f(f(x))
     }
     
@@ -88,13 +88,13 @@ fn test_alias_in_return() {
 
 // ===== Type alias with void function =====
 
-type Action = fn(int)
+type Action = fn(i64)
 
 @test
 fn test_void_fn_alias() {
     var sum = 0
     
-    fn forEach(arr: Array<int>, f: Action) {
+    fn forEach(arr: Array<i64>, f: Action) {
         for (item in arr) {
             f(item)
         }

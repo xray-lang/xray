@@ -5,7 +5,7 @@ import { Mutex, CountdownLatch } from sync
 // after synchronisation. Confirms the composition provides real cross-coroutine
 // mutual exclusion in both VM and AOT, not just single-coroutine behaviour.
 
-const m = Mutex<int>(0)
+const m = Mutex<i64>(0)
 const done = CountdownLatch(1)
 
 go fn() {

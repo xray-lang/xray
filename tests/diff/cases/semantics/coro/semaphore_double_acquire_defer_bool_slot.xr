@@ -1,6 +1,6 @@
 import { Semaphore } from sync
 
-fn holdBoth(a: Semaphore, b: Semaphore) -> int {
+fn holdBoth(a: Semaphore, b: Semaphore) -> i64 {
     a.acquire()
     b.acquire()
     defer { b.release() }

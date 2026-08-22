@@ -12,21 +12,21 @@
 
 @test
 fn test_int64_max_value() {
-    var max: int = 9223372036854775807
+    var max: i64 = 9223372036854775807
     assert_eq(max, 9223372036854775807)
-    assert_eq(typeName(max), "int")
+    assert_eq(typeName(max), "i64")
 }
 
 @test
 fn test_int64_min_value() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(min, -9223372036854775807 - 1)
 }
 
 @test
 fn test_boundary_identity() {
-    var max: int = 9223372036854775807
-    var min: int = -9223372036854775807 - 1
+    var max: i64 = 9223372036854775807
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(max - max, 0)
     assert_eq(min - min, 0)
     assert_eq(max * 1, max)
@@ -40,97 +40,97 @@ fn test_boundary_identity() {
 
 @test
 fn test_large_values_still_int() {
-    var a: int = 140737488355327
+    var a: i64 = 140737488355327
     var r = a + 1
     assert_eq(r, 140737488355328)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 @test
 fn test_large_addition_still_int() {
-    var a: int = 100000000000000
-    var b: int = 100000000000000
+    var a: i64 = 100000000000000
+    var b: i64 = 100000000000000
     var r = a + b
     assert_eq(r, 200000000000000)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 // ===== Addition overflow wraps =====
 
 @test
 fn test_add_near_boundary_ok() {
-    var a: int = 9223372036854775806
+    var a: i64 = 9223372036854775806
     assert_eq(a + 1, 9223372036854775807)
 }
 
 @test
 fn test_add_overflow_wraps() {
-    var max: int = 9223372036854775807
+    var max: i64 = 9223372036854775807
     var r = max + 1
     // INT64_MAX + 1 wraps to INT64_MIN
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 @test
 fn test_add_negative_overflow_wraps() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     var r = min + (-1)
     // INT64_MIN + (-1) wraps to INT64_MAX
     assert_eq(r, 9223372036854775807)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 // ===== Subtraction overflow wraps =====
 
 @test
 fn test_sub_near_boundary_ok() {
-    var a: int = -9223372036854775807
+    var a: i64 = -9223372036854775807
     assert_eq(a - 1, -9223372036854775807 - 1)
 }
 
 @test
 fn test_sub_overflow_wraps() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     var r = min - 1
     // INT64_MIN - 1 wraps to INT64_MAX
     assert_eq(r, 9223372036854775807)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 @test
 fn test_sub_positive_overflow_wraps() {
-    var max: int = 9223372036854775807
+    var max: i64 = 9223372036854775807
     var r = max - (-1)
     // INT64_MAX - (-1) = INT64_MAX + 1 wraps to INT64_MIN
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 // ===== Multiplication overflow wraps =====
 
 @test
 fn test_mul_within_range() {
-    var a: int = 1000000
+    var a: i64 = 1000000
     assert_eq(a * 1000000, 1000000000000)
 }
 
 @test
 fn test_mul_overflow_wraps() {
-    var max: int = 9223372036854775807
+    var max: i64 = 9223372036854775807
     var r = max * 2
     // INT64_MAX * 2 wraps: result is -2 (unsigned: 0xFFFFFFFFFFFFFFFE)
     assert_eq(r, -2)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 @test
 fn test_mul_both_large_ok() {
-    var a: int = 3000000000
-    var b: int = 3000000001
+    var a: i64 = 3000000000
+    var b: i64 = 3000000001
     var r = a * b
     assert_eq(r, 9000000003000000000)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 // ===== Negation overflow wraps =====
@@ -144,18 +144,18 @@ fn test_neg_normal() {
 
 @test
 fn test_neg_min_wraps() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     var r = -min
     // -INT64_MIN wraps to INT64_MIN (two's complement)
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 // ===== Left shift within range =====
 
 @test
 fn test_shift_within_range() {
-    var one: int = 1
+    var one: i64 = 1
     assert_eq(one << 46, 70368744177664)
     assert_eq(one << 62, 4611686018427387904)
 }
@@ -164,37 +164,37 @@ fn test_shift_within_range() {
 
 @test
 fn test_compound_add_wraps() {
-    var x: int = 9223372036854775807
+    var x: i64 = 9223372036854775807
     x += 1
     assert_eq(x, -9223372036854775807 - 1)
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 }
 
 @test
 fn test_compound_sub_wraps() {
-    var x: int = -9223372036854775807 - 1
+    var x: i64 = -9223372036854775807 - 1
     x -= 1
     assert_eq(x, 9223372036854775807)
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 }
 
 @test
 fn test_compound_mul_wraps() {
-    var x: int = 9223372036854775807
+    var x: i64 = 9223372036854775807
     x *= 2
     assert_eq(x, -2)
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 }
 
 // ===== Compound assignment within range =====
 
 @test
 fn test_compound_near_boundary_ok() {
-    var x: int = 9223372036854775806
+    var x: i64 = 9223372036854775806
     x += 1
     assert_eq(x, 9223372036854775807)
 
-    var y: int = -9223372036854775807
+    var y: i64 = -9223372036854775807
     y -= 1
     assert_eq(y, -9223372036854775807 - 1)
 }
@@ -203,7 +203,7 @@ fn test_compound_near_boundary_ok() {
 
 @test
 fn test_mul_neg_neg_ok() {
-    var a: int = 140737488355327
+    var a: i64 = 140737488355327
     assert_eq(a * -1, -140737488355327)
 }
 
@@ -217,26 +217,26 @@ fn test_mul_neg_neg_ok() {
 
 @test
 fn test_div_min_neg_one_wraps() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     var r = min / -1
     assert_eq(r, -9223372036854775807 - 1)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 @test
 fn test_mod_min_neg_one_is_zero() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     var r = min % -1
     assert_eq(r, 0)
-    assert_eq(typeName(r), "int")
+    assert_eq(typeName(r), "i64")
 }
 
 @test
 fn test_div_min_neg_one_in_loop() {
     // Loop forces JIT compilation on hot paths so that the wrap path
     // is exercised on the JIT side, not just the interpreter.
-    var min: int = -9223372036854775807 - 1
-    var acc: int = 0
+    var min: i64 = -9223372036854775807 - 1
+    var acc: i64 = 0
     for (i in 0..200) {
         acc += min / -1
     }
@@ -253,7 +253,7 @@ fn test_div_normal_with_neg_one_divisor() {
     assert_eq(42 / -1, -42)
     assert_eq(-42 / -1, 42)
     assert_eq(0 / -1, 0)
-    var big: int = 9223372036854775807
+    var big: i64 = 9223372036854775807
     assert_eq(big / -1, -9223372036854775807)
 }
 
@@ -265,7 +265,7 @@ fn test_div_normal_with_neg_one_divisor() {
 
 @test
 fn test_abs_min_wraps() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(min.abs(), -9223372036854775807 - 1)
 }
 
@@ -274,7 +274,7 @@ fn test_abs_normal() {
     assert_eq((-42).abs(), 42)
     assert_eq((42).abs(), 42)
     assert_eq((0).abs(), 0)
-    var max: int = 9223372036854775807
+    var max: i64 = 9223372036854775807
     assert_eq(max.abs(), 9223372036854775807)
 }
 
@@ -282,8 +282,8 @@ fn test_abs_normal() {
 
 @test
 fn test_checked_add_sub_mul() {
-    var max: int = 9223372036854775807
-    var min: int = -9223372036854775807 - 1
+    var max: i64 = 9223372036854775807
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(max.checkedAdd(0), max)
     assert_eq(max.checkedAdd(1), null)
     assert_eq(min.checkedAdd(-1), null)
@@ -302,8 +302,8 @@ fn test_checked_add_sub_mul() {
 
 @test
 fn test_saturating_add_sub_mul() {
-    var max: int = 9223372036854775807
-    var min: int = -9223372036854775807 - 1
+    var max: i64 = 9223372036854775807
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(max.saturatingAdd(1), max)
     assert_eq(min.saturatingAdd(-1), min)
     assert_eq(max.saturatingSub(-1), max)
@@ -315,8 +315,8 @@ fn test_saturating_add_sub_mul() {
 
 @test
 fn test_wrapping_add_sub_mul() {
-    var max: int = 9223372036854775807
-    var min: int = -9223372036854775807 - 1
+    var max: i64 = 9223372036854775807
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(max.wrappingAdd(1), min)
     assert_eq(min.wrappingAdd(-1), max)
     assert_eq(min.wrappingSub(1), max)
@@ -327,6 +327,6 @@ fn test_wrapping_add_sub_mul() {
 
 @test
 fn test_to_hex_min_boundary() {
-    var min: int = -9223372036854775807 - 1
+    var min: i64 = -9223372036854775807 - 1
     assert_eq(min.toHex(), "-0x8000000000000000")
 }

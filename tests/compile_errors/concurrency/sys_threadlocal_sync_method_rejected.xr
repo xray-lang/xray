@@ -1,12 +1,12 @@
 import sys
 import sync
 
-const local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<i64>(fn() -> i64 {
     return 1
 })
 
-fn main() -> int {
-    var m = sync.Mutex<int>(2)
+fn main() -> i64 {
+    var m = sync.Mutex<i64>(2)
     var x = local.get()
     return m.lock((v) -> v + x)
 }

@@ -7,14 +7,14 @@
 enum NetErr { Timeout, Refused }
 enum DiskErr { Full, ReadOnly }
 
-fn fail(kind: int) -> int {
+fn fail(kind: i64) -> i64 {
     if (kind == 0) { throw NetErr.Timeout }
     if (kind == 1) { throw DiskErr.Full }
     return kind
 }
 
 // Route by enum type: NetErr → "net", DiskErr → "disk".
-fn classify(kind: int) -> string {
+fn classify(kind: i64) -> string {
     var tag = "none"
     try {
         fail(kind)
@@ -43,7 +43,7 @@ fn test_typed_enum_no_throw() {
 
 // Typed enum catch followed by a catch-all: a non-matching enum must fall
 // through the typed clause into the catch-all rather than propagating.
-fn classify_with_default(kind: int) -> string {
+fn classify_with_default(kind: i64) -> string {
     var tag = "none"
     try {
         fail(kind)

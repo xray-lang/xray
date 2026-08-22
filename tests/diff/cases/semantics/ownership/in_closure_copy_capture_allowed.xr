@@ -1,11 +1,11 @@
-fn make(data: Array<int>) -> fn() -> int {
+fn make(data: Array<i64>) -> fn() -> i64 {
     var snapshot = copy(data)
-    return fn() -> int {
+    return fn() -> i64 {
         return len(snapshot)
     }
 }
 
-var values: Array<int> = [1, 2, 3, 4]
+var values: Array<i64> = [1, 2, 3, 4]
 var f = make(values)
 values.push(5)
 print(f())

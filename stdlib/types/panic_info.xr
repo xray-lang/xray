@@ -12,7 +12,7 @@ class PanicInfo {
     message: string
     stack: Array<string>
     cause: PanicInfo?
-    code: int
+    code: i64
     data: JSON.Value
     constructor(message: string = "", cause: PanicInfo? = null)
     toString() -> string

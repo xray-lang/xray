@@ -13,8 +13,8 @@ const PI = 3.14159
 print("PI = ${PI}")
 
 // === Type annotations ===
-var age: int = 25
-var height: float = 1.75
+var age: i64 = 25
+var height: f64 = 1.75
 var name: string = "Alice"
 var active: bool = true
 
@@ -26,7 +26,7 @@ var y = 3.14          // inferred as float
 var s = "hello"       // inferred as string
 
 // === Nullable types ===
-var maybe: int? = null
+var maybe: i64? = null
 print("maybe = ${maybe}")
 maybe = 42
 print("maybe = ${maybe}")
@@ -36,7 +36,7 @@ var value = maybe ?? 0
 print("value = ${value}")
 
 // === Multiple assignment ===
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 var (quotient, remainder) = divmod(17, 5)

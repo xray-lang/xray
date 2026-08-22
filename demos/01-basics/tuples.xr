@@ -15,19 +15,19 @@ print(triple.1)
 print(triple.2)
 
 // === Type annotations ===
-var p: (int, int) = (3, 4)
-var kv: (string, int) = ("score", 100)
+var p: (i64, i64) = (3, 4)
+var kv: (string, i64) = ("score", 100)
 print("${p.0}, ${p.1}")
 print("${kv.0}=${kv.1}")
 
 // === .N field access (chained) ===
-var nested: ((int, int), string) = ((10, 20), "label")
+var nested: ((i64, i64), string) = ((10, 20), "label")
 print(nested.0.0)                      // 10
 print(nested.0.1)                      // 20
 print(nested.1)                        // label
 
 // === Multi-return functions ===
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 var (q, r) = divmod(17, 5)
@@ -44,13 +44,13 @@ var b = 2
 print("after swap: a=${a}, b=${b}")
 
 // === for-in with tuple destructure ===
-var pairs: Array<(string, int)> = [("a", 1), ("b", 2), ("c", 3)]
+var pairs: Array<(string, i64)> = [("a", 1), ("b", 2), ("c", 3)]
 for ((k, v) in pairs) {
     print("${k}=${v}")
 }
 
 // === Match with tuple patterns ===
-fn classify(p: (int, int)) -> string {
+fn classify(p: (i64, i64)) -> string {
     return match (p) {
         (0, 0)             -> "origin"
         (0, _)             -> "y-axis"
@@ -66,7 +66,7 @@ print(classify((5, 5)))
 print(classify((2, 9)))
 
 // === Nested match patterns ===
-fn fst_first(t: ((int, int), int)) -> int {
+fn fst_first(t: ((i64, i64), i64)) -> i64 {
     return match (t) {
         ((0, _), _) -> -1
         ((a, _), _) -> a
@@ -76,7 +76,7 @@ print(fst_first(((42, 99), 7)))
 print(fst_first(((0, 9), 7)))
 
 // === Spread in function calls ===
-fn dist(x1: int, y1: int, x2: int, y2: int) -> int {
+fn dist(x1: i64, y1: i64, x2: i64, y2: i64) -> i64 {
     var dx = x2 - x1
     var dy = y2 - y1
     return dx * dx + dy * dy

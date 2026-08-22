@@ -1,27 +1,27 @@
 import { divideByChunk } from "./_struct_direct_nothrow_const_lib"
 
 struct Counter {
-    bias: int
+    bias: i64
 
-    private leaf(value: int) -> int {
+    private leaf(value: i64) -> i64 {
         return divideByChunk(value) + this.bias
     }
 
-    private middle(value: int) -> int {
+    private middle(value: i64) -> i64 {
         return this.leaf(value)
     }
 
-    run(value: int) -> int {
+    run(value: i64) -> i64 {
         return this.middle(value)
     }
 
     @inline
-    hot(value: int) -> int {
+    hot(value: i64) -> i64 {
         return this.run(value)
     }
 }
 
-fn invoke(value: int) -> int {
+fn invoke(value: i64) -> i64 {
     var counter = Counter{bias: 1}
     return counter.hot(value)
 }

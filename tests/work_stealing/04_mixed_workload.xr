@@ -17,7 +17,7 @@ const CPU_WORK = 2000
 const IO_SLEEP_MS = 10
 
 /* 计算密集型协程 */
-fn cpu_intensive(id: int) -> int {
+fn cpu_intensive(id: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < CPU_WORK; i++) {
         sum = sum + i * id
@@ -26,7 +26,7 @@ fn cpu_intensive(id: int) -> int {
 }
 
 /* IO 密集型协程（模拟 IO 等待）*/
-fn io_intensive(id: int) -> int {
+fn io_intensive(id: i64) -> i64 {
     time.sleep(IO_SLEEP_MS)
     return id * 100
 }
@@ -53,13 +53,13 @@ print("等待所有协程完成...")
 var cpu_completed = 0
 var io_completed = 0
 for (var i = 0; i < len(cpu_tasks); i++) {
-    var result: int = await cpu_tasks[i]
+    var result: i64 = await cpu_tasks[i]
     if (result >= 0) {
         cpu_completed = cpu_completed + 1
     }
 }
 for (var i = 0; i < len(io_tasks); i++) {
-    var result: int = await io_tasks[i]
+    var result: i64 = await io_tasks[i]
     if (result >= 0) {
         io_completed = io_completed + 1
     }
@@ -82,7 +82,7 @@ var expected_sequential = (CPU_COROS * 10) + (IO_COROS * IO_SLEEP_MS)
 print("  串行预估耗时: ~" + string(expected_sequential) + " ms")
 print("  实际耗时: " + string(total_time) + " ms")
 if (total_time < expected_sequential) {
-    var speedup = float(expected_sequential) / float(total_time)
+    var speedup = (expected_sequential as f64) / (total_time as f64)
     print("  并行加速比: " + string(speedup) + "x")
     print("✓ 并行执行有效")
 }

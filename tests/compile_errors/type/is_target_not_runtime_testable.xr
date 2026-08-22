@@ -2,6 +2,6 @@
 // function signatures, so a test against them has no answer to give.
 fn main() {
     var v: JSON.Value = 1
-    print(v is int?)
+    print(v is i64?)
 }
 main()

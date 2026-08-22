@@ -10,7 +10,7 @@ fn xray_intsize_roundtrip(delta: isize) -> isize {
     return local - 1
 }
 
-fn xray_uintsize_layout() -> int {
+fn xray_uintsize_layout() -> i64 {
     return mem.sizeOf<usize>() + mem.alignOf<usize>() +
         mem.sizeOf<isize>() + mem.alignOf<isize>()
 }

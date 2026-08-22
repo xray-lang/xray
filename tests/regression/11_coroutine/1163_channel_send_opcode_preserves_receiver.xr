@@ -3,14 +3,14 @@
 // against is the send opcode overwriting the channel/receiver register
 // window so the second recv saw a stale value.
 
-fn recv_int(ch: Channel<int>) -> int {
+fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn send_twice(ch: Channel<int>, a: int, b: int) -> int {
+fn send_twice(ch: Channel<i64>, a: i64, b: i64) -> i64 {
     ch.send(a)
     ch.send(b)
     return a + b
@@ -18,7 +18,7 @@ fn send_twice(ch: Channel<int>, a: int, b: int) -> int {
 
 @test
 fn test_chan_send_preserves_receiver() {
-    const ch = Channel<int>(0)
+    const ch = Channel<i64>(0)
     var task = go send_twice(ch, 21, 34)
 
     assert_eq(recv_int(ch), 21)

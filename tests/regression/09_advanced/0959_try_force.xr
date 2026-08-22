@@ -5,9 +5,9 @@
 */
 
 enum ForceErr { Msg(string) }
-type User = { id: int, name: string }
+type User = { id: i64, name: string }
 
-fn maybeFailInt(should_throw: bool) -> int {
+fn maybeFailInt(should_throw: bool) -> i64 {
     if (should_throw) {
         throw ForceErr.Msg("force-try violation")
     }

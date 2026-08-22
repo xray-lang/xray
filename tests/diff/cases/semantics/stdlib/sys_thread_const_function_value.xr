@@ -4,11 +4,11 @@
 
 import sys
 
-fn base() -> int {
+fn base() -> i64 {
     return 21
 }
 
-var t = sys.Thread.spawn(fn() -> int {
+var t = sys.Thread.spawn(fn() -> i64 {
     const f = base
     return f() * 2
 })

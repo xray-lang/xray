@@ -396,7 +396,7 @@ typedef enum XaotAliasKind {
 } XaotAliasKind;
 
 enum {
-    /* Backing storage allocated by this function (array literal / Array<byte>
+    /* Backing storage allocated by this function (array literal / Array<u8>
      * constructor / with_capacity —a fresh malloc nothing else can point at yet). */
     XAOT_ALIAS_EV_FRESH_ALLOC = 1u << 0,
     /* Every XI_INDEX_GET / XI_INDEX_SET on the array has a proven bounds

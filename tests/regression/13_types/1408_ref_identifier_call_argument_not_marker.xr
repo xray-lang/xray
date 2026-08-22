@@ -1,8 +1,8 @@
-fn accept_int(value: int) -> int {
+fn accept_int(value: i64) -> i64 {
     return value
 }
 
-fn ref_identifier_expression(ref: int) -> int {
+fn ref_identifier_expression(ref: i64) -> i64 {
     return accept_int(ref + 1)
 }
 

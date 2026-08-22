@@ -468,7 +468,7 @@ TEST(nested_scope) {
 }
 
 TEST(function_params) {
-    assert(check_bindings("fn add(a: int, b: int) -> int {\n"
+    assert(check_bindings("fn add(a: i64, b: i64) -> i64 {\n"
                           "    return a + b\n"
                           "}\n"
                           "print(add(1, 2))\n",
@@ -477,7 +477,7 @@ TEST(function_params) {
 
 TEST(closure_capture) {
     assert(check_bindings("var x = 10\n"
-                          "fn foo() -> int {\n"
+                          "fn foo() -> i64 {\n"
                           "    return x + 1\n"
                           "}\n"
                           "print(foo())\n",
@@ -486,9 +486,9 @@ TEST(closure_capture) {
 
 TEST(nested_closure) {
     assert(check_bindings("var outer = 1\n"
-                          "fn foo() -> int {\n"
+                          "fn foo() -> i64 {\n"
                           "    var mid = 2\n"
-                          "    fn bar() -> int {\n"
+                          "    fn bar() -> i64 {\n"
                           "        return outer + mid\n"
                           "    }\n"
                           "    return bar()\n"
@@ -549,19 +549,19 @@ TEST(template_string_binding) {
 }
 
 TEST(multiple_functions) {
-    assert(check_bindings("fn a() -> int { return 1 }\n"
-                          "fn b() -> int { return a() + 1 }\n"
+    assert(check_bindings("fn a() -> i64 { return 1 }\n"
+                          "fn b() -> i64 { return a() + 1 }\n"
                           "print(b())\n",
                           "multiple_functions"));
 }
 
 TEST(class_method_this) {
     assert(check_bindings("class Foo {\n"
-                          "    x: int\n"
-                          "    init(val: int) {\n"
+                          "    x: i64\n"
+                          "    init(val: i64) {\n"
                           "        this.x = val\n"
                           "    }\n"
-                          "    get() -> int {\n"
+                          "    get() -> i64 {\n"
                           "        return this.x\n"
                           "    }\n"
                           "}\n",
@@ -587,9 +587,9 @@ TEST(array_and_map_literal) {
 }
 
 TEST(select_receive_binding_preserves_element_type) {
-    const char *source = "fn consume(ch: Channel<int>) {\n"
+    const char *source = "fn consume(ch: Channel<i64>) {\n"
                          "    select {\n"
-                         "        value from ch -> { var exact: int = value }\n"
+                         "        value from ch -> { var exact: i64 = value }\n"
                          "    }\n"
                          "}\n";
     AstNode *program = xr_parse(g_session, source);
@@ -616,7 +616,7 @@ TEST(select_receive_binding_preserves_element_type) {
     XaSymbol *binding = xa_scope_lookup_by_id(analyzer->global_scope, binding_id);
     XaSymbolLinks *links = binding ? xa_analyzer_get_links(analyzer, binding) : NULL;
     if (!links || !links->type || links->type->kind != XR_KIND_INT) {
-        fprintf(stderr, "select receive binding did not preserve Channel<int> element type\n");
+        fprintf(stderr, "select receive binding did not preserve Channel<i64> element type\n");
         abort();
     }
 

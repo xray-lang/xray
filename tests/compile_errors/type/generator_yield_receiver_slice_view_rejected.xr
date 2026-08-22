@@ -1,5 +1,5 @@
-fn chunks(text: string) -> Iterator<Slice<byte>> {
-    var view: Slice<byte> = text.bytes()
+fn chunks(text: string) -> Iterator<Slice<u8>> {
+    var view: Slice<u8> = text.bytes()
     yield view
 }
 

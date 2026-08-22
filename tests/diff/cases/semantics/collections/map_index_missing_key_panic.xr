@@ -15,7 +15,7 @@ try {
 
 print(scores.get("missing") == null)
 
-var payloads: Map<string, int?> = #{"present-null": null, "present-value": 5}
+var payloads: Map<string, i64?> = #{"present-null": null, "present-value": 5}
 if (payloads.containsKey("present-null")) {
     print(payloads["present-null"] == null)
 }

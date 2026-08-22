@@ -54,7 +54,7 @@ fn mandelbrot(size) {
 // 主程序
 var size = 1000
 if (len(process.args) > 0) {
-    size = int(process.args[0])
+    size = i64.parse(process.args[0])
 }
 var count = mandelbrot(size)
 print("xray mandelbrot")

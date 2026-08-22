@@ -13,7 +13,7 @@ legacy_public_surface = [
   "stat"
 ]
 intentional_semantic_changes = [
-  "text file APIs keep string storage and binary file APIs carry Array<byte>",
+  "text file APIs keep string storage and binary file APIs carry Array<u8>",
   "readFileBytes and writeFileBytes preserve arbitrary byte values including NUL and 0xff",
   "future net/io buffer convergence must keep text and binary entry points distinct",
   "path ownership remains Path-based rather than reintroducing string path overloads"
@@ -28,7 +28,7 @@ benchmark_suite = "stdlib/io"
 [[legacy_behavior]]
 id = "text-binary-file-split"
 classification = "required"
-new_behavior = "readFile/writeFile remain text APIs while readFileBytes/writeFileBytes preserve Array<byte> payloads"
+new_behavior = "readFile/writeFile remain text APIs while readFileBytes/writeFileBytes preserve Array<u8> payloads"
 
 [[legacy_behavior]]
 id = "byte-file-roundtrip"

@@ -1,4 +1,4 @@
-fn valueFn(x: int) {
+fn valueFn(x: i64) {
 }
 
-var f: fn(ref int) = valueFn
+var f: fn(ref i64) = valueFn

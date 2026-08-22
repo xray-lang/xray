@@ -1,10 +1,10 @@
 import { scale } from "./bytecode_build_multimodule_nested"
 
 export struct Packet {
-    value: int
-    offset: int
+    value: i64
+    offset: i64
 }
 
-export fn packetScore(packet: Packet) -> int {
+export fn packetScore(packet: Packet) -> i64 {
     return scale(packet.value) + packet.offset
 }

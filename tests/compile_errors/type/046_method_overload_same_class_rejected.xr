@@ -1,5 +1,5 @@
 class Service {
-    run(x: int) -> int {
+    run(x: i64) -> i64 {
         return x
     }
 

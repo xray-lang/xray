@@ -1,10 +1,10 @@
 import mem
 
 fn publish(
-    output: Channel<(int, Buffer?)>,
-    sequence: int,
-    size: int
-) -> int {
+    output: Channel<(i64, Buffer?)>,
+    sequence: i64,
+    size: i64
+) -> i64 {
     var buffer = mem.allocZeroed(size)
     var payload: Buffer? = buffer
     var frame = (sequence, payload)
@@ -12,7 +12,7 @@ fn publish(
     return sequence
 }
 
-const output = Channel<(int, Buffer?)>(1)
+const output = Channel<(i64, Buffer?)>(1)
 var checksum = 0
 for (var sequence = 0; sequence < 256; sequence++) {
     var size = sequence % 3 == 0 ? 32 : sequence % 3 == 1 ? 256 : 4096

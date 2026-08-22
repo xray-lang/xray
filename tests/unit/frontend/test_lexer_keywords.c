@@ -77,14 +77,13 @@ typedef struct {
 
 static const KwExpect kKnownKeywords[] = {
     /* None of the uppercase native type names are lexer keywords any
-     * more: Array / BigInt / Array<byte> / Channel / DateTime / Json / Map /
+     * more: Array / BigInt / Array<u8> / Channel / DateTime / Json / Map /
      * Range / Regex / Set / StringBuilder all resolve through the
      * prelude registry as plain identifiers. */
     {"as", TK_AS},
     {"await", TK_AWAIT},
     {"bool", TK_BOOL},
     {"break", TK_BREAK},
-    {"byte", TK_BYTE},
     {"catch", TK_CATCH},
     {"class", TK_CLASS},
     {"comptime", TK_COMPTIME},
@@ -98,7 +97,6 @@ static const KwExpect kKnownKeywords[] = {
     {"extends", TK_EXTENDS},
     {"false", TK_FALSE},
     {"final", TK_FINAL},
-    {"float", TK_FLOAT},
     {"f32", TK_F32},
     {"f64", TK_F64},
     {"fn", TK_FN},
@@ -108,7 +106,6 @@ static const KwExpect kKnownKeywords[] = {
     {"implements", TK_IMPLEMENTS},
     {"import", TK_IMPORT},
     {"in", TK_IN},
-    {"int", TK_INT},
     {"i8", TK_I8},
     {"i16", TK_I16},
     {"i32", TK_I32},
@@ -162,9 +159,10 @@ TEST(every_keyword_recognised) {
 
 TEST(removed_keywords_are_identifiers) {
     static const char *removed[] = {
-        "abstract", "char",    "override", "owned",   "shared",   "int8",
-        "int16",    "int32",   "int64",    "uint8",   "uint16",   "uint32",
-        "uint64",   "float32", "float64",  "intsize", "uintsize",
+        "abstract", "char",    "override", "owned",   "shared",   "int",
+        "byte",     "float",   "int8",     "int16",   "int32",    "int64",
+        "uint8",    "uint16",  "uint32",   "uint64",  "float32",  "float64",
+        "intsize",  "uintsize",
     };
     int n = (int) (sizeof(removed) / sizeof(removed[0]));
     for (int i = 0; i < n; i++) {

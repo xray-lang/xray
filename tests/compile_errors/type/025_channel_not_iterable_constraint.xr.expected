@@ -1,1 +1,1 @@
-Type 'Channel<int>' does not satisfy constraint 'Iterable<int>' for type parameter 'T'
+Type 'Channel<i64>' does not satisfy constraint 'Iterable<i64>' for type parameter 'T'

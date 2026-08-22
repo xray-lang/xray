@@ -28,10 +28,8 @@ static inline const XaBuiltinType *get_builtin_types(void) {
 XrTypeId xr_type_to_builtin_id(XrType *type) {
     if (!type)
         return XR_TID_NULL;
-    if (XR_TYPE_IS_INT(type))
-        return XR_TID_INT;
-    if (XR_TYPE_IS_FLOAT(type))
-        return XR_TID_FLOAT;
+    if (XR_TYPE_IS_INT(type) || XR_TYPE_IS_FLOAT(type))
+        return xr_scalar_rep_typeid(type->scalar_rep);
     if (XR_TYPE_IS_STRING(type))
         return XR_TID_STRING;
     if (XR_TYPE_IS_RUNE(type))
@@ -352,7 +350,7 @@ bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const char *me
     if (!receiver || !method_name || receiver->kind != XR_KIND_INT || receiver->is_nullable)
         return false;
     if (receiver->scalar_rep == XR_NATIVE_I64)
-        return false;  // plain int / explicit int64: int64 semantics are exact
+            return false;  // i64 semantics are exact
 
     static const char *const blocked[] = {
         "checkedAdd",    "checkedSub",   "checkedMul",   "saturatingAdd", "saturatingSub",
@@ -364,7 +362,7 @@ bool xa_builtin_int_overflow_method_unsupported(XrType *receiver, const char *me
                 snprintf(msg, msg_cap,
                          "'%s' is not supported on fixed-width integer receivers yet: the runtime "
                          "computes it at int64 width, which would silently use the wrong overflow "
-                         "boundary; convert the receiver with int(...) first if int64 semantics "
+                         "boundary; convert the receiver with `as i64` first if i64 semantics "
                          "are intended, or use wrappingAdd/wrappingSub/wrappingMul (width-exact)",
                          method_name);
             return true;
@@ -843,20 +841,20 @@ static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 static const XaBuiltinMember g_rt_coro_functions[] = {
     {"yield", "(): ()", "Cooperative CPU yield (Gosched)", true, true, false, false, true},
     {"stats", "(): CoroStats", "Get coroutine statistics", true, true, false, false, false},
-    {"list", "(limit?: int, state?: CoroState): Array<CoroInfo>", "List coroutines", true, true,
+    {"list", "(limit?: i64, state?: CoroState): Array<CoroInfo>", "List coroutines", true, true,
      false, false, false},
     {"deadlocks", "(): Array<CoroDeadlock>", "Detect deadlocked coroutines", true, true, false,
      false, false},
-    {"top", "(n: int, metric?: CoroMetric): Array<CoroInfo>", "Top N coroutines by metric", true,
+    {"top", "(n: i64, metric?: CoroMetric): Array<CoroInfo>", "Top N coroutines by metric", true,
      true, false, false, false},
-    {"groupBy", "(field: CoroGroupKey): Map<string, int>", "Group coroutines by field", true, true,
+    {"groupBy", "(field: CoroGroupKey): Map<string, i64>", "Group coroutines by field", true, true,
      false, false, false},
     {"Local", "<T>(): CoroLocal<T>", "Create a typed coroutine-local slot", true, true, false,
      false, false},
     {"lockThread", "(): ()", "Lock current thread", true, true, false, false, false},
     {"unlockThread", "(): ()", "Unlock current thread", true, true, false, false, false},
-    {"dump", "(limit?: int): ()", "Dump coroutine state", true, true, false, false, false},
-    {"stalled", "(timeout_ms?: int): Array<CoroInfo>", "Detect stalled coroutines", true, true,
+    {"dump", "(limit?: i64): ()", "Dump coroutine state", true, true, false, false, false},
+    {"stalled", "(timeout_ms?: i64): Array<CoroInfo>", "Detect stalled coroutines", true, true,
      false, false, false},
     {"whereis", "(name: string): bool", "Check if named coroutine exists", true, true, false, false,
      false},
@@ -1260,7 +1258,7 @@ const char *xa_builtin_get_type_name(XrType *type) {
     return get_builtin_types()[id].name;
 }
 
-// Parse a type string (e.g., "int", "string?", "Array<int>") to XrType
+// Parse a type string (e.g., "i64", "string?", "Array<i64>") to XrType
 static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len);
 
 // Helper for parse_type_str: when s starts with '(' return the byte index
@@ -1396,12 +1394,12 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
     size_t base_len = nullable ? len - 1 : len;
 
     // Strip trailing '?' from optional params too
-    // e.g., "int?" means int or null
+    // e.g., "i64?" means int or null
 
     XrType *type = NULL;
-    XrSourceTypeSpelling scalar_source = xr_source_type_spelling_lookup(s, base_len);
-    if (scalar_source != XR_SOURCE_TYPE_NONE) {
-        uint8_t scalar_rep = xr_source_type_scalar_rep(scalar_source);
+    const XrExactScalarDesc *scalar = xr_exact_scalar_by_source_name(s, base_len);
+    if (scalar) {
+        uint8_t scalar_rep = scalar->native_type;
         type = xr_scalar_rep_is_float(scalar_rep) ? xr_type_new_float_width(X, scalar_rep)
                                                   : xr_type_new_int_width(X, scalar_rep);
     }
@@ -1956,7 +1954,7 @@ XrType *xa_builtin_parse_full_signature(XrVMRuntime *X, const char *sig) {
 
         if (colon && colon < close) {
             // Detect optional parameter: '?' immediately before ':'
-            // e.g., "level?: int" or "compareFn?: fn(...)"
+            // e.g., "level?: i64" or "compareFn?: fn(...)"
             bool is_optional = (colon > open && *(colon - 1) == '?');
             if (is_optional)
                 seen_optional = true;

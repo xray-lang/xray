@@ -1,6 +1,6 @@
 import mem
 
-fn address() -> int {
+fn address() -> i64 {
     var buffer = mem.alloc(8)
     var ptr = unsafe { buffer.borrowPtr() }
     return mem.addr(ptr)

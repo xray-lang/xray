@@ -1,6 +1,6 @@
-struct Pair { a: int; b: int }
+struct Pair { a: i64; b: i64 }
 
-fn bump(p: Pair) -> int {
+fn bump(p: Pair) -> i64 {
     var local = p
     local.a = local.a + 10
     return local.a + local.b

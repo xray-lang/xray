@@ -1,4 +1,4 @@
-fn counter(limit: int) -> Iterator<int> {
+fn counter(limit: i64) -> Iterator<i64> {
     for (var i = 0; i < limit; i++) {
         yield i
     }

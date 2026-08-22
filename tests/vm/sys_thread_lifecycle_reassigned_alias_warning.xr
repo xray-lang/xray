@@ -1,10 +1,10 @@
 import sys
 
 fn assignmentRebind() {
-    var original = sys.Thread.spawn(fn() -> int {
+    var original = sys.Thread.spawn(fn() -> i64 {
         return 1
     })
-    var replacement = sys.Thread.spawn(fn() -> int {
+    var replacement = sys.Thread.spawn(fn() -> i64 {
         return 2
     })
     var handle = original
@@ -13,10 +13,10 @@ fn assignmentRebind() {
 }
 
 fn destructureRebind() {
-    var first = sys.Thread.spawn(fn() -> int {
+    var first = sys.Thread.spawn(fn() -> i64 {
         return 3
     })
-    var second = sys.Thread.spawn(fn() -> int {
+    var second = sys.Thread.spawn(fn() -> i64 {
         return 4
     })
     var handle = first

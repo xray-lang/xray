@@ -13,7 +13,7 @@ fn test_array_literal() {
 
 @test
 fn test_empty_array() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     assert_eq(len(arr), 0)
     assert_eq(len(arr) == 0, true)
 }
@@ -98,7 +98,7 @@ fn test_index_assignment() {
 // ===== push/pop =====
 @test
 fn test_push() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     arr.push(1)
     arr.push(2)
     arr.push(3)
@@ -120,7 +120,7 @@ fn test_pop() {
 
 @test
 fn test_pop_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var result = arr.pop()
     assert_eq(result, null)
     assert_eq(len(arr), 0)
@@ -146,7 +146,7 @@ fn test_unshift() {
 
 @test
 fn test_shift_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     var result = arr.shift()
     assert_eq(result, null)
 }
@@ -196,7 +196,7 @@ fn test_clear() {
 // ===== 边界条件 =====
 @test
 fn test_large_array() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     for (var i = 0; i < 100; i++) {
         arr.push(i)
     }
@@ -207,7 +207,7 @@ fn test_large_array() {
 
 @test
 fn test_array_of_arrays() {
-    var arr: Array<Array<int>> = []
+    var arr: Array<Array<i64>> = []
     arr.push([1, 2])
     arr.push([3, 4])
     assert_eq(len(arr), 2)

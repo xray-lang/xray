@@ -1,9 +1,9 @@
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 1
 }
 
-var COUNTERS: [int; 2] = [runtimeOnly(), 2]
+var COUNTERS: [i64; 2] = [runtimeOnly(), 2]
 
-fn xray_top_var_fixed_array_runtime_reject() -> int {
+fn xray_top_var_fixed_array_runtime_reject() -> i64 {
     return COUNTERS[0]
 }

@@ -1,9 +1,9 @@
 import mem
 
-fn xray_rawptr_address_before(p: Ptr<byte>, q: Ptr<byte>) -> bool {
+fn xray_rawptr_address_before(p: Ptr<u8>, q: Ptr<u8>) -> bool {
     return mem.addr(p) < mem.addr(q)
 }
 
-fn xray_rawmut_address(p: MutPtr<u32>) -> int {
+fn xray_rawmut_address(p: MutPtr<u32>) -> i64 {
     return mem.addr(p)
 }

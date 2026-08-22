@@ -1,8 +1,8 @@
-type IntFn = fn(int) -> int
+type IntFn = fn(i64) -> i64
 
-fn bump(x: int) -> int {
+fn bump(x: i64) -> i64 {
     return x + 1
 }
 
 var f: IntFn? = bump
-var value: int = f?.(41)
+var value: i64 = f?.(41)

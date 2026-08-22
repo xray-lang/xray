@@ -12,7 +12,7 @@ class Box<T> {
 
 @test
 fn test_generic_method_keeps_ref_contract() {
-    var box = Box<int>(7)
+    var box = Box<i64>(7)
     var value = 7
     box.touch(ref value)
 }

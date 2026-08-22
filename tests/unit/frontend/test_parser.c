@@ -422,7 +422,7 @@ TEST(parser_select_default_keyword_rejected) {
 
 TEST(parser_function_decl) {
     setup();
-    AstNode *stmt = parse_first("fn add(a: int, b: int) -> int {\n  return a + b\n}");
+    AstNode *stmt = parse_first("fn add(a: i64, b: i64) -> i64 {\n  return a + b\n}");
     ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
     ASSERT_STR_EQ(stmt->as.function_decl.name, "add");
     ASSERT_EQ_INT(stmt->as.function_decl.param_count, 2);
@@ -433,7 +433,7 @@ TEST(parser_function_decl) {
 TEST(parser_const_type_qualifier_is_canonical_in_every_position) {
     setup();
     AstNode *decl =
-        parse_first("fn inspect(value: const Array<const string>) -> const Array<int> {\n"
+        parse_first("fn inspect(value: const Array<const string>) -> const Array<i64> {\n"
                     "  return value\n"
                     "}");
     ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
@@ -447,7 +447,7 @@ TEST(parser_const_type_qualifier_is_canonical_in_every_position) {
     xr_tref_to_string_buf(param, text, (int) sizeof(text));
     ASSERT_STR_EQ(text, "const Array<const string>");
 
-    AstNode *idempotent = parse_first("var x: const const Array<int>");
+    AstNode *idempotent = parse_first("var x: const const Array<i64>");
     ASSERT_EQ_INT(idempotent->as.var_decl.type_annotation->kind, XR_TREF_CONST);
     ASSERT_EQ_INT(idempotent->as.var_decl.type_annotation->children[0]->kind, XR_TREF_GENERIC);
     teardown();
@@ -497,27 +497,27 @@ TEST(parser_parameter_modes_share_annotation_parser) {
     const XrParamMode modes[] = {XR_PARAM_READ, XR_PARAM_READ, XR_PARAM_REF, XR_PARAM_MOVE};
     const int mode_count = (int) (sizeof(modes) / sizeof(modes[0]));
 
-    AstNode *decl = parse_first("fn touch(a: int, b: int, c: ref int, d: move int) {\n}");
+    AstNode *decl = parse_first("fn touch(a: i64, b: i64, c: ref i64, d: move i64) {\n}");
     ASSERT_EQ_INT(decl->type, AST_FUNCTION_DECL);
     assert_ast_param_modes(decl->as.function_decl.params, decl->as.function_decl.param_count, modes,
                            mode_count);
 
     AstNode *stmt =
-        parse_first("var f = fn(a: int, b: int, c: ref int, d: move int) {\n  return a\n}");
+        parse_first("var f = fn(a: i64, b: i64, c: ref i64, d: move i64) {\n  return a\n}");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     assert_ast_param_modes(init->as.function_expr.params, init->as.function_expr.param_count, modes,
                            mode_count);
 
     AstNode *method_stmt =
-        parse_first("class Box {\n  touch(a: int, b: int, c: ref int, d: move int) {}\n}");
+        parse_first("class Box {\n  touch(a: i64, b: i64, c: ref i64, d: move i64) {}\n}");
     AstNode *method = method_stmt->as.class_decl.methods[0];
     ASSERT_EQ_INT(method->type, AST_METHOD_DECL);
     assert_ast_param_modes(method->as.method_decl.params, method->as.method_decl.param_count, modes,
                            mode_count);
 
     AstNode *iface =
-        parse_first("interface Sink {\n  write(a: int, b: int, c: ref int, d: move int) -> ()\n}");
+        parse_first("interface Sink {\n  write(a: i64, b: i64, c: ref i64, d: move i64) -> ()\n}");
     AstNode *iface_method = iface->as.interface_decl.methods[0];
     ASSERT_EQ_INT(iface_method->type, AST_INTERFACE_METHOD);
     assert_ast_param_modes(iface_method->as.interface_method.params,
@@ -530,7 +530,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     setup();
 
     AstNode *ctor_class = parse_first("class Box {\n"
-                                      "  constructor(value: ref int) {}\n"
+                                      "  constructor(value: ref i64) {}\n"
                                       "}");
     AstNode *ctor = ctor_class->as.class_decl.methods[0];
     ASSERT_EQ_INT(ctor->type, AST_METHOD_DECL);
@@ -539,7 +539,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(ctor->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
 
     AstNode *operator_class = parse_first("class Matrix {\n"
-                                          "  operator[]=(index: int, value: move int) {}\n"
+                                          "  operator[]=(index: i64, value: move i64) {}\n"
                                           "}");
     AstNode *op = operator_class->as.class_decl.methods[0];
     ASSERT_EQ_INT(op->type, AST_METHOD_DECL);
@@ -549,8 +549,8 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(op->as.method_decl.params[1]->passing_mode, XR_PARAM_MOVE);
 
     AstNode *setter_class = parse_first("class Meter {\n"
-                                        "  value: int {\n"
-                                        "    fn(v: ref int) {}\n"
+                                        "  value: i64 {\n"
+                                        "    fn(v: ref i64) {}\n"
                                         "  }\n"
                                         "}");
     AstNode *setter = setter_class->as.class_decl.methods[0];
@@ -560,8 +560,8 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
     ASSERT_EQ_INT(setter->as.method_decl.params[0]->passing_mode, XR_PARAM_REF);
 
     AstNode *contract_class = parse_first("class ContractBox {\n"
-                                          "  configure(limit: int = 4) {}\n"
-                                          "  collect(...values: int) {}\n"
+                                          "  configure(limit: i64 = 4) {}\n"
+                                          "  collect(...values: i64) {}\n"
                                           "}");
     MethodDeclNode *configure = &contract_class->as.class_decl.methods[0]->as.method_decl;
     ASSERT_EQ_INT(configure->param_count, 1);
@@ -585,7 +585,7 @@ TEST(parser_oop_parameter_modes_share_annotation_parser) {
 TEST(parser_function_type_param_modes) {
     setup();
 
-    AstNode *alias = parse_first("type Handler = fn(int, ref string, move bool) -> int");
+    AstNode *alias = parse_first("type Handler = fn(i64, ref string, move bool) -> i64");
     ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
     XrTypeRef *tref = alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(tref);
@@ -598,11 +598,11 @@ TEST(parser_function_type_param_modes) {
 
     char buf[128];
     xr_tref_to_string_buf(tref, buf, sizeof(buf));
-    ASSERT_STR_EQ(buf, "fn(int, ref string, move bool) -> int");
+    ASSERT_STR_EQ(buf, "fn(i64, ref string, move bool) -> i64");
 
     AstNode *complex_alias =
-        parse_first("type ComplexHandler = fn(Array<int>, ref Slice<u8>?, "
-                    "move [u8; 16], (int, string), fn(ref int) -> bool,) -> Array<string>");
+        parse_first("type ComplexHandler = fn(Array<i64>, ref Slice<u8>?, "
+                    "move [u8; 16], (i64, string), fn(ref i64) -> bool,) -> Array<string>");
     XrTypeRef *complex = complex_alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(complex);
     ASSERT_EQ_INT(complex->kind, XR_TREF_FUNCTION);
@@ -629,8 +629,8 @@ TEST(parser_function_type_param_modes) {
     ASSERT_STR_EQ(complex->children[5]->name, "Array");
     char complex_buf[512];
     xr_tref_to_string_buf(complex, complex_buf, sizeof(complex_buf));
-    ASSERT_STR_EQ(complex_buf, "fn(Array<int>, ref Slice<u8>?, move [u8; 16], (int, string), "
-                               "fn(ref int) -> bool) -> Array<string>");
+    ASSERT_STR_EQ(complex_buf, "fn(Array<i64>, ref Slice<u8>?, move [u8; 16], (i64, string), "
+                               "fn(ref i64) -> bool) -> Array<string>");
 
     teardown();
 }
@@ -646,7 +646,7 @@ TEST(parser_function_no_params) {
 
 TEST(parser_return_stmt) {
     setup();
-    AstNode *program = parse_ok("fn f() -> int {\n  return 42\n}");
+    AstNode *program = parse_ok("fn f() -> i64 {\n  return 42\n}");
     AstNode *fn = first_stmt(program);
     ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
     // body is a block
@@ -708,7 +708,7 @@ TEST(parser_class_decl) {
 TEST(parser_direct_visibility_owns_declaration) {
     setup();
     AstNode *program = parse_ok("@deprecated(\"use hash64\")\n"
-                                "export fn hash() -> int { return 1 }\n"
+                                "export fn hash() -> i64 { return 1 }\n"
                                 "export final class FinalBox {}\n"
                                 "export struct Word { value: u32 }\n");
     ASSERT_EQ_INT(program->as.program.count, 3);
@@ -735,7 +735,7 @@ TEST(parser_method_deprecated_attribute) {
     setup();
     AstNode *program = parse_ok("struct Word {\n"
                                 "  @deprecated(\"use rotateLeft\")\n"
-                                "  rotate(n: int) -> u32 { return 0 }\n"
+                                "  rotate(n: i64) -> u32 { return 0 }\n"
                                 "}\n");
     AstNode *st = program->as.program.statements[0];
     ASSERT_EQ_INT(st->type, AST_STRUCT_DECL);
@@ -750,10 +750,10 @@ TEST(parser_method_deprecated_attribute) {
 TEST(parser_inline_control_attributes_and_conflict) {
     setup();
     AstNode *program = parse_ok("@inline\n"
-                                "fn hot(value: int) -> int { return value }\n"
+                                "fn hot(value: i64) -> i64 { return value }\n"
                                 "struct Worker {\n"
                                 "  @noinline\n"
-                                "  cold(value: int) -> int { return value }\n"
+                                "  cold(value: i64) -> i64 { return value }\n"
                                 "}\n");
     AstNode *fn = program->as.program.statements[0];
     ASSERT_EQ_INT(fn->type, AST_FUNCTION_DECL);
@@ -804,7 +804,7 @@ TEST(parser_enum_static_method) {
                                 "  Red,\n"
                                 "  Green\n"
                                 "  @deprecated\n"
-                                "  static fn fromInt(v: int) -> Color {\n"
+                                "  static fn fromInt(v: i64) -> Color {\n"
                                 "    return Color.Red\n"
                                 "  }\n"
                                 "  fn label() -> string {\n"
@@ -850,7 +850,7 @@ TEST(parser_rejects_move_const_parameter_capability) {
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
                          "class Config {}\nfn publish(config: move const Config) {}"));
     ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X),
-                         "type Publisher = (move const int) -> ()"));
+                         "type Publisher = (move const i64) -> ()"));
     teardown();
 }
 
@@ -923,7 +923,7 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
     ASSERT_EQ_INT(plain->as.call_expr.arguments[3]->type, AST_MEMBER_ACCESS);
     ASSERT_EQ_INT(plain->as.call_expr.arguments[4]->type, AST_MEMBER_ACCESS);
 
-    AstNode *generic_stmt = parse_first("foo<int>("
+    AstNode *generic_stmt = parse_first("foo<i64>("
                                         "ref x, "
                                         "move y)");
     AstNode *generic = generic_stmt->as.expr_stmt;
@@ -932,7 +932,7 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
     ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[0], XR_CALL_ARG_REF);
     ASSERT_EQ_INT(generic->as.call_expr.arg_accesses[1], XR_CALL_ARG_MOVE);
 
-    AstNode *new_stmt = parse_first("Array<int>("
+    AstNode *new_stmt = parse_first("Array<i64>("
                                     "move y)");
     AstNode *new_expr = new_stmt->as.expr_stmt;
     ASSERT_EQ_INT(new_expr->type, AST_NEW_EXPR);
@@ -941,8 +941,8 @@ TEST(parser_call_arg_access_markers_only_in_direct_argument_slot) {
 
     AstNode *class_stmt = parse_first("class Child extends Base {\n"
                                       "  constructor(value: "
-                                      "ref int, result: "
-                                      "move int) {\n"
+                                      "ref i64, result: "
+                                      "move i64) {\n"
                                       "    super("
                                       "ref value, "
                                       "move result)\n"
@@ -976,7 +976,7 @@ TEST(parser_member_generic_call_uintsize_type_arg) {
     ASSERT_EQ_INT(expr->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.call_expr.type_arg_count, 1);
     ASSERT_NOT_NULL(expr->as.call_expr.type_args);
-    ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->kind, XR_TREF_INT_WIDTH);
+    ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->kind, XR_TREF_SCALAR);
     ASSERT_EQ_INT(expr->as.call_expr.type_args[0]->scalar_rep, XR_NATIVE_USIZE);
     teardown();
 }
@@ -989,32 +989,28 @@ TEST(parser_member_generic_call_uintsize_after_binary_op) {
     ASSERT_EQ_INT(expr->as.binary.left->as.call_expr.type_arg_count, 1);
     ASSERT_EQ_INT(expr->as.binary.right->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_arg_count, 1);
-    ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->kind, XR_TREF_INT_WIDTH);
+    ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->kind, XR_TREF_SCALAR);
     ASSERT_EQ_INT(expr->as.binary.right->as.call_expr.type_args[0]->scalar_rep, XR_NATIVE_ISIZE);
     teardown();
 }
 
 TEST(parser_scalar_spelling_registry_roundtrip) {
     setup();
-    AstNode *alias = parse_first("type Scalars = (int, i8, i16, i32, i64, byte, u8, u16, u32, u64, "
-                                 "float, f32, f64, isize, usize)");
+    AstNode *alias = parse_first("type Scalars = (i8, i16, i32, i64, u8, u16, u32, u64, "
+                                 "f32, f64, isize, usize)");
     ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
     XrTypeRef *tuple = alias->as.type_alias.resolved_type;
     ASSERT_NOT_NULL(tuple);
     ASSERT_EQ_INT(tuple->kind, XR_TREF_TUPLE);
-    ASSERT_EQ_INT(tuple->nchildren, 15);
+    ASSERT_EQ_INT(tuple->nchildren, 12);
     char formatted[256];
     xr_tref_to_string_buf(tuple, formatted, sizeof(formatted));
-    ASSERT_STR_EQ(formatted, "(int, i8, i16, i32, i64, byte, u8, u16, u32, u64, float, f32, f64, "
-                             "isize, usize)");
-    ASSERT_EQ_INT(tuple->children[0]->scalar_rep, XR_NATIVE_I64);
-    ASSERT_EQ_INT(tuple->children[4]->scalar_rep, XR_NATIVE_I64);
-    ASSERT_EQ_INT(tuple->children[5]->scalar_rep, XR_NATIVE_U8);
-    ASSERT_EQ_INT(tuple->children[6]->scalar_rep, XR_NATIVE_U8);
-    ASSERT_EQ_INT(tuple->children[10]->scalar_rep, XR_NATIVE_F64);
-    ASSERT_EQ_INT(tuple->children[12]->scalar_rep, XR_NATIVE_F64);
-    ASSERT_EQ_INT(tuple->children[13]->scalar_rep, XR_NATIVE_ISIZE);
-    ASSERT_EQ_INT(tuple->children[14]->scalar_rep, XR_NATIVE_USIZE);
+    ASSERT_STR_EQ(formatted, "(i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, isize, usize)");
+    ASSERT_EQ_INT(tuple->children[3]->scalar_rep, XR_NATIVE_I64);
+    ASSERT_EQ_INT(tuple->children[4]->scalar_rep, XR_NATIVE_U8);
+    ASSERT_EQ_INT(tuple->children[9]->scalar_rep, XR_NATIVE_F64);
+    ASSERT_EQ_INT(tuple->children[10]->scalar_rep, XR_NATIVE_ISIZE);
+    ASSERT_EQ_INT(tuple->children[11]->scalar_rep, XR_NATIVE_USIZE);
     teardown();
 }
 
@@ -1024,7 +1020,7 @@ TEST(parser_retired_scalar_spelling_is_ordinary_identifier) {
     ASSERT_EQ_INT(alias->type, AST_TYPE_ALIAS);
     ASSERT_STR_EQ(alias->as.type_alias.name, "int32");
     ASSERT_NOT_NULL(alias->as.type_alias.resolved_type);
-    ASSERT_EQ_INT(alias->as.type_alias.resolved_type->kind, XR_TREF_INT_WIDTH);
+    ASSERT_EQ_INT(alias->as.type_alias.resolved_type->kind, XR_TREF_SCALAR);
     ASSERT_EQ_INT(alias->as.type_alias.resolved_type->scalar_rep, XR_NATIVE_I32);
     teardown();
 }
@@ -1092,8 +1088,8 @@ TEST(parser_tuple_with_trailing_comma) {
 TEST(parser_tuple_type_over_16_elements) {
     setup();
     AstNode *stmt =
-        parse_first("var t: (int, int, int, int, int, int, int, int, int, int, "
-                    "int, int, int, int, int, int, int, int, int, int) = "
+        parse_first("var t: (i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, "
+                    "i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) = "
                     "(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)");
     ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
     XrTypeRef *ann = stmt->as.var_decl.type_annotation;
@@ -1130,7 +1126,7 @@ TEST(parser_arrow_fn_not_tuple) {
 
 TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
     setup();
-    AstNode *stmt = parse_first("var f = (a: int, b, c: ref int, d: move Buffer,) -> a + b");
+    AstNode *stmt = parse_first("var f = (a: i64, b, c: ref i64, d: move Buffer,) -> a + b");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 4);
@@ -1145,14 +1141,14 @@ TEST(parser_arrow_parameters_support_independent_annotations_and_modes) {
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     ASSERT_NULL(xr_parse(session, "var f = (ref x) -> x"));
-    ASSERT_NULL(xr_parse(session, "var f = (x: int = 1) -> x"));
-    ASSERT_NULL(xr_parse(session, "var f = (...xs: int) -> xs"));
+    ASSERT_NULL(xr_parse(session, "var f = (x: i64 = 1) -> x"));
+    ASSERT_NULL(xr_parse(session, "var f = (...xs: i64) -> xs"));
     teardown();
 }
 
 TEST(parser_bare_lambda_in_expression_position) {
     setup();
-    AstNode *stmt = parse_first("var f: fn(int) -> int = x -> x * 2");
+    AstNode *stmt = parse_first("var f: fn(i64) -> i64 = x -> x * 2");
     AstNode *init = stmt->as.var_decl.initializer;
     ASSERT_EQ_INT(init->type, AST_FUNCTION_EXPR);
     ASSERT_EQ_INT(init->as.function_expr.param_count, 1);
@@ -1215,7 +1211,7 @@ TEST(parser_tuple_destructure_fn_param) {
      * `var (x, y) = __param0` at the head of the function body and
      * nulls out param->pattern. Verify the pattern landed on the body
      * with the right shape. */
-    AstNode *stmt = parse_first("fn f((x, y): (int, int)) -> int { return x + y }");
+    AstNode *stmt = parse_first("fn f((x, y): (i64, i64)) -> i64 { return x + y }");
     ASSERT_EQ_INT(stmt->type, AST_FUNCTION_DECL);
     ASSERT_EQ_INT(stmt->as.function_decl.param_count, 1);
     AstNode *body = stmt->as.function_decl.body;

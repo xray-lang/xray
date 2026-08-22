@@ -1,6 +1,6 @@
 export struct WideValueState align(64) {
     lanes: [u64; 8]
-    bytes: [byte; 192]
+    bytes: [u8; 192]
     total: u64
 
     static init() -> WideValueState {
@@ -11,7 +11,7 @@ export struct WideValueState align(64) {
         }
     }
 
-    reset(marker: byte) {
+    reset(marker: u8) {
         this.lanes = [1, 2, 3, 4, 5, 6, 7, 8]
         this.bytes = [0; 192]
         this.bytes[191] = marker
@@ -21,7 +21,7 @@ export struct WideValueState align(64) {
     update(delta: u64) {
         this.total += delta
         this.lanes[0] = this.lanes[0] + delta
-        this.bytes[0] = this.total as byte
+        this.bytes[0] = this.total as u8
     }
 
     digest() -> u64 {

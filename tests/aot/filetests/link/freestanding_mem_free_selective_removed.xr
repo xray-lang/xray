@@ -1,6 +1,6 @@
 import { free } from mem
 
-fn xray_bad_mem_free_selective(p: MutPtr<byte>) -> int {
+fn xray_bad_mem_free_selective(p: MutPtr<u8>) -> i64 {
     free(p)
     return 0
 }

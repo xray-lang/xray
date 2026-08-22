@@ -22,7 +22,7 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
-#include "../shared/xr_scalar_type.h"
+#include "../shared/xr_exact_scalar_registry.h"
 #include "../shared/xobject_shape.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
@@ -986,8 +986,8 @@ XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, AstNode *
         fprintf(stderr,
                 "[LOWER] numeric boundary lacks analyzer conversion evidence at line %d "
                 "(boundary %s->%s)\n",
-                (int) source_node->line, xr_scalar_rep_canonical_name(value->type->scalar_rep),
-                xr_scalar_rep_canonical_name(target_type->scalar_rep));
+                (int) source_node->line, xr_scalar_rep_name(value->type->scalar_rep),
+                xr_scalar_rep_name(target_type->scalar_rep));
         l->had_error = true;
         return NULL;
     }
@@ -1022,10 +1022,10 @@ XR_FUNC XiValue *xi_lower_apply_numeric_conversion_witness(XiLower *l, AstNode *
                 "[LOWER] numeric boundary has invalid conversion evidence '%s' at line %d: %s "
                 "(witness %s->%s, boundary %s->%s)\n",
                 xr_conversion_kind_name(witness.kind), (int) source_node->line, invalid_reason,
-                xr_scalar_rep_canonical_name(witness.source_scalar_rep),
-                xr_scalar_rep_canonical_name(witness.target_scalar_rep),
-                xr_scalar_rep_canonical_name(value->type->scalar_rep),
-                xr_scalar_rep_canonical_name(target_type->scalar_rep));
+                xr_scalar_rep_name(witness.source_scalar_rep),
+                xr_scalar_rep_name(witness.target_scalar_rep),
+                xr_scalar_rep_name(value->type->scalar_rep),
+                xr_scalar_rep_name(target_type->scalar_rep));
         l->had_error = true;
         return NULL;
     }
@@ -1985,11 +1985,11 @@ static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
         *out = xi_const_float(l->func, l->cur_block, 0.43429448190325182765, l->type_float);
     else if (strcmp(name, "EPSILON") == 0)
         *out = xi_const_float(l->func, l->cur_block, DBL_EPSILON, l->type_float);
-    else if (strcmp(name, "MAX_INT") == 0)
+    else if (strcmp(name, "MAX_I64") == 0)
         *out = xi_const_int(l->func, l->cur_block, INT64_MAX, l->type_int);
-    else if (strcmp(name, "MIN_INT") == 0)
+    else if (strcmp(name, "MIN_I64") == 0)
         *out = xi_const_int(l->func, l->cur_block, INT64_MIN, l->type_int);
-    else if (strcmp(name, "MAX_FLOAT") == 0)
+    else if (strcmp(name, "MAX_F64") == 0)
         *out = xi_const_float(l->func, l->cur_block, DBL_MAX, l->type_float);
     else if (strcmp(name, "INF") == 0)
         *out = xi_const_float(l->func, l->cur_block, INFINITY, l->type_float);
@@ -4094,16 +4094,12 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
 
-    /* Type conversion builtins: string(x), int(x), float(x), bool(x).
+    /* Remaining global conversions: string(x), bool(x), and rune(x).
      * Each emits XI_CONVERT with the target type set on the value. */
     if (call->arg_count == 1) {
         struct XrType *target = NULL;
         if (strcmp(fname, "string") == 0)
             target = l->type_string;
-        else if (strcmp(fname, "int") == 0)
-            target = l->type_int;
-        else if (strcmp(fname, "float") == 0)
-            target = l->type_float;
         else if (strcmp(fname, "bool") == 0)
             target = l->type_bool;
         else if (strcmp(fname, "rune") == 0)
@@ -6768,6 +6764,39 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *static_ma = &call->callee->as.member_access;
         if (static_ma->object && static_ma->object->type == AST_VARIABLE && static_ma->name &&
+            call->arg_count == 1 &&
+            (strcmp(static_ma->object->as.variable.name, "i64") == 0 ||
+             strcmp(static_ma->object->as.variable.name, "f64") == 0) &&
+            (strcmp(static_ma->name, "parse") == 0 ||
+             strcmp(static_ma->name, "tryParse") == 0)) {
+            XiValue *arg = xi_lower_expr(l, call->arguments[0]);
+            if (!arg)
+                return NULL;
+            struct XrType *result_type = xi_lower_node_type(l, node);
+            if (!result_type || xi_lower_type_is_unknown(result_type)) {
+                result_type = strcmp(static_ma->object->as.variable.name, "i64") == 0
+                                  ? xr_type_new_int_width(l->isolate, XR_NATIVE_I64)
+                                  : xr_type_new_float_width(l->isolate, XR_NATIVE_F64);
+                if (strcmp(static_ma->name, "tryParse") == 0)
+                    result_type = xr_type_new_optional(l->isolate, result_type);
+            }
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 1);
+            if (!v)
+                return NULL;
+            v->args[0] = arg;
+            char builtin_name[32];
+            snprintf(builtin_name, sizeof(builtin_name), "%s.%s",
+                     static_ma->object->as.variable.name, static_ma->name);
+            v->aux = (void *) arena_strdup(l->func, builtin_name);
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            if (strcmp(static_ma->name, "parse") == 0) {
+                v->flags |= XI_FLAG_MAY_THROW;
+                xi_lower_insert_err_check(l, node, true);
+            }
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+        if (static_ma->object && static_ma->object->type == AST_VARIABLE && static_ma->name &&
             strcmp(static_ma->object->as.variable.name, "string") == 0) {
             bool is_utf8_static = strcmp(static_ma->name, "fromUtf8") == 0 ||
                                   strcmp(static_ma->name, "fromUtf8Lossy") == 0;
@@ -9214,7 +9243,7 @@ static XiValue *lower_construct(XiLower *l, AstNode *node, struct XrType *result
                     uint8_t ktid = xr_type_to_tid(result_type->map.key_type);
                     if (ktid == XR_TID_STRING)
                         key_kind = 1;
-                    else if (ktid == XR_TID_INT)
+                    else if (ktid == XR_TID_I64)
                         key_kind = 2;
                 }
                 v->aux_int = (int64_t) ((key_kind << 8) | ((vtid & 0x1F) << 3));
@@ -9899,12 +9928,9 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
     if (tref) {
         int tid = -1;
         switch (tref->kind) {
-            case XR_TREF_INT:
-                tid = 8;
-                break; /* XR_TID_INT */
-            case XR_TREF_FLOAT:
-                tid = 11;
-                break; /* XR_TID_FLOAT */
+            case XR_TREF_SCALAR:
+                tid = (int) xr_scalar_rep_typeid(tref->scalar_rep);
+                break;
             case XR_TREF_STRING:
                 tid = 12;
                 break; /* XR_TID_STRING */
@@ -9914,12 +9940,6 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             case XR_TREF_NULL:
                 tid = 0;
                 break; /* XR_TID_NULL */
-            case XR_TREF_INT_WIDTH:
-            case XR_TREF_FLOAT_WIDTH:
-                /* A fixed-width target is answered by representability on
-                 * both backends, keyed by the width's own type id. */
-                tid = (int) xr_scalar_rep_typeid(tref->scalar_rep);
-                break;
             case XR_TREF_ERROR:
             case XR_TREF_NAMED:
             case XR_TREF_GENERIC:
@@ -10130,13 +10150,9 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
     if (tref->kind == XR_TREF_OPTIONAL && tref->nchildren > 0)
         inner = tref->children[0];
     switch (inner->kind) {
-        case XR_TREF_INT:
-            tid = 8;
-            name = "int";
-            break;
-        case XR_TREF_FLOAT:
-            tid = 11;
-            name = "float";
+        case XR_TREF_SCALAR:
+            tid = (int) xr_scalar_rep_typeid(inner->scalar_rep);
+            name = xr_scalar_rep_name(inner->scalar_rep);
             break;
         case XR_TREF_STRING:
             tid = 12;
@@ -10153,14 +10169,6 @@ static void lower_dynamic_as_target(XrTypeRef *tref, int *out_tid, const char **
         case XR_TREF_NULL:
             tid = 0;
             name = "null";
-            break;
-        case XR_TREF_INT_WIDTH:
-        case XR_TREF_FLOAT_WIDTH:
-            /* Fixed-width casts run the same representability test `is`
-             * does; leaving these unresolved would silently degrade the
-             * cast to a move that accepts out-of-range values. */
-            tid = (int) xr_scalar_rep_typeid(inner->scalar_rep);
-            name = xr_typeid_name((XrTypeId) tid);
             break;
         case XR_TREF_ERROR:
         case XR_TREF_NAMED:

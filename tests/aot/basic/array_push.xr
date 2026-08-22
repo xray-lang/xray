@@ -1,4 +1,4 @@
-var bytes: Array<byte> = Array.withCapacity(4)
+var bytes: Array<u8> = Array.withCapacity(4)
 bytes.push(7)
 bytes.push(9)
 bytes.push(11)

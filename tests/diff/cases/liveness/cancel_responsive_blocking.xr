@@ -2,7 +2,7 @@
 // point within a bounded wall clock, on both backends.
 import time
 
-fn sleeper(ch: Channel<int>) -> int {
+fn sleeper(ch: Channel<i64>) -> i64 {
     var got = match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -11,7 +11,7 @@ fn sleeper(ch: Channel<int>) -> int {
 }
 
 print("spawn")
-var ch = Channel<int>(1)
+var ch = Channel<i64>(1)
 var t = go sleeper(ch)
 time.sleep(5)
 t.cancel()

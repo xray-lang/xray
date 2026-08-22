@@ -219,7 +219,7 @@ TEST(line_breaks_inside_groups_do_not_split) {
     static const char *grouped[] = {
         "var x = (1\n    - 2)\n",
         "var x = [1,\n    -2]\n",
-        "fn f(p: int) -> int { return p }\nvar y = f(\n    1\n)\n",
+        "fn f(p: i64) -> i64 { return p }\nvar y = f(\n    1\n)\n",
         NULL,
     };
     for (int i = 0; grouped[i]; i++) {
@@ -235,7 +235,7 @@ TEST(line_breaks_inside_groups_do_not_split) {
 /* Regression for the original defect: the misparse used to be silent. */
 TEST(bang_on_new_line_is_not_a_force_unwrap) {
     setup();
-    const char *src = "var a: int? = null\nvar b = true\nvar x = a\n!b\n";
+    const char *src = "var a: i64? = null\nvar b = true\nvar x = a\n!b\n";
     XrArena *arena = NULL;
     Parser parser;
     AstNode *program = parse_recoverable_src(src, &parser, &arena);

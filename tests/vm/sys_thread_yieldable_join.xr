@@ -1,17 +1,17 @@
 import sys
 
-fn waitThread(t: Thread<int>) -> int {
+fn waitThread(t: Thread<i64>) -> i64 {
     var v = t.join()
     print("joined " + string(v))
     return v
 }
 
-fn tick() -> int {
+fn tick() -> i64 {
     print("tick")
     return 1
 }
 
-const thread = sys.Thread.spawn(fn() -> int {
+const thread = sys.Thread.spawn(fn() -> i64 {
     sys.sleepMs(40)
     return 7
 })

@@ -10,7 +10,7 @@ import {
 } from base64
 
 fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return base64.encode(view, options)
 }
 
@@ -72,7 +72,7 @@ print(bs[0])
 print(bs[1])
 print(bs[2])
 
-var raw = Array<byte>(3)
+var raw = Array<u8>(3)
 raw[0] = 72
 raw[1] = 101
 raw[2] = 108

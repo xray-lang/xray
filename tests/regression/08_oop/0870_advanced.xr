@@ -14,13 +14,13 @@ class Shape {
     describe() -> string {        return "Shape: " + this.name
     }
 
-    area() -> int {        return 0
+    area() -> i64 {        return 0
     }
 }
 
 class Rectangle extends Shape {
-    width: int
-    height: int
+    width: i64
+    height: i64
 
     constructor(w, h) {
         super("Rectangle")
@@ -32,7 +32,7 @@ class Rectangle extends Shape {
         return super.describe() + " (${this.width}x${this.height})"
     }
 
-    area() -> int {        return this.width * this.height
+    area() -> i64 {        return this.width * this.height
     }
 }
 
@@ -46,13 +46,13 @@ fn test_super_method_with_extension() {
 // ===== 三层继承 + super =====
 
 class A {
-    value: int
+    value: i64
 
     constructor(v) {
         this.value = v
     }
 
-    getValue() -> int {        return this.value
+    getValue() -> i64 {        return this.value
     }
 
     describe() -> string {        return "A:${this.value}"
@@ -60,14 +60,14 @@ class A {
 }
 
 class B extends A {
-    extra: int
+    extra: i64
 
     constructor(v, e) {
         super(v)
         this.extra = e
     }
 
-    getValue() -> int {        return super.getValue() + this.extra
+    getValue() -> i64 {        return super.getValue() + this.extra
     }
 
     describe() -> string {        return super.describe() + ",B:${this.extra}"
@@ -75,14 +75,14 @@ class B extends A {
 }
 
 class C extends B {
-    more: int
+    more: i64
 
     constructor(v, e, m) {
         super(v, e)
         this.more = m
     }
 
-    getValue() -> int {        return super.getValue() + this.more
+    getValue() -> i64 {        return super.getValue() + this.more
     }
 
     describe() -> string {        return super.describe() + ",C:${this.more}"
@@ -136,13 +136,13 @@ fn test_super_in_chain() {
 // ===== 方法作为一等公民 =====
 
 class Processor {
-    factor: int
+    factor: i64
 
     constructor(f) {
         this.factor = f
     }
 
-    process(x: int) -> int {        return x * this.factor    }
+    process(x: i64) -> i64 {        return x * this.factor    }
 }
 
 @test
@@ -159,17 +159,17 @@ fn test_method_reference() {
 // ===== 类内部调用其他方法 =====
 
 class Calculator {
-    base: int
+    base: i64
 
     constructor(base) {
         this.base = base
     }
 
-    add(x: int) -> int {        return this.base + x    }
+    add(x: i64) -> i64 {        return this.base + x    }
 
-    addTwice(x: int) -> int {        return this.add(x) + this.add(x)    }
+    addTwice(x: i64) -> i64 {        return this.add(x) + this.add(x)    }
 
-    addChain(a: int, b: int, c: int) -> int {        return this.add(a) + this.add(b) + this.add(c) - this.base * 2    }
+    addChain(a: i64, b: i64, c: i64) -> i64 {        return this.add(a) + this.add(b) + this.add(c) - this.base * 2    }
 }
 
 @test
@@ -204,9 +204,9 @@ fn test_constructor_calls_method() {
 // ===== 字段初始化顺序 =====
 
 class Ordered {
-    a: int
-    b: int
-    c: int
+    a: i64
+    b: i64
+    c: i64
 
     constructor() {
         this.a = 1
@@ -226,7 +226,7 @@ fn test_field_init_order() {
 // ===== 对象作为参数 =====
 
 class Box {
-    value: int
+    value: i64
 
     constructor(v) {
         this.value = v
@@ -256,7 +256,7 @@ fn test_object_as_param() {
 
 class Item {
     name: string
-    price: int
+    price: i64
 
     constructor(n, p) {
         this.name = n
@@ -288,7 +288,7 @@ fn test_object_array() {
 
 class MapUser {
     name: string
-    level: int
+    level: i64
 
     constructor(n, l) {
         this.name = n

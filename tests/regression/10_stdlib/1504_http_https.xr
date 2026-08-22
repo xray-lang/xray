@@ -4,7 +4,7 @@ import http
 
 fn isHttps(url: string) -> bool { return url.indexOf("https://") == 0 }
 fn isHttp(url: string) -> bool { return url.indexOf("http://") == 0 && url.indexOf("https://") != 0 }
-fn getDefaultPort(url: string) -> int {
+fn getDefaultPort(url: string) -> i64 {
     if (url.indexOf("https://") == 0) { return 443 }
     if (url.indexOf("http://") == 0) { return 80 }
     return -1

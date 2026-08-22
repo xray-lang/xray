@@ -1,14 +1,14 @@
-fn makeScores() -> Map<int, int> {
+fn makeScores() -> Map<i64, i64> {
     return #{}
 }
 
-fn makeSeen() -> Set<int> {
+fn makeSeen() -> Set<i64> {
     return #[]
 }
 
-fn mapSetTypedLocalReceiverPlan(value: int) -> int {
-    var scores: Map<int, int> = makeScores()
-    var seen: Set<int> = makeSeen()
+fn mapSetTypedLocalReceiverPlan(value: i64) -> i64 {
+    var scores: Map<i64, i64> = makeScores()
+    var seen: Set<i64> = makeSeen()
     scores.set(1, value)
     scores[2] = value
     seen.add(1)

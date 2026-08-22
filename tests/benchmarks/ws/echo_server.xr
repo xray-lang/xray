@@ -12,7 +12,7 @@ import { WsConn } from ws
 
 var port = 9001
 if (len(process.args) > 0) {
-    port = int(process.args[0]) ?? 9001
+    port = i64.tryParse(process.args[0]) ?? 9001
 }
 
 print("xray WebSocket Echo Server on port " + string(port))

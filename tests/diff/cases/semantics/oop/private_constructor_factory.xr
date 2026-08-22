@@ -1,15 +1,15 @@
 class Token {
-    private value: int
+    private value: i64
 
-    private constructor(v: int) {
+    private constructor(v: i64) {
         this.value = v
     }
 
-    static make(v: int) -> Token {
+    static make(v: i64) -> Token {
         return Token(v)
     }
 
-    get() -> int {
+    get() -> i64 {
         return this.value
     }
 }

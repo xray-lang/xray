@@ -71,7 +71,7 @@ const char *xr_type_to_string(XrType *type) {
             case XR_NATIVE_USIZE:
                 return TYPE_NAME_USIZE;
             default:
-                return TYPE_NAME_INT;
+                return TYPE_NAME_I64;
         }
     }
     if (XR_TYPE_IS_FLOAT(type) && !type->is_nullable) {
@@ -79,7 +79,7 @@ const char *xr_type_to_string(XrType *type) {
             return TYPE_NAME_F32;
         if (type->scalar_rep == XR_NATIVE_F64)
             return TYPE_NAME_F64;
-        return TYPE_NAME_FLOAT;
+        return TYPE_NAME_F64;
     }
     if (XR_TYPE_IS_STRING(type) && !type->is_nullable)
         return TYPE_NAME_STRING;

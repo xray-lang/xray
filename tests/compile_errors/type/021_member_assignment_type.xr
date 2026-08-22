@@ -1,5 +1,5 @@
 class Person {
-    age: int
+    age: i64
 
     constructor() {
         this.age = 0

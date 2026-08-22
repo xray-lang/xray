@@ -15,12 +15,12 @@ fn run() {
     unsafe {
         while (i < 4) {
             mem.store<u8>(p, 0, (i + 100) as u8)
-            sum = sum + (arr[0] as int)
+            sum = sum + (arr[0] as i64)
             i = i + 1
         }
     }
     print(sum)
-    print(arr[0] as int)
+    print(arr[0] as i64)
 }
 
 run()

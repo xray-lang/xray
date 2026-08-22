@@ -1,11 +1,11 @@
 // A unique source is transferred into a coroutine via an explicit `move` input.
 // Deterministic via await; output must match across VM/AOT.
-fn consume(data: move Array<int>) -> int {
+fn consume(data: move Array<i64>) -> i64 {
     return len(data)
 }
 
 fn main() {
-    var job: Array<int> = [1, 2, 3]
+    var job: Array<i64> = [1, 2, 3]
     var t = go consume(move job)
     print(await t)
 }

@@ -1,5 +1,5 @@
 class Probe {
-    count: int
+    count: i64
 
     constructor() {
         this.count = 0

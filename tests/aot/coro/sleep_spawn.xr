@@ -1,6 +1,6 @@
 import time
 
-fn sleeper(ms: int) -> int {
+fn sleeper(ms: i64) -> i64 {
     time.sleep(ms)
     return ms + 1
 }

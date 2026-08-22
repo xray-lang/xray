@@ -1,15 +1,15 @@
-fn endpoint(host: string, port: int = 80, tls: bool = false) -> int {
+fn endpoint(host: string, port: i64 = 80, tls: bool = false) -> i64 {
     if (tls) {
         return port + len(host)
     }
     return port
 }
 
-fn allSupplied() -> int {
+fn allSupplied() -> i64 {
     return endpoint("api", 443, true)
 }
 
-fn needsDefaults() -> int {
+fn needsDefaults() -> i64 {
     return endpoint("local")
 }
 

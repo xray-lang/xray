@@ -5,7 +5,7 @@
 type Address = { city: string, zip: string }
 type User = {
     name: string,
-    age: int,
+    age: i64,
     email: string,
     tags: Array<string>,
     address: Address,
@@ -32,8 +32,8 @@ print("typed JSON: ${JSON.stringify(contact)}")
 // Unknown inbound JSON stays in JSON.Value and uses explicit paths.
 var text = "{\"point\":{\"x\":1,\"y\":2},\"label\":\"origin\"}"
 var parsed = JSON.parseValue(text)
-print("x: ${JSON.require<int>(parsed, ["point", "x"])}")
-print("missing salary: ${JSON.get<int>(parsed, ["salary"])}")
+print("x: ${JSON.require<i64>(parsed, ["point", "x"])}")
+print("missing salary: ${JSON.get<i64>(parsed, ["salary"])}")
 JSON.set(parsed, ["point", "x"], 10)
 print("updated: ${JSON.stringify(parsed)}")
 

@@ -1,5 +1,5 @@
 interface Reader {
-    read() -> int
+    read() -> i64
 }
 
 class BadReader implements Reader {

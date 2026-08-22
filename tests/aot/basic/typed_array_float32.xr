@@ -1,4 +1,4 @@
-fn run() -> float {
+fn run() -> f64 {
     var values: Array<f32> = []
     values.push(1.25)
     values.push(2.5)

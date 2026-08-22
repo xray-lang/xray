@@ -1,7 +1,7 @@
 // Historical residue fixture: a function that heap-allocates and grows an
 // array leaves runtime-helper (R1) and bounds (R4) residue in the generated C,
 // so the AOT backend must reject it with error[E0655].
-fn zeroCostAllocReject(n: int) -> int {
+fn zeroCostAllocReject(n: i64) -> i64 {
     var arr = [n, n, n]
     arr.push(n)
     return len(arr)

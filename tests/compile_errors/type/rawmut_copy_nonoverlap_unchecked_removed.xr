@@ -1,4 +1,4 @@
-fn copy(dst: Array<byte>, src: Array<byte>) {
+fn copy(dst: Array<u8>, src: Array<u8>) {
     unsafe {
         dst.mutPtr().copyFromNonOverlappingUnchecked(src.ptr(), 1)
     }

@@ -1,10 +1,10 @@
 import mem
 
 var guard = 0
-var p = mem.mutPtr<byte>(0)
+var p = mem.mutPtr<u8>(0)
 unsafe {
-    mem.withSliceMut<byte>(p, 0, ref guard, fn(view: ref Slice<byte>) {
-        var bytes = Array<byte>()
+    mem.withSliceMut<u8>(p, 0, ref guard, fn(view: ref Slice<u8>) {
+        var bytes = Array<u8>()
         view = bytes[:]
     })
 }

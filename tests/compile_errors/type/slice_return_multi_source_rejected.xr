@@ -1,4 +1,4 @@
-fn choose(left: Slice<byte>, right: Slice<byte>, useLeft: bool) -> Slice<byte> {
+fn choose(left: Slice<u8>, right: Slice<u8>, useLeft: bool) -> Slice<u8> {
     if (useLeft) {
         return left
     }

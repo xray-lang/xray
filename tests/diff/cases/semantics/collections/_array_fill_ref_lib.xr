@@ -4,7 +4,7 @@
 
 export enum Kind { I32, I64 }
 
-export fn takeBranch(stack: ref Array<i64>, kinds: ref Array<Kind>, keepArity: int, height: int) {
+export fn takeBranch(stack: ref Array<i64>, kinds: ref Array<Kind>, keepArity: i64, height: i64) {
     var kept = Array<i64>(keepArity, 0)
     var keptKinds = Array<Kind>(keepArity, Kind.I32)
     for (var k = 0; k < keepArity; k += 1) {

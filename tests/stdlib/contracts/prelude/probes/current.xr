@@ -1,9 +1,9 @@
-var values: Array<int> = [3, 1, 2]
+var values: Array<i64> = [3, 1, 2]
 values.sort()
 assert(len(values) == 3)
 assert(values[0] == 1)
 assert(values[2] == 3)
-var mapping: Map<string, int> = #{}
+var mapping: Map<string, i64> = #{}
 mapping["x"] = 1
 mapping["y"] = 2
 assert(len(mapping) == 2)

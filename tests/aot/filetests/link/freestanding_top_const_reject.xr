@@ -1,9 +1,9 @@
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 41
 }
 
-const MAGIC: int = runtimeOnly()
+const MAGIC: i64 = runtimeOnly()
 
-fn xray_magic() -> int {
+fn xray_magic() -> i64 {
     return MAGIC + 1
 }

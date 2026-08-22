@@ -32,7 +32,7 @@ fn test_selective_class_nested() {
     // BUG-1 触发点：嵌套函数体内引用 selective import 的 class。
     // 嵌套函数返回基础类型 int 以绕过 analyzer 跨模块类型 unknown 问题，
     // 让运行时实际命中 lower_import_stmt 的写读不对称路径。
-    fn make() -> int {
+    fn make() -> i64 {
         var b = Box(7, 6)
         return b.area()
     }
@@ -41,7 +41,7 @@ fn test_selective_class_nested() {
 
 @test
 fn test_selective_fn_nested() {
-    fn build() -> int {
+    fn build() -> i64 {
         var b = makeBox(8, 9)
         return b.area()
     }

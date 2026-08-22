@@ -16,11 +16,11 @@
 fn greet(name: string = "World") {
     print("Hello, " + name)
 }
-fn add(a: int, b: int = 10, c: int = 100) -> int {
+fn add(a: i64, b: i64 = 10, c: i64 = 100) -> i64 {
     return a + b + c
 }
-type Point = { x: int, y: int }
-fn createPoint(x: int = 0, y: int = 0) -> Point {
+type Point = { x: i64, y: i64 }
+fn createPoint(x: i64 = 0, y: i64 = 0) -> Point {
     return { x: x, y: y }
 }
 fn formatName(first: string, last: string = "Unknown") -> string {

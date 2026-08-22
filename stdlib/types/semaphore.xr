@@ -1,9 +1,9 @@
 // Built-in Semaphore type; implemented by the runtime.
 class Semaphore {
-    available: int
+    available: i64
     isClosed: bool
     // @receiver_write
-    release(count?: int) -> int
+    release(count?: i64) -> i64
     // @receiver_write
     tryAcquire() -> bool
     // @receiver_write

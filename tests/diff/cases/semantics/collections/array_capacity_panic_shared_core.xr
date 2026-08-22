@@ -2,7 +2,7 @@
 var dyn: JSON.Object = JSON.parseObject("{\"bad\":true}")
 
 try {
-    var xs = Array<int>(JSON.require<int>(dyn, ["bad"]), 1)
+    var xs = Array<i64>(JSON.require<i64>(dyn, ["bad"]), 1)
     print(len(xs))
 } catch panic (p) {
     print(p.message)
@@ -10,7 +10,7 @@ try {
 }
 
 try {
-    var ys = Array.withCapacity(JSON.require<int>(dyn, ["bad"]))
+    var ys = Array.withCapacity(JSON.require<i64>(dyn, ["bad"]))
     print(len(ys))
 } catch panic (p) {
     print(p.message)

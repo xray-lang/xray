@@ -1,2 +1,2 @@
-var m: Map<string, int> = #{"a": 1}
+var m: Map<string, i64> = #{"a": 1}
 print(m["a"])

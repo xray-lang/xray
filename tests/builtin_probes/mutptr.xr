@@ -1,2 +1,2 @@
-fn use(p: MutPtr<int>) -> bool { return true }
+fn use(p: MutPtr<i64>) -> bool { return true }
 print(true)

@@ -496,17 +496,11 @@ AstNode *xr_parse_regex_literal(Parser *parser) {
     return node;
 }
 
-// Parse type cast: int(x), float(x), string(x), bool(x)
+// Parse the remaining value conversion keywords: string(x), bool(x), rune(x).
 AstNode *xr_parse_type_cast(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_type_cast: NULL parser");
     const char *type_name = NULL;
     switch (parser->previous.type) {
-        case TK_INT:
-            type_name = "int";
-            break;
-        case TK_FLOAT:
-            type_name = "float";
-            break;
         case TK_STRING:
             type_name = "string";
             break;
@@ -546,6 +540,26 @@ AstNode *xr_parse_type_cast(Parser *parser) {
     arguments[0] = arg;
 
     return xr_ast_call_expr(parser->compiler_session, callee, arguments, NULL, 1, line);
+}
+
+/* Exact scalar keywords also introduce primitive type namespaces. They are
+ * ordinary resolved namespace values here; numeric conversion remains the
+ * `as` operator and is never inferred from call syntax. */
+AstNode *xr_parse_scalar_namespace(Parser *parser) {
+    XR_DCHECK(parser != NULL, "parse_scalar_namespace: NULL parser");
+    const char *name = NULL;
+    switch (parser->previous.type) {
+#define XR_EXACT_SCALAR(id, stable_id, source_name, native_type, family, range_class, flags)       \
+    case TK_##id:                                                                                  \
+        name = source_name;                                                                        \
+        break;
+#include "../../shared/xr_exact_scalar_registry.def"
+#undef XR_EXACT_SCALAR
+        default:
+            xr_parser_error(parser, "expected exact scalar keyword");
+            return NULL;
+    }
+    return xr_ast_variable(parser->compiler_session, name, parser->previous.line);
 }
 
 AstNode *xr_parse_comptime_expr(Parser *parser) {

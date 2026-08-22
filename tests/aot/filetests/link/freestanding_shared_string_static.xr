@@ -1,6 +1,6 @@
 const BOOT_LABEL: string = "boot"
 
-fn xray_shared_label() -> int {
+fn xray_shared_label() -> i64 {
     print(BOOT_LABEL)
     return 4
 }

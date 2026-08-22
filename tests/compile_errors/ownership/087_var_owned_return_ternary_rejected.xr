@@ -1,14 +1,14 @@
-fn makeA() -> Array<byte> {
-    var a = Array<byte>(1, 0)
+fn makeA() -> Array<u8> {
+    var a = Array<u8>(1, 0)
     return move a
 }
 
-fn makeB() -> Array<byte> {
-    var b = Array<byte>(2, 0)
+fn makeB() -> Array<u8> {
+    var b = Array<u8>(2, 0)
     return move b
 }
 
-fn choose(flag: bool) -> Array<byte> {
+fn choose(flag: bool) -> Array<u8> {
     return flag ? makeA() : makeB()
 }
 

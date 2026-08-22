@@ -14,7 +14,7 @@ const CONFIG = {
     maxRetries: 3
 }
 
-fn worker1(id: int) {
+fn worker1(id: i64) {
     // All workers can safely read CONFIG (no copy, no lock)
     print("worker-${id}: host=${CONFIG.host}, port=${CONFIG.port}")
 }
@@ -27,9 +27,9 @@ scope {
 
 // === Rule 2: Channel (inter-coroutine communication) ===
 // Channels are declared `shared` and deep-copy pointer values on send.
-const ch = Channel<int>(1)
+const ch = Channel<i64>(1)
 
-fn sender(ch: Channel<int>) {
+fn sender(ch: Channel<i64>) {
     ch.send(42)
 }
 
@@ -43,7 +43,7 @@ ch.close()
 
 // === Rule 3: Explicit copy or move ===
 // Crossing a go boundary requires copy(...), move of an owned source, or shared identity.
-fn processData(data: move Array<int>) {
+fn processData(data: move Array<i64>) {
     // This is a separate copy — mutations don't affect the original
     data.push(999)
     print("child sees: ${data}")

@@ -19,8 +19,8 @@ legacy_public_surface = [
 intentional_semantic_changes = [
   "fixed digest APIs return fixed byte arrays and use encoding.hexEncode only for presentation",
   "HMAC uses an explicit algorithm enum and byte inputs",
-  "randomBytes returns Array<byte> and reports native failures through a typed error",
-  "timingSafeEqual compares Slice<byte> inputs without data-dependent early exit",
+  "randomBytes returns Array<u8> and reports native failures through a typed error",
+  "timingSafeEqual compares Slice<u8> inputs without data-dependent early exit",
   "ambiguous encrypt/decrypt helpers are removed in favor of explicit AEAD provider, nonce, AAD, ciphertext, and tag contracts"
 ]
 known_legacy_bugs = [

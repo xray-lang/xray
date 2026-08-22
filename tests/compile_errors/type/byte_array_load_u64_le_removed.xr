@@ -1,2 +1,2 @@
-var bytes = Array<byte>(8)
+var bytes = Array<u8>(8)
 print(bytes.loadU64LE(0))

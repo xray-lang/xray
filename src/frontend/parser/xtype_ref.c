@@ -25,7 +25,6 @@ static XrTypeRef *tref_alloc(struct XrCompilerSession *session) {
     XrTypeRef *t = (XrTypeRef *) ast_alloc(session, sizeof(XrTypeRef));
     memset(t, 0, sizeof(XrTypeRef));
     t->scalar_rep = XR_SCALAR_REP_NONE;
-    t->builtin_spelling = XR_SOURCE_TYPE_NONE;
     return t;
 }
 
@@ -54,12 +53,12 @@ XR_FUNC XrTypeRef **xr_tref_array_copy(struct XrCompilerSession *session, XrType
 
 /* ========== Primitive Constructors ========== */
 
-XR_FUNC XrTypeRef *xr_tref_int(struct XrCompilerSession *session) {
-    return xr_tref_scalar(session, XR_SOURCE_TYPE_INT, XR_NATIVE_I64, false);
+XR_FUNC XrTypeRef *xr_tref_i64(struct XrCompilerSession *session) {
+    return xr_tref_scalar(session, XR_NATIVE_I64);
 }
 
-XR_FUNC XrTypeRef *xr_tref_float(struct XrCompilerSession *session) {
-    return xr_tref_scalar(session, XR_SOURCE_TYPE_FLOAT, XR_NATIVE_F64, true);
+XR_FUNC XrTypeRef *xr_tref_f64(struct XrCompilerSession *session) {
+    return xr_tref_scalar(session, XR_NATIVE_F64);
 }
 
 XR_FUNC XrTypeRef *xr_tref_string(struct XrCompilerSession *session) {
@@ -98,54 +97,15 @@ XR_FUNC XrTypeRef *xr_tref_error(struct XrCompilerSession *session) {
     return t;
 }
 
-/* ========== Native-Width Scalars ========== */
+/* ========== Exact Scalars ========== */
 
-XR_FUNC XrTypeRef *xr_tref_scalar(struct XrCompilerSession *session, XrSourceTypeSpelling spelling,
-                                  uint8_t scalar_rep, bool float_family) {
+XR_FUNC XrTypeRef *xr_tref_scalar(struct XrCompilerSession *session, uint8_t scalar_rep) {
+    XR_DCHECK(xr_exact_scalar_by_native_type(scalar_rep) != NULL,
+              "xr_tref_scalar: unknown scalar representation");
     XrTypeRef *t = tref_alloc(session);
-    bool default_spelling = spelling == XR_SOURCE_TYPE_INT || spelling == XR_SOURCE_TYPE_FLOAT;
-    t->kind = float_family ? (default_spelling ? XR_TREF_FLOAT : XR_TREF_FLOAT_WIDTH)
-                           : (default_spelling ? XR_TREF_INT : XR_TREF_INT_WIDTH);
+    t->kind = XR_TREF_SCALAR;
     t->scalar_rep = scalar_rep;
-    t->builtin_spelling = (uint8_t) spelling;
     return t;
-}
-
-static XrSourceTypeSpelling canonical_int_spelling(uint8_t scalar_rep) {
-    switch ((XrNativeType) scalar_rep) {
-        case XR_NATIVE_I8:
-            return XR_SOURCE_TYPE_I8;
-        case XR_NATIVE_U8:
-            return XR_SOURCE_TYPE_BYTE;
-        case XR_NATIVE_I16:
-            return XR_SOURCE_TYPE_I16;
-        case XR_NATIVE_U16:
-            return XR_SOURCE_TYPE_U16;
-        case XR_NATIVE_I32:
-            return XR_SOURCE_TYPE_I32;
-        case XR_NATIVE_U32:
-            return XR_SOURCE_TYPE_U32;
-        case XR_NATIVE_I64:
-            return XR_SOURCE_TYPE_INT;
-        case XR_NATIVE_U64:
-            return XR_SOURCE_TYPE_U64;
-        case XR_NATIVE_ISIZE:
-            return XR_SOURCE_TYPE_ISIZE;
-        case XR_NATIVE_USIZE:
-            return XR_SOURCE_TYPE_USIZE;
-        default:
-            return XR_SOURCE_TYPE_NONE;
-    }
-}
-
-XR_FUNC XrTypeRef *xr_tref_int_width(struct XrCompilerSession *session, uint8_t scalar_rep) {
-    return xr_tref_scalar(session, canonical_int_spelling(scalar_rep), scalar_rep, false);
-}
-
-XR_FUNC XrTypeRef *xr_tref_float_width(struct XrCompilerSession *session, uint8_t scalar_rep) {
-    XrSourceTypeSpelling spelling =
-        scalar_rep == XR_NATIVE_F32 ? XR_SOURCE_TYPE_F32 : XR_SOURCE_TYPE_FLOAT;
-    return xr_tref_scalar(session, spelling, scalar_rep, true);
 }
 
 /* ========== Composite Constructors ========== */
@@ -296,8 +256,8 @@ XR_FUNC XrTypeRef *xr_tref_type_param(struct XrCompilerSession *session, const c
 
 /* ========== String Conversion ========================================
  *
- * Produces human-readable type strings like "int", "Array<string>",
- * "(int) -> bool", etc.  Arena-allocated — no free needed.
+ * Produces human-readable type strings like "i64", "Array<string>",
+ * "(i64) -> bool", etc.  Arena-allocated — no free needed.
  * Function types follow the unified arrow form (no leading `fn`).
  * ===================================================================== */
 
@@ -323,12 +283,11 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
             tref_append(buf, pos, cap, "const ");
             tref_to_str_impl(t->nchildren > 0 ? t->children[0] : NULL, buf, pos, cap);
             break;
-        case XR_TREF_INT:
-            tref_append(buf, pos, cap, "int");
+        case XR_TREF_SCALAR: {
+            const char *source_name = xr_scalar_rep_name(t->scalar_rep);
+            tref_append(buf, pos, cap, source_name ? source_name : "<scalar?>");
             break;
-        case XR_TREF_FLOAT:
-            tref_append(buf, pos, cap, "float");
-            break;
+        }
         case XR_TREF_STRING:
             tref_append(buf, pos, cap, "string");
             break;
@@ -347,16 +306,6 @@ static void tref_to_str_impl(const XrTypeRef *t, char *buf, int *pos, int cap) {
         case XR_TREF_ERROR:
             tref_append(buf, pos, cap, "<error>");
             break;
-
-        case XR_TREF_INT_WIDTH:
-        case XR_TREF_FLOAT_WIDTH: {
-            const char *source_name =
-                xr_source_type_spelling_name((XrSourceTypeSpelling) t->builtin_spelling);
-            if (!source_name)
-                source_name = xr_scalar_rep_canonical_name(t->scalar_rep);
-            tref_append(buf, pos, cap, source_name ? source_name : "<scalar?>");
-            break;
-        }
 
         case XR_TREF_NAMED:
             tref_append(buf, pos, cap, t->name ? t->name : "?");

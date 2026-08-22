@@ -2,10 +2,10 @@
 
 export enum FastResult<T> {
     Ok(T),
-    Err(int)
+    Err(i64)
 }
 
-export fn pick(ok: bool) -> FastResult<int> {
+export fn pick(ok: bool) -> FastResult<i64> {
     if (ok) {
         return FastResult.Ok(41)
     }

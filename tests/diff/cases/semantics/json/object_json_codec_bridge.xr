@@ -3,17 +3,17 @@
 // to a shaped JSON.Value through its field table, decodes back through the same bridge
 // shape, and survives a full roundtrip including a nested Object.
 
-type Address = { city: string, zip: int }
-type User = { name: string, age: int, address: Address }
+type Address = { city: string, zip: i64 }
+type User = { name: string, age: i64, address: Address }
 
 var user: User = { name: "Ada", age: 37, address: { city: "Hangzhou", zip: 310000 } }
 
 // Object -> JSON.Value field-table encode is observable as a shaped JSON.
 var encoded = JSON.value(user)
 print(JSON.require<string>(encoded, ["name"]))             // Ada
-print(JSON.require<int>(encoded, ["age"]))                 // 37
+print(JSON.require<i64>(encoded, ["age"]))                 // 37
 print(JSON.require<string>(encoded, ["address", "city"])) // Hangzhou
-print(JSON.require<int>(encoded, ["address", "zip"]))     // 310000
+print(JSON.require<i64>(encoded, ["address", "zip"]))     // 310000
 
 // JSON.Value -> Object decode consumes the same bridge shape.
 var decoded = JSON.decode<User>(encoded)

@@ -1,4 +1,4 @@
-fn kernel(a: int, b: int) -> int {
+fn kernel(a: i64, b: i64) -> i64 {
     var acc = a
     for (var i = 0; i < 8; i++) {
         acc = acc + b * i + 3
@@ -6,7 +6,7 @@ fn kernel(a: int, b: int) -> int {
     return acc
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var total = 0
     for (var i = 0; i < rounds; i++) {
         total = total + kernel(i, 7)

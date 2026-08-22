@@ -2,9 +2,9 @@
 // pointer must not invalidate or freeze a previously derived offset pointer.
 import mem
 
-var base = mem.mutPtr<byte>(16)
+var base = mem.mutPtr<u8>(16)
 var offset = base.offset(1)
-base = mem.mutPtr<byte>(32)
+base = mem.mutPtr<u8>(32)
 
 print(mem.addr(offset))
 print(mem.addr(base))

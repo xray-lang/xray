@@ -8,9 +8,9 @@ fn test_scalar_kind_transitions() {
     object.set("value", true)
     assert_eq(JSON.require<bool>(object, ["value"]), true)
     object.set("value", -123)
-    assert_eq(JSON.require<int>(object, ["value"]), -123)
+    assert_eq(JSON.require<i64>(object, ["value"]), -123)
     object.set("value", 3.14)
-    assert_eq(JSON.require<float>(object, ["value"]), 3.14)
+    assert_eq(JSON.require<f64>(object, ["value"]), 3.14)
     object.set("value", "hello")
     assert_eq(JSON.require<string>(object, ["value"]), "hello")
 }
@@ -19,7 +19,7 @@ fn test_scalar_kind_transitions() {
 fn test_nested_composite_store() {
     var object: JSON.Object = JSON.parseObject("{}")
     object.set("child", JSON.value({ x: 10, y: 20 }))
-    assert_eq(JSON.require<int>(object, ["child", "x"]), 10)
+    assert_eq(JSON.require<i64>(object, ["child", "x"]), 10)
     object.set("items", JSON.value([1, 2, 3]))
-    assert_eq(JSON.require<int>(object, ["items", 2]), 3)
+    assert_eq(JSON.require<i64>(object, ["items", 2]), 3)
 }

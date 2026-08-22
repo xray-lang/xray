@@ -1,6 +1,6 @@
 fn main() {
-    var bytes = Array<byte>(1, 0)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(1, 0)
+    var view: Slice<u8> = bytes[:]
     const frozen = move bytes
     print(len(view))
 }

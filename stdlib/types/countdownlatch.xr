@@ -1,11 +1,11 @@
 // Built-in CountdownLatch type; implemented by the runtime.
 class CountdownLatch {
-    remaining: int
+    remaining: i64
     isClosed: bool
     // @receiver_write
-    reset(count: int) -> bool
+    reset(count: i64) -> bool
     // @receiver_write
-    done(count?: int) -> int
+    done(count?: i64) -> i64
     // @receiver_write
     tryWait() -> bool
     // @receiver_write

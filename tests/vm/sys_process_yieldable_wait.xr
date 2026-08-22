@@ -1,13 +1,13 @@
 import sys
 import { Process } from sys
 
-fn waitProcess(p: Process) -> int {
+fn waitProcess(p: Process) -> i64 {
     var code = p.wait()
     print("waited " + string(code))
     return code
 }
 
-fn tick() -> int {
+fn tick() -> i64 {
     print("tick")
     return 1
 }

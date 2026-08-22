@@ -1,6 +1,6 @@
 struct Pair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 }
 
 union I32Bits {
@@ -10,12 +10,12 @@ union I32Bits {
 
 struct Holder {
     bits: I32Bits
-    base: int
+    base: i64
 }
 
 const PAIR = Pair{left: 1, right: 2}
 const HOLDER = Holder{bits: I32Bits{u: 33}, base: 4}
 
-fn xray_shared_aggregate_static() -> int {
-    return PAIR.left + PAIR.right + (unsafe { HOLDER.bits.u } as int) + HOLDER.base
+fn xray_shared_aggregate_static() -> i64 {
+    return PAIR.left + PAIR.right + (unsafe { HOLDER.bits.u } as i64) + HOLDER.base
 }

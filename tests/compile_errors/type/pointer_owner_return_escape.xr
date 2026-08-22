@@ -1,6 +1,6 @@
 import mem
 
-fn raw() -> MutPtr<byte> {
+fn raw() -> MutPtr<u8> {
     var buffer = mem.alloc(8)
     return unsafe { buffer.borrowPtr() }
 }

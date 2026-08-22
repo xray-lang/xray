@@ -1,4 +1,4 @@
-fn xray_no_alloc_stringbuilder_append_reject(sb: ref StringBuilder, value: int) -> int {
+fn xray_no_alloc_stringbuilder_append_reject(sb: ref StringBuilder, value: i64) -> i64 {
     sb.append(value)
     return len(sb)
 }

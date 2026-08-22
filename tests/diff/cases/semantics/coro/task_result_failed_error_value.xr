@@ -1,6 +1,6 @@
 enum TaskResultErr { Msg(string) }
 
-fn fail_with_enum() -> int {
+fn fail_with_enum() -> i64 {
     throw TaskResultErr.Msg("task-error")
     return 0
 }

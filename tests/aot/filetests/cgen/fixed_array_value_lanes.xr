@@ -1,6 +1,6 @@
 struct Holder {
     names: [string; 2]
-    blocks: [[byte; 2]; 2]
+    blocks: [[u8; 2]; 2]
 }
 
 var holder = Holder{names: ["x", "y"], blocks: [[11, 12], [13, 14]]}

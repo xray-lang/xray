@@ -3,17 +3,17 @@
 // VM (closure-backed) and AOT (zero-alloc typed function-pointer table) must agree.
 extern "C" { fn malloc(n: usize) -> MutPtr<i32> }
 
-type Op = CFn<fn(int, MutPtr<i32>, int) -> int>
+type Op = CFn<fn(i64, MutPtr<i32>, i64) -> i64>
 
 var IMM: Array<i32> = [10, 20, 0, 0]
 
-fn opConst(pc: int, stack: MutPtr<i32>, sp: int) -> int {
+fn opConst(pc: i64, stack: MutPtr<i32>, sp: i64) -> i64 {
     var cursor = stack
     unsafe { cursor[sp] = IMM[pc] }
     return sp + 1
 }
 
-fn opAdd(pc: int, stack: MutPtr<i32>, sp: int) -> int {
+fn opAdd(pc: i64, stack: MutPtr<i32>, sp: i64) -> i64 {
     var cursor = stack
     var b = unsafe { cursor[sp - 1] }
     var a = unsafe { cursor[sp - 2] }
@@ -21,7 +21,7 @@ fn opAdd(pc: int, stack: MutPtr<i32>, sp: int) -> int {
     return sp - 1
 }
 
-fn interp(ops: Array<Op>, n: int, stack: MutPtr<i32>) -> i32 {
+fn interp(ops: Array<Op>, n: i64, stack: MutPtr<i32>) -> i32 {
     var sp = 0
     for (var pc = 0; pc < n; pc++) {
         sp = ops[pc](pc, stack, sp)

@@ -1,4 +1,4 @@
-fn rebind(view: ref Slice<int>) {
+fn rebind(view: ref Slice<i64>) {
     var replacement = [9, 8]
     view = replacement[:]
 }

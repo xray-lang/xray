@@ -1,18 +1,18 @@
 // Residue verification never changes generated code. plain_kernel and
 // gated_kernel have identical bodies, so their generated C must be
 // structurally identical (the shared body shape appears twice).
-fn plain_kernel(x: int, y: int) -> int {
+fn plain_kernel(x: i64, y: i64) -> i64 {
     return x * y + 1
 }
 
-fn gated_kernel(x: int, y: int) -> int {
+fn gated_kernel(x: i64, y: i64) -> i64 {
     return x * y + 1
 }
 
-fn call_plain(a: int) -> int {
+fn call_plain(a: i64) -> i64 {
     return plain_kernel(a, a)
 }
 
-fn call_gated(a: int) -> int {
+fn call_gated(a: i64) -> i64 {
     return gated_kernel(a, a)
 }

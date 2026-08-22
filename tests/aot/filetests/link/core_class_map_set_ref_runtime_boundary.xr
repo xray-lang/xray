@@ -1,13 +1,13 @@
 class Registry {
-    scores: Map<int, int>
-    seen: Set<int>
+    scores: Map<i64, i64>
+    seen: Set<i64>
 
-    constructor(scores: Map<int, int>, seen: Set<int>) {
+    constructor(scores: Map<i64, i64>, seen: Set<i64>) {
         this.scores = scores
         this.seen = seen
     }
 
-    mark(key: int, value: int) -> int {
+    mark(key: i64, value: i64) -> i64 {
         this.scores.set(key, value)
         this.seen.add(key)
         if (this.seen.contains(key)) {
@@ -16,18 +16,18 @@ class Registry {
         return 0
     }
 
-    replace(scores: Map<int, int>, seen: Set<int>) {
+    replace(scores: Map<i64, i64>, seen: Set<i64>) {
         this.scores = scores
         this.seen = seen
     }
 }
 
-var firstScores: Map<int, int> = #{}
-var firstSeen: Set<int> = #[]
+var firstScores: Map<i64, i64> = #{}
+var firstSeen: Set<i64> = #[]
 var registry = Registry(firstScores, firstSeen)
 print(registry.mark(7, 11))
 
-var secondScores: Map<int, int> = #{}
-var secondSeen: Set<int> = #[]
+var secondScores: Map<i64, i64> = #{}
+var secondSeen: Set<i64> = #[]
 registry.replace(secondScores, secondSeen)
 print(registry.mark(3, 21))

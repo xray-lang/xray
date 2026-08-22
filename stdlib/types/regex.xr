@@ -1,7 +1,7 @@
 // Built-in Regex type — implementation in stdlib/regex/xregex_binding.c
 class RegexMatch {
-    start: int
-    end: int
+    start: i64
+    end: i64
     text: string
     groups: Array<string>
 }
@@ -9,8 +9,8 @@ class Regex {
     test(text: string) -> bool
     find(text: string) -> RegexMatch?
     findText(text: string) -> string?
-    findGroup(text: string, index: int) -> string?
-    findAll(text: string, limit?: int) -> Array<RegexMatch>
+    findGroup(text: string, index: i64) -> string?
+    findAll(text: string, limit?: i64) -> Array<RegexMatch>
     replace(text: string, replacement: string) -> string
-    split(text: string, limit?: int) -> Array<string>
+    split(text: string, limit?: i64) -> Array<string>
 }

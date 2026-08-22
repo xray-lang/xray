@@ -1,4 +1,4 @@
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 class ObjectMethodReturnFactory {
     makeUser() -> User {
@@ -6,7 +6,7 @@ class ObjectMethodReturnFactory {
     }
 }
 
-fn objectMethodReturnReceiverPlan() -> int {
+fn objectMethodReturnReceiverPlan() -> i64 {
     var f = ObjectMethodReturnFactory()
     return f.makeUser().age
 }

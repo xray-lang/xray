@@ -1,6 +1,6 @@
-fn read(data: Array<int>) -> int {
+fn read(data: Array<i64>) -> i64 {
     return len(data)
 }
 
-var values: Array<int> = []
+var values: Array<i64> = []
 print(read(ref values))

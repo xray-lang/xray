@@ -1,11 +1,11 @@
 class Collector {
-    total: int
+    total: i64
 
     constructor() {
         this.total = 0
     }
 
-    add(data: Slice<byte>) -> int {
+    add(data: Slice<u8>) -> i64 {
         var i = 0
         while (i < len(data)) {
             this.total += data[i]
@@ -16,5 +16,5 @@ class Collector {
 }
 
 var collector = Collector()
-var bytes: Array<byte> = [7, 11, 13]
+var bytes: Array<u8> = [7, 11, 13]
 print(collector.add(bytes[:]))

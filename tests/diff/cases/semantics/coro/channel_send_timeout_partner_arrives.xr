@@ -5,7 +5,7 @@
 // coroutine prints: Sent already proves the rendezvous handed the value over.
 import time
 
-const ch = Channel<int>(0)
+const ch = Channel<i64>(0)
 go fn() {
     time.sleep(5)
     var got = ch.recv()

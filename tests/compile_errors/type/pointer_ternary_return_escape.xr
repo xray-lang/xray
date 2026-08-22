@@ -1,9 +1,9 @@
 import mem
 
-fn choose(flag: bool) -> MutPtr<byte> {
+fn choose(flag: bool) -> MutPtr<u8> {
     var buffer = mem.alloc(8)
     var borrowed = unsafe { buffer.borrowPtr() }
-    var foreign = mem.mutPtr<byte>(0)
+    var foreign = mem.mutPtr<u8>(0)
     var selected = flag ? borrowed : foreign
     return selected
 }

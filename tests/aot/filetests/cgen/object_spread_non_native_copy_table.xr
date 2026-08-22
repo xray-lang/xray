@@ -1,5 +1,5 @@
 type Meta = { label: string, payload: JSON.Value }
-type Envelope = { id: int, meta: Meta, note: string }
+type Envelope = { id: i64, meta: Meta, note: string }
 
 var base: Envelope = {
     id: 7,

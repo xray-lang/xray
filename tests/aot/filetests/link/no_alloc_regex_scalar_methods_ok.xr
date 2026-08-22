@@ -2,7 +2,7 @@ import regex
 
 var xray_no_alloc_regex_scalar_digits = regex.compile("(\\d+)")
 
-fn xray_no_alloc_regex_scalar_methods_ok(text: string) -> int {
+fn xray_no_alloc_regex_scalar_methods_ok(text: string) -> i64 {
     var score = regex.test(xray_no_alloc_regex_scalar_digits, text) ? 10 : 0
     score = score + regex.count(xray_no_alloc_regex_scalar_digits, text)
     score = score + (xray_no_alloc_regex_scalar_digits.test(text) ? 100 : 0)

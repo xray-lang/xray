@@ -81,9 +81,9 @@ fn test_filter_map_reduce_pipeline() {
     // Sum all values from category "A"
     var totalA = data.filter(fn(d) {
         return d.category == "A"
-    }).map(fn(d) -> int {
-        return d.values.reduce(fn(a, b) -> int { return a + b }, 0)
-    }).reduce(fn(a, b) -> int { return a + b }, 0)
+    }).map(fn(d) -> i64 {
+        return d.values.reduce(fn(a, b) -> i64 { return a + b }, 0)
+    }).reduce(fn(a, b) -> i64 { return a + b }, 0)
     assert_eq(totalA, 15)
 }
 
@@ -107,7 +107,7 @@ fn test_nested_map_with_filter() {
 @test
 fn test_nested_forEach_with_accumulation() {
     var data = [[1, 2], [3, 4], [5, 6]]
-    var products: Array<int> = []
+    var products: Array<i64> = []
     data.forEach(fn(row) {
         row.forEach(fn(x) {
             products.push(x * x)
@@ -174,7 +174,7 @@ fn test_reduce_build_nested_map() {
 
 @test
 fn test_higher_order_with_for_loop() {
-    var results: Array<int> = []
+    var results: Array<i64> = []
     for (var i = 0; i < 3; i++) {
         var arr = [1, 2, 3]
         var sum = arr.map(fn(x) { return x + i }).reduce(fn(a, b) { return a + b }, 0)
@@ -294,7 +294,7 @@ fn test_nested_some_with_map() {
 fn test_reduce_builds_grouped_arrays() {
     var nums = [1, 2, 3, 4, 5, 6, 7, 8, 9]
     // Group into chunks of 3
-    var seed: Array<int> = []
+    var seed: Array<i64> = []
     var chunks = nums.reduce(fn(acc, val) {
         var next = copy(acc)
         var last = next[len(next) - 1]
@@ -361,7 +361,7 @@ fn test_five_level_deep() {
 
 @test
 fn test_stress_large_chain() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     for (var i = 0; i < 500; i++) { arr.push(i) }
     var result = arr
         .filter(fn(x) { return x % 3 == 0 })

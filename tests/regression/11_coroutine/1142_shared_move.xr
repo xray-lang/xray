@@ -9,16 +9,16 @@
 **   - 普通变量: 通过 copy(...) 显式深拷贝后传递给协程
 */
 
-fn recvArray(ch: Channel<Array<int>>) -> Array<int> {
+fn recvArray(ch: Channel<Array<i64>>) -> Array<i64> {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> []
     }
 }
 
-type Config = { name: string, value: int }
-type StepMessage = { step: int }
-type CountRecord = { count: int }
+type Config = { name: string, value: i64 }
+type StepMessage = { step: i64 }
+type CountRecord = { count: i64 }
 
 fn emptyStep() -> StepMessage {
     return { step: 0 }
@@ -43,11 +43,11 @@ fn test_shared_const() {
     print(config)
 
     // Multiple coroutines read the same shared (zero-copy)
-    var t1 = go fn(c: Config) -> int {
+    var t1 = go fn(c: Config) -> i64 {
         return c.value
     }(config)
 
-    var t2 = go fn(c: Config) -> int {
+    var t2 = go fn(c: Config) -> i64 {
         return c.value * 2
     }(config)
 
@@ -66,7 +66,7 @@ fn test_move_go() {
     var data: CountRecord = { count: 10 }
 
     // 'move data' transfers the owned root to child coroutine
-    var task = go fn(d: move CountRecord) -> int {
+    var task = go fn(d: move CountRecord) -> i64 {
         print("child got:", d.count)
         return d.count + 1
     }(move data)
@@ -81,8 +81,8 @@ fn test_move_go() {
 fn test_move_channel_send() {
     print("=== Test move channel send ===")
 
-    const ch: Channel<Array<int>> = Channel(1)
-    var payload = Array<int>(3, 0)
+    const ch: Channel<Array<i64>> = Channel(1)
+    var payload = Array<i64>(3, 0)
     payload[0] = 10
     payload[1] = 20
     payload[2] = 30
@@ -104,7 +104,7 @@ fn test_normal_copy() {
     var arr = [1, 2, 3]
 
     // Explicit copy: coroutine gets a deep copy
-    var task = go fn(data: move Array<int>) {
+    var task = go fn(data: move Array<i64>) {
         data.push(4)  // does not affect original
         return len(data)
     }(copy(arr))
@@ -134,7 +134,7 @@ fn test_move_pipeline() {
     // msg is no longer usable here (moved in go call above)
 
     // Stage 2: receive and process
-    var t2 = go fn(c: Channel<StepMessage>) -> int {
+    var t2 = go fn(c: Channel<StepMessage>) -> i64 {
         var d = recvStep(c)
         d.step = d.step + 1
         print("stage2:", d.step)

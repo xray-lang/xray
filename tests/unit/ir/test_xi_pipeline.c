@@ -265,7 +265,7 @@ TEST(e2e_for_loop) {
 
 TEST(e2e_function_decl) {
     /* Function declaration should emit CLOSURE opcode and have a child proto */
-    XrProto *p = compile_source("fn add(a: int, b: int) -> int { return a + b }\n"
+    XrProto *p = compile_source("fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                                 "print(add(1, 2))",
                                 NULL);
     assert(p != NULL);
@@ -275,7 +275,7 @@ TEST(e2e_function_decl) {
 }
 
 TEST(e2e_attached_ir_is_repped) {
-    XrProto *p = compile_source("fn add(a: int, b: int) -> int { return a + b }\n"
+    XrProto *p = compile_source("fn add(a: i64, b: i64) -> i64 { return a + b }\n"
                                 "print(add(1, 2))",
                                 NULL);
     assert(p != NULL);
@@ -294,7 +294,7 @@ TEST(e2e_attached_ir_is_repped) {
 }
 
 TEST(e2e_recursive_func) {
-    XrProto *p = compile_source("fn fib(n: int) -> int {\n"
+    XrProto *p = compile_source("fn fib(n: i64) -> i64 {\n"
                                 "  if (n <= 1) { return n }\n"
                                 "  return fib(n - 1) + fib(n - 2)\n"
                                 "}\nprint(fib(5))",
@@ -311,7 +311,7 @@ TEST(e2e_nested_call) {
     /* Tests the register clobber fix: nested calls to same function.
      * The callee branches so the inliner (which folds straight-line
      * shared-slot helpers into the caller) keeps both calls alive. */
-    XrProto *p = compile_source("fn add(a: int, b: int) -> int {\n"
+    XrProto *p = compile_source("fn add(a: i64, b: i64) -> i64 {\n"
                                 "  if (a < 0) { return b }\n"
                                 "  return a + b\n"
                                 "}\n"
@@ -346,7 +346,7 @@ TEST(e2e_dce_unused_var) {
      *   fn f() -> int { var x = 42; var y = 99; return x }
      * y is unused → LOADI 99 should be eliminated from the child proto. */
     XrProto *p =
-        compile_source("fn f() -> int { var x = 42\nvar y = 99\nreturn x }\nprint(f())", NULL);
+        compile_source("fn f() -> i64 { var x = 42\nvar y = 99\nreturn x }\nprint(f())", NULL);
     assert(p != NULL);
     /* Child proto (f) should have only one LOADI (for x=42); y=99 is dead */
     int nch = DYNARRAY_COUNT(&p->protos);
@@ -507,8 +507,8 @@ TEST(e2e_short_circuit) {
 /* ========== Multiple Functions ========== */
 
 TEST(e2e_multi_func) {
-    XrProto *p = compile_source("fn double(x: int) -> int { return x * 2 }\n"
-                                "fn negate(x: int) -> int { return -x }\n"
+    XrProto *p = compile_source("fn double(x: i64) -> i64 { return x * 2 }\n"
+                                "fn negate(x: i64) -> i64 { return -x }\n"
                                 "print(negate(double(3)))",
                                 NULL);
     assert(p != NULL);
@@ -556,7 +556,7 @@ TEST(e2e_template_string) {
 /* ========== Nullish Coalesce ========== */
 
 TEST(e2e_nullish_coalesce) {
-    XrProto *p = compile_source("var a: int? = null\nvar b = a ?? 42\nprint(b)", NULL);
+    XrProto *p = compile_source("var a: i64? = null\nvar b = a ?? 42\nprint(b)", NULL);
     assert(p != NULL);
     /* ?? lowers to ISNULL + conditional branch; verify enough instructions */
     int total = PROTO_CODE_COUNT(p);
@@ -597,7 +597,7 @@ TEST(e2e_try_catch) {
 TEST(e2e_slice) {
     XrProto *p = compile_source("fn useSlice() {\n"
                                 "  var arr = [1, 2, 3, 4, 5]\n"
-                                "  var s: Slice<int> = arr[1:3]\n"
+                                "  var s: Slice<i64> = arr[1:3]\n"
                                 "  print(s)\n"
                                 "}\n"
                                 "useSlice()",
@@ -609,7 +609,7 @@ TEST(e2e_slice) {
 }
 
 TEST(e2e_generator_completion_has_no_normal_return_value) {
-    XrProto *p = compile_source("fn counter(n: int) -> Iterator<int> {\n"
+    XrProto *p = compile_source("fn counter(n: i64) -> Iterator<i64> {\n"
                                 "  yield n\n"
                                 "}\n"
                                 "for (x in counter(1)) {\n"
@@ -625,8 +625,8 @@ TEST(e2e_generator_completion_has_no_normal_return_value) {
 /* ========== Closure (nested function) ========== */
 
 TEST(e2e_closure) {
-    XrProto *p = compile_source("fn make() -> fn() -> int {\n"
-                                "  fn inner() -> int { return 42 }\n"
+    XrProto *p = compile_source("fn make() -> fn() -> i64 {\n"
+                                "  fn inner() -> i64 { return 42 }\n"
                                 "  return inner\n"
                                 "}\nvar f = make()\nprint(f())",
                                 NULL);
@@ -702,7 +702,7 @@ static char *gen_many_functions(int nfuncs, int body_size) {
     size_t pos = 0;
     for (int f = 0; f < nfuncs; f++) {
         pos += (size_t) snprintf(buf + pos, cap - pos,
-                                 "fn func%d(x: int) -> int {\n  var acc = x\n", f);
+                                 "fn func%d(x: i64) -> i64 {\n  var acc = x\n", f);
         for (int s = 0; s < body_size; s++)
             pos += (size_t) snprintf(buf + pos, cap - pos, "  acc = acc + %d\n", s + 1);
         pos += (size_t) snprintf(buf + pos, cap - pos, "  return acc\n}\n");
@@ -839,7 +839,7 @@ TEST(e2e_analyzer_error_stops_before_lowering) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
     XaAnalyzer *analyzer = xa_analyzer_new(session);
     assert(analyzer != NULL);
-    AstNode *program = xr_parse(session, "var x: int = \"not an int\"\n");
+    AstNode *program = xr_parse(session, "var x: i64 = \"not an i64\"\n");
     assert(program != NULL);
     xa_analyzer_analyze(analyzer, "invalid.xr", program);
 
@@ -875,8 +875,8 @@ TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
 TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
     const char *source =
         "class Router {\n"
-        "    add<T>(value: T) -> int { return this.addRoute(value) }\n"
-        "    addRoute<T>(value: T) -> int { return 7 }\n"
+        "    add<T>(value: T) -> i64 { return this.addRoute(value) }\n"
+        "    addRoute<T>(value: T) -> i64 { return 7 }\n"
         "}\n"
         "var router = Router()\n"
         "print(router.add(1))\n";

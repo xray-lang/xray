@@ -54,7 +54,7 @@ fn test_mod_assign() {
 @test
 fn test_member_mod_assign_ignores_same_named_const() {
     class Counter {
-        value: int
+        value: i64
 
         constructor() {
             this.value = 17
@@ -64,7 +64,7 @@ fn test_member_mod_assign_ignores_same_named_const() {
             this.value %= 5
         }
 
-        get() -> int {
+        get() -> i64 {
             return this.value
         }
     }

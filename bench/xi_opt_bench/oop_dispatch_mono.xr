@@ -1,13 +1,13 @@
 class BenchCounter {
-    value: int = 0
+    value: i64 = 0
 
-    bump(x: int) -> int {
+    bump(x: i64) -> i64 {
         this.value = this.value + x
         return this.value
     }
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var counter = BenchCounter()
     var total = 0
     for (var i = 0; i < rounds; i++) {

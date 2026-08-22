@@ -1,46 +1,46 @@
-const TABLE: [int; 4] = comptime [2, 4, 6, 8]
-const BYTES: [byte; 4] = comptime [1, 3, 5, 7]
-const WEIGHTS: [float; 3] = comptime [1.5, 2.5, 3.5]
+const TABLE: [i64; 4] = comptime [2, 4, 6, 8]
+const BYTES: [u8; 4] = comptime [1, 3, 5, 7]
+const WEIGHTS: [f64; 3] = comptime [1.5, 2.5, 3.5]
 
-const MATRIX: [[byte; 4]; 2] = comptime [
+const MATRIX: [[u8; 4]; 2] = comptime [
     [1, 2, 3, 4],
     [5, 6, 7, 8],
 ]
 
-const CUBE: [[[int; 2]; 2]; 2] = comptime [
+const CUBE: [[[i64; 2]; 2]; 2] = comptime [
     [[1, 2], [3, 4]],
     [[5, 6], [7, 8]],
 ]
 
 struct Header {
-    magic: int
-    flags: int
+    magic: i64
+    flags: i64
 }
 
 const HEADER = comptime Header{magic: TABLE[1], flags: TABLE[3]}
 
 struct PlainHeader {
-    magic: int
-    flags: int
+    magic: i64
+    flags: i64
 }
 
 const PLAIN_HEADER = PlainHeader{magic: TABLE[0], flags: TABLE[1]}
 
 struct Packet {
-    bytes: [byte; 4]
-    base: int
+    bytes: [u8; 4]
+    base: i64
 }
 
 const PACKET = comptime Packet{bytes: [1, 2, 3, 4], base: HEADER.flags}
 
 struct Inner {
-    code: int
+    code: i64
     flag: bool
 }
 
 struct Outer {
     inner: Inner
-    base: int
+    base: i64
 }
 
 const OUTER = comptime Outer{inner: Inner{code: TABLE[2], flag: true}, base: PACKET.base}
@@ -51,7 +51,7 @@ const GROUPS: [Outer; 2] = comptime [
 ]
 
 const PAIR = comptime (HEADER.magic, TABLE[2], WEIGHTS[1])
-const PAIR_ROWS: [(int, int); 2] = comptime [
+const PAIR_ROWS: [(i64, i64); 2] = comptime [
     (TABLE[0], TABLE[1]),
     (TABLE[2], TABLE[3]),
 ]
@@ -67,27 +67,27 @@ const LABEL_CUBE: [[[string; 2]; 2]; 2] = comptime [
 const LABELED = comptime (LABEL, TABLE[0])
 const NESTED = comptime ((TABLE[0], LABEL), (WEIGHTS[2], TABLE[3]))
 const LABELS: [string; 2] = comptime ["level", LABEL]
-const LABELED_ROWS: [(string, int); 2] = comptime [
+const LABELED_ROWS: [(string, i64); 2] = comptime [
     (LABEL, TABLE[0]),
     ("done", TABLE[1]),
 ]
 
 struct Named {
     label: string
-    code: int
+    code: i64
 }
 
 const NAMED = comptime Named{label: LABEL, code: TABLE[1]}
 
 struct LabelBox {
     labels: [string; 2]
-    code: int
+    code: i64
 }
 
 const LABEL_BOX = comptime LabelBox{labels: [LABEL, "bonus"], code: TABLE[2]}
 
 struct Entry {
-    code: int
+    code: i64
     flag: bool
 }
 
@@ -97,8 +97,8 @@ const ENTRIES: [Entry; 2] = comptime [
 ]
 
 struct Row {
-    samples: [byte; 4]
-    weight: int
+    samples: [u8; 4]
+    weight: i64
 }
 
 const ROWS: [Row; 2] = comptime [
@@ -108,7 +108,7 @@ const ROWS: [Row; 2] = comptime [
 
 struct LabelRow {
     labels: [string; 2]
-    code: int
+    code: i64
 }
 
 const LABEL_ROWS: [LabelRow; 2] = comptime [
@@ -118,12 +118,12 @@ const LABEL_ROWS: [LabelRow; 2] = comptime [
 
 struct LabelInner {
     label: string
-    code: int
+    code: i64
 }
 
 struct LabelGroup {
     inner: LabelInner
-    base: int
+    base: i64
 }
 
 const LABEL_GROUPS: [LabelGroup; 2] = comptime [
@@ -132,7 +132,7 @@ const LABEL_GROUPS: [LabelGroup; 2] = comptime [
 ]
 
 packed struct PackedPair {
-    tag: byte
+    tag: u8
     value: u32
 }
 
@@ -141,7 +141,7 @@ struct AlignedWord align(16) {
 }
 
 packed struct PackedAligned align(16) {
-    tag: byte
+    tag: u8
     value: u32
 }
 
@@ -156,7 +156,7 @@ union I32Bits {
 
 union U32Bytes {
     u: u32
-    b: [byte; 4]
+    b: [u8; 4]
 }
 
 const BITS = comptime I32Bits{i: -1}
@@ -174,7 +174,7 @@ const WORD_ROWS: [U32Bytes; 2] = comptime [
 
 struct BitHolder {
     bits: I32Bits
-    base: int
+    base: i64
 }
 
 const BIT_HOLDER = comptime BitHolder{bits: I32Bits{u: 33}, base: TABLE[0]}
@@ -186,7 +186,7 @@ const BIT_GROUPS: [BitHolder; 2] = comptime [
 
 struct WordHolder {
     word: U32Bytes
-    base: int
+    base: i64
 }
 
 const WORD_HOLDER = comptime WordHolder{word: U32Bytes{b: [9, 8, 7, 6]}, base: TABLE[1]}
@@ -196,167 +196,167 @@ const WORD_GROUPS: [WordHolder; 2] = comptime [
     WordHolder{word: U32Bytes{b: [8, 7, 6, 5]}, base: TABLE[3]},
 ]
 
-fn xray_top_const_aggregate() -> int {
+fn xray_top_const_aggregate() -> i64 {
     const first = comptime TABLE[0]
     const magic = comptime HEADER.magic
     const flags = comptime HEADER.flags
     return first + magic + flags
 }
 
-fn xray_top_const_array_runtime(i: int) -> int {
+fn xray_top_const_array_runtime(i: i64) -> i64 {
     return TABLE[i]
 }
 
-fn xray_top_const_byte_runtime(i: int) -> int {
-    return BYTES[i] as int
+fn xray_top_const_byte_runtime(i: i64) -> i64 {
+    return BYTES[i] as i64
 }
 
-fn xray_top_const_float_runtime(i: int) -> float {
+fn xray_top_const_float_runtime(i: i64) -> f64 {
     return WEIGHTS[i]
 }
 
-fn xray_top_const_matrix_runtime(row: int, col: int) -> int {
-    return MATRIX[row][col] as int
+fn xray_top_const_matrix_runtime(row: i64, col: i64) -> i64 {
+    return MATRIX[row][col] as i64
 }
 
-fn xray_top_const_cube_runtime(i: int, j: int, k: int) -> int {
+fn xray_top_const_cube_runtime(i: i64, j: i64, k: i64) -> i64 {
     return CUBE[i][j][k]
 }
 
-fn xray_top_const_struct_runtime() -> int {
+fn xray_top_const_struct_runtime() -> i64 {
     return HEADER.magic + HEADER.flags
 }
 
-fn xray_top_const_plain_struct_runtime() -> int {
+fn xray_top_const_plain_struct_runtime() -> i64 {
     return PLAIN_HEADER.magic + PLAIN_HEADER.flags
 }
 
-fn xray_top_const_struct_array_runtime(i: int) -> int {
-    return PACKET.bytes[i] as int + PACKET.base
+fn xray_top_const_struct_array_runtime(i: i64) -> i64 {
+    return PACKET.bytes[i] as i64 + PACKET.base
 }
 
-fn xray_top_const_nested_struct_runtime() -> int {
+fn xray_top_const_nested_struct_runtime() -> i64 {
     return OUTER.inner.code + OUTER.base
 }
 
-fn xray_top_const_tuple_runtime() -> int {
+fn xray_top_const_tuple_runtime() -> i64 {
     return PAIR.0 + PAIR.1
 }
 
-fn xray_top_const_tuple_float_runtime() -> float {
+fn xray_top_const_tuple_float_runtime() -> f64 {
     return PAIR.2
 }
 
-fn xray_top_const_tuple_array_runtime(i: int) -> int {
+fn xray_top_const_tuple_array_runtime(i: i64) -> i64 {
     return PAIR_ROWS[i].0 + PAIR_ROWS[i].1
 }
 
-fn xray_top_const_nested_tuple_runtime() -> int {
+fn xray_top_const_nested_tuple_runtime() -> i64 {
     return NESTED.0.0 + NESTED.1.1
 }
 
-fn xray_top_const_nested_tuple_float_runtime() -> float {
+fn xray_top_const_nested_tuple_float_runtime() -> f64 {
     return NESTED.1.0
 }
 
-fn xray_top_const_string_print() -> int {
+fn xray_top_const_string_print() -> i64 {
     print(LABEL)
     return 1
 }
 
-fn xray_top_const_tuple_string_print() -> int {
+fn xray_top_const_tuple_string_print() -> i64 {
     print(LABELED.0)
     return LABELED.1
 }
 
-fn xray_top_const_tuple_array_string_print(i: int) -> int {
+fn xray_top_const_tuple_array_string_print(i: i64) -> i64 {
     print(LABELED_ROWS[i].0)
     return LABELED_ROWS[i].1
 }
 
-fn xray_top_const_nested_tuple_string_print() -> int {
+fn xray_top_const_nested_tuple_string_print() -> i64 {
     print(NESTED.0.1)
     return NESTED.0.0
 }
 
-fn xray_top_const_struct_string_print() -> int {
+fn xray_top_const_struct_string_print() -> i64 {
     print(NAMED.label)
     return NAMED.code
 }
 
-fn xray_top_const_string_array_print(i: int) -> int {
+fn xray_top_const_string_array_print(i: i64) -> i64 {
     print(LABELS[i])
     return i
 }
 
-fn xray_top_const_string_matrix_print(row: int, col: int) -> int {
+fn xray_top_const_string_matrix_print(row: i64, col: i64) -> i64 {
     print(LABEL_MATRIX[row][col])
     return row + col
 }
 
-fn xray_top_const_string_cube_print(i: int, j: int, k: int) -> int {
+fn xray_top_const_string_cube_print(i: i64, j: i64, k: i64) -> i64 {
     print(LABEL_CUBE[i][j][k])
     return i + j + k
 }
 
-fn xray_top_const_struct_string_array_print(i: int) -> int {
+fn xray_top_const_struct_string_array_print(i: i64) -> i64 {
     print(LABEL_BOX.labels[i])
     return LABEL_BOX.code
 }
 
-fn xray_top_const_struct_array_field_runtime(i: int) -> int {
+fn xray_top_const_struct_array_field_runtime(i: i64) -> i64 {
     return ENTRIES[i].code + (ENTRIES[i].flag ? 1 : 0)
 }
 
-fn xray_top_const_struct_array_fixed_field_runtime(row: int, col: int) -> int {
-    return ROWS[row].samples[col] as int + ROWS[row].weight
+fn xray_top_const_struct_array_fixed_field_runtime(row: i64, col: i64) -> i64 {
+    return ROWS[row].samples[col] as i64 + ROWS[row].weight
 }
 
-fn xray_top_const_struct_array_string_fixed_field_print(row: int, col: int) -> int {
+fn xray_top_const_struct_array_string_fixed_field_print(row: i64, col: i64) -> i64 {
     print(LABEL_ROWS[row].labels[col])
     return LABEL_ROWS[row].code
 }
 
-fn xray_top_const_struct_array_nested_field_runtime(i: int) -> int {
+fn xray_top_const_struct_array_nested_field_runtime(i: i64) -> i64 {
     return GROUPS[i].inner.code + GROUPS[i].base
 }
 
-fn xray_top_const_struct_array_nested_string_field_print(i: int) -> int {
+fn xray_top_const_struct_array_nested_string_field_print(i: i64) -> i64 {
     print(LABEL_GROUPS[i].inner.label)
     return LABEL_GROUPS[i].inner.code + LABEL_GROUPS[i].base
 }
 
-fn xray_top_const_packed_struct_runtime() -> int {
-    return (PACKED.tag as int) + (PACKED.value as int)
+fn xray_top_const_packed_struct_runtime() -> i64 {
+    return (PACKED.tag as i64) + (PACKED.value as i64)
 }
 
-fn xray_top_const_aligned_struct_runtime() -> int {
-    return ALIGNED.value as int
+fn xray_top_const_aligned_struct_runtime() -> i64 {
+    return ALIGNED.value as i64
 }
 
-fn xray_top_const_packed_aligned_struct_runtime() -> int {
-    return (PACKED_ALIGNED.tag as int) + (PACKED_ALIGNED.value as int)
+fn xray_top_const_packed_aligned_struct_runtime() -> i64 {
+    return (PACKED_ALIGNED.tag as i64) + (PACKED_ALIGNED.value as i64)
 }
 
-fn xray_top_const_union_u32_runtime() -> int {
-    return unsafe { BITS.u } as int
+fn xray_top_const_union_u32_runtime() -> i64 {
+    return unsafe { BITS.u } as i64
 }
 
-fn xray_top_const_union_byte_runtime(i: int) -> int {
-    return unsafe { WORD_BYTES.b }[i] as int
+fn xray_top_const_union_byte_runtime(i: i64) -> i64 {
+    return unsafe { WORD_BYTES.b }[i] as i64
 }
 
-fn xray_top_const_union_array_runtime(i: int) -> int {
-    return (unsafe { BIT_ROWS[i].u } as int) + (unsafe { WORD_ROWS[i].b }[i] as int)
+fn xray_top_const_union_array_runtime(i: i64) -> i64 {
+    return (unsafe { BIT_ROWS[i].u } as i64) + (unsafe { WORD_ROWS[i].b }[i] as i64)
 }
 
-fn xray_top_const_struct_nested_union_runtime(i: int) -> int {
-    return (unsafe { BIT_HOLDER.bits.u } as int) + (unsafe { WORD_HOLDER.word.b }[i] as int) +
+fn xray_top_const_struct_nested_union_runtime(i: i64) -> i64 {
+    return (unsafe { BIT_HOLDER.bits.u } as i64) + (unsafe { WORD_HOLDER.word.b }[i] as i64) +
         BIT_HOLDER.base + WORD_HOLDER.base
 }
 
-fn xray_top_const_struct_array_nested_union_runtime(row: int, col: int) -> int {
-    return (unsafe { BIT_GROUPS[row].bits.u } as int) +
-        (unsafe { WORD_GROUPS[row].word.b }[col] as int) +
+fn xray_top_const_struct_array_nested_union_runtime(row: i64, col: i64) -> i64 {
+    return (unsafe { BIT_GROUPS[row].bits.u } as i64) +
+        (unsafe { WORD_GROUPS[row].word.b }[col] as i64) +
         BIT_GROUPS[row].base + WORD_GROUPS[row].base
 }

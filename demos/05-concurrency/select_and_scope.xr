@@ -9,7 +9,7 @@ import time
 const ch1 = Channel<string>(1)
 const ch2 = Channel<string>(1)
 
-fn sendDelayed(ch: Channel<string>, msg: string, delay: int) {
+fn sendDelayed(ch: Channel<string>, msg: string, delay: i64) {
     time.sleep(delay)
     ch.send(msg)
 }
@@ -59,7 +59,7 @@ print("all tasks in scope completed")
 print("\n--- parallel pipeline ---")
 const results = Channel<string>(3)
 
-fn fetchData(id: int, out: Channel<string>) {
+fn fetchData(id: i64, out: Channel<string>) {
     time.sleep(10)
     out.send("data-${id}")
 }

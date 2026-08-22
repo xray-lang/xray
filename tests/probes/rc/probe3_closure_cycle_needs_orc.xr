@@ -24,15 +24,15 @@ import runtime
 // 后者当前被解析成单元素元组的可空版本（`(fn(): int,)?`），赋闭包字面量
 // 时报 E0352——那是独立于本任务的类型解析问题。
 class Button {
-    onClick: fn() -> int
-    clicks: int
+    onClick: fn() -> i64
+    clicks: i64
 
     constructor() {
-        this.onClick = fn() -> int { return 0 }
+        this.onClick = fn() -> i64 { return 0 }
         this.clicks = 0
     }
 
-    render() -> int {
+    render() -> i64 {
         this.clicks = this.clicks + 1
         return this.clicks
     }
@@ -43,23 +43,23 @@ class Button {
 // 不报的一级间接形态：闭包存入 b 的字段所指的另一个对象。零误报优先，这一
 // 类交给阶段 D 的运行期检测器兜底。
 class Slot {
-    handler: fn() -> int
+    handler: fn() -> i64
 
     constructor() {
-        this.handler = fn() -> int { return 0 }
+        this.handler = fn() -> i64 { return 0 }
     }
 }
 
 class Widget {
     slot: Slot
-    clicks: int
+    clicks: i64
 
     constructor() {
         this.slot = Slot()
         this.clicks = 0
     }
 
-    render() -> int {
+    render() -> i64 {
         this.clicks = this.clicks + 1
         return this.clicks
     }
@@ -67,7 +67,7 @@ class Widget {
 
 fn make_direct_closure_cycle() {
     var w = Widget()
-    w.slot.handler = fn() -> int {
+    w.slot.handler = fn() -> i64 {
         return w.render()
     }
 }
@@ -75,23 +75,23 @@ fn make_direct_closure_cycle() {
 // 间接形态：闭包存入另一个对象，而那个对象由被捕获的对象持有。
 // A.6 明确**不**报这一形态（零误报优先），由阶段 D 的检测器兜底。
 class Holder {
-    handler: fn() -> int
+    handler: fn() -> i64
 
     constructor() {
-        this.handler = fn() -> int { return 0 }
+        this.handler = fn() -> i64 { return 0 }
     }
 }
 
 class Owner {
     holder: Holder
-    value: int
+    value: i64
 
     constructor() {
         this.holder = Holder()
         this.value = 0
     }
 
-    bump() -> int {
+    bump() -> i64 {
         this.value = this.value + 1
         return this.value
     }
@@ -99,15 +99,15 @@ class Owner {
 
 fn make_indirect_closure_cycle() {
     var o = Owner()
-    o.holder.handler = fn() -> int {
+    o.holder.handler = fn() -> i64 {
         return o.bump()
     }
 }
 
 // 无环对照：闭包捕获后不被存入捕获对象可达的位置。
-fn make_closure_without_cycle() -> int {
+fn make_closure_without_cycle() -> i64 {
     var b = Button()
-    var f = fn() -> int {
+    var f = fn() -> i64 {
         return b.render()
     }
     return f()
@@ -175,10 +175,10 @@ fn test_indirect_closure_cycle_observable() {
 // 裁决能成立的前提。
 fn make_closure_cycle_broken_by_defer() {
     var w = Widget()
-    w.slot.handler = fn() -> int {
+    w.slot.handler = fn() -> i64 {
         return w.render()
     }
-    defer { w.slot.handler = fn() -> int { return 0 } }
+    defer { w.slot.handler = fn() -> i64 { return 0 } }
 }
 
 @test
@@ -213,10 +213,10 @@ fn test_defer_breaks_the_closure_cycle() {
     // 与残留无关、任何阶段都必须成立的一条：断环后对象仍然可用，defer 没有
     // 提前释放任何东西。
     var w = Widget()
-    w.slot.handler = fn() -> int { return w.render() }
+    w.slot.handler = fn() -> i64 { return w.render() }
     var handler = w.slot.handler
     assert(handler() == 1)
-    w.slot.handler = fn() -> int { return 0 }
+    w.slot.handler = fn() -> i64 { return 0 }
     var cleared = w.slot.handler
     assert(cleared() == 0)
 }

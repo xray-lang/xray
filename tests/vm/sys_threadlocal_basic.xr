@@ -1,6 +1,6 @@
 import sys
 
-const local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<i64>(fn() -> i64 {
     return 10
 })
 
@@ -8,7 +8,7 @@ print(local.get())
 local.set(20)
 print(local.get())
 
-var t = sys.Thread.spawn(fn() -> int {
+var t = sys.Thread.spawn(fn() -> i64 {
     var first = local.get()
     local.set(first + 5)
     return local.get()

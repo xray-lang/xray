@@ -1,11 +1,11 @@
 class Base {
-    run(value: int) -> int {
+    run(value: i64) -> i64 {
         return value + 1
     }
 }
 
 class Child extends Base {
-    run(value: string) -> int {
+    run(value: string) -> i64 {
         return len(value)
     }
 }

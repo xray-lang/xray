@@ -1,13 +1,13 @@
 class Counter {
-    value: int
-    step: int
+    value: i64
+    step: i64
 
-    constructor(init: int, step: int) {
+    constructor(init: i64, step: i64) {
         this.value = init
         this.step = step
     }
 
-    bump(n: int) -> int {
+    bump(n: i64) -> i64 {
         var i = 0
         var sum = 0
         while (i < n) {
@@ -19,7 +19,7 @@ class Counter {
     }
 }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var c = Counter(1, 3)
     return c.bump(n)
 }

@@ -166,10 +166,10 @@ static void test_tagged_map_preserves_declared_scalar_key_lane(void) {
     xrt_array_t *key_array = (xrt_array_t *) keys.ptr;
 
     ASSERT_EQ_INT(key_array->elem_type, XR_ELEM_F64,
-                  "Map<float, tagged>.keys keeps packed float lanes");
+                  "Map<f64, tagged>.keys keeps packed f64 lanes");
     ASSERT_EQ_INT(key_array->length, 1, "keys returns the declared scalar key");
     ASSERT_TRUE(((double *) key_array->data)[0] == 1.0,
-                "the packed float key is not misread as tagged storage");
+                "the packed f64 key is not misread as tagged storage");
     xrt_release(keys);
     xrt_map_destroy(map);
 }

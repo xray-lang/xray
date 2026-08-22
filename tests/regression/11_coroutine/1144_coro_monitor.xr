@@ -2,7 +2,7 @@
 
 import time
 
-fn worker1() -> int {
+fn worker1() -> i64 {
     time.sleep(50)
     return 42
 }
@@ -10,7 +10,7 @@ fn worker2() -> string {
     time.sleep(30)
     return "done"
 }
-fn worker3() -> int {
+fn worker3() -> i64 {
     return 100
 }
 

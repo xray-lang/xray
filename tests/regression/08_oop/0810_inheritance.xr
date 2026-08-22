@@ -103,25 +103,25 @@ fn test_polymorphism() {
 // ===== 继承字段访问 =====
 
 class Base {
-    value: int
+    value: i64
 
     constructor(v) {
         this.value = v
     }
 
-    getValue() -> int {        return this.value
+    getValue() -> i64 {        return this.value
     }
 }
 
 class Derived extends Base {
-    extra: int
+    extra: i64
 
     constructor(v, e) {
         super(v)
         this.extra = e
     }
 
-    getSum() -> int {        return this.value + this.extra
+    getSum() -> i64 {        return this.value + this.extra
     }
 }
 
@@ -138,9 +138,9 @@ fn test_inherited_field_access() {
 
 class Person {
     name: string
-    age: int
+    age: i64
 
-    constructor(name: string, age: int) {
+    constructor(name: string, age: i64) {
         this.name = name
         this.age = age
     }
@@ -150,9 +150,9 @@ class Person {
 }
 
 class Student extends Person {
-    grade: int
+    grade: i64
 
-    constructor(name: string, age: int, grade: int) {
+    constructor(name: string, age: i64, grade: i64) {
         super(name, age)
         this.grade = grade
     }

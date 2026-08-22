@@ -1,2 +1,2 @@
-fn use(v: Indexable<int, string>) -> bool { return true }
+fn use(v: Indexable<i64, string>) -> bool { return true }
 print(true)

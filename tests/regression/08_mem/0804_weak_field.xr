@@ -17,7 +17,7 @@ import runtime
 
 class Parent {
     children: Array<Child>
-    tag: int
+    tag: i64
 
     constructor(tag) {
         this.children = []
@@ -27,7 +27,7 @@ class Parent {
 
 class Child {
     weak parent: Parent?
-    tag: int
+    tag: i64
 
     constructor(tag) {
         this.parent = null
@@ -70,7 +70,7 @@ fn test_weak_reads_null_after_the_target_is_released() {
 
 // 断环的实测效果：双向链接离开作用域后必须被纯 RC 完全回收。
 // 这是 weak 存在的全部理由——没有它，这个形态就是泄漏。
-fn make_linked_pair(i: int) {
+fn make_linked_pair(i: i64) {
     var p = Parent(i)
     var c = Child(i + 1)
     c.parent = p

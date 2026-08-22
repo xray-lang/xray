@@ -884,7 +884,7 @@ AstNode *xr_ast_index_set(XrCompilerSession *session, AstNode *array, AstNode *i
 }
 
 // Create slice expression node
-// source: source object expression (Array, String, Slice<byte>)
+// source: source object expression (Array, String, Slice<u8>)
 // start: start index expression (can be NULL)
 // end: end index expression (can be NULL)
 AstNode *xr_ast_slice_expr(XrCompilerSession *session, AstNode *source, AstNode *start,

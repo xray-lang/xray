@@ -1,8 +1,8 @@
-fn xray_no_alloc_json_values_reject(value: JSON.Object) -> int {
+fn xray_no_alloc_json_values_reject(value: JSON.Object) -> i64 {
     return len(value.values())
 }
 
-fn xray_no_alloc_json_entries_reject(value: JSON.Object) -> int {
+fn xray_no_alloc_json_entries_reject(value: JSON.Object) -> i64 {
     return len(value.entries())
 }
 
@@ -18,7 +18,7 @@ fn xray_no_alloc_json_tostring_reject(value: JSON.Object) -> string {
     return value.toString()
 }
 
-fn xray_no_alloc_range_values_reject(value: Range) -> int {
+fn xray_no_alloc_range_values_reject(value: Range) -> i64 {
     return len(value.values())
 }
 

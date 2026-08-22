@@ -2,7 +2,7 @@
 // A `defer` inside a coroutine body runs at the coroutine function's exit. With
 // each task awaited before the next is spawned, the schedule is deterministic,
 // so VM and AOT must agree on the interleaving of body / deferred output.
-fn task(id: int) -> int {
+fn task(id: i64) -> i64 {
     defer { print("task-defer " + string(id)) }
     print("task-body " + string(id))
     return id * 10

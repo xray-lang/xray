@@ -19,7 +19,7 @@ fn test_concurrent_short_concat() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     
-    fn short_concat_task(id: int) -> string {
+    fn short_concat_task(id: i64) -> string {
         // 短字符串拼接（总长度 < 64，使用栈上缓冲区）
         var prefix = "task_"
         var suffix = "_done"
@@ -55,7 +55,7 @@ fn test_concurrent_long_concat() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     
-    fn long_concat_task(id: int) -> string {
+    fn long_concat_task(id: i64) -> string {
         // 长字符串拼接（总长度 >= 64，使用 XrStrBuf）
         var prefix = "x".repeat(50)
         var middle = "_id" + string(id) + "_"
@@ -100,7 +100,7 @@ fn test_concurrent_mixed_concat() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     
-    fn mixed_concat_task(id: int) -> string {
+    fn mixed_concat_task(id: i64) -> string {
         // 偶数 id 使用短字符串，奇数 id 使用长字符串
         if (id % 2 == 0) {
             return "short_" + string(id)
@@ -147,7 +147,7 @@ fn test_concurrent_loop_concat() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     
-    fn loop_concat_task(id: int) -> string {
+    fn loop_concat_task(id: i64) -> string {
         // 每个协程执行多次拼接（减少循环次数避免 GC 压力）
         var result = "start_" + string(id)
         for (var i = 0; i < 5; i++) {
@@ -188,7 +188,7 @@ fn test_concurrent_threshold_boundary() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     
-    fn boundary_concat_task(id: int) -> int {
+    fn boundary_concat_task(id: i64) -> i64 {
         // 根据 id 选择不同的长度组合，测试阈值边界
         var len_a = 30 + (id % 10)  // 30-39
         var len_b = 30 + (id % 10)  // 30-39
@@ -202,7 +202,7 @@ fn test_concurrent_threshold_boundary() {
     }
     
     var n = 50
-    var tasks: Array<Task<int>> = []
+    var tasks: Array<Task<i64>> = []
     for (var i = 0; i < n; i++) {
         tasks.push(go boundary_concat_task(i))
     }
@@ -226,7 +226,7 @@ fn test_concurrent_threshold_boundary() {
 
 // ===== 测试6: 并发数据隔离性验证 =====
 type IsolationResult = {
-    id: int,
+    id: i64,
     result: string,
     prefix_ok: bool,
     suffix_ok: bool,
@@ -244,7 +244,7 @@ fn test_concurrent_data_isolation() {
                  "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
                  "U", "V", "W", "X", "Y", "Z"]
     
-    fn isolation_task(id: int, unique_char: string) -> IsolationResult {
+    fn isolation_task(id: i64, unique_char: string) -> IsolationResult {
         // 每个协程使用唯一的字符串内容
         var prefix = unique_char.repeat(30)
         var suffix = unique_char.repeat(30)
@@ -293,7 +293,7 @@ fn test_stress_concurrent_concat() {
     // **Feature: string-concat-optimization, Property 5: 并发拼接正确性**
     // **Validates: Requirements 1.1, 5.1**
     
-    fn stress_task(id: int) -> Array<string> {
+    fn stress_task(id: i64) -> Array<string> {
         // 执行多次不同类型的拼接
         var results: Array<string> = []
         

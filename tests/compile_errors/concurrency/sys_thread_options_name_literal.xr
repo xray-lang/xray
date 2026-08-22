@@ -1,7 +1,7 @@
 import sys
 
 var workerName = "worker"
-var t = sys.Thread.spawn(ThreadOptions{ name: workerName }, fn() -> int {
+var t = sys.Thread.spawn(ThreadOptions{ name: workerName }, fn() -> i64 {
     return 1
 })
 print(t.join())

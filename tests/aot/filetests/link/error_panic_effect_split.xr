@@ -2,14 +2,14 @@ enum GateErr {
     Boom
 }
 
-fn typed_error(flag: bool) -> int {
+fn typed_error(flag: bool) -> i64 {
     if (flag) {
         throw GateErr.Boom
     }
     return 1
 }
 
-fn panic_boundary(n: int) -> int {
+fn panic_boundary(n: i64) -> i64 {
     try {
         return 10 / n
     } catch panic (p) {

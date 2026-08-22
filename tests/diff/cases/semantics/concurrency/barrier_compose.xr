@@ -9,7 +9,7 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 
 class Barrier {
     _latch: CountdownLatch
-    constructor(parties: int) {
+    constructor(parties: i64) {
         this._latch = CountdownLatch(parties)
     }
     wait() -> bool {

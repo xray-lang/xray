@@ -5,7 +5,7 @@
  */
 
 // Test 1: Basic tuple return
-fn divide(a: int, b: int) -> (int, bool) {
+fn divide(a: i64, b: i64) -> (i64, bool) {
     if (b == 0) {
         return (0, false)
     }
@@ -24,7 +24,7 @@ fn test_tuple_return_basic() {
 }
 
 // Test 2: Triple return values
-fn minmax(a: int, b: int, c: int) -> (int, int, int) {
+fn minmax(a: i64, b: i64, c: i64) -> (i64, i64, i64) {
     var min_val = a
     var max_val = a
     var sum = a + b + c
@@ -46,7 +46,7 @@ fn test_triple_return() {
 }
 
 // Test 3: Field access on a returned tuple without full destructure
-fn quadruple() -> (int, int, int, int) {
+fn quadruple() -> (i64, i64, i64, i64) {
     return (1, 2, 3, 4)
 }
 
@@ -59,11 +59,11 @@ fn test_partial_capture() {
 }
 
 // Test 4: Tuple return in a conditional
-fn safeDivide(a: int, b: int) -> (float, bool) {
+fn safeDivide(a: i64, b: i64) -> (f64, bool) {
     if (b == 0) {
         return (0.0, false)
     }
-    return (float(a) / float(b), true)
+    return ((a as f64) / (b as f64), true)
 }
 
 @test

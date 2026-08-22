@@ -11,7 +11,7 @@ fn popValue(stack: ref Array<i64>) -> i64 {
     return stack.pop()!
 }
 
-fn takeResult(stack: ref Array<i64>, n: int) -> Array<i64> {
+fn takeResult(stack: ref Array<i64>, n: i64) -> Array<i64> {
     var out = Array<i64>(n, 0)
     for (var i = 0; i < n; i += 1) {
         out[n - 1 - i] = stack.pop()!
@@ -19,7 +19,7 @@ fn takeResult(stack: ref Array<i64>, n: int) -> Array<i64> {
     return out
 }
 
-fn interp(code: Array<int>, arg: i64) -> i64 {
+fn interp(code: Array<i64>, arg: i64) -> i64 {
     var stack: Array<i64> = []
     var pos = 0
     while (pos < len(code)) {
@@ -43,10 +43,10 @@ fn interp(code: Array<int>, arg: i64) -> i64 {
 
 fn main() {
     // push arg, push arg, add, return -> arg + arg
-    var addCode: Array<int> = [1, 1, 10, 2]
+    var addCode: Array<i64> = [1, 1, 10, 2]
     assert(interp(addCode, 7) == 14)
     // push arg three times, add, add, return -> 3 * arg
-    var chainCode: Array<int> = [1, 1, 1, 10, 10, 2]
+    var chainCode: Array<i64> = [1, 1, 1, 10, 10, 2]
     assert(interp(chainCode, 5) == 15)
     print(interp(addCode, 7))
 }

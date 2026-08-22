@@ -1,7 +1,7 @@
-fn make() -> fn() -> int {
+fn make() -> fn() -> i64 {
     var owner = [1, 2, 3]
-    var view: Slice<int> = owner[0:2]
-    var read = fn() -> int {
+    var view: Slice<i64> = owner[0:2]
+    var read = fn() -> i64 {
         return len(view)
     }
     return read

@@ -1,7 +1,7 @@
-fn zeroCostWindowReject(data: Slice<int>, start: int) -> int {
+fn zeroCostWindowReject(data: Slice<i64>, start: i64) -> i64 {
     var window = data.window(start, 2)
     return len(window)
 }
 
-var values: [int; 4] = [1, 2, 3, 4]
+var values: [i64; 4] = [1, 2, 3, 4]
 print(zeroCostWindowReject(values[:], 1))

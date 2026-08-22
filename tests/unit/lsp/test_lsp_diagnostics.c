@@ -221,20 +221,20 @@ TEST(diagnostics_closure_cycle_reaches_lsp) {
     ASSERT(server != NULL);
 
     const char *code = "class Button {\n"
-                       "    onClick: fn() -> int\n"
-                       "    clicks: int\n"
+                       "    onClick: fn() -> i64\n"
+                       "    clicks: i64\n"
                        "    constructor() {\n"
-                       "        this.onClick = fn() -> int { return 0 }\n"
+                       "        this.onClick = fn() -> i64 { return 0 }\n"
                        "        this.clicks = 0\n"
                        "    }\n"
-                       "    render() -> int {\n"
+                       "    render() -> i64 {\n"
                        "        this.clicks = this.clicks + 1\n"
                        "        return this.clicks\n"
                        "    }\n"
                        "}\n"
                        "fn install() {\n"
                        "    var b = Button()\n"
-                       "    b.onClick = fn() -> int { return b.render() }\n"
+                       "    b.onClick = fn() -> i64 { return b.render() }\n"
                        "}\n";
     XrLspDocument *doc = open_and_parse(server, "file:///cycle.xr", code);
     ASSERT(doc != NULL);

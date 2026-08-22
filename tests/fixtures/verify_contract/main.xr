@@ -7,11 +7,11 @@ extern "C" {
     fn uncontracted_native(value: i32) -> i32
 }
 
-export fn pure(value: int) -> int {
+export fn pure(value: i64) -> i64 {
     return value + 1
 }
 
-export fn allocates(value: int) -> int {
+export fn allocates(value: i64) -> i64 {
     var values = [value]
     return len(values)
 }
@@ -22,7 +22,7 @@ export fn callsUncontractedNative(value: i32) -> i32 {
 
 // `yield expr` hands the frame to the iterator driving it; the scheduler is
 // never involved, so this proves `no_reschedule` but not `no_suspend`.
-export fn counter(n: int) -> Iterator<int> {
+export fn counter(n: i64) -> Iterator<i64> {
     for (var i = 0; i < n; i++) {
         yield i
     }
@@ -30,7 +30,7 @@ export fn counter(n: int) -> Iterator<int> {
 
 // Driving a generator resumes the generator's frame and returns normally, so
 // neither suspension dimension reaches this caller.
-export fn driveCounter(n: int) -> int {
+export fn driveCounter(n: i64) -> i64 {
     var sum = 0
     for (x in counter(n)) {
         sum = sum + x
@@ -44,7 +44,7 @@ print(callPrivateWide(41 as u64))
 // Task 247 phase G: a class whose type graph has no cycle. Pure RC reclaims
 // everything it builds, so `no_reference_cycles` is provable here.
 export class AcyclicLeaf {
-    v: int
+    v: i64
     constructor(v) { this.v = v }
 }
 
@@ -53,7 +53,7 @@ export class AcyclicLeaf {
 // compiler cannot tell that apart at the type level.
 export class CyclicNode {
     next: CyclicNode?
-    v: int
+    v: i64
     constructor(v) { this.next = null; this.v = v }
 }
 
@@ -62,7 +62,7 @@ export class CyclicNode {
 // end-to-end link between phase C (`weak`) and phase G (the contract).
 export class WeakBrokenNode {
     weak parent: WeakBrokenNode?
-    v: int
+    v: i64
     constructor(v) { this.parent = null; this.v = v }
 }
 

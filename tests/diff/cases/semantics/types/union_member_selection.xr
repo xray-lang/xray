@@ -2,11 +2,11 @@
 // A union value carries the member selected at the assignment point. Exact type
 // matches win over implicit conversion, so the selection never depends on the
 // order the members were written, and `is` tests are mutually exclusive.
-var a: int | float = 1
-print("a=${a} is int=${a is int} is float=${a is float}")
+var a: i64 | f64 = 1
+print("a=${a} is i64=${a is i64} is f64=${a is f64}")
 
-var b: int | float = 1.0
-print("b=${b} is int=${b is int} is float=${b is float}")
+var b: i64 | f64 = 1.0
+print("b=${b} is i64=${b is i64} is f64=${b is f64}")
 
 var c: i32 | string = 7
 print("c=${c} is i32=${c is i32} is string=${c is string}")
@@ -22,18 +22,18 @@ var widened: i32 | string = narrow
 print("widened=${widened} is i32=${widened is i32} is string=${widened is string}")
 
 // Reassignment reselects the member.
-var switched: int | float = 1
+var switched: i64 | f64 = 1
 switched = 2.5
-print("switched=${switched} is int=${switched is int} is float=${switched is float}")
+print("switched=${switched} is i64=${switched is i64} is f64=${switched is f64}")
 
 // Arm order does not affect which arm matches.
-var m1: int | float = 3
+var m1: i64 | f64 = 3
 match (m1) {
-    is float -> print("m1 float"),
-    is int -> print("m1 int"),
+    is f64 -> print("m1 f64"),
+    is i64 -> print("m1 i64"),
 }
-var m2: int | float = 3.5
+var m2: i64 | f64 = 3.5
 match (m2) {
-    is int -> print("m2 int"),
-    is float -> print("m2 float"),
+    is i64 -> print("m2 i64"),
+    is f64 -> print("m2 f64"),
 }

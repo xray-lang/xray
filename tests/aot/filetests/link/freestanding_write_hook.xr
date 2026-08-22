@@ -1,4 +1,4 @@
-fn xray_print_score(n: int) -> int {
+fn xray_print_score(n: i64) -> i64 {
     print("score", n)
     return n + 1
 }

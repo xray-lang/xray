@@ -31,7 +31,7 @@ var _async = false
 var _asyncQueue: Array<string> = []
 var _dropped = 0
 
-fn _levelValue(level: LogLevel) -> int {
+fn _levelValue(level: LogLevel) -> i64 {
     return match (level) {
         LogLevel.Debug -> 0,
         LogLevel.Info  -> 1,
@@ -78,7 +78,7 @@ fn _jsonValue(value: JSON.Value) -> string {
     var t = typeName(value)
     if (t == "null") { return "null" }
     if (t == "bool") { return (value as bool) ? "true" : "false" }
-    if (t == "int" || t == "float") { return string(value) }
+    if (t == "i64" || t == "f64") { return string(value) }
     return _jsonEscape(string(value))
 }
 
@@ -97,7 +97,7 @@ fn _message(args: Array<JSON.Value>) -> string {
     return string(args[0])
 }
 
-fn _appendTextAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: int) {
+fn _appendTextAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: i64) {
     var i = start
     while (i + 1 < len(args)) {
         var key = string(args[i])
@@ -116,7 +116,7 @@ fn _appendTextAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: int)
     }
 }
 
-fn _appendJsonAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: int) {
+fn _appendJsonAttrs(out: ref StringBuilder, args: Array<JSON.Value>, start: i64) {
     var i = start
     while (i + 1 < len(args)) {
         out.append(",")

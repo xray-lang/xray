@@ -22,7 +22,7 @@ from typing import Any
 
 
 NUMERIC_SOURCE_RE = re.compile(
-    r"\b(?:byte|u8|u16|u32|u64|usize|i8|i16|i32|i64|isize|int|f32|f64|float)\b"
+    r"\b(?:u8|u16|u32|u64|usize|i8|i16|i32|i64|isize|f32|f64)\b"
     r"|\b(?:0[xob][0-9A-Fa-f_]+|[0-9][0-9_]*)\b"
 )
 

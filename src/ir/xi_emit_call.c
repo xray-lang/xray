@@ -1134,6 +1134,21 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_builtin_unary_opcode(ctx, v, dst, OP_CHR);
         return;
     }
+    if (bname && (strcmp(bname, "i64.parse") == 0 || strcmp(bname, "i64.tryParse") == 0 ||
+                  strcmp(bname, "f64.parse") == 0 || strcmp(bname, "f64.tryParse") == 0)) {
+        if (v->nargs != 1) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        XiEmitReg src = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint16_t mode = strstr(bname, ".tryParse") ? XR_CONVERSION_BC_PARSE_OPTIONAL
+                                                   : XR_CONVERSION_BC_PARSE_REQUIRED;
+        emit_inst(ctx, CREATE_ABC(strncmp(bname, "i64.", 4) == 0 ? OP_TOINT : OP_TOFLOAT, dst,
+                                  src, mode));
+        return;
+    }
     if (bname && strcmp(bname, "StringBuilder") == 0) {
         /* OP_NEWSTRINGBUILDER: A=dst, B=storage_mode (0=normal) */
         emit_inst(

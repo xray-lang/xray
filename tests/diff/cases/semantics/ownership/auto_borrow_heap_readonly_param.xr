@@ -1,16 +1,16 @@
-fn lenOf(a: Array<int>) -> int {
+fn lenOf(a: Array<i64>) -> i64 {
     return len(a)
 }
 
-fn first(m: Map<string, int>, k: string) -> int {
+fn first(m: Map<string, i64>, k: string) -> i64 {
     return m[k]
 }
 
-var xs: Array<int> = [1, 2, 3]
+var xs: Array<i64> = [1, 2, 3]
 print(lenOf(xs))
 xs.push(4)
 print(lenOf(xs))
 
-var m: Map<string, int> = #{}
+var m: Map<string, i64> = #{}
 m.set("x", 7)
 print(first(m, "x"))

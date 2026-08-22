@@ -1,4 +1,4 @@
-fn readSlot(outputs: Array<Array<byte>>, index: int) -> int {
+fn readSlot(outputs: Array<Array<u8>>, index: i64) -> i64 {
     var sharedOutputs = copy(outputs)
     unsafe {
         var block = sharedOutputs.get(index)
@@ -6,10 +6,10 @@ fn readSlot(outputs: Array<Array<byte>>, index: int) -> int {
     }
 }
 
-var block: Array<byte> = Array.withCapacity(1)
+var block: Array<u8> = Array.withCapacity(1)
 unsafe {
     block.push(7)
 }
-var outputs: Array<Array<byte>> = []
+var outputs: Array<Array<u8>> = []
 outputs.push(block)
 print(readSlot(outputs, 0))

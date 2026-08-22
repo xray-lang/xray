@@ -3,17 +3,17 @@
 // The op table is a const Array<CFn<...>> of module-level ops.
 extern "C" { fn malloc(n: usize) -> MutPtr<i32> }
 
-type Op = CFn<fn(int, MutPtr<i32>, int) -> int>
+type Op = CFn<fn(i64, MutPtr<i32>, i64) -> i64>
 
 var IMM: Array<i32> = [10, 20, 0, 0]
 
-fn opConst(pc: int, stack: MutPtr<i32>, sp: int) -> int {
+fn opConst(pc: i64, stack: MutPtr<i32>, sp: i64) -> i64 {
     var target = stack
     unsafe { target[sp] = IMM[pc] }
     return OPS[pc + 1](pc + 1, target, sp + 1)
 }
 
-fn opReturn(pc: int, stack: MutPtr<i32>, sp: int) -> int {
+fn opReturn(pc: i64, stack: MutPtr<i32>, sp: i64) -> i64 {
     return unsafe { stack[sp - 1] }
 }
 

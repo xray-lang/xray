@@ -34,7 +34,7 @@ import "./modules/error_source" as src
 }
 
 @test fn auto_propagation_cross_module() {
-    fn wrapper() -> int {
+    fn wrapper() -> i64 {
         var x = src.safe_div(100, 0)
         return x + 1
     }

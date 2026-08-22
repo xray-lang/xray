@@ -3,7 +3,7 @@
 // produces NaN, and constant folding must match runtime behavior.
 import math
 
-fn runtime_div(a: float, b: float) -> float {
+fn runtime_div(a: f64, b: f64) -> f64 {
     return a / b
 }
 

@@ -17,11 +17,11 @@ print(blib.sumLengths(["gamma", "delta", "epsilon"]))
 
 // Array<byte>(literal) builds a fresh converted array; the literal is only
 // read by the constructor and the conversion is only read by the callee.
-print(sumBytes(Array<byte>([1, 2, 3, 4, 5])))
-print(blib.sumBytes(Array<byte>([10, 20, 30])))
+print(sumBytes(Array<u8>([1, 2, 3, 4, 5])))
+print(blib.sumBytes(Array<u8>([10, 20, 30])))
 
-fn decode(vals: Array<byte>) -> string {
-    var out = Array<byte>(len(vals))
+fn decode(vals: Array<u8>) -> string {
+    var out = Array<u8>(len(vals))
     for (var i = 0; i < len(vals); i++) {
         out[i] = vals[i]
     }
@@ -29,6 +29,6 @@ fn decode(vals: Array<byte>) -> string {
     // returns a fresh string, so `out` still dies (and drops) in this frame.
     return string.fromUtf8(out[:])!
 }
-print(decode(Array<byte>([72, 105])))
+print(decode(Array<u8>([72, 105])))
 
 print(string.join(["a", "b", "c"], "-"))

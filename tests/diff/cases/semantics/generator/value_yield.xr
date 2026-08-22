@@ -2,7 +2,7 @@
 // `yield expr` creates a pull-driven Iterator<T>. VM and AOT must agree on
 // production order, for-in consumption, and early break laziness.
 
-fn counter(n: int) -> Iterator<int> {
+fn counter(n: i64) -> Iterator<i64> {
     print("start " + string(n))
     for (var i = 0; i < n; i++) {
         print("yield " + string(i))

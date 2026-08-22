@@ -1,4 +1,4 @@
-type Inner = { count: int, ok: bool }
+type Inner = { count: i64, ok: bool }
 type Payload = { name: string, inner: Inner, values: Array<JSON.Value> }
 
 var payload = JSON.parse<Payload>(

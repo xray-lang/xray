@@ -1,6 +1,6 @@
-fn mutate(data: Array<int>) {
+fn mutate(data: Array<i64>) {
     data[0] = 9
 }
 
-var values: Array<int> = [1, 2, 3]
+var values: Array<i64> = [1, 2, 3]
 mutate(values)

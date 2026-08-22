@@ -38,7 +38,7 @@ fn test_dump_bool() {
 
 @test
 fn test_dump_null() {
-    var n: int? = null
+    var n: i64? = null
     dump(n)
     assert_eq(n == null, true)
 }
@@ -90,7 +90,7 @@ fn test_dump_with_indent() {
 fn test_dump_inside_function() {
     // Regression for: dump() inside a function body must not interfere
     // with the function's return register or local variables.
-    fn helper(v: int) -> int {
+    fn helper(v: i64) -> i64 {
         var doubled = v * 2
         dump(doubled)
         return doubled + 1

@@ -4,13 +4,13 @@
 @test
 fn test_int_literal() {
     var x = 42
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 }
 
 @test
 fn test_float_literal() {
     var x = 3.14
-    assert_eq(typeName(x), "float")
+    assert_eq(typeName(x), "f64")
 }
 
 @test
@@ -49,7 +49,7 @@ fn test_array_string() {
 
 @test
 fn test_array_empty() {
-    var arr: Array<int> = []
+    var arr: Array<i64> = []
     assert_eq(typeName(arr), "Array")
 }
 
@@ -70,7 +70,7 @@ fn test_map_basic() {
 
 @test
 fn test_map_empty() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     assert_eq(typeName(m), "Map")
 }
 
@@ -91,7 +91,7 @@ fn test_arithmetic_int() {
     var diff = a - b
     var prod = a * b
     var quot = a / b
-    assert_eq(typeName(sum), "int")
+    assert_eq(typeName(sum), "i64")
     assert_eq(sum, 13)
 }
 
@@ -100,16 +100,16 @@ fn test_arithmetic_float() {
     var a = 10.0
     var b = 3.0
     var result = a / b
-    assert_eq(typeName(result), "float")
+    assert_eq(typeName(result), "f64")
 }
 
 @test
 fn test_arithmetic_mixed() {
     var a = 10
     var b = 3.0
-    var result = (a as float) + b
+    var result = (a as f64) + b
     // Mixed numeric variables require an explicit direction choice.
-    assert_eq(typeName(result), "float")
+    assert_eq(typeName(result), "f64")
 }
 
 @test
@@ -144,7 +144,7 @@ fn test_logical() {
 @test
 fn test_ternary_same_type() {
     var x = true ? 1 : 2
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
     assert_eq(x, 1)
 }
 
@@ -161,8 +161,8 @@ fn test_ternary_different_types() {
 @test
 fn test_reassignment() {
     var x = 10
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
     x = 20
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
     assert_eq(x, 20)
 }

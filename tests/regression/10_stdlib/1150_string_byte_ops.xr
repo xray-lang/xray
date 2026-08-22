@@ -59,7 +59,7 @@ fn test_byte_at_equals_char_at_ascii() {
     var dna = "ACGTACGTACGT"
     var i = 0
     while (i < len(dna.bytes())) {
-        assert_eq(int(dna.runes().nth(i).toUInt32()), int(dna.bytes()[i]))
+        assert_eq((dna.runes().nth(i).toUInt32() as i64), (dna.bytes()[i] as i64))
         i = i + 1
     }
 }

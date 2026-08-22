@@ -1,7 +1,7 @@
 // Direct extern calls are an explicit unsafe boundary and may consume a
 // call-bound pointer borrow without extending its Xray lifetime.
 extern "C" {
-    fn memcmp(left: Ptr<byte>, right: Ptr<byte>, size: usize) -> i32
+    fn memcmp(left: Ptr<u8>, right: Ptr<u8>, size: usize) -> i32
 }
 
 fn compareLocal() -> i32 {

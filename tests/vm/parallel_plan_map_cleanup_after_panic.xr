@@ -1,5 +1,5 @@
 import parallel
-var plan = parallel.Plan<int>(parallel.Options(2), lane -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(2), lane -> lane)
 try {
     var mapped = plan.map(0..20000, (state, i) -> {
         if (i == 10000) {
@@ -14,12 +14,12 @@ try {
     print(p.code == 420)
     print(p.message.contains("division by zero"))
 }
-const afterMap = Atomic<int>(0)
+const afterMap = Atomic<i64>(0)
 plan.forEach(0..4, (state, i) -> {
     afterMap.add(1, Ordering.Relaxed)
 })
 print(afterMap.load(Ordering.Relaxed) == 4)
-var out: Array<int> = []
+var out: Array<i64> = []
 try {
     plan.mapInto(0..20000, ref out, (state, i) -> {
         if (i == 10000) {
@@ -33,7 +33,7 @@ try {
     print(p.code == 420)
     print(p.message.contains("division by zero"))
 }
-const afterMapInto = Atomic<int>(0)
+const afterMapInto = Atomic<i64>(0)
 plan.forEach(0..4, (state, i) -> {
     afterMapInto.add(1, Ordering.Relaxed)
 })

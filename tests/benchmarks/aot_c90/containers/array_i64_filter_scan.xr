@@ -1,12 +1,12 @@
-fn run(n: int) -> int {
-    var values: Array<int> = []
+fn run(n: i64) -> i64 {
+    var values: Array<i64> = []
     var i = 0
     while (i < n) {
         values.push((i * 17) % 251)
         i = i + 1
     }
 
-    var kept = values.filter(fn(x: int) -> bool { return (x % 3) == 1 })
+    var kept = values.filter(fn(x: i64) -> bool { return (x % 3) == 1 })
 
     var sum = 0
     i = 0

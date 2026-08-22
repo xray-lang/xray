@@ -1,11 +1,11 @@
 import parallel
 
-fn apply(f: fn(int) -> int) {
+fn apply(f: fn(i64) -> i64) {
     parallel.forEach(0..4, (i) -> {
         print(f(i))
     }, parallel.Options(2))
 }
 
-apply(fn(x: int) -> int {
+apply(fn(x: i64) -> i64 {
     return x + 1
 })

@@ -2,7 +2,7 @@
 ** fannkuch_redux_aot.xr - Fannkuch-Redux Benchmark (AOT typed version)
 */
 
-fn flip(perm: Array<int>, n: int) {
+fn flip(perm: Array<i64>, n: i64) {
     var lo = 0
     var hi = n - 1
     while (lo < hi) {
@@ -14,7 +14,7 @@ fn flip(perm: Array<int>, n: int) {
     }
 }
 
-fn rotate(perm: Array<int>, n: int) {
+fn rotate(perm: Array<i64>, n: i64) {
     var first = perm[0]
     for (var i = 0; i < n - 1; i++) {
         perm[i] = perm[i + 1]
@@ -22,8 +22,8 @@ fn rotate(perm: Array<int>, n: int) {
     perm[n - 1] = first
 }
 
-fn countFlips(perm: Array<int>, n: int): int {
-    var work: Array<int> = []
+fn countFlips(perm: Array<i64>, n: i64): i64 {
+    var work: Array<i64> = []
     for (var i = 0; i < n; i++) {
         work.push(perm[i])
     }
@@ -36,7 +36,7 @@ fn countFlips(perm: Array<int>, n: int): int {
     return flips
 }
 
-fn nextPermutation(perm: Array<int>, count: Array<int>, n: int): bool {
+fn nextPermutation(perm: Array<i64>, count: Array<i64>, n: i64): bool {
     rotate(perm, n)
     var i = 2
     while (count[i - 1] >= i - 1) {
@@ -51,9 +51,9 @@ fn nextPermutation(perm: Array<int>, count: Array<int>, n: int): bool {
     return true
 }
 
-fn fannkuch(n: int) {
-    var perm: Array<int> = []
-    var count: Array<int> = []
+fn fannkuch(n: i64) {
+    var perm: Array<i64> = []
+    var count: Array<i64> = []
     for (var i = 0; i < n; i++) {
         perm.push(i + 1)
         count.push(0)
@@ -79,5 +79,5 @@ fn fannkuch(n: int) {
     print("Pfannkuchen(" + n + ") = " + maxFlips)
 }
 
-var n = len(process.args) > 0 ? int(process.args[0]) ?? 10 : 10
+var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 10 : 10
 fannkuch(n)

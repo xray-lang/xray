@@ -58,7 +58,7 @@ static inline bool xr_semantic_raw_pointer_type_is_exact(const XrSemanticTypeRec
 /* A `MutPtr<T>` argument reaching a `Ptr<T>` parameter.
  *
  * A raw pointer states an address and nothing else here: the record carries no
- * element type at all, so `Ptr<byte>` and `Ptr<int>` are already one
+ * element type at all, so `Ptr<u8>` and `Ptr<int>` are already one
  * representation at this layer and the only fact the two records can disagree
  * about is mutability. Handing a mutable address to a parameter that promises
  * not to write through it drops a permission the callee never asked for; the

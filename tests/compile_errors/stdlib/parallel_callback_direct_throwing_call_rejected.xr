@@ -4,7 +4,7 @@ enum ParallelErr {
     Boom
 }
 
-fn fails() -> int {
+fn fails() -> i64 {
     throw ParallelErr.Boom
     return 1
 }

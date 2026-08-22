@@ -62,9 +62,9 @@ print(x)                     // 1
 默认按 **引用捕获**：
 
 ```xray
-fn make_counter() -> (() -> int) {
+fn make_counter() -> (() -> i64) {
     var count = 0
-    return fn() -> int {
+    return fn() -> i64 {
         count += 1                  // 修改外层 count
         return count
     }
@@ -92,13 +92,13 @@ print(c())      // 2
 Xray **不**是全面 ownership/borrow checker 语言（不像 Rust）。但在**跨协程数据传递**中使用 move 语义：
 
 ```xray
-var big_buffer = Array<byte>(1024 * 1024)
+var big_buffer = Array<u8>(1024 * 1024)
 
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(big_buffer)             // 编译错误：execution-local heap 值不能裸跨协程传递
 
-var t2 = go fn(b: Array<byte>) -> int {
+var t2 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big_buffer)        // OK：所有权转移
 
@@ -142,7 +142,7 @@ go fn() { local += 1 }()                 // ❌ 编译错误：不能捕获可�
 ```xray
 // 方法 1：显式复制 execution-local graph
 var arr = [1, 2, 3]
-var t = go fn(data: Array<int>) -> int {
+var t = go fn(data: Array<i64>) -> i64 {
     data.push(4)            // 拷贝上修改，不影响原值
     return len(data)
 }(copy(arr))
@@ -150,20 +150,20 @@ print(arr)                  // [1, 2, 3] 未变
 
 // 方法 2：const 零拷贝只读（可被捕获）
 const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> int {
+var t2 = go fn(c: JSON.Object) -> i64 {
     return c.rate
 }(config)
 
 // 方法 3：move 转移所有权
-var big = Array<byte>(1024)
-var t3 = go fn(b: Array<byte>) -> int {
+var big = Array<u8>(1024)
+var t3 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big)
 // big 在此处不可访问
 
 // 方法 4：Channel 通信（可被捕获）
-const ch = Channel<int>(10)
-var t4 = go fn(c: Channel<int>) -> int {
+const ch = Channel<i64>(10)
+var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0
@@ -252,9 +252,9 @@ A closure captures variables from outer scopes as **upvalues**.
 The default capture mode is **by reference**:
 
 ```xray
-fn make_counter() -> (() -> int) {
+fn make_counter() -> (() -> i64) {
     var count = 0
-    return fn() -> int {
+    return fn() -> i64 {
         count += 1                  // mutates the outer count
         return count
     }
@@ -284,13 +284,13 @@ The compiler analyzes upvalues:
 Xray is **not** a full ownership/borrow-checked language (unlike Rust). However, **cross-coroutine data transfer** uses move semantics:
 
 ```xray
-var big_buffer = Array<byte>(1024 * 1024)
+var big_buffer = Array<u8>(1024 * 1024)
 
-var t = go fn(b: Array<byte>) -> int {
+var t = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(big_buffer)             // compile error: an execution-local heap value cannot cross bare
 
-var t2 = go fn(b: Array<byte>) -> int {
+var t2 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big_buffer)        // OK: ownership transferred
 
@@ -334,7 +334,7 @@ go fn() { local += 1 }()                 // ❌ compile error: cannot capture mu
 ```xray
 // Pattern 1: explicitly copy an execution-local graph
 var arr = [1, 2, 3]
-var t = go fn(data: Array<int>) -> int {
+var t = go fn(data: Array<i64>) -> i64 {
     data.push(4)            // mutates the copy, original is unaffected
     return len(data)
 }(copy(arr))
@@ -342,20 +342,20 @@ print(arr)                  // [1, 2, 3] unchanged
 
 // Pattern 2: const, zero-copy read-only (capturable)
 const config = { rate: 100 }
-var t2 = go fn(c: JSON.Object) -> int {
+var t2 = go fn(c: JSON.Object) -> i64 {
     return c.rate
 }(config)
 
 // Pattern 3: move ownership
-var big = Array<byte>(1024)
-var t3 = go fn(b: Array<byte>) -> int {
+var big = Array<u8>(1024)
+var t3 = go fn(b: Array<u8>) -> i64 {
     return process(b)
 }(move big)
 // big is inaccessible from this point
 
 // Pattern 4: Channel communication (capturable)
-const ch = Channel<int>(10)
-var t4 = go fn(c: Channel<int>) -> int {
+const ch = Channel<i64>(10)
+var t4 = go fn(c: Channel<i64>) -> i64 {
     return match (c.recv()) {
         Recv.Value(v) -> v
         _ -> 0

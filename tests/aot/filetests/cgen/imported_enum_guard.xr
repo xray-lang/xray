@@ -1,6 +1,6 @@
 import { ImportedGuardError, importedGuardError } from "./_imported_enum_guard_lib"
 
-fn readImportedGuardError(value: ImportedGuardError) -> int {
+fn readImportedGuardError(value: ImportedGuardError) -> i64 {
     return match (value) {
         ImportedGuardError.Failed(code) -> code
     }

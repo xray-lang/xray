@@ -4,8 +4,8 @@
 // Pointer bit-values are non-deterministic, so every assertion observes the
 // DATA behind the pointer (deterministic) or the CAS success flag.
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p1 = unsafe { malloc(4) }
@@ -13,7 +13,7 @@ var p2 = unsafe { malloc(4) }
 unsafe { p1[0] = 11 }
 unsafe { p2[0] = 22 }
 
-const a = Atomic<MutPtr<byte>>(p1)
+const a = Atomic<MutPtr<u8>>(p1)
 
 // load: read data behind the stored pointer
 unsafe { print(a.load()[0]) }        // 11

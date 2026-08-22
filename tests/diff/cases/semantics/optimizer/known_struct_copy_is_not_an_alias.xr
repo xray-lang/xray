@@ -3,8 +3,8 @@
 // must not change a. A pass that gives both names one value number answers true
 // for the second comparison.
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 
 fn run() {

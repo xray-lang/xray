@@ -26,5 +26,5 @@ class Task<T> {
     // @receiver_write
     awaitResult() -> TaskResult<T>
     // @receiver_write
-    awaitTimeout(timeout: int) -> TaskResult<T>
+    awaitTimeout(timeout: i64) -> TaskResult<T>
 }

@@ -1,7 +1,7 @@
 union BadMethod {
     x: u32
 
-    value() -> int {
+    value() -> i64 {
         return 1
     }
 }

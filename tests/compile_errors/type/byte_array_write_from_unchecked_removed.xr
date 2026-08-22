@@ -1,4 +1,4 @@
-var out: Array<byte> = Array.withCapacity(4)
-var src = Array<byte>(4)
-var view: Slice<byte> = src[:]
+var out: Array<u8> = Array.withCapacity(4)
+var src = Array<u8>(4)
+var view: Slice<u8> = src[:]
 out.writeFromUnchecked(0, view, 0, 1)

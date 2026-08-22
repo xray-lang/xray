@@ -5,12 +5,12 @@
 
 var order = 0
 
-fn mark(step: int) -> int {
+fn mark(step: i64) -> i64 {
     order = order * 10 + step
     return step
 }
 
-fn seq(step: int, a: int, b: int) -> Array<int> {
+fn seq(step: i64, a: i64, b: i64) -> Array<i64> {
     mark(step)
     return [a, b]
 }

@@ -1,4 +1,4 @@
-fn xray_no_alloc_range_toarray_reject(value: Range) -> int {
+fn xray_no_alloc_range_toarray_reject(value: Range) -> i64 {
     return len(value.toArray())
 }
 

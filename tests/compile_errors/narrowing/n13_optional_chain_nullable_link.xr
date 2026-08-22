@@ -1,7 +1,7 @@
 // Spec §3.6 / §2.13 N-13: the chain short-circuits on a null prefix only.
 // A link whose own member is nullable needs its own `?.`.
-class Leaf { value: int
-    constructor(value: int) { this.value = value } }
+class Leaf { value: i64
+    constructor(value: i64) { this.value = value } }
 class Branch { leaf: Leaf?
     constructor(leaf: Leaf?) { this.leaf = leaf } }
 

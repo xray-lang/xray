@@ -4,7 +4,7 @@
 // the runtime array through a struct whose field order did not match the shared
 // array ABI, so it read a garbage length, returned no tasks, and the awaits
 // silently produced nothing on AOT while the VM printed the results.
-fn compute(n: int) -> int {
+fn compute(n: i64) -> i64 {
     return n * 100
 }
 

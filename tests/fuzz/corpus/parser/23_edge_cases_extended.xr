@@ -83,13 +83,13 @@ assert_eq(v2, "has name")
 // 6. Type annotation
 // ============================================
 // Function with type annotations
-fn typed_func(x: int): int {
+fn typed_func(x: i64): i64 {
     return x * 2
 }
 
 assert_eq(typed_func(5), 10)
 // Variable with type annotation
-let typed_var: int = 42
+let typed_var: i64 = 42
 assert_eq(typed_var, 42)
 // Array type
 let typed_arr: Array<any> = [1, 2, 3]

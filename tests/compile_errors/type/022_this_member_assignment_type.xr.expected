@@ -1,1 +1,1 @@
-Type 'string' is not assignable to member 'age' (type 'int')
+Type 'string' is not assignable to member 'age' (type 'i64')

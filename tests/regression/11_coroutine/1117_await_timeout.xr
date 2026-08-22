@@ -7,11 +7,11 @@ import time
 
 // 快速完成的任务
 
-fn fast_task() -> int {
+fn fast_task() -> i64 {
     return 42
 }
 
-fn slow_task() -> int {
+fn slow_task() -> i64 {
     time.sleep(50)
     return 7
 }

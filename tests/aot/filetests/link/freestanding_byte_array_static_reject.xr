@@ -1,9 +1,9 @@
-fn xray_byte_array_capacity_reject() -> int {
-    var b: Array<byte> = Array.withCapacity(8)
+fn xray_byte_array_capacity_reject() -> i64 {
+    var b: Array<u8> = Array.withCapacity(8)
     return len(b)
 }
 
-fn xray_byte_array_from_string_reject() -> int {
-    var b = Array<byte>("abc")
+fn xray_byte_array_from_string_reject() -> i64 {
+    var b = Array<u8>("abc")
     return len(b)
 }

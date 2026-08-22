@@ -1,21 +1,21 @@
 interface Mutator {
-    bump(value: ref int) -> int
-    fill(value: ref int) -> int
+    bump(value: ref i64) -> i64
+    fill(value: ref i64) -> i64
 }
 
 class Stepper implements Mutator {
-    step: int
+    step: i64
 
-    constructor(step: int) {
+    constructor(step: i64) {
         this.step = step
     }
 
-    bump(value: ref int) -> int {
+    bump(value: ref i64) -> i64 {
         value = value + this.step
         return value
     }
 
-    fill(value: ref int) -> int {
+    fill(value: ref i64) -> i64 {
         value = this.step * 10
         return value
     }
@@ -24,22 +24,22 @@ class Stepper implements Mutator {
 class Doubler implements Mutator {
     constructor() {}
 
-    bump(value: ref int) -> int {
+    bump(value: ref i64) -> i64 {
         value = value * 2
         return value
     }
 
-    fill(value: ref int) -> int {
+    fill(value: ref i64) -> i64 {
         value = 40
         return value
     }
 }
 
-fn applyBump(mutator: ref Mutator, value: ref int) -> int {
+fn applyBump(mutator: ref Mutator, value: ref i64) -> i64 {
     return mutator.bump(ref value)
 }
 
-fn applyFill(mutator: ref Mutator, value: ref int) -> int {
+fn applyFill(mutator: ref Mutator, value: ref i64) -> i64 {
     return mutator.fill(ref value)
 }
 
@@ -52,6 +52,6 @@ selected = Doubler()
 print(applyBump(ref selected, ref value))
 print(value)
 
-var output: int
+var output: i64
 print(applyFill(ref selected, ref output))
 print(output)

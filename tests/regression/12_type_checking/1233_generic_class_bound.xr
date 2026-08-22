@@ -95,7 +95,7 @@ fn test_class_bound_with_second_param() {
     fn pair<T: Animal, U>(a: T, tag: U) -> U { return tag }
 
     var cat = Cat("Mittens")
-    assert_eq(pair<Cat, int>(cat, 7), 7)
+    assert_eq(pair<Cat, i64>(cat, 7), 7)
     assert_eq(pair<Cat, string>(cat, "ok"), "ok")
 }
 

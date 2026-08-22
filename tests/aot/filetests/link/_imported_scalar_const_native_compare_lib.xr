@@ -1,1 +1,1 @@
-export const LIMIT: int = 240
+export const LIMIT: i64 = 240

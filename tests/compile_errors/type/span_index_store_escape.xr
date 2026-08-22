@@ -1,8 +1,8 @@
 fn bad() {
-    var owner = Array<int>(4, 0)
-    var first: Slice<int> = owner[0:1]
-    var second: Slice<int> = owner[1:2]
-    var views = Array<Slice<int>>(1, first)
+    var owner = Array<i64>(4, 0)
+    var first: Slice<i64> = owner[0:1]
+    var second: Slice<i64> = owner[1:2]
+    var views = Array<Slice<i64>>(1, first)
     views[0] = second
 }
 

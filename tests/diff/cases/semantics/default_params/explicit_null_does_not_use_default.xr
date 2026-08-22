@@ -2,7 +2,7 @@
 // C1: an omitted argument uses the declared default; an explicit `null` is
 // passed through and must NOT trigger the default. VM and AOT must agree.
 
-fn connectI(timeout: int? = 30) -> int? { return timeout }
+fn connectI(timeout: i64? = 30) -> i64? { return timeout }
 fn connectS(host: string? = "local") -> string? { return host }
 fn formatName(first: string, last: string = "Unknown") -> string {
     return first + " " + last

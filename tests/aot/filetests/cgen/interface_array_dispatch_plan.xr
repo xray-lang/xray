@@ -1,22 +1,22 @@
 interface Drawable {
-    draw() -> int
+    draw() -> i64
 }
 
 class Sprite implements Drawable {
     constructor() {
     }
 
-    draw() -> int { return 1 }
+    draw() -> i64 { return 1 }
 }
 
 class Icon implements Drawable {
     constructor() {
     }
 
-    draw() -> int { return 2 }
+    draw() -> i64 { return 2 }
 }
 
-fn drawAll(items: Array<Drawable>) -> int {
+fn drawAll(items: Array<Drawable>) -> i64 {
     var i = 0
     var sum = 0
     while (i < len(items)) {

@@ -1,2 +1,2 @@
-fn use(f: CFn<fn(int) -> int>) -> bool { return true }
+fn use(f: CFn<fn(i64) -> i64>) -> bool { return true }
 print(true)

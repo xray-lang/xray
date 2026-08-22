@@ -1,6 +1,6 @@
 // The same field-set rule applies to a class literal.
 class Counter {
-    n: int
+    n: i64
 }
 
 var c = Counter{n: 1, bogus: 2}

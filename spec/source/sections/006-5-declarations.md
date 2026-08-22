@@ -26,9 +26,9 @@ ObjectBinding ::= Identifier (':' Identifier)?
 #### 5.1.1 `var` — 可变绑定
 
 ```xray @id=decl-var
-var x = 1                         // 类型推断为 int
+var x = 1                         // 类型推断为 i64
 var name: string = "Alice"        // 显式类型
-var count: int                    // 仅声明无初值：使用零值
+var count: i64                    // 仅声明无初值：使用零值
 var maybeName: string?            // OK：默认 null
 var empty: string = ""            // string 必须显式初始化
 ```
@@ -42,7 +42,7 @@ var empty: string = ""            // string 必须显式初始化
 
 ```xray @id=decl-const
 const PI = 3.14159
-const MAX_LEN: int = 1024
+const MAX_LEN: i64 = 1024
 ```
 
 - **必须**有初值。
@@ -56,7 +56,7 @@ const MAX_LEN: int = 1024
 - 新鲜可变图由编译器推断唯一所有权，不需要存储修饰符。`move` 要求源根唯一且无存活 alias/loan，成功后使源绑定失效；`copy` 保留源并显式构造独立图。
 
 ```xray @id=decl-capability
-const channel = Channel<int>(16)
+const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
@@ -104,7 +104,7 @@ AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 #### 5.2.1 基本形式
 
 ```xray @id=decl-fn-basic
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
@@ -112,7 +112,7 @@ fn greet(name: string) -> () {         // 显式 Unit
     print("Hi ${name}")
 }
 
-fn echo(x: int) {                       // 省略返回类型 = ()
+fn echo(x: i64) {                       // 省略返回类型 = ()
     print(x)
 }
 ```
@@ -125,7 +125,7 @@ fn echo(x: int) {                       // 省略返回类型 = ()
 #### 5.2.2 默认参数值
 
 ```xray @id=decl-fn-default
-fn connect(host: string, port: int = 8080, tls: bool = false) {
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
 }
 
@@ -142,17 +142,17 @@ connect("localhost", 443, true)
 #### 5.2.3 多返回值
 
 ```xray @id=decl-fn-multi-return
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
 var (q, r) = divmod(17, 5)
-var result = divmod(10, 3)        // result 类型 (int, int)
+var result = divmod(10, 3)        // result 类型 (i64, i64)
 ```
 
 **约束**：
-- 返回类型用括号包裹元组：`(int, bool)`。
-- 单返回值不写括号：`: int`。
+- 返回类型用括号包裹元组：`(i64, bool)`。
+- 单返回值不写括号：`: i64`。
 - `return (a, b)` 必须带括号；裸逗号 `return a, b` 是编译错误（`E0801`）。
 
 #### 5.2.4 参数模式
@@ -161,12 +161,12 @@ var result = divmod(10, 3)        // result 类型 (int, int)
 `name: ref T`、`name: move T`。
 
 ```xray @id=decl-fn-param-modes
-fn length_sq(v: Vec2) -> float {
+fn length_sq(v: Vec2) -> f64 {
     // v 默认只读；具体 ABI 可按值或按只读地址传递
     return v.x * v.x + v.y * v.y
 }
 
-fn translate(v: ref Vec2, dx: float, dy: float) -> () {
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
     // v 是可变引用（修改对调用方可见）
     v.x += dx
     v.y += dy
@@ -193,7 +193,7 @@ submit(makeJob())
 #### 5.2.5 rest 参数
 
 ```xray @id=decl-fn-rest
-fn sum(...nums: int) -> int {
+fn sum(...nums: i64) -> i64 {
     var total = 0
     for (n in nums) { total += n }
     return total
@@ -215,14 +215,14 @@ fn main() { ... }
 ```
 
 - 顶层 `fn` 声明被提升到当前作用域顶部。
-- `var f = (x: int) -> x`（赋值给变量的箭头函数）**不**提升。
+- `var f = (x: i64) -> x`（赋值给变量的箭头函数）**不**提升。
 
 #### 5.2.7 尾递归优化
 
 Xi 优化器会把可证明的自尾调用改写为循环；VM 也有常量栈空间的 tail-call opcode。不要把这一点理解为所有后端、所有间接/互递归调用的通用常量栈保证：构造调用和无法证明安全的调用仍按普通调用执行。详见 [§17](#17-编译流水线-compilation-pipeline)。
 
 ```xray
-fn factorial(n: int, acc: int = 1) -> int {
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // 尾调用：自动优化为循环
 }
@@ -249,8 +249,8 @@ greet()                   // 必须显式调用
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
     fn cos(x: f64) -> f64
 }
 
@@ -293,15 +293,15 @@ print(mem.offsetOf<CHeader>("count"))
 ```xray
 extern "C" {
     fn bsearch(
-        key: Ptr<byte>,
-        base: Ptr<byte>,
+        key: Ptr<u8>,
+        base: Ptr<u8>,
         count: usize,
         size: usize,
-        cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>
-    ) -> Ptr<byte>
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
     return 0
 }
 
@@ -372,13 +372,13 @@ allow = []
 闭包捕获与高阶函数：
 
 ```xray
-fn apply(f: fn(int) -> int, x: int) -> int {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
 }
 
 fn main() {
     var base = 10
-    var addBase = fn(x: int) -> int { return x + base }   // 闭包捕获 base
+    var addBase = fn(x: i64) -> i64 { return x + base }   // 闭包捕获 base
     print(addBase(5))            // => 15
     print(apply(addBase, 7))     // => 17（函数作为参数传入）
 }
@@ -389,7 +389,7 @@ main()
 多返回值（元组）：
 
 ```xray
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
@@ -431,7 +431,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```xray @id=decl-class-basic
 class Animal {
     name: string                       // 字段
-    private _age: int = 0              // 私有字段，可有默认值
+    private _age: i64 = 0              // 私有字段，可有默认值
 
     constructor(name: string) {
         this.name = name
@@ -484,7 +484,7 @@ class Dog extends Animal {
 | `const` | 字段 | 不可变字段——只能在声明类的构造器中经 `this` 赋值一次，之后重写报 `E0378` |
 | `final` | 类声明前缀 | `final class C` 禁止继承；`final` 不用于字段或方法 |
 
-**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: int = 0`。
+**修饰符可组合**：`private const secret: string = "key123"`、`protected static counter: i64 = 0`。
 
 > `const` = 不可变字段/绑定，`final class` = 禁止继承。字段不可变只用 `const`；对字段或方法写 `final` 会报错。
 
@@ -492,9 +492,9 @@ class Dog extends Animal {
 
 ```xray
 class Point {
-    x: float
-    y: float
-    constructor(x: float, y: float) {
+    x: f64
+    y: f64
+    constructor(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -502,9 +502,9 @@ class Point {
 
 // 参数类型可省（从同名字段推断）
 class Vector2 {
-    x: float
-    y: float
-    constructor(x, y) {         // 等价于显式写 (x: float, y: float)
+    x: f64
+    y: f64
+    constructor(x, y) {         // 等价于显式写 (x: f64, y: f64)
         this.x = x
         this.y = y
     }
@@ -522,10 +522,10 @@ class Vector2 {
 
 ```xray
 class Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    constructor(x: float, y: float) {
+    constructor(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -537,7 +537,7 @@ class Vec2 {
         return this.x == other.x && this.y == other.y
     }
 
-    operator[](index: int) -> float {
+    operator[](index: i64) -> f64 {
         if (index == 0) { return this.x }
         return this.y
     }
@@ -557,11 +557,11 @@ class Vec2 {
 
 ```xray
 class Counter {
-    n: int = 0
+    n: i64 = 0
     operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: int) -> Counter { this.n = this.n + other; return this }
-    operator[](i: int) -> int { return this.n + i }
-    operator[]=(i: int, v: int) { this.n = v - i }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
 }
 ```
 
@@ -575,7 +575,7 @@ class Counter {
 interface Iterator<T> {
     hasNext() -> bool       // 是否还有下一个元素；不消费元素
     next() -> T             // 取下一个元素并前进
-    nth(index: int) -> T    // 从当前位置起前进 index 个元素并返回
+    nth(index: i64) -> T    // 从当前位置起前进 index 个元素并返回
 }
 
 interface Iterable<T> {
@@ -600,17 +600,17 @@ interface Iterable<T> {
 
 ```xray
 class Rect {
-    _w: int
-    _h: int
-    constructor(w: int, h: int) { this._w = w; this._h = h }
+    _w: i64
+    _h: i64
+    constructor(w: i64, h: i64) { this._w = w; this._h = h }
 
     // 只读：只有 getter
-    area: int { fn() { return this._w * this._h } }
+    area: i64 { fn() { return this._w * this._h } }
 
     // 可读可写：getter + setter
-    width: int {
+    width: i64 {
         fn() { return this._w }
-        fn(v: int) { this._w = v }
+        fn(v: i64) { this._w = v }
     }
 }
 
@@ -662,9 +662,9 @@ main()
 
 ```xray
 class Vec2 {
-    x: int
-    y: int
-    constructor(x: int, y: int) { this.x = x; this.y = y }
+    x: i64
+    y: i64
+    constructor(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -691,10 +691,10 @@ StructDecl ::= 'struct' Identifier TypeParams?
 
 ```xray @id=decl-struct-point
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    magnitude_sq() -> float {
+    magnitude_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 }
@@ -723,7 +723,7 @@ b.x = 99.0
 ```xray
 struct Config {
     host: string
-    port: int = 8080        // 声明默认值：字面量中可省
+    port: i64 = 8080        // 声明默认值：字面量中可省
     label: string?          // 可空：字面量中可省
 }
 
@@ -757,8 +757,8 @@ var c = Config{host: "localhost"}    // OK
 
 ```xray
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 fn main() {
@@ -786,8 +786,8 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // 方法签
 
 ```xray @id=decl-interface-shape
 interface Shape {
-    area() -> float
-    perimeter() -> float
+    area() -> f64
+    perimeter() -> f64
 }
 
 // 接口方法返回类型可省略（默认 ()）
@@ -797,18 +797,18 @@ interface Greeter {
 }
 
 class Circle implements Shape {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
 }
 
 // 实现多个接口
 class Logger implements Shape, Greeter {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
     log() { print("logging") }
 }
@@ -825,26 +825,26 @@ fn describe(s: Shape) -> string {
 - 实现类**必须**提供所有接口成员（方法同名同参同返回；属性同名同类型）。
 - 接口方法声明中的**返回类型可省略**（默认 `()`）。
 - 接口方法默认 `abstract`（无方法体）。
-- 接口可声明**属性签名**（`length: int`、`const id: int`）；实现类必须有相应字段。
+- 接口可声明**属性签名**（`length: i64`、`const id: i64`）；实现类必须有相应字段。
 - 实现类可以提供额外的方法（接口仅定义最小集）。
 
 ```xray
 // 属性签名 + 接口继承
 interface HasLength {
-    length: int
+    length: i64
 }
 interface SizedCollection<T> extends HasLength {
     first() -> T
 }
 
-class Buffer implements SizedCollection<int> {
-    length: int                       // 实现属性签名
-    private data: Array<int>
-    constructor(n: int) {
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // 实现属性签名
+    private data: Array<i64>
+    constructor(n: i64) {
         this.length = n
         this.data = []
     }
-    first() -> int { return this.data[0] }
+    first() -> i64 { return this.data[0] }
 }
 ```
 
@@ -854,13 +854,13 @@ class Buffer implements SizedCollection<int> {
 
 ```xray
 interface Shape {
-    area() -> float
+    area() -> f64
 }
 
 class Circle implements Shape {
-    r: float
-    constructor(r: float) { this.r = r }
-    area() -> float { return 3.14159 * this.r * this.r }
+    r: f64
+    constructor(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
 fn main() {
@@ -902,7 +902,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> int {
+    fn code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -927,8 +927,8 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 // 递归 enum 的 payload 必须经 class 节点间接化
@@ -939,7 +939,7 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(int),
+    Number(i64),
     Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
@@ -983,7 +983,7 @@ match (event) {
 
 ```xray @id=decl-enum-properties
 Color.Red.name        // "Red"          变体名 (string)
-Color.Red.ordinal     // 0              声明顺序 tag (int，从 0)
+Color.Red.ordinal     // 0              声明顺序 tag (i64，从 0)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" 格式
 ```
 
@@ -1003,7 +1003,7 @@ for (variant in NetEvent.variants) {
     print(variant.name)
     for (field in variant.payloads) {
         print(field.name)                 // field: EnumPayloadField<NetEvent>
-        print(field.type)                 // int：具体字段类型的 canonical TypeId
+        print(field.type)                 // i64：具体字段类型的 canonical TypeId
     }
 }
 ```
@@ -1022,10 +1022,10 @@ descriptor API 是封闭白名单：
 
 | 类型 | 属性 / 操作 |
 |---|---|
-| `EnumVariants<E>` | `length: int`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
-| `EnumVariant<E>` | `ordinal: int`、`name: string`、`payloadCount: int`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
-| `EnumPayloads<E>` | `length: int`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
-| `EnumPayloadField<E>` | `index: int`、`name: string`、`type: int`（canonical TypeId） |
+| `EnumVariants<E>` | `length: i64`、检查边界的 `[index] -> EnumVariant<E>`、`for-in` |
+| `EnumVariant<E>` | `ordinal: i64`、`name: string`、`payloadCount: i64`、`isUnit: bool`、`payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`、检查边界的 `[index] -> EnumPayloadField<E>`、`for-in` |
+| `EnumPayloadField<E>` | `index: i64`、`name: string`、`type: i64`（canonical TypeId） |
 
 命名 payload 字段的 `name` 是源码声明名；位置 payload 字段没有声明名，其 `name` 确定为 `""`，不使用 `null`，因此 descriptor 表面保持非空 `string` 类型。
 
@@ -1035,14 +1035,14 @@ descriptor API 是封闭白名单：
 
 unit-only enum 的实际值在 typed 路径中同样只携带 ordinal；一旦该值跨入 tagged/擦除边界，静态 sidecar 必须保留 enum 名与全部 case 名，使边界后的 `.name`、`toString()`、相等性和通用字符串格式化与 VM 语义一致。仍保持 typed 的 enum 不生成该 sidecar。
 
-泛型时必须知道具体 enum layout，例如 `Option<int>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
+泛型时必须知道具体 enum layout，例如 `Option<i64>.variants` 合法；未约束类型参数 `E.variants` 不合法。别名、导入和跨模块编译保留同一声明顺序与具体类型替换。
 
 #### 5.6.6 反查（从值到成员）
 
 默认不支持 `Enum(value)` 或从 backing value 反查 enum。协议解析应写成显式函数：
 
 ```xray
-fn statusFromCode(code: int) -> HttpStatus? {
+fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
     if (code == 404) { return HttpStatus.NotFound }
     if (code == 500) { return HttpStatus.InternalError }
@@ -1056,11 +1056,11 @@ fn statusFromCode(code: int) -> HttpStatus? {
 
 ```xray
 enum Shape {
-    Circle(radius: float),
-    Rect(w: float, h: float),
-    Triangle(a: float, b: float, c: float)
+    Circle(radius: f64),
+    Rect(w: f64, h: f64),
+    Triangle(a: f64, b: f64, c: f64)
 
-    fn area() -> float {
+    fn area() -> f64 {
         return match (this) {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
@@ -1090,7 +1090,7 @@ print(s.isRound())       // true
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: int) -> Color {
+    static fn fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
@@ -1133,9 +1133,9 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
-type Outcome = int | string                          // union 别名
-type Mapper = fn(int) -> int                              // 函数类型别名
-type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
+type Outcome = i64 | string                          // union 别名
+type Mapper = fn(i64) -> i64                              // 函数类型别名
+type Point = { x: f64, y: f64 }                  // 结构化对象别名（sealed）
 type Pair<T> = { first: T, second: T }                // 泛型别名
 ```
 
@@ -1203,9 +1203,9 @@ ObjectBinding ::= Identifier (':' Identifier)?
 #### 5.1.1 `var` — mutable binding
 
 ```xray @id=decl-var
-var x = 1                         // type inferred as int
+var x = 1                         // type inferred as i64
 var name: string = "Alice"        // explicit type
-var count: int                    // no initializer: zero value used
+var count: i64                    // no initializer: zero value used
 var maybeName: string?            // OK: defaults to null
 var empty: string = ""            // string requires an explicit initializer
 ```
@@ -1219,7 +1219,7 @@ var empty: string = ""            // string requires an explicit initializer
 
 ```xray @id=decl-const
 const PI = 3.14159
-const MAX_LEN: int = 1024
+const MAX_LEN: i64 = 1024
 ```
 
 - Initializer is **required**.
@@ -1233,7 +1233,7 @@ const MAX_LEN: int = 1024
 - The compiler infers unique ownership for fresh mutable graphs; no storage modifier is required. `move` requires a unique root with no live alias/loan and invalidates the source binding on success; `copy` preserves the source and explicitly constructs an independent graph.
 
 ```xray @id=decl-capability
-const channel = Channel<int>(16)
+const channel = Channel<i64>(16)
 const counter = Atomic(0)
 
 var source = [1, 2, 3]
@@ -1281,7 +1281,7 @@ AttrList ::= ('@' Identifier ('(' AttrArgList? ')')?)*
 #### 5.2.1 Basic form
 
 ```xray @id=decl-fn-basic
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
@@ -1289,7 +1289,7 @@ fn greet(name: string) -> () {         // explicit Unit
     print("Hi ${name}")
 }
 
-fn echo(x: int) {                       // omitted return type = ()
+fn echo(x: i64) {                       // omitted return type = ()
     print(x)
 }
 ```
@@ -1302,7 +1302,7 @@ fn echo(x: int) {                       // omitted return type = ()
 #### 5.2.2 Default parameter values
 
 ```xray @id=decl-fn-default
-fn connect(host: string, port: int = 8080, tls: bool = false) {
+fn connect(host: string, port: i64 = 8080, tls: bool = false) {
     print(host, port, tls)
 }
 
@@ -1319,17 +1319,17 @@ connect("localhost", 443, true)
 #### 5.2.3 Multiple return values
 
 ```xray @id=decl-fn-multi-return
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
 var (q, r) = divmod(17, 5)
-var result = divmod(10, 3)        // result has type (int, int)
+var result = divmod(10, 3)        // result has type (i64, i64)
 ```
 
 **Constraints**:
-- The return type wraps the tuple in parentheses: `(int, bool)`.
-- A single return value omits the parentheses: `: int`.
+- The return type wraps the tuple in parentheses: `(i64, bool)`.
+- A single return value omits the parentheses: `: i64`.
 - `return (a, b)` requires the parentheses; bare comma `return a, b` is a compile error (`E0801`).
 
 #### 5.2.4 Parameter modes
@@ -1338,12 +1338,12 @@ Ordinary parameters provide a read-only capability by default. Only writable bor
 ownership transfer have explicit modes: `name: ref T` and `name: move T`.
 
 ```xray @id=decl-fn-param-modes
-fn length_sq(v: Vec2) -> float {
+fn length_sq(v: Vec2) -> f64 {
     // v is read-only; the ABI may pass a small value or a read-only address
     return v.x * v.x + v.y * v.y
 }
 
-fn translate(v: ref Vec2, dx: float, dy: float) -> () {
+fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {
     // v is a mutable reference (changes are visible to the caller)
     v.x += dx
     v.y += dy
@@ -1370,7 +1370,7 @@ Ordinary outputs use return values, tuples, structs, or `Result`. C ABI output l
 #### 5.2.5 Rest parameters
 
 ```xray @id=decl-fn-rest
-fn sum(...nums: int) -> int {
+fn sum(...nums: i64) -> i64 {
     var total = 0
     for (n in nums) { total += n }
     return total
@@ -1392,14 +1392,14 @@ fn main() { ... }
 ```
 
 - Top-level `fn` declarations are hoisted to the top of the current scope.
-- `var f = (x: int) -> x` (an arrow function bound to a variable) is **not** hoisted.
+- `var f = (x: i64) -> x` (an arrow function bound to a variable) is **not** hoisted.
 
 #### 5.2.7 Tail-call optimization
 
 The Xi optimizer rewrites proven self-tail calls into loops, and the VM also has constant-stack tail-call opcodes. This is not a blanket constant-stack guarantee for every back end or every indirect/mutually-recursive call: constructors and calls that cannot be proven safe remain ordinary calls. See [§17](#17-compilation-pipeline).
 
 ```xray
-fn factorial(n: int, acc: int = 1) -> int {
+fn factorial(n: i64, acc: i64 = 1) -> i64 {
     if (n <= 1) { return acc }
     return factorial(n - 1, acc * n)     // tail call: optimized to a loop
 }
@@ -1426,8 +1426,8 @@ An `extern "C"` block declares external **function symbols** that share the C AB
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
     fn cos(x: f64) -> f64
 }
 
@@ -1469,15 +1469,15 @@ Rules:
 ```xray
 extern "C" {
     fn bsearch(
-        key: Ptr<byte>,
-        base: Ptr<byte>,
+        key: Ptr<u8>,
+        base: Ptr<u8>,
         count: usize,
         size: usize,
-        cmp: CFn<fn(Ptr<byte>, Ptr<byte>) -> i32>
-    ) -> Ptr<byte>
+        cmp: CFn<fn(Ptr<u8>, Ptr<u8>) -> i32>
+    ) -> Ptr<u8>
 }
 
-fn zeroCmp(a: Ptr<byte>, b: Ptr<byte>) -> i32 {
+fn zeroCmp(a: Ptr<u8>, b: Ptr<u8>) -> i32 {
     return 0
 }
 
@@ -1540,13 +1540,13 @@ Run `xray verify --contract perf-contracts.toml`. A contract checks existing sem
 Closure capture and higher-order functions:
 
 ```xray
-fn apply(f: fn(int) -> int, x: int) -> int {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x)
 }
 
 fn main() {
     var base = 10
-    var addBase = fn(x: int) -> int { return x + base }   // closure captures base
+    var addBase = fn(x: i64) -> i64 { return x + base }   // closure captures base
     print(addBase(5))            // => 15
     print(apply(addBase, 7))     // => 17 (function passed as an argument)
 }
@@ -1557,7 +1557,7 @@ main()
 Multiple return values (a tuple):
 
 ```xray
-fn divmod(a: int, b: int) -> (int, int) {
+fn divmod(a: i64, b: i64) -> (i64, i64) {
     return (a / b, a % b)
 }
 
@@ -1599,7 +1599,7 @@ Modifier ::= 'private' | 'protected' | 'static' | 'const'
 ```xray @id=decl-class-basic
 class Animal {
     name: string                       // field
-    private _age: int = 0              // private field with default value
+    private _age: i64 = 0              // private field with default value
 
     constructor(name: string) {
         this.name = name
@@ -1652,7 +1652,7 @@ class Dog extends Animal {
 | `const` | field | Immutable field—assignable once via `this` in the declaring class's constructor; later writes report `E0378` |
 | `final` | class declaration prefix | `final class C` cannot be inherited; `final` is not used on fields or methods |
 
-**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: int = 0`.
+**Modifiers may combine**: `private const secret: string = "key123"`, `protected static counter: i64 = 0`.
 
 > `const` = immutable field/binding, `final class` = cannot be inherited. Immutable fields use `const` only; writing `final` on a field or method is an error.
 
@@ -1660,9 +1660,9 @@ class Dog extends Animal {
 
 ```xray
 class Point {
-    x: float
-    y: float
-    constructor(x: float, y: float) {
+    x: f64
+    y: f64
+    constructor(x: f64, y: f64) {
         this.x = x
         this.y = y
     }
@@ -1670,9 +1670,9 @@ class Point {
 
 // Parameter types may be omitted (inferred from same-named fields)
 class Vector2 {
-    x: float
-    y: float
-    constructor(x, y) {         // equivalent to (x: float, y: float)
+    x: f64
+    y: f64
+    constructor(x, y) {         // equivalent to (x: f64, y: f64)
         this.x = x
         this.y = y
     }
@@ -1690,10 +1690,10 @@ class Vector2 {
 
 ```xray
 class Vec2 {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    constructor(x: float, y: float) {
+    constructor(x: f64, y: f64) {
         this.x = x; this.y = y
     }
 
@@ -1705,7 +1705,7 @@ class Vec2 {
         return this.x == other.x && this.y == other.y
     }
 
-    operator[](index: int) -> float {
+    operator[](index: i64) -> f64 {
         if (index == 0) { return this.x }
         return this.y
     }
@@ -1725,11 +1725,11 @@ class Vec2 {
 
 ```xray
 class Counter {
-    n: int = 0
+    n: i64 = 0
     operator++() -> Counter { this.n = this.n + 1; return this }
-    operator+=(other: int) -> Counter { this.n = this.n + other; return this }
-    operator[](i: int) -> int { return this.n + i }
-    operator[]=(i: int, v: int) { this.n = v - i }
+    operator+=(other: i64) -> Counter { this.n = this.n + other; return this }
+    operator[](i: i64) -> i64 { return this.n + i }
+    operator[]=(i: i64, v: i64) { this.n = v - i }
 }
 ```
 
@@ -1743,7 +1743,7 @@ class Counter {
 interface Iterator<T> {
     hasNext() -> bool       // is another element available; does not consume one
     next() -> T             // take the next element and advance
-    nth(index: int) -> T    // advance index elements from the current position and return it
+    nth(index: i64) -> T    // advance index elements from the current position and return it
 }
 
 interface Iterable<T> {
@@ -1768,17 +1768,17 @@ A field name followed by an accessor block declares a **computed property**: it 
 
 ```xray
 class Rect {
-    _w: int
-    _h: int
-    constructor(w: int, h: int) { this._w = w; this._h = h }
+    _w: i64
+    _h: i64
+    constructor(w: i64, h: i64) { this._w = w; this._h = h }
 
     // Read-only: getter alone
-    area: int { fn() { return this._w * this._h } }
+    area: i64 { fn() { return this._w * this._h } }
 
     // Readable and writable: getter + setter
-    width: int {
+    width: i64 {
         fn() { return this._w }
-        fn(v: int) { this._w = v }
+        fn(v: i64) { this._w = v }
     }
 }
 
@@ -1830,9 +1830,9 @@ Operator overloading (call with named values):
 
 ```xray
 class Vec2 {
-    x: int
-    y: int
-    constructor(x: int, y: int) { this.x = x; this.y = y }
+    x: i64
+    y: i64
+    constructor(x: i64, y: i64) { this.x = x; this.y = y }
     operator+(other: Vec2) -> Vec2 {
         return Vec2(this.x + other.x, this.y + other.y)
     }
@@ -1859,10 +1859,10 @@ StructDecl ::= 'struct' Identifier TypeParams?
 
 ```xray @id=decl-struct-point
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 
-    magnitude_sq() -> float {
+    magnitude_sq() -> f64 {
         return this.x * this.x + this.y * this.y
     }
 }
@@ -1891,7 +1891,7 @@ b.x = 99.0
 ```xray
 struct Config {
     host: string
-    port: int = 8080        // declaration default: omittable in a literal
+    port: i64 = 8080        // declaration default: omittable in a literal
     label: string?          // nullable: omittable in a literal
 }
 
@@ -1925,8 +1925,8 @@ A `struct` is a value type: assignment and argument passing copy it.
 
 ```xray
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 fn main() {
@@ -1954,8 +1954,8 @@ InterfaceMember ::= Identifier '(' ParamList? ')' ReturnType?       // method si
 
 ```xray @id=decl-interface-shape
 interface Shape {
-    area() -> float
-    perimeter() -> float
+    area() -> f64
+    perimeter() -> f64
 }
 
 // Interface method return types may be omitted (default ())
@@ -1965,18 +1965,18 @@ interface Greeter {
 }
 
 class Circle implements Shape {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
 }
 
 // Implement multiple interfaces
 class Logger implements Shape, Greeter {
-    radius: float
-    constructor(r: float) { this.radius = r }
-    area() -> float { return 3.14 * this.radius * this.radius }
-    perimeter() -> float { return 6.28 * this.radius }
+    radius: f64
+    constructor(r: f64) { this.radius = r }
+    area() -> f64 { return 3.14 * this.radius * this.radius }
+    perimeter() -> f64 { return 6.28 * this.radius }
     greet(name: string) { print("hello,", name) }
     log() { print("logging") }
 }
@@ -1993,26 +1993,26 @@ fn describe(s: Shape) -> string {
 - The implementing type **must** provide every interface member (matching name/parameters/return type for methods; matching name/type for properties).
 - **Return types in interface method declarations may be omitted** (default `()`).
 - Interface methods are `abstract` by default (no body).
-- Interfaces may declare **property signatures** (`length: int`, `const id: int`); the implementing type must provide a corresponding field.
+- Interfaces may declare **property signatures** (`length: i64`, `const id: i64`); the implementing type must provide a corresponding field.
 - Implementing types may add additional methods (the interface defines the minimum surface).
 
 ```xray
 // property signatures + interface inheritance
 interface HasLength {
-    length: int
+    length: i64
 }
 interface SizedCollection<T> extends HasLength {
     first() -> T
 }
 
-class Buffer implements SizedCollection<int> {
-    length: int                       // implements the property signature
-    private data: Array<int>
-    constructor(n: int) {
+class Buffer implements SizedCollection<i64> {
+    length: i64                       // implements the property signature
+    private data: Array<i64>
+    constructor(n: i64) {
         this.length = n
         this.data = []
     }
-    first() -> int { return this.data[0] }
+    first() -> i64 { return this.data[0] }
 }
 ```
 
@@ -2022,13 +2022,13 @@ Interface + `implements` + polymorphism:
 
 ```xray
 interface Shape {
-    area() -> float
+    area() -> f64
 }
 
 class Circle implements Shape {
-    r: float
-    constructor(r: float) { this.r = r }
-    area() -> float { return 3.14159 * this.r * this.r }
+    r: f64
+    constructor(r: f64) { this.r = r }
+    area() -> f64 { return 3.14159 * this.r * this.r }
 }
 
 fn main() {
@@ -2070,7 +2070,7 @@ enum HttpStatus {
     NotFound,
     InternalError
 
-    fn code() -> int {
+    fn code() -> i64 {
         return match (this) {
             HttpStatus.OK -> 200,
             HttpStatus.NotFound -> 404,
@@ -2095,8 +2095,8 @@ enum Option<T> {
 enum NetEvent {
     Connected,
     Disconnected(reason: string),
-    DataReceived(bytes: Array<byte>),
-    Error(code: int, message: string),
+    DataReceived(bytes: Array<u8>),
+    Error(code: i64, message: string),
 }
 
 // A recursive enum payload must be indirected through a class node
@@ -2107,7 +2107,7 @@ class ExprNode {
 }
 
 enum Expr {
-    Number(int),
+    Number(i64),
     Binary(op: string, left: ExprNode, right: ExprNode),
     Call(name: string, args: Array<Expr>),
 }
@@ -2151,7 +2151,7 @@ Instance properties (act on the enum value):
 
 ```xray @id=decl-enum-properties
 Color.Red.name        // "Red"          variant name (string)
-Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)
+Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)
 Color.Red.toString()  // "Color.Red"    "<EnumName>.<VariantName>" format
 ```
 
@@ -2171,7 +2171,7 @@ for (variant in NetEvent.variants) {
     print(variant.name)
     for (field in variant.payloads) {
         print(field.name)                 // field: EnumPayloadField<NetEvent>
-        print(field.type)                 // int: canonical TypeId for the concrete field type
+        print(field.type)                 // i64: canonical TypeId for the concrete field type
     }
 }
 ```
@@ -2190,10 +2190,10 @@ The descriptor API is a closed whitelist:
 
 | Type | Properties / operations |
 |---|---|
-| `EnumVariants<E>` | `length: int`, checked `[index] -> EnumVariant<E>`, and `for-in` |
-| `EnumVariant<E>` | `ordinal: int`, `name: string`, `payloadCount: int`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
-| `EnumPayloads<E>` | `length: int`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
-| `EnumPayloadField<E>` | `index: int`, `name: string`, `type: int` (canonical TypeId) |
+| `EnumVariants<E>` | `length: i64`, checked `[index] -> EnumVariant<E>`, and `for-in` |
+| `EnumVariant<E>` | `ordinal: i64`, `name: string`, `payloadCount: i64`, `isUnit: bool`, `payloads: EnumPayloads<E>` |
+| `EnumPayloads<E>` | `length: i64`, checked `[index] -> EnumPayloadField<E>`, and `for-in` |
+| `EnumPayloadField<E>` | `index: i64`, `name: string`, `type: i64` (canonical TypeId) |
 
 For a named payload field, `name` is its source declaration name. A positional payload field has no declared name and deterministically reports `""`, not `null`, so the descriptor surface keeps a non-null `string` type.
 
@@ -2203,14 +2203,14 @@ This facility is a compiler-recognized static type domain, not an `Iterable` con
 
 An actual unit-only enum value likewise carries only its ordinal on typed paths. Once it crosses a tagged or erased boundary, its immutable static sidecar must retain the enum name and every case name so later `.name`, `toString()`, equality, and generic string formatting remain VM-equivalent. Enums that stay typed emit no such sidecar.
 
-Generic code must identify a concrete enum layout. `Option<int>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
+Generic code must identify a concrete enum layout. `Option<i64>.variants` is valid; `E.variants` on an unconstrained type parameter is not. Aliases, imports, and separate compilation preserve declaration order and concrete type substitution.
 
 #### 5.6.6 Reverse lookup (value to member)
 
 `Enum(value)` and reverse lookup from backing values are not supported by default. Protocol parsing should be written as an explicit function:
 
 ```xray
-fn statusFromCode(code: int) -> HttpStatus? {
+fn statusFromCode(code: i64) -> HttpStatus? {
     if (code == 200) { return HttpStatus.OK }
     if (code == 404) { return HttpStatus.NotFound }
     if (code == 500) { return HttpStatus.InternalError }
@@ -2224,11 +2224,11 @@ Instance and static methods may be defined inside `enum` bodies with the same sy
 
 ```xray
 enum Shape {
-    Circle(radius: float),
-    Rect(w: float, h: float),
-    Triangle(a: float, b: float, c: float)
+    Circle(radius: f64),
+    Rect(w: f64, h: f64),
+    Triangle(a: f64, b: f64, c: f64)
 
-    fn area() -> float {
+    fn area() -> f64 {
         return match (this) {
             Shape.Circle(r)     -> 3.14159 * r * r,
             Shape.Rect(w, h)    -> w * h,
@@ -2258,7 +2258,7 @@ Static methods use `static fn` and are useful for factories, lookup helpers, and
 enum Color {
     Red, Green, Blue
 
-    static fn fromInt(v: int) -> Color {
+    static fn fromInt(v: i64) -> Color {
         if (v == 1) { return Color.Red }
         if (v == 2) { return Color.Green }
         return Color.Blue
@@ -2301,9 +2301,9 @@ AliasTypeParams ::= '<' Identifier (',' Identifier)* ','? '>'
 ```
 
 ```xray
-type Outcome = int | string                          // union alias
-type Mapper = fn(int) -> int                           // function-type alias
-type Point = { x: float, y: float }                  // structural object alias (sealed)
+type Outcome = i64 | string                          // union alias
+type Mapper = fn(i64) -> i64                           // function-type alias
+type Point = { x: f64, y: f64 }                  // structural object alias (sealed)
 type Pair<T> = { first: T, second: T }                // generic alias
 ```
 

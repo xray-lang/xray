@@ -42,8 +42,8 @@ var total_time = time.monotonic() - start_time
 print("执行耗时: " + string(wait_time) + " ms")
 print("总耗时: " + string(total_time) + " ms")
 /* 计算吞吐量 */
-var throughput = float(BURST_SIZE) / (float(total_time) / 1000)
-print("吞吐量: " + string(int(throughput)) + " 协程/秒")
+var throughput = (BURST_SIZE as f64) / ((total_time as f64) / 1000)
+print("吞吐量: " + string((throughput as i64)) + " 协程/秒")
 /* 验证 */
 var all_done = true
 for (var i = 0; i < len(tasks); i++) {

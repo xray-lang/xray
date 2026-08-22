@@ -80,7 +80,7 @@ TEST(run_closure_blocking_reuses_isolate_across_calls) {
     xray_vm_delete(iso);
 }
 
-/* An Array<byte> argument built from C is deep-copied into the coroutine and
+/* An Array<u8> argument built from C is deep-copied into the coroutine and
  * survives the drive. http.post to an invalid URL throws before any I/O, so
  * this covers the byte-array argument path without the network. */
 TEST(run_closure_blocking_accepts_byte_array_argument) {

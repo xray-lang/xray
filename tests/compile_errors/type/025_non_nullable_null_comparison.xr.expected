@@ -1,1 +1,1 @@
-Comparison: cannot compare non-nullable type 'int' with null
+Comparison: cannot compare non-nullable type 'i64' with null

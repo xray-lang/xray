@@ -6,21 +6,21 @@
 
 enum E { A, B }
 
-fn fa(x: int) -> int {
+fn fa(x: i64) -> i64 {
     if (x < 0) {
         throw E.A
     }
     return x + 1
 }
 
-fn fb(x: int) -> int {
+fn fb(x: i64) -> i64 {
     if (x < 0) {
         throw E.B
     }
     return x + 2
 }
 
-fn call_first(fns: Array<fn(int) -> int>, x: int) -> int {
+fn call_first(fns: Array<fn(i64) -> i64>, x: i64) -> i64 {
     return fns[0](x)
 }
 
@@ -28,7 +28,7 @@ fn call_first(fns: Array<fn(int) -> int>, x: int) -> int {
 fn test_error_set_not_in_function_type() {
     // [fa, fb] only type-checks as Array<fn(int) -> int> if fa and fb share the
     // same function type despite throwing different enum errors.
-    var fns: Array<fn(int) -> int> = [fa, fb]
+    var fns: Array<fn(i64) -> i64> = [fa, fb]
     assert_eq(len(fns), 2)
     assert_eq(fns[0](10), 11)
     assert_eq(fns[1](10), 12)

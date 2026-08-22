@@ -159,7 +159,7 @@ fn test_match_expression_result() {
 
 @test
 fn test_match_in_function() {
-    fn classify(n: int) -> string {
+    fn classify(n: i64) -> string {
         return match (n) {
             0 -> "zero"
             n if (n > 0) -> "positive"
@@ -215,7 +215,7 @@ fn test_match_no_branch_throws() {
 
 @test
 fn test_match_block_arm_return() {
-    fn classify(n: int) -> string {
+    fn classify(n: i64) -> string {
         match (n) {
             1 -> {
                 return "one"

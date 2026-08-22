@@ -1,5 +1,5 @@
 enum Result {
-    Ok(value: int),
+    Ok(value: i64),
     Error(message: string)
 }
 

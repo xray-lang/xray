@@ -105,7 +105,7 @@ static inline XrValue xr_int_min_method(XrVMRuntime *iso, XrValue self, XrValue 
     return xr_int(v);
 }
 
-/* int.toFloat() -> float. Pure, no GC. */
+/* int.toF64() -> float. Pure, no GC. */
 static inline XrValue xr_int_to_float_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;

@@ -71,7 +71,7 @@ static XrJsonValue *make_enum_value_completions(const char *enum_name) {
     xjson_object_set(i1, "sortText", xjson_new_string("0"));
     xjson_array_push(items, i1);
 
-    snprintf(detail, sizeof(detail), "%s.ordinal: int", enum_name);
+    snprintf(detail, sizeof(detail), "%s.ordinal: i64", enum_name);
     XrJsonValue *i3 = make_completion_item("ordinal", 10, detail);
     xjson_object_set(i3, "sortText", xjson_new_string("1"));
     xjson_array_push(items, i3);
@@ -274,10 +274,10 @@ static XlspBuiltinType infer_type_from_source(const char *content, const char *v
                 after++;
                 while (*after == ' ' || *after == '\t')
                     after++;
-                if (strncmp(after, TYPE_NAME_INT, 3) == 0)
-                    return XLSP_TYPE_INT;
-                if (strncmp(after, TYPE_NAME_FLOAT, 5) == 0)
-                    return XLSP_TYPE_FLOAT;
+                if (strncmp(after, TYPE_NAME_I64, 3) == 0)
+                    return XLSP_TYPE_I64;
+                if (strncmp(after, TYPE_NAME_F64, 5) == 0)
+                    return XLSP_TYPE_F64;
                 if (strncmp(after, TYPE_NAME_STRING, 6) == 0)
                     return XLSP_TYPE_STRING;
                 if (strncmp(after, TYPE_NAME_BOOL, 4) == 0)
@@ -409,7 +409,7 @@ static XrJsonValue *complete_basic(XrLspServer *server, XrLspDocument *doc, XrLs
             if (sym->kind == XA_SYM_FUNCTION || sym->kind == XA_SYM_METHOD) {
                 kind = 3;
 
-                // Build detailed function signature: fn(a: int, b: str): ReturnType
+                // Build detailed function signature: fn(a: i64, b: str): ReturnType
                 XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
                 char sig_buf[512];
                 int sig_len = 0;
@@ -1053,9 +1053,9 @@ static XlspBuiltinType type_to_builtin_bucket(XrType *type) {
     if (type->kind == XR_KIND_CHANNEL)
         return XLSP_TYPE_CHANNEL;
     if (XR_TYPE_IS_INT(type))
-        return XLSP_TYPE_INT;
+        return XLSP_TYPE_I64;
     if (XR_TYPE_IS_FLOAT(type))
-        return XLSP_TYPE_FLOAT;
+        return XLSP_TYPE_F64;
     if (XR_TYPE_IS_BOOL(type))
         return XLSP_TYPE_BOOL;
     if (XR_TYPE_IS_JSON(type))

@@ -31,14 +31,14 @@ const HTTP_SERVER_READ_CHUNK_BYTES = 8192
 const HTTP_SERVER_ACCEPT_POLL_MS = 100
 const HTTP_SERVER_BACKLOG = 1024
 
-fn _floorDiv(a: int, b: int) -> int {
+fn _floorDiv(a: i64, b: i64) -> i64 {
     var q = a / b
     var r = a % b
     if (r < 0) { q = q - 1 }
     return q
 }
 
-fn _daysFromCivil(year: int, month: int, day: int) -> int {
+fn _daysFromCivil(year: i64, month: i64, day: i64) -> i64 {
     var y = year
     if (month <= 2) { y = y - 1 }
     var era = _floorDiv(y, 400)
@@ -50,12 +50,12 @@ fn _daysFromCivil(year: int, month: int, day: int) -> int {
     return era * 146097 + doe - 719468
 }
 
-fn _timeFromCivil(year: int, month: int, day: int, hour: int, minute: int, second: int) -> int {
+fn _timeFromCivil(year: i64, month: i64, day: i64, hour: i64, minute: i64, second: i64) -> i64 {
     return _daysFromCivil(year, month, day) * COOKIE_SECONDS_PER_DAY + hour * 3600 +
            minute * 60 + second
 }
 
-fn _parseIntStrict(s: string) -> int? {
+fn _parseIntStrict(s: string) -> i64? {
     var t = text.trim(s)
     if (len(t) == 0) { return null }
     var sign = 1
@@ -69,7 +69,7 @@ fn _parseIntStrict(s: string) -> int? {
     if (i >= len(t)) { return null }
     var out = 0
     while (i < len(t)) {
-        var c = int(t.runes().nth(i).toUInt32())
+        var c = (t.runes().nth(i).toUInt32() as i64)
         if (c < 48 || c > 57) { return null }
         out = out * 10 + (c - 48)
         i = i + 1
@@ -93,7 +93,7 @@ fn _splitWs(s: string) -> Array<string> {
     return out
 }
 
-fn _monthNumber(raw: string) -> int {
+fn _monthNumber(raw: string) -> i64 {
     var m = text.lower(raw)
     if (m == "jan") { return 1 }
     if (m == "feb") { return 2 }
@@ -110,7 +110,7 @@ fn _monthNumber(raw: string) -> int {
     return 0
 }
 
-fn _parseHms(raw: string) -> Array<int>? {
+fn _parseHms(raw: string) -> Array<i64>? {
     var parts = raw.split(":")
     if (len(parts) < 2 || len(parts) > 3) { return null }
     var h = _parseIntStrict(parts[0])
@@ -126,20 +126,20 @@ fn _parseHms(raw: string) -> Array<int>? {
     return [h!, m!, s]
 }
 
-fn _dateTimestamp(year: int, month: int, day: int, hmsRaw: string) -> int? {
+fn _dateTimestamp(year: i64, month: i64, day: i64, hmsRaw: string) -> i64? {
     var hms = _parseHms(hmsRaw)
     if (hms == null) { return null }
     if (year < 1601 || month < 1 || month > 12 || day < 1 || day > 31) { return null }
     return _timeFromCivil(year, month, day, hms![0], hms![1], hms![2])
 }
 
-fn _twoDigitCookieYear(y: int) -> int {
+fn _twoDigitCookieYear(y: i64) -> i64 {
     if (y >= 0 && y <= 68) { return 2000 + y }
     if (y >= 69 && y <= 99) { return 1900 + y }
     return y
 }
 
-fn _parseCookieDate(raw: string) -> int {
+fn _parseCookieDate(raw: string) -> i64 {
     var tokens = _splitWs(text.trim(raw))
     if (len(tokens) >= 5 && tokens[0].endsWith(",")) {
         var day = _parseIntStrict(tokens[1])
@@ -208,7 +208,7 @@ fn _sameCookie(a: Cookie, b: Cookie) -> bool {
            a.path == b.path
 }
 
-fn _cookieNow(nowSeconds: int) -> int {
+fn _cookieNow(nowSeconds: i64) -> i64 {
     if (nowSeconds > 0) { return nowSeconds }
     return time.now() / 1000
 }
@@ -218,7 +218,7 @@ export class Cookie {
     value: string
     domain: string
     path: string
-    expires: int
+    expires: i64
     secure: bool
     httpOnly: bool
     sameSite: string
@@ -229,7 +229,7 @@ export class Cookie {
         value: string,
         domain: string,
         path: string,
-        expires: int = 0,
+        expires: i64 = 0,
         secure: bool = false,
         httpOnly: bool = false,
         sameSite: string = "",
@@ -246,11 +246,11 @@ export class Cookie {
         this.hostOnly = hostOnly
     }
 
-    isExpired(nowSeconds: int = 0) -> bool {
+    isExpired(nowSeconds: i64 = 0) -> bool {
         return this.expires > 0 && this.expires <= _cookieNow(nowSeconds)
     }
 
-    matches(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0) -> bool {
+    matches(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0) -> bool {
         if (this.isExpired(nowSeconds)) { return false }
         if (this.hostOnly) {
             if (text.lower(this.domain) != text.lower(domain)) { return false }
@@ -269,16 +269,16 @@ export class Cookie {
 
 export class CookieJar {
     cookies: Array<Cookie>
-    maxCookies: int
+    maxCookies: i64
 
-    constructor(maxCookies: int = 300) {
+    constructor(maxCookies: i64 = 300) {
         this.cookies = []
         this.maxCookies = maxCookies
     }
 
-    count: int { fn() { return len(this.cookies) } }
+    count: i64 { fn() { return len(this.cookies) } }
 
-    add(cookie: Cookie, nowSeconds: int = 0) {
+    add(cookie: Cookie, nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)
         var next: Array<Cookie> = []
         var replaced = false
@@ -301,7 +301,7 @@ export class CookieJar {
         this.cookies = next
     }
 
-    addFromResponse(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: int = 0) {
+    addFromResponse(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)
         for (var i = 0; i < len(setCookieHeaders); i++) {
             var cookie = parseSetCookie(setCookieHeaders[i], requestDomain, requestPath, now)
@@ -309,7 +309,7 @@ export class CookieJar {
         }
     }
 
-    getHeader(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0) -> string? {
+    getHeader(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0) -> string? {
         var now = _cookieNow(nowSeconds)
         var out = StringBuilder()
         var first = true
@@ -324,7 +324,7 @@ export class CookieJar {
         return out.toString()
     }
 
-    cleanup(nowSeconds: int = 0) {
+    cleanup(nowSeconds: i64 = 0) {
         var now = _cookieNow(nowSeconds)
         var next: Array<Cookie> = []
         for (var i = 0; i < len(this.cookies); i++) {
@@ -350,7 +350,7 @@ export class CookieJar {
 }
 
 export fn parseSetCookie(header: string, requestDomain: string = "", requestPath: string = "/",
-                  nowSeconds: int = 0) -> Cookie? {
+                  nowSeconds: i64 = 0) -> Cookie? {
     var now = _cookieNow(nowSeconds)
     if (len(header) == 0 || len(header.bytes()) > COOKIE_MAX_INPUT_LEN) { return null }
     var parts = header.split(";")
@@ -413,7 +413,7 @@ export fn parseSetCookie(header: string, requestDomain: string = "", requestPath
     return Cookie(name, value, domain, path, expires, secure, httpOnly, sameSite, hostOnly)
 }
 
-export fn cookieJar(maxCookies: int = 300) -> CookieJar {
+export fn cookieJar(maxCookies: i64 = 300) -> CookieJar {
     return CookieJar(maxCookies)
 }
 
@@ -439,12 +439,12 @@ class _FormField {
     }
 }
 
-fn _normalizeLimit(limit: int) -> int {
+fn _normalizeLimit(limit: i64) -> i64 {
     if (limit <= 0) { return 0 }
     return limit
 }
 
-fn _limitExceeded(limit: int, current: int, added: int) -> bool {
+fn _limitExceeded(limit: i64, current: i64, added: i64) -> bool {
     return limit > 0 && current + added > limit
 }
 
@@ -559,7 +559,7 @@ fn _routePatternIsStatic(pattern: string) -> bool {
     return true
 }
 
-fn _joinRouteTail(segs: Array<string>, start: int) -> string {
+fn _joinRouteTail(segs: Array<string>, start: i64) -> string {
     var out = StringBuilder()
     for (var i = start; i < len(segs); i++) {
         if (i > start) { out.append("/") }
@@ -709,7 +709,7 @@ fn _serverDefaultHandler(req: HttpRequest) -> HttpResponse {
         500,
         "Internal Server Error",
         Headers(),
-        Array<byte>(0)
+        Array<u8>(0)
     )
 }
 
@@ -796,7 +796,7 @@ fn _serverRequest(msg: _HttpRequestBytes, params: Map<string, string>) -> HttpRe
     )
 }
 
-fn _serverStatusResponse(status: int, body: string, keepAlive: bool = false) -> string {
+fn _serverStatusResponse(status: i64, body: string, keepAlive: bool = false) -> string {
     var text = responseText(status, body, "text/plain; charset=utf-8", null, keepAlive)
     if (text != null) { return text! }
     return "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 21\r\nConnection: close\r\n\r\nInternal Server Error"
@@ -821,7 +821,7 @@ fn _serverArrayResponse(value: JSON.Value, keepAlive: bool) -> string {
     var body = ""
     var headers = Headers()
 
-    if (len(arr) >= 1 && typeName(arr[0]) == "int") { status = int(arr[0]) }
+    if (len(arr) >= 1 && typeName(arr[0]) == "i64") { status = (arr[0] as i64) }
     if (len(arr) >= 2 && typeName(arr[1]) == "string") { contentType = string(arr[1]) }
     if (len(arr) >= 3 && arr[2] != null) { body = string(arr[2]) }
     if (len(arr) >= 4) {
@@ -945,7 +945,7 @@ fn _serveHttpConnection(
     // amortized O(1) and pipelined requests advance `start` without copying
     // the buffer.  The consumed prefix is dropped once per request boundary,
     // right before blocking for more input.
-    var raw = Array<byte>()
+    var raw = Array<u8>()
     var start = 0
     while (running.load()) {
         var headEnd = _byteArrayHeadEnd(raw, start)
@@ -973,7 +973,7 @@ fn _serveHttpConnection(
                 }
                 start = start + msg!.consumedBytes
                 if (start < len(raw)) { continue }
-                raw = Array<byte>()
+                raw = Array<u8>()
                 start = 0
             }
         }
@@ -985,11 +985,11 @@ fn _serveHttpConnection(
 
         if (start > 0) {
             var rest = _byteArrayRange(raw, start, len(raw))
-            raw = rest ?? Array<byte>()
+            raw = rest ?? Array<u8>()
             start = 0
         }
         net.setReadDeadline(live, time.monotonic() + HTTP_SERVER_ACCEPT_POLL_MS)
-        var chunk = Array<byte>(HTTP_SERVER_READ_CHUNK_BYTES)
+        var chunk = Array<u8>(HTTP_SERVER_READ_CHUNK_BYTES)
         var read = net.readInto(live, ref chunk, HTTP_SERVER_READ_CHUNK_BYTES)
         if (read < 0) {
             var err = net.lastError(live)
@@ -1015,7 +1015,7 @@ fn _serverStopWatch(running: Atomic<bool>) {
 
 // listen throws NetError; the server keeps its boolean listen contract, so
 // setup failure is folded back into null here.
-fn _serverListenSocket(port: int) -> NetListener? {
+fn _serverListenSocket(port: i64) -> NetListener? {
     try {
         return net.listen(port, HTTP_SERVER_BACKLOG)
     } catch (e: NetError) {
@@ -1023,7 +1023,7 @@ fn _serverListenSocket(port: int) -> NetListener? {
     }
 }
 
-fn _serverListen(router: _ServerRouter, port: int, running: Atomic<bool>) -> bool {
+fn _serverListen(router: _ServerRouter, port: i64, running: Atomic<bool>) -> bool {
     if (!running.load()) { return false }
     var listener = _serverListenSocket(port)
     if (listener == null) { return false }
@@ -1095,7 +1095,7 @@ export class Server {
     // Listen while the caller-owned synchronization capability remains true.
     // A false initial value is rejected.  Setting it to false stops accept and
     // lets the structured scope drain active keep-alive connections promptly.
-    listen(port: int, running: Atomic<bool>) -> bool {
+    listen(port: i64, running: Atomic<bool>) -> bool {
         return _serverListen(this.router, port, running)
     }
 }
@@ -1115,11 +1115,11 @@ export class MultipartBody {
 export class FormData {
     boundary: string
     fields: Array<_FormField>
-    totalSize: int
-    maxTotalSize: int
-    maxFileSize: int
+    totalSize: i64
+    maxTotalSize: i64
+    maxFileSize: i64
 
-    constructor(maxTotalSize: int, maxFileSize: int) {
+    constructor(maxTotalSize: i64, maxFileSize: i64) {
         this.boundary = _boundary()
         this.fields = []
         this.totalSize = 0
@@ -1194,8 +1194,8 @@ export class FormData {
 
 // formData - Create an explicit multipart/form-data builder.
 export fn formData(
-    maxTotalSize: int = 67108864,
-    maxFileSize: int = 33554432
+    maxTotalSize: i64 = 67108864,
+    maxFileSize: i64 = 33554432
 ) -> FormData {
     return FormData(maxTotalSize, maxFileSize)
 }
@@ -1366,10 +1366,10 @@ export type HttpRequestOptions = {
     url: string,
     method: HttpMethod?,
     headers: Headers?,
-    body: Array<byte>?,
+    body: Array<u8>?,
     followRedirects: bool?,
-    maxRedirects: int?,
-    timeoutMs: int?,
+    maxRedirects: i64?,
+    timeoutMs: i64?,
     version: HttpVersion?
 }
 
@@ -1438,7 +1438,7 @@ fn _trimLineEnd(line: string) -> string {
     return line
 }
 
-fn _responseHeadEnd(raw: string) -> int {
+fn _responseHeadEnd(raw: string) -> i64 {
     var crlf = raw.indexOf("\r\n\r\n")
     if (crlf >= 0) { return crlf + 4 }
     var lf = raw.indexOf("\n\n")
@@ -1446,26 +1446,26 @@ fn _responseHeadEnd(raw: string) -> int {
     return -1
 }
 
-fn _parseStatusCode(raw: string) -> int {
+fn _parseStatusCode(raw: string) -> i64 {
     if (len(raw) != 3) { return -1 }
     var code = 0
     for (var i = 0; i < len(raw); i++) {
         var o = raw.runes().nth(i).toUInt32()
         if (o < 48 || o > 57) { return -1 }
-        code = code * 10 + ((o - 48) as int)
+        code = code * 10 + ((o - 48) as i64)
     }
     return code
 }
 
-fn _hexValue(c: rune) -> int {
+fn _hexValue(c: rune) -> i64 {
     var o = c.toUInt32()
-    if (o >= 48 && o <= 57) { return (o - 48) as int }
-    if (o >= 65 && o <= 70) { return (10 + o - 65) as int }
-    if (o >= 97 && o <= 102) { return (10 + o - 97) as int }
+    if (o >= 48 && o <= 57) { return (o - 48) as i64 }
+    if (o >= 65 && o <= 70) { return (10 + o - 65) as i64 }
+    if (o >= 97 && o <= 102) { return (10 + o - 97) as i64 }
     return -1
 }
 
-fn _parseChunkSize(line: string) -> int? {
+fn _parseChunkSize(line: string) -> i64? {
     var semi = line.indexOf(";")
     var raw = line
     if (semi >= 0) { raw = line.slice(0, semi) }
@@ -1525,7 +1525,7 @@ fn _chunkedFramingFrom(headers: Headers) -> bool? {
     return chunked
 }
 
-fn _contentLengthFrom(headers: Headers) -> int? {
+fn _contentLengthFrom(headers: Headers) -> i64? {
     var pairs = headers.entries()
     var found = false
     var length = -1
@@ -1540,8 +1540,8 @@ fn _contentLengthFrom(headers: Headers) -> int? {
     return length
 }
 
-fn _byteCrlfIndex(raw: string, start: int) -> int {
-    var bytes: Slice<byte> = raw.bytes()
+fn _byteCrlfIndex(raw: string, start: i64) -> i64 {
+    var bytes: Slice<u8> = raw.bytes()
     var pos = start
     while (pos + 1 < len(bytes)) {
         if (bytes[pos] == 13 && bytes[pos + 1] == 10) {
@@ -1552,22 +1552,22 @@ fn _byteCrlfIndex(raw: string, start: int) -> int {
     return -1
 }
 
-fn _byteSlice(raw: string, start: int, end: int) -> string? {
+fn _byteSlice(raw: string, start: i64, end: i64) -> string? {
     var bytes = raw.copyBytes()
     if (start < 0 || end < start || end > len(bytes)) { return null }
-    var out = Array<byte>()
+    var out = Array<u8>()
     for (var i = start; i < end; i++) { out.push(bytes[i]) }
     return string.fromUtf8(out[:])
 }
 
-fn _byteCrlfAt(raw: string, pos: int) -> bool {
-    var bytes: Slice<byte> = raw.bytes()
+fn _byteCrlfAt(raw: string, pos: i64) -> bool {
+    var bytes: Slice<u8> = raw.bytes()
     return pos + 1 < len(bytes) &&
            bytes[pos] == 13 &&
            bytes[pos + 1] == 10
 }
 
-fn _responseAllowsBody(status: int) -> bool {
+fn _responseAllowsBody(status: i64) -> bool {
     return !(status >= 100 && status < 200) && status != 204 && status != 304
 }
 
@@ -1588,7 +1588,7 @@ fn _httpUrlOk(raw: string) -> bool {
     return (scheme == "http:" || scheme == "https:") && len(p.hostname) > 0
 }
 
-fn _originPort(raw: string) -> int {
+fn _originPort(raw: string) -> i64 {
     var p = parseUrl(raw)
     if (len(p.port) > 0) {
         var port = _parseIntStrict(p.port)
@@ -1609,11 +1609,11 @@ fn _sameOrigin(a: string, b: string) -> bool {
 class _HttpRequestUrl {
     scheme: string
     host: string
-    port: int
+    port: i64
     path: string
     isHttps: bool
 
-    constructor(scheme: string, host: string, port: int, path: string, isHttps: bool) {
+    constructor(scheme: string, host: string, port: i64, path: string, isHttps: bool) {
         this.scheme = scheme
         this.host = host
         this.port = port
@@ -1629,8 +1629,8 @@ export class HttpRequest {
     path: string
     query: QueryParams
     headers: Headers
-    body: Array<byte>
-    contentLength: int
+    body: Array<u8>
+    contentLength: i64
     params: Map<string, string>
 
     constructor(
@@ -1638,8 +1638,8 @@ export class HttpRequest {
         path: string,
         query: QueryParams,
         headers: Headers,
-        body: Array<byte>,
-        contentLength: int,
+        body: Array<u8>,
+        contentLength: i64,
         params: Map<string, string>
     ) {
         this.method = method
@@ -1668,17 +1668,17 @@ export class HttpRequest {
 // text() and json() are explicit decoding operations.
 export class HttpResponse {
     version: HttpVersion
-    status: int
+    status: i64
     reason: string
     headers: Headers
-    body: Array<byte>
+    body: Array<u8>
 
     constructor(
         version: HttpVersion,
-        status: int,
+        status: i64,
         reason: string,
         headers: Headers,
-        body: Array<byte>
+        body: Array<u8>
     ) {
         this.version = version
         this.status = status
@@ -1704,7 +1704,7 @@ export class HttpResponse {
 
 export fn textResponse(
     body: string,
-    status: int = 200,
+    status: i64 = 200,
     headers: Headers? = null
 ) -> HttpResponse {
     return HttpResponse(
@@ -1718,7 +1718,7 @@ export fn textResponse(
 
 export fn jsonResponse<T: JSON.Encodable>(
     value: T,
-    status: int = 200,
+    status: i64 = 200,
     headers: Headers? = null
 ) -> HttpResponse {
     var responseHeaders = headers ?? Headers()
@@ -1734,11 +1734,11 @@ export fn jsonResponse<T: JSON.Encodable>(
     )
 }
 
-export fn json<T: JSON.Encodable>(value: T, status: int = 200) -> HttpResponse {
+export fn json<T: JSON.Encodable>(value: T, status: i64 = 200) -> HttpResponse {
     return jsonResponse(value, status, null)
 }
 
-fn _firstAuthorityEnd(raw: string, start: int) -> int {
+fn _firstAuthorityEnd(raw: string, start: i64) -> i64 {
     var i = start
     while (i < len(raw)) {
         var ch = raw.runes().nth(i)
@@ -1748,7 +1748,7 @@ fn _firstAuthorityEnd(raw: string, start: int) -> int {
     return len(raw)
 }
 
-fn _findCharBefore(raw: string, needle: rune, start: int, end: int) -> int {
+fn _findCharBefore(raw: string, needle: rune, start: i64, end: i64) -> i64 {
     var i = start
     while (i < end) {
         if (raw.runes().nth(i) == needle) { return i }
@@ -1757,19 +1757,19 @@ fn _findCharBefore(raw: string, needle: rune, start: int, end: int) -> int {
     return -1
 }
 
-fn _parsePortStrict(raw: string) -> int? {
+fn _parsePortStrict(raw: string) -> i64? {
     if (len(raw) == 0 || len(raw) > 5) { return null }
     var port = 0
     for (var i = 0; i < len(raw); i++) {
         var c = raw.runes().nth(i).toUInt32()
         if (c < 48 || c > 57) { return null }
-        port = port * 10 + ((c - 48) as int)
+        port = port * 10 + ((c - 48) as i64)
     }
     if (port <= 0 || port > 65535) { return null }
     return port
 }
 
-fn _httpPathFrom(raw: string, pos: int) -> string {
+fn _httpPathFrom(raw: string, pos: i64) -> string {
     var path = "/"
     if (pos < len(raw)) {
         path = raw.slice(pos)
@@ -1852,7 +1852,7 @@ fn _httpRequestUrlText(url: _HttpRequestUrl) -> string {
     return url.scheme + "://" + _httpRequestHostHeader(url) + url.path
 }
 
-fn _requestTimeout(options: HttpRequestOptions) -> int {
+fn _requestTimeout(options: HttpRequestOptions) -> i64 {
     var raw = options.timeoutMs
     if (raw == null) { return HTTP_DEFAULT_TIMEOUT_MS }
     var t = raw!
@@ -1860,7 +1860,7 @@ fn _requestTimeout(options: HttpRequestOptions) -> int {
     return t
 }
 
-fn _requestMaxRedirects(options: HttpRequestOptions) -> int {
+fn _requestMaxRedirects(options: HttpRequestOptions) -> i64 {
     var raw = options.maxRedirects
     if (raw == null) { return 5 }
     var n = raw!
@@ -1872,9 +1872,9 @@ fn _requestFollowRedirects(options: HttpRequestOptions) -> bool {
     return options.followRedirects ?? true
 }
 
-fn _requestBody(options: HttpRequestOptions) -> Array<byte> {
+fn _requestBody(options: HttpRequestOptions) -> Array<u8> {
     if (options.body != null) { return copy(options.body!) }
-    return Array<byte>(0)
+    return Array<u8>(0)
 }
 
 fn _requestHeaders(options: HttpRequestOptions) -> Headers {
@@ -1916,24 +1916,24 @@ fn _headersLocation(headers: Headers) -> string? {
 
 class _HttpResponseBytes {
     head: ResponseHead
-    body: Array<byte>
+    body: Array<u8>
 
-    constructor(head: ResponseHead, body: Array<byte>) {
+    constructor(head: ResponseHead, body: Array<u8>) {
         this.head = head
         this.body = body
     }
 }
 
-fn _byteArrayRange(raw: Array<byte>, start: int, end: int) -> Array<byte>? {
+fn _byteArrayRange(raw: Array<u8>, start: i64, end: i64) -> Array<u8>? {
     if (start < 0 || end < start || end > len(raw)) { return null }
-    var out = Array<byte>(end - start)
+    var out = Array<u8>(end - start)
     for (var i = start; i < end; i++) {
         out[i - start] = raw[i]
     }
     return out
 }
 
-fn _byteArrayText(raw: Array<byte>, start: int, end: int) -> string? {
+fn _byteArrayText(raw: Array<u8>, start: i64, end: i64) -> string? {
     var bytes = _byteArrayRange(raw, start, end)
     if (bytes == null) { return null }
     try {
@@ -1943,7 +1943,7 @@ fn _byteArrayText(raw: Array<byte>, start: int, end: int) -> string? {
     }
 }
 
-fn _byteArrayCrlfIndex(raw: Array<byte>, start: int) -> int {
+fn _byteArrayCrlfIndex(raw: Array<u8>, start: i64) -> i64 {
     var pos = start
     while (pos + 1 < len(raw)) {
         if (raw[pos] == 13 && raw[pos + 1] == 10) { return pos }
@@ -1952,7 +1952,7 @@ fn _byteArrayCrlfIndex(raw: Array<byte>, start: int) -> int {
     return -1
 }
 
-fn _byteArrayHeadEnd(raw: Array<byte>, start: int = 0) -> int {
+fn _byteArrayHeadEnd(raw: Array<u8>, start: i64 = 0) -> i64 {
     var pos = start
     while (pos + 1 < len(raw)) {
         if (pos + 3 < len(raw) && raw[pos] == 13 && raw[pos + 1] == 10 &&
@@ -1965,8 +1965,8 @@ fn _byteArrayHeadEnd(raw: Array<byte>, start: int = 0) -> int {
     return -1
 }
 
-fn _copyByteArray(data: Array<byte>) -> Array<byte> {
-    var out = Array<byte>(len(data))
+fn _copyByteArray(data: Array<u8>) -> Array<u8> {
+    var out = Array<u8>(len(data))
     for (var i = 0; i < len(data); i++) { out[i] = data[i] }
     return out
 }
@@ -1974,18 +1974,18 @@ fn _copyByteArray(data: Array<byte>) -> Array<byte> {
 // _ChunkedBytes - Decoded chunked payload plus the offset one past its
 // terminating trailer block inside the scanned buffer.
 class _ChunkedBytes {
-    body: Array<byte>
-    endOffset: int
+    body: Array<u8>
+    endOffset: i64
 
-    constructor(body: Array<byte>, endOffset: int) {
+    constructor(body: Array<u8>, endOffset: i64) {
         this.body = body
         this.endOffset = endOffset
     }
 }
 
-fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> _ChunkedBytes? {
+fn _parseChunkedBytes(raw: Array<u8>, start: i64, maxBodyBytes: i64) -> _ChunkedBytes? {
     var pos = start
-    var out = Array<byte>()
+    var out = Array<u8>()
 
     while (true) {
         var lineEnd = _byteArrayCrlfIndex(raw, pos)
@@ -2025,10 +2025,10 @@ fn _parseChunkedBytes(raw: Array<byte>, start: int, maxBodyBytes: int) -> _Chunk
 // byte-exact instead of routing them through UTF-8 request text.
 class _HttpRequestBytes {
     head: RequestHead
-    body: Array<byte>
-    consumedBytes: int
+    body: Array<u8>
+    consumedBytes: i64
 
-    constructor(head: RequestHead, body: Array<byte>, consumedBytes: int) {
+    constructor(head: RequestHead, body: Array<u8>, consumedBytes: i64) {
         this.head = head
         this.body = body
         this.consumedBytes = consumedBytes
@@ -2040,8 +2040,8 @@ class _HttpRequestBytes {
 // the buffered bytes do not yet hold the complete body (or its chunked
 // framing is invalid), so the caller keeps reading.  Chunked trailers are
 // validated and discarded because HttpRequest does not expose them.
-fn _parseRequestBytes(raw: Array<byte>, start: int, headEnd: int, head: RequestHead,
-                      maxBodyBytes: int) -> _HttpRequestBytes? {
+fn _parseRequestBytes(raw: Array<u8>, start: i64, headEnd: i64, head: RequestHead,
+                      maxBodyBytes: i64) -> _HttpRequestBytes? {
     if (head.chunked) {
         var chunked = _parseChunkedBytes(raw, headEnd, maxBodyBytes)
         if (chunked == null) { return null }
@@ -2054,14 +2054,14 @@ fn _parseRequestBytes(raw: Array<byte>, start: int, headEnd: int, head: RequestH
         if (body == null) { return null }
         return _HttpRequestBytes(head, body!, bodyEnd - start)
     }
-    return _HttpRequestBytes(head, Array<byte>(0), headEnd - start)
+    return _HttpRequestBytes(head, Array<u8>(0), headEnd - start)
 }
 
 fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
-    var raw = Array<byte>()
+    var raw = Array<u8>()
     var closeDelimited = false
     while (len(raw) <= HTTP_MAX_RESPONSE_BYTES) {
-        var chunk = Array<byte>(8192)
+        var chunk = Array<u8>(8192)
         var read = net.readInto(conn, ref chunk, 8192)
         if (read < 0) { return null }
         if (read == 0) { break }
@@ -2077,7 +2077,7 @@ fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
         head!.headerBytes = headEnd
 
         var noBody = !_responseAllowsBody(head!.status) || method == "HEAD"
-        if (noBody) { return _HttpResponseBytes(head!, Array<byte>(0)) }
+        if (noBody) { return _HttpResponseBytes(head!, Array<u8>(0)) }
 
         if (head!.chunked) {
             var chunked = _parseChunkedBytes(raw, headEnd, HTTP_MAX_RESPONSE_BYTES)
@@ -2112,7 +2112,7 @@ fn _readHttpResponse(conn: NetConn, method: string) -> _HttpResponseBytes? {
 
 // dial throws NetError; the HTTP client folds every setup failure back into
 // null so _singleRequest keeps its single ConnectionFailed classification.
-fn _dialHttpConn(url: _HttpRequestUrl, timeoutMs: int) -> NetConn? {
+fn _dialHttpConn(url: _HttpRequestUrl, timeoutMs: i64) -> NetConn? {
     try {
         return net.dial(url.host, url.port, DialOptions(timeoutMs, url.isHttps))
     } catch (e: NetError) {
@@ -2120,8 +2120,8 @@ fn _dialHttpConn(url: _HttpRequestUrl, timeoutMs: int) -> NetConn? {
     }
 }
 
-fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, body: Array<byte>,
-                  timeoutMs: int, stripSensitive: bool) -> HttpResponse {
+fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, body: Array<u8>,
+                  timeoutMs: i64, stripSensitive: bool) -> HttpResponse {
     var conn = _dialHttpConn(url, timeoutMs)
     if (conn == null) { throw HttpError.ConnectionFailed(_httpRequestUrlText(url)) }
 
@@ -2166,7 +2166,7 @@ fn _singleRequest(url: _HttpRequestUrl, method: HttpMethod, headers: Headers, bo
 }
 
 fn _singleHttp2Request(url: _HttpRequestUrl, method: HttpMethod, headers: Headers,
-                       body: Array<byte>, timeoutMs: int,
+                       body: Array<u8>, timeoutMs: i64,
                        stripSensitive: bool) -> HttpResponse {
     if (!http2.supported()) { throw HttpError.UnsupportedVersion(HttpVersion.Http2) }
     if (!url.isHttps) {
@@ -2241,7 +2241,7 @@ export fn request(options: HttpRequestOptions) -> HttpResponse {
         current = nextUrl
         method = HttpMethod(next!.method)
         stripSensitive = next!.stripSensitiveHeaders
-        if (next!.dropBody) { body = Array<byte>(0) }
+        if (next!.dropBody) { body = Array<u8>(0) }
         redirects = redirects + 1
     }
     throw HttpError.InvalidUrl(options.url)
@@ -2258,7 +2258,7 @@ export fn get(url: string) -> HttpResponse {
 // non-empty authorization value is sent verbatim as the Authorization header,
 // covering the common bearer-token case without the caller assembling a Headers
 // collection. Transport failures throw HttpError exactly as request() does.
-export fn post(url: string, contentType: string, body: Array<byte>,
+export fn post(url: string, contentType: string, body: Array<u8>,
                authorization: string = "") -> HttpResponse {
     var headers = Headers()
     headers.set("Content-Type", contentType)
@@ -2271,21 +2271,21 @@ export fn post(url: string, contentType: string, body: Array<byte>,
 // ResponseHead - Parsed HTTP/1.x response status line and headers.
 export class ResponseHead {
     version: string
-    status: int
+    status: i64
     reason: string
     headers: Headers
-    headerBytes: int
-    contentLength: int
+    headerBytes: i64
+    contentLength: i64
     chunked: bool
     keepAlive: bool
 
     constructor(
         version: string,
-        status: int,
+        status: i64,
         reason: string,
         headers: Headers,
-        headerBytes: int,
-        contentLength: int,
+        headerBytes: i64,
+        contentLength: i64,
         chunked: bool,
         keepAlive: bool
     ) {
@@ -2327,12 +2327,12 @@ export class RedirectDecision {
 export class ChunkedBody {
     body: string
     trailers: Headers
-    consumedBytes: int
+    consumedBytes: i64
 
     constructor(
         body: string,
         trailers: Headers,
-        consumedBytes: int
+        consumedBytes: i64
     ) {
         this.body = body
         this.trailers = trailers
@@ -2354,8 +2354,8 @@ export class RequestHead {
     target: string
     version: string
     headers: Headers
-    headerBytes: int
-    contentLength: int
+    headerBytes: i64
+    contentLength: i64
     chunked: bool
     keepAlive: bool
 
@@ -2364,8 +2364,8 @@ export class RequestHead {
         target: string,
         version: string,
         headers: Headers,
-        headerBytes: int,
-        contentLength: int,
+        headerBytes: i64,
+        contentLength: i64,
         chunked: bool,
         keepAlive: bool
     ) {
@@ -2393,13 +2393,13 @@ export class RequestMessage {
     head: RequestHead
     body: string
     trailers: Headers
-    consumedBytes: int
+    consumedBytes: i64
 
     constructor(
         head: RequestHead,
         body: string,
         trailers: Headers,
-        consumedBytes: int
+        consumedBytes: i64
     ) {
         this.head = head
         this.body = body
@@ -2425,13 +2425,13 @@ export class ResponseMessage {
     head: ResponseHead
     body: string
     trailers: Headers
-    consumedBytes: int
+    consumedBytes: i64
 
     constructor(
         head: ResponseHead,
         body: string,
         trailers: Headers,
-        consumedBytes: int
+        consumedBytes: i64
     ) {
         this.head = head
         this.body = body
@@ -2455,8 +2455,8 @@ export class ResponseMessage {
 // parseChunkedBody - Decode a complete Transfer-Encoding: chunked body.
 export fn parseChunkedBody(
     raw: string,
-    maxBodyBytes: int = 67108864,
-    maxTrailerHeaders: int = 50
+    maxBodyBytes: i64 = 67108864,
+    maxTrailerHeaders: i64 = 50
 ) -> ChunkedBody? {
     var pos = 0
     var total = 0
@@ -2506,14 +2506,14 @@ export fn parseChunkedBody(
 }
 
 // decodeChunkedBody - Decode a chunked body and discard trailers.
-export fn decodeChunkedBody(raw: string, maxBodyBytes: int = 67108864) -> string? {
+export fn decodeChunkedBody(raw: string, maxBodyBytes: i64 = 67108864) -> string? {
     var parsed = parseChunkedBody(raw, maxBodyBytes)
     if (parsed == null) { return null }
     return parsed!.body
 }
 
 // parseRequestHead - Parse an HTTP/1.x request head without reading sockets.
-export fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
+export fn parseRequestHead(raw: string, maxHeaders: i64 = 100) -> RequestHead? {
     var end = _responseHeadEnd(raw)
     if (end < 0) { return null }
     var lines = raw.slice(0, end).split("\n")
@@ -2561,9 +2561,9 @@ export fn parseRequestHead(raw: string, maxHeaders: int = 100) -> RequestHead? {
 // parseRequestText - Parse a complete HTTP/1.x request text.
 export fn parseRequestText(
     raw: string,
-    maxBodyBytes: int = 67108864,
-    maxHeaders: int = 100,
-    maxTrailerHeaders: int = 50
+    maxBodyBytes: i64 = 67108864,
+    maxHeaders: i64 = 100,
+    maxTrailerHeaders: i64 = 50
 ) -> RequestMessage? {
     var head = parseRequestHead(raw, maxHeaders)
     if (head == null) { return null }
@@ -2603,9 +2603,9 @@ export fn parseRequestText(
 // parseResponseText - Parse a complete HTTP/1.x response text.
 export fn parseResponseText(
     raw: string,
-    maxBodyBytes: int = 67108864,
-    maxHeaders: int = 100,
-    maxTrailerHeaders: int = 50
+    maxBodyBytes: i64 = 67108864,
+    maxHeaders: i64 = 100,
+    maxTrailerHeaders: i64 = 50
 ) -> ResponseMessage? {
     var head = parseResponseHead(raw, maxHeaders)
     if (head == null) { return null }
@@ -2650,7 +2650,7 @@ export fn parseResponseText(
 }
 
 // parseResponseHead - Parse an HTTP/1.x response head without reading sockets.
-export fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead? {
+export fn parseResponseHead(raw: string, maxHeaders: i64 = 100) -> ResponseHead? {
     var end = _responseHeadEnd(raw)
     if (end < 0) { return null }
     var lines = raw.slice(0, end).split("\n")
@@ -2704,7 +2704,7 @@ export fn parseResponseHead(raw: string, maxHeaders: int = 100) -> ResponseHead?
 }
 
 // isRedirectStatus - True for HTTP redirect codes that carry Location.
-export fn isRedirectStatus(status: int) -> bool {
+export fn isRedirectStatus(status: i64) -> bool {
     return status == 301 || status == 302 || status == 303 ||
            status == 307 || status == 308
 }
@@ -2721,7 +2721,7 @@ export fn redirectTarget(currentUrl: string, location: string) -> string? {
 
 // redirectDecision - Compute the next URL/method and credential stripping rule.
 export fn redirectDecision(
-    status: int,
+    status: i64,
     currentUrl: string,
     location: string,
     method: string = "GET",
@@ -2807,7 +2807,7 @@ export fn requestText(
     out.append(body)
     return out.toString()
 }
-fn _statusReason(status: int) -> string {
+fn _statusReason(status: i64) -> string {
     if (status == 100) { return "Continue" }
     if (status == 101) { return "Switching Protocols" }
     if (status == 102) { return "Processing" }
@@ -2884,7 +2884,7 @@ export fn urlDecode(s: string) -> string {
 
 // responseText - Format a complete HTTP/1.1 response with explicit headers.
 export fn responseText(
-    status: int,
+    status: i64,
     body: string = "",
     contentType: string = "text/plain; charset=utf-8",
     headers: Headers? = null,

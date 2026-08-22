@@ -25,8 +25,8 @@
  *               with at least one integer-or-fraction digit
  *
  *      Any trailing residue rejects the input, so "12abc" fails instead of
- *      yielding 12. This is the grammar strconv.parseInt / strconv.parseFloat
- *      already enforce, so the builtin conversions and the stdlib agree; it
+ *      yielding 12. This is the exact scalar parse grammar shared by every
+ *      backend; it
  *      also rejects the hex-float and inf/nan spellings a libc strtod would
  *      otherwise accept behind the language's back.
  *
@@ -127,8 +127,8 @@ static inline double xr_string_parse_scale_pow10(double mantissa, int exp10) {
  *
  * The accumulator runs negative so INT64_MIN stays representable, and both
  * overflow guards fire before the operation that would overflow -- the same
- * shape strconv.parseInt uses, so the builtin and the stdlib reject exactly
- * the same magnitudes.
+ * shape used by i64.parse/tryParse, so every backend rejects exactly the same
+ * magnitudes.
  */
 static inline XrStringParseIntResult xr_string_parse_int64(const char *data, size_t len) {
     XrStringParseIntResult out = {false, 0};

@@ -1,7 +1,7 @@
 class Packet {
-    payload: Array<byte>
+    payload: Array<u8>
 
-    constructor(payload: Array<byte>) {
+    constructor(payload: Array<u8>) {
         this.payload = payload
     }
 }

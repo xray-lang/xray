@@ -1,19 +1,19 @@
 // Independent Xray oracle for the disposable typed-slot calibration.
 class Cell {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
-fn addOne(value: int) -> int {
+fn addOne(value: i64) -> i64 {
     return value + 1
 }
 
-fn run(iterations: int) -> int {
-    var array: Array<int> = [1, 2, 3, 4]
-    var table: Map<int, int> = #{}
+fn run(iterations: i64) -> i64 {
+    var array: Array<i64> = [1, 2, 3, 4]
+    var table: Map<i64, i64> = #{}
     table.set(3, 30)
     table.set(5, 50)
     table.set(7, 70)

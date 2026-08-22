@@ -7,7 +7,7 @@ print(typeName("x"))
 var xs = [1, 2, 3]
 print(typeName(xs))
 
-var m: Map<string, int> = #{"a": 1}
+var m: Map<string, i64> = #{"a": 1}
 print(typeName(m))
 
 var s = #[1, 2, 3]

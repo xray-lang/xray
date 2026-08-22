@@ -1,7 +1,7 @@
 import sys
 import sync
 
-var t = sys.Thread.spawn(fn() -> int {
+var t = sys.Thread.spawn(fn() -> i64 {
     var once = sync.Once()
     once.call(fn() {
         print("init")

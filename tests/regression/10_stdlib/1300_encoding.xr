@@ -4,7 +4,7 @@ import encoding
 import { HexError, Utf16DecodeOptions, Utf16EncodeOptions, Utf16Error } from encoding
 
 fn hexEncodeText(data: string) -> string {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return encoding.hexEncode(view)
 }
 
@@ -23,7 +23,7 @@ fn hexDecodeFails(hex: string) -> bool {
 }
 
 fn utf8ValidText(data: string) -> bool {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return encoding.utf8Valid(view)
 }
 
@@ -40,7 +40,7 @@ fn utf16Options(order: Endian, consumeBom: bool = true) -> Utf16DecodeOptions {
     return options
 }
 
-fn utf16DecodeFails(data: Slice<byte>) -> bool {
+fn utf16DecodeFails(data: Slice<u8>) -> bool {
     try {
         var decoded = encoding.utf16Decode(data)
         return len(decoded) < 0
@@ -122,21 +122,21 @@ fn test_utf8_valid() {
 
 @test
 fn test_utf8_invalid_bytes() {
-    var cont = Array<byte>(1)
+    var cont = Array<u8>(1)
     cont[0] = 0x80
     assert_eq(encoding.utf8Valid(cont[:]), false)
 
-    var overlong = Array<byte>(2)
+    var overlong = Array<u8>(2)
     overlong[0] = 0xC0
     overlong[1] = 0x80
     assert_eq(encoding.utf8Valid(overlong[:]), false)
 
-    var truncated = Array<byte>(2)
+    var truncated = Array<u8>(2)
     truncated[0] = 0xE2
     truncated[1] = 0x82
     assert_eq(encoding.utf8Valid(truncated[:]), false)
 
-    var surrogate = Array<byte>(3)
+    var surrogate = Array<u8>(3)
     surrogate[0] = 0xED
     surrogate[1] = 0xA0
     surrogate[2] = 0x80
@@ -185,23 +185,23 @@ fn test_utf16_empty() {
 
 @test
 fn test_utf16_odd_length_invalid() {
-    var bytes = Array<byte>(1)
+    var bytes = Array<u8>(1)
     assert_eq(utf16DecodeFails(bytes[:]), true)
 }
 
 @test
 fn test_utf16_surrogate_errors() {
-    var low = Array<byte>(2)
+    var low = Array<u8>(2)
     low[0] = 0x00
     low[1] = 0xDC
     assert_eq(utf16DecodeFails(low[:]), true)
 
-    var missing = Array<byte>(2)
+    var missing = Array<u8>(2)
     missing[0] = 0x00
     missing[1] = 0xD8
     assert_eq(utf16DecodeFails(missing[:]), true)
 
-    var invalid = Array<byte>(4)
+    var invalid = Array<u8>(4)
     invalid[0] = 0x00
     invalid[1] = 0xD8
     invalid[2] = 0x41
@@ -211,7 +211,7 @@ fn test_utf16_surrogate_errors() {
 
 @test
 fn test_utf16_bom_options() {
-    var bom = Array<byte>(4)
+    var bom = Array<u8>(4)
     bom[0] = 0xFE
     bom[1] = 0xFF
     bom[2] = 0

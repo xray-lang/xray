@@ -1,7 +1,7 @@
-fn xray_no_alloc_map_set_reject(scores: ref Map<int, int>, key: int, value: int) -> int {
+fn xray_no_alloc_map_set_reject(scores: ref Map<i64, i64>, key: i64, value: i64) -> i64 {
     scores.set(key, value)
     return len(scores)
 }
 
-var scores: Map<int, int> = #{}
+var scores: Map<i64, i64> = #{}
 print(xray_no_alloc_map_set_reject(ref scores, 1, 10))

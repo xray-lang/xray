@@ -1,13 +1,13 @@
 // 测试 select 发送分支
 
-fn recv_value(r: Recv<int>) -> int {
+fn recv_value(r: Recv<i64>) -> i64 {
     return match (r) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn recv_ok(r: Recv<int>) -> bool {
+fn recv_ok(r: Recv<i64>) -> bool {
     return match (r) {
         Recv.Value(_) -> true
         _ -> false

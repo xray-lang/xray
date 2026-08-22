@@ -1,5 +1,5 @@
 class HashOnly {
-    hash() -> int {
+    hash() -> i64 {
         return 1
     }
 }

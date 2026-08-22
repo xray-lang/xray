@@ -1,4 +1,4 @@
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var object = JSON.parseObject("{\"id\":7,\"name\":\"Ada\"}")
     var i = 0
     var total = 0
@@ -11,6 +11,6 @@ fn run(n: int) -> int {
 
 var iterations = 20000
 if (len(process.args) > 0) {
-    iterations = int(process.args[0]) ?? iterations
+    iterations = i64.tryParse(process.args[0]) ?? iterations
 }
 print(run(iterations))

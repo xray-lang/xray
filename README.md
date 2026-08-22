@@ -5,7 +5,7 @@
 > A lightweight, statically typed language with explicit concurrency and both bytecode VM and native AOT execution.
 
 ```xray
-fn count(xs: Array<int>) -> int {
+fn count(xs: Array<i64>) -> i64 {
     var total = 0
     for (x in xs) {
         total += x
@@ -148,7 +148,7 @@ Quoted literals use one quote for single-line inline text, two quotes for an emp
 Heap-backed execution-local values do not cross a coroutine or channel boundary implicitly. Use `copy(value)` for an independent graph or `move value` to transfer an inferred-unique root. Inline values, published `const` data, and audited synchronization handles such as channels, tasks, and atomics can cross directly.
 
 ```xray
-const ch = Channel<int>(2)
+const ch = Channel<i64>(2)
 go fn() {
     ch.send(42)
 }()
@@ -173,7 +173,7 @@ Xray does not use a garbage collector of any kind — not a concurrent tracing o
 
 Importable standard-library modules include:
 
-`base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `strconv`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, and `yaml`.
+`base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `http`, `io`, `log`, `math`, `mem`, `net`, `os`, `parallel`, `path`, `regex`, `runtime`, `sync`, `sys`, `text`, `time`, `toml`, `url`, `ws`, `xml`, and `yaml`.
 
 The prelude makes these types available without an explicit import:
 

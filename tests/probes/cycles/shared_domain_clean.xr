@@ -12,7 +12,7 @@ import runtime
 
 var before = runtime.sharedBytes()
 
-fn producer(ch: Channel<int>, n: int) {
+fn producer(ch: Channel<i64>, n: i64) {
     var i = 0
     while (i < n) {
         ch.send(i)
@@ -21,7 +21,7 @@ fn producer(ch: Channel<int>, n: int) {
     ch.close()
 }
 
-fn consume(ch: Channel<int>) -> int {
+fn consume(ch: Channel<i64>) -> i64 {
     var total = 0
     for (v in ch) {
         total = total + v
@@ -29,14 +29,14 @@ fn consume(ch: Channel<int>) -> int {
     return total
 }
 
-var ch = Channel<int>(8)
+var ch = Channel<i64>(8)
 var t = go producer(ch, 100)
 var total = consume(ch)
 await t
 print(total)
 
 // 数据通道用完即弃；再开一轮验证重复创建/关闭不留存量。
-var ch2 = Channel<int>(4)
+var ch2 = Channel<i64>(4)
 var t2 = go producer(ch2, 10)
 print(consume(ch2))
 await t2

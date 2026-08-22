@@ -28,7 +28,7 @@ from stdlib_manifest import (
 HOSTED_ABI_BATCHES = {"scalar", "string_rc", "mutable_rc", "object_rc"}
 HOSTED_ABI_OWNERSHIP = {"owned", "immediate", "owned-or-null", "immediate-or-null"}
 # Results the VM passes by value; anything else is a heap handle.
-HOSTED_ABI_SCALAR_RESULTS = {"()", "bool", "int", "float"}
+HOSTED_ABI_SCALAR_RESULTS = {"()", "bool", "i64", "f64"}
 
 
 def check_manifest(root: Path) -> list[str]:
@@ -43,8 +43,8 @@ def check_manifest(root: Path) -> list[str]:
             "governance.export_authority must be 'boundary_manifest_semantic_source'"
         )
     names = [str(module.get("name", "")) for module in manifest.modules]
-    if len(names) != 34:
-        errors.append(f"{MANIFEST_PATH}: task-256 terminal module count must be 34, got {len(names)}")
+    if len(names) != 33:
+        errors.append(f"{MANIFEST_PATH}: terminal module count must be 33, got {len(names)}")
     if len(names) != len(set(names)):
         errors.append(f"{MANIFEST_PATH}: module names must be unique")
     source_registry = registry_modules(root)
@@ -208,19 +208,12 @@ def check_l4_quality(root: Path) -> list[str]:
             "governance.l4_algorithm_reviewed must exactly match L4 xray_semantic modules"
         )
 
-    strconv = (root / "stdlib/strconv/strconv.xr").read_text(encoding="utf-8")
-    if ".runes().nth(" in strconv:
-        errors.append("strconv parsing must remain a linear byte scan")
-    if "return float(s)" not in strconv:
-        errors.append("strconv.parseFloat must delegate conversion to the rounded binary64 primitive")
-    if "multiplyLimit" not in strconv or "9223372036854775807" not in strconv:
-        errors.append("strconv.parseInt must retain explicit signed-64-bit overflow guards")
-    edge_case = (root / "tests/diff/cases/semantics/stdlib/strconv_contract_direct.xr").read_text(
+    edge_case = (root / "tests/diff/cases/semantics/stdlib/exact_scalar_parse_contract.xr").read_text(
         encoding="utf-8"
     )
     for needle in ("9223372036854775808", "1.00000000000000011102230246251565404236316680908203125", "1e+"):
         if needle not in edge_case:
-            errors.append(f"strconv edge-case differential is missing {needle!r}")
+            errors.append(f"exact scalar parse differential is missing {needle!r}")
     return errors
 
 
@@ -489,7 +482,7 @@ def check_fastpaths(root: Path) -> list[str]:
                 errors.append("source-derived hosted fragment batches must contain at least 48 exports")
             # These assert the shape of the ABI, not the generator's type
             # classification. Re-deriving "which results are heap values" here
-            # is what went stale: the gate only knew string and Array<byte>,
+            # is what went stale: the gate only knew string and Array<u8>,
             # so every class-instance and enum result read as a violation once
             # object_rc arrived. Owning the invariants, and only the
             # invariants, keeps the gate honest without a second copy of the

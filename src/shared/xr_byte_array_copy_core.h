@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_byte_array_copy_core.h - Canonical Array<byte> bounded copy semantics.
+ * xr_byte_array_copy_core.h - Canonical Array<u8> bounded copy semantics.
  */
 
 #ifndef XR_BYTE_ARRAY_COPY_CORE_H

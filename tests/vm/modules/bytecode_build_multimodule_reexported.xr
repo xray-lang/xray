@@ -1,7 +1,7 @@
-export fn reexportedBonus() -> int {
+export fn reexportedBonus() -> i64 {
     return 7
 }
 
-export fn starBonus() -> int {
+export fn starBonus() -> i64 {
     return 9
 }

@@ -67,7 +67,7 @@ fn test_null_comparison() {
 @test
 fn test_null_vs_value() {
     var x = null
-    var y: int? = 0
+    var y: i64? = 0
     assert_eq(x == y, false)
     assert_eq(x != y, true)
 }
@@ -101,7 +101,7 @@ fn test_nullable_presence_condition() {
     } else {
         assert(false)
     }
-    var zero: int? = 0
+    var zero: i64? = 0
     if (zero) {
         assert(true)
     } else {

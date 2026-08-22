@@ -5,8 +5,8 @@
 // semantics: two's-complement wrap, shift count mod 64, arithmetic right
 // shift. Any divergence from the VM shows up as a diff failure here.
 
-var max: int = 9223372036854775807
-var min: int = -9223372036854775807 - 1
+var max: i64 = 9223372036854775807
+var min: i64 = -9223372036854775807 - 1
 
 // Wrap on overflow
 print(max + 1)        // INT64_MIN
@@ -17,18 +17,18 @@ print(min / -1)       // INT64_MIN
 print(min % -1)       // 0
 
 // Shift count mod 64
-var x: int = 12345
+var x: i64 = 12345
 print(x << 64)        // 12345
 print(x << 65)        // 24690
 print(x >> 64)        // 12345
 print(x >> 70)        // 192
 
 // Negative shift count: -1 & 63 == 63
-var one: int = 1
+var one: i64 = 1
 print(one << -1)      // INT64_MIN
 
 // Arithmetic right shift on negatives
-var neg: int = -8
+var neg: i64 = -8
 print(neg >> 1)       // -4
 print(-1 >> 63)       // -1
 print(min >> 63)      // -1
@@ -40,9 +40,9 @@ print(-1 << 1)        // -2
 
 // Runtime-variable counts (defeat constant folding so the emitted
 // arithmetic path is exercised, not just the folded constants)
-var n64: int = 64
-var n65: int = 65
-var nneg: int = -1
+var n64: i64 = 64
+var n65: i64 = 65
+var nneg: i64 = -1
 print(x << n64)       // 12345
 print(x << n65)       // 24690
 print(x >> n64)       // 12345

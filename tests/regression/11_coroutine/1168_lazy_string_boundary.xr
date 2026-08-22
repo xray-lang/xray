@@ -1,4 +1,4 @@
-fn make_key(n: int) -> string {
+fn make_key(n: i64) -> string {
     return "k" + string(n)
 }
 
@@ -9,7 +9,7 @@ fn recv_string(ch: Channel<string>) -> string {
     }
 }
 
-fn build_message(prefix: string, n: int) -> string {
+fn build_message(prefix: string, n: i64) -> string {
     return prefix + "_" + string(n)
 }
 
@@ -24,7 +24,7 @@ fn map_worker(seed: string) -> Map<string, string> {
 @test
 fn test_lazy_string_map_set_content_keys() {
     var key = make_key(1)
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     m.set(key, 7)
     m.set(make_key(1), 11)
 

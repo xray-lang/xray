@@ -1,18 +1,18 @@
 class BoolIntMapBag {
-    values: Map<bool, int>
+    values: Map<bool, i64>
 
     constructor() {
-        var values: Map<bool, int> = #{}
+        var values: Map<bool, i64> = #{}
         this.values = values
     }
 
-    fill() -> int {
+    fill() -> i64 {
         this.values.set(true, 21)
         this.values.set(false, 34)
         return len(this.values)
     }
 
-    scan(rounds: int) -> int {
+    scan(rounds: i64) -> i64 {
         var r = 0
         var sum = 0
         while (r < rounds) {
@@ -28,7 +28,7 @@ class BoolIntMapBag {
     }
 }
 
-fn class_map_bool_i64_field_loop_run(rounds: int) -> int {
+fn class_map_bool_i64_field_loop_run(rounds: i64) -> i64 {
     var bag = BoolIntMapBag()
     var count = bag.fill()
     return bag.scan(rounds) + count

@@ -1,7 +1,7 @@
 // 003_wrong_arg_count.xr
 // Expected: Compile error - wrong argument count
 // Error should mention: argument, expected, got
-fn greet(name: string, age: int) {
+fn greet(name: string, age: i64) {
     print(name + " is " + string(age))
 }
 

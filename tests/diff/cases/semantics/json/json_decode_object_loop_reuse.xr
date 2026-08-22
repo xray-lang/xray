@@ -1,4 +1,4 @@
-type Profile = {id: int, active: bool}
+type Profile = {id: i64, active: bool}
 
 var object = JSON.parseObject("{\"id\":7,\"active\":true}")
 var i = 0

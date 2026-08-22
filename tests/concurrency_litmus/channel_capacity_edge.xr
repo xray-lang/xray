@@ -13,7 +13,7 @@
 
 const ITERATIONS = 3000
 
-fn worker(lock: Channel<int>, inside: Atomic<int>, collisions: Atomic<int>) {
+fn worker(lock: Channel<i64>, inside: Atomic<i64>, collisions: Atomic<i64>) {
     lock.send(1)
     if (inside.fetchAdd(1, Ordering.SeqCst) != 0) {
         collisions.add(1, Ordering.SeqCst)
@@ -25,7 +25,7 @@ fn worker(lock: Channel<int>, inside: Atomic<int>, collisions: Atomic<int>) {
 fn main() {
     const collisions = Atomic(0)
     for (i in 0..ITERATIONS) {
-        const lock = Channel<int>(1)
+        const lock = Channel<i64>(1)
         const inside = Atomic(0)
         var a = go worker(lock, inside, collisions)
         var b = go worker(lock, inside, collisions)

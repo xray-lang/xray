@@ -6,26 +6,26 @@
 // Parent with an explicit zero-arg constructor; child has a complex initializer
 // (array literal) that forces a synthesized constructor.
 class Base {
-    id: int
+    id: i64
     constructor() { this.id = 42 }
 }
 class Child extends Base {
-    xs: Array<int> = [1, 2, 3]
+    xs: Array<i64> = [1, 2, 3]
 }
 
 // Parent whose own constructor is itself synthesized (complex initializer, no
 // explicit constructor); the grandchild must chain through it.
 class GenRoot {
-    roots: Array<int> = [7, 7]
+    roots: Array<i64> = [7, 7]
 }
 class GenLeaf extends GenRoot {
-    leaves: Array<int> = [4, 5]
+    leaves: Array<i64> = [4, 5]
 }
 
 // Mixed simple + complex defaults on the child, explicit parent constructor.
 class Mixed extends Base {
-    n: int = 9
-    ys: Array<int> = [8]
+    n: i64 = 9
+    ys: Array<i64> = [8]
 }
 
 // A subclass whose base has no constructor at all: the synthesized constructor
@@ -34,7 +34,7 @@ class Plain {
     tag: string = "plain"
 }
 class PlainChild extends Plain {
-    zs: Array<int> = [6, 6, 6]
+    zs: Array<i64> = [6, 6, 6]
 }
 
 fn main() {

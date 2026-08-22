@@ -18,8 +18,8 @@
 
 // 测试类：Vector2D - 有加减乘除运算符重载
 class Vector2D {
-    x: float
-    y: float
+    x: f64
+    y: f64
     
     constructor(x, y) {
         this.x = x
@@ -34,11 +34,11 @@ class Vector2D {
         return Vector2D(this.x - other.x, this.y - other.y)
     }
     
-    operator*(scalar: float) -> Vector2D {
+    operator*(scalar: f64) -> Vector2D {
         return Vector2D(this.x * scalar, this.y * scalar)
     }
     
-    operator/(scalar: float) -> Vector2D {
+    operator/(scalar: f64) -> Vector2D {
         return Vector2D(this.x / scalar, this.y / scalar)
     }
     
@@ -115,7 +115,7 @@ fn test_property5_chained_operations() {
 // ===== 测试类：Money - 有比较运算符重载 =====
 
 class Money {
-    amount: int
+    amount: i64
     
     constructor(amount) {
         this.amount = amount
@@ -157,7 +157,7 @@ fn test_property5_comparison_operators() {
 // ===== 测试类：BitSet - 有位运算符重载 =====
 
 class BitSet {
-    value: int
+    value: i64
     
     constructor(v) {
         this.value = v
@@ -209,17 +209,17 @@ fn test_property5_bitwise_xor() {
 // ===== 测试类：Matrix - 有下标运算符重载 =====
 
 class Matrix {
-    data: Array<int>
+    data: Array<i64>
     
     constructor() {
         this.data = [0, 0, 0, 0]
     }
     
-    operator[](index: int) -> int {
+    operator[](index: i64) -> i64 {
         return this.data[index]
     }
     
-    operator[]=(index: int, value: int) {
+    operator[]=(index: i64, value: i64) {
         this.data[index] = value
     }
 }
@@ -249,7 +249,7 @@ fn test_property5_subscript_set() {
 // ===== 测试继承运算符重载 =====
 
 class Vector3D extends Vector2D {
-    z: float
+    z: f64
     
     constructor(x, y, z) {
         super(x, y)
@@ -274,8 +274,8 @@ fn test_property5_inherited_operator() {
 
 // 测试类：Point - 没有运算符重载
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
     
     constructor(x, y) {
         this.x = x
@@ -397,8 +397,8 @@ fn test_mixed_classes() {
 // ===== 测试取模运算符重载 =====
 
 class ModVector {
-    x: int
-    y: int
+    x: i64
+    y: i64
     
     constructor(x, y) {
         this.x = x

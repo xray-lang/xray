@@ -1,4 +1,4 @@
-fn identity(ptr: Ptr<byte>) -> Ptr<byte> {
+fn identity(ptr: Ptr<u8>) -> Ptr<u8> {
     return ptr
 }
 

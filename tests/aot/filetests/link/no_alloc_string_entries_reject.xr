@@ -1,4 +1,4 @@
-fn xray_no_alloc_string_entries_reject(value: string) -> int {
+fn xray_no_alloc_string_entries_reject(value: string) -> i64 {
     var count = 0
     for (_ in value) { count = count + 1 }
     return count

@@ -6,35 +6,35 @@
 // ===== 基本 getter =====
 
 class Circle {
-    _radius: float
+    _radius: f64
     
     constructor(r) {
         this._radius = r
     }
     
-    radius: float {
+    radius: f64 {
         fn() { return this._radius }
     }
     
-    diameter: float {
+    diameter: f64 {
         fn() { return this._radius * 2 }
     }
     
-    area: float {
+    area: f64 {
         fn() { return 3.14159 * this._radius * this._radius }
     }
 }
 
 @test
 fn test_basic_getter() {
-    var c = Circle(5)
-    assert_eq(c.radius, 5)
-    assert_eq(c.diameter, 10)
+    var c = Circle(5.0)
+    assert_eq(c.radius, 5.0)
+    assert_eq(c.diameter, 10.0)
 }
 
 @test
 fn test_computed_getter() {
-    var c = Circle(2)
+    var c = Circle(2.0)
     var area = c.area
     assert_eq(area > 12, true)
     assert_eq(area < 13, true)
@@ -43,51 +43,51 @@ fn test_computed_getter() {
 // ===== 基本 setter =====
 
 class Temperature {
-    _celsius: float
+    _celsius: f64
     
     constructor(c) {
         this._celsius = c
     }
     
-    celsius: float {
+    celsius: f64 {
         fn() { return this._celsius }
-        fn(value: float) { this._celsius = value }
+        fn(value: f64) { this._celsius = value }
     }
     
-    fahrenheit: float {
+    fahrenheit: f64 {
         fn() { return this._celsius * 1.8 + 32 }
-        fn(value: float) { this._celsius = (value - 32) / 1.8 }
+        fn(value: f64) { this._celsius = (value - 32) / 1.8 }
     }
 }
 
 @test
 fn test_basic_setter() {
-    var t = Temperature(0)
-    assert_eq(t.celsius, 0)
+    var t = Temperature(0.0)
+    assert_eq(t.celsius, 0.0)
     
-    t.celsius = 100
-    assert_eq(t.celsius, 100)
+    t.celsius = 100.0
+    assert_eq(t.celsius, 100.0)
 }
 
 @test
 fn test_computed_setter() {
-    var t = Temperature(0)
-    t.fahrenheit = 212
-    assert_eq(t.celsius, 100)
+    var t = Temperature(0.0)
+    t.fahrenheit = 212.0
+    assert_eq(t.celsius, 100.0)
 }
 
 // ===== 验证 setter =====
 
 class Age {
-    _value: int
+    _value: i64
     
     constructor() {
         this._value = 0
     }
     
-    value: int {
+    value: i64 {
         fn() { return this._value }
-        fn(v: int) {
+        fn(v: i64) {
             if (v >= 0) {
                 this._value = v
             }
@@ -128,18 +128,18 @@ fn test_readonly_property() {
 // ===== getter 链式访问 =====
 
 class Box {
-    _width: int
-    _height: int
+    _width: i64
+    _height: i64
     
     constructor(w, h) {
         this._width = w
         this._height = h
     }
     
-    width: int { fn() { return this._width } }
-    height: int { fn() { return this._height } }
-    area: int { fn() { return this._width * this._height } }
-    perimeter: int { fn() { return 2 * (this._width + this._height) } }
+    width: i64 { fn() { return this._width } }
+    height: i64 { fn() { return this._height } }
+    area: i64 { fn() { return this._width * this._height } }
+    perimeter: i64 { fn() { return 2 * (this._width + this._height) } }
 }
 
 @test

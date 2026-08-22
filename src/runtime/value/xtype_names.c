@@ -13,7 +13,7 @@
 
 #include "xtype_names.h"
 #include "../../base/xchecks.h"
-#include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include <string.h>
 
 // Defined in xvalue.c — single source of truth for type name strings
@@ -24,16 +24,6 @@ XR_DATA const char *typeid_names[XR_TID_COUNT];
 int xr_type_from_name(const char *type_name) {
     if (!type_name)
         return -1;
-
-    /* Type.xxx accepts every deliberate public scalar spelling. Aliases map
-     * directly to the same stable ordinal; canonical display remains the
-     * typeid_names[] entry. isize/usize have no distinct dynamic TypeId. */
-#define XR_SCALAR_TYPE(source_id, spelling, length, lexer_token, scalar_rep, type_family, role,    \
-                       canonical_display, public_type_id, range_class)                             \
-    if (public_type_id != XR_TID_COUNT && strcmp(type_name, spelling) == 0)                        \
-        return public_type_id;
-#include "../../shared/xr_scalar_type.def"
-#undef XR_SCALAR_TYPE
 
     for (int i = 0; i < XR_TID_COUNT; i++) {
         if (typeid_names[i] && strcmp(type_name, typeid_names[i]) == 0) {

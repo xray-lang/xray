@@ -592,7 +592,6 @@ TEST(lexer_keyword_table_completeness) {
         {"await", TK_AWAIT},
         {"bool", TK_BOOL},
         {"break", TK_BREAK},
-        {"byte", TK_BYTE},
         {"catch", TK_CATCH},
         {"class", TK_CLASS},
         {"const", TK_CONST},
@@ -605,7 +604,6 @@ TEST(lexer_keyword_table_completeness) {
         {"extends", TK_EXTENDS},
         {"false", TK_FALSE},
         {"final", TK_FINAL},
-        {"float", TK_FLOAT},
         {"f32", TK_F32},
         {"f64", TK_F64},
         {"fn", TK_FN},
@@ -615,7 +613,6 @@ TEST(lexer_keyword_table_completeness) {
         {"implements", TK_IMPLEMENTS},
         {"import", TK_IMPORT},
         {"in", TK_IN},
-        {"int", TK_INT},
         {"i8", TK_I8},
         {"i16", TK_I16},
         {"i32", TK_I32},
@@ -649,7 +646,7 @@ TEST(lexer_keyword_table_completeness) {
         {"while", TK_WHILE},
         {"yield", TK_YIELD},
         // None of the uppercase native type names are lexer keywords:
-        // Array / BigInt / Array<byte> / Channel / DateTime / Json / Map /
+        // Array / BigInt / Array<u8> / Channel / DateTime / Json / Map /
         // Range / Regex / Set / StringBuilder all resolve through the
         // prelude registry as plain identifiers.
     };

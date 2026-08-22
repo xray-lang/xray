@@ -42,7 +42,7 @@ print(crlfLines[1] == "")
 print(crlfLines[2])
 
 var bytesFile = path.join(dir, path.from("bytes.bin"))
-var bytes = Array<byte>(3)
+var bytes = Array<u8>(3)
 bytes[0] = 65
 bytes[1] = 0
 bytes[2] = 255

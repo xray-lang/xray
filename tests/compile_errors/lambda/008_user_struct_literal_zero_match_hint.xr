@@ -1,6 +1,6 @@
 struct Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
-var make: fn(int) -> Point = value -> Point{result: value}
+var make: fn(i64) -> Point = value -> Point{result: value}

@@ -1,6 +1,6 @@
 import sys
 
-fn maybeJoin(t: Thread<int>, skip: bool) {
+fn maybeJoin(t: Thread<i64>, skip: bool) {
     if (skip) {
         return
     }
@@ -8,7 +8,7 @@ fn maybeJoin(t: Thread<int>, skip: bool) {
 }
 
 fn run() {
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return 42
     })
     maybeJoin(t, true)

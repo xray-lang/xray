@@ -1,15 +1,15 @@
-fn clobbered_sum(src: Slice<byte>) -> int {
+fn clobbered_sum(src: Slice<u8>) -> i64 {
     var total = 0
     var i = 0
     while (i < len(src)) {
         print(i)
-        total = total + int(src[i])
+        total = total + (src[i] as i64)
         i = i + 1
     }
     return total
 }
 
-var bytes = Array<byte>(2)
+var bytes = Array<u8>(2)
 bytes[0] = 1
 bytes[1] = 2
 print(clobbered_sum(bytes[:]))

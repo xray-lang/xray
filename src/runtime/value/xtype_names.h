@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Avoids hardcoded type name strings.
- *   Primitives (int/float/string/bool/null) lowercase.
+ *   Primitives (exact scalars/string/bool/null) lowercase.
  *   Object types (Array/Map/BigInt/DateTime etc.) PascalCase.
  *
  * The TYPE_NAME_* spellings, the XrTypeId enum and the id -> name mapping all
@@ -22,7 +22,7 @@
 
 #include <stdint.h>
 #include "../../base/xdefs.h"
-#include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include "../../shared/xr_type_names_core.h"
 
 /* The dynamic tag carries only the i64/f64 family; the static width lives in
@@ -43,22 +43,25 @@ static inline uint8_t xr_typeid_scalar_rep(XrTypeId tid) {
             return XR_NATIVE_I32;
         case XR_TID_U32:
             return XR_NATIVE_U32;
-        case XR_TID_INT:
+        case XR_TID_I64:
             return XR_NATIVE_I64;
         case XR_TID_U64:
             return XR_NATIVE_U64;
         case XR_TID_F32:
             return XR_NATIVE_F32;
-        case XR_TID_FLOAT:
+        case XR_TID_F64:
             return XR_NATIVE_F64;
+        case XR_TID_ISIZE:
+            return XR_NATIVE_ISIZE;
+        case XR_TID_USIZE:
+            return XR_NATIVE_USIZE;
         default:
             return XR_SCALAR_REP_NONE;
     }
 }
 
-/* Inverse of xr_typeid_scalar_rep. isize/usize have no public id of their own
- * and collapse onto the widest id of their signedness, which is exact on 64-bit
- * targets and the closest available answer elsewhere. */
+/* Inverse of xr_typeid_scalar_rep. Every exact scalar representation, including
+ * target-width isize/usize, has one stable public type id. */
 static inline XrTypeId xr_scalar_rep_typeid(uint8_t scalar_rep) {
     switch ((XrNativeType) scalar_rep) {
         case XR_NATIVE_I8:
@@ -74,16 +77,18 @@ static inline XrTypeId xr_scalar_rep_typeid(uint8_t scalar_rep) {
         case XR_NATIVE_U32:
             return XR_TID_U32;
         case XR_NATIVE_U64:
-        case XR_NATIVE_USIZE:
             return XR_TID_U64;
+        case XR_NATIVE_USIZE:
+            return XR_TID_USIZE;
         case XR_NATIVE_F32:
             return XR_TID_F32;
         case XR_NATIVE_F64:
-            return XR_TID_FLOAT;
-        case XR_NATIVE_I64:
+            return XR_TID_F64;
         case XR_NATIVE_ISIZE:
+            return XR_TID_ISIZE;
+        case XR_NATIVE_I64:
         default:
-            return XR_TID_INT;
+            return XR_TID_I64;
     }
 }
 

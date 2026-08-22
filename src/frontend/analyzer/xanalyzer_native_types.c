@@ -336,8 +336,8 @@ typedef struct {
 
 /* Maps .xr class names to XrTypeId and display name. */
 static const NativeTypeMapping type_mappings[] = {
-    {"int", XR_TID_INT, TYPE_NAME_INT},
-    {"float", XR_TID_FLOAT, TYPE_NAME_FLOAT},
+    {"i64", XR_TID_I64, TYPE_NAME_I64},
+    {"f64", XR_TID_F64, TYPE_NAME_F64},
     {"bool", XR_TID_BOOL, TYPE_NAME_BOOL},
     {"string", XR_TID_STRING, TYPE_NAME_STRING},
     {"rune", XR_TID_RUNE, TYPE_NAME_RUNE},
@@ -553,8 +553,8 @@ typedef struct {
 
 static const TidObjMapping tid_obj_map[] = {
     {XR_TID_BOOL, XR_TBOOL},
-    {XR_TID_INT, XR_TINT},
-    {XR_TID_FLOAT, XR_TFLOAT},
+    {XR_TID_I64, XR_TINT},
+    {XR_TID_F64, XR_TFLOAT},
     {XR_TID_STRING, XR_TSTRING},
     {XR_TID_ARRAY, XR_TARRAY},
     {XR_TID_MAP, XR_TMAP},

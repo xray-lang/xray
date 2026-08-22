@@ -1,7 +1,7 @@
 // 007_readonly_in_function.xr
 // 错误测试：在函数中修改只读字段
 // 期望错误：无法修改只读字段
-type User = { const id: int, name: string }
+type User = { const id: i64, name: string }
 
 fn updateUser(u: User) {
     u.id = 999

@@ -51,7 +51,7 @@ fn test_imported_class_with_new() {
 
 @test
 fn test_imported_in_nested_fn() {
-    fn inner() -> int {
+    fn inner() -> i64 {
         return double_it(10)
     }
     assert_eq(inner(), 20)
@@ -59,7 +59,7 @@ fn test_imported_in_nested_fn() {
 
 @test
 fn test_imported_const_nested() {
-    fn get_magic() -> int {
+    fn get_magic() -> i64 {
         return MAGIC
     }
     assert_eq(get_magic(), 42)
@@ -67,9 +67,9 @@ fn test_imported_const_nested() {
 
 @test
 fn test_imported_byte_u8_canonical_identity() {
-    var byteArray: Array<byte> = [1, 2, 3]
+    var byteArray: Array<u8> = [1, 2, 3]
     var uint8Array: Array<u8> = [4, 5, 6]
-    var fromModule: Array<byte> = make_uint8_bytes()
+    var fromModule: Array<u8> = make_uint8_bytes()
 
     assert_eq(first_byte(uint8Array), 4)
     assert_eq(second_uint8(byteArray), 2)
@@ -78,13 +78,13 @@ fn test_imported_byte_u8_canonical_identity() {
 
 @test
 fn test_imported_byte_u8_slice_and_method_identity() {
-    var byteArray: Array<byte> = [10, 20, 30]
+    var byteArray: Array<u8> = [10, 20, 30]
     var uint8Array: Array<u8> = [40, 50, 60]
 
     assert_eq(sum_byte_slice(uint8Array[:]), 90)
     assert_eq(sum_uint8_slice(byteArray[:]), 30)
 
-    var appendToByte: Array<byte> = [1]
+    var appendToByte: Array<u8> = [1]
     appendToByte.appendFrom(uint8Array[0:2])
     assert_eq(len(appendToByte), 3)
     assert_eq(appendToByte[2], 50)

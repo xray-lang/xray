@@ -7,8 +7,8 @@
 ** 测试 typeName() 函数返回变量类型名称字符串
 */
 // 测试基本类型
-assert_eq(typeName(123), "int")
-assert_eq(typeName(3.14), "float")
+assert_eq(typeName(123), "i64")
+assert_eq(typeName(3.14), "f64")
 assert_eq(typeName("hello"), "string")
 assert_eq(typeName(true), "bool")
 assert_eq(typeName(false), "bool")
@@ -23,7 +23,7 @@ assert_eq(typeName(s), "Set")
 
 // 测试函数类型
 @test
-fn test_fn() -> int {
+fn test_fn() -> i64 {
     return 42
 }
 
@@ -35,10 +35,10 @@ var closure = fn() {
 assert_eq(typeName(closure), "function")
 // 测试变量类型
 var x = 10
-assert_eq(typeName(x), "int")
+assert_eq(typeName(x), "i64")
 var y = 3.14
-assert_eq(typeName(y), "float")
+assert_eq(typeName(y), "f64")
 // 测试表达式结果类型
-assert_eq(typeName(1 + 2), "int")
+assert_eq(typeName(1 + 2), "i64")
 assert_eq(typeName("a" + "b"), "string")
 print("typeName() 测试通过!")

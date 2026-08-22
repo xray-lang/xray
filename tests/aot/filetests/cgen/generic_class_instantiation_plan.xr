@@ -10,8 +10,8 @@ class Box<T> {
     }
 }
 
-fn wrapper() -> int {
-    var box = Box<int>(7)
+fn wrapper() -> i64 {
+    var box = Box<i64>(7)
     return box.get()
 }
 

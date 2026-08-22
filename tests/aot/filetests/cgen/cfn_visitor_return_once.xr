@@ -1,13 +1,13 @@
-type Visitor = CFn<fn(int, int) -> int>
+type Visitor = CFn<fn(i64, i64) -> i64>
 
 var visits = 0
 
-fn visit(left: int, right: int) -> int {
+fn visit(left: i64, right: i64) -> i64 {
     visits += 1
     return left + right
 }
 
-fn forEach(left: int, visitor: Visitor, right: int) -> int {
+fn forEach(left: i64, visitor: Visitor, right: i64) -> i64 {
     var result = visitor(left, right)
     print(result)
     return result

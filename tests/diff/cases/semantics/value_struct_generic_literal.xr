@@ -4,6 +4,6 @@ struct Box<T> {
     value: T
 }
 
-var p = Box<int>{value: 41}
+var p = Box<i64>{value: 41}
 p.value = p.value + 1
 print(p.value)

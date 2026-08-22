@@ -1,4 +1,4 @@
-fn bump(value: ref int) {
+fn bump(value: ref i64) {
     value = value + 1
 }
 

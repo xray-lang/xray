@@ -501,8 +501,6 @@ static void sig_type_ref(SigBuf *s, const XrTypeRef *ref) {
         sig_add(s, ":%s", ref->name);
     if (ref->scalar_rep)
         sig_add(s, "/s%u", (unsigned) ref->scalar_rep);
-    if (ref->builtin_spelling)
-        sig_add(s, "/b%u", (unsigned) ref->builtin_spelling);
     if (ref->requires_nothrow)
         sig_add(s, "/nothrow");
     if (ref->fixed_length)

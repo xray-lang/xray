@@ -2,10 +2,10 @@ import sys
 
 var tag = 1
 var t = match (tag) {
-    0 -> sys.Thread.spawn(fn() -> int {
+    0 -> sys.Thread.spawn(fn() -> i64 {
         return 1
     }),
-    _ -> sys.Thread.spawn(fn() -> int {
+    _ -> sys.Thread.spawn(fn() -> i64 {
         return 2
     })
 }

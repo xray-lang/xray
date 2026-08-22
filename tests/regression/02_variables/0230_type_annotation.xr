@@ -4,16 +4,16 @@
 // ===== 基本类型注解 =====
 @test
 fn test_int_annotation() {
-    var x: int = 42
+    var x: i64 = 42
     assert_eq(x, 42)
-    assert_eq(typeName(x), "int")
+    assert_eq(typeName(x), "i64")
 }
 
 @test
 fn test_float_annotation() {
-    var x: float = 3.14
+    var x: f64 = 3.14
     assert_eq(x > 3, true)
-    assert_eq(typeName(x), "float")
+    assert_eq(typeName(x), "f64")
 }
 
 @test
@@ -33,21 +33,21 @@ fn test_bool_annotation() {
 // ===== 集合类型注解 =====
 @test
 fn test_array_annotation() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     assert_eq(len(arr), 3)
     assert_eq(typeName(arr), "Array")
 }
 
 @test
 fn test_map_annotation() {
-    var m: Map<string, int> = #{"a": 1}
+    var m: Map<string, i64> = #{"a": 1}
     assert_eq(m.get("a"), 1)
     assert_eq(typeName(m), "Map")
 }
 
 @test
 fn test_set_annotation() {
-    var s: Set<int> = #[1, 2, 3]
+    var s: Set<i64> = #[1, 2, 3]
     assert_eq(len(s), 3)
     assert_eq(typeName(s), "Set")
 }
@@ -55,7 +55,7 @@ fn test_set_annotation() {
 // ===== 函数参数类型注解 =====
 @test
 fn test_function_param_annotation() {
-    fn add(a: int, b: int) -> int {
+    fn add(a: i64, b: i64) -> i64 {
         return a + b
     }
     assert_eq(add(2, 3), 5)
@@ -63,7 +63,7 @@ fn test_function_param_annotation() {
 
 @test
 fn test_function_return_annotation() {
-    fn double(x: int) -> int {
+    fn double(x: i64) -> i64 {
         return x * 2
     }
     assert_eq(double(5), 10)
@@ -73,10 +73,10 @@ fn test_function_return_annotation() {
 @test
 fn test_class_field_annotation() {
     class Point {
-        x: int
-        y: int
+        x: i64
+        y: i64
 
-        constructor(x: int, y: int) {
+        constructor(x: i64, y: i64) {
             this.x = x
             this.y = y
         }
@@ -89,8 +89,8 @@ fn test_class_field_annotation() {
 // ===== 复杂类型 =====
 @test
 fn test_nullable_type() {
-    var x: int = 10
-    var y: int? = null
+    var x: i64 = 10
+    var y: i64? = null
     if (y == null) {
         y = x
     }

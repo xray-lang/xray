@@ -1,13 +1,13 @@
-fn worker() -> int {
+fn worker() -> i64 {
     return 1
 }
 
-export fn importedSuspends() -> int {
+export fn importedSuspends() -> i64 {
     var y = await go worker()
     return y
 }
 
-export const importedSuspendsValue = fn() -> int {
+export const importedSuspendsValue = fn() -> i64 {
     var y = await go worker()
     return y
 }

@@ -1,6 +1,6 @@
 import mem
 
-fn readRaw(src: Slice<byte>) -> int {
+fn readRaw(src: Slice<u8>) -> i64 {
     var value16: u16 = 0
     var value32: u32 = 0
     var value64: u64 = 0
@@ -10,10 +10,10 @@ fn readRaw(src: Slice<byte>) -> int {
         value32 = mem.load<u32>(p, 0, Endian.LE)
         value64 = mem.load<u64>(p, 0, Endian.LE)
     }
-    return int(value16) + int(value32) + int(value64)
+    return (value16 as i64) + (value32 as i64) + (value64 as i64)
 }
 
-var bytes: Array<byte> = Array.withCapacity(8)
+var bytes: Array<u8> = Array.withCapacity(8)
 unsafe {
     bytes.push(1)
     bytes.push(2)

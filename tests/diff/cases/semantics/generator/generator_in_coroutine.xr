@@ -5,13 +5,13 @@
 // the two suspension dimensions exist to keep apart, and it must produce the same
 // values under both backends.
 
-fn counter(n: int) -> Iterator<int> {
+fn counter(n: i64) -> Iterator<i64> {
     for (var i = 0; i < n; i++) {
         yield i
     }
 }
 
-fn sumGenerator(n: int) -> int {
+fn sumGenerator(n: i64) -> i64 {
     var total = 0
     for (x in counter(n)) {
         total = total + x
@@ -19,11 +19,11 @@ fn sumGenerator(n: int) -> int {
     return total
 }
 
-fn generatorInto(sink: Atomic<int>, n: int) {
+fn generatorInto(sink: Atomic<i64>, n: i64) {
     sink.fetchAdd(sumGenerator(n))
 }
 
-fn doubleInto(sink: Atomic<int>, v: int) {
+fn doubleInto(sink: Atomic<i64>, v: i64) {
     sink.fetchAdd(v * 2)
 }
 
@@ -32,11 +32,11 @@ var t = go sumGenerator(5)
 print("await " + string(await t))
 
 // Driven inside a structured scope, alongside a sibling that does not.
-fn doubleOf(v: int) -> int {
+fn doubleOf(v: i64) -> i64 {
     return v * 2
 }
 
-const total: Atomic<int> = Atomic<int>(0)
+const total: Atomic<i64> = Atomic<i64>(0)
 scope {
     go generatorInto(total, 4)
     go doubleInto(total, 21)
@@ -48,7 +48,7 @@ print("main " + string(sumGenerator(3)))
 
 // A generator abandoned inside a coroutine must not leak the pull into the
 // scheduler either: the coroutine finishes normally.
-fn firstOf(n: int) -> int {
+fn firstOf(n: i64) -> i64 {
     for (x in counter(n)) {
         return x + 100
     }

@@ -1,2 +1,2 @@
-var key: [byte; 4] = [0; 3]
+var key: [u8; 4] = [0; 3]
 print(len(key))

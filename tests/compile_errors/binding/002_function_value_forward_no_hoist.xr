@@ -1,5 +1,5 @@
 print(later())
 
-const later = fn() -> int {
+const later = fn() -> i64 {
     return 1
 }

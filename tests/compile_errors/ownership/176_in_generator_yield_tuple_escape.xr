@@ -1,8 +1,8 @@
-fn leak(data: Array<int>) -> Iterator<(Array<int>, int)> {
+fn leak(data: Array<i64>) -> Iterator<(Array<i64>, i64)> {
     yield (data, len(data))
 }
 
-var values: Array<int> = [1, 2]
+var values: Array<i64> = [1, 2]
 for (item in leak(values)) {
     print(item.1)
 }

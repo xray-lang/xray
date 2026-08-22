@@ -1,6 +1,6 @@
 import { Capabilities, U8xNative, U64xNative } from simd
 
-fn stripe(acc: ref Slice<u64>, input: Slice<byte>, secret: Slice<byte>) {
+fn stripe(acc: ref Slice<u64>, input: Slice<u8>, secret: Slice<u8>) {
     var width = Capabilities.nativeBytes()
     var offset = 0
     while (offset < 64) {
@@ -23,8 +23,8 @@ fn aggregateBoundary(output: ref Slice<u64>) {
 
 fn main() {
     var acc: [u64; 8] = [1, 2, 3, 4, 5, 6, 7, 8]
-    var input: [byte; 64] = [1; 64]
-    var secret: [byte; 64] = [2; 64]
+    var input: [u8; 64] = [1; 64]
+    var secret: [u8; 64] = [2; 64]
     var accView: Slice<u64> = acc[:]
     stripe(ref accView, input[:], secret[:])
     var boundary: [u64; 8] = [0; 8]

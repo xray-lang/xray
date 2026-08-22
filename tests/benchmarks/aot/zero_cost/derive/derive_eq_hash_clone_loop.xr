@@ -1,9 +1,9 @@
 @derive(Eq, Hash)
 class Key {
-    id: int
+    id: i64
     name: string
 
-    constructor(id: int, name: string) {
+    constructor(id: i64, name: string) {
         this.id = id
         this.name = name
     }
@@ -11,15 +11,15 @@ class Key {
 
 @derive(Clone)
 class Snapshot {
-    value: int
+    value: i64
 
-    constructor(value: int) {
+    constructor(value: i64) {
         this.value = value
     }
 }
 
-fn run(n: int) -> int {
-    var values: Map<Key, int> = #{}
+fn run(n: i64) -> i64 {
+    var values: Map<Key, i64> = #{}
     var keys: Set<Key> = #[]
     var inserted = Key(7, "alpha")
     var snapshot = Snapshot(5)

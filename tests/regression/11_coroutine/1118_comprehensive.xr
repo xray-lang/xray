@@ -2,14 +2,14 @@
 // 作者：xingleixu@gmail.com
 // 展示：go, await, task.cancel(), task.done, task.status, TaskResult, Channel, select
 
-fn recv_int(r: Recv<int>) -> int {
+fn recv_int(r: Recv<i64>) -> i64 {
     return match (r) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn blocked(ch: Channel<int>) -> int {
+fn blocked(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
@@ -20,12 +20,12 @@ fn blocked(ch: Channel<int>) -> int {
 fn test_main() {
     // === 1. 基本 go/await ===
     print("=== go/await ===")
-    var task1 = go fn() -> int { return 42 }()
+    var task1 = go fn() -> i64 { return 42 }()
     print("task1 result:", await task1)
 
     // === 2. 状态检查（await 后确定性） ===
     print("=== status ===")
-    var task2 = go fn() -> int { return 100 }()
+    var task2 = go fn() -> i64 { return 100 }()
     var task2_result = await task2
     print("done:", task2.done)
     print("status:", task2.status)
@@ -33,7 +33,7 @@ fn test_main() {
 
     // === 3. 取消协程（channel-blocked 保证未完成） ===
     print("=== cancel ===")
-    const cancel_ch = Channel<int>(0)
+    const cancel_ch = Channel<i64>(0)
     var task3 = go blocked(cancel_ch)
     task3.cancel()
     var result3 = task3.awaitResult()
@@ -46,7 +46,7 @@ fn test_main() {
 
     // === 4. Channel 通信 ===
     print("=== channel ===")
-    const ch = Channel<int>(3)
+    const ch = Channel<i64>(3)
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
@@ -55,7 +55,7 @@ fn test_main() {
     // === 5. defer 清理 ===
     print("=== defer ===")
     fn cleanup() { print("cleanup!") }
-    fn with_defer() -> int {
+    fn with_defer() -> i64 {
         defer { cleanup() }
         print("working...")
         return 42
@@ -64,9 +64,9 @@ fn test_main() {
 
     // === 6. await all ===
     print("=== await all ===")
-    var t1 = go fn() -> int { return 1 }()
-    var t2 = go fn() -> int { return 2 }()
-    var t3 = go fn() -> int { return 3 }()
+    var t1 = go fn() -> i64 { return 1 }()
+    var t2 = go fn() -> i64 { return 2 }()
+    var t3 = go fn() -> i64 { return 3 }()
     var results = await all [t1, t2, t3]
     print("all results:", results)
 

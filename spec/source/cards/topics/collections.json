@@ -61,7 +61,7 @@
     {
       "heading": "Other collection-like types",
       "bullets": [
-        "`Array<byte>` is a typed byte buffer backed by contiguous memory",
+        "`Array<u8>` is a typed byte buffer backed by contiguous memory",
         "`Channel<T>` is the coroutine communication container"
       ]
     }

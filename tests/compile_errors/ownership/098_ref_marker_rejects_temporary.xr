@@ -1,8 +1,8 @@
-fn bump(data: ref Array<int>) {
+fn bump(data: ref Array<i64>) {
     data.push(1)
 }
 
-fn make() -> Array<int> {
+fn make() -> Array<i64> {
     return []
 }
 

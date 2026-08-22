@@ -1,28 +1,28 @@
 class ByteMapBag {
-    values: Map<byte, i32>
+    values: Map<u8, i32>
 
     constructor() {
-        var values: Map<byte, i32> = #{}
+        var values: Map<u8, i32> = #{}
         this.values = values
     }
 
-    fill(n: int) -> int {
+    fill(n: i64) -> i64 {
         var i = 0
         while (i < n) {
-            this.values.set(i as byte, (i * 5 + 7) as i32)
+            this.values.set(i as u8, (i * 5 + 7) as i32)
             i = i + 1
         }
         return len(this.values)
     }
 
-    scan(n: int, rounds: int) -> int {
+    scan(n: i64, rounds: i64) -> i64 {
         var r = 0
         var sum = 0
         while (r < rounds) {
             var i = 0
             while (i < n) {
-                if (this.values.containsKey(i as byte)) {
-                    sum = sum + this.values.get(i as byte)!
+                if (this.values.containsKey(i as u8)) {
+                    sum = sum + this.values.get(i as u8)!
                 }
                 i = i + 1
             }
@@ -32,7 +32,7 @@ class ByteMapBag {
     }
 }
 
-fn class_map_u8_i32_field_loop_run(n: int, rounds: int) -> int {
+fn class_map_u8_i32_field_loop_run(n: i64, rounds: i64) -> i64 {
     var bag = ByteMapBag()
     var count = bag.fill(n)
     return bag.scan(n, rounds) + count

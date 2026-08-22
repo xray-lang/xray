@@ -2,7 +2,7 @@
 // whose parameters are read-only, so ARC proves them BORROWED and the caller
 // keeps ownership of every argument.
 
-export fn sumLengths(xs: Array<string>) -> int {
+export fn sumLengths(xs: Array<string>) -> i64 {
     var n = 0
     for (var i = 0; i < len(xs); i++) {
         n = n + len(xs[i])
@@ -10,10 +10,10 @@ export fn sumLengths(xs: Array<string>) -> int {
     return n
 }
 
-export fn sumBytes(data: Array<byte>) -> int {
+export fn sumBytes(data: Array<u8>) -> i64 {
     var n = 0
     for (var i = 0; i < len(data); i++) {
-        n = n + int(data[i])
+        n = n + (data[i] as i64)
     }
     return n
 }

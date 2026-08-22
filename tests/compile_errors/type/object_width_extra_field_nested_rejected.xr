@@ -1,6 +1,6 @@
 // Object width rule reaches into nested Object fields: the extra field lives on
 // the inner shape, and the mismatch is still rejected.
-type Point = { x: int, y: int }
+type Point = { x: i64, y: i64 }
 type Outer = { p: Point }
 
 fn main() {

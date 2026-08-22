@@ -1,8 +1,8 @@
-fn add_i64(a: int, b: int) -> int {
+fn add_i64(a: i64, b: i64) -> i64 {
     return a + b
 }
 
-fn choose(flag: bool, value: int) -> int {
+fn choose(flag: bool, value: i64) -> i64 {
     if (flag) {
         return value
     }
@@ -13,14 +13,14 @@ fn echo_text(text: string) -> string {
     return text
 }
 
-fn same_items(items: move Array<int>) -> Array<int> {
+fn same_items(items: move Array<i64>) -> Array<i64> {
     return items
 }
 
 fn main() {
     print(choose(true, add_i64(21, 21)))
     print(echo_text("ptr"))
-    var items: Array<int> = [1, 2, 3]
+    var items: Array<i64> = [1, 2, 3]
     print(len(same_items(move items)))
 }
 

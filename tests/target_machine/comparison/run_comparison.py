@@ -771,7 +771,7 @@ def render_source(case: dict[str, Any]) -> str:
     if case_id in DIRECT_CALL_OPERATORS:
         operator = DIRECT_CALL_OPERATORS[case_id]
         return (
-            "fn callee(left: int, right: int) -> int {\n"
+            "fn callee(left: i64, right: i64) -> i64 {\n"
             f"    return left {operator} right\n"
             "}\n\n"
             f"print(callee({left}, {right}))\n"
@@ -785,7 +785,7 @@ def render_source(case: dict[str, Any]) -> str:
             "    return left - right\n"
         )
     return (
-        "fn evaluate(left: int, right: int) -> int {\n"
+        "fn evaluate(left: i64, right: i64) -> i64 {\n"
         f"{body}"
         "}\n\n"
         f"print(evaluate({left}, {right}))\n"

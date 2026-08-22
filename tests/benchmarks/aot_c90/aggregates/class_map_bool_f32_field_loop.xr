@@ -6,13 +6,13 @@ class BoolFloatMapBag {
         this.values = values
     }
 
-    fill() -> int {
+    fill() -> i64 {
         this.values.set(true, 1.5)
         this.values.set(false, 2.25)
         return len(this.values)
     }
 
-    scan(rounds: int) -> float {
+    scan(rounds: i64) -> f64 {
         var r = 0
         var sum = 0.0
         while (r < rounds) {
@@ -28,10 +28,10 @@ class BoolFloatMapBag {
     }
 }
 
-fn class_map_bool_f32_field_loop_run(rounds: int) -> float {
+fn class_map_bool_f32_field_loop_run(rounds: i64) -> f64 {
     var bag = BoolFloatMapBag()
     var count = bag.fill()
-    return bag.scan(rounds) + (count as float)
+    return bag.scan(rounds) + (count as f64)
 }
 
 print(class_map_bool_f32_field_loop_run(400000))

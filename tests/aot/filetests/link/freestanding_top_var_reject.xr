@@ -1,9 +1,9 @@
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 1
 }
 
-var COUNTER: int = runtimeOnly()
+var COUNTER: i64 = runtimeOnly()
 
-fn xray_top_var_reject() -> int {
+fn xray_top_var_reject() -> i64 {
     return COUNTER
 }

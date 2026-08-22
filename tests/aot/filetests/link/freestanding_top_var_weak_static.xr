@@ -1,13 +1,13 @@
 struct CounterState {
-    value: int
-    limit: int
+    value: i64
+    limit: i64
 }
 
 var STATE = CounterState{value: 1, limit: 10}
 
 var TICKS = 3
 
-fn xrayTopVarWeakStatic(flag: int) -> int {
+fn xrayTopVarWeakStatic(flag: i64) -> i64 {
     if (flag != 0) {
         STATE.value = STATE.value + 2
         TICKS = TICKS + flag

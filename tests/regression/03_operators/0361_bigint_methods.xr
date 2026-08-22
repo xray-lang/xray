@@ -110,16 +110,16 @@ fn test_isPositive_zero() {
     assert_eq(a.isPositive(), false)
 }
 
-// ===== toInt() =====
+// ===== toI64() =====
 
 @test
-fn test_toInt_int64_min() {
+fn test_toI64_int64_min() {
     var a = -9223372036854775808n
-    assert_eq(a.toInt(), -9223372036854775808)
+    assert_eq(a.toI64(), -9223372036854775808)
 }
 
 @test
-fn test_toInt_below_int64_min_overflows() {
+fn test_toI64_below_int64_min_overflows() {
     var a = -9223372036854775809n
-    assert_eq(a.toInt(), null)
+    assert_eq(a.toI64(), null)
 }

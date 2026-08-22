@@ -1,7 +1,7 @@
 // Test trailing commas in all supported positions
 
 // 1. Function declaration with trailing comma in params
-fn add(a: int, b: int,) -> int {
+fn add(a: i64, b: i64,) -> i64 {
     return a + b
 }
 
@@ -30,8 +30,8 @@ fn test_object_trailing_comma() {
 
 // 5. Struct literal with trailing comma
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
 
 @test
@@ -48,14 +48,14 @@ fn identity<T,>(val: T,) -> T {
 
 @test
 fn test_generic_trailing_comma() {
-    var x = identity<int,>(42,)
+    var x = identity<i64,>(42,)
     assert(x == 42)
 }
 
 // 7. constructor expression with trailing comma
 class Box {
-    value: int
-    constructor(v: int) {
+    value: i64
+    constructor(v: i64) {
         this.value = v
     }
 }
@@ -69,6 +69,6 @@ fn test_new_trailing_comma() {
 // 8. Arrow function with trailing comma in params
 @test
 fn test_arrow_trailing_comma() {
-    var f = (a: int, b: int,) -> a + b
+    var f = (a: i64, b: i64,) -> a + b
     assert(f(3, 4) == 7)
 }

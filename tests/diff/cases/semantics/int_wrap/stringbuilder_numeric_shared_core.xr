@@ -1,4 +1,4 @@
-var min: int = -9223372036854775807 - 1
+var min: i64 = -9223372036854775807 - 1
 var sb = StringBuilder()
 sb.append("min=")
 sb.append(min)

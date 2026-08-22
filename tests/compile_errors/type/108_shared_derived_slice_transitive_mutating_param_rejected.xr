@@ -1,14 +1,14 @@
-fn overwrite(view: Slice<byte>) {
+fn overwrite(view: Slice<u8>) {
     view.fill(1)
 }
 
-fn wrapper(view: Slice<byte>) {
+fn wrapper(view: Slice<u8>) {
     overwrite(view)
 }
 
 fn main() {
-    const bytes = Array<byte>(4, 0)
-    var view: Slice<byte> = bytes[:]
+    const bytes = Array<u8>(4, 0)
+    var view: Slice<u8> = bytes[:]
     wrapper(view)
 }
 

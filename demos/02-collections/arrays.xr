@@ -5,7 +5,7 @@
 
 // === Creation ===
 var nums = [1, 2, 3, 4, 5]
-var empty: Array<int> = []
+var empty: Array<i64> = []
 print("nums: ${nums}")
 print("empty: ${empty}")
 
@@ -45,29 +45,29 @@ print("reversed: ${unsorted}")
 // === Functional methods ===
 var data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-var evens = data.filter(fn(x: int) -> bool { return x % 2 == 0 })
+var evens = data.filter(fn(x: i64) -> bool { return x % 2 == 0 })
 print("evens: ${evens}")
 
-var doubled = data.map(fn(x: int) -> int { return x * 2 })
+var doubled = data.map(fn(x: i64) -> i64 { return x * 2 })
 print("doubled: ${doubled}")
 
-var total = data.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)
+var total = data.reduce(fn(acc: i64, x: i64) -> i64 { return acc + x }, 0)
 print("sum: ${total}")
 
 // Chaining
 var result = data
-    .filter(fn(x: int) -> bool { return x % 2 == 0 })
-    .map(fn(x: int) -> int { return x * x })
+    .filter(fn(x: i64) -> bool { return x % 2 == 0 })
+    .map(fn(x: i64) -> i64 { return x * x })
 print("even squares: ${result}")
 
 // === find / every / some ===
-var found = data.find(fn(x: int) -> bool { return x > 5 })
+var found = data.find(fn(x: i64) -> bool { return x > 5 })
 print("first > 5: ${found}")
 
-var allPositive = data.every(fn(x: int) -> bool { return x > 0 })
+var allPositive = data.every(fn(x: i64) -> bool { return x > 0 })
 print("all positive: ${allPositive}")
 
-var hasLarge = data.some(fn(x: int) -> bool { return x > 8 })
+var hasLarge = data.some(fn(x: i64) -> bool { return x > 8 })
 print("has > 8: ${hasLarge}")
 
 // === fill ===

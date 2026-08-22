@@ -1,18 +1,18 @@
 class Payload {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
-    constructor(x: int, y: int) {
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
 
-    sum() -> int {
+    sum() -> i64 {
         return this.x + this.y
     }
 }
 
-fn run(rounds: int) -> int {
+fn run(rounds: i64) -> i64 {
     var payload = Payload(17, 29)
     var total = 0
     for (var i = 0; i < rounds; i++) {

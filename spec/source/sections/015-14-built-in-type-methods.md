@@ -13,40 +13,40 @@ order: 015
 
 本节按主题汇总每种内置类型的方法、签名和行为。
 
-### 14.1 `int` 方法
+### 14.1 `i64` 方法
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
-| `abs()` | `() -> int` | 绝对值 |
+| `abs()` | `() -> i64` | 绝对值 |
 | `toString()` | `() -> string` | 十进制字符串 |
 | `toBigInt()` | `() -> BigInt` | 转 BigInt |
-| `toFloat()` | `() -> float` | 转 float |
+| `toF64()` | `() -> f64` | 转 f64 |
 | `toHex()` | `() -> string` | 十六进制字符串 |
-| `max(other)` / `min(other)` | `(int) -> int` | 双值最值 |
-| `sqrt()` | `() -> float` | 平方根 |
-| `pow(exp)` | `(float) -> float` | 幂运算 |
-| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | 溢出返回 `null` |
-| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | 溢出饱和到 `int` 边界 |
-| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | 显式二补码环绕 |
-| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
-| `popcount()` | `() -> int` | 二补码位表示中置位的个数 |
-| `leadingZeros()` / `trailingZeros()` | `() -> int` | 前导/后缀零比特数（`0` 返回 `64`） |
-| `byteswap()` | `() -> int` | 反转字节序 |
-| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | 循环移位（`n` 按模 64） |
+| `max(other)` / `min(other)` | `(i64) -> i64` | 双值最值 |
+| `sqrt()` | `() -> f64` | 平方根 |
+| `pow(exp)` | `(f64) -> f64` | 幂运算 |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(i64) -> i64?` | 溢出返回 `null` |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(i64) -> i64` | 溢出饱和到 `i64` 边界 |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(i64) -> i64` | 显式二补码环绕 |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(i64) -> bool` | 仅报告有符号溢出（要结果用 `checked*`） |
+| `popcount()` | `() -> i64` | 二补码位表示中置位的个数 |
+| `leadingZeros()` / `trailingZeros()` | `() -> i64` | 前导/后缀零比特数（`0` 返回 `64`） |
+| `byteswap()` | `() -> i64` | 反转字节序 |
+| `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | 循环移位（`n` 按模 64） |
 
 `abs()` 遵循整数环绕语义：`(-9223372036854775807 - 1).abs()` 返回自身。`toHex()` 对负数使用带符号前缀，例如 `-0x8000000000000000`。位运算与溢出谓词在 VM 与 AOT 中具有相同语义。
 
-### 14.2 `float` 方法
+### 14.2 `f64` 方法
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
-| `abs()` | `() -> float` | 绝对值 |
+| `abs()` | `() -> f64` | 绝对值 |
 | `toString()` | `() -> string` | 字符串化 |
-| `toFixed(decimals?)` | `(int?) -> string` | 固定位数小数字符串 |
-| `toInt()` | `() -> int` | 转 int |
-| `floor()` / `ceil()` / `round()` | `() -> int` | 取整 |
-| `sqrt()` | `() -> float` | 平方根 |
-| `pow(exp)` | `(float) -> float` | 幂运算 |
+| `toFixed(decimals?)` | `(i64?) -> string` | 固定位数小数字符串 |
+| `toI64()` | `() -> i64` | 转 i64 |
+| `floor()` / `ceil()` / `round()` | `() -> i64` | 取整 |
+| `sqrt()` | `() -> f64` | 平方根 |
+| `pow(exp)` | `(f64) -> f64` | 幂运算 |
 | `isNaN()` | `() -> bool` | 是否为 IEEE NaN |
 
 ### 14.3 `BigInt` 方法
@@ -55,10 +55,10 @@ order: 015
 |--|--|--|
 | `abs()` | `() -> BigInt` | 绝对值 |
 | `toString()` | `() -> string` | 字符串化 |
-| `sign()` | `() -> int` | -1 / 0 / 1 |
+| `sign()` | `() -> i64` | -1 / 0 / 1 |
 | `isZero()` / `isNegative()` / `isPositive()` | `() -> bool` | 符号判断 |
-| `toInt()` | `() -> int?` | 无法表示时返回 null |
-| `toFloat()` | `() -> float` | 转 float |
+| `toI64()` | `() -> i64?` | 无法表示时返回 null |
+| `toF64()` | `() -> f64` | 转 f64 |
 
 ### 14.4 `bool` 方法
 
@@ -84,11 +84,11 @@ order: 015
 | 成员 | 类型 / 说明 |
 |--|--|
 | `len(s)` | O(1) Unicode scalar 数量 |
-| `bytes()` / `copyBytes()` | 借用的 `Slice<byte>` / 独立的 `Array<byte>` |
+| `bytes()` / `copyBytes()` | 借用的 `Slice<u8>` / 独立的 `Array<u8>` |
 | `runes()` | `Iterator<rune>`；裸 `for (r in s)` 使用相同语义 |
 | `string.fromRune(r)` | 从一个 Unicode scalar 构造字符串 |
-| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<byte>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
-| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<byte>`，非法序列替换为 U+FFFD |
+| `string.fromUtf8(bytes)` | 复制并严格验证 `Slice<u8>`；非法 UTF-8 抛 `Utf8Error.InvalidUtf8` |
+| `string.fromUtf8Lossy(bytes)` | 复制 `Slice<u8>`，非法序列替换为 U+FFFD |
 | `string.join(parts, separator?)` | 拼接 `Array<string>` |
 | `contains(s)` | 是否包含子串 |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | 返回 rune ordinal |
@@ -102,15 +102,15 @@ order: 015
 
 string 不支持整数下标或 slice operator；显式使用 `s.runes().nth(i)`、`s.bytes()[i]` 或 `s.slice(start, end)`。字符串拼接使用 `+`；大小写、去空白、填充和反转等 Unicode 文本操作属于 `text` 模块。
 
-### 14.6 `Array<byte>`
+### 14.6 `Array<u8>`
 
-`Array<byte>` 是可直接使用的 `Array` 具体化，构造由 `Array<byte>(n)` / `Array<byte>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
+`Array<u8>` 是可直接使用的 `Array` 具体化，构造由 `Array<u8>(n)` / `Array<u8>(n, fill)` 等内置路径处理。它的 `toString()` 与所有 Array 一样返回容器格式；文本解码必须显式使用 `string.fromUtf8(bytes[:])` 或 `string.fromUtf8Lossy(bytes[:])`。当前没有单独的 `stdlib/types/bytes.xr` 声明；工具不要把它当成另一套与 Array 同构的独立 API。
 
 ### 14.7 `Array<T>` 方法
 
 | 成员 | 类型/说明 |
 |--|--|
-| `len(arr)` | `int` 全局查询 |
+| `len(arr)` | `i64` 全局查询 |
 | `capacity` / `arr[i]` / `arr[i] = v` | 容量属性与下标读写；也可使用 `get(i)` / `set(i, v)` |
 | `push(x)` / `pop()` | 尾部增删 |
 | `shift()` / `unshift(x)` | 头部增删 |
@@ -132,7 +132,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 | 成员 | 类型/说明 |
 |--|--|
-| `len(m)` | `int` 全局查询 |
+| `len(m)` | `i64` 全局查询 |
 | `m[k]` / `m[k] = v` | 下标读写 |
 | `get(k)` / `set(k, v)` | `get` 在缺失时返回 `null`；`set` 写入 |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | 查询与删除 |
@@ -148,7 +148,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 
 | 成员 | 类型/说明 |
 |--|--|
-| `len(set)` | `int` 全局查询 |
+| `len(set)` | `i64` 全局查询 |
 | `add(x)` / `contains(x)` / `delete(x)` | 插入、查询、删除 |
 | `clear()` | 清空 |
 | `values()` | 返回 `Array<T>` |
@@ -171,13 +171,13 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `close()` | 关闭 channel |
 | `capacity` / `isClosed` | 容量和关闭状态属性 |
 
-`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
+`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<i64?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
 ### 14.11 `JSON` 命名空间
 
 `JSON` 是 prelude 命名空间，不是可声明变量的值类型，也不需要 `import json`。schema-less JSON 使用 `JSON.Value`；确定为 object 的动态 JSON 使用 `JSON.Object`。`JSON.Object` 是 `Map<string, JSON.Value>` 的纯别名，因此枚举、动态下标、增删字段和 `len` 都直接使用 §14.8 的 Map API。
 
-`JSON.Value` 是 `null | bool | int | float | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
+`JSON.Value` 是 `null | bool | i64 | f64 | string | Array<JSON.Value> | JSON.Object` 的递归边界值。它没有 dot、下标、迭代或 `len` 魔法：先用 typed decode 提交 schema，用 `asObject` / `asArray` 显式解包，或用 path API 访问任意深度。
 
 | 静态函数 | 说明 |
 |--|--|
@@ -186,7 +186,7 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | 构造已知字段 `value: T`，并将顶层未知字段保留在 `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | 从已有 schema-less 值尝试构造 `T`，失败返回 `null` |
 | `JSON.value<T>(value)` | 显式把可编码的复合值物化为 `JSON.Value` |
-| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `int` |
+| `JSON.stringify<T>(value, indent?)` | 序列化可编码值；`indent` 必须是非空 `i64` |
 | `JSON.isValid(text, strict?)` | 校验 JSON 文本 |
 | `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | 查询 JSON arm |
 | `JSON.asObject(value)` / `JSON.asArray(value)` | 返回共享底层存储的可空 object/array 视图，不复制 |
@@ -195,10 +195,10 @@ Array 没有 `slice()` / `splice()` / `flat()` / `copyWithin()` 方法。`arr[st
 | `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | 修改或删除路径；路径可穿过 object key 与 array index |
 | `JSON.merge(parts)` | 将 `JSON.WithRest<T>` 的 typed 部分和顶层 rest 重新组成 `JSON.Object` |
 
-`JSON.Path` 是 `Array<string | int>`：string segment 是完整 object key，int segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
+`JSON.Path` 是 `Array<string | i64>`：string segment 是完整 object key，i64 segment 是 array index。`["user", "profile", "name"]` 表示深层字段；`"user.profile"` 只是一个含点号的 key，不会解析成三段。动态 object key 也可直接使用 `JSON.Object` 的 Map 下标和方法。
 
 ```xray @id=json-boundary-and-path
-type Request = { action: string, userId: int }
+type Request = { action: string, userId: i64 }
 
 var request = JSON.parse<Request>(body)       // 未知字段默认拒绝
 var payload = JSON.parseObject(body)          // JSON.Object，即 Map
@@ -209,7 +209,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON 标量 `null`、`bool`、`int`、`float`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
+JSON 标量 `null`、`bool`、`i64`、`f64`、`string` 可在有明确 `JSON.Value` 目标时隐式 widening；结构对象、数组和其他复合值必须写 `JSON.value(...)`。因此 `{ name: "alice" }` 始终是精确结构对象，不会因上下文悄悄变成动态 object。
 
 ### 14.12 `Range`
 
@@ -219,7 +219,7 @@ JSON 标量 `null`、`bool`、`int`、`float`、`string` 可在有明确 `JSON.V
 |--|--|
 | `start` / `end` | 起点与声明的终点 |
 | `contains(x)` | 按半开或闭区间语义判断 `x` 是否在范围内 |
-| `toArray()` | 按迭代顺序生成独立的 `Array<int>` |
+| `toArray()` | 按迭代顺序生成独立的 `Array<i64>` |
 | `toString()` | 返回 `a..b` 或 `a..=b` 形式的字符串 |
 | `iterator()` | 迭代协议；惰性产出与 `toArray()` 相同的元素序列 |
 | `len(range)` | 返回范围中的元素数量 |
@@ -285,7 +285,7 @@ print(len(empty))           // 0
 
 ### 14.19 `Atomic<T>` 方法
 
-`Atomic<T>` 包装 `int`、`float` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
+`Atomic<T>` 包装 `i64`、`f64` 或 `bool`，提供无锁原子操作。句柄以 `const` 命名；受审计原子方法提供同步内部修改。
 
 | 方法 | 签名 | 说明 |
 |--|--|--|
@@ -313,40 +313,40 @@ print(len(empty))           // 0
 
 This section summarizes the methods, signatures, and behavior of each built-in type by topic.
 
-### 14.1 `int` Methods
+### 14.1 `i64` Methods
 
 | Method | Signature | Description |
 |--|--|--|
-| `abs()` | `() -> int` | absolute value |
+| `abs()` | `() -> i64` | absolute value |
 | `toString()` | `() -> string` | decimal string |
 | `toBigInt()` | `() -> BigInt` | convert to BigInt |
-| `toFloat()` | `() -> float` | convert to float |
+| `toF64()` | `() -> f64` | convert to f64 |
 | `toHex()` | `() -> string` | hexadecimal string |
-| `max(other)` / `min(other)` | `(int) -> int` | binary max/min |
-| `sqrt()` | `() -> float` | square root |
-| `pow(exp)` | `(float) -> float` | power |
-| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(int) -> int?` | returns `null` on overflow |
-| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(int) -> int` | clamps overflow to the `int` boundary |
-| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(int) -> int` | explicit two's-complement wrap |
-| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(int) -> bool` | reports signed overflow only (use `checked*` for the value) |
-| `popcount()` | `() -> int` | number of set bits in the two's-complement representation |
-| `leadingZeros()` / `trailingZeros()` | `() -> int` | leading/trailing zero bit count (`0` yields `64`) |
-| `byteswap()` | `() -> int` | reverses the byte order |
-| `rotateLeft(n)` / `rotateRight(n)` | `(int) -> int` | bit rotation (`n` taken modulo 64) |
+| `max(other)` / `min(other)` | `(i64) -> i64` | binary max/min |
+| `sqrt()` | `() -> f64` | square root |
+| `pow(exp)` | `(f64) -> f64` | power |
+| `checkedAdd(other)` / `checkedSub(other)` / `checkedMul(other)` | `(i64) -> i64?` | returns `null` on overflow |
+| `saturatingAdd(other)` / `saturatingSub(other)` / `saturatingMul(other)` | `(i64) -> i64` | clamps overflow to the `i64` boundary |
+| `wrappingAdd(other)` / `wrappingSub(other)` / `wrappingMul(other)` | `(i64) -> i64` | explicit two's-complement wrap |
+| `addOverflows(other)` / `subOverflows(other)` / `mulOverflows(other)` | `(i64) -> bool` | reports signed overflow only (use `checked*` for the value) |
+| `popcount()` | `() -> i64` | number of set bits in the two's-complement representation |
+| `leadingZeros()` / `trailingZeros()` | `() -> i64` | leading/trailing zero bit count (`0` yields `64`) |
+| `byteswap()` | `() -> i64` | reverses the byte order |
+| `rotateLeft(n)` / `rotateRight(n)` | `(i64) -> i64` | bit rotation (`n` taken modulo 64) |
 
 `abs()` follows integer wrap semantics: `(-9223372036854775807 - 1).abs()` returns itself. `toHex()` keeps a sign prefix for negative values, for example `-0x8000000000000000`. Bit-manipulation methods and overflow predicates have the same semantics in VM and AOT builds.
 
-### 14.2 `float` Methods
+### 14.2 `f64` Methods
 
 | Method | Signature | Description |
 |--|--|--|
-| `abs()` | `() -> float` | absolute value |
+| `abs()` | `() -> f64` | absolute value |
 | `toString()` | `() -> string` | string conversion |
-| `toFixed(decimals?)` | `(int?) -> string` | fixed-decimal string |
-| `toInt()` | `() -> int` | convert to int |
-| `floor()` / `ceil()` / `round()` | `() -> int` | rounding |
-| `sqrt()` | `() -> float` | square root |
-| `pow(exp)` | `(float) -> float` | power |
+| `toFixed(decimals?)` | `(i64?) -> string` | fixed-decimal string |
+| `toI64()` | `() -> i64` | convert to i64 |
+| `floor()` / `ceil()` / `round()` | `() -> i64` | rounding |
+| `sqrt()` | `() -> f64` | square root |
+| `pow(exp)` | `(f64) -> f64` | power |
 | `isNaN()` | `() -> bool` | whether the value is IEEE NaN |
 
 ### 14.3 `BigInt` Methods
@@ -355,10 +355,10 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 |--|--|--|
 | `abs()` | `() -> BigInt` | absolute value |
 | `toString()` | `() -> string` | string conversion |
-| `sign()` | `() -> int` | -1 / 0 / 1 |
+| `sign()` | `() -> i64` | -1 / 0 / 1 |
 | `isZero()` / `isNegative()` / `isPositive()` | `() -> bool` | sign predicates |
-| `toInt()` | `() -> int?` | returns null when not representable as `int` |
-| `toFloat()` | `() -> float` | convert to float |
+| `toI64()` | `() -> i64?` | returns null when not representable as `i64` |
+| `toF64()` | `() -> f64` | convert to f64 |
 
 ### 14.4 `bool` Methods
 
@@ -384,11 +384,11 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 | Member | Type / Description |
 |--|--|
 | `len(s)` | O(1) Unicode scalar count |
-| `bytes()` / `copyBytes()` | borrowed `Slice<byte>` / independent `Array<byte>` |
+| `bytes()` / `copyBytes()` | borrowed `Slice<u8>` / independent `Array<u8>` |
 | `runes()` | `Iterator<rune>`; bare `for (r in s)` has the same semantics |
 | `string.fromRune(r)` | constructs a string from one Unicode scalar |
-| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<byte>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
-| `string.fromUtf8Lossy(bytes)` | copies a `Slice<byte>`, replacing invalid sequences with U+FFFD |
+| `string.fromUtf8(bytes)` | copies and strictly validates a `Slice<u8>`; invalid UTF-8 throws `Utf8Error.InvalidUtf8` |
+| `string.fromUtf8Lossy(bytes)` | copies a `Slice<u8>`, replacing invalid sequences with U+FFFD |
 | `string.join(parts, separator?)` | joins an `Array<string>` |
 | `contains(s)` | substring containment test |
 | `indexOf(s, start?)` / `lastIndexOf(s)` | return rune ordinals |
@@ -402,15 +402,15 @@ This section summarizes the methods, signatures, and behavior of each built-in t
 
 Strings do not support integer indexing or the slice operator; use `s.runes().nth(i)`, `s.bytes()[i]`, or `s.slice(start, end)` explicitly. Concatenation uses `+`; Unicode text transforms such as case conversion, trimming, padding, and reversal belong to the `text` module.
 
-### 14.6 `Array<byte>`
+### 14.6 `Array<u8>`
 
-`Array<byte>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<byte>(n)` / `Array<byte>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
+`Array<u8>` is a directly available specialization of `Array`; construction is handled via builtin paths such as `Array<u8>(n)` / `Array<u8>(n, fill)`. Its `toString()` uses the same container formatting as every Array; decode text explicitly with `string.fromUtf8(bytes[:])` or `string.fromUtf8Lossy(bytes[:])`. There is currently no separate `stdlib/types/bytes.xr` declaration; tooling should not treat it as a second, Array-isomorphic API surface.
 
 ### 14.7 `Array<T>` Methods
 
 | Member | Type / Description |
 |--|--|
-| `len(arr)` | global `int` query |
+| `len(arr)` | global `i64` query |
 | `capacity` / `arr[i]` / `arr[i] = v` | capacity field and indexed read/write; `get(i)` / `set(i, v)` are also available |
 | `push(x)` / `pop()` | tail insert/remove |
 | `shift()` / `unshift(x)` | head insert/remove |
@@ -432,7 +432,7 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 
 | Member | Type / Description |
 |--|--|
-| `len(m)` | global `int` query |
+| `len(m)` | global `i64` query |
 | `m[k]` / `m[k] = v` | indexed read/write |
 | `get(k)` / `set(k, v)` | `get` returns `null` when absent; `set` writes |
 | `containsKey(k)` / `containsValue(v)` / `delete(k)` / `clear()` | query and remove |
@@ -444,13 +444,13 @@ Array has no `slice()` / `splice()` / `flat()` / `copyWithin()` methods. `arr[st
 
 `m[k]` requires the key to exist; a missing key raises runtime error `E0431`. Use `m.get(k)` for optional lookup.
 
-The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<float, V>` is the float key `1.0`, not an int key stored in a float map. Key matching uses the key equivalence relation from §9.2, not `==`.
+The key position of a subscript is typed and checked against `K`, symmetrically with the value position against `V`: `m[1]` on a `Map<f64, V>` is the f64 key `1.0`, not an i64 key stored in a f64 map. Key matching uses the key equivalence relation from §9.2, not `==`.
 
 ### 14.9 `Set<T>` Methods
 
 | Member | Type / Description |
 |--|--|
-| `len(set)` | global `int` query |
+| `len(set)` | global `i64` query |
 | `add(x)` / `contains(x)` / `delete(x)` | insert, query, remove |
 | `clear()` | empty the set |
 | `values()` | returns `Array<T>` |
@@ -473,13 +473,13 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `close()` | close the channel |
 | `capacity` / `isClosed` | capacity and closed-state fields |
 
-`Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
+`Recv.Value(v)` carries the channel payload, so `Channel<i64?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
 ### 14.11 `JSON` Namespace
 
 `JSON` is a prelude namespace, not a value type that variables can use, and it needs no `import json`. Use `JSON.Value` for schema-less JSON and `JSON.Object` when the dynamic value is known to be an object. `JSON.Object` is a pure alias for `Map<string, JSON.Value>`, so enumeration, dynamic subscripts, field insertion/removal, and `len` use the Map API in §14.8 directly.
 
-`JSON.Value` is the recursive boundary domain `null | bool | int | float | string | Array<JSON.Value> | JSON.Object`. It has no magic dot access, subscript, iteration, or `len`: commit to a schema with typed decode, explicitly unwrap it with `asObject` / `asArray`, or use the path API for arbitrary depth.
+`JSON.Value` is the recursive boundary domain `null | bool | i64 | f64 | string | Array<JSON.Value> | JSON.Object`. It has no magic dot access, subscript, iteration, or `len`: commit to a schema with typed decode, explicitly unwrap it with `asObject` / `asArray`, or use the path API for arbitrary depth.
 
 | Static function | Description |
 |--|--|
@@ -488,7 +488,7 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `JSON.parseWithRest<T>(text, nestedUnknownFields?)` | constructs known fields as `value: T` and keeps unknown top-level fields in `rest: JSON.Object` |
 | `JSON.decode<T>(value, unknown?)` / `JSON.decodeObject<T>(object, unknown?)` | attempts to construct `T` from an existing schema-less value; failure returns `null` |
 | `JSON.value<T>(value)` | explicitly materializes an encodable composite value as `JSON.Value` |
-| `JSON.stringify<T>(value, indent?)` | serializes an encodable value; `indent` must be a non-null `int` |
+| `JSON.stringify<T>(value, indent?)` | serializes an encodable value; `indent` must be a non-null `i64` |
 | `JSON.isValid(text, strict?)` | validates JSON text |
 | `JSON.kindOf(value)` / `JSON.isNull/isBool/isInt/isFloat/isString/isArray/isObject(value)` | inspects the active JSON arm |
 | `JSON.asObject(value)` / `JSON.asArray(value)` | returns a nullable view sharing the underlying object/array storage, without copying |
@@ -497,10 +497,10 @@ The key position of a subscript is typed and checked against `K`, symmetrically 
 | `JSON.set(root, path, value, createParents?)` / `JSON.remove(root, path)` | mutates or removes a path through object keys and array indices |
 | `JSON.merge(parts)` | recombines the typed and top-level rest parts of `JSON.WithRest<T>` as a `JSON.Object` |
 
-`JSON.Path` is `Array<string | int>`: a string segment is one complete object key, and an int segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
+`JSON.Path` is `Array<string | i64>`: a string segment is one complete object key, and an i64 segment is an array index. `["user", "profile", "name"]` addresses nested fields; `"user.profile"` is only one key containing dots. A dynamic object key can also use the Map subscript and methods on `JSON.Object` directly.
 
 ```xray @id=json-boundary-and-path-en
-type Request = { action: string, userId: int }
+type Request = { action: string, userId: i64 }
 
 var request = JSON.parse<Request>(body)       // unknown fields reject by default
 var payload = JSON.parseObject(body)          // JSON.Object, therefore a Map
@@ -511,7 +511,7 @@ var name = JSON.get<string>(payload, path)
 JSON.set(payload, path, "Ada", true)
 ```
 
-JSON scalars (`null`, `bool`, `int`, `float`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
+JSON scalars (`null`, `bool`, `i64`, `f64`, and `string`) widen implicitly when an explicit `JSON.Value` target exists. Structural objects, arrays, and other composites require `JSON.value(...)`. Therefore `{ name: "alice" }` always remains an exact structural object; context never silently turns it into a dynamic object.
 
 ### 14.12 `Range`
 
@@ -521,7 +521,7 @@ JSON scalars (`null`, `bool`, `int`, `float`, and `string`) widen implicitly whe
 |--|--|
 | `start` / `end` | The start and the declared endpoint |
 | `contains(x)` | Tests membership using the range's half-open or inclusive semantics |
-| `toArray()` | Produces an independent `Array<int>` in iteration order |
+| `toArray()` | Produces an independent `Array<i64>` in iteration order |
 | `toString()` | Returns an `a..b` or `a..=b` string |
 | `iterator()` | iteration protocol; yields the same elements as `toArray()`, lazily |
 | `len(range)` | Returns the number of elements in the range |
@@ -587,7 +587,7 @@ The built-in `PanicInfo` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.19 `Atomic<T>` Methods
 
-`Atomic<T>` wraps `int`, `float`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
+`Atomic<T>` wraps `i64`, `f64`, or `bool` with lock-free atomic operations. Name the handle with `const`; audited atomic methods provide synchronized interior mutation.
 
 | Method | Signature | Description |
 |--|--|--|

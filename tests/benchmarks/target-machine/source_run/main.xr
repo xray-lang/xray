@@ -1,6 +1,6 @@
 import { baselineValue } from "./helper"
 
-fn workload(iterations: int) -> int {
+fn workload(iterations: i64) -> i64 {
     var result = 0
     var index = 0
     while (index < iterations) {

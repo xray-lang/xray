@@ -18,7 +18,7 @@ import { HttpRequest, HttpResponse } from http
 
 var port = 8080
 if (len(process.args) > 0) {
-    port = int(process.args[0]) ?? 8080
+    port = i64.tryParse(process.args[0]) ?? 8080
 }
 var server = http.Server()
 

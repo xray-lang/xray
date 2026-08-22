@@ -1,2 +1,2 @@
-fn use(t: Thread<int>) -> bool { return true }
+fn use(t: Thread<i64>) -> bool { return true }
 print(true)

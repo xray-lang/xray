@@ -5,19 +5,19 @@
 
 import time
 
-fn recv_int(ch: Channel<int>) -> int {
+fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
     }
 }
 
-fn send_after(ch: Channel<int>, id: int, delay_ms: int) {
+fn send_after(ch: Channel<i64>, id: i64, delay_ms: i64) {
     time.sleep(delay_ms)
     ch.send(id)
 }
 
-const ch: Channel<int> = Channel(3)
+const ch: Channel<i64> = Channel(3)
 
 go send_after(ch, 1, 50)
 go send_after(ch, 2, 10)

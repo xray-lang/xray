@@ -21,7 +21,7 @@ fn slow_worker(ch: Channel<string>) {
     time.sleep(200)
     ch.send("slow done")
 }
-fn fast_worker(id: int, ch: Channel<string>) {
+fn fast_worker(id: i64, ch: Channel<string>) {
     var sum = 0
     for (var i = 0; i < 100; i++) {
         sum = sum + i

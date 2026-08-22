@@ -8,7 +8,7 @@ order: 021
 
 ## 附录 B. 关键字索引
 
-以下 **66 个**关键字与 `src/frontend/lexer/xkeywords.def` 一一对应并按源码顺序（ASCII 字典序）排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
+以下 **64 个**关键字来自 `src/frontend/lexer/xkeywords.def` 的 52 个通用关键字与 `src/shared/xr_exact_scalar_registry.def` 的 12 个 exact 标量类型名，并按 ASCII 字典序排列。`move`、`ref`、`out`、`linked`、`from`、`to`、`after`、`panic` 是上下文词，不在本表；`parallel` 是标准库模块名。
 
 | 关键字 | 节 |
 |--|--|
@@ -16,7 +16,6 @@ order: 021
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
-| `byte` | §2.3.1 |
 | `catch` | §8 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
@@ -28,25 +27,24 @@ order: 021
 | `enum` | §5.6 |
 | `export` | §11 |
 | `extends` | §5.3 |
-| `false` | §1.6.4 |
-| `final` | §5.3 |
-| `float` | §2.3.2 |
 | `f32` | §2.3.2 |
 | `f64` | §2.3.2 |
+| `false` | §1.6.4 |
+| `final` | §5.3 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
-| `if` | §4.2 |
-| `implements` | §5.5 |
-| `import` | §11 |
-| `in` | §4.4 |
-| `int` | §2.3.1 |
 | `i16` | §2.3.1 |
 | `i32` | §2.3.1 |
 | `i64` | §2.3.1 |
 | `i8` | §2.3.1 |
+| `if` | §4.2 |
+| `implements` | §5.5 |
+| `import` | §11 |
+| `in` | §4.4 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
+| `isize` | §2.3.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
@@ -73,7 +71,9 @@ order: 021
 | `u8` | §2.3.1 |
 | `union` | §5.2.9 |
 | `unsafe` | §3.2 / §5.2 |
+| `usize` | §2.3.1 |
 | `var` | §5.1 |
+| `where` | §9.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 <!-- /xr-spec:cn -->
@@ -83,7 +83,7 @@ order: 021
 
 ## Appendix B. Keyword Index
 
-These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.def` and follow its ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
+These **64 keywords** are the union of the 52 general keywords in `src/frontend/lexer/xkeywords.def` and the 12 exact scalar type names in `src/shared/xr_exact_scalar_registry.def`, shown in ASCII lexical order. `move`, `ref`, `out`, `linked`, `from`, `to`, `after`, and `panic` are contextual words, not entries here; `parallel` is a standard-library module name.
 
 | Keyword | Section |
 |--|--|
@@ -91,7 +91,6 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `await` | §10.3 |
 | `bool` | §2.3.3 |
 | `break` | §4.6 |
-| `byte` | §2.3.1 |
 | `catch` | §8 |
 | `class` | §5.3 |
 | `comptime` | §3.2 |
@@ -103,25 +102,24 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `enum` | §5.6 |
 | `export` | §11 |
 | `extends` | §5.3 |
-| `false` | §1.6.4 |
-| `final` | §5.3 |
-| `float` | §2.3.2 |
 | `f32` | §2.3.2 |
 | `f64` | §2.3.2 |
+| `false` | §1.6.4 |
+| `final` | §5.3 |
 | `fn` | §5.2 |
 | `for` | §4.4 |
 | `go` | §10.2 |
-| `if` | §4.2 |
-| `implements` | §5.5 |
-| `import` | §11 |
-| `in` | §4.4 |
-| `int` | §2.3.1 |
 | `i16` | §2.3.1 |
 | `i32` | §2.3.1 |
 | `i64` | §2.3.1 |
 | `i8` | §2.3.1 |
+| `if` | §4.2 |
+| `implements` | §5.5 |
+| `import` | §11 |
+| `in` | §4.4 |
 | `interface` | §5.5 |
 | `is` | §3.8 |
+| `isize` | §2.3.1 |
 | `match` | §3.13 / §4.5 |
 | `new` | §3.14 |
 | `null` | §1.6.4 |
@@ -148,7 +146,9 @@ These **66 keywords** correspond one-for-one with `src/frontend/lexer/xkeywords.
 | `u8` | §2.3.1 |
 | `union` | §5.2.9 |
 | `unsafe` | §3.2 / §5.2 |
+| `usize` | §2.3.1 |
 | `var` | §5.1 |
+| `where` | §9.1 |
 | `while` | §4.3 |
 | `yield` | §3.16 |
 <!-- /xr-spec:en -->

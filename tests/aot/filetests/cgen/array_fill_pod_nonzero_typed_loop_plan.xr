@@ -1,7 +1,7 @@
-fn fillNonZero(a: ref Array<u32>) -> int {
+fn fillNonZero(a: ref Array<u32>) -> i64 {
     a.fill(7, 1, 7)
     unsafe {
-        return int(a.get(1)) + int(a.get(4)) + int(a.get(6))
+        return (a.get(1) as i64) + (a.get(4) as i64) + (a.get(6) as i64)
     }
 }
 

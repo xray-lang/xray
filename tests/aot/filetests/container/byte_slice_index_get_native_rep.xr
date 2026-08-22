@@ -1,8 +1,8 @@
-fn readByteAsInt(b: Slice<byte>, i: int) -> int {
-    return int(b[i])
+fn readByteAsInt(b: Slice<u8>, i: i64) -> i64 {
+    return (b[i] as i64)
 }
 
-var bytes = Array<byte>(3, 0)
+var bytes = Array<u8>(3, 0)
 bytes[0] = 7
 bytes[1] = 11
 bytes[2] = 13

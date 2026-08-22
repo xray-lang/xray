@@ -1,2 +1,2 @@
-var out: Array<byte> = Array.withCapacity(8)
+var out: Array<u8> = Array.withCapacity(8)
 out.wildCopyFromNonOverlappingUnchecked(0, out, 0, 1)

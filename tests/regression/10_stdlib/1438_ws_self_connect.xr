@@ -17,7 +17,7 @@ import net
 
 // Echo server: bounce every text/binary frame back until the peer closes.
 // Runs until `running` is cleared by the test.
-fn startEchoServer(port: int, running: Atomic<bool>) {
+fn startEchoServer(port: i64, running: Atomic<bool>) {
     ws.serve(port, fn(conn: ref WsConn) {
         while (true) {
             var msg = conn.recv()
@@ -36,7 +36,7 @@ fn startEchoServer(port: int, running: Atomic<bool>) {
 }
 
 // Reserve an ephemeral port, then release it so the echo server can rebind it.
-fn pickPort() -> int {
+fn pickPort() -> i64 {
     try {
         var lst = net.listen(0, 1)
         var p = lst.port()

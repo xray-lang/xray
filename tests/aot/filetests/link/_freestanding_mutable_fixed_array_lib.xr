@@ -1,1 +1,1 @@
-export var SHARED_COUNTERS: [int; 2] = [3, 5]
+export var SHARED_COUNTERS: [i64; 2] = [3, 5]

@@ -64,7 +64,7 @@ DWARFDUMP_CANDIDATES = (
 # report "no source locals" for what is really a fixture bug).
 BREAK_MARKER = "// BREAK"
 
-SCALAR_SOURCE = """fn compute(seed: int) -> int {
+SCALAR_SOURCE = """fn compute(seed: i64) -> i64 {
     if (seed <= 0) { return 0 }
     var answer = seed + 1
     var doubled = answer * 2
@@ -95,10 +95,10 @@ make(20)
 
 # No bare `yield`: that statement form was removed with the go/defer surface
 # convergence, and the fixture had kept it, so this scenario failed to parse.
-CORO_SOURCE = """fn produce(seed: int) -> int {
+CORO_SOURCE = """fn produce(seed: i64) -> i64 {
     return seed + 1
 }
-fn worker(seed: int) -> int {
+fn worker(seed: i64) -> i64 {
     var task = go produce(seed)
     var answer = await task
     var doubled = answer * 2

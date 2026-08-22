@@ -1,10 +1,10 @@
 @test
 fn test_for_in_local_slice_borrow_ends_before_owner_grow() {
-    var bytes = Array<byte>(0)
+    var bytes = Array<u8>(0)
 
     for (i in 0..3) {
         bytes.push(1)
-        var view: Slice<byte> = bytes[:]
+        var view: Slice<u8> = bytes[:]
         var before = len(view)
         bytes.push(2)
         assert_eq(len(bytes), before + 1)

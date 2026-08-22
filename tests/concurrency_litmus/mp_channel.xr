@@ -8,12 +8,12 @@
 
 const ITERATIONS = 3000
 
-fn producer(data: Atomic<int>, ch: Channel<int>) {
+fn producer(data: Atomic<i64>, ch: Channel<i64>) {
     data.store(7, Ordering.Relaxed)
     ch.send(1)
 }
 
-fn consumer(data: Atomic<int>, ch: Channel<int>) -> int {
+fn consumer(data: Atomic<i64>, ch: Channel<i64>) -> i64 {
     var got = ch.recvOr(-1)
     if (got != 1) {
         return -1
@@ -25,7 +25,7 @@ fn main() {
     var forbidden = 0
     for (i in 0..ITERATIONS) {
         const data = Atomic(0)
-        const ch = Channel<int>(0)
+        const ch = Channel<i64>(0)
         var c = go consumer(data, ch)
         var p = go producer(data, ch)
         await p

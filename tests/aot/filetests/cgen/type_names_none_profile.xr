@@ -10,5 +10,5 @@ class Box<T> {
     }
 }
 
-var box = Box<int>(7)
+var box = Box<i64>(7)
 print(box.get())

@@ -2,12 +2,12 @@
 // A but a different default so the two classes are observably distinct.
 // Skipped as a standalone diff case because its basename starts with '_'.
 export class Options {
-    weight: int
-    constructor(weight: int = 20) {
+    weight: i64
+    constructor(weight: i64 = 20) {
         this.weight = weight
     }
 }
 
-export fn pick(o: Options) -> int {
+export fn pick(o: Options) -> i64 {
     return o.weight
 }

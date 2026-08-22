@@ -12,7 +12,7 @@ extern "C" {
     fn xrayffi_ssize_roundtrip(x: isize) -> isize
     fn xrayffi_f32_add(x: f32, y: f32) -> f32
     fn xrayffi_f64_add(x: f64, y: f64) -> f64
-    fn xrayffi_ptr_identity(p: Ptr<byte>) -> Ptr<byte>
+    fn xrayffi_ptr_identity(p: Ptr<u8>) -> Ptr<u8>
     fn xrayffi_void_sink(x: i32) -> ()
 }
 

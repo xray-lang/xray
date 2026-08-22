@@ -1,2 +1,2 @@
-union type 'Array<byte> | Array<int>' has no member 'appendFrom'
-union type 'Slice<byte> | Slice<int>' has no member 'load'
+union type 'Array<u8> | Array<i64>' has no member 'appendFrom'
+union type 'Slice<u8> | Slice<i64>' has no member 'load'

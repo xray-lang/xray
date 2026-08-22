@@ -89,7 +89,6 @@ XR_FUNC struct XrModule *xr_native_module_create_cluster(struct XrVMRuntime *iso
 /* ========== Data Format Modules ========== */
 
 XR_FUNC struct XrModule *xr_native_module_create_text(struct XrVMRuntime *isolate);
-XR_FUNC struct XrModule *xr_native_module_create_strconv(struct XrVMRuntime *isolate);
 
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
 XR_FUNC struct XrModule *xr_native_module_create_csv(struct XrVMRuntime *isolate);

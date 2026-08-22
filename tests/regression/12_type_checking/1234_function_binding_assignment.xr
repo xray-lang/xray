@@ -16,10 +16,10 @@ fn bounded_same<U: Comparable & Hashable>(x: U) -> U {
 
 @test
 fn test_var_function_expression_reassignment_exact_signature() {
-    var f = fn(x: int) -> int {
+    var f = fn(x: i64) -> i64 {
         return x + 1
     }
-    f = fn(y: int) -> int {
+    f = fn(y: i64) -> i64 {
         return y * 2
     }
     assert_eq(f(5), 10)

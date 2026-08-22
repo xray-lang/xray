@@ -2,4 +2,4 @@
 print("dependency body")
 defer { print("dependency cleanup") }
 
-export fn dependency_value() -> int { return 40 }
+export fn dependency_value() -> i64 { return 40 }

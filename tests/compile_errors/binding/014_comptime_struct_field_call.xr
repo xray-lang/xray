@@ -1,9 +1,9 @@
 struct CtPoint {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 2
 }
 

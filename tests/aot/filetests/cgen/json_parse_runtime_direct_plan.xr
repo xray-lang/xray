@@ -1,5 +1,5 @@
 var data = JSON.parseValue("{\"name\":\"Ada\",\"age\":37,\"ok\":true}")
 
 print(JSON.require<string>(data, ["name"]))
-print(JSON.require<int>(data, ["age"]))
+print(JSON.require<i64>(data, ["age"]))
 print(JSON.require<bool>(data, ["ok"]))

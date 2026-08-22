@@ -1,1 +1,1 @@
-var f = (...xs: int) -> xs
+var f = (...xs: i64) -> xs

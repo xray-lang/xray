@@ -1,5 +1,5 @@
 struct Item {
-    count: int
+    count: i64
     name: string
 }
 
@@ -8,7 +8,7 @@ item.count = item.count + 3
 print(item.count)
 print(item.name)
 
-fn bump(n: int) -> int {
+fn bump(n: i64) -> i64 {
     var local = Item{count: n, name: "local"}
     local.count = local.count + 4
     print(local.name)

@@ -9,16 +9,16 @@ interface Drawable {
 }
 
 class Circle implements Drawable {
-    radius: float
+    radius: f64
 
-    constructor(radius: float) {
+    constructor(radius: f64) {
         this.radius = radius
     }
 
     draw() {        // 实现接口方法
     }
 
-    getRadius() -> float {        return this.radius
+    getRadius() -> f64 {        return this.radius
     }
 }
 
@@ -31,23 +31,23 @@ fn test_interface_implementation() {
 // ===== 多方法接口 =====
 
 interface Shape {
-    area() -> float
-    perimeter() -> float
+    area() -> f64
+    perimeter() -> f64
 }
 
 class Rectangle implements Shape {
-    width: float
-    height: float
+    width: f64
+    height: f64
 
-    constructor(w: float, h: float) {
+    constructor(w: f64, h: f64) {
         this.width = w
         this.height = h
     }
 
-    area() -> float {        return this.width * this.height
+    area() -> f64 {        return this.width * this.height
     }
 
-    perimeter() -> float {        return 2 * (this.width + this.height)
+    perimeter() -> f64 {        return 2 * (this.width + this.height)
     }
 }
 
@@ -61,16 +61,16 @@ fn test_multi_method_interface() {
 // ===== 多个类实现同一接口 =====
 
 class Square implements Shape {
-    side: float
+    side: f64
 
-    constructor(s: float) {
+    constructor(s: f64) {
         this.side = s
     }
 
-    area() -> float {        return this.side * this.side
+    area() -> f64 {        return this.side * this.side
     }
 
-    perimeter() -> float {        return 4 * this.side
+    perimeter() -> f64 {        return 4 * this.side
     }
 }
 
@@ -91,9 +91,9 @@ interface Printable {
 
 class Person implements Printable {
     name: string
-    age: int
+    age: i64
 
-    constructor(name: string, age: int) {
+    constructor(name: string, age: i64) {
         this.name = name
         this.age = age
     }

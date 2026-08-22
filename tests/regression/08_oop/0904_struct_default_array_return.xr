@@ -2,15 +2,15 @@
 // Expected: defaults work, array stores structs, return preserves value
 
 struct Config {
-    width: int = 800
-    height: int = 600
+    width: i64 = 800
+    height: i64 = 600
     title: string = "untitled"
 }
 struct Point {
-    x: float
-    y: float
+    x: f64
+    y: f64
 }
-fn make_point(x: float, y: float) -> Point {
+fn make_point(x: f64, y: f64) -> Point {
     return Point{x: x, y: y}
 }
 

@@ -1,16 +1,16 @@
 enum FastResult {
-    Ok(int),
-    Err(int)
+    Ok(i64),
+    Err(i64)
 }
 
-fn pick(n: int) -> FastResult {
+fn pick(n: i64) -> FastResult {
     if (n != 0) {
         return FastResult.Ok(41)
     }
     return FastResult.Err(9)
 }
 
-fn xray_enum_payload_value(n: int) -> int {
+fn xray_enum_payload_value(n: i64) -> i64 {
     var result = pick(n)
     match (result) {
         FastResult.Ok(value) -> {

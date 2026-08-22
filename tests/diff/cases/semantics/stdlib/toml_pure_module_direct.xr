@@ -5,7 +5,7 @@ fn field(value: TomlValue, key: string) -> TomlValue {
     return toml.get(value, key)!
 }
 
-fn item(value: TomlValue, index: int) -> TomlValue {
+fn item(value: TomlValue, index: i64) -> TomlValue {
     return toml.at(value, index)!
 }
 
@@ -13,7 +13,7 @@ fn asString(value: TomlValue) -> string {
     return toml.asString(value)!
 }
 
-fn asInt(value: TomlValue) -> int {
+fn asInt(value: TomlValue) -> i64 {
     return toml.asInt(value)!
 }
 
@@ -21,7 +21,7 @@ fn asBool(value: TomlValue) -> bool {
     return toml.asBool(value)!
 }
 
-fn arrayLen(value: TomlValue) -> int {
+fn arrayLen(value: TomlValue) -> i64 {
     return toml.length(value)
 }
 

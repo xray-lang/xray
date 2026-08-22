@@ -28,7 +28,7 @@ class ApiInventoryEnumMetadataTest(unittest.TestCase):
             by_key[("EnumVariant", "payloads", "property")]["signature"],
         )
         self.assertEqual(
-            ": int",
+            ": i64",
             by_key[("EnumPayloadField", "type", "property")]["signature"],
         )
         self.assertEqual(

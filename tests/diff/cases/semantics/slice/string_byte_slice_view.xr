@@ -1,11 +1,11 @@
 // anchor: slice-string-bytes-view
 fn main() {
     var text = "ABCD"
-    var bytes: Slice<byte> = text.bytes()
+    var bytes: Slice<u8> = text.bytes()
     print(len(bytes))
     print(bytes[0])
     print(bytes[1])
-    var mid: Slice<byte> = bytes[1:3]
+    var mid: Slice<u8> = bytes[1:3]
     print(len(mid))
     print(mid[0])
     print(mid[1])

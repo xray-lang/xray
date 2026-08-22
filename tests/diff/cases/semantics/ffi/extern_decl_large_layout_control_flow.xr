@@ -3,7 +3,7 @@
 import mem
 
 struct Task208Function {
-    code: Ptr<byte>
+    code: Ptr<u8>
     codeSize: usize
     locals: [u32; 4]
     constants: [u64; 4]
@@ -11,11 +11,11 @@ struct Task208Function {
 }
 
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>) -> ()
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>) -> ()
 }
 
-fn readUtf8Like(bytes: Ptr<byte>, length: usize) -> usize {
+fn readUtf8Like(bytes: Ptr<u8>, length: usize) -> usize {
     var cursor: usize = 0
     var checksum: usize = 0
     while (cursor < length) {

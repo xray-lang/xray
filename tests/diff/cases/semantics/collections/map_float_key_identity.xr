@@ -4,13 +4,13 @@
 // are one key, and -0.0 and +0.0 are the same key.
 var nan = 0.0 / 0.0
 
-var s: Set<float> = #[]
+var s: Set<f64> = #[]
 s.add(nan)
 s.add(nan)
 print("nan set size=${len(s)}")
 print("nan set contains=${s.contains(nan)}")
 
-var m: Map<float, string> = #{}
+var m: Map<f64, string> = #{}
 m[nan] = "first"
 m[nan] = "second"
 print("nan map size=${len(m)}")

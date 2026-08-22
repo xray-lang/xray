@@ -9,13 +9,13 @@ var CONSUMERS = 10
 var ITEMS = 100000
 // 总生产数量
 if (len(process.args) > 0) {
-    PRODUCERS = int(process.args[0]) ?? PRODUCERS
+    PRODUCERS = i64.tryParse(process.args[0]) ?? PRODUCERS
 }
 if (len(process.args) > 1) {
-    CONSUMERS = int(process.args[1]) ?? CONSUMERS
+    CONSUMERS = i64.tryParse(process.args[1]) ?? CONSUMERS
 }
 if (len(process.args) > 2) {
-    ITEMS = int(process.args[2]) ?? ITEMS
+    ITEMS = i64.tryParse(process.args[2]) ?? ITEMS
 }
 print("=== 生产者消费者测试 ===")
 print("生产者:", PRODUCERS)
@@ -24,7 +24,7 @@ print("总数量:", ITEMS)
 const queue = Channel(100)
 const done_ch = Channel(CONSUMERS)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -32,14 +32,14 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 生产者
-fn producer(id: int, count: int) {
+fn producer(id: i64, count: i64) {
     for (var i = 0; i < count; i++) {
         queue.send(id * 1000000 + i)
     }
 }
 
 // 消费者
-fn consumer(id: int) {
+fn consumer(id: i64) {
     var consumed = 0
     while (true) {
         var item = recv_int(queue, -1)
@@ -88,7 +88,7 @@ print("预期:", expected)
 print("正确:", total_consumed == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(total_consumed * 1000 / elapsed), "items/sec")
+    print("吞吐量:", (total_consumed * 1000 / elapsed as i64), "items/sec")
 } else {
     print("吞吐量: 太快无法测量")
 }

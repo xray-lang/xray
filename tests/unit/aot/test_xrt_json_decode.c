@@ -275,7 +275,7 @@ static void test_decode_validates_each_primitive_field(void) {
     json_object_set(source, "name", xr_box_str("Ada"));
     json_object_set(source, "age", XR_FROM_FLOAT(37.0));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
-                "int field must reject a float");
+                "i64 field must reject a f64");
     json_object_set(source, "age", XR_FROM_INT(37));
     json_object_set(source, "active", XR_FROM_INT(1));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
@@ -283,7 +283,7 @@ static void test_decode_validates_each_primitive_field(void) {
     json_object_set(source, "active", XR_TRUE_VAL);
     json_object_set(source, "score", XR_FROM_INT(9));
     ASSERT_TRUE(XR_IS_NULL(decode_with_kinds(source, 4, names, kinds)),
-                "float field must reject an integer");
+                "f64 field must reject an integer");
     destroy_object(source);
 }
 
@@ -364,7 +364,7 @@ static void test_decode_nested_object_field(void) {
     ASSERT_TRUE(xrt_object_domain((xrt_object_t *) decoded_nested.ptr) == XRT_OBJECT_STRUCT,
                 "nested field should become a structural object");
     ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(decoded_nested, 0)) == 7,
-                "nested int field should be copied");
+                "nested i64 field should be copied");
     destroy_object(decoded_nested);
     destroy_object(decoded);
 
@@ -494,7 +494,7 @@ static void test_decode_mixed_nested_object_and_array_json_fields(void) {
     XrValue decoded_address = xrt_object_get_name_owned(decoded, "address");
     ASSERT_TRUE(!XR_IS_NULL(decoded_address), "nested address should be materialized");
     ASSERT_TRUE(XR_TO_INT(xrt_object_get_field(decoded_address, 1)) == 310000,
-                "nested int field should survive mixed decode");
+                "nested i64 field should survive mixed decode");
     destroy_object(decoded_address);
     destroy_object(decoded);
 

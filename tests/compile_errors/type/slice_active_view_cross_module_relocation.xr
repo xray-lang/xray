@@ -1,8 +1,8 @@
 import { grow } from "../../fixtures/slice/_slice_memory_effect_lib"
 
 fn main() {
-    var owner: Array<byte> = [1, 2]
-    var view: Slice<byte> = owner[:]
+    var owner: Array<u8> = [1, 2]
+    var view: Slice<u8> = owner[:]
     grow(ref owner)
     print(view[0])
 }

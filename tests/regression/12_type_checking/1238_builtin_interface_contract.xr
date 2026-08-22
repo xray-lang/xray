@@ -7,9 +7,9 @@
 // `operator len() -> int` requirement is what makes len(bag) legal.
 
 class Bag implements Lengthable {
-    n: int
-    constructor(n: int) { this.n = n }
-    operator len() -> int { return this.n }
+    n: i64
+    constructor(n: i64) { this.n = n }
+    operator len() -> i64 { return this.n }
 }
 
 @test
@@ -26,6 +26,6 @@ fn test_builtin_lengthable_via_generic_constraint() {
     assert_eq(measure("abcd"), 4)
 }
 
-fn measure<T: Lengthable>(value: T) -> int {
+fn measure<T: Lengthable>(value: T) -> i64 {
     return len(value)
 }

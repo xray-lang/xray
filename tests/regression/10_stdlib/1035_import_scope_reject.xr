@@ -13,7 +13,7 @@ fn test_top_level_import_works() {
 
 @test
 fn test_import_accessible_in_nested_fn() {
-    fn inner() -> int {
+    fn inner() -> i64 {
         return time.now()
     }
     assert(inner() > 0)

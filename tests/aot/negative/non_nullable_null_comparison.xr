@@ -1,4 +1,4 @@
-var x: int = 1
+var x: i64 = 1
 
 if (x == null) {
     print("bad")

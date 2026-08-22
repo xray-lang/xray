@@ -21,7 +21,7 @@
 | `scripts/check_bytes_type_residue.py` | 204：`Bytes/ByteSpan/ByteView` 删除 residue 分类 inventory，区分 public 表面与 internal legacy 命名 | `--root <repo>`；可选 `--json`、`--fail-on-public`、`--fail-on-internal-legacy` | 默认只输出 inventory=0；CTest `bytes_type_residue` 阻止 public 与 internal legacy 残余回流 | < 2s |
 | `scripts/check_byte_width_predicates.py` | 204：高层 analyzer/IR/AOT 不得重新用 `native_width == XR_NATIVE_U8` 或 `elem_name == "XR_ELEM_U8"` 选择 byte 语义 | `--root <repo>`；可选 `--json` | 未登记的直接 U8 width/string predicate=1；CTest `byte_width_predicate_audit` 固定共享 helper 边界 | < 2s |
 | `scripts/run_byte_u8_canonical_audit.py` | 204/239：`byte`/`u8` 规范化为同一 U8 identity 的 final audit，串联语言正例、LSP canonical docs 与 global evidence/cache type-key | env: `XRAY_BIN`, `XRAY_TEST_LSP_DOCUMENT`, `XRAY_TEST_XGLOBAL_SUMMARY` | 任一子门禁失败=1；CTest `byte_u8_canonical_audit` 固定可复跑组合证据 | < 120s |
-| `scripts/run_byte_receiver_effect_audit.py` | 204：`Array<byte>` / `Slice<byte>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
+| `scripts/run_byte_receiver_effect_audit.py` | 204：`Array<u8>` / `Slice<u8>` receiver effect 与 203 local/owned/const/shared provenance 对齐 audit | env: `XRAY_BIN` | 任一正例或负例漂移=1；CTest `byte_receiver_effect_audit` 固定可复跑组合证据 | < 120s |
 | `scripts/check_source_unknown_convergence.py` | 202：source `unknown` 删除与 typed erasure 边界收敛前的 source/runtime/analyzer/IR/AOT/Task residue 分类 inventory | `--root <repo>`；可选 `--json` | 默认只输出 inventory=0，为 P0 固定基线 | < 2s |
 | `scripts/check_source_unknown_aot_baseline.py` | 202：Task、ThreadLocal、Json encode 与 HTTP handler 的 AOT baseline fixture/expect 覆盖检查 | `--root <repo>`；可选 `--json` | baseline fixture 或关键断言缺失=1 | < 1s |
 | `scripts/check_error_effect_convergence.py` | 205/216：unchecked error-effect graph、typed throw bit 与 backend 重推导分类 inventory | `--root <repo>`；可选 `--json`、`--max-category NAME=N` | 默认输出 inventory；CTest 固定 `THROW_BIT_RECOMPUTE=0`，阻止 backend/CGen 重推导 typed bit | < 2s |
@@ -132,8 +132,8 @@ canonical `mem.ptr/mutPtr/addr/load/store`、允许保留的 compile-error 负�
 串联 204/239 完成定义中 `byte` / `u8` canonical U8 identity 的三类证据：
 
 - `1409_byte_u8_canonical_identity.xr` 固定 scalar、`Array<T>`、`Slice<T>`、函数参数和 U8 条件方法互通。
-- `test_lsp_document` 固定 `Array<u8>` 源码拼写的 completion/hover docs canonicalize 到 `Array<byte>` / `Slice<byte>`。
-- `test_xglobal_summary` 固定 global evidence 和 cache materialization 里的 `Array<byte>` / `Array<u8>`、`Slice<byte>` / `Slice<u8>` type key 同一。
+- `test_lsp_document` 固定 `Array<u8>` 源码拼写的 completion/hover docs canonicalize 到 `Array<u8>` / `Slice<u8>`。
+- `test_xglobal_summary` 固定 global evidence 和 cache materialization 里的 `Array<u8>` / `Array<u8>`、`Slice<u8>` / `Slice<u8>` type key 同一。
 
 CTest `byte_u8_canonical_audit` 只在 LSP 单测可用的平台启用，避免 final audit 退回到手工命令列表。
 
@@ -141,7 +141,7 @@ CTest `byte_u8_canonical_audit` 只在 LSP 单测可用的平台启用，避免 
 
 串联 204 完成定义中 receiver effect 与 203 storage/provenance 对齐的正反例：
 
-- 正例固定 `var` / `owned` `Array<byte>` mutating receiver 可用，`const` / `shared` 派生 `Slice<byte>` 只读路径可用。
+- 正例固定 `var` / `owned` `Array<u8>` mutating receiver 可用，`const` / `shared` 派生 `Slice<u8>` 只读路径可用。
 - 正例复跑 shared-derived readonly direct/import/re-export/returned function-value 参数，以及 owned move-to-shared 基础回归。
 - 负例固定 `in` 参数、const view、shared binding、shared-derived Slice direct/param/function-value/import/re-export/returned callee，以及 active Slice borrow 下的 move/freeze 都会被拒绝。
 

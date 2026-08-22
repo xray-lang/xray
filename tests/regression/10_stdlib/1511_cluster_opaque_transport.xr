@@ -2,7 +2,7 @@ import cluster
 import mem
 import { ClusterConfig, ClusterDelivery } from cluster
 
-type DeliveryBoundary = ClusterDelivery | int
+type DeliveryBoundary = ClusterDelivery | i64
 
 fn erase_delivery(value: ClusterDelivery) -> DeliveryBoundary {
     return value

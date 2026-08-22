@@ -1,4 +1,4 @@
 // 005_extensible_readonly.xr
 // Structural object types are always exact. Width is expressed only by a
 // generic structural constraint, never by a row tail.
-type Entity = { id: int, name: string, ... }
+type Entity = { id: i64, name: string, ... }

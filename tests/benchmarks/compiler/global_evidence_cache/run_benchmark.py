@@ -54,7 +54,7 @@ PROJECT_DIR = Path(__file__).resolve().parents[4]
 ALL_CASES = ("class", "generic", "closure", "static", "capability", "package")
 
 DECL_EXTRA = """
-fn added_decl(x: int) -> int {
+fn added_decl(x: i64) -> i64 {
     return x + 1
 }
 """
@@ -62,34 +62,34 @@ fn added_decl(x: int) -> int {
 SUMMARY_RE = re.compile(r"evidence cache summary: (.*)")
 
 CLASS_TEMPLATE = """interface Shape {{
-    area() -> int
+    area() -> i64
 }}
 
 class Circle implements Shape {{
-    r: int
-    constructor(r: int) {{
+    r: i64
+    constructor(r: i64) {{
         this.r = r
     }}
-    area() -> int {{
+    area() -> i64 {{
         return this.r * this.r + {body}
     }}
 }}
 
 class Square implements Shape {{
-    side: int
-    constructor(side: int) {{
+    side: i64
+    constructor(side: i64) {{
         this.side = side
     }}
-    area() -> int {{
+    area() -> i64 {{
         return this.side * this.side
     }}
 }}
 
-fn score(shape: Shape) -> int {{
+fn score(shape: Shape) -> i64 {{
     return shape.area()
 }}
 
-fn tag() -> int {{
+fn tag() -> i64 {{
     return {extra}
 }}
 
@@ -111,32 +111,32 @@ fn id<T>(x: T) -> T {{
     return x
 }}
 
-fn tag() -> int {{
+fn tag() -> i64 {{
     return {extra}
 }}
 
-fn wrapper() -> int {{
-    var box = Box<int>(7)
-    return id<int>(box.get()) + {body}
+fn wrapper() -> i64 {{
+    var box = Box<i64>(7)
+    return id<i64>(box.get()) + {body}
 }}
 
 {decl}
 print(wrapper())
 """
 
-CLOSURE_TEMPLATE = """fn tag() -> int {{
+CLOSURE_TEMPLATE = """fn tag() -> i64 {{
     return {extra}
 }}
 
-fn directClosure() -> int {{
-    const f = fn() -> int {{
+fn directClosure() -> i64 {{
+    const f = fn() -> i64 {{
         return 41 + {body}
     }}
     return f() + 1
 }}
 
-fn captured(seed: int) -> int {{
-    const f = fn() -> int {{
+fn captured(seed: i64) -> i64 {{
+    const f = fn() -> i64 {{
         return seed + 2
     }}
     return f()
@@ -147,16 +147,16 @@ print(directClosure() + captured(1))
 """
 
 STATIC_TEMPLATE = """struct StaticPair {{
-    left: int
-    right: int
+    left: i64
+    right: i64
 }}
 
-fn tag() -> int {{
+fn tag() -> i64 {{
     return {extra}
 }}
 
-fn run() -> int {{
-    const table: [int; 3] = comptime [1, 2, 3]
+fn run() -> i64 {{
+    const table: [i64; 3] = comptime [1, 2, 3]
     const pair = comptime StaticPair{{left: table[0], right: 4}}
     const value = comptime 7
     return value + pair.right + {body}
@@ -166,19 +166,19 @@ fn run() -> int {{
 print(run())
 """
 
-CAPABILITY_TEMPLATE = """fn tag() -> int {{
+CAPABILITY_TEMPLATE = """fn tag() -> i64 {{
     return {extra}
 }}
 
-fn worker(x: int) -> int {{
+fn worker(x: i64) -> i64 {{
     return x + 1 + {body}
 }}
 
-fn sum(xs: Array<int>) -> int {{
+fn sum(xs: Array<i64>) -> i64 {{
     return xs.length
 }}
 
-shared ch: Channel<Array<int>> = Channel(1)
+shared ch: Channel<Array<i64>> = Channel(1)
 
 {decl}
 var a = go worker(41)
@@ -193,11 +193,11 @@ print(await b)
 
 PACKAGE_TEMPLATE = """import "codex/pkg" as pkg
 
-fn tag() -> int {{
+fn tag() -> i64 {{
     return {extra}
 }}
 
-fn value() -> int {{
+fn value() -> i64 {{
     return 7 + {body}
 }}
 

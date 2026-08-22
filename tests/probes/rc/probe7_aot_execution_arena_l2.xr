@@ -15,7 +15,7 @@ import runtime
 
 class ArenaCycleNode {
     peer: ArenaCycleNode?
-    value: int
+    value: i64
 
     constructor(value) {
         this.peer = null
@@ -23,7 +23,7 @@ class ArenaCycleNode {
     }
 }
 
-fn leave_cycles(count: int) -> int {
+fn leave_cycles(count: i64) -> i64 {
     var checksum = 0
     var i = 0
     while (i < count) {
@@ -39,15 +39,15 @@ fn leave_cycles(count: int) -> int {
     return checksum
 }
 
-fn run_one_execution(count: int) -> int {
+fn run_one_execution(count: i64) -> i64 {
     var task = go leave_cycles(count)
     return await task
 }
 
 // The harness always passes decimal counts, and int(s) now throws on anything
 // else (spec 13.2) instead of yielding a null to fall back from.
-var rounds = len(process.args) > 0 ? int(process.args[0]) : 2000
-var cycles_per_round = len(process.args) > 1 ? int(process.args[1]) : 32
+var rounds = len(process.args) > 0 ? i64.parse(process.args[0]) : 2000
+var cycles_per_round = len(process.args) > 1 ? i64.parse(process.args[1]) : 32
 var objects_before = runtime.liveObjects()
 var bytes_before = runtime.liveBytes()
 var total = 0

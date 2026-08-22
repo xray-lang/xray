@@ -52,8 +52,8 @@ typedef struct XrHostedFragmentArrayView {
     uint8_t reserved8[7];
 } XrHostedFragmentArrayView;
 
-/* A call-scoped borrow of contiguous byte storage.  Both Array<byte> and
- * Slice<byte> use this operation: generated fragments must never reinterpret
+/* A call-scoped borrow of contiguous byte storage.  Both Array<u8> and
+ * Slice<u8> use this operation: generated fragments must never reinterpret
  * a host container header.  `readonly` preserves the host's dynamic view
  * provenance so a `ref` parameter can fail closed before native code runs. */
 typedef struct XrHostedFragmentByteSpanView {

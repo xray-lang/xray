@@ -4,7 +4,7 @@ union I32Bits {
 }
 
 var bits = I32Bits{i: -1}
-print(int(unsafe { bits.u }))
+print((unsafe { bits.u } as i64))
 
 bits.u = 0x7fffffff
 print(unsafe { bits.i })

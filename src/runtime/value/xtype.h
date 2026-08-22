@@ -26,7 +26,7 @@
 #include "../../base/xdefs.h"
 #include "../../shared/xr_param_mode.h"
 #include "../../shared/xr_json_type.h"
-#include "../../shared/xr_scalar_type.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include "../../shared/xr_conversion.h"
 
 /* ========== XrRep - Machine Representation ========== */

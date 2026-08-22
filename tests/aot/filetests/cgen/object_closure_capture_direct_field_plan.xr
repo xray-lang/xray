@@ -1,6 +1,6 @@
-fn objectClosureCapturePlan() -> int {
+fn objectClosureCapturePlan() -> i64 {
     var user = { name: "ada", age: 7 }
-    const read = fn() -> int {
+    const read = fn() -> i64 {
         return user.age
     }
     return read()

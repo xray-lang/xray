@@ -1,6 +1,6 @@
-fn launch(data: Array<int>) {
+fn launch(data: Array<i64>) {
     var originalLength = len(data)
-    var task = go fn(buffer: move Array<int>) -> int {
+    var task = go fn(buffer: move Array<i64>) -> i64 {
         buffer.push(5)
         return len(buffer)
     }(copy(data))
@@ -8,5 +8,5 @@ fn launch(data: Array<int>) {
     print(originalLength)
 }
 
-var values: Array<int> = [1, 2, 3, 4]
+var values: Array<i64> = [1, 2, 3, 4]
 launch(values)

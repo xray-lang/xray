@@ -4,18 +4,18 @@
 // unsupported AOT targets. Compiler-owned intrinsic identities map the same
 // operations to typed Xi vector ops without relying on paths or source names.
 export struct U8x16 align(16) {
-    private _lanes: [byte; 16]
+    private _lanes: [u8; 16]
 
-    static fromLanes(lanes: [byte; 16]) -> U8x16 {
+    static fromLanes(lanes: [u8; 16]) -> U8x16 {
         return U8x16{_lanes: copy(lanes)}
     }
 
-    static splat(value: byte) -> U8x16 {
+    static splat(value: u8) -> U8x16 {
         return U8x16{_lanes: [value; 16]}
     }
 
-    static load(data: Slice<byte>, offset: int = 0) -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+    static load(data: Slice<u8>, offset: i64 = 0) -> U8x16 {
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 16) {
             lanes[i] = data[offset + i]
@@ -24,7 +24,7 @@ export struct U8x16 align(16) {
         return U8x16{_lanes: lanes}
     }
 
-    store(output: ref Slice<byte>, offset: int = 0) {
+    store(output: ref Slice<u8>, offset: i64 = 0) {
         var i = 0
         while (i < 16) {
             output[offset + i] = this._lanes[i]
@@ -32,18 +32,18 @@ export struct U8x16 align(16) {
         }
     }
 
-    extract(lane: int) -> byte {
+    extract(lane: i64) -> u8 {
         return this._lanes[lane]
     }
 
-    replace(lane: int, value: byte) -> U8x16 {
+    replace(lane: i64, value: u8) -> U8x16 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U8x16{_lanes: lanes}
     }
 
     bitAnd(other: U8x16) -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 16) {
             lanes[i] = this._lanes[i] & other._lanes[i]
@@ -53,7 +53,7 @@ export struct U8x16 align(16) {
     }
 
     bitOr(other: U8x16) -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 16) {
             lanes[i] = this._lanes[i] | other._lanes[i]
@@ -63,7 +63,7 @@ export struct U8x16 align(16) {
     }
 
     bitXor(other: U8x16) -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 16) {
             lanes[i] = this._lanes[i] ^ other._lanes[i]
@@ -73,7 +73,7 @@ export struct U8x16 align(16) {
     }
 
     bitNot() -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 16) {
             lanes[i] = ~this._lanes[i]
@@ -116,7 +116,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: [value; 4]}
     }
 
-    static load(data: Slice<u32>, offset: int = 0) -> U32x4 {
+    static load(data: Slice<u32>, offset: i64 = 0) -> U32x4 {
         var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -126,7 +126,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
 
-    store(output: ref Slice<u32>, offset: int = 0) {
+    store(output: ref Slice<u32>, offset: i64 = 0) {
         var i = 0
         while (i < 4) {
             output[offset + i] = this._lanes[i]
@@ -134,11 +134,11 @@ export struct U32x4 align(16) {
         }
     }
 
-    extract(lane: int) -> u32 {
+    extract(lane: i64) -> u32 {
         return this._lanes[lane]
     }
 
-    replace(lane: int, value: u32) -> U32x4 {
+    replace(lane: i64, value: u32) -> U32x4 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U32x4{_lanes: lanes}
@@ -214,7 +214,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
 
-    shiftLeft(bits: int) -> U32x4 {
+    shiftLeft(bits: i64) -> U32x4 {
         var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -224,7 +224,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
 
-    shiftRight(bits: int) -> U32x4 {
+    shiftRight(bits: i64) -> U32x4 {
         var lanes: [u32; 4] = [0; 4]
         var i = 0
         while (i < 4) {
@@ -234,7 +234,7 @@ export struct U32x4 align(16) {
         return U32x4{_lanes: lanes}
     }
 
-    shuffle(i0: int, i1: int, i2: int, i3: int) -> U32x4 {
+    shuffle(i0: i64, i1: i64, i2: i64, i3: i64) -> U32x4 {
         return U32x4{_lanes: [this._lanes[i0], this._lanes[i1], this._lanes[i2], this._lanes[i3]]}
     }
 
@@ -267,15 +267,15 @@ export struct U32x4 align(16) {
     }
 
     reinterpretU8() -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 4) {
             var word = this._lanes[i]
             var base = i * 4
-            lanes[base] = (word & 255) as byte
-            lanes[base + 1] = ((word >> 8) & 255) as byte
-            lanes[base + 2] = ((word >> 16) & 255) as byte
-            lanes[base + 3] = ((word >> 24) & 255) as byte
+            lanes[base] = (word & 255) as u8
+            lanes[base + 1] = ((word >> 8) & 255) as u8
+            lanes[base + 2] = ((word >> 16) & 255) as u8
+            lanes[base + 3] = ((word >> 24) & 255) as u8
             i += 1
         }
         return U8x16.fromLanes(lanes)
@@ -297,20 +297,20 @@ export struct U64x2 align(16) {
         return U64x2{_lanes: [value; 2]}
     }
 
-    static load(data: Slice<u64>, offset: int = 0) -> U64x2 {
+    static load(data: Slice<u64>, offset: i64 = 0) -> U64x2 {
         return U64x2{_lanes: [data[offset], data[offset + 1]]}
     }
 
-    store(output: ref Slice<u64>, offset: int = 0) {
+    store(output: ref Slice<u64>, offset: i64 = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
     }
 
-    extract(lane: int) -> u64 {
+    extract(lane: i64) -> u64 {
         return this._lanes[lane]
     }
 
-    replace(lane: int, value: u64) -> U64x2 {
+    replace(lane: i64, value: u64) -> U64x2 {
         var lanes = copy(this._lanes)
         lanes[lane] = value
         return U64x2{_lanes: lanes}
@@ -344,11 +344,11 @@ export struct U64x2 align(16) {
         return U64x2{_lanes: [~this._lanes[0], ~this._lanes[1]]}
     }
 
-    shiftLeft(bits: int) -> U64x2 {
+    shiftLeft(bits: i64) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] << bits, this._lanes[1] << bits]}
     }
 
-    shiftRight(bits: int) -> U64x2 {
+    shiftRight(bits: i64) -> U64x2 {
         return U64x2{_lanes: [this._lanes[0] >> bits, this._lanes[1] >> bits]}
     }
 
@@ -356,7 +356,7 @@ export struct U64x2 align(16) {
         return U64x2{_lanes: [this._lanes[1], this._lanes[0]]}
     }
 
-    shuffle(i0: int, i1: int) -> U64x2 {
+    shuffle(i0: i64, i1: i64) -> U64x2 {
         return U64x2{_lanes: [this._lanes[i0], this._lanes[i1]]}
     }
 
@@ -369,19 +369,19 @@ export struct U64x2 align(16) {
     }
 
     reinterpretU8() -> U8x16 {
-        var lanes: [byte; 16] = [0; 16]
+        var lanes: [u8; 16] = [0; 16]
         var i = 0
         while (i < 2) {
             var word = this._lanes[i]
             var base = i * 8
-            lanes[base] = (word & 255) as byte
-            lanes[base + 1] = ((word >> 8) & 255) as byte
-            lanes[base + 2] = ((word >> 16) & 255) as byte
-            lanes[base + 3] = ((word >> 24) & 255) as byte
-            lanes[base + 4] = ((word >> 32) & 255) as byte
-            lanes[base + 5] = ((word >> 40) & 255) as byte
-            lanes[base + 6] = ((word >> 48) & 255) as byte
-            lanes[base + 7] = ((word >> 56) & 255) as byte
+            lanes[base] = (word & 255) as u8
+            lanes[base + 1] = ((word >> 8) & 255) as u8
+            lanes[base + 2] = ((word >> 16) & 255) as u8
+            lanes[base + 3] = ((word >> 24) & 255) as u8
+            lanes[base + 4] = ((word >> 32) & 255) as u8
+            lanes[base + 5] = ((word >> 40) & 255) as u8
+            lanes[base + 6] = ((word >> 48) & 255) as u8
+            lanes[base + 7] = ((word >> 56) & 255) as u8
             i += 1
         }
         return U8x16.fromLanes(lanes)
@@ -392,9 +392,9 @@ export struct U64x2 align(16) {
 // portable 128-bit semantic baseline; AOT rewrites this query to the exact
 // target plan so dead wide branches disappear before machine code emission.
 export struct Capabilities {
-    private _marker: byte
+    private _marker: u8
 
-    static nativeBytes() -> int {
+    static nativeBytes() -> i64 {
         return 16
     }
 
@@ -412,14 +412,14 @@ export struct Capabilities {
 }
 
 export struct U8x32 align(32) {
-    private _lanes: [byte; 32]
+    private _lanes: [u8; 32]
 
-    static fromLanes(lanes: [byte; 32]) -> U8x32 {
+    static fromLanes(lanes: [u8; 32]) -> U8x32 {
         return U8x32{_lanes: copy(lanes)}
     }
 
-    static load(data: Slice<byte>, offset: int = 0) -> U8x32 {
-        var lanes: [byte; 32] = [0; 32]
+    static load(data: Slice<u8>, offset: i64 = 0) -> U8x32 {
+        var lanes: [u8; 32] = [0; 32]
         var i = 0
         while (i < 32) {
             lanes[i] = data[offset + i]
@@ -428,7 +428,7 @@ export struct U8x32 align(32) {
         return U8x32{_lanes: lanes}
     }
 
-    store(output: ref Slice<byte>, offset: int = 0) {
+    store(output: ref Slice<u8>, offset: i64 = 0) {
         var i = 0
         while (i < 32) {
             output[offset + i] = this._lanes[i]
@@ -437,7 +437,7 @@ export struct U8x32 align(32) {
     }
 
     bitXor(other: U8x32) -> U8x32 {
-        var lanes: [byte; 32] = [0; 32]
+        var lanes: [u8; 32] = [0; 32]
         var i = 0
         while (i < 32) {
             lanes[i] = this._lanes[i] ^ other._lanes[i]
@@ -500,11 +500,11 @@ export struct U64x4 align(32) {
         return U64x4{_lanes: copy(lanes)}
     }
 
-    static load(data: Slice<u64>, offset: int = 0) -> U64x4 {
+    static load(data: Slice<u64>, offset: i64 = 0) -> U64x4 {
         return U64x4{_lanes: [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]]}
     }
 
-    store(output: ref Slice<u64>, offset: int = 0) {
+    store(output: ref Slice<u64>, offset: i64 = 0) {
         output[offset] = this._lanes[0]
         output[offset + 1] = this._lanes[1]
         output[offset + 2] = this._lanes[2]
@@ -519,11 +519,11 @@ export struct U64x4 align(32) {
         return U64x4{_lanes: [this._lanes[0] ^ other._lanes[0], this._lanes[1] ^ other._lanes[1], this._lanes[2] ^ other._lanes[2], this._lanes[3] ^ other._lanes[3]]}
     }
 
-    shiftLeft(bits: int) -> U64x4 {
+    shiftLeft(bits: i64) -> U64x4 {
         return U64x4{_lanes: [this._lanes[0] << bits, this._lanes[1] << bits, this._lanes[2] << bits, this._lanes[3] << bits]}
     }
 
-    shiftRight(bits: int) -> U64x4 {
+    shiftRight(bits: i64) -> U64x4 {
         return U64x4{_lanes: [this._lanes[0] >> bits, this._lanes[1] >> bits, this._lanes[2] >> bits, this._lanes[3] >> bits]}
     }
 
@@ -540,19 +540,19 @@ export struct U64x4 align(32) {
     }
 
     reinterpretU8() -> U8x32 {
-        var lanes: [byte; 32] = [0; 32]
+        var lanes: [u8; 32] = [0; 32]
         var i = 0
         while (i < 4) {
             var word = this._lanes[i]
             var base = i * 8
-            lanes[base] = (word & 255) as byte
-            lanes[base + 1] = ((word >> 8) & 255) as byte
-            lanes[base + 2] = ((word >> 16) & 255) as byte
-            lanes[base + 3] = ((word >> 24) & 255) as byte
-            lanes[base + 4] = ((word >> 32) & 255) as byte
-            lanes[base + 5] = ((word >> 40) & 255) as byte
-            lanes[base + 6] = ((word >> 48) & 255) as byte
-            lanes[base + 7] = ((word >> 56) & 255) as byte
+            lanes[base] = (word & 255) as u8
+            lanes[base + 1] = ((word >> 8) & 255) as u8
+            lanes[base + 2] = ((word >> 16) & 255) as u8
+            lanes[base + 3] = ((word >> 24) & 255) as u8
+            lanes[base + 4] = ((word >> 32) & 255) as u8
+            lanes[base + 5] = ((word >> 40) & 255) as u8
+            lanes[base + 6] = ((word >> 48) & 255) as u8
+            lanes[base + 7] = ((word >> 56) & 255) as u8
             i += 1
         }
         return U8x32.fromLanes(lanes)
@@ -560,14 +560,14 @@ export struct U64x4 align(32) {
 }
 
 export struct U8x64 align(64) {
-    private _lanes: [byte; 64]
+    private _lanes: [u8; 64]
 
-    static fromLanes(lanes: [byte; 64]) -> U8x64 {
+    static fromLanes(lanes: [u8; 64]) -> U8x64 {
         return U8x64{_lanes: copy(lanes)}
     }
 
-    static load(data: Slice<byte>, offset: int = 0) -> U8x64 {
-        var lanes: [byte; 64] = [0; 64]
+    static load(data: Slice<u8>, offset: i64 = 0) -> U8x64 {
+        var lanes: [u8; 64] = [0; 64]
         var i = 0
         while (i < 64) {
             lanes[i] = data[offset + i]
@@ -576,7 +576,7 @@ export struct U8x64 align(64) {
         return U8x64{_lanes: lanes}
     }
 
-    store(output: ref Slice<byte>, offset: int = 0) {
+    store(output: ref Slice<u8>, offset: i64 = 0) {
         var i = 0
         while (i < 64) {
             output[offset + i] = this._lanes[i]
@@ -585,7 +585,7 @@ export struct U8x64 align(64) {
     }
 
     bitXor(other: U8x64) -> U8x64 {
-        var lanes: [byte; 64] = [0; 64]
+        var lanes: [u8; 64] = [0; 64]
         var i = 0
         while (i < 64) {
             lanes[i] = this._lanes[i] ^ other._lanes[i]
@@ -666,7 +666,7 @@ export struct U64x8 align(64) {
         return U64x8{_lanes: copy(lanes)}
     }
 
-    static load(data: Slice<u64>, offset: int = 0) -> U64x8 {
+    static load(data: Slice<u64>, offset: i64 = 0) -> U64x8 {
         var lanes: [u64; 8] = [0; 8]
         var i = 0
         while (i < 8) {
@@ -676,7 +676,7 @@ export struct U64x8 align(64) {
         return U64x8{_lanes: lanes}
     }
 
-    store(output: ref Slice<u64>, offset: int = 0) {
+    store(output: ref Slice<u64>, offset: i64 = 0) {
         var i = 0
         while (i < 8) {
             output[offset + i] = this._lanes[i]
@@ -704,7 +704,7 @@ export struct U64x8 align(64) {
         return U64x8{_lanes: lanes}
     }
 
-    shiftLeft(bits: int) -> U64x8 {
+    shiftLeft(bits: i64) -> U64x8 {
         var lanes: [u64; 8] = [0; 8]
         var i = 0
         while (i < 8) {
@@ -714,7 +714,7 @@ export struct U64x8 align(64) {
         return U64x8{_lanes: lanes}
     }
 
-    shiftRight(bits: int) -> U64x8 {
+    shiftRight(bits: i64) -> U64x8 {
         var lanes: [u64; 8] = [0; 8]
         var i = 0
         while (i < 8) {
@@ -751,10 +751,10 @@ export struct U64x8 align(64) {
 // register. Code must branch on Capabilities.isScalable() before using this
 // family as a target hot path.
 export struct U8xNative align(64) {
-    private _lanes: [byte; 64]
+    private _lanes: [u8; 64]
 
-    static load(data: Slice<byte>, offset: int = 0) -> U8xNative {
-        var lanes: [byte; 64] = [0; 64]
+    static load(data: Slice<u8>, offset: i64 = 0) -> U8xNative {
+        var lanes: [u8; 64] = [0; 64]
         var i = 0
         while (i < Capabilities.nativeBytes()) {
             lanes[i] = data[offset + i]
@@ -764,7 +764,7 @@ export struct U8xNative align(64) {
     }
 
     bitXor(other: U8xNative) -> U8xNative {
-        var lanes: [byte; 64] = [0; 64]
+        var lanes: [u8; 64] = [0; 64]
         var i = 0
         while (i < Capabilities.nativeBytes()) {
             lanes[i] = this._lanes[i] ^ other._lanes[i]
@@ -833,7 +833,7 @@ export struct U64xNative align(64) {
         return U64xNative{_lanes: lanes}
     }
 
-    static load(data: Slice<u64>, offset: int = 0) -> U64xNative {
+    static load(data: Slice<u64>, offset: i64 = 0) -> U64xNative {
         var lanes: [u64; 8] = [0; 8]
         var i = 0
         while (i < Capabilities.nativeBytes() / 8) {
@@ -843,7 +843,7 @@ export struct U64xNative align(64) {
         return U64xNative{_lanes: lanes}
     }
 
-    store(output: ref Slice<u64>, offset: int = 0) {
+    store(output: ref Slice<u64>, offset: i64 = 0) {
         var i = 0
         while (i < Capabilities.nativeBytes() / 8) {
             output[offset + i] = this._lanes[i]
@@ -881,7 +881,7 @@ export struct U64xNative align(64) {
         return U64xNative{_lanes: lanes}
     }
 
-    shiftRight(bits: int) -> U64xNative {
+    shiftRight(bits: i64) -> U64xNative {
         var lanes: [u64; 8] = [0; 8]
         var i = 0
         while (i < Capabilities.nativeBytes() / 8) {

@@ -1259,7 +1259,7 @@ static inline void xrt_println(XrValue v) {
 }
 
 /* typeof(x) — return integer type ID matching VM XrTypeId.
- * XR_TID_INT=8, XR_TID_FLOAT=11, XR_TID_BOOL=1, XR_TID_NULL=0,
+ * XR_TID_I64=8, XR_TID_F64=11, XR_TID_BOOL=1, XR_TID_NULL=0,
  * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
  * XR_TID_MAP=16. */
 #define XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(core_id, public_id, numeric_id)                         \
@@ -1267,8 +1267,8 @@ static inline void xrt_println(XrValue v) {
     _Static_assert((unsigned) (public_id) == (numeric_id), "AOT public type id drifted")
 
 XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_NULL, XR_TID_NULL, 0u);
-XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_INT, XR_TID_INT, 8u);
-XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_FLOAT, XR_TID_FLOAT, 11u);
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_I64, XR_TID_I64, 8u);
+XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_F64, XR_TID_F64, 11u);
 XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_BUFFER, XR_TID_BUFFER, 42u);
 XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_RUNE, XR_TID_RUNE, 43u);
 
@@ -1277,9 +1277,9 @@ XRT_TYPE_IDENTITY_ASSERT_PUBLIC_ID(XR_TYPE_IDENTITY_CORE_RUNE, XR_TID_RUNE, 43u)
 static inline XrTypeIdentityCoreKind xrt_type_identity_kind(XrValue v) {
     switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
-            return XR_TYPE_IDENTITY_CORE_INT;
+            return XR_TYPE_IDENTITY_CORE_I64;
         case XR_TAG_F64:
-            return XR_TYPE_IDENTITY_CORE_FLOAT;
+            return XR_TYPE_IDENTITY_CORE_F64;
         case XR_TAG_BOOL:
             return XR_TYPE_IDENTITY_CORE_BOOL;
         case XR_TAG_RUNE:
@@ -1367,8 +1367,8 @@ static inline XrValue xrt_typename(XrValue v) {
      * literals: this table is keyed by tag instead of type id, so it is the one
      * name source the type-id table cannot pin. Renaming rune once left "char"
      * behind here for exactly that reason. */
-    XRT_STR_LIT_DEF(xs_int, TYPE_NAME_INT);
-    XRT_STR_LIT_DEF(xs_float, TYPE_NAME_FLOAT);
+    XRT_STR_LIT_DEF(xs_int, TYPE_NAME_I64);
+    XRT_STR_LIT_DEF(xs_float, TYPE_NAME_F64);
     XRT_STR_LIT_DEF(xs_bool, TYPE_NAME_BOOL);
     XRT_STR_LIT_DEF(xs_rune, TYPE_NAME_RUNE);
     XRT_STR_LIT_DEF(xs_null, TYPE_NAME_NULL);

@@ -1,6 +1,6 @@
 // A typed int is not implicitly convertible to float, so it cannot key a
 // Map<float, V>. Only the literal form is contextually typed into the key type.
-var m: Map<float, string> = #{}
-var k: int = 1
+var m: Map<f64, string> = #{}
+var k: i64 = 1
 m[k] = "typed int key"
 print("${len(m)}")

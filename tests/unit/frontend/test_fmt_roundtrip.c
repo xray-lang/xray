@@ -496,7 +496,7 @@ TEST(doc_comment_before_function) {
     setup();
     const char *src = "/// This is a doc comment\n"
                       "/// with two lines\n"
-                      "fn foo() -> int {\n"
+                      "fn foo() -> i64 {\n"
                       "    return 42\n"
                       "}\n";
     char *out = parse_and_format(src, "<test>");
@@ -522,7 +522,7 @@ TEST(comment_before_class) {
     setup();
     const char *src = "// MyClass docs\n"
                       "class MyClass {\n"
-                      "    x: int\n"
+                      "    x: i64\n"
                       "}\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
@@ -601,29 +601,29 @@ TEST(arrow_return_type_emitted) {
     setup();
     /* The formatter must emit `-> T` for return types and must not fall
      * back to the legacy `: T` form. */
-    const char *src = "fn foo() -> int { return 1 }\n";
+    const char *src = "fn foo() -> i64 { return 1 }\n";
     char *out = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(out);
-    ASSERT_TRUE(contains(out, "-> int"));
-    ASSERT_FALSE(contains(out, "): int"));
+    ASSERT_TRUE(contains(out, "-> i64"));
+    ASSERT_FALSE(contains(out, "): i64"));
     free(out);
     teardown();
 }
 
 TEST(annotated_and_mode_lambda_remain_arrow) {
     setup();
-    const char *src = "var typed = (x: int) -> x + 1\n"
-                      "var mutate = (x: ref int) -> { x = x + 1 }\n"
+    const char *src = "var typed = (x: i64) -> x + 1\n"
+                      "var mutate = (x: ref i64) -> { x = x + 1 }\n"
                       "var consume = (job: move Job) -> job\n"
-                      "var task = go launch((x: int) -> x)\n"
-                      "var explicit = fn(x: int) -> int { return x + 1 }\n";
+                      "var task = go launch((x: i64) -> x)\n"
+                      "var explicit = fn(x: i64) -> i64 { return x + 1 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "(x: int) -> x + 1"));
-    ASSERT_TRUE(contains(fmt1, "(x: ref int) ->"));
+    ASSERT_TRUE(contains(fmt1, "(x: i64) -> x + 1"));
+    ASSERT_TRUE(contains(fmt1, "(x: ref i64) ->"));
     ASSERT_TRUE(contains(fmt1, "(job: move Job) -> job"));
-    ASSERT_TRUE(contains(fmt1, "go launch((x: int) -> x)"));
-    ASSERT_TRUE(contains(fmt1, "fn(x: int) -> int"));
+    ASSERT_TRUE(contains(fmt1, "go launch((x: i64) -> x)"));
+    ASSERT_TRUE(contains(fmt1, "fn(x: i64) -> i64"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
     ASSERT_NOT_NULL(fmt2);
     ASSERT_STR_EQ(fmt1, fmt2);
@@ -635,7 +635,7 @@ TEST(annotated_and_mode_lambda_remain_arrow) {
 TEST(attribute_visibility_modifier_order_roundtrip) {
     setup();
     const char *src = "@deprecated(\"use hash64\")\n"
-                      "export fn hash() -> int { return 1 }\n"
+                      "export fn hash() -> i64 { return 1 }\n"
                       "@derive(Clone)\n"
                       "export final class Box {}\n"
                       "export packed struct Word { value: u32 }\n";
@@ -656,7 +656,7 @@ TEST(method_deprecated_attribute_roundtrip) {
     setup();
     const char *src = "export struct Word {\n"
                       "  @deprecated(\"use rotateLeft\")\n"
-                      "  rotate(n: int) -> u32 { return 0 }\n"
+                      "  rotate(n: i64) -> u32 { return 0 }\n"
                       "}\n"
                       "enum State {\n"
                       "  Ready\n"
@@ -678,10 +678,10 @@ TEST(method_deprecated_attribute_roundtrip) {
 TEST(inline_control_attributes_roundtrip) {
     setup();
     const char *src = "@inline\n"
-                      "fn hot(value: int) -> int { return value }\n"
+                      "fn hot(value: i64) -> i64 { return value }\n"
                       "struct Worker {\n"
                       "  @noinline\n"
-                      "  cold(value: int) -> int { return value }\n"
+                      "  cold(value: i64) -> i64 { return value }\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
@@ -719,7 +719,7 @@ TEST(explicit_numeric_conversions_roundtrip) {
 TEST(deprecated_message_roundtrip) {
     setup();
     const char *src = "@deprecated(\"use coldPath instead\")\n"
-                      "fn hot() -> int { return 1 }\n";
+                      "fn hot() -> i64 { return 1 }\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
     ASSERT_TRUE(contains(fmt1, "@deprecated(\"use coldPath instead\")\nfn hot"));
@@ -749,27 +749,27 @@ TEST(object_destructure_rename_roundtrip) {
 
 TEST(parameter_modes_roundtrip) {
     setup();
-    const char *src = "fn param_modes(a: int, b: ref int, c: move Buffer) { }\n"
-                      "var f = fn(a: int, b: ref int, c: move Buffer) -> int { return a }\n"
+    const char *src = "fn param_modes(a: i64, b: ref i64, c: move Buffer) { }\n"
+                      "var f = fn(a: i64, b: ref i64, c: move Buffer) -> i64 { return a }\n"
                       "class ParamModeBox {\n"
-                      "    touch(a: int, b: ref int, c: move Buffer) { }\n"
-                      "    configure(limit: int = 4) { }\n"
-                      "    collect(...values: int) { }\n"
+                      "    touch(a: i64, b: ref i64, c: move Buffer) { }\n"
+                      "    configure(limit: i64 = 4) { }\n"
+                      "    collect(...values: i64) { }\n"
                       "}\n"
                       "interface ParamModeIface {\n"
-                      "    touch(a: int, b: ref int, c: move Buffer) -> int\n"
+                      "    touch(a: i64, b: ref i64, c: move Buffer) -> i64\n"
                       "}\n"
-                      "type ComplexHandler = fn(Array<int>, ref Slice<u8>?, "
-                      "move Buffer, (int, string), fn(ref int) -> bool,) -> Array<string>\n";
+                      "type ComplexHandler = fn(Array<i64>, ref Slice<u8>?, "
+                      "move Buffer, (i64, string), fn(ref i64) -> bool,) -> Array<string>\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
-    ASSERT_TRUE(contains(fmt1, "fn param_modes(a: int, b: ref int, c: move Buffer)"));
-    ASSERT_TRUE(contains(fmt1, "fn(a: int, b: ref int, c: move Buffer) -> int"));
-    ASSERT_TRUE(contains(fmt1, "touch(a: int, b: ref int, c: move Buffer)"));
-    ASSERT_TRUE(contains(fmt1, "configure(limit: int = 4)"));
-    ASSERT_TRUE(contains(fmt1, "collect(...values: int)"));
-    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = fn(Array<int>, ref Slice<u8>?, "
-                               "move Buffer, (int, string), fn(ref int) -> bool) -> "
+    ASSERT_TRUE(contains(fmt1, "fn param_modes(a: i64, b: ref i64, c: move Buffer)"));
+    ASSERT_TRUE(contains(fmt1, "fn(a: i64, b: ref i64, c: move Buffer) -> i64"));
+    ASSERT_TRUE(contains(fmt1, "touch(a: i64, b: ref i64, c: move Buffer)"));
+    ASSERT_TRUE(contains(fmt1, "configure(limit: i64 = 4)"));
+    ASSERT_TRUE(contains(fmt1, "collect(...values: i64)"));
+    ASSERT_TRUE(contains(fmt1, "type ComplexHandler = fn(Array<i64>, ref Slice<u8>?, "
+                               "move Buffer, (i64, string), fn(ref i64) -> bool) -> "
                                "Array<string>"));
     ASSERT_FALSE(contains(fmt1, "bool,) -> Array<string>"));
     ASSERT_FALSE(contains(fmt1, "ref b:"));
@@ -784,7 +784,7 @@ TEST(parameter_modes_roundtrip) {
 
 TEST(unknown_effect_attribute_rejected) {
     setup();
-    const char *src = "@effect_claim\nfn pure(value: int) -> int { return value }\n";
+    const char *src = "@effect_claim\nfn pure(value: i64) -> i64 { return value }\n";
     char *out = parse_and_format(src, "retired-effect-attributes.xr");
     ASSERT_NULL(out);
     teardown();
@@ -814,7 +814,7 @@ TEST(extern_block_roundtrip) {
  * rewrite to `?.` would silently churn every such line. */
 TEST(optional_chain_implicit_link_roundtrip) {
     setup();
-    const char *src = "fn probe(b: Branch?, rows: Array<Array<int>>?) {\n"
+    const char *src = "fn probe(b: Branch?, rows: Array<Array<i64>>?) {\n"
                       "    print(b?.leaf.value)\n"
                       "    print(b?.leaf.doubled())\n"
                       "    print(b?.maybeLeaf?.value)\n"
@@ -837,18 +837,18 @@ TEST(optional_chain_implicit_link_roundtrip) {
 TEST(parameter_modes_comments_roundtrip) {
     setup();
     const char *src = "/// function docs\n"
-                      "fn commented_modes(a: int, b: ref int, c: move Buffer) {\n"
+                      "fn commented_modes(a: i64, b: ref i64, c: move Buffer) {\n"
                       "    touch(ref b, move c) // call marker note\n"
                       "}\n"
                       "/* function type docs */\n"
-                      "type CommentedHandler = fn(int, ref string, move Buffer) -> bool\n"
+                      "type CommentedHandler = fn(i64, ref string, move Buffer) -> bool\n"
                       "class CommentedBox {\n"
                       "    // method docs\n"
-                      "    touch(value: ref int, job: move Buffer) { } // method marker note\n"
+                      "    touch(value: ref i64, job: move Buffer) { } // method marker note\n"
                       "}\n"
                       "interface CommentedIface {\n"
                       "    // signature docs\n"
-                      "    call(value: int, job: move Buffer) -> int\n"
+                      "    call(value: i64, job: move Buffer) -> i64\n"
                       "}\n";
     char *fmt1 = parse_and_format(src, "<test>");
     ASSERT_NOT_NULL(fmt1);
@@ -858,11 +858,11 @@ TEST(parameter_modes_comments_roundtrip) {
     ASSERT_TRUE(contains(fmt1, "// method docs"));
     ASSERT_TRUE(contains(fmt1, "// method marker note"));
     ASSERT_TRUE(contains(fmt1, "// signature docs"));
-    ASSERT_TRUE(contains(fmt1, "commented_modes(a: int, b: ref int, c: move Buffer)"));
+    ASSERT_TRUE(contains(fmt1, "commented_modes(a: i64, b: ref i64, c: move Buffer)"));
     ASSERT_TRUE(contains(fmt1, "touch(ref b, move c)"));
-    ASSERT_TRUE(contains(fmt1, "type CommentedHandler = fn(int, ref string, move Buffer) -> bool"));
-    ASSERT_TRUE(contains(fmt1, "touch(value: ref int, job: move Buffer)"));
-    ASSERT_TRUE(contains(fmt1, "call(value: int, job: move Buffer) -> int"));
+    ASSERT_TRUE(contains(fmt1, "type CommentedHandler = fn(i64, ref string, move Buffer) -> bool"));
+    ASSERT_TRUE(contains(fmt1, "touch(value: ref i64, job: move Buffer)"));
+    ASSERT_TRUE(contains(fmt1, "call(value: i64, job: move Buffer) -> i64"));
     ASSERT_FALSE(contains(fmt1, "ref value:"));
     ASSERT_FALSE(contains(fmt1, "move job:"));
     char *fmt2 = parse_and_format(fmt1, "<test>");
@@ -889,7 +889,7 @@ static char *format_with_config(const char *source, XrFmtConfig *cfg) {
 
 TEST(branch_arrows_default_aligned) {
     setup();
-    const char *src = "fn f(n: int) -> string {\n"
+    const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
                       "        0 -> \"zero\",\n"
                       "        n if (n < 0) -> \"negative\",\n"
@@ -910,7 +910,7 @@ TEST(branch_arrows_default_aligned) {
 
 TEST(branch_arrows_can_disable_alignment) {
     setup();
-    const char *src = "fn f(n: int) -> string {\n"
+    const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
                       "        0 -> \"zero\",\n"
                       "        n if (n < 0) -> \"negative\",\n"
@@ -934,7 +934,7 @@ TEST(branch_arrows_can_disable_alignment) {
 
 TEST(branch_arrows_aligned_idempotent) {
     setup();
-    const char *src = "fn f(n: int) -> string {\n"
+    const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
                       "        0 -> \"zero\",\n"
                       "        n if (n < 0) -> \"negative\",\n"
@@ -961,8 +961,8 @@ TEST(branch_arrows_aligned_idempotent) {
 TEST(select_branch_arrows_default_aligned) {
     setup();
     const char *src = "fn main() {\n"
-                      "    const ch1 = Channel<int>(1)\n"
-                      "    const ch2 = Channel<int>(1)\n"
+                      "    const ch1 = Channel<i64>(1)\n"
+                      "    const ch2 = Channel<i64>(1)\n"
                       "    select {\n"
                       "        v from ch1 -> { print(v) }\n"
                       "        100 to ch2 -> { print(\"sent\") }\n"
@@ -984,7 +984,7 @@ TEST(match_single_arm_no_padding) {
     setup();
     /* A match with exactly one arm should not introduce any padding even
      * with alignment turned on — there is nothing to align against. */
-    const char *src = "fn f(n: int) -> string {\n"
+    const char *src = "fn f(n: i64) -> string {\n"
                       "    return match (n) {\n"
                       "        _ -> \"only\"\n"
                       "    }\n"
@@ -1024,12 +1024,12 @@ TEST(enum_payload_members_roundtrip) {
     setup();
     const char *src = "enum E {\n"
                       "    A,\n"
-                      "    Bbb(x: int, string)\n"
+                      "    Bbb(x: i64, string)\n"
                       "}\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "A"));
-    ASSERT_TRUE(contains(out, "Bbb(x: int, string)"));
+    ASSERT_TRUE(contains(out, "Bbb(x: i64, string)"));
     ASSERT_FALSE(contains(out, "="));
     free(out);
     teardown();
@@ -1038,21 +1038,21 @@ TEST(enum_payload_members_roundtrip) {
 TEST(enum_static_iteration_roundtrip) {
     setup();
     const char *src = "enum Color { Red, Green }\n"
-                      "enum Event { Ready, Data(value: int) }\n"
+                      "enum Event { Ready, Data(value: i64) }\n"
                       "export enum Result<T> { Empty, Ok(T) }\n"
                       "for(color in Color){print(color.name)}\n"
                       "for(variant in Event.variants){\n"
                       "for(field in variant.payloads){print(field.name)}\n"
                       "}\n"
-                      "for(variant in Result<int>.variants){print(variant.name)}\n";
+                      "for(variant in Result<i64>.variants){print(variant.name)}\n";
     char *out = parse_and_format(src, "enum_static_iteration.xr");
     ASSERT_NOT_NULL(out);
     ASSERT_TRUE(contains(out, "for (color in Color) {"));
     ASSERT_TRUE(contains(out, "for (variant in Event.variants) {"));
     ASSERT_TRUE(contains(out, "for (field in variant.payloads) {"));
     ASSERT_TRUE(contains(out, "export enum Result<T> {"));
-    ASSERT_TRUE(contains(out, "for (variant in Result<int>.variants) {"));
-    ASSERT_FALSE(contains(out, "Result<int>().variants"));
+    ASSERT_TRUE(contains(out, "for (variant in Result<i64>.variants) {"));
+    ASSERT_FALSE(contains(out, "Result<i64>().variants"));
 
     char *again = parse_and_format(out, "enum_static_iteration_formatted.xr");
     ASSERT_NOT_NULL(again);
@@ -1070,7 +1070,7 @@ TEST(class_fields_aligned_when_enabled) {
     setup();
     const char *src = "class User {\n"
                       "    name: string\n"
-                      "    age: int\n"
+                      "    age: i64\n"
                       "    email: string\n"
                       "}\n";
     XrFmtConfig cfg = xfmt_default_config;
@@ -1079,7 +1079,7 @@ TEST(class_fields_aligned_when_enabled) {
     ASSERT_NOT_NULL(out);
     /* Widest name is `email` (5 chars). `name`(4) and `age`(3) are padded. */
     ASSERT_TRUE(contains(out, "name : string"));
-    ASSERT_TRUE(contains(out, "age  : int"));
+    ASSERT_TRUE(contains(out, "age  : i64"));
     ASSERT_TRUE(contains(out, "email: string"));
     free(out);
     teardown();
@@ -1088,12 +1088,12 @@ TEST(class_fields_aligned_when_enabled) {
 TEST(class_fields_default_single_space) {
     setup();
     const char *src = "class C {\n"
-                      "    a: int\n"
+                      "    a: i64\n"
                       "    bbbb: string\n"
                       "}\n";
     char *out = format_with_config(src, NULL);
     ASSERT_NOT_NULL(out);
-    ASSERT_TRUE(contains(out, "a: int"));
+    ASSERT_TRUE(contains(out, "a: i64"));
     ASSERT_TRUE(contains(out, "bbbb: string"));
     ASSERT_FALSE(contains(out, "a   :"));
     free(out);

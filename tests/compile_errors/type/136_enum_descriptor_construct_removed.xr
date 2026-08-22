@@ -1,5 +1,5 @@
 enum Option {
-    Some(value: int),
+    Some(value: i64),
     None,
 }
 

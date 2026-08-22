@@ -13,16 +13,16 @@
 // Read-only captures take the by-copy path and never allocate a cell, so a
 // backend that conflated the two paths would answer 3.1 or 3.6 differently.
 
-type IntThunk = fn() -> int
-type IntFn = fn(int) -> int
+type IntThunk = fn() -> i64
+type IntFn = fn(i64) -> i64
 
 fn makeCounter() -> IntThunk {
     var count = 0
-    return fn() -> int { count = count + 1
+    return fn() -> i64 { count = count + 1
                          return count }
 }
 
-fn makeAdder(base: int) -> IntFn { return (n) -> n + base }
+fn makeAdder(base: i64) -> IntFn { return (n) -> n + base }
 
 fn main() {
     var greeting = "hi"
@@ -44,7 +44,7 @@ fn main() {
     print(add99(5))                  // 104
 
     var total = 0
-    var accumulate = (v: int) -> { total = total + v }
+    var accumulate = (v: i64) -> { total = total + v }
     accumulate(5)
     accumulate(7)
     print(total)                     // 12 -- the write is visible outside

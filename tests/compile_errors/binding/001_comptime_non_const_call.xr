@@ -1,4 +1,4 @@
-fn readSize() -> int {
+fn readSize() -> i64 {
     return 1
 }
 

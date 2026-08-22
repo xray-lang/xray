@@ -1,5 +1,5 @@
-fn direct_score(delta: int) -> int {
-    fn add(x: int) -> int {
+fn direct_score(delta: i64) -> i64 {
+    fn add(x: i64) -> i64 {
         var acc = x
         var i = 0
         while (i < 4) {
@@ -12,10 +12,10 @@ fn direct_score(delta: int) -> int {
     return add(5)
 }
 
-fn cell_score() -> int {
+fn cell_score() -> i64 {
     var n = 0
 
-    fn inc(step: int) -> int {
+    fn inc(step: i64) -> i64 {
         n = n + step
         return n
     }

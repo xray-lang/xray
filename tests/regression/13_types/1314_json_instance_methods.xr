@@ -8,7 +8,7 @@ fn test_as_object_map_surface() {
     assert_eq(len(obj!.keys()), 2)
     assert(obj!.containsKey("x"))
     obj!.set("z", 3)
-    assert_eq(JSON.require<int>(value, ["z"]), 3)
+    assert_eq(JSON.require<i64>(value, ["z"]), 3)
 }
 
 @test

@@ -4,128 +4,128 @@
 // results, quiet boxing, and only a stderr warning. Breadth well past the old
 // cap must now compile cleanly.
 
-class C0 { v: int
-    constructor(v: int) { this.v = v }
+class C0 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C1 { v: int
-    constructor(v: int) { this.v = v }
+class C1 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C2 { v: int
-    constructor(v: int) { this.v = v }
+class C2 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C3 { v: int
-    constructor(v: int) { this.v = v }
+class C3 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C4 { v: int
-    constructor(v: int) { this.v = v }
+class C4 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C5 { v: int
-    constructor(v: int) { this.v = v }
+class C5 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C6 { v: int
-    constructor(v: int) { this.v = v }
+class C6 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C7 { v: int
-    constructor(v: int) { this.v = v }
+class C7 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C8 { v: int
-    constructor(v: int) { this.v = v }
+class C8 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C9 { v: int
-    constructor(v: int) { this.v = v }
+class C9 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C10 { v: int
-    constructor(v: int) { this.v = v }
+class C10 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C11 { v: int
-    constructor(v: int) { this.v = v }
+class C11 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C12 { v: int
-    constructor(v: int) { this.v = v }
+class C12 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C13 { v: int
-    constructor(v: int) { this.v = v }
+class C13 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C14 { v: int
-    constructor(v: int) { this.v = v }
+class C14 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C15 { v: int
-    constructor(v: int) { this.v = v }
+class C15 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C16 { v: int
-    constructor(v: int) { this.v = v }
+class C16 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C17 { v: int
-    constructor(v: int) { this.v = v }
+class C17 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C18 { v: int
-    constructor(v: int) { this.v = v }
+class C18 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C19 { v: int
-    constructor(v: int) { this.v = v }
+class C19 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C20 { v: int
-    constructor(v: int) { this.v = v }
+class C20 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C21 { v: int
-    constructor(v: int) { this.v = v }
+class C21 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C22 { v: int
-    constructor(v: int) { this.v = v }
+class C22 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C23 { v: int
-    constructor(v: int) { this.v = v }
+class C23 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C24 { v: int
-    constructor(v: int) { this.v = v }
+class C24 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C25 { v: int
-    constructor(v: int) { this.v = v }
+class C25 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C26 { v: int
-    constructor(v: int) { this.v = v }
+class C26 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C27 { v: int
-    constructor(v: int) { this.v = v }
+class C27 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C28 { v: int
-    constructor(v: int) { this.v = v }
+class C28 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C29 { v: int
-    constructor(v: int) { this.v = v }
+class C29 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C30 { v: int
-    constructor(v: int) { this.v = v }
+class C30 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C31 { v: int
-    constructor(v: int) { this.v = v }
+class C31 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C32 { v: int
-    constructor(v: int) { this.v = v }
+class C32 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C33 { v: int
-    constructor(v: int) { this.v = v }
+class C33 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C34 { v: int
-    constructor(v: int) { this.v = v }
+class C34 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C35 { v: int
-    constructor(v: int) { this.v = v }
+class C35 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C36 { v: int
-    constructor(v: int) { this.v = v }
+class C36 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C37 { v: int
-    constructor(v: int) { this.v = v }
+class C37 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C38 { v: int
-    constructor(v: int) { this.v = v }
+class C38 { v: i64
+    constructor(v: i64) { this.v = v }
 }
-class C39 { v: int
-    constructor(v: int) { this.v = v }
+class C39 { v: i64
+    constructor(v: i64) { this.v = v }
 }
 
-fn tag<T>(x: T) -> int { return 1 }
+fn tag<T>(x: T) -> i64 { return 1 }
 
 @test
 fn test_many_reference_instantiations() {

@@ -2,7 +2,7 @@ import mem
 
 fn main() {
     var buffer = mem.allocZeroed(8)
-    var view: Slice<byte> = buffer.asMutBytes()
+    var view: Slice<u8> = buffer.asMutBytes()
     buffer.resize(16)
     print(view[0])
 }

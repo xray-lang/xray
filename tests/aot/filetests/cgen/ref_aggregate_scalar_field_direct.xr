@@ -1,11 +1,11 @@
-fn bumpPair(left: ref int, right: ref int) {
+fn bumpPair(left: ref i64, right: ref i64) {
     left += 1
     right += 2
 }
 
 struct Counter {
-    left: int
-    right: int
+    left: i64
+    right: i64
 
     advance() {
         bumpPair(ref this.left, ref this.right)

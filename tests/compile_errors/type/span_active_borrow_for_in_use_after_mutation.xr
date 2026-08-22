@@ -1,8 +1,8 @@
 fn main() {
-    var bytes = Array<byte>(0)
+    var bytes = Array<u8>(0)
     for (i in 0..1) {
         bytes.push(1)
-        var view: Slice<byte> = bytes[:]
+        var view: Slice<u8> = bytes[:]
         bytes.push(2)
         print(len(view))
     }

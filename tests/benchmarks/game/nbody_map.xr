@@ -39,7 +39,7 @@ fn offsetMomentum(bodies) {
     bodies[0]["vz"] = -pz / SOLAR_MASS
 }
 
-fn energy(bodies): float {
+fn energy(bodies): f64 {
     var e = 0.0
     var nbodies = len(bodies)
     var i = 0
@@ -61,7 +61,7 @@ fn energy(bodies): float {
     return e
 }
 
-fn advance(bodies, dt: float) {
+fn advance(bodies, dt: f64) {
     var nbodies = len(bodies)
     var i = 0
     while (i < nbodies) {
@@ -96,7 +96,7 @@ fn advance(bodies, dt: float) {
 }
 
 fn main() {
-    var n = len(process.args) > 0 ? int(process.args[0]) ?? 500000 : 500000
+    var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 500000 : 500000
     var bodies = createBodies()
     offsetMomentum(bodies)
     print(energy(bodies))

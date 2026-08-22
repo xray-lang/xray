@@ -1,16 +1,16 @@
 class Counter {
-    value: int
+    value: i64
 
     constructor() {
         this.value = 0
     }
 }
 
-fn stashLength(data: Array<int>, counter: ref Counter) {
+fn stashLength(data: Array<i64>, counter: ref Counter) {
     counter.value = len(data)
 }
 
-var values: Array<int> = [1, 2, 3, 4]
+var values: Array<i64> = [1, 2, 3, 4]
 var counter = Counter()
 stashLength(values, ref counter)
 print(counter.value)

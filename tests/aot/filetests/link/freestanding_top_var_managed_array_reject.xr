@@ -1,5 +1,5 @@
-var ROWS: [Array<int>; 1] = [[1, 2]]
+var ROWS: [Array<i64>; 1] = [[1, 2]]
 
-fn xray_top_var_managed_array_reject() -> int {
+fn xray_top_var_managed_array_reject() -> i64 {
     return len(ROWS[0])
 }

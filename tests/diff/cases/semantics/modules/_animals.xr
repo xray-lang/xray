@@ -3,15 +3,15 @@
 // extends this class across the module boundary.
 export class Animal {
     name: string
-    legs: int
-    constructor(n: string, l: int) {
+    legs: i64
+    constructor(n: string, l: i64) {
         this.name = n
         this.legs = l
     }
     describe() -> string {
         return this.name
     }
-    leg_count() -> int {
+    leg_count() -> i64 {
         return this.legs
     }
 }

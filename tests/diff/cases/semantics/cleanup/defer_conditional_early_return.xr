@@ -3,7 +3,7 @@
 // branch never runs; defers fire on whichever `return` is taken, in LIFO.
 // Regression: AOT previously emitted all defer sites at every exit (running
 // unregistered/wrong-branch defers); it now runs exactly those registered.
-fn pick(n: int) -> string {
+fn pick(n: i64) -> string {
     defer { print("always") }
     if (n < 0) {
         defer { print("neg-branch") }

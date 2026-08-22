@@ -4,13 +4,13 @@ fn churnFixedReturn() -> [i32; 16] {
     return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 }
 
-fn readLocal() -> int {
+fn readLocal() -> i64 {
     var values: [i32; 3] = [4, 5, 6]
     var p = unsafe { values.ptr() }
     return unsafe { p[1] }
 }
 
-fn readStatic() -> int {
+fn readStatic() -> i64 {
     var p = unsafe { STATIC_VALUES.ptr() }
     var total = 0
     for (i in 0..1024) {
@@ -20,9 +20,9 @@ fn readStatic() -> int {
     return unsafe { p[2] } + total - 1024
 }
 
-fn readBytes() -> int {
+fn readBytes() -> i64 {
     var p = unsafe { c"ok".ptr() }
-    return unsafe { int(p[0]) + int(p[1]) + int(p[2]) }
+    return unsafe { (p[0] as i64) + (p[1] as i64) + (p[2] as i64) }
 }
 
 print(readLocal())

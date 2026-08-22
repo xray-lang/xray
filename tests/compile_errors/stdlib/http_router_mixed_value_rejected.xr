@@ -2,6 +2,6 @@
 // Json-encoding escape hatch that accepts an unrelated value type per call.
 import { Router } from http
 
-var routes = Router<int>()
+var routes = Router<i64>()
 routes.add("GET", "/one", 1)
 routes.add("GET", "/two", "two")

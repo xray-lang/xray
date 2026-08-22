@@ -1,5 +1,5 @@
 // 'where' may only constrain a type parameter of this declaration.
-fn pick<T>(a: T) -> int where Q: Comparable {
+fn pick<T>(a: T) -> i64 where Q: Comparable {
     return 1
 }
-print(pick<int>(1))
+print(pick<i64>(1))

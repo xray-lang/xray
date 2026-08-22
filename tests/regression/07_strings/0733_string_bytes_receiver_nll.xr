@@ -1,7 +1,7 @@
 @test
 fn test_string_bytes_receiver_borrow_ends_after_last_use() {
     var text = "hello"
-    var view: Slice<byte> = text.bytes()
+    var view: Slice<u8> = text.bytes()
     var byteCount = len(view)
 
     text = "bye"

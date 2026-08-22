@@ -1,7 +1,7 @@
-fn stash(data: Array<int>, out: ref Map<string, Array<int>>) {
+fn stash(data: Array<i64>, out: ref Map<string, Array<i64>>) {
     out.set("x", data)
 }
 
-var values: Array<int> = [1, 2, 3]
-var out: Map<string, Array<int>> = #{}
+var values: Array<i64> = [1, 2, 3]
+var out: Map<string, Array<i64>> = #{}
 stash(values, ref out)

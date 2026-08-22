@@ -1,1 +1,1 @@
-Type 'int' is not assignable to type 'rune'
+Type 'i64' is not assignable to type 'rune'

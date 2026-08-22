@@ -1,10 +1,10 @@
 import sys
 
-fn suspends() -> int {
+fn suspends() -> i64 {
     Coro.yield()
     return 1
 }
 
-const local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<i64>(fn() -> i64 {
     return suspends()
 })

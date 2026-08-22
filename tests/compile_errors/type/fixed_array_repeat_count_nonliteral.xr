@@ -1,3 +1,3 @@
 var n = 4
-var key: [byte; 4] = [0; n]
+var key: [u8; 4] = [0; n]
 print(len(key))

@@ -113,7 +113,7 @@ static inline XrValue xr_float_is_nan_method(XrVMRuntime *iso, XrValue self, XrV
     return xr_bool(isnan(XR_TO_FLOAT(self)));
 }
 
-/* float.toInt() -> int (truncation). Pure, no GC. */
+/* float.toI64() -> int (truncation). Pure, no GC. */
 static inline XrValue xr_float_to_int_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;

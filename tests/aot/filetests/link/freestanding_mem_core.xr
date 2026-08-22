@@ -2,34 +2,34 @@ import mem
 import codegen
 
 struct XrayMemHeader {
-    tag: byte
+    tag: u8
     value: u32
 }
 
-fn xray_mem_addr_roundtrip(addr: int) -> int {
-    var p = mem.mutPtr<byte>(addr)
+fn xray_mem_addr_roundtrip(addr: i64) -> i64 {
+    var p = mem.mutPtr<u8>(addr)
     return mem.addr(p)
 }
 
-fn xray_mem_layout_constants() -> int {
+fn xray_mem_layout_constants() -> i64 {
     var size = mem.sizeOf<XrayMemHeader>()
     var align = mem.alignOf<XrayMemHeader>()
     var off = mem.offsetOf<XrayMemHeader>("value")
     return size + align + off
 }
 
-fn xray_mem_typed_from_address(addr: int) -> int {
+fn xray_mem_typed_from_address(addr: i64) -> i64 {
     var p = mem.mutPtr<u32>(addr)
     return mem.addr(p)
 }
 
-fn xray_mem_typed_addr_null() -> int {
+fn xray_mem_typed_addr_null() -> i64 {
     var p = Ptr<u32>.null()
     var q = MutPtr<u64>.null()
     return mem.addr(p) + mem.addr(q)
 }
 
-fn xray_mem_bits(x: int, n: int) -> int {
+fn xray_mem_bits(x: i64, n: i64) -> i64 {
     // Bit/wrapping intrinsics are int methods (task 153); the freestanding
     // cgen lowers them straight to the shared cores already inlined in
     // xrt_core_freestanding.h, so no new undefined symbols appear.
@@ -48,17 +48,17 @@ fn xray_codegen_opaque(value: u64) -> u64 {
     return codegen.opaque(value)
 }
 
-fn xray_mem_bulk(dst: int, src: int, n: int) -> int {
-    var d = mem.mutPtr<byte>(dst)
-    var s = mem.mutPtr<byte>(src)
+fn xray_mem_bulk(dst: i64, src: i64, n: i64) -> i64 {
+    var d = mem.mutPtr<u8>(dst)
+    var s = mem.mutPtr<u8>(src)
     mem.copy(d, s, n)
     mem.move(d, s, n)
     mem.set(d, 0, n)
     return mem.compare(d, s, n)
 }
 
-fn xray_mem_mmio_shape(addr: int) -> int {
-    var p = mem.mutPtr<byte>(addr)
+fn xray_mem_mmio_shape(addr: i64) -> i64 {
+    var p = mem.mutPtr<u8>(addr)
     mem.prefetch(p, 1)
     mem.cacheFlush(p, 64)
     mem.cacheInvalidate(p, 64)

@@ -1,6 +1,6 @@
 import sys
 
-fn closeOnlyInOneMatchArm(tag: int) {
+fn closeOnlyInOneMatchArm(tag: i64) {
     var pipe = sys.Pipe.open()
     match (tag) {
         0 -> {

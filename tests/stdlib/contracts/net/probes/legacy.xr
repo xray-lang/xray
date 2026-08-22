@@ -12,7 +12,7 @@ fn highServer(listener: NetListener) -> bool {
     return written == len(data.bytes())
 }
 
-fn highClient(port: int) -> bool {
+fn highClient(port: i64) -> bool {
     var conn = net.dial("127.0.0.1", port)!
     net.write(conn, "é€")
     var data = net.read(conn)!
@@ -27,7 +27,7 @@ fn copyServer(listener: NetListener) -> bool {
     return copied == 6
 }
 
-fn copyClient(port: int) -> bool {
+fn copyClient(port: i64) -> bool {
     var conn = net.dial("127.0.0.1", port)!
     net.write(conn, "native")
     net.shutdownWrite(conn)

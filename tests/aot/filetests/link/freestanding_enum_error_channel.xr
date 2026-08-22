@@ -2,14 +2,14 @@ enum FsErr {
     Bad
 }
 
-fn mayFail(n: int) -> int {
+fn mayFail(n: i64) -> i64 {
     if (n == 0) {
         throw FsErr.Bad
     }
     return n + 10
 }
 
-fn xray_enum_error_channel(n: int) -> int {
+fn xray_enum_error_channel(n: i64) -> i64 {
     var out = 0
     try {
         out = mayFail(n)

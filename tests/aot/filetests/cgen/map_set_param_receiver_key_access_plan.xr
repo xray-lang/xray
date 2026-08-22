@@ -1,4 +1,4 @@
-fn mapSetParamReceiverPlan(scores: ref Map<int, int>, seen: ref Set<int>, value: int) -> int {
+fn mapSetParamReceiverPlan(scores: ref Map<i64, i64>, seen: ref Set<i64>, value: i64) -> i64 {
     scores.set(1, value)
     scores[2] = value
     seen.add(1)
@@ -18,6 +18,6 @@ fn mapSetParamReceiverPlan(scores: ref Map<int, int>, seen: ref Set<int>, value:
     return 0
 }
 
-var scores: Map<int, int> = #{}
-var seen: Set<int> = #[]
+var scores: Map<i64, i64> = #{}
+var seen: Set<i64> = #[]
 print(mapSetParamReceiverPlan(ref scores, ref seen, 7))

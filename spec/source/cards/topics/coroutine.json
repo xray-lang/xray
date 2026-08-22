@@ -29,7 +29,7 @@
     },
     {
       "heading": "Common constraints",
-      "markdown": "`go` accepts only a call expression. Write inline logic as an immediately invoked lambda, for example `go fn(x: int) { work(x) }(value)`. A lambda may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with `copy(...)` or `move`. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous."
+      "markdown": "`go` accepts only a call expression. Write inline logic as an immediately invoked lambda, for example `go fn(x: i64) { work(x) }(value)`. A lambda may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with `copy(...)` or `move`. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous."
     },
     {
       "heading": "Task handle",

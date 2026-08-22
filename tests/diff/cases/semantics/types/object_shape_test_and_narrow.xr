@@ -1,7 +1,7 @@
 // Unknown JSON is decoded through an explicit schema boundary. Structural
 // object unions continue to use `is` and `as` for ordinary static narrowing.
-type User = { name: string, age: int }
-type Tagged = { kind: string, n: int }
+type User = { name: string, age: i64 }
+type Tagged = { kind: string, n: i64 }
 
 var ok: JSON.Value = JSON.parseValue("{\"name\":\"Alice\",\"age\":30}")
 var missingField: JSON.Value = JSON.parseValue("{\"name\":\"Bob\"}")

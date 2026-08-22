@@ -75,7 +75,7 @@ fn test_uint32_wrapping() {
 
 @test
 fn test_int64_wrapping() {
-    var a: int = 9223372036854775807
+    var a: i64 = 9223372036854775807
     assert_eq(a.wrappingAdd(1), -9223372036854775808)
     var b: i64 = -9223372036854775808
     assert_eq(b.wrappingSub(1), 9223372036854775807)
@@ -107,7 +107,7 @@ fn test_wrapping_result_width() {
 
 @test
 fn test_plain_int_families_unchanged() {
-    var a: int = 9223372036854775807
+    var a: i64 = 9223372036854775807
     assert_eq(a.checkedAdd(1), null)
     assert_eq(a.saturatingAdd(1), 9223372036854775807)
     assert_eq(a.addOverflows(1), true)

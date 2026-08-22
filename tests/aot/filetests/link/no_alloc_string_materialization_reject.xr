@@ -41,7 +41,7 @@ fn xray_no_alloc_string_replace_all_reject(value: string) -> string {
     return value.replaceAll("a", "b")
 }
 
-fn xray_no_alloc_string_split_reject(value: string) -> int {
+fn xray_no_alloc_string_split_reject(value: string) -> i64 {
     return len(value.split(","))
 }
 

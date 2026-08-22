@@ -1,9 +1,9 @@
 import sys
 
-var t = sys.Thread.spawn(fn() -> int {
+var t = sys.Thread.spawn(fn() -> i64 {
     return 1
 })
 
-const ch: Channel<int> = Channel(t.join())
+const ch: Channel<i64> = Channel(t.join())
 ch.close()
 print("channel")

@@ -2,14 +2,14 @@
 
 // === 1. Basic types toString ===
 
-fn myFunc() -> int { return 1 }
+fn myFunc() -> i64 { return 1 }
 class Dog {
     name: string
     constructor(name) { this.name = name }
 }
 class Point {
-    x: int = 0
-    y: int = 0
+    x: i64 = 0
+    y: i64 = 0
     constructor(x, y) { this.x = x; this.y = y }
     toString() -> string { return "(" + string(this.x) + ", " + string(this.y) + ")" }
 }
@@ -64,9 +64,9 @@ fn test_tostring() {
     assert(js.indexOf("Alice") >= 0)
 
     // === 8. Array<byte> toString (Array<byte> is Array<byte>) ===
-    var buf = Array<byte>(3, 0)
+    var buf = Array<u8>(3, 0)
     assert_eq(string(buf), "[0, 0, 0]")
-    var binary = Array<byte>(4, 0)
+    var binary = Array<u8>(4, 0)
     binary[0] = 65
     binary[1] = 66
     binary[3] = 255

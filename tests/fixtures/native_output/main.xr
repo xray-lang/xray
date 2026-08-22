@@ -1,11 +1,11 @@
 import mem
 
 struct CValue {
-    value: int
+    value: i64
 }
 
 extern "C" {
-    fn fill_i64(out: MutPtr<byte>) -> i32
+    fn fill_i64(out: MutPtr<u8>) -> i32
 }
 
 fn main() {

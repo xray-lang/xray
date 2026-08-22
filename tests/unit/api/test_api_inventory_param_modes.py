@@ -18,9 +18,9 @@ import gen_api_inventory as api_inventory  # noqa: E402
 class ApiInventoryParamModeTest(unittest.TestCase):
     def test_normalized_signatures_keep_param_modes(self) -> None:
         self.assertEqual(
-            "(a: int, b: ref string, c: move Buffer): ()",
+            "(a: i64, b: ref string, c: move Buffer): ()",
             api_inventory.normalize_signature(
-                " a: int,\n    b: ref string,\n    c: move Buffer ", None
+                " a: i64,\n    b: ref string,\n    c: move Buffer ", None
             ),
         )
 
@@ -32,12 +32,12 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             (module_dir / "modes.xr").write_text(
                 "\n".join(
                     [
-                        "export fn transfer(view: Slice<byte>, sink: ref Array<byte>, job: move Buffer) -> int {",
+                        "export fn transfer(view: Slice<u8>, sink: ref Array<u8>, job: move Buffer) -> i64 {",
                         "    sink.push(len(view))",
                         "    return len(view)",
                         "}",
                         "export class Box {",
-                        "    touch(value: int, place: ref int, job: move Buffer) -> ()",
+                        "    touch(value: i64, place: ref i64, job: move Buffer) -> ()",
                         "}",
                         "",
                     ]
@@ -52,11 +52,11 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             }
 
         self.assertEqual(
-            "(view: Slice<byte>, sink: ref Array<byte>, job: move Buffer): int",
+            "(view: Slice<u8>, sink: ref Array<u8>, job: move Buffer): i64",
             signatures[("modes", "transfer", "function")],
         )
         self.assertEqual(
-            "(value: int, place: ref int, job: move Buffer): ()",
+            "(value: i64, place: ref i64, job: move Buffer): ()",
             signatures[("Box", "touch", "method")],
         )
 
@@ -109,12 +109,12 @@ class ApiInventoryParamModeTest(unittest.TestCase):
                 "\n".join(
                     [
                         "export class Job {",
-                        "    constructor(name: string, retries: int,",
-                        "                run: (int) -> string) {",
+                        "    constructor(name: string, retries: i64,",
+                        "                run: (i64) -> string) {",
                         "        this.name = name",
                         "    }",
                         "    static create(name: string,",
-                        "                  run: (int) -> string) -> Job {",
+                        "                  run: (i64) -> string) -> Job {",
                         "        return Job(name, 0, run)",
                         "    }",
                         "}",
@@ -131,11 +131,11 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             }
 
         self.assertEqual(
-            "(name: string, retries: int, run: (int) -> string): ()",
+            "(name: string, retries: i64, run: (i64) -> string): ()",
             signatures[("Job", "constructor", "method")],
         )
         self.assertEqual(
-            "(name: string, run: (int) -> string): Job",
+            "(name: string, run: (i64) -> string): Job",
             signatures[("Job", "create", "static-method")],
         )
 
@@ -148,7 +148,7 @@ class ApiInventoryParamModeTest(unittest.TestCase):
                 "\n".join(
                     [
                         "export fn schedule(name: string,",
-                        "                   run: (int) -> string) -> string {",
+                        "                   run: (i64) -> string) -> string {",
                         "    return run(1)",
                         "}",
                         "",
@@ -162,7 +162,7 @@ class ApiInventoryParamModeTest(unittest.TestCase):
         self.assertEqual(1, len(items))
         self.assertEqual("schedule", items[0]["name"])
         self.assertEqual(
-            "(name: string, run: (int) -> string): string", items[0]["signature"]
+            "(name: string, run: (i64) -> string): string", items[0]["signature"]
         )
 
     def test_pure_stdlib_inventory_keeps_structural_generic_constraints(self) -> None:
@@ -208,7 +208,7 @@ class ApiInventoryParamModeTest(unittest.TestCase):
                         "    static splat(value: u32) -> U32x4 {",
                         "        return U32x4{_lanes: [value; 4]}",
                         "    }",
-                        "    extract(lane: int) -> u32 {",
+                        "    extract(lane: i64) -> u32 {",
                         "        return this._lanes[lane]",
                         "    }",
                         "}",
@@ -230,7 +230,7 @@ class ApiInventoryParamModeTest(unittest.TestCase):
             signatures[("U32x4", "splat", "static-method")],
         )
         self.assertEqual(
-            "(lane: int): u32",
+            "(lane: i64): u32",
             signatures[("U32x4", "extract", "method")],
         )
 
@@ -244,7 +244,7 @@ class ApiInventoryParamModeTest(unittest.TestCase):
                     [
                         "export type Config = {",
                         "    name: string,",
-                        "    capacity: int,",
+                        "    capacity: i64,",
                         "}",
                         "",
                     ]
@@ -258,10 +258,10 @@ class ApiInventoryParamModeTest(unittest.TestCase):
                 for entry in items
             }
 
-        self.assertEqual("{ name: string, capacity: int, }",
+        self.assertEqual("{ name: string, capacity: i64, }",
                          signatures[("cluster", "Config", "type")])
         self.assertEqual("string", signatures[("cluster", "Config.name", "field")])
-        self.assertEqual("int", signatures[("cluster", "Config.capacity", "field")])
+        self.assertEqual("i64", signatures[("cluster", "Config.capacity", "field")])
 
 
 if __name__ == "__main__":

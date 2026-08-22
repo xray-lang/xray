@@ -1,1 +1,1 @@
-Index type 'string' is not assignable to expected type 'int'
+Index type 'string' is not assignable to expected type 'i64'

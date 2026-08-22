@@ -5,10 +5,10 @@ fn main() {
     var wordWindow: Slice<u32> = wordSlice[1:3]
     var filledWords: Slice<u32> = wordWindow.fill(9)
     print(len(filledWords))
-    print(int(words[0]))
-    print(int(words[1]))
-    print(int(words[2]))
-    print(int(words[3]))
+    print((words[0] as i64))
+    print((words[1] as i64))
+    print((words[2] as i64))
+    print((words[3] as i64))
     var flags = Array<bool>(3, false)
     var flagSlice: Slice<bool> = flags[:]
     flagSlice.fill(true)
@@ -22,7 +22,7 @@ fn main() {
     var zeros = Array<u16>(3, 7)
     var zeroSlice: Slice<u16> = zeros[:]
     zeroSlice.fill(0)
-    print(int(zeros[0]) + int(zeros[1]) + int(zeros[2]))
+    print((zeros[0] as i64) + (zeros[1] as i64) + (zeros[2] as i64))
 }
 
 main()

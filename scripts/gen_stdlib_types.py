@@ -229,7 +229,7 @@ def infer_pure_const_type(annotation, value):
     if v.startswith('"'):
         return "string"
     if re.fullmatch(r'-?(?:0x[0-9A-Fa-f]+|\d+)', v):
-        return "int"
+        return "i64"
     if v in ("true", "false"):
         return "bool"
     return "unknown"

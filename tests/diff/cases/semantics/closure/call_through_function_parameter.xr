@@ -5,16 +5,16 @@
 // without calling it, and calling a function value held in a local, both take
 // different lowering paths, so neither one covers this.
 
-fn apply(value: int, body: fn(int) -> int) -> int {
+fn apply(value: i64, body: fn(i64) -> i64) -> i64 {
     return body(value)
 }
 
-fn twice(n: int) -> int {
+fn twice(n: i64) -> i64 {
     return n * 2
 }
 
 fn main() {
     print(apply(21, twice))
-    print(apply(5, fn(n: int) -> int { return n + 1 }))
+    print(apply(5, fn(n: i64) -> i64 { return n + 1 }))
 }
 main()

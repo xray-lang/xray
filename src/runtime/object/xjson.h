@@ -168,9 +168,9 @@ static inline uint8_t xr_json_decode_schema_tid(const XrJsonDecodeSchema *schema
         case XR_JSON_VALUE_BOOL:
             return XR_TID_BOOL;
         case XR_JSON_VALUE_INT:
-            return XR_TID_INT;
+            return XR_TID_I64;
         case XR_JSON_VALUE_FLOAT:
-            return XR_TID_FLOAT;
+            return XR_TID_F64;
         case XR_JSON_VALUE_STRING:
             return XR_TID_STRING;
         case XR_JSON_VALUE_JSON:

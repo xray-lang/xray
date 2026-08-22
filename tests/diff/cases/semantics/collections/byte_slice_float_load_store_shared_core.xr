@@ -1,7 +1,7 @@
 // anchor: byte-slice-float-load-store-shared-core
 fn main() {
-    var bytes = Array<byte>(16)
-    var view: Slice<byte> = bytes[:]
+    var bytes = Array<u8>(16)
+    var view: Slice<u8> = bytes[:]
     view.store<f32>(0, 1.5, Endian.LE)
     view.store<f32>(4, -2.5, Endian.BE)
     view.store<f64>(8, -2.25, Endian.LE)

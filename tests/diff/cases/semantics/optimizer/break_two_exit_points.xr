@@ -1,7 +1,7 @@
 // anchor: break-two-exit-points
 // Two break sites in one body: one on the induction variable, one on the
 // accumulator. Whichever fires first decides the trip count.
-fn run(cap: int) -> int {
+fn run(cap: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < 100; i++) {
         if (i >= 20) {

@@ -1,1 +1,1 @@
-var f = (x: int) -> () { return () }
+var f = (x: i64) -> () { return () }

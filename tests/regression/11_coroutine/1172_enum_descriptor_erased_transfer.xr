@@ -5,12 +5,12 @@ enum TransferHue {
 
 enum TransferState {
     Idle,
-    Busy(int)
+    Busy(i64)
 }
 
 type TransferVariant = EnumVariant<TransferHue> | EnumVariant<TransferState>
 
-fn recv_variant(ch: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>>) -> int {
+fn recv_variant(ch: Channel<EnumVariant<TransferHue> | EnumVariant<TransferState>>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> {
             if (value is EnumVariant<TransferHue>) {

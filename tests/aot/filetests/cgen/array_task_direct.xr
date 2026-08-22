@@ -1,9 +1,9 @@
-fn worker() -> int {
+fn worker() -> i64 {
     return 7
 }
 
-fn taskArrayOps() -> int {
-    var tasks: Array<Task<int>> = []
+fn taskArrayOps() -> i64 {
+    var tasks: Array<Task<i64>> = []
     tasks.push(go worker())
     var result = await tasks[0]
     return result + len(tasks)

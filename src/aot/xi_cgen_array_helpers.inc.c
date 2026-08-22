@@ -3148,7 +3148,7 @@ static bool cg_array_builtin_tid_from_emission_storage(uint32_t storage, uint8_t
             *out = XR_TID_U32;
             return true;
         case XR_TARGET_ARRAY_STORAGE_I64:
-            *out = XR_TID_INT;
+            *out = XR_TID_I64;
             return true;
         case XR_TARGET_ARRAY_STORAGE_U64:
             *out = XR_TID_U64;
@@ -3157,7 +3157,7 @@ static bool cg_array_builtin_tid_from_emission_storage(uint32_t storage, uint8_t
             *out = XR_TID_F32;
             return true;
         case XR_TARGET_ARRAY_STORAGE_F64:
-            *out = XR_TID_FLOAT;
+            *out = XR_TID_F64;
             return true;
         case XR_TARGET_ARRAY_STORAGE_BOOL:
             *out = XR_TID_BOOL;
@@ -5437,7 +5437,7 @@ static bool emit_byte_array_append_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return false;
 
     const XaotBulkPlan *bulk =
-        cg_required_bulk_plan(ctx, f, call, XG_BULK_COPY, "Array<byte>.appendFrom");
+        cg_required_bulk_plan(ctx, f, call, XG_BULK_COPY, "Array<u8>.appendFrom");
     if (call->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return true;
@@ -5480,7 +5480,7 @@ static bool emit_byte_array_repeat_from_expr(XiCgenCtx *ctx, FILE *out, const Xi
         return false;
 
     const XaotBulkPlan *bulk =
-        cg_required_bulk_plan(ctx, f, call, XG_BULK_REPEAT, "Array<byte>.repeatFrom");
+        cg_required_bulk_plan(ctx, f, call, XG_BULK_REPEAT, "Array<u8>.repeatFrom");
     if (call->xg_bulk_op_id != XG_NO_ID && !bulk) {
         emit_codegen_abort_expr(out);
         return true;

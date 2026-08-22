@@ -2,10 +2,10 @@
 // to direct-call or inline the nested closure. Regression guard for cloning
 // LOAD_UPVAL / STORE_UPVAL into a caller without remapping the closure env.
 
-fn run() -> int {
+fn run() -> i64 {
     var n = 0
 
-    fn inc(step: int) -> int {
+    fn inc(step: i64) -> i64 {
         n = n + step
         return n
     }

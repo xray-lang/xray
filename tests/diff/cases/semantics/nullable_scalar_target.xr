@@ -19,8 +19,8 @@
 // no frozen row here describes, and a narrower payload or a rune would imply a
 // boxing recipe the authority does not state.
 fn main() {
-    var absent: int? = null
-    var present: int? = 7
+    var absent: i64? = null
+    var present: i64? = 7
     print(absent)
     print(present)
 
@@ -39,8 +39,8 @@ fn main() {
     print(flag)
     print(missing)
 
-    var ratio: float? = 1.5
-    var noratio: float? = null
+    var ratio: f64? = 1.5
+    var noratio: f64? = null
     print(ratio)
     print(noratio)
 }

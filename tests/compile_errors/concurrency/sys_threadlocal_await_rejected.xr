@@ -1,10 +1,10 @@
 import sys
 
-const local = sys.ThreadLocal<int>(fn() -> int {
+const local = sys.ThreadLocal<i64>(fn() -> i64 {
     return 1
 })
 
-fn worker() -> int {
+fn worker() -> i64 {
     return 2
 }
 

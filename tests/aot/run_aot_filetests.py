@@ -107,7 +107,7 @@ def configure_jobs(requested: str) -> int:
 def probe_dump_support(config: Config, ws: workspace.Workspace) -> tuple[bool, str]:
     """Does this xray support --dump-xaot-plan? A trivial build decides; failure
     skips the whole suite rather than reporting every case as a failure."""
-    src = ws.write("probe.xr", "fn answer() -> int {\n    return 42\n}\nprint(answer())\n")
+    src = ws.write("probe.xr", "fn answer() -> i64 {\n    return 42\n}\nprint(answer())\n")
     out_c = ws.path("probe.c")
     result = proc.run(
         [config.xray, "build", "--native", "--dump-xaot-plan", "--dump-link-manifest",

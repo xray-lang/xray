@@ -1,14 +1,14 @@
 struct Pair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 }
 
-fn runtimeOnly() -> int {
+fn runtimeOnly() -> i64 {
     return 1
 }
 
 const PAIR = Pair{left: runtimeOnly(), right: 2}
 
-fn xray_shared_aggregate_reject() -> int {
+fn xray_shared_aggregate_reject() -> i64 {
     return PAIR.left + PAIR.right
 }

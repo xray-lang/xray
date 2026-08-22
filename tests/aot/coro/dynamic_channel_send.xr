@@ -1,4 +1,4 @@
-const reply: Channel<int> = Channel(1)
+const reply: Channel<i64> = Channel(1)
 var packet = (7, reply)
 
 packet.1.send(42)

@@ -4,7 +4,7 @@ enum FsMode {
     Halt
 }
 
-fn code(m: FsMode) -> int {
+fn code(m: FsMode) -> i64 {
     return match (m) {
         FsMode.Boot -> 11
         FsMode.Run -> 22
@@ -12,7 +12,7 @@ fn code(m: FsMode) -> int {
     }
 }
 
-fn xray_enum_static(n: int) -> int {
+fn xray_enum_static(n: i64) -> i64 {
     var m = FsMode.Boot
     if (n == 1) {
         m = FsMode.Run

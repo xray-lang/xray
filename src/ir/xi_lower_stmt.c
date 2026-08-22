@@ -3831,7 +3831,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                 uint8_t ktid = xr_type_to_tid(type->map.key_type);
                 if (ktid == XR_TID_STRING)
                     key_kind = 1;
-                else if (ktid == XR_TID_INT)
+                else if (ktid == XR_TID_I64)
                     key_kind = 2;
             }
             init_val->aux_int = (int64_t) ((key_kind << 8) | ((value_tid & 0x1F) << 3) | flags);

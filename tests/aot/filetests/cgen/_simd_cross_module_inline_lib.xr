@@ -1,8 +1,8 @@
 import { Capabilities, U8x16, U8x32, U64x2, U64x4 } from simd
 
 @inline
-export fn addSeedNarrow(destination: ref [byte; 16], source: const Slice<byte>, seed: u64) -> bool {
-    var output: Slice<byte> = destination[:]
+export fn addSeedNarrow(destination: ref [u8; 16], source: const Slice<u8>, seed: u64) -> bool {
+    var output: Slice<u8> = destination[:]
     var delta = U64x2.splat(seed).replace(1, 0 - seed)
     var block = U8x16.load(source, 0).reinterpretU64().add(delta)
     block.reinterpretU8().store(ref output, 0)
@@ -10,8 +10,8 @@ export fn addSeedNarrow(destination: ref [byte; 16], source: const Slice<byte>, 
 }
 
 @inline
-fn addSeedWideLeaf(destination: ref [byte; 32], source: const Slice<byte>, seed: u64) -> bool {
-    var output: Slice<byte> = destination[:]
+fn addSeedWideLeaf(destination: ref [u8; 32], source: const Slice<u8>, seed: u64) -> bool {
+    var output: Slice<u8> = destination[:]
     var delta = U64x4.fromLanes([seed, 0 - seed, seed, 0 - seed])
     var block = U8x32.load(source, 0).reinterpretU64().add(delta)
     block.reinterpretU8().store(ref output, 0)
@@ -19,7 +19,7 @@ fn addSeedWideLeaf(destination: ref [byte; 32], source: const Slice<byte>, seed:
 }
 
 @inline
-export fn addSeedWide(destination: ref [byte; 32], source: const Slice<byte>, seed: u64) -> bool {
+export fn addSeedWide(destination: ref [u8; 32], source: const Slice<u8>, seed: u64) -> bool {
     if (Capabilities.nativeBytes() < 32) {
         return false
     }

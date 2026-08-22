@@ -1,4 +1,4 @@
-fn cleanupZeroCost(count: int) -> int {
+fn cleanupZeroCost(count: i64) -> i64 {
     var observed = 0
     for (var i = 0; i < count; i = i + 1) {
         defer {

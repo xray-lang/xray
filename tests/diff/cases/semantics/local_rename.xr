@@ -27,7 +27,7 @@ fn arrays() {
     print(c[2])
 }
 
-type Pair = { x: int, y: string }
+type Pair = { x: i64, y: string }
 
 fn objects() {
     var o = { x: 7, y: "seven" }

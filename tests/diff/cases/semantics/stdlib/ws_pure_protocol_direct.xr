@@ -84,11 +84,11 @@ print(ws.parseUpgradeResponse(serverResponse.replace("Upgrade: websocket\r\n", "
 print(ws.parseUpgradeResponse(serverResponse, key, ["other"], true) == null)
 print(ws.parseUpgradeResponse(serverResponse, key, ["chat"], false) == null)
 
-var closePayload = ws.parseClosePayload(Array<byte>([3, 232, 79, 75]))!
+var closePayload = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))!
 print(closePayload.code)
 print(closePayload.reason)
 
-var emptyClose = ws.parseClosePayload(Array<byte>(0))!
+var emptyClose = ws.parseClosePayload(Array<u8>(0))!
 print(emptyClose.code)
 print(len(emptyClose.reason))
 
@@ -96,16 +96,16 @@ print(ws.isValidCloseCode(1000))
 print(ws.isValidCloseCode(1005))
 print(ws.isValidCloseCode(3000))
 print(ws.isValidCloseCode(5000))
-print(ws.parseClosePayload(Array<byte>([3])) == null)
-print(ws.parseClosePayload(Array<byte>([3, 238])) == null)
-print(ws.parseClosePayload(Array<byte>([3, 232, 192, 175])) == null)
-print(ws.parseClosePayload(Array<byte>([3, 232, 226, 130])) == null)
-var oversizedClose = Array<byte>(126)
+print(ws.parseClosePayload(Array<u8>([3])) == null)
+print(ws.parseClosePayload(Array<u8>([3, 238])) == null)
+print(ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
+print(ws.parseClosePayload(Array<u8>([3, 232, 226, 130])) == null)
+var oversizedClose = Array<u8>(126)
 oversizedClose[0] = 3
 oversizedClose[1] = 232
 print(ws.parseClosePayload(oversizedClose) == null)
 
-var masked = maskPayload(Array<byte>([1, 2, 3, 4, 5]), Array<byte>([1, 1, 1, 1]))
+var masked = maskPayload(Array<u8>([1, 2, 3, 4, 5]), Array<u8>([1, 1, 1, 1]))
 print(masked[0])
 print(masked[1])
 print(masked[2])
@@ -119,14 +119,14 @@ print(f[1])
 print(f[2])
 print(f[3])
 
-var payload = Array<byte>(126)
+var payload = Array<u8>(126)
 var ext = ws.frame(payload, 2, false)
 print(ext[0])
 print(ext[1])
 print(ext[2])
 print(ext[3])
 
-var payload300 = Array<byte>(300)
+var payload300 = Array<u8>(300)
 payload300[299] = 90
 var ext300 = ws.frame(payload300, 2, false)
 var parsed300 = parseFrame(ext300, false)!
@@ -143,24 +143,24 @@ print(parsed.masked)
 print(parsed.payload.toString())
 print(parsed.consumedBytes)
 
-var maskedFrame = Array<byte>([129, 130, 1, 2, 3, 4, 73, 107])
+var maskedFrame = Array<u8>([129, 130, 1, 2, 3, 4, 73, 107])
 var parsedMasked = parseFrame(maskedFrame, true)!
 print(parsedMasked.masked)
 print(parsedMasked.payload.toString())
 
-var withTail = Array<byte>([129, 1, 65, 66])
+var withTail = Array<u8>([129, 1, 65, 66])
 var parsedTail = parseFrame(withTail, false)!
 print(parsedTail.payload.toString())
 print(parsedTail.consumedBytes)
 
-var rsv = parseFrame(Array<byte>([193, 0]), false, false, true)!
+var rsv = parseFrame(Array<u8>([193, 0]), false, false, true)!
 print(rsv.rsv1)
-print(parseFrame(Array<byte>([193, 0]), false) == null)
+print(parseFrame(Array<u8>([193, 0]), false) == null)
 
-print(parseFrame(Array<byte>([131, 0]), false) == null)
-print(parseFrame(Array<byte>([9, 0]), false) == null)
-print(parseFrame(Array<byte>([137, 126, 0, 126]), false) == null)
-print(parseFrame(Array<byte>([129, 126, 0, 1, 65]), false) == null)
-print(parseFrame(Array<byte>([129, 127, 128, 0, 0, 0, 0, 0, 0, 1, 65]), false) == null)
-print(parseFrame(Array<byte>([129, 2, 65]), false) == null)
+print(parseFrame(Array<u8>([131, 0]), false) == null)
+print(parseFrame(Array<u8>([9, 0]), false) == null)
+print(parseFrame(Array<u8>([137, 126, 0, 126]), false) == null)
+print(parseFrame(Array<u8>([129, 126, 0, 1, 65]), false) == null)
+print(parseFrame(Array<u8>([129, 127, 128, 0, 0, 0, 0, 0, 0, 1, 65]), false) == null)
+print(parseFrame(Array<u8>([129, 2, 65]), false) == null)
 print(parseFrame(maskedFrame, false, true) == null)

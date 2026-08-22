@@ -18,21 +18,24 @@ order: 014
 |--|--|--|
 | `print` | `(...values) -> ()` | 输出到 stdout，自动追加换行；多参以空格分隔 |
 | `dump` | `(value, indent?) -> ()` | 结构化调试输出 |
-| `len` | `(value) -> int` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
+| `len` | `(value) -> i64` | 查询实现 `Lengthable` 的 string、容器、Range、Slice 等长度；`JSON.Value` 不实现 `Lengthable` |
 
 ### 13.2 类型转换
 
 | 函数 | 签名 | 说明 |
 |--|--|--|
-| `int(x)` | `(value) -> int` | 转为 int；`rune` 转为 Unicode scalar code point；字符串解析失败抛异常 |
-| `float(x)` | `(value) -> float` | 转为 float |
+| `x as T` | `numeric -> T` | 在 12 个 exact scalar 类型间做显式数值转换；`T` 必须是 `i8` / `i16` / `i32` / `i64` / `u8` / `u16` / `u32` / `u64` / `f32` / `f64` / `isize` / `usize` |
+| `i64.parse(s)` | `(string) -> i64` | 严格解析十进制整数；失败抛异常 |
+| `i64.tryParse(s)` | `(string) -> i64?` | 严格解析十进制整数；失败返回 `null` |
+| `f64.parse(s)` | `(string) -> f64` | 严格解析十进制浮点数；失败抛异常 |
+| `f64.tryParse(s)` | `(string) -> f64?` | 严格解析十进制浮点数；失败返回 `null` |
 | `string(x)` | `(value) -> string` | 转为字符串；`rune` 转为单 scalar 字符串 |
 | `bool(x)` | `(value) -> bool` | 转为 bool；规则见 §2.3.3 |
-| `rune(n)` | `(int) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
-| `chr(n)` | `(int) -> string` | Unicode 码点转单 scalar 字符串 |
+| `rune(n)` | `(i64) -> rune` | 从整数构造 Unicode scalar；surrogate 或越界值抛异常 |
+| `chr(n)` | `(i64) -> string` | Unicode 码点转单 scalar 字符串 |
 | `copy(x)` | `(value) -> fresh value` | 显式深拷贝；普通值保留类型形状，借用的 `Slice<T>` / view 则返回独立 owner `Array<T>` |
 
-`int(s)` / `float(s)` 解析整个字符串，不被文法接受的输入一律抛异常：允许首尾空白与前导符号，其余必须是十进制数字；`float` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留是解析失败而不是前缀解析，因此 `int("12abc")` 抛异常而不是得到 `12`；十六进制与 `inf` / `nan` 写法同样拒绝，整数超出 `int` 范围也是拒绝而不是饱和。这与 `strconv.parseInt` / `strconv.parseFloat` 已有的文法一致（§15.8）。
+`i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` 都解析整个字符串：允许首尾空白与前导符号，其余必须符合十进制文法；`f64` 额外接受小数部分和指数，整数与小数部分合计有一位数字即可（`.5` 与 `1.` 都能解析）。尾部残留、十六进制、`inf` / `nan` 以及越界整数都解析失败。`parse` 用 typed error channel 报错，`tryParse` 返回 `null`。数值之间的转换只能写成显式 `as`，文本解析不经过数值 cast。
 
 ### 13.3 类型检查
 
@@ -47,10 +50,10 @@ order: 014
 
 ```xray @id=builtin-typeOf-is
 var x = 42
-print(typeOf(x) == Type.int)    // true
-print(typeName(x))              // "int"
-print(x is int)                 // true
-// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
+print(typeOf(x) == Type.i64)    // true
+print(typeName(x))              // "i64"
+print(x is i64)                 // true
+// typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
 
 ### 13.4 协程
@@ -83,7 +86,7 @@ print(x is int)                 // true
 | `Set.from(iterable)` | 从 string / Array / Set 创建 Set |
 | `Set.range(start, end)` | 创建闭区间整数 Set |
 
-BigInt 使用 `123n` 字面量或 `int.toBigInt()`；JSON 使用 `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`；DateTime 使用 `datetime` 模块工厂函数。
+BigInt 使用 `123n` 字面量或 `i64.toBigInt()`；JSON 使用 `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`；DateTime 使用 `datetime` 模块工厂函数。
 <!-- /xr-spec:cn -->
 
 <!-- xr-spec:en -->
@@ -101,21 +104,24 @@ These global functions and built-in constructor/static functions are usable with
 |--|--|--|
 | `print` | `(...values) -> ()` | print to stdout, automatically appending a newline; multiple arguments are separated by spaces |
 | `dump` | `(value, indent?) -> ()` | structured debug output |
-| `len` | `(value) -> int` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
+| `len` | `(value) -> i64` | length of strings, containers, Range, Slice, and other `Lengthable` values; `JSON.Value` is not `Lengthable` |
 
 ### 13.2 Type Conversion
 
 | Function | Signature | Description |
 |--|--|--|
-| `int(x)` | `(value) -> int` | convert to int; `rune` converts to its Unicode scalar code point; throws if string parsing fails |
-| `float(x)` | `(value) -> float` | convert to float |
+| `x as T` | `numeric -> T` | explicit numeric conversion among the 12 exact scalar types; `T` is `i8` / `i16` / `i32` / `i64` / `u8` / `u16` / `u32` / `u64` / `f32` / `f64` / `isize` / `usize` |
+| `i64.parse(s)` | `(string) -> i64` | strict decimal integer parse; throws on failure |
+| `i64.tryParse(s)` | `(string) -> i64?` | strict decimal integer parse; returns `null` on failure |
+| `f64.parse(s)` | `(string) -> f64` | strict decimal floating-point parse; throws on failure |
+| `f64.tryParse(s)` | `(string) -> f64?` | strict decimal floating-point parse; returns `null` on failure |
 | `string(x)` | `(value) -> string` | convert to string; `rune` converts to a one-scalar string |
 | `bool(x)` | `(value) -> bool` | convert to bool; rules in §2.3.3 |
-| `rune(n)` | `(int) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
-| `chr(n)` | `(int) -> string` | Unicode code point → one-scalar string |
+| `rune(n)` | `(i64) -> rune` | construct a Unicode scalar from an integer; surrogate and out-of-range values throw |
+| `chr(n)` | `(i64) -> string` | Unicode code point → one-scalar string |
 | `copy(x)` | `(value) -> fresh value` | explicit deep copy; ordinary values preserve their type shape, while a borrowed `Slice<T>` / view returns an independent owner `Array<T>` |
 
-`int(s)` and `float(s)` parse the whole string, and anything the grammar does not accept throws: surrounding whitespace and a leading sign are allowed, and the rest must be decimal digits; `float` also accepts a fractional part and an exponent, and needs only one digit across the integer and fractional parts (`.5` and `1.` both parse). Trailing residue is a parse failure rather than a prefix parse, so `int("12abc")` throws instead of yielding `12`; hex and the `inf` / `nan` spellings are rejected as well, and an integer outside the `int` range is rejected rather than saturated. This is the grammar `strconv.parseInt` / `strconv.parseFloat` already enforce (§15.8).
+`i64.parse` / `i64.tryParse` / `f64.parse` / `f64.tryParse` consume the whole string. Surrounding whitespace and a leading sign are accepted; `f64` additionally accepts a fractional part and exponent, with at least one digit across the integer and fractional parts (`.5` and `1.` are valid). Trailing residue, hexadecimal input, `inf` / `nan`, and out-of-range integers fail. `parse` reports failure through the typed error channel; `tryParse` returns `null`. Numeric conversions use explicit `as`; text parsing is not a numeric cast.
 
 ### 13.3 Type Checking
 
@@ -130,10 +136,10 @@ The global read-only environment values are not functions: `process` (entry argu
 
 ```xray @id=builtin-typeOf-is
 var x = 42
-print(typeOf(x) == Type.int)    // true
-print(typeName(x))              // "int"
-print(x is int)                 // true
-// typeOf(x) == "int"           // compile error: use Type.int or typeName(x)
+print(typeOf(x) == Type.i64)    // true
+print(typeName(x))              // "i64"
+print(x is i64)                 // true
+// typeOf(x) == "i64"           // compile error: use Type.i64 or typeName(x)
 ```
 
 ### 13.4 Coroutines
@@ -166,5 +172,5 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | `Set.from(iterable)` | Set from a string / Array / Set |
 | `Set.range(start, end)` | inclusive integer Set |
 
-BigInt uses the `123n` literal or `int.toBigInt()`; JSON uses `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`; DateTime uses factory functions in the `datetime` module.
+BigInt uses the `123n` literal or `i64.toBigInt()`; JSON uses `JSON.parse<T>` / `JSON.parseObject` / `JSON.value` / `JSON.stringify`; DateTime uses factory functions in the `datetime` module.
 <!-- /xr-spec:en -->

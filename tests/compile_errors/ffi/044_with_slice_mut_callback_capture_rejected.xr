@@ -1,9 +1,9 @@
 import mem
 
 var guard = 0
-var p = mem.mutPtr<byte>(0)
+var p = mem.mutPtr<u8>(0)
 unsafe {
-    mem.withSliceMut<byte>(p, 0, ref guard, fn(view: ref Slice<byte>) {
+    mem.withSliceMut<u8>(p, 0, ref guard, fn(view: ref Slice<u8>) {
         var escaped = fn() { print(len(view)) }
         escaped()
     })

@@ -1,7 +1,7 @@
 // 1202_generic_inference.xr
 // Test generic type inference
 
-fn recvInt(ch: Channel<int>) -> int {
+fn recvInt(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
@@ -11,7 +11,7 @@ fn recvInt(ch: Channel<int>) -> int {
 // ===== Array Generic Inference =====
 @test
 fn test_array_type_annotation() {
-    var arr: Array<int> = [1, 2, 3]
+    var arr: Array<i64> = [1, 2, 3]
     assert_eq(len(arr), 3)
     arr.push(4)
     assert_eq(len(arr), 4)
@@ -36,7 +36,7 @@ fn test_array_empty_with_annotation() {
 // ===== Map Generic Inference =====
 @test
 fn test_map_type_annotation() {
-    var m: Map<string, int> = #{}
+    var m: Map<string, i64> = #{}
     m.set("a", 1)
     m.set("b", 2)
     assert_eq(m.get("a"), 1)
@@ -52,7 +52,7 @@ fn test_map_infer_from_literal() {
 // ===== Set Generic Inference =====
 @test
 fn test_set_type_annotation() {
-    var s: Set<int> = #[]
+    var s: Set<i64> = #[]
     s.add(1)
     s.add(2)
     s.add(1)
@@ -70,7 +70,7 @@ fn test_set_infer_from_literal() {
 // ===== Channel Generic Inference =====
 @test
 fn test_channel_basic() {
-    const ch = Channel<int>(1)
+    const ch = Channel<i64>(1)
     ch.send(42)
     var val = recvInt(ch)
     assert_eq(val, 42)
@@ -102,7 +102,7 @@ fn test_array_filter_return_type() {
 @test
 fn test_array_slice_return_type() {
     var arr = [1, 2, 3, 4, 5]
-    var sliced: Slice<int> = arr[1:4]
+    var sliced: Slice<i64> = arr[1:4]
     assert_eq(typeName(sliced), "Slice")
     assert_eq(len(sliced), 3)
 }
@@ -124,7 +124,7 @@ fn test_map_values_return_type() {
 // ===== Nested Generic Types =====
 @test
 fn test_array_of_arrays() {
-    var matrix: Array<Array<int>> = [[1, 2], [3, 4]]
+    var matrix: Array<Array<i64>> = [[1, 2], [3, 4]]
     assert_eq(matrix[0][0], 1)
     assert_eq(matrix[1][1], 4)
 }

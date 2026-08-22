@@ -1,4 +1,4 @@
-fn xray_no_alloc_array_with_capacity_reject() -> int {
+fn xray_no_alloc_array_with_capacity_reject() -> i64 {
     var xs = Array.withCapacity(16)
     return len(xs)
 }

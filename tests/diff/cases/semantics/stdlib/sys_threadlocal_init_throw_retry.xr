@@ -10,7 +10,7 @@ enum InitErr {
 
 var fail = true
 var calls = 0
-var local = sys.ThreadLocal<int>(fn() -> int {
+var local = sys.ThreadLocal<i64>(fn() -> i64 {
     calls = calls + 1
     if (fail) {
         throw InitErr.Failed

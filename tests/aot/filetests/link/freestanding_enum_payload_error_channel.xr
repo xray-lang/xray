@@ -1,20 +1,20 @@
 enum FsErr {
-    Bad(int)
+    Bad(i64)
 }
 
 struct Pair {
-    left: int
-    right: int
+    left: i64
+    right: i64
 }
 
-fn mayFail(n: int) -> Pair {
+fn mayFail(n: i64) -> Pair {
     if (n == 0) {
         throw FsErr.Bad(7)
     }
     return Pair{left: n, right: n + 1}
 }
 
-fn xray_enum_payload_error(n: int) -> int {
+fn xray_enum_payload_error(n: i64) -> i64 {
     var out = 0
     try {
         var pair = mayFail(n)

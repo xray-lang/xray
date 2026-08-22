@@ -236,7 +236,7 @@ TEST(vm_deep_recursion_via_dostring) {
      * deep enough to exercise xr_coro_grow_stack in run(). prepare_entry
      * must keep entry frame and grow frame array consistently. */
     const char *src = "enum VmApiErr { CheckFailed }\n"
-                      "fn dive(n: int) -> int {\n"
+                      "fn dive(n: i64) -> i64 {\n"
                       "  if (n <= 0) { return 0; }\n"
                       "  return dive(n - 1) + 1;\n"
                       "}\n"
@@ -260,7 +260,7 @@ TEST(vm_large_maxstacksize_entry) {
      * default coroutine stack, forcing prepare_entry to grow before
      * the first instruction runs. */
     const char *src = "enum VmApiErr { CheckFailed }\n"
-                      "fn wide() -> int {\n"
+                      "fn wide() -> i64 {\n"
                       "  var a01 = 1; var a02 = 2; var a03 = 3; var a04 = 4;\n"
                       "  var a05 = 5; var a06 = 6; var a07 = 7; var a08 = 8;\n"
                       "  var a09 = 9; var a10 = 10; var a11 = 11; var a12 = 12;\n"
@@ -290,7 +290,7 @@ TEST(vm_vararg_entry) {
     /* Xray rest-param syntax: ...nums (no type annotation on rest param).
      * Exercises the vararg branch of xr_vm_call_closure. */
     const char *src = "enum VmApiErr { CheckFailed }\n"
-                      "fn sumAll(...nums) -> int {\n"
+                      "fn sumAll(...nums) -> i64 {\n"
                       "  var total = 0\n"
                       "  for (var i = 0; i < len(nums); i = i + 1) {\n"
                       "    total = total + nums[i]\n"

@@ -10,12 +10,12 @@ fn task_with_yield() -> string {
     return "yielded"
 }
 
-fn worker(id: int) -> int {
+fn worker(id: i64) -> i64 {
     Coro.yield()
     return id * 10
 }
 
-fn loop_yield(n: int) -> int {
+fn loop_yield(n: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < n; i++) {
         sum = sum + i
@@ -26,7 +26,7 @@ fn loop_yield(n: int) -> int {
     return sum
 }
 
-fn intensive_yield(count: int) -> int {
+fn intensive_yield(count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         sum = sum + i

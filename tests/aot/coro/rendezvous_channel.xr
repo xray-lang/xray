@@ -1,9 +1,9 @@
-fn sender(ch: Channel<int>) -> int {
+fn sender(ch: Channel<i64>) -> i64 {
     ch.send(41)
     return 1
 }
 
-const ch = Channel<int>(0)
+const ch = Channel<i64>(0)
 const task = go sender(ch)
 var v = ch.recv()
 var done = await task

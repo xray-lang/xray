@@ -8,7 +8,7 @@ fn getFirst<T>(arr: Array<T>) -> T? {
     }
     return null
 }
-fn swap<T>(arr: ref Array<T>, i: int, j: int) {
+fn swap<T>(arr: ref Array<T>, i: i64, j: i64) {
     var temp = copy(arr[i])
     arr[i] = copy(arr[j])
     arr[j] = temp

@@ -39,7 +39,7 @@ fn test_n9_unreachable_path_is_absorbed() {
     assert_eq(len(a), 3)
 }
 
-fn n9_pick(flag: bool, x: string?, y: string?) -> int {
+fn n9_pick(flag: bool, x: string?, y: string?) -> i64 {
     if (flag) {
         if (x == null) { return -1 }
         return len(x)

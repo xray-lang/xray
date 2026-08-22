@@ -1,7 +1,7 @@
 {
   "module": "net",
   "summary": "TCP/UDP/TLS networking with native stream pumps",
-  "lead": "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<byte>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.",
+  "lead": "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<u8>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.",
   "usage": "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.",
   "sections": [
     {
@@ -27,7 +27,7 @@
       "bullets": [
         "Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.",
         "Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.",
-        "Use `Array<byte>` buffers for binary protocol hot paths that must inspect payload.",
+        "Use `Array<u8>` buffers for binary protocol hot paths that must inspect payload.",
         "Use string reads only when the program actually needs to parse or mutate text."
       ]
     }

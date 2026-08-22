@@ -1,11 +1,11 @@
 class Box {
-    bytes: Array<byte> = Array<byte>(0)
+    bytes: Array<u8> = Array<u8>(0)
 }
 
 fn main() {
     var box = Box()
     box.bytes.push(1)
-    var view: Slice<byte> = box.bytes[:]
+    var view: Slice<u8> = box.bytes[:]
     box.bytes.push(2)
     print(len(view))
 }

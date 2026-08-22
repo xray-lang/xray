@@ -3,7 +3,7 @@
 // now declare more than 256 distinct source variables. Register pressure stays
 // low here (each temp dies before the next), so this isolates the frontend var
 // cap without depending on the widened 16-bit bytecode register operand space.
-fn many() -> int {
+fn many() -> i64 {
     var total = 0
     var a0 = 0; total = total + a0; var a1 = 1; total = total + a1; var a2 = 2; total = total + a2; var a3 = 3; total = total + a3; var a4 = 4; total = total + a4;
     var a5 = 5; total = total + a5; var a6 = 6; total = total + a6; var a7 = 7; total = total + a7; var a8 = 8; total = total + a8; var a9 = 9; total = total + a9;

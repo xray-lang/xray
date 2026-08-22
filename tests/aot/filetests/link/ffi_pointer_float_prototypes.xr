@@ -1,5 +1,5 @@
 extern "C" {
-    fn memchr(s: Ptr<byte>, c: i32, n: usize) -> Ptr<byte>
+    fn memchr(s: Ptr<u8>, c: i32, n: usize) -> Ptr<u8>
     fn sinf(x: f32) -> f32
 }
 

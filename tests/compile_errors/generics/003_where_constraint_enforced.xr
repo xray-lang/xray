@@ -1,5 +1,5 @@
 // A 'where' constraint must be enforced exactly like an inline `<T: C>` one.
-class Opaque { x: int }
+class Opaque { x: i64 }
 
 fn maxOf<T>(a: T, b: T) -> T where T: Comparable {
     if (a > b) { return a }

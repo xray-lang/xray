@@ -15,29 +15,29 @@
 // source-class authority yet), so it is not exercised here.
 
 class Plain {
-    n: int = 7
+    n: i64 = 7
 
-    value() -> int {
+    value() -> i64 {
         return this.n
     }
 
-    plus(k: int) -> int {
+    plus(k: i64) -> i64 {
         return this.n + k
     }
 
-    relay() -> int {
+    relay() -> i64 {
         return this.plus(1)
     }
 }
 
 class Tally {
-    total: int = 2
+    total: i64 = 2
 
-    add(k: int) -> int {
+    add(k: i64) -> i64 {
         return this.total + k
     }
 
-    twice(k: int) -> int {
+    twice(k: i64) -> i64 {
         return this.add(k) + this.add(k)
     }
 }

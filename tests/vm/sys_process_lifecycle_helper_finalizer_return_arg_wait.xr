@@ -5,7 +5,7 @@ fn passProcess(p: Process) -> Process {
     return p
 }
 
-fn waitProcess(p: Process) -> int {
+fn waitProcess(p: Process) -> i64 {
     return p.wait()
 }
 

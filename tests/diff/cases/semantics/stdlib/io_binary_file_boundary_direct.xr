@@ -3,18 +3,18 @@
 import io
 import path
 
-fn allBytes() -> Array<byte> {
-    var out = Array<byte>(256)
+fn allBytes() -> Array<u8> {
+    var out = Array<u8>(256)
     for (var i = 0; i < 256; i++) {
-        out[i] = i as byte
+        out[i] = i as u8
     }
     return out
 }
 
-fn rollingHash(data: Array<byte>) -> int {
+fn rollingHash(data: Array<u8>) -> i64 {
     var acc = 0
     for (var i = 0; i < len(data); i++) {
-        var value: int = data[i] as int
+        var value: i64 = data[i] as i64
         acc = ((acc * 131) + value) % 1000000007
     }
     return acc

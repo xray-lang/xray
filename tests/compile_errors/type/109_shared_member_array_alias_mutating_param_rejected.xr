@@ -1,8 +1,8 @@
 class Box {
-    items: Array<int> = Array<int>(1, 0)
+    items: Array<i64> = Array<i64>(1, 0)
 }
 
-fn appendOne(items: ref Array<int>) {
+fn appendOne(items: ref Array<i64>) {
     items.push(3)
 }
 

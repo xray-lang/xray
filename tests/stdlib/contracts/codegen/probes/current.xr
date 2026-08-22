@@ -19,14 +19,14 @@ assert(codegen.opaque(i_min) == i_min)
 var i_zero = 0
 assert(codegen.opaque(i_zero) == i_zero)
 
-var b: byte = 255
+var b: u8 = 255
 assert(codegen.opaque(b) == b)
 var w: u16 = 65535
 assert(codegen.opaque(w) == w)
 var s32: i32 = -2147483647
 assert(codegen.opaque(s32) == s32)
 
-var p = mem.mutPtr<byte>(4096)
+var p = mem.mutPtr<u8>(4096)
 assert(mem.addr(codegen.opaque(p)) == mem.addr(p))
 print("{\"case\":\"opaque-is-identity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}")
 

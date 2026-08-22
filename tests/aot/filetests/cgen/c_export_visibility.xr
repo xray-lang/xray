@@ -1,7 +1,7 @@
-export fn publicValue() -> int {
+export fn publicValue() -> i64 {
     return 41
 }
 
-export fn hiddenValue() -> int {
+export fn hiddenValue() -> i64 {
     return 42
 }

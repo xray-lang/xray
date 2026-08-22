@@ -1,14 +1,14 @@
 // AOT basic test: class with fields and methods
 class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
-    constructor(x: int, y: int) {
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
 
-    sum() -> int {
+    sum() -> i64 {
         return this.x + this.y
     }
 }

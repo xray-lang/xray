@@ -1,4 +1,4 @@
-fn choose(value: int?) -> int {
+fn choose(value: i64?) -> i64 {
     return value ?? 41
 }
 

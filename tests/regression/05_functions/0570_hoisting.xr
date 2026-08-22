@@ -10,7 +10,7 @@ fn test_call_before_definition() {
     assert_eq(result, 30)
 }
 
-fn add(a: int, b: int) -> int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b
 }
 
@@ -24,12 +24,12 @@ fn test_mutual_recursion() {
     assert_eq(isOdd(4), false)
 }
 
-fn isEven(n: int) -> bool {
+fn isEven(n: i64) -> bool {
     if (n == 0) { return true }
     return isOdd(n - 1)
 }
 
-fn isOdd(n: int) -> bool {
+fn isOdd(n: i64) -> bool {
     if (n == 0) { return false }
     return isEven(n - 1)
 }
@@ -73,7 +73,7 @@ fn test_class_method_uses_later_fn() {
 
 // ===== Definition before call still works =====
 
-fn multiply(x: int, y: int) -> int {
+fn multiply(x: i64, y: i64) -> i64 {
     return x * y
 }
 
@@ -86,7 +86,7 @@ fn test_definition_before_call() {
 
 var factor = 10
 
-fn scaled(x: int) -> int {
+fn scaled(x: i64) -> i64 {
     return x * factor
 }
 
@@ -113,7 +113,7 @@ fn test_block_closure_capture_with_hoisting() {
     var result = getDoubled()
     assert_eq(result, 20)
     
-    fn getDoubled() -> int {
+    fn getDoubled() -> i64 {
         return x * 2
     }
 }
@@ -123,12 +123,12 @@ fn test_block_mutual_recursion() {
     assert_eq(blockEven(4), true)
     assert_eq(blockEven(3), false)
     
-    fn blockEven(n: int) -> bool {
+    fn blockEven(n: i64) -> bool {
         if (n == 0) { return true }
         return blockOdd(n - 1)
     }
     
-    fn blockOdd(n: int) -> bool {
+    fn blockOdd(n: i64) -> bool {
         if (n == 0) { return false }
         return blockEven(n - 1)
     }

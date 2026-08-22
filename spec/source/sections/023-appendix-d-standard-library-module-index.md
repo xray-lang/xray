@@ -8,7 +8,7 @@ order: 023
 
 ## 附录 D. 标准库模块索引
 
-完整 28 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
+完整 27 个标准库模块（native、纯 Xray 或混合实现）见 [§15](#15-标准库概览-standard-library)。
 
 | 模块 | 用途 |
 |--|--|
@@ -30,7 +30,6 @@ order: 023
 | `path` | 路径操作 |
 | `regex` | 正则 |
 | `runtime` | 运行时信息与堆内省 |
-| `strconv` | 字符串数值解析 |
 | `sync` | 协程同步原语 |
 | `sys` | OS 线程与底层同步接口 |
 | `text` | Unicode 文本变换 |
@@ -47,7 +46,7 @@ order: 023
 
 ## Appendix D. Standard Library Module Index
 
-The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
+The full set of 27 stdlib modules (native, pure Xray, or mixed) is documented in [§15](#15-standard-library-overview).
 
 | Module | Purpose |
 |--|--|
@@ -69,7 +68,6 @@ The full set of 28 stdlib modules (native, pure Xray, or mixed) is documented in
 | `path` | path manipulation |
 | `regex` | regular expressions |
 | `runtime` | runtime information and heap introspection |
-| `strconv` | numeric string parsing |
 | `sync` | coroutine synchronization primitives |
 | `sys` | OS-thread and low-level synchronization surface |
 | `text` | Unicode text transforms |

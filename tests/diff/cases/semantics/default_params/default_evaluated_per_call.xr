@@ -3,11 +3,11 @@
 // call, and never when the argument is supplied. VM and AOT must agree.
 
 var counter = 0
-fn next() -> int {
+fn next() -> i64 {
     counter = counter + 1
     return counter
 }
-fn tag(id: int = next()) -> int { return id }
+fn tag(id: i64 = next()) -> i64 { return id }
 
 print(tag())     // next() -> 1
 print(tag())     // next() -> 2

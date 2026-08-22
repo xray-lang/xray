@@ -1,18 +1,18 @@
-fn mutate() -> int {
-    var bytes = Array<byte>(10)
-    var view: Slice<byte> = bytes[:]
+fn mutate() -> i64 {
+    var bytes = Array<u8>(10)
+    var view: Slice<u8> = bytes[:]
     view[0] = 1
     view[1] = 2
     view[2] = 3
     view[3] = 4
     view[4] = 5
-    var dst: Slice<byte> = view[1:6]
-    var src: Slice<byte> = view[0:5]
+    var dst: Slice<u8> = view[1:6]
+    var src: Slice<u8> = view[0:5]
     dst.copyFrom(src)
     view.repeatFrom(6, 2, 4)
-    var empty: Slice<byte> = view[0:0]
+    var empty: Slice<u8> = view[0:0]
     empty.copyFrom(empty)
-    return int(view[1]) + int(view[5]) + int(view[6]) + int(view[9]) + len(empty)
+    return (view[1] as i64) + (view[5] as i64) + (view[6] as i64) + (view[9] as i64) + len(empty)
 }
 
 print(mutate())

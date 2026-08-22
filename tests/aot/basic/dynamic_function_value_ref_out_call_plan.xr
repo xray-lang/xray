@@ -1,19 +1,19 @@
-fn bumpOne(value: ref int) -> int {
+fn bumpOne(value: ref i64) -> i64 {
     value = value + 1
     return value
 }
 
-fn bumpTwo(value: ref int) -> int {
+fn bumpTwo(value: ref i64) -> i64 {
     value = value + 2
     return value
 }
 
-fn fillTen(value: ref int) -> int {
+fn fillTen(value: ref i64) -> i64 {
     value = 10
     return value
 }
 
-fn fillTwenty(value: ref int) -> int {
+fn fillTwenty(value: ref i64) -> i64 {
     value = 20
     return value
 }

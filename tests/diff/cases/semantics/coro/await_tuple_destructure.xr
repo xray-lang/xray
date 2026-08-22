@@ -5,7 +5,7 @@
 // recognizes GC-header runtime tuples) while codegen produces AOT-native
 // tuples (XR_TAG_TUPLE), so every coroutine tuple element silently read back
 // as null on AOT while the VM produced the values.
-fn produce() -> (int, int) {
+fn produce() -> (i64, i64) {
     Coro.yield()
     return (10, 20)
 }
@@ -16,7 +16,7 @@ print(a)
 print(b)
 
 // Tuple constructed and destructured within a coroutine body.
-fn sum_pair() -> int {
+fn sum_pair() -> i64 {
     Coro.yield()
     var pair = (3, 4)
     var (x, y) = pair

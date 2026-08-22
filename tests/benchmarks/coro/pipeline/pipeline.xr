@@ -7,17 +7,17 @@ import time
 var STAGES = 100     // 管道级数
 var ITEMS = 100000   // 数据项数
 if (len(process.args) > 0) {
-    STAGES = int(process.args[0]) ?? STAGES
+    STAGES = i64.tryParse(process.args[0]) ?? STAGES
 }
 if (len(process.args) > 1) {
-    ITEMS = int(process.args[1]) ?? ITEMS
+    ITEMS = i64.tryParse(process.args[1]) ?? ITEMS
 }
 
 print("=== Pipeline 测试 ===")
 print("管道级数:", STAGES)
 print("数据项数:", ITEMS)
 
-fn recv_int(ch: Channel<int>, fallback: int) -> int {
+fn recv_int(ch: Channel<i64>, fallback: i64) -> i64 {
     return match (ch.recv()) {
         Recv.Value(value) -> value
         _ -> fallback
@@ -25,7 +25,7 @@ fn recv_int(ch: Channel<int>, fallback: int) -> int {
 }
 
 // 管道阶段：从 in 读取，处理后写入 out
-fn stage(in_ch: Channel<int>, out_ch: Channel<int>) -> int {
+fn stage(in_ch: Channel<i64>, out_ch: Channel<i64>) -> i64 {
     var processed = 0
     while (true) {
         var val = recv_int(in_ch, -1)
@@ -42,7 +42,7 @@ var start = time.monotonic()
 
 // 构建管道：创建 STAGES+1 个 channel，STAGES 个协程
 var chs = [Channel(10)]
-var tasks: Array<Task<int>> = []
+var tasks: Array<Task<i64>> = []
 
 for (var i = 0; i < STAGES; i++) {
     chs.push(Channel(10))
@@ -53,7 +53,7 @@ var first_ch = chs[0]
 var last_ch = chs[STAGES]
 
 // 生产者：向第一个 channel 发送数据
-fn produce(ch: Channel<int>, count: int) -> int {
+fn produce(ch: Channel<i64>, count: i64) -> i64 {
     for (var i = 0; i < count; i++) {
         ch.send(i)
     }
@@ -88,8 +88,8 @@ print("预期:", expected)
 print("正确:", sum == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
-    print("吞吐量:", int(count * 1000 / elapsed), "items/sec")
-    print("每项延迟:", int(elapsed * 1000000 / count), "ns (", STAGES, "stages)")
+    print("吞吐量:", (count * 1000 / elapsed as i64), "items/sec")
+    print("每项延迟:", (elapsed * 1000000 / count as i64), "ns (", STAGES, "stages)")
 } else {
     print("吞吐量: 太快无法测量")
     print("每项延迟: 太快无法测量")

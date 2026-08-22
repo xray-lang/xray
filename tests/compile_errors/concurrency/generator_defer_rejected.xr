@@ -1,7 +1,7 @@
 // `defer` is the only deterministic cleanup mechanism, and a generator that is
 // abandoned before exhaustion is never resumed, so the deferred action would
 // silently not run. A cleanup that may never run is rejected, not documented.
-fn gen() -> Iterator<int> {
+fn gen() -> Iterator<i64> {
     defer { print("cleanup") }
     yield 1
     yield 2

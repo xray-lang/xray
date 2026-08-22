@@ -17,7 +17,7 @@ legacy_public_surface = [
   "isZlib"
 ]
 intentional_semantic_changes = [
-  "public convergence target uses Slice<byte> inputs and Array<byte> outputs after the native error ABI is stable",
+  "public convergence target uses Slice<u8> inputs and Array<u8> outputs after the native error ABI is stable",
   "decompression failures must become typed CompressionError values instead of null sentinels in the native switch",
   "checksum values remain stable across old string storage and future byte slices",
   "compression and decompression helpers must not construct string storage for arbitrary bytes once the ABI switches"
@@ -53,4 +53,4 @@ new_behavior = "future converged decompression APIs throw CompressionError and n
 [[legacy_behavior]]
 id = "string-binary-payloads"
 classification = "removed"
-new_behavior = "future converged compression APIs carry arbitrary bytes through Slice<byte> and Array<byte>, not string storage"
+new_behavior = "future converged compression APIs carry arbitrary bytes through Slice<u8> and Array<u8>, not string storage"

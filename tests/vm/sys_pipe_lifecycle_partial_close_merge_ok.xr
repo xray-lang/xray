@@ -16,7 +16,7 @@ fn closeReadInTernary(flag: bool) {
     print(pipe!.closeWrite())
 }
 
-fn closeReadInMatch(tag: int) {
+fn closeReadInMatch(tag: i64) {
     var pipe = sys.Pipe.open()
     match (tag) {
         0 -> {

@@ -1,2 +1,2 @@
-fn bad(...xs: int) {
+fn bad(...xs: i64) {
 }

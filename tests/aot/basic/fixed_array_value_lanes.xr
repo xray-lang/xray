@@ -1,9 +1,9 @@
 struct Holder {
     names: [string; 2]
-    blocks: [[byte; 2]; 2]
+    blocks: [[u8; 2]; 2]
 }
 
-var zero: [byte; 4] = [0; 4]
+var zero: [u8; 4] = [0; 4]
 print(len(zero))
 print(zero[3])
 

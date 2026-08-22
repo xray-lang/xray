@@ -8,9 +8,9 @@
  * xi_dump.c - Human-readable text dump for the typed SSA IR
  *
  * Output format (inspired by Go SSA):
- *   func add(v0: int, v1: int) -> int {
+ *   func add(v0: i64, v1: i64) -> i64 {
  *     b0:                          ; entry
- *       v2 = ADD v0 v1             ; int
+ *       v2 = ADD v0 v1             ; i64
  *       RETURN v2
  *   }
  */
@@ -19,6 +19,7 @@
 #include "xi_op_name.h"
 #include "../runtime/value/xtype.h" /* XrTypeKind, XR_KIND_* */
 #include "../runtime/value/xstruct_layout.h"
+#include "../shared/xr_exact_scalar_registry.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -30,10 +31,14 @@ static const char *xi_type_name(const struct XrType *type) {
     if (!type)
         return "?";
     switch (type->kind) {
-        case XR_KIND_INT:
-            return "int";
-        case XR_KIND_FLOAT:
-            return "float";
+        case XR_KIND_INT: {
+            const char *name = xr_scalar_rep_name(type->scalar_rep);
+            return name ? name : "i64";
+        }
+        case XR_KIND_FLOAT: {
+            const char *name = xr_scalar_rep_name(type->scalar_rep);
+            return name ? name : "f64";
+        }
         case XR_KIND_BOOL:
             return "bool";
         case XR_KIND_RUNE:
@@ -240,8 +245,8 @@ static void dump_value(FILE *out, const XiValue *v) {
                 (unsigned) v->enum_metadata_kind, (unsigned) v->enum_metadata_field);
     }
     if (v->conversion.kind != XR_CONVERSION_NONE) {
-        const char *source = xr_scalar_rep_canonical_name(v->conversion.source_scalar_rep);
-        const char *target = xr_scalar_rep_canonical_name(v->conversion.target_scalar_rep);
+        const char *source = xr_scalar_rep_name(v->conversion.source_scalar_rep);
+        const char *target = xr_scalar_rep_name(v->conversion.target_scalar_rep);
         fprintf(out, " [conversion=%s %s->%s%s%s]", xr_conversion_kind_name(v->conversion.kind),
                 source ? source : "dynamic", target ? target : "dynamic",
                 v->conversion.is_implicit ? ",implicit" : ",explicit",

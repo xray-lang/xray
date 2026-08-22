@@ -20,7 +20,7 @@ var only = [...a]
 print(only)
 print(len(only))
 
-var empty: Array<int> = []
+var empty: Array<i64> = []
 var from_empty = [...empty, ...b]
 print(from_empty)
 

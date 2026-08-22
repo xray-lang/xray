@@ -1,26 +1,26 @@
-fn xray_builtin_string_reject(x: int) -> int {
+fn xray_builtin_string_reject(x: i64) -> i64 {
     var s = string(x)
     print(s)
     return 0
 }
 
-fn xray_builtin_typename_reject(x: int) -> int {
+fn xray_builtin_typename_reject(x: i64) -> i64 {
     var s = typeName(x)
     print(s)
     return 0
 }
 
-fn xray_builtin_copy_reject(values: Slice<int>) -> int {
+fn xray_builtin_copy_reject(values: Slice<i64>) -> i64 {
     var copied = copy(values)
     return len(copied)
 }
 
-fn xray_builtin_char_reject(x: int) -> int {
+fn xray_builtin_char_reject(x: i64) -> i64 {
     var c = rune(x)
-    return c as int
+    return c as i64
 }
 
-fn xray_builtin_chr_dump_reject() -> int {
+fn xray_builtin_chr_dump_reject() -> i64 {
     var s = chr(65)
     dump(s)
     return 0

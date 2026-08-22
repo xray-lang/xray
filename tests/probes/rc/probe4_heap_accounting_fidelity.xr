@@ -38,13 +38,13 @@ fn test_map_churn_does_not_inflate_live_bytes() {
 @test
 fn test_set_churn_does_not_inflate_live_bytes() {
     for (var w = 0; w < 1000; w++) {
-        var warm: Set<int> = Set()
+        var warm: Set<i64> = Set()
         warm.add(w)
     }
     var before = runtime.liveBytes()
 
     for (var i = 0; i < 200000; i++) {
-        var s: Set<int> = Set()
+        var s: Set<i64> = Set()
         s.add(i)
     }
 
@@ -73,7 +73,7 @@ fn test_array_churn_does_not_inflate_live_bytes() {
 fn test_retained_maps_are_counted() {
     var before = runtime.liveBytes()
 
-    var keep: Array<Map<string, int>> = []
+    var keep: Array<Map<string, i64>> = []
     for (var i = 0; i < 20000; i++) {
         keep.push(#{"k": i})
     }
@@ -88,7 +88,7 @@ fn test_retained_maps_are_counted() {
 fn test_retained_arrays_are_counted() {
     var before = runtime.liveBytes()
 
-    var keep: Array<Array<int>> = []
+    var keep: Array<Array<i64>> = []
     for (var i = 0; i < 20000; i++) {
         keep.push([i, i + 1, i + 2, i + 4])
     }
@@ -104,11 +104,11 @@ fn test_grown_then_dropped_containers_refund_their_bytes() {
     var before = runtime.liveBytes()
 
     for (var round = 0; round < 200; round++) {
-        var m: Map<string, int> = #{}
+        var m: Map<string, i64> = #{}
         for (var i = 0; i < 200; i++) {
             m[string(i)] = i
         }
-        var a: Array<int> = []
+        var a: Array<i64> = []
         for (var i = 0; i < 500; i++) {
             a.push(i)
         }

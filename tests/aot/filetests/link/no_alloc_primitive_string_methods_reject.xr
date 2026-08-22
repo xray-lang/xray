@@ -1,12 +1,12 @@
-fn xray_no_alloc_int_tostring_reject(value: int) -> string {
+fn xray_no_alloc_int_tostring_reject(value: i64) -> string {
     return value.toString()
 }
 
-fn xray_no_alloc_int_tohex_reject(value: int) -> string {
+fn xray_no_alloc_int_tohex_reject(value: i64) -> string {
     return value.toHex()
 }
 
-fn xray_no_alloc_float_tostring_reject(value: float) -> string {
+fn xray_no_alloc_float_tostring_reject(value: f64) -> string {
     return value.toString()
 }
 

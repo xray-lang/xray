@@ -26,7 +26,7 @@ class Util {
         return x
     }
 
-    static swap<A, B>(pair: Array<int>) -> Array<int> {
+    static swap<A, B>(pair: Array<i64>) -> Array<i64> {
         return [pair[1], pair[0]]
     }
 }
@@ -49,7 +49,7 @@ class Box<T> {
 @test
 fn test_generic_methods() {
 
-    var c = Container<int>()
+    var c = Container<i64>()
     // Test 1: Typed add method
     c.add(42)
     c.add(100)
@@ -81,7 +81,7 @@ fn test_generic_methods() {
     // Generic class with generic method
 
     // Test 5: Generic class with generic method
-    var box: Box<int> = Box<int>(10)
+    var box: Box<i64> = Box<i64>(10)
     assert_eq(box.get(), 10)
     var str = box.transform(fn(n) {
         return "value: " + string(n)

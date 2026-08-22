@@ -1,2 +1,2 @@
-var callback = fn() -> int { return 1 }
+var callback = fn() -> i64 { return 1 }
 print(JSON.stringify(callback))

@@ -1,7 +1,7 @@
 fn bad() {
     var owner = [1, 2, 3]
-    var view: Slice<int> = owner[0:2]
-    var views: Set<Slice<int>> = #[view]
+    var view: Slice<i64> = owner[0:2]
+    var views: Set<Slice<i64>> = #[view]
     print(views.contains(view))
 }
 

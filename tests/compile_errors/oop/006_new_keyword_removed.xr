@@ -1,5 +1,5 @@
 class Point {
-    x: int
-    constructor(x: int) { this.x = x }
+    x: i64
+    constructor(x: i64) { this.x = x }
 }
 var p = new Point(1)

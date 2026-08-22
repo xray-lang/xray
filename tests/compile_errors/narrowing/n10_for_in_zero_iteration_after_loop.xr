@@ -4,7 +4,7 @@
 // therefore `string?` after the loop, and returning it as `string` is
 // rejected. Without the header join the body assignment would leak out and
 // hide the null path, silently accepting a possibly-null return.
-fn f(xs: Array<int>) -> string {
+fn f(xs: Array<i64>) -> string {
     var s: string? = null
     for (v in xs) {
         s = "x"

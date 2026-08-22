@@ -1,6 +1,6 @@
 enum Item {
     Missing,
-    Number(int)
+    Number(i64)
 }
 
 fn lookup(values: Map<string, Item>, key: string) -> Item? {

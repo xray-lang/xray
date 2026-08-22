@@ -5,7 +5,7 @@
 @test
 fn test_slice_basic() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Slice<int> = arr[1:4]
+    var s: Slice<i64> = arr[1:4]
     assert_eq(len(s), 3)
     assert_eq(s[0], 2)
     assert_eq(s[2], 4)
@@ -14,7 +14,7 @@ fn test_slice_basic() {
 @test
 fn test_slice_from_start() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Slice<int> = arr[:2]
+    var s: Slice<i64> = arr[:2]
     assert_eq(len(s), 2)
     assert_eq(s[0], 1)
 }
@@ -22,7 +22,7 @@ fn test_slice_from_start() {
 @test
 fn test_slice_to_end() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Slice<int> = arr[3:]
+    var s: Slice<i64> = arr[3:]
     assert_eq(len(s), 2)
     assert_eq(s[1], 5)
 }
@@ -30,18 +30,18 @@ fn test_slice_to_end() {
 @test
 fn test_slice_negative_bounds() {
     var arr = [1, 2, 3, 4, 5]
-    var s: Slice<int> = arr[-4:-1]
+    var s: Slice<i64> = arr[-4:-1]
     assert_eq(len(s), 3)
     assert_eq(s[0], 2)
     assert_eq(s[2], 4)
-    var empty: Slice<int> = arr[4:2]
+    var empty: Slice<i64> = arr[4:2]
     assert_eq(len(empty), 0)
 }
 
 @test
 fn test_slice_is_view() {
     var arr = [10, 20, 30, 40]
-    var s: Slice<int> = arr[1:3]
+    var s: Slice<i64> = arr[1:3]
     arr[1] = 21
     assert_eq(s[0], 21)
     s[1] = 31

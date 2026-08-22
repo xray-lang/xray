@@ -1,15 +1,15 @@
 import { Capabilities, U8x16, U8x32, U8x64, U8xNative, U32x4, U32x8, U32x16, U64x2, U64x4, U64x8, U64xNative } from simd
 
 fn run() {
-    var bytes = Array<byte>(32)
+    var bytes = Array<u8>(32)
     for (i in 0..32) {
-        bytes[i] = ((i * 17 + 3) & 255) as byte
+        bytes[i] = ((i * 17 + 3) & 255) as u8
     }
-    var byteView: Slice<byte> = bytes[:]
+    var byteView: Slice<u8> = bytes[:]
     var b = U8x16.load(byteView, 3)
     assert_eq(b.extract(0), bytes[3])
     assert_eq(b.extract(15), bytes[18])
-    assert_eq(b.bitXor(U8x16.splat(255)).extract(4), (~bytes[7]) as byte)
+    assert_eq(b.bitXor(U8x16.splat(255)).extract(4), (~bytes[7]) as u8)
     var words = Array<u32>([1, 2, 3, 4, 5, 6])
     var wordView: Slice<u32> = words[:]
     var a32 = U32x4.load(wordView, 1)
@@ -84,11 +84,11 @@ fn run() {
     var xbytes = U8x32.load(byteView).bitXor(U8x32.load(byteView))
     xbytes.reinterpretU64().store(ref wideOutView)
     assert_eq(wideOut[0], 0)
-    var bytes512 = Array<byte>(64)
+    var bytes512 = Array<u8>(64)
     for (i in 0..64) {
-        bytes512[i] = ((i * 13 + 5) & 255) as byte
+        bytes512[i] = ((i * 13 + 5) & 255) as u8
     }
-    var bytes512View: Slice<byte> = bytes512[:]
+    var bytes512View: Slice<u8> = bytes512[:]
     var zero512 = U8x64.load(bytes512View).bitXor(U8x64.load(bytes512View))
     zero512.store(ref bytes512View)
     assert_eq(bytes512[0], 0)
@@ -107,11 +107,11 @@ fn run() {
     roundTrip512.store(ref out512View)
     assert_eq(out512[0], 10)
     assert_eq(out512[7], 80)
-    var nativeBytes = Array<byte>(64)
+    var nativeBytes = Array<u8>(64)
     for (i in 0..64) {
         nativeBytes[i] = 1
     }
-    var nativeByteView: Slice<byte> = nativeBytes[:]
+    var nativeByteView: Slice<u8> = nativeBytes[:]
     var nativeData = U8xNative.load(nativeByteView)
     var nativeWords = nativeData.reinterpretU32()
     var nativeProducts = nativeWords.widenMulEven(nativeWords.swapAdjacent())

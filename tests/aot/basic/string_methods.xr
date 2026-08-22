@@ -21,8 +21,8 @@ var t = s + s + s
 print(t)                // ababab
 print(len(t))         // 6
 
-fn lowByteAt(text: string, index: int) -> int {
-    return (text.runes().nth(index).toUInt32() & 0xFF) as int
+fn lowByteAt(text: string, index: i64) -> i64 {
+    return (text.runes().nth(index).toUInt32() & 0xFF) as i64
 }
 
 print(lowByteAt("abc", 0)) // 97

@@ -1,6 +1,6 @@
 struct CtPair {
-    x: int
-    y: int
+    x: i64
+    y: i64
 }
 
 const CT_TUPLE = comptime (1, (2, 3), "tail")

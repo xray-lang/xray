@@ -1,1 +1,1 @@
-operator '+' is not defined for 'rune' and 'int'
+operator '+' is not defined for 'rune' and 'i64'

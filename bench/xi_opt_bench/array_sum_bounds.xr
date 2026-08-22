@@ -1,12 +1,12 @@
-fn build_data(n: int) -> Array<int> {
-    var data: Array<int> = []
+fn build_data(n: i64) -> Array<i64> {
+    var data: Array<i64> = []
     for (var i = 0; i < n; i++) {
         data.push((i * 17 + 3) % 1024)
     }
     return data
 }
 
-fn sum_bounds(data: Array<int>, rounds: int) -> int {
+fn sum_bounds(data: Array<i64>, rounds: i64) -> i64 {
     var total = 0
     var n = len(data)
     for (var r = 0; r < rounds; r++) {

@@ -15,14 +15,14 @@
 // Both branches, a returned call result, and a bound local are covered so the
 // storage fact is proved at a use, at a return, and at a definition.
 
-fn label(n: int, unused: int) -> string {
+fn label(n: i64, unused: i64) -> string {
     if (n > 0) {
         return "pos"
     }
     return "neg"
 }
 
-fn forward(n: int) -> string {
+fn forward(n: i64) -> string {
     return label(n, 0)
 }
 

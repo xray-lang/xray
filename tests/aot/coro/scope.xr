@@ -1,27 +1,27 @@
-fn send_after_yield(ch: Channel<int>, n: int) {
+fn send_after_yield(ch: Channel<i64>, n: i64) {
     Coro.yield()
     ch.send(n)
 }
 
-fn linked_value() -> int {
+fn linked_value() -> i64 {
     Coro.yield()
     return 41
 }
 
 enum ScopeAotErr { Msg(string) }
 
-fn sibling_ok(ch: Channel<int>) -> int {
+fn sibling_ok(ch: Channel<i64>) -> i64 {
     ch.send(1)
     return 5
 }
 
-fn sibling_fail(ch: Channel<int>) -> int {
+fn sibling_fail(ch: Channel<i64>) -> i64 {
     ch.send(10)
     throw ScopeAotErr.Msg("aot_fail")
     return 0
 }
 
-fn recv_sum(ch: Channel<int>, count: int) -> int {
+fn recv_sum(ch: Channel<i64>, count: i64) -> i64 {
     var sum = 0
     for (var i = 0; i < count; i++) {
         match (ch.recv()) {
@@ -34,7 +34,7 @@ fn recv_sum(ch: Channel<int>, count: int) -> int {
     return sum
 }
 
-const ch = Channel<int>(2)
+const ch = Channel<i64>(2)
 scope {
     go send_after_yield(ch, 1)
     go send_after_yield(ch, 2)
@@ -59,7 +59,7 @@ linked scope {
 
 // A plain `scope` waits for both children; the failing one leaves its sibling
 // alone and its error does not escape the block.
-const isolated_ch = Channel<int>(2)
+const isolated_ch = Channel<i64>(2)
 scope {
     go sibling_ok(isolated_ch)
     go sibling_fail(isolated_ch)

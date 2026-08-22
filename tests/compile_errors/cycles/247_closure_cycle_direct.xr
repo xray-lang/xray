@@ -9,15 +9,15 @@
 // runtime detector.
 
 class Button {
-    onClick: fn() -> int
-    clicks: int
+    onClick: fn() -> i64
+    clicks: i64
 
     constructor() {
-        this.onClick = fn() -> int { return 0 }
+        this.onClick = fn() -> i64 { return 0 }
         this.clicks = 0
     }
 
-    render() -> int {
+    render() -> i64 {
         this.clicks = this.clicks + 1
         return this.clicks
     }
@@ -25,7 +25,7 @@ class Button {
 
 fn install() {
     var b = Button()
-    b.onClick = fn() -> int { return b.render() }
+    b.onClick = fn() -> i64 { return b.render() }
 }
 
 install()

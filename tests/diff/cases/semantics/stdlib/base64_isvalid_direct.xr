@@ -9,7 +9,7 @@ import {
 } from base64
 
 fn encodeText(data: string, options: Base64EncodeOptions = Base64EncodeOptions()) -> string {
-    var view: Slice<byte> = data.bytes()
+    var view: Slice<u8> = data.bytes()
     return base64.encode(view, options)
 }
 
@@ -60,7 +60,7 @@ print(decodeText(encodeText("test data with special chars: +/=", urlEncodeOption
 print(decodeFails("A"))
 print(decodeFails("Q==="))
 
-var bytes = Array<byte>(5)
+var bytes = Array<u8>(5)
 bytes[0] = 0
 bytes[1] = 127
 bytes[2] = 255
@@ -75,7 +75,7 @@ print(decodedBytes[1])
 print(decodedBytes[2])
 print(decodedBytes[3])
 print(decodedBytes[4])
-var emptyBytes = Array<byte>(0)
+var emptyBytes = Array<u8>(0)
 print(base64.encode(emptyBytes[:]))
 print(decodeFails("!!!"))
 

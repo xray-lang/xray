@@ -10,7 +10,7 @@ type Box<T> = { value: T }
 
 @test
 fn test_object_alias() {
-    var ints: Pair<int> = { first: 2, second: 5 }
+    var ints: Pair<i64> = { first: 2, second: 5 }
     var names: Pair<string> = { first: "x", second: "ray" }
     assert_eq(ints.first + ints.second, 7)
     assert_eq(names.first + names.second, "xray")
@@ -18,7 +18,7 @@ fn test_object_alias() {
 
 @test
 fn test_function_alias() {
-    fn apply(f: Mapper<int, string>, value: int) -> string {
+    fn apply(f: Mapper<i64, string>, value: i64) -> string {
         return f(value)
     }
     assert_eq(apply((n) -> "n=" + string(n), 9), "n=9")
@@ -26,7 +26,7 @@ fn test_function_alias() {
 
 @test
 fn test_container_and_optional_alias() {
-    var xs: Vec<int> = [1, 2, 3]
+    var xs: Vec<i64> = [1, 2, 3]
     var hit: Maybe<string> = "ok"
     var miss: Maybe<string> = null
     assert_eq(len(xs), 3)
@@ -36,6 +36,6 @@ fn test_container_and_optional_alias() {
 
 @test
 fn test_forward_generic_alias() {
-    var box: Forward<int> = { value: 42 }
+    var box: Forward<i64> = { value: 42 }
     assert_eq(box.value, 42)
 }

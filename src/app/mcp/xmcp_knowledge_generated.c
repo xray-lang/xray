@@ -42,12 +42,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "CoroInfo",
-        .signature = "{ id: int, name: string?, state: CoroState, reductions: int, source: string? }",
+        .signature = "{ id: i64, name: string?, state: CoroState, reductions: i64, source: string? }",
         .summary = "Typed diagnostic snapshot for one coroutine",
     },
     {
         .name = "CoroInfo.id",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -57,7 +57,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "CoroInfo.reductions",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -117,32 +117,32 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "CoroStats",
-        .signature = "{ active: int, blocked: int, ready: int, total: int, created: int }",
+        .signature = "{ active: i64, blocked: i64, ready: i64, total: i64, created: i64 }",
         .summary = "Typed aggregate counters for the coroutine scheduler",
     },
     {
         .name = "CoroStats.active",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "CoroStats.blocked",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "CoroStats.created",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "CoroStats.ready",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "CoroStats.total",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -162,12 +162,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "dump",
-        .signature = "(limit?: int): ()",
+        .signature = "(limit?: i64): ()",
         .summary = "Dump coroutine state",
     },
     {
         .name = "groupBy",
-        .signature = "(field: CoroGroupKey): Map<string, int>",
+        .signature = "(field: CoroGroupKey): Map<string, i64>",
         .summary = "Group coroutines by field",
     },
     {
@@ -177,7 +177,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "list",
-        .signature = "(limit?: int, state?: CoroState): Array<CoroInfo>",
+        .signature = "(limit?: i64, state?: CoroState): Array<CoroInfo>",
         .summary = "List coroutines",
     },
     {
@@ -197,7 +197,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "stalled",
-        .signature = "(timeout_ms?: int): Array<CoroInfo>",
+        .signature = "(timeout_ms?: i64): Array<CoroInfo>",
         .summary = "Detect stalled coroutines",
     },
     {
@@ -207,7 +207,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_Coro[] = {
     },
     {
         .name = "top",
-        .signature = "(n: int, metric?: CoroMetric): Array<CoroInfo>",
+        .signature = "(n: i64, metric?: CoroMetric): Array<CoroInfo>",
         .summary = "Top N coroutines by metric",
     },
     {
@@ -278,12 +278,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
     },
     {
         .name = "decode",
-        .signature = "(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<byte>",
+        .signature = "(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>",
         .summary = "",
     },
     {
         .name = "encode",
-        .signature = "(data: Slice<byte>, options: Base64EncodeOptions = Base64EncodeOptions()): string",
+        .signature = "(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string",
         .summary = "",
     },
     {
@@ -296,7 +296,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "ClusterConfig",
-        .signature = "{ name: string, port: int, secret: string?, tls: ClusterTlsOptions?, }",
+        .signature = "{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, }",
         .summary = "",
     },
     {
@@ -306,7 +306,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterConfig.port",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
@@ -356,32 +356,32 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterInfo",
-        .signature = "{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }",
+        .signature = "{ self: string, port: i64, running: bool, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: ClusterTlsStatus }",
         .summary = "Typed diagnostic snapshot for the local cluster runtime",
     },
     {
         .name = "ClusterInfo.deadNodes",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterInfo.heartbeatIntervalMs",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterInfo.heartbeatTimeoutMs",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterInfo.listeners",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterInfo.maxMissedHeartbeats",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -391,7 +391,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterInfo.port",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -411,27 +411,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterNodeInfo",
-        .signature = "{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }",
+        .signature = "{ name: string, host: string, port: i64, state: ClusterNodeState, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }",
         .summary = "Typed diagnostic snapshot for one remote cluster node",
     },
     {
         .name = "ClusterNodeInfo.bytesReceived",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.bytesSent",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.framesReceived",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.framesSent",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -441,7 +441,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterNodeInfo.missedHeartbeats",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -451,32 +451,32 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterNodeInfo.outQueueBytes",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.outQueueFrames",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.phi",
-        .signature = "const float",
+        .signature = "const f64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.port",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.rttMs",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "ClusterNodeInfo.sendErrors",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -486,7 +486,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "ClusterNodeInfo.slowConsumerEvents",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -576,12 +576,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "HANDSHAKE_VERSION",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "NODE_NAME_MAX",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -591,7 +591,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "NodeAddress.constructor",
-        .signature = "(host: string, port: int): ()",
+        .signature = "(host: string, port: i64): ()",
         .summary = "",
     },
     {
@@ -601,17 +601,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "NodeAddress.port",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "TOPIC_DEFAULT_HOP_LIMIT",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "TOPIC_PATTERN_MAX",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -631,7 +631,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "listen",
-        .signature = "(pattern: string, capacity: int = 1024): Channel<Buffer>?",
+        .signature = "(pattern: string, capacity: i64 = 1024): Channel<Buffer>?",
         .summary = "",
     },
     {
@@ -707,17 +707,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_codegen[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     {
         .name = "adler32",
-        .signature = "(data: string): int",
+        .signature = "(data: string): i64",
         .summary = "Compute Adler-32 checksum",
     },
     {
         .name = "crc32",
-        .signature = "(data: string): int",
+        .signature = "(data: string): i64",
         .summary = "Compute CRC-32 checksum",
     },
     {
         .name = "deflate",
-        .signature = "(data: string, level?: int): string?",
+        .signature = "(data: string, level?: i64): string?",
         .summary = "Deflate compress",
     },
     {
@@ -727,7 +727,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     },
     {
         .name = "gzip",
-        .signature = "(data: string, level?: int): string?",
+        .signature = "(data: string, level?: i64): string?",
         .summary = "Gzip compress",
     },
     {
@@ -747,7 +747,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_compress[] = {
     },
     {
         .name = "zlibCompress",
-        .signature = "(data: string, level?: int): string?",
+        .signature = "(data: string, level?: i64): string?",
         .summary = "Zlib compress",
     },
     {
@@ -780,7 +780,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_crypto[] = {
     },
     {
         .name = "randomBytes",
-        .signature = "(n: int): string",
+        .signature = "(n: i64): string",
         .summary = "Generate random bytes",
     },
     {
@@ -818,17 +818,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvDiagnostic.byteOffset",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "CsvDiagnostic.column",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "CsvDiagnostic.constructor",
-        .signature = "(kind: CsvErrorKind, byteOffset: int, line: int, record: int, column: int, message: string): ()",
+        .signature = "(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()",
         .summary = "",
     },
     {
@@ -838,7 +838,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvDiagnostic.line",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -848,7 +848,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvDiagnostic.record",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -873,7 +873,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvParseOptions",
-        .signature = "{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: int, maxRecords: int, maxInputBytes: int, maxFieldBytes: int, maxColumns: int }",
+        .signature = "{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }",
         .summary = "",
     },
     {
@@ -898,22 +898,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvParseOptions.maxColumns",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
         .name = "CsvParseOptions.maxFieldBytes",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
         .name = "CsvParseOptions.maxInputBytes",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
         .name = "CsvParseOptions.maxRecords",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
@@ -928,7 +928,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
     },
     {
         .name = "CsvParseOptions.skipRecords",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
@@ -1031,27 +1031,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     },
     {
         .name = "DateTime.add",
-        .signature = "(amount: int, unit: string): DateTime",
+        .signature = "(amount: i64, unit: string): DateTime",
         .summary = "",
     },
     {
         .name = "DateTime.constructor",
-        .signature = "(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true): ()",
+        .signature = "(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()",
         .summary = "",
     },
     {
         .name = "DateTime.day",
-        .signature = ": int { fn() { return this._day } }",
+        .signature = ": i64 { fn() { return this._day } }",
         .summary = "",
     },
     {
         .name = "DateTime.daysInMonth",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
         .name = "DateTime.diff",
-        .signature = "(other: DateTime, unit: string = \"seconds\"): int",
+        .signature = "(other: DateTime, unit: string = \"seconds\"): i64",
         .summary = "",
     },
     {
@@ -1066,7 +1066,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     },
     {
         .name = "DateTime.hour",
-        .signature = ": int { fn() { return this._hour } }",
+        .signature = ": i64 { fn() { return this._hour } }",
         .summary = "",
     },
     {
@@ -1091,27 +1091,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     },
     {
         .name = "DateTime.millisecond",
-        .signature = ": int { fn() { return this._millisecond } }",
+        .signature = ": i64 { fn() { return this._millisecond } }",
         .summary = "",
     },
     {
         .name = "DateTime.minute",
-        .signature = ": int { fn() { return this._minute } }",
+        .signature = ": i64 { fn() { return this._minute } }",
         .summary = "",
     },
     {
         .name = "DateTime.month",
-        .signature = ": int { fn() { return this._month } }",
+        .signature = ": i64 { fn() { return this._month } }",
         .summary = "",
     },
     {
         .name = "DateTime.second",
-        .signature = ": int { fn() { return this._second } }",
+        .signature = ": i64 { fn() { return this._second } }",
         .summary = "",
     },
     {
         .name = "DateTime.timestamp",
-        .signature = ": int { fn() { return this._timestamp } }",
+        .signature = ": i64 { fn() { return this._timestamp } }",
         .summary = "",
     },
     {
@@ -1136,42 +1136,42 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     },
     {
         .name = "DateTime.tzOffset",
-        .signature = ": int { fn() { return this._tzOffset } }",
+        .signature = ": i64 { fn() { return this._tzOffset } }",
         .summary = "",
     },
     {
         .name = "DateTime.weekday",
-        .signature = ": int { fn() { return this._weekday } }",
+        .signature = ": i64 { fn() { return this._weekday } }",
         .summary = "",
     },
     {
         .name = "DateTime.year",
-        .signature = ": int { fn() { return this._year } }",
+        .signature = ": i64 { fn() { return this._year } }",
         .summary = "",
     },
     {
         .name = "DateTime.yearday",
-        .signature = ": int { fn() { return this._yearday } }",
+        .signature = ": i64 { fn() { return this._yearday } }",
         .summary = "",
     },
     {
         .name = "create",
-        .signature = "(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime",
+        .signature = "(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime",
         .summary = "",
     },
     {
         .name = "createUTC",
-        .signature = "(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime",
+        .signature = "(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime",
         .summary = "",
     },
     {
         .name = "fromTimestamp",
-        .signature = "(ts: int): DateTime",
+        .signature = "(ts: i64): DateTime",
         .summary = "",
     },
     {
         .name = "fromTimestampMs",
-        .signature = "(ts: int): DateTime",
+        .signature = "(ts: i64): DateTime",
         .summary = "",
     },
     {
@@ -1181,7 +1181,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     },
     {
         .name = "offset",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -1234,12 +1234,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
     {
         .name = "hexDecode",
-        .signature = "(hex: string): Array<byte>",
+        .signature = "(hex: string): Array<u8>",
         .summary = "",
     },
     {
         .name = "hexEncode",
-        .signature = "(data: Slice<byte>): string",
+        .signature = "(data: Slice<u8>): string",
         .summary = "",
     },
     {
@@ -1249,17 +1249,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_encoding[] = {
     },
     {
         .name = "utf16Decode",
-        .signature = "(data: Slice<byte>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string",
+        .signature = "(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string",
         .summary = "",
     },
     {
         .name = "utf16Encode",
-        .signature = "(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<byte>",
+        .signature = "(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<u8>",
         .summary = "",
     },
     {
         .name = "utf8Valid",
-        .signature = "(data: Slice<byte>): bool",
+        .signature = "(data: Slice<u8>): bool",
         .summary = "",
     },
 };
@@ -1277,12 +1277,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "ChunkedBody.constructor",
-        .signature = "(body: string, trailers: Headers, consumedBytes: int): ()",
+        .signature = "(body: string, trailers: Headers, consumedBytes: i64): ()",
         .summary = "",
     },
     {
         .name = "ChunkedBody.consumedBytes",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1307,7 +1307,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Cookie.constructor",
-        .signature = "(name: string, value: string, domain: string, path: string, expires: int = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()",
+        .signature = "(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()",
         .summary = "",
     },
     {
@@ -1317,7 +1317,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Cookie.expires",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1332,12 +1332,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Cookie.isExpired",
-        .signature = "(nowSeconds: int = 0): bool",
+        .signature = "(nowSeconds: i64 = 0): bool",
         .summary = "",
     },
     {
         .name = "Cookie.matches",
-        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): bool",
+        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool",
         .summary = "",
     },
     {
@@ -1377,17 +1377,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "CookieJar.add",
-        .signature = "(cookie: Cookie, nowSeconds: int = 0): ()",
+        .signature = "(cookie: Cookie, nowSeconds: i64 = 0): ()",
         .summary = "",
     },
     {
         .name = "CookieJar.addFromResponse",
-        .signature = "(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: int = 0): ()",
+        .signature = "(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0): ()",
         .summary = "",
     },
     {
         .name = "CookieJar.cleanup",
-        .signature = "(nowSeconds: int = 0): ()",
+        .signature = "(nowSeconds: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -1402,7 +1402,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "CookieJar.constructor",
-        .signature = "(maxCookies: int = 300): ()",
+        .signature = "(maxCookies: i64 = 300): ()",
         .summary = "",
     },
     {
@@ -1412,17 +1412,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "CookieJar.count",
-        .signature = ": int { fn() { return len(this.cookies) } }",
+        .signature = ": i64 { fn() { return len(this.cookies) } }",
         .summary = "",
     },
     {
         .name = "CookieJar.getHeader",
-        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): string?",
+        .signature = "(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?",
         .summary = "",
     },
     {
         .name = "CookieJar.maxCookies",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1452,7 +1452,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "FormData.constructor",
-        .signature = "(maxTotalSize: int, maxFileSize: int): ()",
+        .signature = "(maxTotalSize: i64, maxFileSize: i64): ()",
         .summary = "",
     },
     {
@@ -1462,17 +1462,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "FormData.maxFileSize",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FormData.maxTotalSize",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FormData.totalSize",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1582,17 +1582,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpRequest.body",
-        .signature = ": Array<byte>",
+        .signature = ": Array<u8>",
         .summary = "",
     },
     {
         .name = "HttpRequest.constructor",
-        .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<byte>, contentLength: int, params: Map<string, string>): ()",
+        .signature = "(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()",
         .summary = "",
     },
     {
         .name = "HttpRequest.contentLength",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1647,12 +1647,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpRequestOptions",
-        .signature = "{ url: string, method: HttpMethod?, headers: Headers?, body: Array<byte>?, followRedirects: bool?, maxRedirects: int?, timeoutMs: int?, version: HttpVersion? }",
+        .signature = "{ url: string, method: HttpMethod?, headers: Headers?, body: Array<u8>?, followRedirects: bool?, maxRedirects: i64?, timeoutMs: i64?, version: HttpVersion? }",
         .summary = "",
     },
     {
         .name = "HttpRequestOptions.body",
-        .signature = "Array<byte>?",
+        .signature = "Array<u8>?",
         .summary = "Type alias field",
     },
     {
@@ -1667,7 +1667,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpRequestOptions.maxRedirects",
-        .signature = "int?",
+        .signature = "i64?",
         .summary = "Type alias field",
     },
     {
@@ -1677,7 +1677,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpRequestOptions.timeoutMs",
-        .signature = "int?",
+        .signature = "i64?",
         .summary = "Type alias field",
     },
     {
@@ -1697,12 +1697,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.body",
-        .signature = ": Array<byte>",
+        .signature = ": Array<u8>",
         .summary = "",
     },
     {
         .name = "HttpResponse.constructor",
-        .signature = "(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()",
+        .signature = "(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()",
         .summary = "",
     },
     {
@@ -1742,7 +1742,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "HttpResponse.status",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1817,12 +1817,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RequestHead.constructor",
-        .signature = "(method: string, target: string, version: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()",
+        .signature = "(method: string, target: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
         .name = "RequestHead.contentLength",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1837,7 +1837,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RequestHead.headerBytes",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1877,12 +1877,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "RequestMessage.constructor",
-        .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: int): ()",
+        .signature = "(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()",
         .summary = "",
     },
     {
         .name = "RequestMessage.consumedBytes",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1922,12 +1922,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "ResponseHead.constructor",
-        .signature = "(version: string, status: int, reason: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()",
+        .signature = "(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()",
         .summary = "",
     },
     {
         .name = "ResponseHead.contentLength",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1942,7 +1942,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "ResponseHead.headerBytes",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1962,7 +1962,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "ResponseHead.status",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -1982,12 +1982,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "ResponseMessage.constructor",
-        .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: int): ()",
+        .signature = "(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()",
         .summary = "",
     },
     {
         .name = "ResponseMessage.consumedBytes",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -2067,7 +2067,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "Server.listen",
-        .signature = "(port: int, running: Atomic<bool>): bool",
+        .signature = "(port: i64, running: Atomic<bool>): bool",
         .summary = "",
     },
     {
@@ -2082,17 +2082,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "cookieJar",
-        .signature = "(maxCookies: int = 300): CookieJar",
+        .signature = "(maxCookies: i64 = 300): CookieJar",
         .summary = "",
     },
     {
         .name = "decodeChunkedBody",
-        .signature = "(raw: string, maxBodyBytes: int = 67108864): string?",
+        .signature = "(raw: string, maxBodyBytes: i64 = 67108864): string?",
         .summary = "",
     },
     {
         .name = "formData",
-        .signature = "(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData",
+        .signature = "(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData",
         .summary = "",
     },
     {
@@ -2102,22 +2102,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "isRedirectStatus",
-        .signature = "(status: int): bool",
+        .signature = "(status: i64): bool",
         .summary = "",
     },
     {
         .name = "json",
-        .signature = "(value: T, status: int = 200): HttpResponse",
+        .signature = "(value: T, status: i64 = 200): HttpResponse",
         .summary = "",
     },
     {
         .name = "jsonResponse",
-        .signature = "(value: T, status: int = 200, headers: Headers? = null): HttpResponse",
+        .signature = "(value: T, status: i64 = 200, headers: Headers? = null): HttpResponse",
         .summary = "",
     },
     {
         .name = "parseChunkedBody",
-        .signature = "(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?",
+        .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxTrailerHeaders: i64 = 50): ChunkedBody?",
         .summary = "",
     },
     {
@@ -2127,37 +2127,37 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "parseRequestHead",
-        .signature = "(raw: string, maxHeaders: int = 100): RequestHead?",
+        .signature = "(raw: string, maxHeaders: i64 = 100): RequestHead?",
         .summary = "",
     },
     {
         .name = "parseRequestText",
-        .signature = "(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?",
+        .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): RequestMessage?",
         .summary = "",
     },
     {
         .name = "parseResponseHead",
-        .signature = "(raw: string, maxHeaders: int = 100): ResponseHead?",
+        .signature = "(raw: string, maxHeaders: i64 = 100): ResponseHead?",
         .summary = "",
     },
     {
         .name = "parseResponseText",
-        .signature = "(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): ResponseMessage?",
+        .signature = "(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): ResponseMessage?",
         .summary = "",
     },
     {
         .name = "parseSetCookie",
-        .signature = "(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?",
+        .signature = "(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: i64 = 0): Cookie?",
         .summary = "",
     },
     {
         .name = "post",
-        .signature = "(url: string, contentType: string, body: Array<byte>, authorization: string = \"\"): HttpResponse",
+        .signature = "(url: string, contentType: string, body: Array<u8>, authorization: string = \"\"): HttpResponse",
         .summary = "",
     },
     {
         .name = "redirectDecision",
-        .signature = "(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?",
+        .signature = "(status: i64, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?",
         .summary = "",
     },
     {
@@ -2177,7 +2177,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "responseText",
-        .signature = "(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
+        .signature = "(status: i64, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?",
         .summary = "",
     },
     {
@@ -2187,7 +2187,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     },
     {
         .name = "textResponse",
-        .signature = "(body: string, status: int = 200, headers: Headers? = null): HttpResponse",
+        .signature = "(body: string, status: i64 = 200, headers: Headers? = null): HttpResponse",
         .summary = "",
     },
     {
@@ -2205,7 +2205,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_http2[] = {
     {
         .name = "request",
-        .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?",
+        .signature = "(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?",
         .summary = "Execute one typed HTTP/2 request",
     },
     {
@@ -2228,7 +2228,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "BufReader.open",
-        .signature = "(path: Path, chunkSize: int = 131072): BufReader?",
+        .signature = "(path: Path, chunkSize: i64 = 131072): BufReader?",
         .summary = "",
     },
     {
@@ -2243,7 +2243,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "BufWriter.constructor",
-        .signature = "(path: Path, capacity: int = 131072): ()",
+        .signature = "(path: Path, capacity: i64 = 131072): ()",
         .summary = "",
     },
     {
@@ -2258,22 +2258,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "BufWriter.size",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
         .name = "BufWriter.write",
-        .signature = "(data: Slice<byte>): int",
+        .signature = "(data: Slice<u8>): i64",
         .summary = "",
     },
     {
         .name = "BufWriter.writeBytes",
-        .signature = "(data: Array<byte>): int",
+        .signature = "(data: Array<u8>): i64",
         .summary = "",
     },
     {
         .name = "BufWriter.writeString",
-        .signature = "(data: string): int",
+        .signature = "(data: string): i64",
         .summary = "",
     },
     {
@@ -2293,7 +2293,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "File.read",
-        .signature = "(maxBytes: int = 131072): Array<byte>?",
+        .signature = "(maxBytes: i64 = 131072): Array<u8>?",
         .summary = "",
     },
     {
@@ -2308,22 +2308,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "FileStat.atime",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FileStat.constructor",
-        .signature = "(size: int, mode: int, mtime: int, atime: int, ctime: int, uid: int, gid: int, isFile: bool, isDir: bool, isSymlink: bool): ()",
+        .signature = "(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()",
         .summary = "",
     },
     {
         .name = "FileStat.ctime",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FileStat.gid",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -2343,22 +2343,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "FileStat.mode",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FileStat.mtime",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FileStat.size",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "FileStat.uid",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -2393,7 +2393,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "chmod",
-        .signature = "(path: Path, mode: int): bool",
+        .signature = "(path: Path, mode: i64): bool",
         .summary = "",
     },
     {
@@ -2413,7 +2413,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "fileSize",
-        .signature = "(path: Path): int",
+        .signature = "(path: Path): i64",
         .summary = "",
     },
     {
@@ -2463,7 +2463,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readFileBytes",
-        .signature = "(path: Path): Array<byte>?",
+        .signature = "(path: Path): Array<u8>?",
         .summary = "",
     },
     {
@@ -2478,7 +2478,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "readStdinBytes",
-        .signature = "(): Array<byte>?",
+        .signature = "(): Array<u8>?",
         .summary = "",
     },
     {
@@ -2538,7 +2538,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
     },
     {
         .name = "writeFileBytes",
-        .signature = "(path: Path, data: Array<byte>): bool",
+        .signature = "(path: Path, data: Array<u8>): bool",
         .summary = "",
     },
     {
@@ -2676,7 +2676,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_json[] = {
     },
     {
         .name = "JSON.stringify",
-        .signature = "(value: T, indent?: int): string",
+        .signature = "(value: T, indent?: i64): string",
         .summary = "",
     },
     {
@@ -2832,257 +2832,257 @@ static const XmcpGeneratedStdlibSymbol _symbols_log[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
     {
         .name = "E",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Euler's number",
     },
     {
         .name = "EPSILON",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Smallest representable difference above 1.0",
     },
     {
         .name = "INF",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Positive infinity",
     },
     {
         .name = "LN10",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Natural logarithm of 10",
     },
     {
         .name = "LN2",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Natural logarithm of 2",
     },
     {
         .name = "LOG10E",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Base-10 logarithm of e",
     },
     {
         .name = "LOG2E",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Base-2 logarithm of e",
     },
     {
-        .name = "MAX_FLOAT",
-        .signature = ": float",
+        .name = "MAX_F64",
+        .signature = ": f64",
         .summary = "Largest finite IEEE-754 double",
     },
     {
-        .name = "MAX_INT",
-        .signature = ": int",
+        .name = "MAX_I64",
+        .signature = ": i64",
         .summary = "Largest signed 64-bit integer",
     },
     {
-        .name = "MIN_INT",
-        .signature = ": int",
+        .name = "MIN_I64",
+        .signature = ": i64",
         .summary = "Smallest signed 64-bit integer",
     },
     {
         .name = "NAN",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Quiet NaN value",
     },
     {
         .name = "PI",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Ratio of a circle's circumference to its diameter",
     },
     {
         .name = "SQRT2",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Square root of 2",
     },
     {
         .name = "TAU",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "Full-circle radians, 2 * PI",
     },
     {
         .name = "abs",
-        .signature = "(x: float): float",
-        .summary = "Absolute value (preserves int)",
+        .signature = "(x: f64): f64",
+        .summary = "Absolute value",
     },
     {
         .name = "acos",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Arc cosine",
     },
     {
         .name = "asin",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Arc sine",
     },
     {
         .name = "atan",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Arc tangent",
     },
     {
         .name = "atan2",
-        .signature = "(y: float, x: float): float",
+        .signature = "(y: f64, x: f64): f64",
         .summary = "Arc tangent of y/x",
     },
     {
         .name = "cbrt",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Cube root",
     },
     {
         .name = "ceil",
-        .signature = "(x: float): int",
+        .signature = "(x: f64): i64",
         .summary = "Ceiling to integer",
     },
     {
         .name = "clamp",
-        .signature = "(x: float, min: float, max: float): float",
-        .summary = "Clamp (preserves int)",
+        .signature = "(x: f64, min: f64, max: f64): f64",
+        .summary = "Clamp to a closed interval",
     },
     {
         .name = "cos",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Cosine",
     },
     {
         .name = "cosh",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Hyperbolic cosine",
     },
     {
         .name = "degToRad",
-        .signature = "(deg: float): float",
+        .signature = "(deg: f64): f64",
         .summary = "Degrees to radians",
     },
     {
         .name = "exp",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Exponential e^x",
     },
     {
         .name = "expm1",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "exp(x)-1 accurate for small x",
     },
     {
         .name = "floor",
-        .signature = "(x: float): int",
+        .signature = "(x: f64): i64",
         .summary = "Floor to integer",
     },
     {
         .name = "fmod",
-        .signature = "(x: float, y: float): float",
+        .signature = "(x: f64, y: f64): f64",
         .summary = "Floating-point remainder",
     },
     {
         .name = "hypot",
-        .signature = "(x: float, y: float): float",
+        .signature = "(x: f64, y: f64): f64",
         .summary = "Hypotenuse sqrt(x*x+y*y)",
     },
     {
         .name = "isFinite",
-        .signature = "(x: float): bool",
+        .signature = "(x: f64): bool",
         .summary = "Check if finite",
     },
     {
         .name = "isNaN",
-        .signature = "(x: float): bool",
+        .signature = "(x: f64): bool",
         .summary = "Check if NaN",
     },
     {
         .name = "lerp",
-        .signature = "(a: float, b: float, t: float): float",
+        .signature = "(a: f64, b: f64, t: f64): f64",
         .summary = "Linear interpolation",
     },
     {
         .name = "log",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Natural logarithm",
     },
     {
         .name = "log10",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Base-10 logarithm",
     },
     {
         .name = "log1p",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "log(1+x) accurate for small x",
     },
     {
         .name = "log2",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Base-2 logarithm",
     },
     {
         .name = "max",
-        .signature = "(...args: float): float",
-        .summary = "Maximum (preserves int)",
+        .signature = "(...args: f64): f64",
+        .summary = "Maximum value",
     },
     {
         .name = "min",
-        .signature = "(...args: float): float",
-        .summary = "Minimum (preserves int)",
+        .signature = "(...args: f64): f64",
+        .summary = "Minimum value",
     },
     {
         .name = "pow",
-        .signature = "(base: float, exp: float): float",
+        .signature = "(base: f64, exp: f64): f64",
         .summary = "Power",
     },
     {
         .name = "radToDeg",
-        .signature = "(rad: float): float",
+        .signature = "(rad: f64): f64",
         .summary = "Radians to degrees",
     },
     {
         .name = "random",
-        .signature = "(): float",
-        .summary = "Random float in [0, 1)",
+        .signature = "(): f64",
+        .summary = "Random f64 in [0, 1)",
     },
     {
         .name = "randomInt",
-        .signature = "(min: int, max: int): int",
+        .signature = "(min: i64, max: i64): i64",
         .summary = "Random integer in [min, max]",
     },
     {
         .name = "round",
-        .signature = "(x: float): int",
+        .signature = "(x: f64): i64",
         .summary = "Round to nearest integer",
     },
     {
         .name = "sign",
-        .signature = "(x: float): int",
+        .signature = "(x: f64): i64",
         .summary = "Sign of value (-1, 0, 1)",
     },
     {
         .name = "sin",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Sine",
     },
     {
         .name = "sinh",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Hyperbolic sine",
     },
     {
         .name = "sqrt",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Square root",
     },
     {
         .name = "tan",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Tangent",
     },
     {
         .name = "tanh",
-        .signature = "(x: float): float",
+        .signature = "(x: f64): f64",
         .summary = "Hyperbolic tangent",
     },
     {
         .name = "trunc",
-        .signature = "(x: float): int",
+        .signature = "(x: f64): i64",
         .summary = "Truncate toward zero",
     },
 };
@@ -3090,47 +3090,47 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     {
         .name = "PROT_EXEC",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "Executable page protection bit for mem.pageAlloc/pageProtect",
     },
     {
         .name = "PROT_NONE",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "No access protection for mem.pageAlloc/pageProtect",
     },
     {
         .name = "PROT_READ",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "Readable page protection bit for mem.pageAlloc/pageProtect",
     },
     {
         .name = "PROT_WRITE",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "Writable page protection bit for mem.pageAlloc/pageProtect",
     },
     {
         .name = "addr",
-        .signature = "(ptr: Ptr<byte>): int",
+        .signature = "(ptr: Ptr<u8>): i64",
         .summary = "Numeric address of any Ptr<T> or MutPtr<T>",
     },
     {
         .name = "alignOf",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Compile-time alignment in bytes of a statically laid out type T",
     },
     {
         .name = "alloc",
-        .signature = "(n: int): Buffer",
+        .signature = "(n: i64): Buffer",
         .summary = "Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped",
     },
     {
         .name = "allocAligned",
-        .signature = "(n: int, align: int): Buffer",
+        .signature = "(n: i64, align: i64): Buffer",
         .summary = "Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*))",
     },
     {
         .name = "allocZeroed",
-        .signature = "(n: int): Buffer",
+        .signature = "(n: i64): Buffer",
         .summary = "Allocate n zero-initialized bytes as a managed Buffer",
     },
     {
@@ -3140,117 +3140,117 @@ static const XmcpGeneratedStdlibSymbol _symbols_mem[] = {
     },
     {
         .name = "cacheFlush",
-        .signature = "(ptr: Ptr<byte>, n: int): ()",
+        .signature = "(ptr: Ptr<u8>, n: i64): ()",
         .summary = "Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
         .name = "cacheInvalidate",
-        .signature = "(ptr: Ptr<byte>, n: int): ()",
+        .signature = "(ptr: Ptr<u8>, n: i64): ()",
         .summary = "Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available",
     },
     {
         .name = "cacheLineSize",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "CPU cache line size in bytes",
     },
     {
         .name = "compare",
-        .signature = "(a: Ptr<byte>, b: Ptr<byte>, n: int): int",
+        .signature = "(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64",
         .summary = "Compare n bytes at a and b (memcmp: <0, 0, >0)",
     },
     {
         .name = "copy",
-        .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
+        .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
         .summary = "Copy n bytes from src to dst (non-overlapping; memcpy)",
     },
     {
         .name = "fence",
-        .signature = "(ordering: int): ()",
+        .signature = "(ordering: i64): ()",
         .summary = "Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst)",
     },
     {
         .name = "load",
-        .signature = "(ptr: Ptr<byte>, offset?: int, endian?: Endian): int",
+        .signature = "(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64",
         .summary = "Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset",
     },
     {
         .name = "move",
-        .signature = "(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()",
+        .signature = "(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()",
         .summary = "Copy n bytes from src to dst (may overlap; memmove)",
     },
     {
         .name = "mutPtr",
-        .signature = "(addr: int): MutPtr<byte>",
+        .signature = "(addr: i64): MutPtr<u8>",
         .summary = "Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "nontemporalStore",
-        .signature = "(ptr: MutPtr<byte>, v: int, size: int): ()",
+        .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
         .summary = "Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available",
     },
     {
         .name = "offsetOf",
-        .signature = "(field: string): int",
+        .signature = "(field: string): i64",
         .summary = "Compile-time byte offset of a field in a fixed-layout struct T",
     },
     {
         .name = "pageAlloc",
-        .signature = "(bytes: int, prot?: int): MutPtr<byte>",
+        .signature = "(bytes: i64, prot?: i64): MutPtr<u8>",
         .summary = "Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree",
     },
     {
         .name = "pageFree",
-        .signature = "(ptr: MutPtr<byte>, bytes: int): bool",
+        .signature = "(ptr: MutPtr<u8>, bytes: i64): bool",
         .summary = "Release anonymous pages from mem.pageAlloc; returns false on OS failure",
     },
     {
         .name = "pageProtect",
-        .signature = "(ptr: MutPtr<byte>, bytes: int, prot: int): bool",
+        .signature = "(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool",
         .summary = "Change anonymous page protection bits; returns false on OS failure",
     },
     {
         .name = "prefetch",
-        .signature = "(ptr: Ptr<byte>, rw: int): ()",
+        .signature = "(ptr: Ptr<u8>, rw: i64): ()",
         .summary = "Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch",
     },
     {
         .name = "ptr",
-        .signature = "(addr: int): Ptr<byte>",
+        .signature = "(addr: i64): Ptr<u8>",
         .summary = "Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe",
     },
     {
         .name = "set",
-        .signature = "(dst: MutPtr<byte>, byte: int, n: int): ()",
+        .signature = "(dst: MutPtr<u8>, u8: i64, n: i64): ()",
         .summary = "Fill n bytes at dst with byte (memset)",
     },
     {
         .name = "sizeOf",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Compile-time size in bytes of a statically laid out type T",
     },
     {
         .name = "slice",
-        .signature = "(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>",
+        .signature = "(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>",
         .summary = "Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked",
     },
     {
         .name = "store",
-        .signature = "(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()",
+        .signature = "(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()",
         .summary = "Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset",
     },
     {
         .name = "volatileLoad",
-        .signature = "(ptr: Ptr<byte>, size: int): int",
+        .signature = "(ptr: Ptr<u8>, size: i64): i64",
         .summary = "Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
     {
         .name = "volatileStore",
-        .signature = "(ptr: MutPtr<byte>, v: int, size: int): ()",
+        .signature = "(ptr: MutPtr<u8>, v: i64, size: i64): ()",
         .summary = "Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order)",
     },
     {
         .name = "withSliceMut",
-        .signature = "(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any",
+        .signature = "(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any",
         .summary = "Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked",
     },
 };
@@ -3263,17 +3263,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "CopyBidirectionalResult.aToB",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "CopyBidirectionalResult.bToA",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "CopyBidirectionalResult.constructor",
-        .signature = "(aToB: int, bToA: int): ()",
+        .signature = "(aToB: i64, bToA: i64): ()",
         .summary = "",
     },
     {
@@ -3283,12 +3283,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "DialOptions.constructor",
-        .signature = "(timeoutMs: int = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()",
+        .signature = "(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()",
         .summary = "",
     },
     {
         .name = "DialOptions.timeoutMs",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -3303,7 +3303,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "Endpoint.constructor",
-        .signature = "(host: string, port: int): ()",
+        .signature = "(host: string, port: i64): ()",
         .summary = "",
     },
     {
@@ -3313,7 +3313,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "Endpoint.port",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -3398,7 +3398,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "UdpFrom.constructor",
-        .signature = "(n: int, host: string, port: int): ()",
+        .signature = "(n: i64, host: string, port: i64): ()",
         .summary = "",
     },
     {
@@ -3408,12 +3408,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "UdpFrom.n",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "UdpFrom.port",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -3428,7 +3428,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "copy",
-        .signature = "(src: NetConn, dst: NetConn, bufferSize: int = _DEFAULT_COPY_BUFFER): int",
+        .signature = "(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER): i64",
         .summary = "",
     },
     {
@@ -3438,7 +3438,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "dial",
-        .signature = "(host: string, port: int, options: DialOptions? = null): NetConn",
+        .signature = "(host: string, port: i64, options: DialOptions? = null): NetConn",
         .summary = "",
     },
     {
@@ -3448,7 +3448,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "fd",
-        .signature = "(handle: NetConn | NetListener): int",
+        .signature = "(handle: NetConn | NetListener): i64",
         .summary = "",
     },
     {
@@ -3458,7 +3458,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "lastErrno",
-        .signature = "(handle: NetConn | NetListener): int",
+        .signature = "(handle: NetConn | NetListener): i64",
         .summary = "",
     },
     {
@@ -3468,7 +3468,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "listen",
-        .signature = "(port: int, backlog: int = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener",
+        .signature = "(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener",
         .summary = "",
     },
     {
@@ -3478,17 +3478,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "readBytes",
-        .signature = "(conn: NetConn, maxBytes: int = 4096): Array<byte>?",
+        .signature = "(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?",
         .summary = "",
     },
     {
         .name = "readInto",
-        .signature = "(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576): int",
+        .signature = "(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64",
         .summary = "",
     },
     {
         .name = "recvFrom",
-        .signature = "(handle: NetConn, buffer: ref Array<byte>, timeoutMs: int = -1): UdpFrom?",
+        .signature = "(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?",
         .summary = "",
     },
     {
@@ -3498,27 +3498,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "sendTo",
-        .signature = "(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs: int = _DEFAULT_TIMEOUT_MS): int",
+        .signature = "(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): i64",
         .summary = "",
     },
     {
         .name = "setAcceptDeadline",
-        .signature = "(listener: NetListener, deadline: int): bool",
+        .signature = "(listener: NetListener, deadline: i64): bool",
         .summary = "",
     },
     {
         .name = "setDeadline",
-        .signature = "(conn: NetConn, deadline: int): bool",
+        .signature = "(conn: NetConn, deadline: i64): bool",
         .summary = "",
     },
     {
         .name = "setReadDeadline",
-        .signature = "(conn: NetConn, deadline: int): bool",
+        .signature = "(conn: NetConn, deadline: i64): bool",
         .summary = "",
     },
     {
         .name = "setWriteDeadline",
-        .signature = "(conn: NetConn, deadline: int): bool",
+        .signature = "(conn: NetConn, deadline: i64): bool",
         .summary = "",
     },
     {
@@ -3538,17 +3538,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "udpBind",
-        .signature = "(port: int, address: string = \"\"): NetConn",
+        .signature = "(port: i64, address: string = \"\"): NetConn",
         .summary = "",
     },
     {
         .name = "upgradeTLS",
-        .signature = "(conn: NetConn, hostname: string, timeoutMs: int = _DEFAULT_TIMEOUT_MS): ()",
+        .signature = "(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()",
         .summary = "",
     },
     {
         .name = "writeBytes",
-        .signature = "(conn: NetConn, data: Array<byte>): int",
+        .signature = "(conn: NetConn, data: Array<u8>): i64",
         .summary = "",
     },
 };
@@ -3561,12 +3561,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "ExecResult.constructor",
-        .signature = "(stdout: string, stderr: string, exitCode: int): ()",
+        .signature = "(stdout: string, stderr: string, exitCode: i64): ()",
         .summary = "",
     },
     {
         .name = "ExecResult.exitCode",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -3586,12 +3586,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "clock",
-        .signature = "(): float",
+        .signature = "(): f64",
         .summary = "",
     },
     {
         .name = "cpuCount",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -3611,12 +3611,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "exit",
-        .signature = "(code: int = 0): ()",
+        .signature = "(code: i64 = 0): ()",
         .summary = "",
     },
     {
         .name = "freeMemory",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -3631,12 +3631,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "getpid",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
         .name = "gid",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -3651,12 +3651,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "kill",
-        .signature = "(pid: int, signal: int = 15): bool",
+        .signature = "(pid: i64, signal: i64 = 15): bool",
         .summary = "",
     },
     {
         .name = "loadavg",
-        .signature = "(): Array<float>",
+        .signature = "(): Array<f64>",
         .summary = "",
     },
     {
@@ -3666,7 +3666,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "ppid",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -3681,7 +3681,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "sleep",
-        .signature = "(ms: int): ()",
+        .signature = "(ms: i64): ()",
         .summary = "",
     },
     {
@@ -3696,12 +3696,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "totalMemory",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
         .name = "uid",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -3711,7 +3711,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "uptime",
-        .signature = "(): float",
+        .signature = "(): f64",
         .summary = "",
     },
     {
@@ -3729,12 +3729,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Options.constructor",
-        .signature = "(workers: int = 0): ()",
+        .signature = "(workers: i64 = 0): ()",
         .summary = "",
     },
     {
         .name = "Options.workers",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -3749,22 +3749,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.constructor",
-        .signature = "(options: Options, init: fn(int) -> S): ()",
+        .signature = "(options: Options, init: fn(i64) -> S): ()",
         .summary = "",
     },
     {
         .name = "Plan.forEach",
-        .signature = "(range: Range, body: fn(S, int)): ()",
+        .signature = "(range: Range, body: fn(S, i64)): ()",
         .summary = "",
     },
     {
         .name = "Plan.map",
-        .signature = "(range: Range, body: fn(S, int) -> T): Array<T>",
+        .signature = "(range: Range, body: fn(S, i64) -> T): Array<T>",
         .summary = "",
     },
     {
         .name = "Plan.mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: fn(S, int) -> T): ()",
+        .signature = "(range: Range, output: ref Array<T>, body: fn(S, i64) -> T): ()",
         .summary = "",
     },
     {
@@ -3774,27 +3774,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_parallel[] = {
     },
     {
         .name = "Plan.reduce",
-        .signature = "(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A): A",
+        .signature = "(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A): A",
         .summary = "",
     },
     {
         .name = "forEach",
-        .signature = "(range: Range, body: fn(int), options: Options = Options()): ()",
+        .signature = "(range: Range, body: fn(i64), options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "map",
-        .signature = "(range: Range, body: fn(int) -> T, options: Options = Options()): Array<T>",
+        .signature = "(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>",
         .summary = "",
     },
     {
         .name = "mapInto",
-        .signature = "(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()): ()",
+        .signature = "(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()",
         .summary = "",
     },
     {
         .name = "reduce",
-        .signature = "(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()): A",
+        .signature = "(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()): A",
         .summary = "",
     },
 };
@@ -3940,12 +3940,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "Regex.findAll",
-        .signature = "(text: string, limit?: int): Array<RegexMatch>",
+        .signature = "(text: string, limit?: i64): Array<RegexMatch>",
         .summary = "",
     },
     {
         .name = "Regex.findGroup",
-        .signature = "(text: string, index: int): string?",
+        .signature = "(text: string, index: i64): string?",
         .summary = "",
     },
     {
@@ -3960,7 +3960,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "Regex.split",
-        .signature = "(text: string, limit?: int): Array<string>",
+        .signature = "(text: string, limit?: i64): Array<string>",
         .summary = "",
     },
     {
@@ -3975,7 +3975,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "count",
-        .signature = "(pattern: Regex, s: string): int",
+        .signature = "(pattern: Regex, s: string): i64",
         .summary = "Count matches",
     },
     {
@@ -3985,17 +3985,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "find",
-        .signature = "(pattern: Regex, s: string, offset?: int): RegexMatch?",
+        .signature = "(pattern: Regex, s: string, offset?: i64): RegexMatch?",
         .summary = "Find first match",
     },
     {
         .name = "findAll",
-        .signature = "(pattern: Regex, s: string, limit?: int): Array<RegexMatch>",
+        .signature = "(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>",
         .summary = "Find all matches",
     },
     {
         .name = "findGroup",
-        .signature = "(pattern: Regex, s: string, index: int): string?",
+        .signature = "(pattern: Regex, s: string, index: i64): string?",
         .summary = "Find capture group",
     },
     {
@@ -4025,7 +4025,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "split",
-        .signature = "(pattern: Regex, s: string, limit?: int): Array<string>",
+        .signature = "(pattern: Regex, s: string, limit?: i64): Array<string>",
         .summary = "Split string by regex",
     },
     {
@@ -4038,42 +4038,42 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     {
         .name = "RuntimeInfo",
-        .signature = "{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }",
+        .signature = "{ liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }",
         .summary = "Typed snapshot of the current execution-local reclamation domain",
     },
     {
         .name = "RuntimeInfo.blocks",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.finalizerCount",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.freeBlocks",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.fullBlocks",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.liveBytes",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.liveKB",
-        .signature = "const float",
+        .signature = "const f64",
         .summary = "Object field",
     },
     {
         .name = "RuntimeInfo.liveObjects",
-        .signature = "const int",
+        .signature = "const i64",
         .summary = "Object field",
     },
     {
@@ -4083,22 +4083,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_runtime[] = {
     },
     {
         .name = "liveBytes",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Get live memory usage in bytes",
     },
     {
         .name = "liveObjects",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Get live object count",
     },
     {
         .name = "sharedBytes",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak",
     },
     {
         .name = "staticBytes",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only)",
     },
 };
@@ -4126,7 +4126,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "Capabilities.nativeBytes",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -4191,7 +4191,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.extract",
-        .signature = "(lane: int): u32",
+        .signature = "(lane: i64): u32",
         .summary = "",
     },
     {
@@ -4201,7 +4201,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.load",
-        .signature = "(data: Slice<u32>, offset: int = 0): U32x4",
+        .signature = "(data: Slice<u32>, offset: i64 = 0): U32x4",
         .summary = "",
     },
     {
@@ -4221,22 +4221,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.replace",
-        .signature = "(lane: int, value: u32): U32x4",
+        .signature = "(lane: i64, value: u32): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.shiftLeft",
-        .signature = "(bits: int): U32x4",
+        .signature = "(bits: i64): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.shiftRight",
-        .signature = "(bits: int): U32x4",
+        .signature = "(bits: i64): U32x4",
         .summary = "",
     },
     {
         .name = "U32x4.shuffle",
-        .signature = "(i0: int, i1: int, i2: int, i3: int): U32x4",
+        .signature = "(i0: i64, i1: i64, i2: i64, i3: i64): U32x4",
         .summary = "",
     },
     {
@@ -4246,7 +4246,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U32x4.store",
-        .signature = "(output: ref Slice<u32>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u32>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4366,7 +4366,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.extract",
-        .signature = "(lane: int): u64",
+        .signature = "(lane: i64): u64",
         .summary = "",
     },
     {
@@ -4376,7 +4376,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.load",
-        .signature = "(data: Slice<u64>, offset: int = 0): U64x2",
+        .signature = "(data: Slice<u64>, offset: i64 = 0): U64x2",
         .summary = "",
     },
     {
@@ -4401,22 +4401,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.replace",
-        .signature = "(lane: int, value: u64): U64x2",
+        .signature = "(lane: i64, value: u64): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.shiftLeft",
-        .signature = "(bits: int): U64x2",
+        .signature = "(bits: i64): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.shiftRight",
-        .signature = "(bits: int): U64x2",
+        .signature = "(bits: i64): U64x2",
         .summary = "",
     },
     {
         .name = "U64x2.shuffle",
-        .signature = "(i0: int, i1: int): U64x2",
+        .signature = "(i0: i64, i1: i64): U64x2",
         .summary = "",
     },
     {
@@ -4426,7 +4426,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x2.store",
-        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4461,7 +4461,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x4.load",
-        .signature = "(data: Slice<u64>, offset: int = 0): U64x4",
+        .signature = "(data: Slice<u64>, offset: i64 = 0): U64x4",
         .summary = "",
     },
     {
@@ -4481,17 +4481,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x4.shiftLeft",
-        .signature = "(bits: int): U64x4",
+        .signature = "(bits: i64): U64x4",
         .summary = "",
     },
     {
         .name = "U64x4.shiftRight",
-        .signature = "(bits: int): U64x4",
+        .signature = "(bits: i64): U64x4",
         .summary = "",
     },
     {
         .name = "U64x4.store",
-        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4521,7 +4521,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x8.load",
-        .signature = "(data: Slice<u64>, offset: int = 0): U64x8",
+        .signature = "(data: Slice<u64>, offset: i64 = 0): U64x8",
         .summary = "",
     },
     {
@@ -4531,17 +4531,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64x8.shiftLeft",
-        .signature = "(bits: int): U64x8",
+        .signature = "(bits: i64): U64x8",
         .summary = "",
     },
     {
         .name = "U64x8.shiftRight",
-        .signature = "(bits: int): U64x8",
+        .signature = "(bits: i64): U64x8",
         .summary = "",
     },
     {
         .name = "U64x8.store",
-        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4566,7 +4566,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64xNative.load",
-        .signature = "(data: Slice<u64>, offset: int = 0): U64xNative",
+        .signature = "(data: Slice<u64>, offset: i64 = 0): U64xNative",
         .summary = "",
     },
     {
@@ -4576,7 +4576,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64xNative.shiftRight",
-        .signature = "(bits: int): U64xNative",
+        .signature = "(bits: i64): U64xNative",
         .summary = "",
     },
     {
@@ -4586,7 +4586,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U64xNative.store",
-        .signature = "(output: ref Slice<u64>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u64>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4621,17 +4621,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x16.extract",
-        .signature = "(lane: int): byte",
+        .signature = "(lane: i64): u8",
         .summary = "",
     },
     {
         .name = "U8x16.fromLanes",
-        .signature = "(lanes: [byte; 16]): U8x16",
+        .signature = "(lanes: [u8; 16]): U8x16",
         .summary = "",
     },
     {
         .name = "U8x16.load",
-        .signature = "(data: Slice<byte>, offset: int = 0): U8x16",
+        .signature = "(data: Slice<u8>, offset: i64 = 0): U8x16",
         .summary = "",
     },
     {
@@ -4646,17 +4646,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x16.replace",
-        .signature = "(lane: int, value: byte): U8x16",
+        .signature = "(lane: i64, value: u8): U8x16",
         .summary = "",
     },
     {
         .name = "U8x16.splat",
-        .signature = "(value: byte): U8x16",
+        .signature = "(value: u8): U8x16",
         .summary = "",
     },
     {
         .name = "U8x16.store",
-        .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4671,12 +4671,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x32.fromLanes",
-        .signature = "(lanes: [byte; 32]): U8x32",
+        .signature = "(lanes: [u8; 32]): U8x32",
         .summary = "",
     },
     {
         .name = "U8x32.load",
-        .signature = "(data: Slice<byte>, offset: int = 0): U8x32",
+        .signature = "(data: Slice<u8>, offset: i64 = 0): U8x32",
         .summary = "",
     },
     {
@@ -4691,7 +4691,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x32.store",
-        .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4706,12 +4706,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x64.fromLanes",
-        .signature = "(lanes: [byte; 64]): U8x64",
+        .signature = "(lanes: [u8; 64]): U8x64",
         .summary = "",
     },
     {
         .name = "U8x64.load",
-        .signature = "(data: Slice<byte>, offset: int = 0): U8x64",
+        .signature = "(data: Slice<u8>, offset: i64 = 0): U8x64",
         .summary = "",
     },
     {
@@ -4726,7 +4726,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8x64.store",
-        .signature = "(output: ref Slice<byte>, offset: int = 0): ()",
+        .signature = "(output: ref Slice<u8>, offset: i64 = 0): ()",
         .summary = "",
     },
     {
@@ -4741,7 +4741,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
     {
         .name = "U8xNative.load",
-        .signature = "(data: Slice<byte>, offset: int = 0): U8xNative",
+        .signature = "(data: Slice<u8>, offset: i64 = 0): U8xNative",
         .summary = "",
     },
     {
@@ -4756,19 +4756,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_simd[] = {
     },
 };
 
-static const XmcpGeneratedStdlibSymbol _symbols_strconv[] = {
-    {
-        .name = "parseFloat",
-        .signature = "(value: string): float?",
-        .summary = "",
-    },
-    {
-        .name = "parseInt",
-        .signature = "(value: string): int?",
-        .summary = "",
-    },
-};
-
 static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     {
         .name = "Barrier",
@@ -4777,7 +4764,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sync[] = {
     },
     {
         .name = "Barrier.constructor",
-        .signature = "(parties: int): ()",
+        .signature = "(parties: i64): ()",
         .summary = "",
     },
     {
@@ -4925,7 +4912,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Dylib.constructor",
-        .signature = "(handle: int): ()",
+        .signature = "(handle: i64): ()",
         .summary = "",
     },
     {
@@ -4940,12 +4927,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Dylib.symbol",
-        .signature = "(name: string): Ptr<byte>?",
+        .signature = "(name: string): Ptr<u8>?",
         .summary = "",
     },
     {
         .name = "OsBarrier",
-        .signature = "(parties: int): OsBarrier",
+        .signature = "(parties: i64): OsBarrier",
         .summary = "Create a reusable OS-domain barrier",
     },
     {
@@ -4990,7 +4977,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Pipe.constructor",
-        .signature = "(readHandle: int, writeHandle: int): ()",
+        .signature = "(readHandle: i64, writeHandle: i64): ()",
         .summary = "",
     },
     {
@@ -5000,22 +4987,22 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Pipe.read",
-        .signature = "(maxBytes: int = 8192): Array<byte>?",
+        .signature = "(maxBytes: i64 = 8192): Array<u8>?",
         .summary = "",
     },
     {
         .name = "Pipe.readEnd",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
         .name = "Pipe.write",
-        .signature = "(data: Array<byte>): int",
+        .signature = "(data: Array<u8>): i64",
         .summary = "",
     },
     {
         .name = "Pipe.writeEnd",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -5025,12 +5012,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Process.constructor",
-        .signature = "(id: int, detached: bool = false): ()",
+        .signature = "(id: i64, detached: bool = false): ()",
         .summary = "",
     },
     {
         .name = "Process.id",
-        .signature = ": int { fn() { return this._id } }",
+        .signature = ": i64 { fn() { return this._id } }",
         .summary = "",
     },
     {
@@ -5045,12 +5032,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "Process.tryWait",
-        .signature = "(): int?",
+        .signature = "(): i64?",
         .summary = "",
     },
     {
         .name = "Process.wait",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -5060,7 +5047,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "ProcessOptions.constructor",
-        .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null, stdout: int? = null, stderr: int? = null, detached: bool = false): ()",
+        .signature = "(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()",
         .summary = "",
     },
     {
@@ -5080,17 +5067,17 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "ProcessOptions.stderr",
-        .signature = ": int?",
+        .signature = ": i64?",
         .summary = "",
     },
     {
         .name = "ProcessOptions.stdin",
-        .signature = ": int?",
+        .signature = ": i64?",
         .summary = "",
     },
     {
         .name = "ProcessOptions.stdout",
-        .signature = ": int?",
+        .signature = ": i64?",
         .summary = "",
     },
     {
@@ -5115,7 +5102,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "cpuCount",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Return the number of CPUs available to OS-thread work",
     },
     {
@@ -5125,12 +5112,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_sys[] = {
     },
     {
         .name = "pinToCpu",
-        .signature = "(cpu: int): bool",
+        .signature = "(cpu: i64): bool",
         .summary = "Best-effort pin of the current OS thread to a CPU index",
     },
     {
         .name = "sleepMs",
-        .signature = "(ms: int): ()",
+        .signature = "(ms: i64): ()",
         .summary = "Block the current OS thread for at least ms milliseconds",
     },
     {
@@ -5148,12 +5135,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_text[] = {
     },
     {
         .name = "padEnd",
-        .signature = "(value: string, targetLength: int, padding: string = \" \"): string",
+        .signature = "(value: string, targetLength: i64, padding: string = \" \"): string",
         .summary = "",
     },
     {
         .name = "padStart",
-        .signature = "(value: string, targetLength: int, padding: string = \" \"): string",
+        .signature = "(value: string, targetLength: i64, padding: string = \" \"): string",
         .summary = "",
     },
     {
@@ -5191,42 +5178,42 @@ static const XmcpGeneratedStdlibSymbol _symbols_text[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_time[] = {
     {
         .name = "clock",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "CPU clock time in milliseconds",
     },
     {
         .name = "localOffset",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Local UTC offset in minutes for the current wall time",
     },
     {
         .name = "localOffsetAt",
-        .signature = "(timestamp: int): int",
+        .signature = "(timestamp: i64): i64",
         .summary = "Local UTC offset in minutes at a Unix timestamp",
     },
     {
         .name = "micros",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Monotonic time in microseconds",
     },
     {
         .name = "monotonic",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Monotonic time in milliseconds",
     },
     {
         .name = "nanos",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Monotonic time in nanoseconds",
     },
     {
         .name = "now",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "Current time in milliseconds since epoch",
     },
     {
         .name = "sleep",
-        .signature = "(ms: int): ()",
+        .signature = "(ms: i64): ()",
         .summary = "Sleep for milliseconds",
     },
 };
@@ -5239,7 +5226,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlArray.at",
-        .signature = "(index: int): TomlValue?",
+        .signature = "(index: i64): TomlValue?",
         .summary = "",
     },
     {
@@ -5249,7 +5236,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlArray.len",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -5294,12 +5281,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlDiagnostic.column",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "TomlDiagnostic.constructor",
-        .signature = "(kind: TomlErrorKind, line: int, column: int, message: string): ()",
+        .signature = "(kind: TomlErrorKind, line: i64, column: i64, message: string): ()",
         .summary = "",
     },
     {
@@ -5309,7 +5296,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlDiagnostic.line",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -5324,7 +5311,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlFloat.constructor",
-        .signature = "(value: float, text: string = \"\"): ()",
+        .signature = "(value: f64, text: string = \"\"): ()",
         .summary = "",
     },
     {
@@ -5339,7 +5326,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlFloat.value",
-        .signature = ": float",
+        .signature = ": f64",
         .summary = "",
     },
     {
@@ -5349,7 +5336,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlParseReport.constructor",
-        .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: int, keys: int): ()",
+        .signature = "(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()",
         .summary = "",
     },
     {
@@ -5364,12 +5351,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlParseReport.keys",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "TomlParseReport.lines",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -5434,7 +5421,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlValue.Int",
-        .signature = "(value: int): TomlValue",
+        .signature = "(value: i64): TomlValue",
         .summary = "",
     },
     {
@@ -5469,12 +5456,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlValue.asFloat",
-        .signature = "(): float?",
+        .signature = "(): f64?",
         .summary = "",
     },
     {
         .name = "TomlValue.asInt",
-        .signature = "(): int?",
+        .signature = "(): i64?",
         .summary = "",
     },
     {
@@ -5489,7 +5476,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlValue.at",
-        .signature = "(index: int): TomlValue?",
+        .signature = "(index: i64): TomlValue?",
         .summary = "",
     },
     {
@@ -5519,7 +5506,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlValue.intValue",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -5534,7 +5521,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "TomlValue.len",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -5569,12 +5556,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "asFloat",
-        .signature = "(value: TomlValue): float?",
+        .signature = "(value: TomlValue): f64?",
         .summary = "",
     },
     {
         .name = "asInt",
-        .signature = "(value: TomlValue): int?",
+        .signature = "(value: TomlValue): i64?",
         .summary = "",
     },
     {
@@ -5584,7 +5571,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "at",
-        .signature = "(value: TomlValue, index: int): TomlValue?",
+        .signature = "(value: TomlValue, index: i64): TomlValue?",
         .summary = "",
     },
     {
@@ -5599,7 +5586,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "floatValue",
-        .signature = "(value: float): TomlValue",
+        .signature = "(value: f64): TomlValue",
         .summary = "",
     },
     {
@@ -5609,7 +5596,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "intValue",
-        .signature = "(value: int): TomlValue",
+        .signature = "(value: i64): TomlValue",
         .summary = "",
     },
     {
@@ -5619,7 +5606,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
     },
     {
         .name = "length",
-        .signature = "(value: TomlValue): int",
+        .signature = "(value: TomlValue): i64",
         .summary = "",
     },
     {
@@ -5835,12 +5822,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ClosePayload.code",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "ClosePayload.constructor",
-        .signature = "(code: int, reason: string): ()",
+        .signature = "(code: i64, reason: string): ()",
         .summary = "",
     },
     {
@@ -5855,12 +5842,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ParsedFrame.constructor",
-        .signature = "(fin: bool, rsv1: bool, opcode: int, masked: bool, payload: Array<byte>, consumedBytes: int): ()",
+        .signature = "(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()",
         .summary = "",
     },
     {
         .name = "ParsedFrame.consumedBytes",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -5875,12 +5862,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ParsedFrame.opcode",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "ParsedFrame.payload",
-        .signature = ": Array<byte>",
+        .signature = ": Array<u8>",
         .summary = "",
     },
     {
@@ -5930,7 +5917,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ParsedUpgradeResponse.constructor",
-        .signature = "(statusCode: int, protocol: string? = null, deflate: bool = false): ()",
+        .signature = "(statusCode: i64, protocol: string? = null, deflate: bool = false): ()",
         .summary = "",
     },
     {
@@ -5945,7 +5932,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "ParsedUpgradeResponse.statusCode",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -5955,12 +5942,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsConn.close",
-        .signature = "(code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
+        .signature = "(code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
         .summary = "",
     },
     {
         .name = "WsConn.constructor",
-        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: int): ()",
+        .signature = "(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()",
         .summary = "",
     },
     {
@@ -5980,12 +5967,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsConn.recv",
-        .signature = "(timeout: int = -1): WsMessage?",
+        .signature = "(timeout: i64 = -1): WsMessage?",
         .summary = "",
     },
     {
         .name = "WsConn.sendBytes",
-        .signature = "(data: Array<byte>, binary: bool = false): bool",
+        .signature = "(data: Array<u8>, binary: bool = false): bool",
         .summary = "",
     },
     {
@@ -6005,27 +5992,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsConnectOptions.constructor",
-        .signature = "(timeoutMs: int = 30000, pingIntervalMs: int = 0, pongTimeoutMs: int = 0, maxMessageSize: int = _WS_MAX_MESSAGE_BYTES): ()",
+        .signature = "(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()",
         .summary = "",
     },
     {
         .name = "WsConnectOptions.maxMessageSize",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "WsConnectOptions.pingIntervalMs",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "WsConnectOptions.pongTimeoutMs",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "WsConnectOptions.timeoutMs",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -6040,12 +6027,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsMessage.constructor",
-        .signature = "(data: Array<byte>? = null, binary: bool = false, error: string? = null): ()",
+        .signature = "(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()",
         .summary = "",
     },
     {
         .name = "WsMessage.data",
-        .signature = ": Array<byte>?",
+        .signature = ": Array<u8>?",
         .summary = "",
     },
     {
@@ -6065,7 +6052,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsUrl.constructor",
-        .signature = "(secure: bool, host: string, port: int, path: string): ()",
+        .signature = "(secure: bool, host: string, port: i64, path: string): ()",
         .summary = "",
     },
     {
@@ -6080,7 +6067,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsUrl.port",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -6095,7 +6082,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "binaryFrame",
-        .signature = "(data: Array<byte>, mask: bool = true): Array<byte>",
+        .signature = "(data: Array<u8>, mask: bool = true): Array<u8>",
         .summary = "",
     },
     {
@@ -6105,12 +6092,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "close",
-        .signature = "(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
+        .signature = "(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool",
         .summary = "",
     },
     {
         .name = "closeFrame",
-        .signature = "(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>",
+        .signature = "(code: i64 = 1000, reason: string = \"\", mask: bool = true): Array<u8>",
         .summary = "",
     },
     {
@@ -6120,27 +6107,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "frame",
-        .signature = "(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>",
+        .signature = "(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true): Array<u8>",
         .summary = "",
     },
     {
         .name = "isValidCloseCode",
-        .signature = "(code: int): bool",
+        .signature = "(code: i64): bool",
         .summary = "",
     },
     {
         .name = "maskPayload",
-        .signature = "(payload: Array<byte>, key: Array<byte>): Array<byte>",
+        .signature = "(payload: Array<u8>, key: Array<u8>): Array<u8>",
         .summary = "",
     },
     {
         .name = "parseClosePayload",
-        .signature = "(payload: Array<byte>): ClosePayload?",
+        .signature = "(payload: Array<u8>): ClosePayload?",
         .summary = "",
     },
     {
         .name = "parseFrame",
-        .signature = "(raw: Array<byte>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?",
+        .signature = "(raw: Array<u8>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: i64 = 67108864): ParsedFrame?",
         .summary = "",
     },
     {
@@ -6165,12 +6152,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "pingFrame",
-        .signature = "(data: Array<byte>? = null, mask: bool = true): Array<byte>",
+        .signature = "(data: Array<u8>? = null, mask: bool = true): Array<u8>",
         .summary = "",
     },
     {
         .name = "pongFrame",
-        .signature = "(data: Array<byte>? = null, mask: bool = true): Array<byte>",
+        .signature = "(data: Array<u8>? = null, mask: bool = true): Array<u8>",
         .summary = "",
     },
     {
@@ -6180,12 +6167,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "recv",
-        .signature = "(conn: ref WsConn, timeout: int = -1): WsMessage?",
+        .signature = "(conn: ref WsConn, timeout: i64 = -1): WsMessage?",
         .summary = "",
     },
     {
         .name = "sendBytes",
-        .signature = "(conn: ref WsConn, data: Array<byte>, binary: bool = false): bool",
+        .signature = "(conn: ref WsConn, data: Array<u8>, binary: bool = false): bool",
         .summary = "",
     },
     {
@@ -6195,12 +6182,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "serve",
-        .signature = "(port: int, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: int = _WS_MAX_MESSAGE_BYTES): bool",
+        .signature = "(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: i64 = _WS_MAX_MESSAGE_BYTES): bool",
         .summary = "",
     },
     {
         .name = "textFrame",
-        .signature = "(data: string, mask: bool = true): Array<byte>",
+        .signature = "(data: string, mask: bool = true): Array<u8>",
         .summary = "",
     },
     {
@@ -6243,12 +6230,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "XmlDiagnostic.column",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "XmlDiagnostic.constructor",
-        .signature = "(kind: XmlErrorKind, line: int, column: int, message: string): ()",
+        .signature = "(kind: XmlErrorKind, line: i64, column: i64, message: string): ()",
         .summary = "",
     },
     {
@@ -6258,7 +6245,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "XmlDiagnostic.line",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -6338,7 +6325,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "XmlWriteOptions",
-        .signature = "{ indent: int, declaration: bool, encoding: string }",
+        .signature = "{ indent: i64, declaration: bool, encoding: string }",
         .summary = "",
     },
     {
@@ -6353,7 +6340,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_xml[] = {
     },
     {
         .name = "XmlWriteOptions.indent",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
@@ -6471,12 +6458,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "YamlDiagnostic.column",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "YamlDiagnostic.constructor",
-        .signature = "(kind: YamlErrorKind, line: int, column: int, message: string): ()",
+        .signature = "(kind: YamlErrorKind, line: i64, column: i64, message: string): ()",
         .summary = "",
     },
     {
@@ -6486,7 +6473,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "YamlDiagnostic.line",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
@@ -6526,7 +6513,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "YamlMapping.size",
-        .signature = "(): int",
+        .signature = "(): i64",
         .summary = "",
     },
     {
@@ -6551,12 +6538,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "YamlParseReport.anchors",
-        .signature = ": int",
+        .signature = ": i64",
         .summary = "",
     },
     {
         .name = "YamlParseReport.constructor",
-        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()",
+        .signature = "(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()",
         .summary = "",
     },
     {
@@ -6611,12 +6598,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "YamlWriteOptions",
-        .signature = "{ indent: int }",
+        .signature = "{ indent: i64 }",
         .summary = "",
     },
     {
         .name = "YamlWriteOptions.indent",
-        .signature = "int",
+        .signature = "i64",
         .summary = "Type alias field",
     },
     {
@@ -6631,12 +6618,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "asFloat",
-        .signature = "(value: YamlValue): float?",
+        .signature = "(value: YamlValue): f64?",
         .summary = "",
     },
     {
         .name = "asInt",
-        .signature = "(value: YamlValue): int?",
+        .signature = "(value: YamlValue): i64?",
         .summary = "",
     },
     {
@@ -6656,12 +6643,12 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "at",
-        .signature = "(value: YamlValue, index: int): YamlValue?",
+        .signature = "(value: YamlValue, index: i64): YamlValue?",
         .summary = "",
     },
     {
         .name = "binaryValue",
-        .signature = "(value: Array<byte>): YamlValue",
+        .signature = "(value: Array<u8>): YamlValue",
         .summary = "",
     },
     {
@@ -6671,7 +6658,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "floatValue",
-        .signature = "(value: float): YamlValue",
+        .signature = "(value: f64): YamlValue",
         .summary = "",
     },
     {
@@ -6681,7 +6668,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "intValue",
-        .signature = "(value: int): YamlValue",
+        .signature = "(value: i64): YamlValue",
         .summary = "",
     },
     {
@@ -6696,7 +6683,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_yaml[] = {
     },
     {
         .name = "length",
-        .signature = "(value: YamlValue): int",
+        .signature = "(value: YamlValue): i64",
         .summary = "",
     },
     {
@@ -6787,7 +6774,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- `typeOf(value)` \xe2\x80\x94 return a stable TypeId / `Type.xxx` value\n"
             "- `typeName(value)` \xe2\x80\x94 return the debug/logging type name\n"
             "- `x is T` \xe2\x80\x94 runtime type check with analyzer narrowing\n"
-            "- `int(value)` / `float(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n"
+            "- `i64(value)` / `f64(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n"
             "- `assert(condition)` and `assert_*` helpers \xe2\x80\x94 testing assertions\n"
             "\n"
             "### Printing and debugging\n"
@@ -6800,10 +6787,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Type inspection\n"
             "```xray\n"
             "var x = 42\n"
-            "print(typeOf(x) == Type.int)    // true\n"
-            "print(typeName(x))              // \"int\"\n"
-            "print(x is int)                 // true\n"
-            "// typeOf(x) == \"int\"           // compile error: use Type.int or typeName(x)\n"
+            "print(typeOf(x) == Type.i64)    // true\n"
+            "print(typeName(x))              // \"i64\"\n"
+            "print(x is i64)                 // true\n"
+            "// typeOf(x) == \"i64\"           // compile error: use Type.i64 or typeName(x)\n"
             "```\n"
             "",
     },
@@ -6820,15 +6807,15 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Declaration\n"
             "```xray\n"
-            "const ch  = Channel<int>(10)    // buffered, capacity = 10\n"
-            "const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)\n"
+            "const ch  = Channel<i64>(10)    // buffered, capacity = 10\n"
+            "const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)\n"
             "const cha = Channel(3)          // element type inferred from the first send\n"
             "```\n"
             "Name a channel with `const`. `Channel<T>` is an audited synchronization handle: its binding is stable while `send`/`recv` mutate protected runtime state.\n"
             "\n"
             "### Operations\n"
             "```xray\n"
-            "const ch = Channel<int>(10)\n"
+            "const ch = Channel<i64>(10)\n"
             "ch.send(42)                             // blocking send\n"
             "var v = match (ch.recv()) {\n"
             "    Recv.Value(value) -> value\n"
@@ -6855,7 +6842,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Function parameter type\n"
             "```xray\n"
-            "fn producer(ch: Channel<int>) {\n"
+            "fn producer(ch: Channel<i64>) {\n"
             "    ch.send(42)\n"
             "}\n"
             "```\n"
@@ -6879,7 +6866,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "class Animal {\n"
             "    name: string                       // field\n"
-            "    private _age: int = 0              // private field with default value\n"
+            "    private _age: i64 = 0              // private field with default value\n"
             "\n"
             "    constructor(name: string) {\n"
             "        this.name = name\n"
@@ -6934,19 +6921,19 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Array\n"
             "```xray\n"
-            "var a: Array<int> = [1, 2, 3]\n"
-            "var b = [1, 2, 3]                // inferred as Array<int>\n"
+            "var a: Array<i64> = [1, 2, 3]\n"
+            "var b = [1, 2, 3]                // inferred as Array<i64>\n"
             "var c: Array<string> = []         // explicit empty array\n"
             "```\n"
             "```xray\n"
             "var a = [1, 2, 3]\n"
-            "var empty: Array<int> = []\n"
-            "var mixed = [1, \"hello\"]    // type Array<int | string>\n"
+            "var empty: Array<i64> = []\n"
+            "var mixed = [1, \"hello\"]    // type Array<i64 | string>\n"
             "```\n"
             "\n"
             "### Map\n"
             "```xray\n"
-            "var m: Map<string, int> = #{\"a\": 1, \"b\": 2}\n"
+            "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
             "var m2 = #{\"a\": 1, \"b\": 2}\n"
             "var empty = #{}                                     // empty Map\n"
             "\n"
@@ -6961,7 +6948,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Set\n"
             "```xray\n"
-            "var s: Set<int> = #[1, 2, 3]\n"
+            "var s: Set<i64> = #[1, 2, 3]\n"
             "```\n"
             "```xray\n"
             "var s = #[1, 2, 3]\n"
@@ -6971,13 +6958,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Slice (borrowed view)\n"
             "```xray\n"
             "fn main() {\n"
-            "    var arr: Array<int> = [10, 20, 30, 40]\n"
-            "    var view: Slice<int> = arr[1:3]        // borrowed view, not a copy\n"
+            "    var arr: Array<i64> = [10, 20, 30, 40]\n"
+            "    var view: Slice<i64> = arr[1:3]        // borrowed view, not a copy\n"
             "    view[1] = 31\n"
             "    print(arr[2])                          // 31 \xe2\x80\x94 the write goes through to the owner\n"
             "    arr[1] = 21\n"
             "    print(view[0])                         // 21 \xe2\x80\x94 element writes on the owner are visible here\n"
-            "    var owned: Array<int> = copy(arr[1:3]) // an independent Array<T>\n"
+            "    var owned: Array<i64> = copy(arr[1:3]) // an independent Array<T>\n"
             "    arr.push(50)                           // OK: no view is live at this point\n"
             "    print(len(owned))\n"
             "}\n"
@@ -6989,7 +6976,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "arr[:3]                 // first 3\n"
             "arr[2:]                 // from index 2 to the end\n"
             "arr[:]                  // full-length view (not a copy)\n"
-            "var view: Slice<int> = arr[1:4]\n"
+            "var view: Slice<i64> = arr[1:4]\n"
             "```\n"
             "\n"
             "### Exact structural object / dynamic JSON object\n"
@@ -7007,7 +6994,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var user = { name, age }                  // equivalent to { name: name, age: age }\n"
             "\n"
             "// Map literal: `#{}` prefix + `:`\n"
-            "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, int>\n"
+            "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, i64>\n"
             "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
             "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
             "```\n"
@@ -7022,12 +7009,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "arr[0]\n"
             "arr[0] = 10\n"
             "map[\"key\"]\n"
-            "var bytes: Slice<byte> = text.bytes()\n"
+            "var bytes: Slice<u8> = text.bytes()\n"
             "bytes[i]                // explicit byte-view index\n"
             "```\n"
             "\n"
             "### Other collection-like types\n"
-            "- `Array<byte>` is a typed byte buffer backed by contiguous memory\n"
+            "- `Array<u8>` is a typed byte buffer backed by contiguous memory\n"
             "- `Channel<T>` is the coroutine communication container\n"
             "",
     },
@@ -7053,32 +7040,32 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Move into coroutine\n"
             "```xray\n"
             "var data = { value: 10 }\n"
-            "var task = go fn(d: JSON.Object) -> int {\n"
+            "var task = go fn(d: JSON.Object) -> i64 {\n"
             "    return d.value + 1\n"
             "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
             "```\n"
             "\n"
             "### Move ownership\n"
             "```xray\n"
-            "var buf = Array<byte>(1024 * 1024)\n"
+            "var buf = Array<u8>(1024 * 1024)\n"
             "\n"
             "// hand off to a coroutine\n"
-            "var t = go fn(b: Array<byte>) -> int {\n"
+            "var t = go fn(b: Array<u8>) -> i64 {\n"
             "    return process(b)\n"
             "}(move buf)\n"
             "// compile error: buf has been moved\n"
             "// print(len(buf))\n"
             "\n"
             "// hand off to a channel\n"
-            "const ch = Channel<Array<byte>>(1)\n"
-            "var payload = Array<byte>(4096)\n"
+            "const ch = Channel<Array<u8>>(1)\n"
+            "var payload = Array<u8>(4096)\n"
             "ch.send(move payload)\n"
             "// compile error: payload has been moved\n"
             "```\n"
             "\n"
             "### Channels\n"
             "```xray\n"
-            "const ch = Channel<int>(10)\n"
+            "const ch = Channel<i64>(10)\n"
             "ch.send(42)                             // blocking send\n"
             "var v = match (ch.recv()) {\n"
             "    Recv.Value(value) -> value\n"
@@ -7104,7 +7091,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Atomic\n"
-            "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`).\n"
+            "`Atomic<T>` wraps `i64`/`f64`/`bool` with lock-free atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`).\n"
             "\n"
             "### Synchronization handles\n"
             "Name `Channel`, `Atomic`, coroutine-domain `sync.*` handles, and OS-thread-domain `sys.Os*` handles with `const`. Use `sync.*` inside coroutine code; use `sys.Os*` inside `sys.Thread` or other blocking OS-thread contexts.\n"
@@ -7198,7 +7185,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### try / catch / throw\n"
             "```xray\n"
-            "enum AppError { NotFound, Timeout(ms: int) }\n"
+            "enum AppError { NotFound, Timeout(ms: i64) }\n"
             "\n"
             "// Recoverable errors: enum values flow through the value-return channel,\n"
             "// caught by catch (e)\n"
@@ -7263,11 +7250,11 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    return                 // implicitly returns () (Unit)\n"
             "}\n"
             "\n"
-            "fn answer() -> int {\n"
+            "fn answer() -> i64 {\n"
             "    return 42\n"
             "}\n"
             "\n"
-            "fn pair(a: int, b: int) -> (int, int) {\n"
+            "fn pair(a: i64, b: i64) -> (i64, i64) {\n"
             "    return (a, b)          // multi-value return must wrap a tuple in parens\n"
             "}\n"
             "```\n"
@@ -7288,12 +7275,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var t1 = go worker(0, channel)\n"
             "\n"
             "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-            "var t2 = go fn(d: JSON.Object) -> int {\n"
+            "var t2 = go fn(d: JSON.Object) -> i64 {\n"
             "    return d.value * 2\n"
             "}(payload)\n"
             "\n"
             "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
-            "var t3 = go fn() -> int {\n"
+            "var t3 = go fn() -> i64 {\n"
             "    return compute()\n"
             "}()\n"
             "\n"
@@ -7311,10 +7298,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var t1 = go compute(2)\n"
             "var t2 = go compute(3)\n"
             "var t3 = go compute(4)\n"
-            "var results: Array<int> = await all [t1, t2, t3]\n"
+            "var results: Array<i64> = await all [t1, t2, t3]\n"
             "// also works on a variable directly, no brackets needed\n"
             "var tasks = [t1, t2, t3]\n"
-            "var results2: Array<int> = await all tasks\n"
+            "var results2: Array<i64> = await all tasks\n"
             "\n"
             "// await any: wait for the first to complete, return its result; the others keep running\n"
             "var first = await any [t1, t2, t3]\n"
@@ -7324,7 +7311,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "\n"
             "### Common constraints\n"
-            "`go` accepts only a call expression. Write inline logic as an immediately invoked lambda, for example `go fn(x: int) { work(x) }(value)`. A lambda may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with `copy(...)` or `move`. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous.\n"
+            "`go` accepts only a call expression. Write inline logic as an immediately invoked lambda, for example `go fn(x: i64) { work(x) }(value)`. A lambda may capture published const values and audited synchronization handles, but never an outer `var`, even for reads. Pass local data as explicit arguments with `copy(...)` or `move`. `linked go` is the semantic prefix; `go(name: ...)` only adds diagnostic metadata. Waiting is always `await task`; unique mutable results are taken once automatically. `await all` is homogeneous.\n"
             "\n"
             "### Task handle\n"
             "```xray\n"
@@ -7370,9 +7357,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "}\n"
             "\n"
             "// scope: keep task handles and inspect each outcome after the block\n"
-            "var first: Task<int>?\n"
-            "var second: Task<int>?\n"
-            "var third: Task<int>?\n"
+            "var first: Task<i64>?\n"
+            "var second: Task<i64>?\n"
+            "var third: Task<i64>?\n"
             "scope {\n"
             "    first = go failing(\"error1\")\n"
             "    second = go failing(\"error2\")\n"
@@ -7384,8 +7371,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### select \xe2\x80\x94 multiplex channels\n"
             "```xray\n"
-            "const ch1 = Channel<int>(2)\n"
-            "const ch2 = Channel<int>(2)\n"
+            "const ch1 = Channel<i64>(2)\n"
+            "const ch2 = Channel<i64>(2)\n"
             "\n"
             "select {\n"
             "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n"
@@ -7461,7 +7448,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    NotFound,\n"
             "    InternalError\n"
             "\n"
-            "    fn code() -> int {\n"
+            "    fn code() -> i64 {\n"
             "        return match (this) {\n"
             "            HttpStatus.OK -> 200,\n"
             "            HttpStatus.NotFound -> 404,\n"
@@ -7474,7 +7461,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Properties\n"
             "```xray\n"
             "Color.Red.name        // \"Red\"          variant name (string)\n"
-            "Color.Red.ordinal     // 0              declaration-order tag (int, zero-based)\n"
+            "Color.Red.ordinal     // 0              declaration-order tag (i64, zero-based)\n"
             "Color.Red.toString()  // \"Color.Red\"    \"<EnumName>.<VariantName>\" format\n"
             "```\n"
             "\n"
@@ -7489,7 +7476,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    print(variant.name)\n"
             "    for (field in variant.payloads) {\n"
             "        print(field.name)                 // field: EnumPayloadField<NetEvent>\n"
-            "        print(field.type)                 // int: canonical TypeId for the concrete field type\n"
+            "        print(field.type)                 // i64: canonical TypeId for the concrete field type\n"
             "    }\n"
             "}\n"
             "```\n"
@@ -7514,8 +7501,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "enum NetEvent {\n"
             "    Connected,\n"
             "    Disconnected(reason: string),\n"
-            "    DataReceived(bytes: Array<byte>),\n"
-            "    Error(code: int, message: string),\n"
+            "    DataReceived(bytes: Array<u8>),\n"
+            "    Error(code: i64, message: string),\n"
             "}\n"
             "\n"
             "// A recursive enum payload must be indirected through a class node\n"
@@ -7526,7 +7513,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "}\n"
             "\n"
             "enum Expr {\n"
-            "    Number(int),\n"
+            "    Number(i64),\n"
             "    Binary(op: string, left: ExprNode, right: ExprNode),\n"
             "    Call(name: string, args: Array<Expr>),\n"
             "}\n"
@@ -7544,7 +7531,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Named functions\n"
             "```xray\n"
-            "fn add(a: int, b: int) -> int {\n"
+            "fn add(a: i64, b: i64) -> i64 {\n"
             "    return a + b\n"
             "}\n"
             "\n"
@@ -7552,14 +7539,14 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    print(\"Hi ${name}\")\n"
             "}\n"
             "\n"
-            "fn echo(x: int) {                       // omitted return type = ()\n"
+            "fn echo(x: i64) {                       // omitted return type = ()\n"
             "    print(x)\n"
             "}\n"
             "```\n"
             "\n"
             "### Default parameters\n"
             "```xray\n"
-            "fn connect(host: string, port: int = 8080, tls: bool = false) {\n"
+            "fn connect(host: string, port: i64 = 8080, tls: bool = false) {\n"
             "    print(host, port, tls)\n"
             "}\n"
             "\n"
@@ -7570,12 +7557,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Multiple return values\n"
             "```xray\n"
-            "fn divmod(a: int, b: int) -> (int, int) {\n"
+            "fn divmod(a: i64, b: i64) -> (i64, i64) {\n"
             "    return (a / b, a % b)\n"
             "}\n"
             "\n"
             "var (q, r) = divmod(17, 5)\n"
-            "var result = divmod(10, 3)        // result has type (int, int)\n"
+            "var result = divmod(10, 3)        // result has type (i64, i64)\n"
             "```\n"
             "\n"
             "### Parameter modes\n"
@@ -7583,12 +7570,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- Calls to `ref` parameters must write `ref place`; existing owners passed to `move` parameters must write `move value`\n"
             "- `copy(value)` creates a fresh owner and ordinary outputs use returns, tuples, structs, or Result\n"
             "```xray\n"
-            "fn length_sq(v: Vec2) -> float {\n"
+            "fn length_sq(v: Vec2) -> f64 {\n"
             "    // v is read-only; the ABI may pass a small value or a read-only address\n"
             "    return v.x * v.x + v.y * v.y\n"
             "}\n"
             "\n"
-            "fn translate(v: ref Vec2, dx: float, dy: float) -> () {\n"
+            "fn translate(v: ref Vec2, dx: f64, dy: f64) -> () {\n"
             "    // v is a mutable reference (changes are visible to the caller)\n"
             "    v.x += dx\n"
             "    v.y += dy\n"
@@ -7605,7 +7592,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Rest parameters\n"
             "```xray\n"
-            "fn sum(...nums: int) -> int {\n"
+            "fn sum(...nums: i64) -> i64 {\n"
             "    var total = 0\n"
             "    for (n in nums) { total += n }\n"
             "    return total\n"
@@ -7618,14 +7605,14 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "// \xe2\x94\x80\xe2\x94\x80 Arrow lambda: each parameter may be annotated or inferred independently \xe2\x94\x80\xe2\x94\x80\n"
             "arr.map(x -> x * 2)\n"
-            "var add = (x: int, y) -> x + y\n"
+            "var add = (x: i64, y) -> x + y\n"
             "\n"
             "// Expression bodies return implicitly; ref only grants a writable loan\n"
-            "var calculate = (x: ref int) -> x * 2\n"
-            "var doubleInPlace = (x: ref int) -> { x = x * 2 }\n"
+            "var calculate = (x: ref i64) -> x * 2\n"
+            "var doubleInPlace = (x: ref i64) -> { x = x * 2 }\n"
             "\n"
             "// \xe2\x94\x80\xe2\x94\x80 fn lambda: explicit return type, generics, or a full parameter contract \xe2\x94\x80\xe2\x94\x80\n"
-            "var inc = fn(x: int) -> int {\n"
+            "var inc = fn(x: i64) -> i64 {\n"
             "    var y = x + 1\n"
             "    return y\n"
             "}\n"
@@ -7660,7 +7647,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    return x\n"
             "}\n"
             "\n"
-            "var a = identity<int>(42)\n"
+            "var a = identity<i64>(42)\n"
             "var b = identity(\"hello\")               // T inferred as string\n"
             "\n"
             "// Generic class\n"
@@ -7670,7 +7657,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "    get() -> T { return this.value }\n"
             "}\n"
             "\n"
-            "var b1 = Box<int>(42)\n"
+            "var b1 = Box<i64>(42)\n"
             "var b2 = Box<string>(\"hi\")\n"
             "\n"
             "// Multi-parameter generic\n"
@@ -7684,7 +7671,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "// Generic interface\n"
             "interface Comparable<T> {\n"
-            "    compareTo(other: T) -> int\n"
+            "    compareTo(other: T) -> i64\n"
             "}\n"
             "\n"
             "// Generic type alias: transparent syntax substitution, not a new type\n"
@@ -7711,16 +7698,16 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Type inference\n"
             "```xray\n"
-            "identity(42)                    // T inferred as int\n"
+            "identity(42)                    // T inferred as i64\n"
             "Box(\"hello\")                // T inferred as string\n"
-            "Pair(\"key\", 100)            // K=string, V=int\n"
+            "Pair(\"key\", 100)            // K=string, V=i64\n"
             "```\n"
             "\n"
             "### Explicit instantiation\n"
             "```xray\n"
-            "var empty = Array<int>()              // no element to infer from\n"
-            "var m = Map<string, int>()\n"
-            "var result = identity<float>(0)            // the type argument supplies a unique context; 0 is directly typed as float\n"
+            "var empty = Array<i64>()              // no element to infer from\n"
+            "var m = Map<string, i64>()\n"
+            "var result = identity<f64>(0)            // the type argument supplies a unique context; 0 is directly typed as f64\n"
             "```\n"
             "\n"
             "### Type identity\n"
@@ -7728,9 +7715,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "class Container<T> {\n"
             "    items: Array<T>\n"
             "}\n"
-            "var c = Container<int>()\n"
-            "print(c is Container<int>)     // true\n"
-            "print(typeName(c))             // \"Container<int>\" when type names are enabled\n"
+            "var c = Container<i64>()\n"
+            "print(c is Container<i64>)     // true\n"
+            "print(typeName(c))             // \"Container<i64>\" when type names are enabled\n"
             "```\n"
             "",
     },
@@ -7746,8 +7733,8 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Interface declarations and implementations\n"
             "```xray\n"
             "interface Shape {\n"
-            "    area() -> float\n"
-            "    perimeter() -> float\n"
+            "    area() -> f64\n"
+            "    perimeter() -> f64\n"
             "}\n"
             "\n"
             "// Interface method return types may be omitted (default ())\n"
@@ -7757,18 +7744,18 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "}\n"
             "\n"
             "class Circle implements Shape {\n"
-            "    radius: float\n"
-            "    constructor(r: float) { this.radius = r }\n"
-            "    area() -> float { return 3.14 * this.radius * this.radius }\n"
-            "    perimeter() -> float { return 6.28 * this.radius }\n"
+            "    radius: f64\n"
+            "    constructor(r: f64) { this.radius = r }\n"
+            "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
+            "    perimeter() -> f64 { return 6.28 * this.radius }\n"
             "}\n"
             "\n"
             "// Implement multiple interfaces\n"
             "class Logger implements Shape, Greeter {\n"
-            "    radius: float\n"
-            "    constructor(r: float) { this.radius = r }\n"
-            "    area() -> float { return 3.14 * this.radius * this.radius }\n"
-            "    perimeter() -> float { return 6.28 * this.radius }\n"
+            "    radius: f64\n"
+            "    constructor(r: f64) { this.radius = r }\n"
+            "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
+            "    perimeter() -> f64 { return 6.28 * this.radius }\n"
             "    greet(name: string) { print(\"hello,\", name) }\n"
             "    log() { print(\"logging\") }\n"
             "}\n"
@@ -7839,7 +7826,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "// 1. visibility belongs to the declaration\n"
             "export fn helper() { return }\n"
             "export final class MyClass {\n"
-            "    value: int\n"
+            "    value: i64\n"
             "    constructor() { this.value = 1 }\n"
             "}\n"
             "export const VERSION = \"1.0\"\n"
@@ -7911,7 +7898,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Where facts apply (N-7, N-8, N-9, N-10)\n"
             "`if` then/else bodies, both arms of `c ? a : b`, loop-body entry and the code after `while` / `for`, the right operand of `&&` / `||`, and the code after `assert(c)`. A branch that necessarily terminates gives the following code the opposite fact.\n"
             "```xray\n"
-            "fn nameLen(s: string?) -> int {\n"
+            "fn nameLen(s: string?) -> i64 {\n"
             "    if (s == null) { return 0 }\n"
             "    return len(s)                 // s is narrowed to string here\n"
             "}\n"
@@ -8028,7 +8015,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "## String\n"
             "\n"
             "### Quoted literals\n"
-            "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[byte; L]`, and `c/cr` for `[byte; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.\n"
+            "Use no prefix / `r` for valid UTF-8 strings, `b/br` for `[u8; L]`, and `c/cr` for `[u8; L+1]` with an appended NUL. `r/br/cr` preserve backslashes; interpolation remains enabled only for no prefix / `r`.\n"
             "```xray\n"
             "var card = r\"\"\"\n"
             "<div class=\"card\">\n"
@@ -8054,7 +8041,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "arr[:3]                 // first 3\n"
             "arr[2:]                 // from index 2 to the end\n"
             "arr[:]                  // full-length view (not a copy)\n"
-            "var view: Slice<int> = arr[1:4]\n"
+            "var view: Slice<i64> = arr[1:4]\n"
             "```\n"
             "\n"
             "### Common methods\n"
@@ -8078,10 +8065,10 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### Struct declaration and literals\n"
             "```xray\n"
             "struct Point {\n"
-            "    x: float\n"
-            "    y: float\n"
+            "    x: f64\n"
+            "    y: f64\n"
             "\n"
-            "    magnitude_sq() -> float {\n"
+            "    magnitude_sq() -> f64 {\n"
             "        return this.x * this.x + this.y * this.y\n"
             "    }\n"
             "}\n"
@@ -8171,20 +8158,20 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "types",
         .title = "Types",
-        .aliases_csv = "int,float,string,bool,nullable,type,tuple,unit,union,Option",
+        .aliases_csv = "i64,f64,string,bool,nullable,type,tuple,unit,union,Option",
         .body =
             "[Language reference](#2-\xe7\xb1\xbb\xe5\x9e\x8b\xe7\xb3\xbb\xe7\xbb\x9f-type-system)\n"
             "\n"
             "## Types\n"
             "\n"
             "### Primitive and built-in categories\n"
-            "- `int` \xe2\x80\x94 default signed integer\n"
-            "- `float` \xe2\x80\x94 default floating-point number\n"
+            "- `i64` \xe2\x80\x94 default signed integer\n"
+            "- `f64` \xe2\x80\x94 default floating-point number\n"
             "- `string` \xe2\x80\x94 UTF-8 string\n"
             "- `bool` \xe2\x80\x94 `true` / `false`\n"
             "- `()` \xe2\x80\x94 Unit, no return value\n"
             "- exact structural objects `{ field: T }`\n"
-            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`\n"
+            "- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`\n"
             "\n"
             "### Explicit conditions\n"
             "```xray\n"
@@ -8208,19 +8195,19 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### Nullable\n"
             "```xray\n"
-            "var x: int? = null      // OK\n"
-            "var y: int? = 42        // OK\n"
-            "var z: int = null       // compile error: null is not int\n"
+            "var x: i64? = null      // OK\n"
+            "var y: i64? = 42        // OK\n"
+            "var z: i64 = null       // compile error: null is not i64\n"
             "```\n"
             "\n"
             "### Collections\n"
             "```xray\n"
-            "var a: Array<int> = [1, 2, 3]\n"
-            "var b = [1, 2, 3]                // inferred as Array<int>\n"
+            "var a: Array<i64> = [1, 2, 3]\n"
+            "var b = [1, 2, 3]                // inferred as Array<i64>\n"
             "var c: Array<string> = []         // explicit empty array\n"
             "```\n"
             "```xray\n"
-            "var m: Map<string, int> = #{\"a\": 1, \"b\": 2}\n"
+            "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
             "var m2 = #{\"a\": 1, \"b\": 2}\n"
             "var empty = #{}                                     // empty Map\n"
             "\n"
@@ -8229,27 +8216,27 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n"
             "```\n"
             "```xray\n"
-            "var s: Set<int> = #[1, 2, 3]\n"
+            "var s: Set<i64> = #[1, 2, 3]\n"
             "```\n"
             "```xray\n"
-            "const ch: Channel<int> = Channel<int>(10)\n"
+            "const ch: Channel<i64> = Channel<i64>(10)\n"
             "```\n"
             "\n"
             "### Union types\n"
             "```xray\n"
-            "var v: int | string = 42\n"
+            "var v: i64 | string = 42\n"
             "v = \"hello\"             // OK\n"
             "```\n"
             "\n"
             "### Tuple types\n"
             "```xray\n"
             "// Literals\n"
-            "var t = (1, 2, 3)                 // type inferred as (int, int, int)\n"
+            "var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)\n"
             "var h = (10, \"hi\", true)          // heterogeneous tuple\n"
             "var single = (99,)                // single-element tuple: note trailing comma\n"
             "\n"
             "// Type annotation\n"
-            "var p: (int, string) = (7, \"ok\")\n"
+            "var p: (i64, string) = (7, \"ok\")\n"
             "\n"
             "// Field access: .N (N is a compile-time constant integer index)\n"
             "var first = t.0                   // 1\n"
@@ -8259,49 +8246,49 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "var b     = nest.1.1              // 4\n"
             "\n"
             "// Function return and destructuring\n"
-            "fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }\n"
+            "fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }\n"
             "var (q, r) = divmod(17, 5)        // tuple destructure\n"
             "\n"
             "// Generic\n"
             "fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }\n"
-            "var p2 = pair(1, \"x\")             // (int, string)\n"
+            "var p2 = pair(1, \"x\")             // (i64, string)\n"
             "```\n"
             "\n"
             "### Type aliases\n"
             "```xray\n"
-            "type Result = int | string\n"
-            "type Mapper = fn(int) -> int\n"
-            "type Point = { x: float, y: float }\n"
+            "type Result = i64 | string\n"
+            "type Mapper = fn(i64) -> i64\n"
+            "type Point = { x: f64, y: f64 }\n"
             "type Pair<T> = { first: T, second: T }\n"
             "type Mapper2<T, U> = fn(T) -> U\n"
             "```\n"
             "\n"
             "### Type inference\n"
             "```xray\n"
-            "var x = 1               // x: int\n"
-            "var y = 1.5             // y: float\n"
+            "var x = 1               // x: i64\n"
+            "var y = 1.5             // y: f64\n"
             "var z = \"hello\"         // z: string\n"
-            "var a = [1, 2, 3]       // a: Array<int>\n"
-            "var m = #{\"a\": 1}    // m: Map<string, int>\n"
+            "var a = [1, 2, 3]       // a: Array<i64>\n"
+            "var m = #{\"a\": 1}    // m: Map<string, i64>\n"
             "var p = { name: \"A\" }   // p: { name: string } \xe2\x80\x94 structured object type\n"
-            "var f = (x: int) -> x   // f: fn(int) -> int \xe2\x80\x94 explicit parameter, inferred return\n"
+            "var f = (x: i64) -> x   // f: fn(i64) -> i64 \xe2\x80\x94 explicit parameter, inferred return\n"
             "```\n"
             "\n"
             "### Explicit casts\n"
             "```xray\n"
-            "var n = x as int        // throws TypeError on failure\n"
-            "var n = x as int?       // returns null on failure (safe cast)\n"
+            "var n = x as i64        // throws TypeError on failure\n"
+            "var n = x as i64?       // returns null on failure (safe cast)\n"
             "```\n"
             "\n"
             "### Construction expressions\n"
             "```xray\n"
             "var p = Point(1.0, 2.0)\n"
-            "var arr = Array<int>()\n"
-            "const ch = Channel<int>(10)\n"
-            "var m = Map<string, int>()\n"
+            "var arr = Array<i64>()\n"
+            "const ch = Channel<i64>(10)\n"
+            "var m = Map<string, i64>()\n"
             "```\n"
             "```xray\n"
-            "var a = [1, 2, 3]              // equivalent to Array<int>() + push\n"
+            "var a = [1, 2, 3]              // equivalent to Array<i64>() + push\n"
             "var m = #{}                    // equivalent to Map<...>()\n"
             "var p = Point{x: 1, y: 2}      // struct literal\n"
             "```\n"
@@ -8318,9 +8305,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "\n"
             "### var\n"
             "```xray\n"
-            "var x = 1                         // type inferred as int\n"
+            "var x = 1                         // type inferred as i64\n"
             "var name: string = \"Alice\"        // explicit type\n"
-            "var count: int                    // no initializer: zero value used\n"
+            "var count: i64                    // no initializer: zero value used\n"
             "var maybeName: string?            // OK: defaults to null\n"
             "var empty: string = \"\"            // string requires an explicit initializer\n"
             "```\n"
@@ -8328,12 +8315,12 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### const\n"
             "```xray\n"
             "const PI = 3.14159\n"
-            "const MAX_LEN: int = 1024\n"
+            "const MAX_LEN: i64 = 1024\n"
             "```\n"
             "\n"
             "### Capabilities, move, and copy\n"
             "```xray\n"
-            "const channel = Channel<int>(16)\n"
+            "const channel = Channel<i64>(16)\n"
             "const counter = Atomic(0)\n"
             "\n"
             "var source = [1, 2, 3]\n"
@@ -8381,10 +8368,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Coro.CoroGroupKey` | `enum CoroGroupKey` | Stable key used to group coroutine diagnostic snapshots |\n"
             "| `Coro.CoroGroupKey.Name` | `CoroGroupKey.Name` | Enum variant |\n"
             "| `Coro.CoroGroupKey.State` | `CoroGroupKey.State` | Enum variant |\n"
-            "| `Coro.CoroInfo` | `{ id: int, name: string?, state: CoroState, reductions: int, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
-            "| `Coro.CoroInfo.id` | `const int` | Object field |\n"
+            "| `Coro.CoroInfo` | `{ id: i64, name: string?, state: CoroState, reductions: i64, source: string? }` | Typed diagnostic snapshot for one coroutine |\n"
+            "| `Coro.CoroInfo.id` | `const i64` | Object field |\n"
             "| `Coro.CoroInfo.name` | `const string?` | Object field |\n"
-            "| `Coro.CoroInfo.reductions` | `const int` | Object field |\n"
+            "| `Coro.CoroInfo.reductions` | `const i64` | Object field |\n"
             "| `Coro.CoroInfo.source` | `const string?` | Object field |\n"
             "| `Coro.CoroInfo.state` | `const CoroState` | Object field |\n"
             "| `Coro.CoroMetric` | `enum CoroMetric` | Metric used to rank coroutine diagnostic snapshots |\n"
@@ -8396,25 +8383,25 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Coro.CoroState.Ready` | `CoroState.Ready` | Enum variant |\n"
             "| `Coro.CoroState.Running` | `CoroState.Running` | Enum variant |\n"
             "| `Coro.CoroState.Unknown` | `CoroState.Unknown` | Enum variant |\n"
-            "| `Coro.CoroStats` | `{ active: int, blocked: int, ready: int, total: int, created: int }` | Typed aggregate counters for the coroutine scheduler |\n"
-            "| `Coro.CoroStats.active` | `const int` | Object field |\n"
-            "| `Coro.CoroStats.blocked` | `const int` | Object field |\n"
-            "| `Coro.CoroStats.created` | `const int` | Object field |\n"
-            "| `Coro.CoroStats.ready` | `const int` | Object field |\n"
-            "| `Coro.CoroStats.total` | `const int` | Object field |\n"
+            "| `Coro.CoroStats` | `{ active: i64, blocked: i64, ready: i64, total: i64, created: i64 }` | Typed aggregate counters for the coroutine scheduler |\n"
+            "| `Coro.CoroStats.active` | `const i64` | Object field |\n"
+            "| `Coro.CoroStats.blocked` | `const i64` | Object field |\n"
+            "| `Coro.CoroStats.created` | `const i64` | Object field |\n"
+            "| `Coro.CoroStats.ready` | `const i64` | Object field |\n"
+            "| `Coro.CoroStats.total` | `const i64` | Object field |\n"
             "| `Coro.Local` | `<T>(): CoroLocal<T>` | Create a typed coroutine-local slot |\n"
             "| `Coro.deadlocks` | `(): Array<CoroDeadlock>` | Detect deadlocked coroutines |\n"
             "| `Coro.demonitor` | `(ch: Channel<string>): ()` | Cancel coroutine monitor |\n"
-            "| `Coro.dump` | `(limit?: int): ()` | Dump coroutine state |\n"
-            "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, int>` | Group coroutines by field |\n"
+            "| `Coro.dump` | `(limit?: i64): ()` | Dump coroutine state |\n"
+            "| `Coro.groupBy` | `(field: CoroGroupKey): Map<string, i64>` | Group coroutines by field |\n"
             "| `Coro.kill` | `(name: string, reason?: string): bool` | Kill named coroutine |\n"
-            "| `Coro.list` | `(limit?: int, state?: CoroState): Array<CoroInfo>` | List coroutines |\n"
+            "| `Coro.list` | `(limit?: i64, state?: CoroState): Array<CoroInfo>` | List coroutines |\n"
             "| `Coro.lockThread` | `(): ()` | Lock current thread |\n"
             "| `Coro.monitor` | `(name: string): Channel<string>` | Monitor named coroutine, returns Channel |\n"
             "| `Coro.self` | `(): string?` | Get current coroutine name |\n"
-            "| `Coro.stalled` | `(timeout_ms?: int): Array<CoroInfo>` | Detect stalled coroutines |\n"
+            "| `Coro.stalled` | `(timeout_ms?: i64): Array<CoroInfo>` | Detect stalled coroutines |\n"
             "| `Coro.stats` | `(): CoroStats` | Get coroutine statistics |\n"
-            "| `Coro.top` | `(n: int, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n"
+            "| `Coro.top` | `(n: i64, metric?: CoroMetric): Array<CoroInfo>` | Top N coroutines by metric |\n"
             "| `Coro.unlockThread` | `(): ()` | Unlock current thread |\n"
             "| `Coro.whereis` | `(name: string): bool` | Check if named coroutine exists |\n"
             "| `Coro.yield` | `(): ()` | Cooperative CPU yield (Gosched) |\n"
@@ -8463,8 +8450,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Base64EncodeOptions.alphabet` | `: Base64Alphabet` |  |\n"
             "| `Base64EncodeOptions.constructor` | `(): ()` |  |\n"
             "| `Base64EncodeOptions.padding` | `: bool` |  |\n"
-            "| `base64.decode` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<byte>` |  |\n"
-            "| `base64.encode` | `(data: Slice<byte>, options: Base64EncodeOptions = Base64EncodeOptions()): string` |  |\n"
+            "| `base64.decode` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): Array<u8>` |  |\n"
+            "| `base64.encode` | `(data: Slice<u8>, options: Base64EncodeOptions = Base64EncodeOptions()): string` |  |\n"
             "| `base64.isValid` | `(text: string, options: Base64DecodeOptions = Base64DecodeOptions()): bool` |  |\n"
             "",
         .symbols = _symbols_base64,
@@ -8484,9 +8471,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `cluster.ClusterConfig` | `{ name: string, port: int, secret: string?, tls: ClusterTlsOptions?, }` |  |\n"
+            "| `cluster.ClusterConfig` | `{ name: string, port: i64, secret: string?, tls: ClusterTlsOptions?, }` |  |\n"
             "| `cluster.ClusterConfig.name` | `string` | Type alias field |\n"
-            "| `cluster.ClusterConfig.port` | `int` | Type alias field |\n"
+            "| `cluster.ClusterConfig.port` | `i64` | Type alias field |\n"
             "| `cluster.ClusterConfig.secret` | `string?` | Type alias field |\n"
             "| `cluster.ClusterConfig.tls` | `ClusterTlsOptions?` | Type alias field |\n"
             "| `cluster.ClusterDelivery` | `enum ClusterDelivery` | Outcome of handing one opaque service envelope to the cluster transport |\n"
@@ -8496,33 +8483,33 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.ClusterDelivery.InvalidTopic` | `ClusterDelivery.InvalidTopic` | Enum variant |\n"
             "| `cluster.ClusterDelivery.Overloaded` | `ClusterDelivery.Overloaded` | Enum variant |\n"
             "| `cluster.ClusterDelivery.Unavailable` | `ClusterDelivery.Unavailable` | Enum variant |\n"
-            "| `cluster.ClusterInfo` | `{ self: string, port: int, running: bool, nodes: Array<ClusterNodeInfo>, listeners: int, deadNodes: int, heartbeatIntervalMs: int, heartbeatTimeoutMs: int, maxMissedHeartbeats: int, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
-            "| `cluster.ClusterInfo.deadNodes` | `const int` | Object field |\n"
-            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const int` | Object field |\n"
-            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const int` | Object field |\n"
-            "| `cluster.ClusterInfo.listeners` | `const int` | Object field |\n"
-            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo` | `{ self: string, port: i64, running: bool, nodes: Array<ClusterNodeInfo>, listeners: i64, deadNodes: i64, heartbeatIntervalMs: i64, heartbeatTimeoutMs: i64, maxMissedHeartbeats: i64, tls: ClusterTlsStatus }` | Typed diagnostic snapshot for the local cluster runtime |\n"
+            "| `cluster.ClusterInfo.deadNodes` | `const i64` | Object field |\n"
+            "| `cluster.ClusterInfo.heartbeatIntervalMs` | `const i64` | Object field |\n"
+            "| `cluster.ClusterInfo.heartbeatTimeoutMs` | `const i64` | Object field |\n"
+            "| `cluster.ClusterInfo.listeners` | `const i64` | Object field |\n"
+            "| `cluster.ClusterInfo.maxMissedHeartbeats` | `const i64` | Object field |\n"
             "| `cluster.ClusterInfo.nodes` | `const Array<ClusterNodeInfo>` | Object field |\n"
-            "| `cluster.ClusterInfo.port` | `const int` | Object field |\n"
+            "| `cluster.ClusterInfo.port` | `const i64` | Object field |\n"
             "| `cluster.ClusterInfo.running` | `const bool` | Object field |\n"
             "| `cluster.ClusterInfo.self` | `const string` | Object field |\n"
             "| `cluster.ClusterInfo.tls` | `const ClusterTlsStatus` | Object field |\n"
-            "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: int, state: ClusterNodeState, framesSent: int, framesReceived: int, bytesSent: int, bytesReceived: int, sendErrors: int, slowConsumerEvents: int, rttMs: int, outQueueBytes: int, outQueueFrames: int, slow: bool, phi: float, missedHeartbeats: int }` | Typed diagnostic snapshot for one remote cluster node |\n"
-            "| `cluster.ClusterNodeInfo.bytesReceived` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.bytesSent` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.framesReceived` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.framesSent` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo` | `{ name: string, host: string, port: i64, state: ClusterNodeState, framesSent: i64, framesReceived: i64, bytesSent: i64, bytesReceived: i64, sendErrors: i64, slowConsumerEvents: i64, rttMs: i64, outQueueBytes: i64, outQueueFrames: i64, slow: bool, phi: f64, missedHeartbeats: i64 }` | Typed diagnostic snapshot for one remote cluster node |\n"
+            "| `cluster.ClusterNodeInfo.bytesReceived` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.bytesSent` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.framesReceived` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.framesSent` | `const i64` | Object field |\n"
             "| `cluster.ClusterNodeInfo.host` | `const string` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.missedHeartbeats` | `const i64` | Object field |\n"
             "| `cluster.ClusterNodeInfo.name` | `const string` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.phi` | `const float` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.port` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.rttMs` | `const int` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.sendErrors` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueBytes` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.outQueueFrames` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.phi` | `const f64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.port` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.rttMs` | `const i64` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.sendErrors` | `const i64` | Object field |\n"
             "| `cluster.ClusterNodeInfo.slow` | `const bool` | Object field |\n"
-            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const int` | Object field |\n"
+            "| `cluster.ClusterNodeInfo.slowConsumerEvents` | `const i64` | Object field |\n"
             "| `cluster.ClusterNodeInfo.state` | `const ClusterNodeState` | Object field |\n"
             "| `cluster.ClusterNodeState` | `enum ClusterNodeState` | Lifecycle state of a remote cluster node |\n"
             "| `cluster.ClusterNodeState.Closing` | `ClusterNodeState.Closing` | Enum variant |\n"
@@ -8540,18 +8527,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `cluster.ClusterTlsStatus.clientReady` | `const bool` | Object field |\n"
             "| `cluster.ClusterTlsStatus.enabled` | `const bool` | Object field |\n"
             "| `cluster.ClusterTlsStatus.serverReady` | `const bool` | Object field |\n"
-            "| `cluster.HANDSHAKE_VERSION` | `: int` |  |\n"
-            "| `cluster.NODE_NAME_MAX` | `: int` |  |\n"
+            "| `cluster.HANDSHAKE_VERSION` | `: i64` |  |\n"
+            "| `cluster.NODE_NAME_MAX` | `: i64` |  |\n"
             "| `NodeAddress` | `NodeAddress` |  |\n"
-            "| `NodeAddress.constructor` | `(host: string, port: int): ()` |  |\n"
+            "| `NodeAddress.constructor` | `(host: string, port: i64): ()` |  |\n"
             "| `NodeAddress.host` | `: string` |  |\n"
-            "| `NodeAddress.port` | `: int` |  |\n"
-            "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: int` |  |\n"
-            "| `cluster.TOPIC_PATTERN_MAX` | `: int` |  |\n"
+            "| `NodeAddress.port` | `: i64` |  |\n"
+            "| `cluster.TOPIC_DEFAULT_HOP_LIMIT` | `: i64` |  |\n"
+            "| `cluster.TOPIC_PATTERN_MAX` | `: i64` |  |\n"
             "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
             "| `cluster.info` | `(): ClusterInfo?` | Get cluster status info |\n"
             "| `cluster.join` | `(addr: string): bool` |  |\n"
-            "| `cluster.listen` | `(pattern: string, capacity: int = 1024): Channel<Buffer>?` |  |\n"
+            "| `cluster.listen` | `(pattern: string, capacity: i64 = 1024): Channel<Buffer>?` |  |\n"
             "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
             "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
             "| `cluster.parseAddress` | `(addr: string): NodeAddress` |  |\n"
@@ -8606,15 +8593,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `compress.adler32` | `(data: string): int` | Compute Adler-32 checksum |\n"
-            "| `compress.crc32` | `(data: string): int` | Compute CRC-32 checksum |\n"
-            "| `compress.deflate` | `(data: string, level?: int): string?` | Deflate compress |\n"
+            "| `compress.adler32` | `(data: string): i64` | Compute Adler-32 checksum |\n"
+            "| `compress.crc32` | `(data: string): i64` | Compute CRC-32 checksum |\n"
+            "| `compress.deflate` | `(data: string, level?: i64): string?` | Deflate compress |\n"
             "| `compress.gunzip` | `(data: string): string` | Gzip decompress |\n"
-            "| `compress.gzip` | `(data: string, level?: int): string?` | Gzip compress |\n"
+            "| `compress.gzip` | `(data: string, level?: i64): string?` | Gzip compress |\n"
             "| `compress.inflate` | `(data: string): string` | Inflate decompress |\n"
             "| `compress.isGzip` | `(data: string): bool` | Check if gzip data |\n"
             "| `compress.isZlib` | `(data: string): bool` | Check if zlib data |\n"
-            "| `compress.zlibCompress` | `(data: string, level?: int): string?` | Zlib compress |\n"
+            "| `compress.zlibCompress` | `(data: string, level?: i64): string?` | Zlib compress |\n"
             "| `compress.zlibDecompress` | `(data: string): string` | Zlib decompress |\n"
             "",
         .symbols = _symbols_compress,
@@ -8638,7 +8625,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `crypto.encrypt` | `(key: string, plaintext: string): string` | AES-256-CBC encrypt |\n"
             "| `crypto.hmac` | `(algo: string, key: string, data: string): string?` | Compute HMAC |\n"
             "| `crypto.md5` | `(data: string): string` | Compute MD5 hash |\n"
-            "| `crypto.randomBytes` | `(n: int): string` | Generate random bytes |\n"
+            "| `crypto.randomBytes` | `(n: i64): string` | Generate random bytes |\n"
             "| `crypto.sha1` | `(data: string): string` | Compute SHA-1 hash |\n"
             "| `crypto.sha256` | `(data: string): string` | Compute SHA-256 hash |\n"
             "| `crypto.sha512` | `(data: string): string` | Compute SHA-512 hash |\n"
@@ -8663,29 +8650,29 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `CsvDiagnostic` | `CsvDiagnostic` |  |\n"
-            "| `CsvDiagnostic.byteOffset` | `: int` |  |\n"
-            "| `CsvDiagnostic.column` | `: int` |  |\n"
-            "| `CsvDiagnostic.constructor` | `(kind: CsvErrorKind, byteOffset: int, line: int, record: int, column: int, message: string): ()` |  |\n"
+            "| `CsvDiagnostic.byteOffset` | `: i64` |  |\n"
+            "| `CsvDiagnostic.column` | `: i64` |  |\n"
+            "| `CsvDiagnostic.constructor` | `(kind: CsvErrorKind, byteOffset: i64, line: i64, record: i64, column: i64, message: string): ()` |  |\n"
             "| `CsvDiagnostic.kind` | `: CsvErrorKind` |  |\n"
-            "| `CsvDiagnostic.line` | `: int` |  |\n"
+            "| `CsvDiagnostic.line` | `: i64` |  |\n"
             "| `CsvDiagnostic.message` | `: string` |  |\n"
-            "| `CsvDiagnostic.record` | `: int` |  |\n"
+            "| `CsvDiagnostic.record` | `: i64` |  |\n"
             "| `CsvDocument` | `CsvDocument` |  |\n"
             "| `CsvDocument.constructor` | `(): ()` |  |\n"
             "| `CsvDocument.headers` | `: Array<string>` |  |\n"
             "| `CsvDocument.rows` | `: Array<Array<string>>` |  |\n"
-            "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: int, maxRecords: int, maxInputBytes: int, maxFieldBytes: int, maxColumns: int }` |  |\n"
+            "| `csv.CsvParseOptions` | `{ delimiter: CsvDelimiter, quoteChar: rune, escapeChar: rune, header: CsvHeader, trimFields: bool, skipEmptyLines: bool, commentPrefix: string, skipRecords: i64, maxRecords: i64, maxInputBytes: i64, maxFieldBytes: i64, maxColumns: i64 }` |  |\n"
             "| `csv.CsvParseOptions.commentPrefix` | `string` | Type alias field |\n"
             "| `csv.CsvParseOptions.delimiter` | `CsvDelimiter` | Type alias field |\n"
             "| `csv.CsvParseOptions.escapeChar` | `rune` | Type alias field |\n"
             "| `csv.CsvParseOptions.header` | `CsvHeader` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxColumns` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxFieldBytes` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxInputBytes` | `int` | Type alias field |\n"
-            "| `csv.CsvParseOptions.maxRecords` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxColumns` | `i64` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxFieldBytes` | `i64` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxInputBytes` | `i64` | Type alias field |\n"
+            "| `csv.CsvParseOptions.maxRecords` | `i64` | Type alias field |\n"
             "| `csv.CsvParseOptions.quoteChar` | `rune` | Type alias field |\n"
             "| `csv.CsvParseOptions.skipEmptyLines` | `bool` | Type alias field |\n"
-            "| `csv.CsvParseOptions.skipRecords` | `int` | Type alias field |\n"
+            "| `csv.CsvParseOptions.skipRecords` | `i64` | Type alias field |\n"
             "| `csv.CsvParseOptions.trimFields` | `bool` | Type alias field |\n"
             "| `CsvParseReport` | `CsvParseReport` |  |\n"
             "| `CsvParseReport.constructor` | `(document: CsvDocument, diagnostics: Array<CsvDiagnostic>, delimiter: rune, linebreak: string, truncated: bool): ()` |  |\n"
@@ -8723,37 +8710,37 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `DateTime` | `DateTime` |  |\n"
-            "| `DateTime.add` | `(amount: int, unit: string): DateTime` |  |\n"
-            "| `DateTime.constructor` | `(timestamp: int, millisecond: int = 0, tzOffset: int = 0, isUtc: bool = true): ()` |  |\n"
-            "| `DateTime.day` | `: int { fn() { return this._day } }` |  |\n"
-            "| `DateTime.daysInMonth` | `(): int` |  |\n"
-            "| `DateTime.diff` | `(other: DateTime, unit: string = \"seconds\"): int` |  |\n"
+            "| `DateTime.add` | `(amount: i64, unit: string): DateTime` |  |\n"
+            "| `DateTime.constructor` | `(timestamp: i64, millisecond: i64 = 0, tzOffset: i64 = 0, isUtc: bool = true): ()` |  |\n"
+            "| `DateTime.day` | `: i64 { fn() { return this._day } }` |  |\n"
+            "| `DateTime.daysInMonth` | `(): i64` |  |\n"
+            "| `DateTime.diff` | `(other: DateTime, unit: string = \"seconds\"): i64` |  |\n"
             "| `DateTime.equals` | `(other: DateTime): bool` |  |\n"
             "| `DateTime.format` | `(pattern: string = \"YYYY-MM-DD HH:mm:ss\"): string` |  |\n"
-            "| `DateTime.hour` | `: int { fn() { return this._hour } }` |  |\n"
+            "| `DateTime.hour` | `: i64 { fn() { return this._hour } }` |  |\n"
             "| `DateTime.isAfter` | `(other: DateTime): bool` |  |\n"
             "| `DateTime.isBefore` | `(other: DateTime): bool` |  |\n"
             "| `DateTime.isLeapYear` | `(): bool` |  |\n"
             "| `DateTime.isUtc` | `: bool { fn() { return this._isUtc } }` |  |\n"
-            "| `DateTime.millisecond` | `: int { fn() { return this._millisecond } }` |  |\n"
-            "| `DateTime.minute` | `: int { fn() { return this._minute } }` |  |\n"
-            "| `DateTime.month` | `: int { fn() { return this._month } }` |  |\n"
-            "| `DateTime.second` | `: int { fn() { return this._second } }` |  |\n"
-            "| `DateTime.timestamp` | `: int { fn() { return this._timestamp } }` |  |\n"
+            "| `DateTime.millisecond` | `: i64 { fn() { return this._millisecond } }` |  |\n"
+            "| `DateTime.minute` | `: i64 { fn() { return this._minute } }` |  |\n"
+            "| `DateTime.month` | `: i64 { fn() { return this._month } }` |  |\n"
+            "| `DateTime.second` | `: i64 { fn() { return this._second } }` |  |\n"
+            "| `DateTime.timestamp` | `: i64 { fn() { return this._timestamp } }` |  |\n"
             "| `DateTime.toISOString` | `(): string` |  |\n"
             "| `DateTime.toLocal` | `(): DateTime` |  |\n"
             "| `DateTime.toString` | `(): string` |  |\n"
             "| `DateTime.toUTC` | `(): DateTime` |  |\n"
-            "| `DateTime.tzOffset` | `: int { fn() { return this._tzOffset } }` |  |\n"
-            "| `DateTime.weekday` | `: int { fn() { return this._weekday } }` |  |\n"
-            "| `DateTime.year` | `: int { fn() { return this._year } }` |  |\n"
-            "| `DateTime.yearday` | `: int { fn() { return this._yearday } }` |  |\n"
-            "| `datetime.create` | `(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime` |  |\n"
-            "| `datetime.createUTC` | `(year: int, month: int = 1, day: int = 1, hour: int = 0, minute: int = 0, second: int = 0): DateTime` |  |\n"
-            "| `datetime.fromTimestamp` | `(ts: int): DateTime` |  |\n"
-            "| `datetime.fromTimestampMs` | `(ts: int): DateTime` |  |\n"
+            "| `DateTime.tzOffset` | `: i64 { fn() { return this._tzOffset } }` |  |\n"
+            "| `DateTime.weekday` | `: i64 { fn() { return this._weekday } }` |  |\n"
+            "| `DateTime.year` | `: i64 { fn() { return this._year } }` |  |\n"
+            "| `DateTime.yearday` | `: i64 { fn() { return this._yearday } }` |  |\n"
+            "| `datetime.create` | `(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime` |  |\n"
+            "| `datetime.createUTC` | `(year: i64, month: i64 = 1, day: i64 = 1, hour: i64 = 0, minute: i64 = 0, second: i64 = 0): DateTime` |  |\n"
+            "| `datetime.fromTimestamp` | `(ts: i64): DateTime` |  |\n"
+            "| `datetime.fromTimestampMs` | `(ts: i64): DateTime` |  |\n"
             "| `datetime.now` | `(): DateTime` |  |\n"
-            "| `datetime.offset` | `(): int` |  |\n"
+            "| `datetime.offset` | `(): i64` |  |\n"
             "| `datetime.parse` | `(s: string, format: string = \"ISO8601\"): DateTime?` |  |\n"
             "| `datetime.utc` | `(): DateTime` |  |\n"
             "",
@@ -8781,12 +8768,12 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Utf16EncodeOptions` | `Utf16EncodeOptions` |  |\n"
             "| `Utf16EncodeOptions.constructor` | `(): ()` |  |\n"
             "| `Utf16EncodeOptions.order` | `: Endian` |  |\n"
-            "| `encoding.hexDecode` | `(hex: string): Array<byte>` |  |\n"
-            "| `encoding.hexEncode` | `(data: Slice<byte>): string` |  |\n"
+            "| `encoding.hexDecode` | `(hex: string): Array<u8>` |  |\n"
+            "| `encoding.hexEncode` | `(data: Slice<u8>): string` |  |\n"
             "| `encoding.hexValid` | `(hex: string): bool` |  |\n"
-            "| `encoding.utf16Decode` | `(data: Slice<byte>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string` |  |\n"
-            "| `encoding.utf16Encode` | `(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<byte>` |  |\n"
-            "| `encoding.utf8Valid` | `(data: Slice<byte>): bool` |  |\n"
+            "| `encoding.utf16Decode` | `(data: Slice<u8>, options: Utf16DecodeOptions = Utf16DecodeOptions()): string` |  |\n"
+            "| `encoding.utf16Encode` | `(data: string, options: Utf16EncodeOptions = Utf16EncodeOptions()): Array<u8>` |  |\n"
+            "| `encoding.utf8Valid` | `(data: Slice<u8>): bool` |  |\n"
             "",
         .symbols = _symbols_encoding,
         .symbol_count = (int)(sizeof(_symbols_encoding) / sizeof(_symbols_encoding[0])),
@@ -8807,19 +8794,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `ChunkedBody` | `ChunkedBody` |  |\n"
             "| `ChunkedBody.body` | `: string` |  |\n"
-            "| `ChunkedBody.constructor` | `(body: string, trailers: Headers, consumedBytes: int): ()` |  |\n"
-            "| `ChunkedBody.consumedBytes` | `: int` |  |\n"
+            "| `ChunkedBody.constructor` | `(body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
+            "| `ChunkedBody.consumedBytes` | `: i64` |  |\n"
             "| `ChunkedBody.getTrailer` | `(name: string): string?` |  |\n"
             "| `ChunkedBody.getTrailers` | `(name: string): Array<string>` |  |\n"
             "| `ChunkedBody.trailers` | `: Headers` |  |\n"
             "| `Cookie` | `Cookie` |  |\n"
-            "| `Cookie.constructor` | `(name: string, value: string, domain: string, path: string, expires: int = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n"
+            "| `Cookie.constructor` | `(name: string, value: string, domain: string, path: string, expires: i64 = 0, secure: bool = false, httpOnly: bool = false, sameSite: string = \"\", hostOnly: bool = false): ()` |  |\n"
             "| `Cookie.domain` | `: string` |  |\n"
-            "| `Cookie.expires` | `: int` |  |\n"
+            "| `Cookie.expires` | `: i64` |  |\n"
             "| `Cookie.hostOnly` | `: bool` |  |\n"
             "| `Cookie.httpOnly` | `: bool` |  |\n"
-            "| `Cookie.isExpired` | `(nowSeconds: int = 0): bool` |  |\n"
-            "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): bool` |  |\n"
+            "| `Cookie.isExpired` | `(nowSeconds: i64 = 0): bool` |  |\n"
+            "| `Cookie.matches` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): bool` |  |\n"
             "| `Cookie.name` | `: string` |  |\n"
             "| `Cookie.path` | `: string` |  |\n"
             "| `Cookie.sameSite` | `: string` |  |\n"
@@ -8827,26 +8814,26 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Cookie.serialize` | `(): string` |  |\n"
             "| `Cookie.value` | `: string` |  |\n"
             "| `CookieJar` | `CookieJar` |  |\n"
-            "| `CookieJar.add` | `(cookie: Cookie, nowSeconds: int = 0): ()` |  |\n"
-            "| `CookieJar.addFromResponse` | `(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: int = 0): ()` |  |\n"
-            "| `CookieJar.cleanup` | `(nowSeconds: int = 0): ()` |  |\n"
+            "| `CookieJar.add` | `(cookie: Cookie, nowSeconds: i64 = 0): ()` |  |\n"
+            "| `CookieJar.addFromResponse` | `(setCookieHeaders: Array<string>, requestDomain: string, requestPath: string, nowSeconds: i64 = 0): ()` |  |\n"
+            "| `CookieJar.cleanup` | `(nowSeconds: i64 = 0): ()` |  |\n"
             "| `CookieJar.clear` | `(): ()` |  |\n"
             "| `CookieJar.clearDomain` | `(domain: string): ()` |  |\n"
-            "| `CookieJar.constructor` | `(maxCookies: int = 300): ()` |  |\n"
+            "| `CookieJar.constructor` | `(maxCookies: i64 = 300): ()` |  |\n"
             "| `CookieJar.cookies` | `: Array<Cookie>` |  |\n"
-            "| `CookieJar.count` | `: int { fn() { return len(this.cookies) } }` |  |\n"
-            "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: int = 0): string?` |  |\n"
-            "| `CookieJar.maxCookies` | `: int` |  |\n"
+            "| `CookieJar.count` | `: i64 { fn() { return len(this.cookies) } }` |  |\n"
+            "| `CookieJar.getHeader` | `(domain: string, path: string, isSecure: bool = false, nowSeconds: i64 = 0): string?` |  |\n"
+            "| `CookieJar.maxCookies` | `: i64` |  |\n"
             "| `FormData` | `FormData` |  |\n"
             "| `FormData.append` | `(name: string, value: string): bool` |  |\n"
             "| `FormData.appendFile` | `(name: string, path: Path): bool` |  |\n"
             "| `FormData.boundary` | `: string` |  |\n"
             "| `FormData.build` | `(): MultipartBody` |  |\n"
-            "| `FormData.constructor` | `(maxTotalSize: int, maxFileSize: int): ()` |  |\n"
+            "| `FormData.constructor` | `(maxTotalSize: i64, maxFileSize: i64): ()` |  |\n"
             "| `FormData.fields` | `: Array<_FormField>` |  |\n"
-            "| `FormData.maxFileSize` | `: int` |  |\n"
-            "| `FormData.maxTotalSize` | `: int` |  |\n"
-            "| `FormData.totalSize` | `: int` |  |\n"
+            "| `FormData.maxFileSize` | `: i64` |  |\n"
+            "| `FormData.maxTotalSize` | `: i64` |  |\n"
+            "| `FormData.totalSize` | `: i64` |  |\n"
             "| `Headers` | `Headers` |  |\n"
             "| `Headers.add` | `(name: string, value: string): ()` |  |\n"
             "| `Headers.constructor` | `(): ()` |  |\n"
@@ -8868,9 +8855,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpMethod.toString` | `(): string` |  |\n"
             "| `HttpMethod.token` | `: string` |  |\n"
             "| `HttpRequest` | `HttpRequest` |  |\n"
-            "| `HttpRequest.body` | `: Array<byte>` |  |\n"
-            "| `HttpRequest.constructor` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<byte>, contentLength: int, params: Map<string, string>): ()` |  |\n"
-            "| `HttpRequest.contentLength` | `: int` |  |\n"
+            "| `HttpRequest.body` | `: Array<u8>` |  |\n"
+            "| `HttpRequest.constructor` | `(method: HttpMethod, path: string, query: QueryParams, headers: Headers, body: Array<u8>, contentLength: i64, params: Map<string, string>): ()` |  |\n"
+            "| `HttpRequest.contentLength` | `: i64` |  |\n"
             "| `HttpRequest.headers` | `: Headers` |  |\n"
             "| `HttpRequest.json` | `(): T` |  |\n"
             "| `HttpRequest.jsonObject` | `(): JSON.Object` |  |\n"
@@ -8881,18 +8868,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpRequest.path` | `: string` |  |\n"
             "| `HttpRequest.query` | `: QueryParams` |  |\n"
             "| `HttpRequest.text` | `(): string` |  |\n"
-            "| `http.HttpRequestOptions` | `{ url: string, method: HttpMethod?, headers: Headers?, body: Array<byte>?, followRedirects: bool?, maxRedirects: int?, timeoutMs: int?, version: HttpVersion? }` |  |\n"
-            "| `http.HttpRequestOptions.body` | `Array<byte>?` | Type alias field |\n"
+            "| `http.HttpRequestOptions` | `{ url: string, method: HttpMethod?, headers: Headers?, body: Array<u8>?, followRedirects: bool?, maxRedirects: i64?, timeoutMs: i64?, version: HttpVersion? }` |  |\n"
+            "| `http.HttpRequestOptions.body` | `Array<u8>?` | Type alias field |\n"
             "| `http.HttpRequestOptions.followRedirects` | `bool?` | Type alias field |\n"
             "| `http.HttpRequestOptions.headers` | `Headers?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.maxRedirects` | `int?` | Type alias field |\n"
+            "| `http.HttpRequestOptions.maxRedirects` | `i64?` | Type alias field |\n"
             "| `http.HttpRequestOptions.method` | `HttpMethod?` | Type alias field |\n"
-            "| `http.HttpRequestOptions.timeoutMs` | `int?` | Type alias field |\n"
+            "| `http.HttpRequestOptions.timeoutMs` | `i64?` | Type alias field |\n"
             "| `http.HttpRequestOptions.url` | `string` | Type alias field |\n"
             "| `http.HttpRequestOptions.version` | `HttpVersion?` | Type alias field |\n"
             "| `HttpResponse` | `HttpResponse` |  |\n"
-            "| `HttpResponse.body` | `: Array<byte>` |  |\n"
-            "| `HttpResponse.constructor` | `(version: HttpVersion, status: int, reason: string, headers: Headers, body: Array<byte>): ()` |  |\n"
+            "| `HttpResponse.body` | `: Array<u8>` |  |\n"
+            "| `HttpResponse.constructor` | `(version: HttpVersion, status: i64, reason: string, headers: Headers, body: Array<u8>): ()` |  |\n"
             "| `HttpResponse.headers` | `: Headers` |  |\n"
             "| `HttpResponse.isSuccess` | `(): bool` |  |\n"
             "| `HttpResponse.json` | `(): T` |  |\n"
@@ -8900,7 +8887,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `HttpResponse.jsonValue` | `(): JSON.Value` |  |\n"
             "| `HttpResponse.jsonWithRest` | `(): JSON.WithRest<T>` |  |\n"
             "| `HttpResponse.reason` | `: string` |  |\n"
-            "| `HttpResponse.status` | `: int` |  |\n"
+            "| `HttpResponse.status` | `: i64` |  |\n"
             "| `HttpResponse.text` | `(): string` |  |\n"
             "| `HttpResponse.version` | `: HttpVersion` |  |\n"
             "| `MultipartBody` | `MultipartBody` |  |\n"
@@ -8915,11 +8902,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RedirectDecision.url` | `: string` |  |\n"
             "| `RequestHead` | `RequestHead` |  |\n"
             "| `RequestHead.chunked` | `: bool` |  |\n"
-            "| `RequestHead.constructor` | `(method: string, target: string, version: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()` |  |\n"
-            "| `RequestHead.contentLength` | `: int` |  |\n"
+            "| `RequestHead.constructor` | `(method: string, target: string, version: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
+            "| `RequestHead.contentLength` | `: i64` |  |\n"
             "| `RequestHead.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestHead.getHeaders` | `(name: string): Array<string>` |  |\n"
-            "| `RequestHead.headerBytes` | `: int` |  |\n"
+            "| `RequestHead.headerBytes` | `: i64` |  |\n"
             "| `RequestHead.headers` | `: Headers` |  |\n"
             "| `RequestHead.keepAlive` | `: bool` |  |\n"
             "| `RequestHead.method` | `: string` |  |\n"
@@ -8927,8 +8914,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestHead.version` | `: string` |  |\n"
             "| `RequestMessage` | `RequestMessage` |  |\n"
             "| `RequestMessage.body` | `: string` |  |\n"
-            "| `RequestMessage.constructor` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: int): ()` |  |\n"
-            "| `RequestMessage.consumedBytes` | `: int` |  |\n"
+            "| `RequestMessage.constructor` | `(head: RequestHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
+            "| `RequestMessage.consumedBytes` | `: i64` |  |\n"
             "| `RequestMessage.getHeader` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `RequestMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
@@ -8936,20 +8923,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `RequestMessage.trailers` | `: Headers` |  |\n"
             "| `ResponseHead` | `ResponseHead` |  |\n"
             "| `ResponseHead.chunked` | `: bool` |  |\n"
-            "| `ResponseHead.constructor` | `(version: string, status: int, reason: string, headers: Headers, headerBytes: int, contentLength: int, chunked: bool, keepAlive: bool): ()` |  |\n"
-            "| `ResponseHead.contentLength` | `: int` |  |\n"
+            "| `ResponseHead.constructor` | `(version: string, status: i64, reason: string, headers: Headers, headerBytes: i64, contentLength: i64, chunked: bool, keepAlive: bool): ()` |  |\n"
+            "| `ResponseHead.contentLength` | `: i64` |  |\n"
             "| `ResponseHead.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseHead.getHeaders` | `(name: string): Array<string>` |  |\n"
-            "| `ResponseHead.headerBytes` | `: int` |  |\n"
+            "| `ResponseHead.headerBytes` | `: i64` |  |\n"
             "| `ResponseHead.headers` | `: Headers` |  |\n"
             "| `ResponseHead.keepAlive` | `: bool` |  |\n"
             "| `ResponseHead.reason` | `: string` |  |\n"
-            "| `ResponseHead.status` | `: int` |  |\n"
+            "| `ResponseHead.status` | `: i64` |  |\n"
             "| `ResponseHead.version` | `: string` |  |\n"
             "| `ResponseMessage` | `ResponseMessage` |  |\n"
             "| `ResponseMessage.body` | `: string` |  |\n"
-            "| `ResponseMessage.constructor` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: int): ()` |  |\n"
-            "| `ResponseMessage.consumedBytes` | `: int` |  |\n"
+            "| `ResponseMessage.constructor` | `(head: ResponseHead, body: string, trailers: Headers, consumedBytes: i64): ()` |  |\n"
+            "| `ResponseMessage.consumedBytes` | `: i64` |  |\n"
             "| `ResponseMessage.getHeader` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailer` | `(name: string): string?` |  |\n"
             "| `ResponseMessage.getTrailers` | `(name: string): Array<string>` |  |\n"
@@ -8965,31 +8952,31 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Router.find` | `(method: string, path: string): RouteMatch<T>?` |  |\n"
             "| `Server` | `Server` |  |\n"
             "| `Server.constructor` | `(): ()` |  |\n"
-            "| `Server.listen` | `(port: int, running: Atomic<bool>): bool` |  |\n"
+            "| `Server.listen` | `(port: i64, running: Atomic<bool>): bool` |  |\n"
             "| `Server.route` | `(method: string, path: string, value: T): bool` |  |\n"
             "| `Server.routeHandler` | `(method: string, path: string, handler: fn(HttpRequest) -> HttpResponse): bool` |  |\n"
-            "| `http.cookieJar` | `(maxCookies: int = 300): CookieJar` |  |\n"
-            "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864): string?` |  |\n"
-            "| `http.formData` | `(maxTotalSize: int = 67108864, maxFileSize: int = 33554432): FormData` |  |\n"
+            "| `http.cookieJar` | `(maxCookies: i64 = 300): CookieJar` |  |\n"
+            "| `http.decodeChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864): string?` |  |\n"
+            "| `http.formData` | `(maxTotalSize: i64 = 67108864, maxFileSize: i64 = 33554432): FormData` |  |\n"
             "| `http.get` | `(url: string): HttpResponse` |  |\n"
-            "| `http.isRedirectStatus` | `(status: int): bool` |  |\n"
-            "| `http.json` | `(value: T, status: int = 200): HttpResponse` |  |\n"
-            "| `http.jsonResponse` | `(value: T, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
-            "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: int = 67108864, maxTrailerHeaders: int = 50): ChunkedBody?` |  |\n"
+            "| `http.isRedirectStatus` | `(status: i64): bool` |  |\n"
+            "| `http.json` | `(value: T, status: i64 = 200): HttpResponse` |  |\n"
+            "| `http.jsonResponse` | `(value: T, status: i64 = 200, headers: Headers? = null): HttpResponse` |  |\n"
+            "| `http.parseChunkedBody` | `(raw: string, maxBodyBytes: i64 = 67108864, maxTrailerHeaders: i64 = 50): ChunkedBody?` |  |\n"
             "| `http.parseMethod` | `(token: string): HttpMethod?` |  |\n"
-            "| `http.parseRequestHead` | `(raw: string, maxHeaders: int = 100): RequestHead?` |  |\n"
-            "| `http.parseRequestText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): RequestMessage?` |  |\n"
-            "| `http.parseResponseHead` | `(raw: string, maxHeaders: int = 100): ResponseHead?` |  |\n"
-            "| `http.parseResponseText` | `(raw: string, maxBodyBytes: int = 67108864, maxHeaders: int = 100, maxTrailerHeaders: int = 50): ResponseMessage?` |  |\n"
-            "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: int = 0): Cookie?` |  |\n"
-            "| `http.post` | `(url: string, contentType: string, body: Array<byte>, authorization: string = \"\"): HttpResponse` |  |\n"
-            "| `http.redirectDecision` | `(status: int, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
+            "| `http.parseRequestHead` | `(raw: string, maxHeaders: i64 = 100): RequestHead?` |  |\n"
+            "| `http.parseRequestText` | `(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): RequestMessage?` |  |\n"
+            "| `http.parseResponseHead` | `(raw: string, maxHeaders: i64 = 100): ResponseHead?` |  |\n"
+            "| `http.parseResponseText` | `(raw: string, maxBodyBytes: i64 = 67108864, maxHeaders: i64 = 100, maxTrailerHeaders: i64 = 50): ResponseMessage?` |  |\n"
+            "| `http.parseSetCookie` | `(header: string, requestDomain: string = \"\", requestPath: string = \"/\", nowSeconds: i64 = 0): Cookie?` |  |\n"
+            "| `http.post` | `(url: string, contentType: string, body: Array<u8>, authorization: string = \"\"): HttpResponse` |  |\n"
+            "| `http.redirectDecision` | `(status: i64, currentUrl: string, location: string, method: string = \"GET\", alreadyStripped: bool = false): RedirectDecision?` |  |\n"
             "| `http.redirectTarget` | `(currentUrl: string, location: string): string?` |  |\n"
             "| `http.request` | `(options: HttpRequestOptions): HttpResponse` |  |\n"
             "| `http.requestText` | `(method: string, path: string, headers: Headers? = null, body: string = \"\", host: string = \"\", stripSensitive: bool = false): string?` |  |\n"
-            "| `http.responseText` | `(status: int, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
+            "| `http.responseText` | `(status: i64, body: string = \"\", contentType: string = \"text/plain; charset=utf-8\", headers: Headers? = null, keepAlive: bool = true): string?` |  |\n"
             "| `http.router` | `(): Router<T>` |  |\n"
-            "| `http.textResponse` | `(body: string, status: int = 200, headers: Headers? = null): HttpResponse` |  |\n"
+            "| `http.textResponse` | `(body: string, status: i64 = 200, headers: Headers? = null): HttpResponse` |  |\n"
             "| `http.urlDecode` | `(s: string): string` |  |\n"
             "| `http.urlEncode` | `(s: string): string` |  |\n"
             "",
@@ -9010,7 +8997,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<byte>, timeoutMs: int): (int, Array<string>, Array<string>, Array<byte>)?` | Execute one typed HTTP/2 request |\n"
+            "| `http2.request` | `(url: string, method: string, headerNames: Array<string>, headerValues: Array<string>, body: Array<u8>, timeoutMs: i64): (i64, Array<string>, Array<string>, Array<u8>)?` | Execute one typed HTTP/2 request |\n"
             "| `http2.supported` | `(): bool` | Whether the built-in HTTP/2 standard module is available on this target |\n"
             "",
         .symbols = _symbols_http2,
@@ -9032,44 +9019,44 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `BufReader` | `BufReader` |  |\n"
             "| `BufReader.close` | `(): bool` |  |\n"
-            "| `BufReader.open` | `(path: Path, chunkSize: int = 131072): BufReader?` |  |\n"
+            "| `BufReader.open` | `(path: Path, chunkSize: i64 = 131072): BufReader?` |  |\n"
             "| `BufReader.readLine` | `(): string?` |  |\n"
             "| `BufWriter` | `BufWriter` |  |\n"
-            "| `BufWriter.constructor` | `(path: Path, capacity: int = 131072): ()` |  |\n"
+            "| `BufWriter.constructor` | `(path: Path, capacity: i64 = 131072): ()` |  |\n"
             "| `BufWriter.flush` | `(): bool` |  |\n"
             "| `BufWriter.reset` | `(): ()` |  |\n"
-            "| `BufWriter.size` | `(): int` |  |\n"
-            "| `BufWriter.write` | `(data: Slice<byte>): int` |  |\n"
-            "| `BufWriter.writeBytes` | `(data: Array<byte>): int` |  |\n"
-            "| `BufWriter.writeString` | `(data: string): int` |  |\n"
+            "| `BufWriter.size` | `(): i64` |  |\n"
+            "| `BufWriter.write` | `(data: Slice<u8>): i64` |  |\n"
+            "| `BufWriter.writeBytes` | `(data: Array<u8>): i64` |  |\n"
+            "| `BufWriter.writeString` | `(data: string): i64` |  |\n"
             "| `File` | `File` |  |\n"
             "| `File.close` | `(): bool` |  |\n"
             "| `File.open` | `(path: Path): File?` |  |\n"
-            "| `File.read` | `(maxBytes: int = 131072): Array<byte>?` |  |\n"
+            "| `File.read` | `(maxBytes: i64 = 131072): Array<u8>?` |  |\n"
             "| `File.stdin` | `(): File` |  |\n"
             "| `FileStat` | `FileStat` |  |\n"
-            "| `FileStat.atime` | `: int` |  |\n"
-            "| `FileStat.constructor` | `(size: int, mode: int, mtime: int, atime: int, ctime: int, uid: int, gid: int, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
-            "| `FileStat.ctime` | `: int` |  |\n"
-            "| `FileStat.gid` | `: int` |  |\n"
+            "| `FileStat.atime` | `: i64` |  |\n"
+            "| `FileStat.constructor` | `(size: i64, mode: i64, mtime: i64, atime: i64, ctime: i64, uid: i64, gid: i64, isFile: bool, isDir: bool, isSymlink: bool): ()` |  |\n"
+            "| `FileStat.ctime` | `: i64` |  |\n"
+            "| `FileStat.gid` | `: i64` |  |\n"
             "| `FileStat.isDir` | `: bool` |  |\n"
             "| `FileStat.isFile` | `: bool` |  |\n"
             "| `FileStat.isSymlink` | `: bool` |  |\n"
-            "| `FileStat.mode` | `: int` |  |\n"
-            "| `FileStat.mtime` | `: int` |  |\n"
-            "| `FileStat.size` | `: int` |  |\n"
-            "| `FileStat.uid` | `: int` |  |\n"
+            "| `FileStat.mode` | `: i64` |  |\n"
+            "| `FileStat.mtime` | `: i64` |  |\n"
+            "| `FileStat.size` | `: i64` |  |\n"
+            "| `FileStat.uid` | `: i64` |  |\n"
             "| `LineIterator` | `LineIterator` |  |\n"
             "| `LineIterator.constructor` | `(reader: BufReader): ()` |  |\n"
             "| `LineIterator.hasNext` | `(): bool` |  |\n"
             "| `LineIterator.next` | `(): string?` |  |\n"
             "| `io.appendFile` | `(path: Path, data: string): bool` |  |\n"
             "| `io.chdir` | `(path: Path): bool` |  |\n"
-            "| `io.chmod` | `(path: Path, mode: int): bool` |  |\n"
+            "| `io.chmod` | `(path: Path, mode: i64): bool` |  |\n"
             "| `io.copyFile` | `(src: Path, dst: Path): bool` |  |\n"
             "| `io.cwd` | `(): Path` |  |\n"
             "| `io.exists` | `(path: Path): bool` |  |\n"
-            "| `io.fileSize` | `(path: Path): int` |  |\n"
+            "| `io.fileSize` | `(path: Path): i64` |  |\n"
             "| `io.isDir` | `(path: Path): bool` |  |\n"
             "| `io.isFile` | `(path: Path): bool` |  |\n"
             "| `io.isSymlink` | `(path: Path): bool` |  |\n"
@@ -9079,10 +9066,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.readDir` | `(path: Path): Array<Path>` |  |\n"
             "| `io.readDirRecursive` | `(path: Path): Array<Path>` |  |\n"
             "| `io.readFile` | `(path: Path): string?` |  |\n"
-            "| `io.readFileBytes` | `(path: Path): Array<byte>?` |  |\n"
+            "| `io.readFileBytes` | `(path: Path): Array<u8>?` |  |\n"
             "| `io.readLines` | `(path: Path): Array<string>` |  |\n"
             "| `io.readStdin` | `(): string?` |  |\n"
-            "| `io.readStdinBytes` | `(): Array<byte>?` |  |\n"
+            "| `io.readStdinBytes` | `(): Array<u8>?` |  |\n"
             "| `io.readlink` | `(path: Path): Path?` |  |\n"
             "| `io.realpath` | `(path: Path): Path?` |  |\n"
             "| `io.remove` | `(path: Path): bool` |  |\n"
@@ -9094,7 +9081,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.tempFile` | `(): Path?` |  |\n"
             "| `io.touch` | `(path: Path): bool` |  |\n"
             "| `io.writeFile` | `(path: Path, data: string): bool` |  |\n"
-            "| `io.writeFileBytes` | `(path: Path, data: Array<byte>): bool` |  |\n"
+            "| `io.writeFileBytes` | `(path: Path, data: Array<u8>): bool` |  |\n"
             "| `io.writeStderr` | `(data: string): bool` |  |\n"
             "| `io.writeStdout` | `(data: string): bool` |  |\n"
             "",
@@ -9152,7 +9139,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `JSON.remove` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): bool` |  |\n"
             "| `JSON.require` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path): T` |  |\n"
             "| `JSON.set` | `(root: JSON.Value \\| JSON.Object, path: JSON.Path, value: JSON.Value, createParents?: bool): ()` |  |\n"
-            "| `JSON.stringify` | `(value: T, indent?: int): string` |  |\n"
+            "| `JSON.stringify` | `(value: T, indent?: i64): string` |  |\n"
             "| `JSON.value` | `(value: T): JSON.Value` |  |\n"
             "",
         .symbols = _symbols_json,
@@ -9218,57 +9205,57 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `math.E` | `: float` | Euler's number |\n"
-            "| `math.EPSILON` | `: float` | Smallest representable difference above 1.0 |\n"
-            "| `math.INF` | `: float` | Positive infinity |\n"
-            "| `math.LN10` | `: float` | Natural logarithm of 10 |\n"
-            "| `math.LN2` | `: float` | Natural logarithm of 2 |\n"
-            "| `math.LOG10E` | `: float` | Base-10 logarithm of e |\n"
-            "| `math.LOG2E` | `: float` | Base-2 logarithm of e |\n"
-            "| `math.MAX_FLOAT` | `: float` | Largest finite IEEE-754 double |\n"
-            "| `math.MAX_INT` | `: int` | Largest signed 64-bit integer |\n"
-            "| `math.MIN_INT` | `: int` | Smallest signed 64-bit integer |\n"
-            "| `math.NAN` | `: float` | Quiet NaN value |\n"
-            "| `math.PI` | `: float` | Ratio of a circle's circumference to its diameter |\n"
-            "| `math.SQRT2` | `: float` | Square root of 2 |\n"
-            "| `math.TAU` | `: float` | Full-circle radians, 2 * PI |\n"
-            "| `math.abs` | `(x: float): float` | Absolute value (preserves int) |\n"
-            "| `math.acos` | `(x: float): float` | Arc cosine |\n"
-            "| `math.asin` | `(x: float): float` | Arc sine |\n"
-            "| `math.atan` | `(x: float): float` | Arc tangent |\n"
-            "| `math.atan2` | `(y: float, x: float): float` | Arc tangent of y/x |\n"
-            "| `math.cbrt` | `(x: float): float` | Cube root |\n"
-            "| `math.ceil` | `(x: float): int` | Ceiling to integer |\n"
-            "| `math.clamp` | `(x: float, min: float, max: float): float` | Clamp (preserves int) |\n"
-            "| `math.cos` | `(x: float): float` | Cosine |\n"
-            "| `math.cosh` | `(x: float): float` | Hyperbolic cosine |\n"
-            "| `math.degToRad` | `(deg: float): float` | Degrees to radians |\n"
-            "| `math.exp` | `(x: float): float` | Exponential e^x |\n"
-            "| `math.expm1` | `(x: float): float` | exp(x)-1 accurate for small x |\n"
-            "| `math.floor` | `(x: float): int` | Floor to integer |\n"
-            "| `math.fmod` | `(x: float, y: float): float` | Floating-point remainder |\n"
-            "| `math.hypot` | `(x: float, y: float): float` | Hypotenuse sqrt(x*x+y*y) |\n"
-            "| `math.isFinite` | `(x: float): bool` | Check if finite |\n"
-            "| `math.isNaN` | `(x: float): bool` | Check if NaN |\n"
-            "| `math.lerp` | `(a: float, b: float, t: float): float` | Linear interpolation |\n"
-            "| `math.log` | `(x: float): float` | Natural logarithm |\n"
-            "| `math.log10` | `(x: float): float` | Base-10 logarithm |\n"
-            "| `math.log1p` | `(x: float): float` | log(1+x) accurate for small x |\n"
-            "| `math.log2` | `(x: float): float` | Base-2 logarithm |\n"
-            "| `math.max` | `(...args: float): float` | Maximum (preserves int) |\n"
-            "| `math.min` | `(...args: float): float` | Minimum (preserves int) |\n"
-            "| `math.pow` | `(base: float, exp: float): float` | Power |\n"
-            "| `math.radToDeg` | `(rad: float): float` | Radians to degrees |\n"
-            "| `math.random` | `(): float` | Random float in [0, 1) |\n"
-            "| `math.randomInt` | `(min: int, max: int): int` | Random integer in [min, max] |\n"
-            "| `math.round` | `(x: float): int` | Round to nearest integer |\n"
-            "| `math.sign` | `(x: float): int` | Sign of value (-1, 0, 1) |\n"
-            "| `math.sin` | `(x: float): float` | Sine |\n"
-            "| `math.sinh` | `(x: float): float` | Hyperbolic sine |\n"
-            "| `math.sqrt` | `(x: float): float` | Square root |\n"
-            "| `math.tan` | `(x: float): float` | Tangent |\n"
-            "| `math.tanh` | `(x: float): float` | Hyperbolic tangent |\n"
-            "| `math.trunc` | `(x: float): int` | Truncate toward zero |\n"
+            "| `math.E` | `: f64` | Euler's number |\n"
+            "| `math.EPSILON` | `: f64` | Smallest representable difference above 1.0 |\n"
+            "| `math.INF` | `: f64` | Positive infinity |\n"
+            "| `math.LN10` | `: f64` | Natural logarithm of 10 |\n"
+            "| `math.LN2` | `: f64` | Natural logarithm of 2 |\n"
+            "| `math.LOG10E` | `: f64` | Base-10 logarithm of e |\n"
+            "| `math.LOG2E` | `: f64` | Base-2 logarithm of e |\n"
+            "| `math.MAX_F64` | `: f64` | Largest finite IEEE-754 double |\n"
+            "| `math.MAX_I64` | `: i64` | Largest signed 64-bit integer |\n"
+            "| `math.MIN_I64` | `: i64` | Smallest signed 64-bit integer |\n"
+            "| `math.NAN` | `: f64` | Quiet NaN value |\n"
+            "| `math.PI` | `: f64` | Ratio of a circle's circumference to its diameter |\n"
+            "| `math.SQRT2` | `: f64` | Square root of 2 |\n"
+            "| `math.TAU` | `: f64` | Full-circle radians, 2 * PI |\n"
+            "| `math.abs` | `(x: f64): f64` | Absolute value |\n"
+            "| `math.acos` | `(x: f64): f64` | Arc cosine |\n"
+            "| `math.asin` | `(x: f64): f64` | Arc sine |\n"
+            "| `math.atan` | `(x: f64): f64` | Arc tangent |\n"
+            "| `math.atan2` | `(y: f64, x: f64): f64` | Arc tangent of y/x |\n"
+            "| `math.cbrt` | `(x: f64): f64` | Cube root |\n"
+            "| `math.ceil` | `(x: f64): i64` | Ceiling to integer |\n"
+            "| `math.clamp` | `(x: f64, min: f64, max: f64): f64` | Clamp to a closed interval |\n"
+            "| `math.cos` | `(x: f64): f64` | Cosine |\n"
+            "| `math.cosh` | `(x: f64): f64` | Hyperbolic cosine |\n"
+            "| `math.degToRad` | `(deg: f64): f64` | Degrees to radians |\n"
+            "| `math.exp` | `(x: f64): f64` | Exponential e^x |\n"
+            "| `math.expm1` | `(x: f64): f64` | exp(x)-1 accurate for small x |\n"
+            "| `math.floor` | `(x: f64): i64` | Floor to integer |\n"
+            "| `math.fmod` | `(x: f64, y: f64): f64` | Floating-point remainder |\n"
+            "| `math.hypot` | `(x: f64, y: f64): f64` | Hypotenuse sqrt(x*x+y*y) |\n"
+            "| `math.isFinite` | `(x: f64): bool` | Check if finite |\n"
+            "| `math.isNaN` | `(x: f64): bool` | Check if NaN |\n"
+            "| `math.lerp` | `(a: f64, b: f64, t: f64): f64` | Linear interpolation |\n"
+            "| `math.log` | `(x: f64): f64` | Natural logarithm |\n"
+            "| `math.log10` | `(x: f64): f64` | Base-10 logarithm |\n"
+            "| `math.log1p` | `(x: f64): f64` | log(1+x) accurate for small x |\n"
+            "| `math.log2` | `(x: f64): f64` | Base-2 logarithm |\n"
+            "| `math.max` | `(...args: f64): f64` | Maximum value |\n"
+            "| `math.min` | `(...args: f64): f64` | Minimum value |\n"
+            "| `math.pow` | `(base: f64, exp: f64): f64` | Power |\n"
+            "| `math.radToDeg` | `(rad: f64): f64` | Radians to degrees |\n"
+            "| `math.random` | `(): f64` | Random f64 in [0, 1) |\n"
+            "| `math.randomInt` | `(min: i64, max: i64): i64` | Random integer in [min, max] |\n"
+            "| `math.round` | `(x: f64): i64` | Round to nearest integer |\n"
+            "| `math.sign` | `(x: f64): i64` | Sign of value (-1, 0, 1) |\n"
+            "| `math.sin` | `(x: f64): f64` | Sine |\n"
+            "| `math.sinh` | `(x: f64): f64` | Hyperbolic sine |\n"
+            "| `math.sqrt` | `(x: f64): f64` | Square root |\n"
+            "| `math.tan` | `(x: f64): f64` | Tangent |\n"
+            "| `math.tanh` | `(x: f64): f64` | Hyperbolic tangent |\n"
+            "| `math.trunc` | `(x: f64): i64` | Truncate toward zero |\n"
             "",
         .symbols = _symbols_math,
         .symbol_count = (int)(sizeof(_symbols_math) / sizeof(_symbols_math[0])),
@@ -9287,39 +9274,39 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `mem.PROT_EXEC` | `: int` | Executable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.PROT_NONE` | `: int` | No access protection for mem.pageAlloc/pageProtect |\n"
-            "| `mem.PROT_READ` | `: int` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.PROT_WRITE` | `: int` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
-            "| `mem.addr` | `(ptr: Ptr<byte>): int` | Numeric address of any Ptr<T> or MutPtr<T> |\n"
-            "| `mem.alignOf` | `(): int` | Compile-time alignment in bytes of a statically laid out type T |\n"
-            "| `mem.alloc` | `(n: int): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
-            "| `mem.allocAligned` | `(n: int, align: int): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
-            "| `mem.allocZeroed` | `(n: int): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
+            "| `mem.PROT_EXEC` | `: i64` | Executable page protection bit for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_NONE` | `: i64` | No access protection for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_READ` | `: i64` | Readable page protection bit for mem.pageAlloc/pageProtect |\n"
+            "| `mem.PROT_WRITE` | `: i64` | Writable page protection bit for mem.pageAlloc/pageProtect |\n"
+            "| `mem.addr` | `(ptr: Ptr<u8>): i64` | Numeric address of any Ptr<T> or MutPtr<T> |\n"
+            "| `mem.alignOf` | `(): i64` | Compile-time alignment in bytes of a statically laid out type T |\n"
+            "| `mem.alloc` | `(n: i64): Buffer` | Allocate n uninitialized bytes as a managed Buffer; released automatically when dropped |\n"
+            "| `mem.allocAligned` | `(n: i64, align: i64): Buffer` | Allocate n managed bytes aligned to align (power-of-two >= sizeof(void*)) |\n"
+            "| `mem.allocZeroed` | `(n: i64): Buffer` | Allocate n zero-initialized bytes as a managed Buffer |\n"
             "| `mem.assumeInitialized` | `(buffer: Buffer): any` | Unsafe compiler-verified materialization of a completely initialized native output Buffer as T |\n"
-            "| `mem.cacheFlush` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
-            "| `mem.cacheInvalidate` | `(ptr: Ptr<byte>, n: int): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
-            "| `mem.cacheLineSize` | `(): int` | CPU cache line size in bytes |\n"
-            "| `mem.compare` | `(a: Ptr<byte>, b: Ptr<byte>, n: int): int` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
-            "| `mem.copy` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
-            "| `mem.fence` | `(ordering: int): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
-            "| `mem.load` | `(ptr: Ptr<byte>, offset?: int, endian?: Endian): int` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
-            "| `mem.move` | `(dst: MutPtr<byte>, src: Ptr<byte>, n: int): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
-            "| `mem.mutPtr` | `(addr: int): MutPtr<byte>` | Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.nontemporalStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
-            "| `mem.offsetOf` | `(field: string): int` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
-            "| `mem.pageAlloc` | `(bytes: int, prot?: int): MutPtr<byte>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
-            "| `mem.pageFree` | `(ptr: MutPtr<byte>, bytes: int): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
-            "| `mem.pageProtect` | `(ptr: MutPtr<byte>, bytes: int, prot: int): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
-            "| `mem.prefetch` | `(ptr: Ptr<byte>, rw: int): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
-            "| `mem.ptr` | `(addr: int): Ptr<byte>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
-            "| `mem.set` | `(dst: MutPtr<byte>, byte: int, n: int): ()` | Fill n bytes at dst with byte (memset) |\n"
-            "| `mem.sizeOf` | `(): int` | Compile-time size in bytes of a statically laid out type T |\n"
-            "| `mem.slice` | `(ptr: Ptr<byte>, count: int, owner: any): Slice<byte>` | Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked |\n"
-            "| `mem.store` | `(ptr: MutPtr<byte>, offset: int, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
-            "| `mem.volatileLoad` | `(ptr: Ptr<byte>, size: int): int` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.volatileStore` | `(ptr: MutPtr<byte>, v: int, size: int): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
-            "| `mem.withSliceMut` | `(ptr: MutPtr<byte>, count: int, guard: any, callback: any): any` | Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked |\n"
+            "| `mem.cacheFlush` | `(ptr: Ptr<u8>, n: i64): ()` | Best-effort data-cache flush for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheInvalidate` | `(ptr: Ptr<u8>, n: i64): ()` | Best-effort data-cache invalidation for a byte range. VM no-op; AOT emits platform cache maintenance when available |\n"
+            "| `mem.cacheLineSize` | `(): i64` | CPU cache line size in bytes |\n"
+            "| `mem.compare` | `(a: Ptr<u8>, b: Ptr<u8>, n: i64): i64` | Compare n bytes at a and b (memcmp: <0, 0, >0) |\n"
+            "| `mem.copy` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` | Copy n bytes from src to dst (non-overlapping; memcpy) |\n"
+            "| `mem.fence` | `(ordering: i64): ()` | Standalone memory fence; ordering mirrors Ordering enum ordinals (0 Relaxed .. 4 SeqCst) |\n"
+            "| `mem.load` | `(ptr: Ptr<u8>, offset?: i64, endian?: Endian): i64` | Unsafe unaligned load of scalar or pointer T from ptr plus a byte offset |\n"
+            "| `mem.move` | `(dst: MutPtr<u8>, src: Ptr<u8>, n: i64): ()` | Copy n bytes from src to dst (may overlap; memmove) |\n"
+            "| `mem.mutPtr` | `(addr: i64): MutPtr<u8>` | Construct MutPtr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
+            "| `mem.nontemporalStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` | Best-effort non-temporal sized store (size in {1,2,4,8}). VM stores normally; AOT emits streaming stores when available |\n"
+            "| `mem.offsetOf` | `(field: string): i64` | Compile-time byte offset of a field in a fixed-layout struct T |\n"
+            "| `mem.pageAlloc` | `(bytes: i64, prot?: i64): MutPtr<u8>` | Allocate zero-filled anonymous pages with read/write protection (mmap/VirtualAlloc). NULL on failure; pair with mem.pageFree |\n"
+            "| `mem.pageFree` | `(ptr: MutPtr<u8>, bytes: i64): bool` | Release anonymous pages from mem.pageAlloc; returns false on OS failure |\n"
+            "| `mem.pageProtect` | `(ptr: MutPtr<u8>, bytes: i64, prot: i64): bool` | Change anonymous page protection bits; returns false on OS failure |\n"
+            "| `mem.prefetch` | `(ptr: Ptr<u8>, rw: i64): ()` | Prefetch a cache line at ptr (performance hint; rw!=0 = write intent). VM no-op, AOT __builtin_prefetch |\n"
+            "| `mem.ptr` | `(addr: i64): Ptr<u8>` | Construct Ptr<T> from a numeric address; constructing is safe, dereferencing requires unsafe |\n"
+            "| `mem.set` | `(dst: MutPtr<u8>, u8: i64, n: i64): ()` | Fill n bytes at dst with byte (memset) |\n"
+            "| `mem.sizeOf` | `(): i64` | Compile-time size in bytes of a statically laid out type T |\n"
+            "| `mem.slice` | `(ptr: Ptr<u8>, count: i64, owner: any): Slice<u8>` | Unsafe caller-proven borrowed Slice over raw memory, rooted in owner; pointer, count, alignment, and range are unchecked |\n"
+            "| `mem.store` | `(ptr: MutPtr<u8>, offset: i64, value: any, endian?: Endian): ()` | Unsafe unaligned store of scalar or pointer T at ptr plus a byte offset |\n"
+            "| `mem.volatileLoad` | `(ptr: Ptr<u8>, size: i64): i64` | Volatile load of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.volatileStore` | `(ptr: MutPtr<u8>, v: i64, size: i64): ()` | Volatile store of size bytes (MMIO; size in {1,2,4,8}, native byte order) |\n"
+            "| `mem.withSliceMut` | `(ptr: MutPtr<u8>, count: i64, guard: any, callback: any): any` | Unsafe caller-proven exclusive mutable Slice loan scoped to a no-suspend callback; pointer, count, alignment, and range are unchecked |\n"
             "",
         .symbols = _symbols_mem,
         .symbol_count = (int)(sizeof(_symbols_mem) / sizeof(_symbols_mem[0])),
@@ -9330,7 +9317,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .body =
             "# net module\n"
             "\n"
-            "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<byte>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.\n"
+            "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Array<u8>`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.\n"
             "\n"
             "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.\n"
             "\n"
@@ -9364,7 +9351,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "### Design rule\n"
             "- Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.\n"
             "- Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.\n"
-            "- Use `Array<byte>` buffers for binary protocol hot paths that must inspect payload.\n"
+            "- Use `Array<u8>` buffers for binary protocol hot paths that must inspect payload.\n"
             "- Use string reads only when the program actually needs to parse or mutate text.\n"
             "\n"
             "## API\n"
@@ -9372,17 +9359,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `CopyBidirectionalResult` | `CopyBidirectionalResult` |  |\n"
-            "| `CopyBidirectionalResult.aToB` | `: int` |  |\n"
-            "| `CopyBidirectionalResult.bToA` | `: int` |  |\n"
-            "| `CopyBidirectionalResult.constructor` | `(aToB: int, bToA: int): ()` |  |\n"
+            "| `CopyBidirectionalResult.aToB` | `: i64` |  |\n"
+            "| `CopyBidirectionalResult.bToA` | `: i64` |  |\n"
+            "| `CopyBidirectionalResult.constructor` | `(aToB: i64, bToA: i64): ()` |  |\n"
             "| `DialOptions` | `DialOptions` |  |\n"
-            "| `DialOptions.constructor` | `(timeoutMs: int = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()` |  |\n"
-            "| `DialOptions.timeoutMs` | `: int` |  |\n"
+            "| `DialOptions.constructor` | `(timeoutMs: i64 = _DEFAULT_TIMEOUT_MS, tls: bool = false): ()` |  |\n"
+            "| `DialOptions.timeoutMs` | `: i64` |  |\n"
             "| `DialOptions.tls` | `: bool` |  |\n"
             "| `Endpoint` | `Endpoint` |  |\n"
-            "| `Endpoint.constructor` | `(host: string, port: int): ()` |  |\n"
+            "| `Endpoint.constructor` | `(host: string, port: i64): ()` |  |\n"
             "| `Endpoint.host` | `: string` |  |\n"
-            "| `Endpoint.port` | `: int` |  |\n"
+            "| `Endpoint.port` | `: i64` |  |\n"
             "| `IpAddress` | `IpAddress` |  |\n"
             "| `IpAddress.constructor` | `(value: string): ()` |  |\n"
             "| `IpAddress.toString` | `(): string` |  |\n"
@@ -9399,37 +9386,37 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.NetError.Timeout` | `NetError.Timeout` | Enum variant |\n"
             "| `net.NetError.Tls` | `NetError.Tls` | Enum variant |\n"
             "| `UdpFrom` | `UdpFrom` |  |\n"
-            "| `UdpFrom.constructor` | `(n: int, host: string, port: int): ()` |  |\n"
+            "| `UdpFrom.constructor` | `(n: i64, host: string, port: i64): ()` |  |\n"
             "| `UdpFrom.host` | `: string` |  |\n"
-            "| `UdpFrom.n` | `: int` |  |\n"
-            "| `UdpFrom.port` | `: int` |  |\n"
+            "| `UdpFrom.n` | `: i64` |  |\n"
+            "| `UdpFrom.port` | `: i64` |  |\n"
             "| `net.accept` | `(listener: NetListener): NetConn?` |  |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` |  |\n"
-            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: int = _DEFAULT_COPY_BUFFER): int` |  |\n"
+            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize: i64 = _DEFAULT_COPY_BUFFER): i64` |  |\n"
             "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): CopyBidirectionalResult` |  |\n"
-            "| `net.dial` | `(host: string, port: int, options: DialOptions? = null): NetConn` |  |\n"
+            "| `net.dial` | `(host: string, port: i64, options: DialOptions? = null): NetConn` |  |\n"
             "| `net.dialEndpoint` | `(endpoint: Endpoint, options: DialOptions? = null): NetConn` |  |\n"
-            "| `net.fd` | `(handle: NetConn \\| NetListener): int` |  |\n"
+            "| `net.fd` | `(handle: NetConn \\| NetListener): i64` |  |\n"
             "| `net.hasTLS` | `(): bool` |  |\n"
-            "| `net.lastErrno` | `(handle: NetConn \\| NetListener): int` |  |\n"
+            "| `net.lastErrno` | `(handle: NetConn \\| NetListener): i64` |  |\n"
             "| `net.lastError` | `(handle: NetConn \\| NetListener): NetError?` |  |\n"
-            "| `net.listen` | `(port: int, backlog: int = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
+            "| `net.listen` | `(port: i64, backlog: i64 = _DEFAULT_BACKLOG, forceV4: bool = false): NetListener` |  |\n"
             "| `net.lookup` | `(hostname: string): Array<IpAddress>` |  |\n"
-            "| `net.readBytes` | `(conn: NetConn, maxBytes: int = 4096): Array<byte>?` |  |\n"
-            "| `net.readInto` | `(conn: NetConn, buffer: ref Array<byte>, maxlen: int = 1048576): int` |  |\n"
-            "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<byte>, timeoutMs: int = -1): UdpFrom?` |  |\n"
+            "| `net.readBytes` | `(conn: NetConn, maxBytes: i64 = 4096): Array<u8>?` |  |\n"
+            "| `net.readInto` | `(conn: NetConn, buffer: ref Array<u8>, maxlen: i64 = 1048576): i64` |  |\n"
+            "| `net.recvFrom` | `(handle: NetConn, buffer: ref Array<u8>, timeoutMs: i64 = -1): UdpFrom?` |  |\n"
             "| `net.resolve` | `(hostname: string): IpAddress?` |  |\n"
-            "| `net.sendTo` | `(handle: NetConn, data: Array<byte>, host: string, port: int, timeoutMs: int = _DEFAULT_TIMEOUT_MS): int` |  |\n"
-            "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` |  |\n"
-            "| `net.setDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
-            "| `net.setReadDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
-            "| `net.setWriteDeadline` | `(conn: NetConn, deadline: int): bool` |  |\n"
+            "| `net.sendTo` | `(handle: NetConn, data: Array<u8>, host: string, port: i64, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): i64` |  |\n"
+            "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: i64): bool` |  |\n"
+            "| `net.setDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n"
+            "| `net.setReadDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n"
+            "| `net.setWriteDeadline` | `(conn: NetConn, deadline: i64): bool` |  |\n"
             "| `net.shutdown` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownRead` | `(conn: NetConn): bool` |  |\n"
             "| `net.shutdownWrite` | `(conn: NetConn): bool` |  |\n"
-            "| `net.udpBind` | `(port: int, address: string = \"\"): NetConn` |  |\n"
-            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: int = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
-            "| `net.writeBytes` | `(conn: NetConn, data: Array<byte>): int` |  |\n"
+            "| `net.udpBind` | `(port: i64, address: string = \"\"): NetConn` |  |\n"
+            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeoutMs: i64 = _DEFAULT_TIMEOUT_MS): ()` |  |\n"
+            "| `net.writeBytes` | `(conn: NetConn, data: Array<u8>): i64` |  |\n"
             "",
         .symbols = _symbols_net,
         .symbol_count = (int)(sizeof(_symbols_net) / sizeof(_symbols_net[0])),
@@ -9449,37 +9436,37 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `ExecResult` | `ExecResult` |  |\n"
-            "| `ExecResult.constructor` | `(stdout: string, stderr: string, exitCode: int): ()` |  |\n"
-            "| `ExecResult.exitCode` | `: int` |  |\n"
+            "| `ExecResult.constructor` | `(stdout: string, stderr: string, exitCode: i64): ()` |  |\n"
+            "| `ExecResult.exitCode` | `: i64` |  |\n"
             "| `ExecResult.stderr` | `: string` |  |\n"
             "| `ExecResult.stdout` | `: string` |  |\n"
             "| `os.arch` | `: string` | Current CPU architecture name |\n"
-            "| `os.clock` | `(): float` |  |\n"
-            "| `os.cpuCount` | `(): int` |  |\n"
+            "| `os.clock` | `(): f64` |  |\n"
+            "| `os.cpuCount` | `(): i64` |  |\n"
             "| `os.environ` | `(): Map<string, string>` |  |\n"
             "| `os.eol` | `: string` | Platform end-of-line string |\n"
             "| `os.exec` | `(command: string): ExecResult?` |  |\n"
-            "| `os.exit` | `(code: int = 0): ()` |  |\n"
-            "| `os.freeMemory` | `(): int` |  |\n"
+            "| `os.exit` | `(code: i64 = 0): ()` |  |\n"
+            "| `os.freeMemory` | `(): i64` |  |\n"
             "| `os.getcwd` | `(): string` |  |\n"
             "| `os.getenv` | `(name: string): string?` |  |\n"
-            "| `os.getpid` | `(): int` |  |\n"
-            "| `os.gid` | `(): int` |  |\n"
+            "| `os.getpid` | `(): i64` |  |\n"
+            "| `os.gid` | `(): i64` |  |\n"
             "| `os.homedir` | `(): string?` |  |\n"
             "| `os.hostname` | `(): string` |  |\n"
-            "| `os.kill` | `(pid: int, signal: int = 15): bool` |  |\n"
-            "| `os.loadavg` | `(): Array<float>` |  |\n"
+            "| `os.kill` | `(pid: i64, signal: i64 = 15): bool` |  |\n"
+            "| `os.loadavg` | `(): Array<f64>` |  |\n"
             "| `os.platform` | `: string` | Current operating system name |\n"
-            "| `os.ppid` | `(): int` |  |\n"
+            "| `os.ppid` | `(): i64` |  |\n"
             "| `os.sep` | `: string` | Platform path separator |\n"
             "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
-            "| `os.sleep` | `(ms: int): ()` |  |\n"
+            "| `os.sleep` | `(ms: i64): ()` |  |\n"
             "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` |  |\n"
             "| `os.tmpdir` | `(): string` |  |\n"
-            "| `os.totalMemory` | `(): int` |  |\n"
-            "| `os.uid` | `(): int` |  |\n"
+            "| `os.totalMemory` | `(): i64` |  |\n"
+            "| `os.uid` | `(): i64` |  |\n"
             "| `os.unsetenv` | `(name: string): bool` |  |\n"
-            "| `os.uptime` | `(): float` |  |\n"
+            "| `os.uptime` | `(): f64` |  |\n"
             "| `os.username` | `(): string?` |  |\n"
             "",
         .symbols = _symbols_os,
@@ -9522,20 +9509,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Options` | `Options` |  |\n"
-            "| `Options.constructor` | `(workers: int = 0): ()` |  |\n"
-            "| `Options.workers` | `: int` |  |\n"
+            "| `Options.constructor` | `(workers: i64 = 0): ()` |  |\n"
+            "| `Options.workers` | `: i64` |  |\n"
             "| `Plan` | `Plan` |  |\n"
             "| `Plan.close` | `(): ()` |  |\n"
-            "| `Plan.constructor` | `(options: Options, init: fn(int) -> S): ()` |  |\n"
-            "| `Plan.forEach` | `(range: Range, body: fn(S, int)): ()` |  |\n"
-            "| `Plan.map` | `(range: Range, body: fn(S, int) -> T): Array<T>` |  |\n"
-            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: fn(S, int) -> T): ()` |  |\n"
+            "| `Plan.constructor` | `(options: Options, init: fn(i64) -> S): ()` |  |\n"
+            "| `Plan.forEach` | `(range: Range, body: fn(S, i64)): ()` |  |\n"
+            "| `Plan.map` | `(range: Range, body: fn(S, i64) -> T): Array<T>` |  |\n"
+            "| `Plan.mapInto` | `(range: Range, output: ref Array<T>, body: fn(S, i64) -> T): ()` |  |\n"
             "| `Plan.options` | `: Options` |  |\n"
-            "| `Plan.reduce` | `(range: Range, initial: A, body: fn(S, int) -> A, combine: fn(A, A) -> A): A` |  |\n"
-            "| `parallel.forEach` | `(range: Range, body: fn(int), options: Options = Options()): ()` |  |\n"
-            "| `parallel.map` | `(range: Range, body: fn(int) -> T, options: Options = Options()): Array<T>` |  |\n"
-            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(int) -> T, options: Options = Options()): ()` |  |\n"
-            "| `parallel.reduce` | `(range: Range, initial: A, body: fn(int) -> A, combine: fn(A, A) -> A, options: Options = Options()): A` |  |\n"
+            "| `Plan.reduce` | `(range: Range, initial: A, body: fn(S, i64) -> A, combine: fn(A, A) -> A): A` |  |\n"
+            "| `parallel.forEach` | `(range: Range, body: fn(i64), options: Options = Options()): ()` |  |\n"
+            "| `parallel.map` | `(range: Range, body: fn(i64) -> T, options: Options = Options()): Array<T>` |  |\n"
+            "| `parallel.mapInto` | `(range: Range, output: ref Array<T>, body: fn(i64) -> T, options: Options = Options()): ()` |  |\n"
+            "| `parallel.reduce` | `(range: Range, initial: A, body: fn(i64) -> A, combine: fn(A, A) -> A, options: Options = Options()): A` |  |\n"
             "",
         .symbols = _symbols_parallel,
         .symbol_count = (int)(sizeof(_symbols_parallel) / sizeof(_symbols_parallel[0])),
@@ -9599,24 +9586,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Regex` | `Regex` |  |\n"
             "| `Regex.find` | `(text: string): RegexMatch?` |  |\n"
-            "| `Regex.findAll` | `(text: string, limit?: int): Array<RegexMatch>` |  |\n"
-            "| `Regex.findGroup` | `(text: string, index: int): string?` |  |\n"
+            "| `Regex.findAll` | `(text: string, limit?: i64): Array<RegexMatch>` |  |\n"
+            "| `Regex.findGroup` | `(text: string, index: i64): string?` |  |\n"
             "| `Regex.findText` | `(text: string): string?` |  |\n"
             "| `Regex.replace` | `(text: string, replacement: string): string` |  |\n"
-            "| `Regex.split` | `(text: string, limit?: int): Array<string>` |  |\n"
+            "| `Regex.split` | `(text: string, limit?: i64): Array<string>` |  |\n"
             "| `Regex.test` | `(text: string): bool` |  |\n"
             "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile regex pattern |\n"
-            "| `regex.count` | `(pattern: Regex, s: string): int` | Count matches |\n"
+            "| `regex.count` | `(pattern: Regex, s: string): i64` | Count matches |\n"
             "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"
-            "| `regex.find` | `(pattern: Regex, s: string, offset?: int): RegexMatch?` | Find first match |\n"
-            "| `regex.findAll` | `(pattern: Regex, s: string, limit?: int): Array<RegexMatch>` | Find all matches |\n"
-            "| `regex.findGroup` | `(pattern: Regex, s: string, index: int): string?` | Find capture group |\n"
+            "| `regex.find` | `(pattern: Regex, s: string, offset?: i64): RegexMatch?` | Find first match |\n"
+            "| `regex.findAll` | `(pattern: Regex, s: string, limit?: i64): Array<RegexMatch>` | Find all matches |\n"
+            "| `regex.findGroup` | `(pattern: Regex, s: string, index: i64): string?` | Find capture group |\n"
             "| `regex.findText` | `(pattern: Regex, s: string): string?` | Find first matching text |\n"
             "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Find full match |\n"
             "| `regex.isValid` | `(pattern: string): bool` | Check if pattern is valid |\n"
             "| `regex.replace` | `(pattern: Regex, s: string, repl: string): string` | Replace first match |\n"
             "| `regex.replaceAll` | `(pattern: Regex, s: string, repl: string): string` | Replace all matches |\n"
-            "| `regex.split` | `(pattern: Regex, s: string, limit?: int): Array<string>` | Split string by regex |\n"
+            "| `regex.split` | `(pattern: Regex, s: string, limit?: i64): Array<string>` | Split string by regex |\n"
             "| `regex.test` | `(pattern: Regex, s: string): bool` | Test if regex matches |\n"
             "",
         .symbols = _symbols_regex,
@@ -9636,19 +9623,19 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `runtime.RuntimeInfo` | `{ liveBytes: int, liveKB: float, liveObjects: int, finalizerCount: int, blocks: int, freeBlocks: int, fullBlocks: int }` | Typed snapshot of the current execution-local reclamation domain |\n"
-            "| `runtime.RuntimeInfo.blocks` | `const int` | Object field |\n"
-            "| `runtime.RuntimeInfo.finalizerCount` | `const int` | Object field |\n"
-            "| `runtime.RuntimeInfo.freeBlocks` | `const int` | Object field |\n"
-            "| `runtime.RuntimeInfo.fullBlocks` | `const int` | Object field |\n"
-            "| `runtime.RuntimeInfo.liveBytes` | `const int` | Object field |\n"
-            "| `runtime.RuntimeInfo.liveKB` | `const float` | Object field |\n"
-            "| `runtime.RuntimeInfo.liveObjects` | `const int` | Object field |\n"
+            "| `runtime.RuntimeInfo` | `{ liveBytes: i64, liveKB: f64, liveObjects: i64, finalizerCount: i64, blocks: i64, freeBlocks: i64, fullBlocks: i64 }` | Typed snapshot of the current execution-local reclamation domain |\n"
+            "| `runtime.RuntimeInfo.blocks` | `const i64` | Object field |\n"
+            "| `runtime.RuntimeInfo.finalizerCount` | `const i64` | Object field |\n"
+            "| `runtime.RuntimeInfo.freeBlocks` | `const i64` | Object field |\n"
+            "| `runtime.RuntimeInfo.fullBlocks` | `const i64` | Object field |\n"
+            "| `runtime.RuntimeInfo.liveBytes` | `const i64` | Object field |\n"
+            "| `runtime.RuntimeInfo.liveKB` | `const f64` | Object field |\n"
+            "| `runtime.RuntimeInfo.liveObjects` | `const i64` | Object field |\n"
             "| `runtime.info` | `(): RuntimeInfo` | Get a typed snapshot of the current execution-local reclamation domain |\n"
-            "| `runtime.liveBytes` | `(): int` | Get live memory usage in bytes |\n"
-            "| `runtime.liveObjects` | `(): int` | Get live object count |\n"
-            "| `runtime.sharedBytes` | `(): int` | Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak |\n"
-            "| `runtime.staticBytes` | `(): int` | Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only) |\n"
+            "| `runtime.liveBytes` | `(): i64` | Get live memory usage in bytes |\n"
+            "| `runtime.liveObjects` | `(): i64` | Get live object count |\n"
+            "| `runtime.sharedBytes` | `(): i64` | Live bytes held by SYNC_SHARED system-heap objects (process-wide); a monotonic rise is the cheap production signal of a shared-domain cycle leak |\n"
+            "| `runtime.staticBytes` | `(): i64` | Memory allocated into the MODULE_STATIC class/module arena (process-wide, grows only) |\n"
             "",
         .symbols = _symbols_runtime,
         .symbol_count = (int)(sizeof(_symbols_runtime) / sizeof(_symbols_runtime[0])),
@@ -9677,7 +9664,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "Native lowering is available for AArch64 NEON and SVE, x86 SSE2/AVX2/AVX-512F, PowerPC64 VSX, and LoongArch64 LSX. Use `--target aarch64-linux-musl --simd sve` for a scalable plan: hardware VLs select a bounded 16-, 32-, or 64-byte active prefix, while fixed-width vector types retain their exact public width. The SVE plan disables unsafe implicit LLVM auto-vectorization and uses explicit predicated intrinsics for runtime-native operations. Use `--simd avx512` for an explicit AVX-512F target or `--simd dispatch` for x86 CPU/OS selection across 16, 32, and 64 bytes. VSX is supported on both `powerpc64-linux-musl` and `powerpc64le-linux-musl`; use `--simd vsx` for an explicit Power8-baseline target plan. Use `--target loongarch64-linux-musl --simd lsx` for the fixed 128-bit LSX lane; `auto` remains scalar because LSX is not assumed by the base target triple.\n"
             "\n"
             "### Operations\n"
-            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: byte zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n"
+            "The vector types provide lane extraction and replacement, integer arithmetic, bitwise operations, shifts, shuffles, widening multiplication, reductions, and bit-preserving reinterpretation where supported by the type. Shuffle lane arguments must be compile-time integers within the vector's lane range. Reinterpretation is endian-neutral: u8 zero is the least-significant byte of numeric lane zero, so VM, scalar AOT, and native SIMD produce identical lane values on little- and big-endian targets.\n"
             "\n"
             "### Example\n"
             "```xray\n"
@@ -9703,7 +9690,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Capabilities.isAccelerated` | `(): bool` |  |\n"
             "| `Capabilities.isRuntimeSelected` | `(): bool` |  |\n"
             "| `Capabilities.isScalable` | `(): bool` |  |\n"
-            "| `Capabilities.nativeBytes` | `(): int` |  |\n"
+            "| `Capabilities.nativeBytes` | `(): i64` |  |\n"
             "| `U32x16` | `U32x16` |  |\n"
             "| `U32x16.fromLanes` | `(lanes: [u32; 16]): U32x16` |  |\n"
             "| `U32x16.splat` | `(value: u32): U32x16` |  |\n"
@@ -9716,18 +9703,18 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U32x4.bitNot` | `(): U32x4` |  |\n"
             "| `U32x4.bitOr` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.bitXor` | `(other: U32x4): U32x4` |  |\n"
-            "| `U32x4.extract` | `(lane: int): u32` |  |\n"
+            "| `U32x4.extract` | `(lane: i64): u32` |  |\n"
             "| `U32x4.fromLanes` | `(lanes: [u32; 4]): U32x4` |  |\n"
-            "| `U32x4.load` | `(data: Slice<u32>, offset: int = 0): U32x4` |  |\n"
+            "| `U32x4.load` | `(data: Slice<u32>, offset: i64 = 0): U32x4` |  |\n"
             "| `U32x4.mul` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.reinterpretU64` | `(): U64x2` |  |\n"
             "| `U32x4.reinterpretU8` | `(): U8x16` |  |\n"
-            "| `U32x4.replace` | `(lane: int, value: u32): U32x4` |  |\n"
-            "| `U32x4.shiftLeft` | `(bits: int): U32x4` |  |\n"
-            "| `U32x4.shiftRight` | `(bits: int): U32x4` |  |\n"
-            "| `U32x4.shuffle` | `(i0: int, i1: int, i2: int, i3: int): U32x4` |  |\n"
+            "| `U32x4.replace` | `(lane: i64, value: u32): U32x4` |  |\n"
+            "| `U32x4.shiftLeft` | `(bits: i64): U32x4` |  |\n"
+            "| `U32x4.shiftRight` | `(bits: i64): U32x4` |  |\n"
+            "| `U32x4.shuffle` | `(i0: i64, i1: i64, i2: i64, i3: i64): U32x4` |  |\n"
             "| `U32x4.splat` | `(value: u32): U32x4` |  |\n"
-            "| `U32x4.store` | `(output: ref Slice<u32>, offset: int = 0): ()` |  |\n"
+            "| `U32x4.store` | `(output: ref Slice<u32>, offset: i64 = 0): ()` |  |\n"
             "| `U32x4.sub` | `(other: U32x4): U32x4` |  |\n"
             "| `U32x4.swapAdjacent` | `(): U32x4` |  |\n"
             "| `U32x4.unzipEven` | `(other: U32x4): U32x4` |  |\n"
@@ -9751,111 +9738,87 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `U64x2.bitNot` | `(): U64x2` |  |\n"
             "| `U64x2.bitOr` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.bitXor` | `(other: U64x2): U64x2` |  |\n"
-            "| `U64x2.extract` | `(lane: int): u64` |  |\n"
+            "| `U64x2.extract` | `(lane: i64): u64` |  |\n"
             "| `U64x2.fromLanes` | `(lanes: [u64; 2]): U64x2` |  |\n"
-            "| `U64x2.load` | `(data: Slice<u64>, offset: int = 0): U64x2` |  |\n"
+            "| `U64x2.load` | `(data: Slice<u64>, offset: i64 = 0): U64x2` |  |\n"
             "| `U64x2.mul` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.reduceAdd` | `(): u64` |  |\n"
             "| `U64x2.reinterpretU32` | `(): U32x4` |  |\n"
             "| `U64x2.reinterpretU8` | `(): U8x16` |  |\n"
-            "| `U64x2.replace` | `(lane: int, value: u64): U64x2` |  |\n"
-            "| `U64x2.shiftLeft` | `(bits: int): U64x2` |  |\n"
-            "| `U64x2.shiftRight` | `(bits: int): U64x2` |  |\n"
-            "| `U64x2.shuffle` | `(i0: int, i1: int): U64x2` |  |\n"
+            "| `U64x2.replace` | `(lane: i64, value: u64): U64x2` |  |\n"
+            "| `U64x2.shiftLeft` | `(bits: i64): U64x2` |  |\n"
+            "| `U64x2.shiftRight` | `(bits: i64): U64x2` |  |\n"
+            "| `U64x2.shuffle` | `(i0: i64, i1: i64): U64x2` |  |\n"
             "| `U64x2.splat` | `(value: u64): U64x2` |  |\n"
-            "| `U64x2.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64x2.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
             "| `U64x2.sub` | `(other: U64x2): U64x2` |  |\n"
             "| `U64x2.swapLanes` | `(): U64x2` |  |\n"
             "| `U64x4` | `U64x4` |  |\n"
             "| `U64x4.add` | `(other: U64x4): U64x4` |  |\n"
             "| `U64x4.bitXor` | `(other: U64x4): U64x4` |  |\n"
             "| `U64x4.fromLanes` | `(lanes: [u64; 4]): U64x4` |  |\n"
-            "| `U64x4.load` | `(data: Slice<u64>, offset: int = 0): U64x4` |  |\n"
+            "| `U64x4.load` | `(data: Slice<u64>, offset: i64 = 0): U64x4` |  |\n"
             "| `U64x4.reduceAdd` | `(): u64` |  |\n"
             "| `U64x4.reinterpretU32` | `(): U32x8` |  |\n"
             "| `U64x4.reinterpretU8` | `(): U8x32` |  |\n"
-            "| `U64x4.shiftLeft` | `(bits: int): U64x4` |  |\n"
-            "| `U64x4.shiftRight` | `(bits: int): U64x4` |  |\n"
-            "| `U64x4.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64x4.shiftLeft` | `(bits: i64): U64x4` |  |\n"
+            "| `U64x4.shiftRight` | `(bits: i64): U64x4` |  |\n"
+            "| `U64x4.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
             "| `U64x4.swapAdjacent` | `(): U64x4` |  |\n"
             "| `U64x8` | `U64x8` |  |\n"
             "| `U64x8.add` | `(other: U64x8): U64x8` |  |\n"
             "| `U64x8.bitXor` | `(other: U64x8): U64x8` |  |\n"
             "| `U64x8.fromLanes` | `(lanes: [u64; 8]): U64x8` |  |\n"
-            "| `U64x8.load` | `(data: Slice<u64>, offset: int = 0): U64x8` |  |\n"
+            "| `U64x8.load` | `(data: Slice<u64>, offset: i64 = 0): U64x8` |  |\n"
             "| `U64x8.reinterpretU32` | `(): U32x16` |  |\n"
-            "| `U64x8.shiftLeft` | `(bits: int): U64x8` |  |\n"
-            "| `U64x8.shiftRight` | `(bits: int): U64x8` |  |\n"
-            "| `U64x8.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64x8.shiftLeft` | `(bits: i64): U64x8` |  |\n"
+            "| `U64x8.shiftRight` | `(bits: i64): U64x8` |  |\n"
+            "| `U64x8.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
             "| `U64x8.swapAdjacent` | `(): U64x8` |  |\n"
             "| `U64xNative` | `U64xNative` |  |\n"
             "| `U64xNative.add` | `(other: U64xNative): U64xNative` |  |\n"
             "| `U64xNative.bitXor` | `(other: U64xNative): U64xNative` |  |\n"
-            "| `U64xNative.load` | `(data: Slice<u64>, offset: int = 0): U64xNative` |  |\n"
+            "| `U64xNative.load` | `(data: Slice<u64>, offset: i64 = 0): U64xNative` |  |\n"
             "| `U64xNative.mul` | `(other: U64xNative): U64xNative` |  |\n"
-            "| `U64xNative.shiftRight` | `(bits: int): U64xNative` |  |\n"
+            "| `U64xNative.shiftRight` | `(bits: i64): U64xNative` |  |\n"
             "| `U64xNative.splat` | `(value: u64): U64xNative` |  |\n"
-            "| `U64xNative.store` | `(output: ref Slice<u64>, offset: int = 0): ()` |  |\n"
+            "| `U64xNative.store` | `(output: ref Slice<u64>, offset: i64 = 0): ()` |  |\n"
             "| `U64xNative.swapAdjacent` | `(): U64xNative` |  |\n"
             "| `U8x16` | `U8x16` |  |\n"
             "| `U8x16.bitAnd` | `(other: U8x16): U8x16` |  |\n"
             "| `U8x16.bitNot` | `(): U8x16` |  |\n"
             "| `U8x16.bitOr` | `(other: U8x16): U8x16` |  |\n"
             "| `U8x16.bitXor` | `(other: U8x16): U8x16` |  |\n"
-            "| `U8x16.extract` | `(lane: int): byte` |  |\n"
-            "| `U8x16.fromLanes` | `(lanes: [byte; 16]): U8x16` |  |\n"
-            "| `U8x16.load` | `(data: Slice<byte>, offset: int = 0): U8x16` |  |\n"
+            "| `U8x16.extract` | `(lane: i64): u8` |  |\n"
+            "| `U8x16.fromLanes` | `(lanes: [u8; 16]): U8x16` |  |\n"
+            "| `U8x16.load` | `(data: Slice<u8>, offset: i64 = 0): U8x16` |  |\n"
             "| `U8x16.reinterpretU32` | `(): U32x4` |  |\n"
             "| `U8x16.reinterpretU64` | `(): U64x2` |  |\n"
-            "| `U8x16.replace` | `(lane: int, value: byte): U8x16` |  |\n"
-            "| `U8x16.splat` | `(value: byte): U8x16` |  |\n"
-            "| `U8x16.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x16.replace` | `(lane: i64, value: u8): U8x16` |  |\n"
+            "| `U8x16.splat` | `(value: u8): U8x16` |  |\n"
+            "| `U8x16.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
             "| `U8x32` | `U8x32` |  |\n"
             "| `U8x32.bitXor` | `(other: U8x32): U8x32` |  |\n"
-            "| `U8x32.fromLanes` | `(lanes: [byte; 32]): U8x32` |  |\n"
-            "| `U8x32.load` | `(data: Slice<byte>, offset: int = 0): U8x32` |  |\n"
+            "| `U8x32.fromLanes` | `(lanes: [u8; 32]): U8x32` |  |\n"
+            "| `U8x32.load` | `(data: Slice<u8>, offset: i64 = 0): U8x32` |  |\n"
             "| `U8x32.reinterpretU32` | `(): U32x8` |  |\n"
             "| `U8x32.reinterpretU64` | `(): U64x4` |  |\n"
-            "| `U8x32.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x32.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
             "| `U8x64` | `U8x64` |  |\n"
             "| `U8x64.bitXor` | `(other: U8x64): U8x64` |  |\n"
-            "| `U8x64.fromLanes` | `(lanes: [byte; 64]): U8x64` |  |\n"
-            "| `U8x64.load` | `(data: Slice<byte>, offset: int = 0): U8x64` |  |\n"
+            "| `U8x64.fromLanes` | `(lanes: [u8; 64]): U8x64` |  |\n"
+            "| `U8x64.load` | `(data: Slice<u8>, offset: i64 = 0): U8x64` |  |\n"
             "| `U8x64.reinterpretU32` | `(): U32x16` |  |\n"
             "| `U8x64.reinterpretU64` | `(): U64x8` |  |\n"
-            "| `U8x64.store` | `(output: ref Slice<byte>, offset: int = 0): ()` |  |\n"
+            "| `U8x64.store` | `(output: ref Slice<u8>, offset: i64 = 0): ()` |  |\n"
             "| `U8xNative` | `U8xNative` |  |\n"
             "| `U8xNative.bitXor` | `(other: U8xNative): U8xNative` |  |\n"
-            "| `U8xNative.load` | `(data: Slice<byte>, offset: int = 0): U8xNative` |  |\n"
+            "| `U8xNative.load` | `(data: Slice<u8>, offset: i64 = 0): U8xNative` |  |\n"
             "| `U8xNative.reinterpretU32` | `(): U32xNative` |  |\n"
             "| `U8xNative.reinterpretU64` | `(): U64xNative` |  |\n"
             "",
         .symbols = _symbols_simd,
         .symbol_count = (int)(sizeof(_symbols_simd) / sizeof(_symbols_simd[0])),
-    },
-    {
-        .module = "strconv",
-        .summary = "Explicit string and scalar conversions",
-        .body =
-            "# strconv module\n"
-            "\n"
-            "Explicit string and scalar conversion helpers.\n"
-            "\n"
-            "Usage: `import strconv` then call `strconv.function()`.\n"
-            "\n"
-            "### Functions\n"
-            "- `strconv.parseInt(value)` returns `int?`\n"
-            "- `strconv.parseFloat(value)` returns `float?`\n"
-            "\n"
-            "## API\n"
-            "\n"
-            "| Symbol | Signature | Summary |\n"
-            "|--|--|--|\n"
-            "| `strconv.parseFloat` | `(value: string): float?` |  |\n"
-            "| `strconv.parseInt` | `(value: string): int?` |  |\n"
-            "",
-        .symbols = _symbols_strconv,
-        .symbol_count = (int)(sizeof(_symbols_strconv) / sizeof(_symbols_strconv[0])),
     },
     {
         .module = "sync",
@@ -9872,7 +9835,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `Barrier` | `Barrier` |  |\n"
-            "| `Barrier.constructor` | `(parties: int): ()` |  |\n"
+            "| `Barrier.constructor` | `(parties: i64): ()` |  |\n"
             "| `Barrier.wait` | `(): bool` |  |\n"
             "| `CachePadded` | `CachePadded` |  |\n"
             "| `CachePadded.value` | `: T` |  |\n"
@@ -9919,11 +9882,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "|--|--|--|\n"
             "| `Dylib` | `Dylib` |  |\n"
             "| `Dylib.close` | `(): bool` |  |\n"
-            "| `Dylib.constructor` | `(handle: int): ()` |  |\n"
+            "| `Dylib.constructor` | `(handle: i64): ()` |  |\n"
             "| `Dylib.lastError` | `(): string` |  |\n"
             "| `Dylib.open` | `(path: Path): Dylib?` |  |\n"
-            "| `Dylib.symbol` | `(name: string): Ptr<byte>?` |  |\n"
-            "| `sys.OsBarrier` | `(parties: int): OsBarrier` | Create a reusable OS-domain barrier |\n"
+            "| `Dylib.symbol` | `(name: string): Ptr<u8>?` |  |\n"
+            "| `sys.OsBarrier` | `(parties: i64): OsBarrier` | Create a reusable OS-domain barrier |\n"
             "| `sys.OsCondvar` | `(): OsCondvar` | Create an OS-domain condition variable |\n"
             "| `sys.OsMutex` | `(): OsMutex` | Create an OS-domain mutex |\n"
             "| `sys.OsOnce` | `(): OsOnce` | Create an OS-domain once gate |\n"
@@ -9932,35 +9895,35 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `Pipe.close` | `(): bool` |  |\n"
             "| `Pipe.closeRead` | `(): bool` |  |\n"
             "| `Pipe.closeWrite` | `(): bool` |  |\n"
-            "| `Pipe.constructor` | `(readHandle: int, writeHandle: int): ()` |  |\n"
+            "| `Pipe.constructor` | `(readHandle: i64, writeHandle: i64): ()` |  |\n"
             "| `Pipe.open` | `(): Pipe?` |  |\n"
-            "| `Pipe.read` | `(maxBytes: int = 8192): Array<byte>?` |  |\n"
-            "| `Pipe.readEnd` | `(): int` |  |\n"
-            "| `Pipe.write` | `(data: Array<byte>): int` |  |\n"
-            "| `Pipe.writeEnd` | `(): int` |  |\n"
+            "| `Pipe.read` | `(maxBytes: i64 = 8192): Array<u8>?` |  |\n"
+            "| `Pipe.readEnd` | `(): i64` |  |\n"
+            "| `Pipe.write` | `(data: Array<u8>): i64` |  |\n"
+            "| `Pipe.writeEnd` | `(): i64` |  |\n"
             "| `Process` | `Process` |  |\n"
-            "| `Process.constructor` | `(id: int, detached: bool = false): ()` |  |\n"
-            "| `Process.id` | `: int { fn() { return this._id } }` |  |\n"
+            "| `Process.constructor` | `(id: i64, detached: bool = false): ()` |  |\n"
+            "| `Process.id` | `: i64 { fn() { return this._id } }` |  |\n"
             "| `Process.kill` | `(signal: Signal = Signal.TERM): bool` |  |\n"
             "| `Process.spawn` | `(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null): Process?` |  |\n"
-            "| `Process.tryWait` | `(): int?` |  |\n"
-            "| `Process.wait` | `(): int` |  |\n"
+            "| `Process.tryWait` | `(): i64?` |  |\n"
+            "| `Process.wait` | `(): i64` |  |\n"
             "| `ProcessOptions` | `ProcessOptions` |  |\n"
-            "| `ProcessOptions.constructor` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: int? = null, stdout: int? = null, stderr: int? = null, detached: bool = false): ()` |  |\n"
+            "| `ProcessOptions.constructor` | `(cwd: string? = null, env: Map<string, string>? = null, stdin: i64? = null, stdout: i64? = null, stderr: i64? = null, detached: bool = false): ()` |  |\n"
             "| `ProcessOptions.cwd` | `: string?` |  |\n"
             "| `ProcessOptions.detached` | `: bool` |  |\n"
             "| `ProcessOptions.env` | `: Map<string, string>?` |  |\n"
-            "| `ProcessOptions.stderr` | `: int?` |  |\n"
-            "| `ProcessOptions.stdin` | `: int?` |  |\n"
-            "| `ProcessOptions.stdout` | `: int?` |  |\n"
+            "| `ProcessOptions.stderr` | `: i64?` |  |\n"
+            "| `ProcessOptions.stdin` | `: i64?` |  |\n"
+            "| `ProcessOptions.stdout` | `: i64?` |  |\n"
             "| `ThreadLocal` | `ThreadLocal` |  |\n"
             "| `ThreadLocal.constructor` | `(init: fn() -> T): ()` |  |\n"
             "| `ThreadLocal.get` | `(): T` |  |\n"
             "| `ThreadLocal.set` | `(value: T): ()` |  |\n"
-            "| `sys.cpuCount` | `(): int` | Return the number of CPUs available to OS-thread work |\n"
+            "| `sys.cpuCount` | `(): i64` | Return the number of CPUs available to OS-thread work |\n"
             "| `sys.onSignal` | `(signal: Signal, handler: fn()): bool` |  |\n"
-            "| `sys.pinToCpu` | `(cpu: int): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
-            "| `sys.sleepMs` | `(ms: int): ()` | Block the current OS thread for at least ms milliseconds |\n"
+            "| `sys.pinToCpu` | `(cpu: i64): bool` | Best-effort pin of the current OS thread to a CPU index |\n"
+            "| `sys.sleepMs` | `(ms: i64): ()` | Block the current OS thread for at least ms milliseconds |\n"
             "| `sys.threadYield` | `(): ()` | Yield the current OS thread to another runnable OS thread |\n"
             "",
         .symbols = _symbols_sys,
@@ -9988,8 +9951,8 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `text.lower` | `(value: string): string` |  |\n"
-            "| `text.padEnd` | `(value: string, targetLength: int, padding: string = \" \"): string` |  |\n"
-            "| `text.padStart` | `(value: string, targetLength: int, padding: string = \" \"): string` |  |\n"
+            "| `text.padEnd` | `(value: string, targetLength: i64, padding: string = \" \"): string` |  |\n"
+            "| `text.padStart` | `(value: string, targetLength: i64, padding: string = \" \"): string` |  |\n"
             "| `text.reverseRunes` | `(value: string): string` |  |\n"
             "| `text.translate` | `(value: string, table: Map<string, string>): string` |  |\n"
             "| `text.trim` | `(value: string): string` |  |\n"
@@ -10014,14 +9977,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `time.clock` | `(): int` | CPU clock time in milliseconds |\n"
-            "| `time.localOffset` | `(): int` | Local UTC offset in minutes for the current wall time |\n"
-            "| `time.localOffsetAt` | `(timestamp: int): int` | Local UTC offset in minutes at a Unix timestamp |\n"
-            "| `time.micros` | `(): int` | Monotonic time in microseconds |\n"
-            "| `time.monotonic` | `(): int` | Monotonic time in milliseconds |\n"
-            "| `time.nanos` | `(): int` | Monotonic time in nanoseconds |\n"
-            "| `time.now` | `(): int` | Current time in milliseconds since epoch |\n"
-            "| `time.sleep` | `(ms: int): ()` | Sleep for milliseconds |\n"
+            "| `time.clock` | `(): i64` | CPU clock time in milliseconds |\n"
+            "| `time.localOffset` | `(): i64` | Local UTC offset in minutes for the current wall time |\n"
+            "| `time.localOffsetAt` | `(timestamp: i64): i64` | Local UTC offset in minutes at a Unix timestamp |\n"
+            "| `time.micros` | `(): i64` | Monotonic time in microseconds |\n"
+            "| `time.monotonic` | `(): i64` | Monotonic time in milliseconds |\n"
+            "| `time.nanos` | `(): i64` | Monotonic time in nanoseconds |\n"
+            "| `time.now` | `(): i64` | Current time in milliseconds since epoch |\n"
+            "| `time.sleep` | `(ms: i64): ()` | Sleep for milliseconds |\n"
             "",
         .symbols = _symbols_time,
         .symbol_count = (int)(sizeof(_symbols_time) / sizeof(_symbols_time[0])),
@@ -10041,9 +10004,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `TomlArray` | `TomlArray` |  |\n"
-            "| `TomlArray.at` | `(index: int): TomlValue?` |  |\n"
+            "| `TomlArray.at` | `(index: i64): TomlValue?` |  |\n"
             "| `TomlArray.constructor` | `(): ()` |  |\n"
-            "| `TomlArray.len` | `(): int` |  |\n"
+            "| `TomlArray.len` | `(): i64` |  |\n"
             "| `TomlArray.push` | `(value: TomlValue): ()` |  |\n"
             "| `TomlArray.values` | `: Array<TomlValue>` |  |\n"
             "| `TomlDateTime` | `TomlDateTime` |  |\n"
@@ -10052,22 +10015,22 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlDateTime.toISOString` | `(): string` |  |\n"
             "| `TomlDateTime.toString` | `(): string` |  |\n"
             "| `TomlDiagnostic` | `TomlDiagnostic` |  |\n"
-            "| `TomlDiagnostic.column` | `: int` |  |\n"
-            "| `TomlDiagnostic.constructor` | `(kind: TomlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `TomlDiagnostic.column` | `: i64` |  |\n"
+            "| `TomlDiagnostic.constructor` | `(kind: TomlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
             "| `TomlDiagnostic.kind` | `: TomlErrorKind` |  |\n"
-            "| `TomlDiagnostic.line` | `: int` |  |\n"
+            "| `TomlDiagnostic.line` | `: i64` |  |\n"
             "| `TomlDiagnostic.message` | `: string` |  |\n"
             "| `TomlFloat` | `TomlFloat` |  |\n"
-            "| `TomlFloat.constructor` | `(value: float, text: string = \"\"): ()` |  |\n"
+            "| `TomlFloat.constructor` | `(value: f64, text: string = \"\"): ()` |  |\n"
             "| `TomlFloat.text` | `: string` |  |\n"
             "| `TomlFloat.toString` | `(): string` |  |\n"
-            "| `TomlFloat.value` | `: float` |  |\n"
+            "| `TomlFloat.value` | `: f64` |  |\n"
             "| `TomlParseReport` | `TomlParseReport` |  |\n"
-            "| `TomlParseReport.constructor` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: int, keys: int): ()` |  |\n"
+            "| `TomlParseReport.constructor` | `(data: TomlValue, errors: Array<TomlDiagnostic>, lines: i64, keys: i64): ()` |  |\n"
             "| `TomlParseReport.data` | `: TomlValue` |  |\n"
             "| `TomlParseReport.errors` | `: Array<TomlDiagnostic>` |  |\n"
-            "| `TomlParseReport.keys` | `: int` |  |\n"
-            "| `TomlParseReport.lines` | `: int` |  |\n"
+            "| `TomlParseReport.keys` | `: i64` |  |\n"
+            "| `TomlParseReport.lines` | `: i64` |  |\n"
             "| `TomlTable` | `TomlTable` |  |\n"
             "| `TomlTable.constructor` | `(): ()` |  |\n"
             "| `TomlTable.containsKey` | `(key: string): bool` |  |\n"
@@ -10080,44 +10043,44 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `TomlValue.Bool` | `(value: bool): TomlValue` |  |\n"
             "| `TomlValue.DateTime` | `(value: TomlDateTime): TomlValue` |  |\n"
             "| `TomlValue.Float` | `(value: TomlFloat): TomlValue` |  |\n"
-            "| `TomlValue.Int` | `(value: int): TomlValue` |  |\n"
+            "| `TomlValue.Int` | `(value: i64): TomlValue` |  |\n"
             "| `TomlValue.String` | `(value: string): TomlValue` |  |\n"
             "| `TomlValue.Table` | `(value: TomlTable): TomlValue` |  |\n"
             "| `TomlValue.arrayValue` | `: TomlArray?` |  |\n"
             "| `TomlValue.asArray` | `(): TomlArray?` |  |\n"
             "| `TomlValue.asBool` | `(): bool?` |  |\n"
             "| `TomlValue.asDateTime` | `(): TomlDateTime?` |  |\n"
-            "| `TomlValue.asFloat` | `(): float?` |  |\n"
-            "| `TomlValue.asInt` | `(): int?` |  |\n"
+            "| `TomlValue.asFloat` | `(): f64?` |  |\n"
+            "| `TomlValue.asInt` | `(): i64?` |  |\n"
             "| `TomlValue.asString` | `(): string?` |  |\n"
             "| `TomlValue.asTable` | `(): TomlTable?` |  |\n"
-            "| `TomlValue.at` | `(index: int): TomlValue?` |  |\n"
+            "| `TomlValue.at` | `(index: i64): TomlValue?` |  |\n"
             "| `TomlValue.boolValue` | `: bool` |  |\n"
             "| `TomlValue.constructor` | `(kind: string): ()` |  |\n"
             "| `TomlValue.dateTimeValue` | `: TomlDateTime?` |  |\n"
             "| `TomlValue.floatValue` | `: TomlFloat?` |  |\n"
             "| `TomlValue.get` | `(key: string): TomlValue?` |  |\n"
-            "| `TomlValue.intValue` | `: int` |  |\n"
+            "| `TomlValue.intValue` | `: i64` |  |\n"
             "| `TomlValue.keys` | `(): Array<string>` |  |\n"
             "| `TomlValue.kind` | `: string` |  |\n"
-            "| `TomlValue.len` | `(): int` |  |\n"
+            "| `TomlValue.len` | `(): i64` |  |\n"
             "| `TomlValue.stringValue` | `: string` |  |\n"
             "| `TomlValue.tableValue` | `: TomlTable?` |  |\n"
             "| `toml.arrayPush` | `(array: ref TomlArray, value: TomlValue): ()` |  |\n"
             "| `toml.arrayValue` | `(value: TomlArray): TomlValue` |  |\n"
             "| `toml.asBool` | `(value: TomlValue): bool?` |  |\n"
             "| `toml.asDateTime` | `(value: TomlValue): TomlDateTime?` |  |\n"
-            "| `toml.asFloat` | `(value: TomlValue): float?` |  |\n"
-            "| `toml.asInt` | `(value: TomlValue): int?` |  |\n"
+            "| `toml.asFloat` | `(value: TomlValue): f64?` |  |\n"
+            "| `toml.asInt` | `(value: TomlValue): i64?` |  |\n"
             "| `toml.asString` | `(value: TomlValue): string?` |  |\n"
-            "| `toml.at` | `(value: TomlValue, index: int): TomlValue?` |  |\n"
+            "| `toml.at` | `(value: TomlValue, index: i64): TomlValue?` |  |\n"
             "| `toml.boolValue` | `(value: bool): TomlValue` |  |\n"
             "| `toml.dateTimeValue` | `(value: string): TomlValue` |  |\n"
-            "| `toml.floatValue` | `(value: float): TomlValue` |  |\n"
+            "| `toml.floatValue` | `(value: f64): TomlValue` |  |\n"
             "| `toml.get` | `(value: TomlValue, key: string): TomlValue?` |  |\n"
-            "| `toml.intValue` | `(value: int): TomlValue` |  |\n"
+            "| `toml.intValue` | `(value: i64): TomlValue` |  |\n"
             "| `toml.isTable` | `(value: TomlValue): bool` |  |\n"
-            "| `toml.length` | `(value: TomlValue): int` |  |\n"
+            "| `toml.length` | `(value: TomlValue): i64` |  |\n"
             "| `toml.newArray` | `(): TomlArray` |  |\n"
             "| `toml.newTable` | `(): TomlTable` |  |\n"
             "| `toml.parse` | `(data: string): TomlValue` |  |\n"
@@ -10195,16 +10158,16 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
             "| `ClosePayload` | `ClosePayload` |  |\n"
-            "| `ClosePayload.code` | `: int` |  |\n"
-            "| `ClosePayload.constructor` | `(code: int, reason: string): ()` |  |\n"
+            "| `ClosePayload.code` | `: i64` |  |\n"
+            "| `ClosePayload.constructor` | `(code: i64, reason: string): ()` |  |\n"
             "| `ClosePayload.reason` | `: string` |  |\n"
             "| `ParsedFrame` | `ParsedFrame` |  |\n"
-            "| `ParsedFrame.constructor` | `(fin: bool, rsv1: bool, opcode: int, masked: bool, payload: Array<byte>, consumedBytes: int): ()` |  |\n"
-            "| `ParsedFrame.consumedBytes` | `: int` |  |\n"
+            "| `ParsedFrame.constructor` | `(fin: bool, rsv1: bool, opcode: i64, masked: bool, payload: Array<u8>, consumedBytes: i64): ()` |  |\n"
+            "| `ParsedFrame.consumedBytes` | `: i64` |  |\n"
             "| `ParsedFrame.fin` | `: bool` |  |\n"
             "| `ParsedFrame.masked` | `: bool` |  |\n"
-            "| `ParsedFrame.opcode` | `: int` |  |\n"
-            "| `ParsedFrame.payload` | `: Array<byte>` |  |\n"
+            "| `ParsedFrame.opcode` | `: i64` |  |\n"
+            "| `ParsedFrame.payload` | `: Array<u8>` |  |\n"
             "| `ParsedFrame.rsv1` | `: bool` |  |\n"
             "| `ParsedUpgradeRequest` | `ParsedUpgradeRequest` |  |\n"
             "| `ParsedUpgradeRequest.constructor` | `(target: string, secKey: string, protocol: string? = null, deflate: bool = false, origin: string? = null): ()` |  |\n"
@@ -10214,61 +10177,61 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ParsedUpgradeRequest.secKey` | `: string` |  |\n"
             "| `ParsedUpgradeRequest.target` | `: string` |  |\n"
             "| `ParsedUpgradeResponse` | `ParsedUpgradeResponse` |  |\n"
-            "| `ParsedUpgradeResponse.constructor` | `(statusCode: int, protocol: string? = null, deflate: bool = false): ()` |  |\n"
+            "| `ParsedUpgradeResponse.constructor` | `(statusCode: i64, protocol: string? = null, deflate: bool = false): ()` |  |\n"
             "| `ParsedUpgradeResponse.deflate` | `: bool` |  |\n"
             "| `ParsedUpgradeResponse.protocol` | `: string?` |  |\n"
-            "| `ParsedUpgradeResponse.statusCode` | `: int` |  |\n"
+            "| `ParsedUpgradeResponse.statusCode` | `: i64` |  |\n"
             "| `WsConn` | `WsConn` |  |\n"
-            "| `WsConn.close` | `(code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
-            "| `WsConn.constructor` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: int): ()` |  |\n"
+            "| `WsConn.close` | `(code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
+            "| `WsConn.constructor` | `(conn: NetConn?, isServer: bool, url: string, error: string?, maxMessage: i64): ()` |  |\n"
             "| `WsConn.error` | `: string?` |  |\n"
             "| `WsConn.isOpen` | `(): bool` |  |\n"
             "| `WsConn.ping` | `(): bool` |  |\n"
-            "| `WsConn.recv` | `(timeout: int = -1): WsMessage?` |  |\n"
-            "| `WsConn.sendBytes` | `(data: Array<byte>, binary: bool = false): bool` |  |\n"
+            "| `WsConn.recv` | `(timeout: i64 = -1): WsMessage?` |  |\n"
+            "| `WsConn.sendBytes` | `(data: Array<u8>, binary: bool = false): bool` |  |\n"
             "| `WsConn.sendText` | `(data: string): bool` |  |\n"
             "| `WsConn.url` | `: string` |  |\n"
             "| `WsConnectOptions` | `WsConnectOptions` |  |\n"
-            "| `WsConnectOptions.constructor` | `(timeoutMs: int = 30000, pingIntervalMs: int = 0, pongTimeoutMs: int = 0, maxMessageSize: int = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
-            "| `WsConnectOptions.maxMessageSize` | `: int` |  |\n"
-            "| `WsConnectOptions.pingIntervalMs` | `: int` |  |\n"
-            "| `WsConnectOptions.pongTimeoutMs` | `: int` |  |\n"
-            "| `WsConnectOptions.timeoutMs` | `: int` |  |\n"
+            "| `WsConnectOptions.constructor` | `(timeoutMs: i64 = 30000, pingIntervalMs: i64 = 0, pongTimeoutMs: i64 = 0, maxMessageSize: i64 = _WS_MAX_MESSAGE_BYTES): ()` |  |\n"
+            "| `WsConnectOptions.maxMessageSize` | `: i64` |  |\n"
+            "| `WsConnectOptions.pingIntervalMs` | `: i64` |  |\n"
+            "| `WsConnectOptions.pongTimeoutMs` | `: i64` |  |\n"
+            "| `WsConnectOptions.timeoutMs` | `: i64` |  |\n"
             "| `WsMessage` | `WsMessage` |  |\n"
             "| `WsMessage.binary` | `: bool` |  |\n"
-            "| `WsMessage.constructor` | `(data: Array<byte>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
-            "| `WsMessage.data` | `: Array<byte>?` |  |\n"
+            "| `WsMessage.constructor` | `(data: Array<u8>? = null, binary: bool = false, error: string? = null): ()` |  |\n"
+            "| `WsMessage.data` | `: Array<u8>?` |  |\n"
             "| `WsMessage.error` | `: string?` |  |\n"
             "| `WsMessage.text` | `(): string?` |  |\n"
             "| `WsUrl` | `WsUrl` |  |\n"
-            "| `WsUrl.constructor` | `(secure: bool, host: string, port: int, path: string): ()` |  |\n"
+            "| `WsUrl.constructor` | `(secure: bool, host: string, port: i64, path: string): ()` |  |\n"
             "| `WsUrl.host` | `: string` |  |\n"
             "| `WsUrl.path` | `: string` |  |\n"
-            "| `WsUrl.port` | `: int` |  |\n"
+            "| `WsUrl.port` | `: i64` |  |\n"
             "| `WsUrl.secure` | `: bool` |  |\n"
             "| `ws.acceptKey` | `(secKey: string): string` |  |\n"
-            "| `ws.binaryFrame` | `(data: Array<byte>, mask: bool = true): Array<byte>` |  |\n"
+            "| `ws.binaryFrame` | `(data: Array<u8>, mask: bool = true): Array<u8>` |  |\n"
             "| `ws.clientHandshakeRequest` | `(url: WsUrl, secKey: string, protocols: Array<string>? = null, deflate: bool = true): string?` |  |\n"
-            "| `ws.close` | `(conn: ref WsConn, code: int = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
-            "| `ws.closeFrame` | `(code: int = 1000, reason: string = \"\", mask: bool = true): Array<byte>` |  |\n"
+            "| `ws.close` | `(conn: ref WsConn, code: i64 = _WS_CLOSE_NORMAL, reason: string = \"\"): bool` |  |\n"
+            "| `ws.closeFrame` | `(code: i64 = 1000, reason: string = \"\", mask: bool = true): Array<u8>` |  |\n"
             "| `ws.connect` | `(url: string, options: WsConnectOptions? = null): WsConn` |  |\n"
-            "| `ws.frame` | `(payload: Array<byte>, opcode: int = _OP_TEXT, mask: bool = true): Array<byte>` |  |\n"
-            "| `ws.isValidCloseCode` | `(code: int): bool` |  |\n"
-            "| `ws.maskPayload` | `(payload: Array<byte>, key: Array<byte>): Array<byte>` |  |\n"
-            "| `ws.parseClosePayload` | `(payload: Array<byte>): ClosePayload?` |  |\n"
-            "| `ws.parseFrame` | `(raw: Array<byte>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: int = 67108864): ParsedFrame?` |  |\n"
+            "| `ws.frame` | `(payload: Array<u8>, opcode: i64 = _OP_TEXT, mask: bool = true): Array<u8>` |  |\n"
+            "| `ws.isValidCloseCode` | `(code: i64): bool` |  |\n"
+            "| `ws.maskPayload` | `(payload: Array<u8>, key: Array<u8>): Array<u8>` |  |\n"
+            "| `ws.parseClosePayload` | `(payload: Array<u8>): ClosePayload?` |  |\n"
+            "| `ws.parseFrame` | `(raw: Array<u8>, expectMasked: bool = false, enforceMask: bool = false, allowRsv1: bool = false, maxPayloadBytes: i64 = 67108864): ParsedFrame?` |  |\n"
             "| `ws.parseUpgradeRequest` | `(request: string, serverProtocols: Array<string>? = null, allowDeflate: bool = true, allowedOrigins: Array<string>? = null): ParsedUpgradeRequest?` |  |\n"
             "| `ws.parseUpgradeResponse` | `(response: string, secKey: string, protocols: Array<string>? = null, allowDeflate: bool = true): ParsedUpgradeResponse?` |  |\n"
             "| `ws.parseUrl` | `(url: string): WsUrl?` |  |\n"
             "| `ws.ping` | `(conn: ref WsConn): bool` |  |\n"
-            "| `ws.pingFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
-            "| `ws.pongFrame` | `(data: Array<byte>? = null, mask: bool = true): Array<byte>` |  |\n"
+            "| `ws.pingFrame` | `(data: Array<u8>? = null, mask: bool = true): Array<u8>` |  |\n"
+            "| `ws.pongFrame` | `(data: Array<u8>? = null, mask: bool = true): Array<u8>` |  |\n"
             "| `ws.randomKey` | `(): string` |  |\n"
-            "| `ws.recv` | `(conn: ref WsConn, timeout: int = -1): WsMessage?` |  |\n"
-            "| `ws.sendBytes` | `(conn: ref WsConn, data: Array<byte>, binary: bool = false): bool` |  |\n"
+            "| `ws.recv` | `(conn: ref WsConn, timeout: i64 = -1): WsMessage?` |  |\n"
+            "| `ws.sendBytes` | `(conn: ref WsConn, data: Array<u8>, binary: bool = false): bool` |  |\n"
             "| `ws.sendText` | `(conn: ref WsConn, data: string): bool` |  |\n"
-            "| `ws.serve` | `(port: int, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: int = _WS_MAX_MESSAGE_BYTES): bool` |  |\n"
-            "| `ws.textFrame` | `(data: string, mask: bool = true): Array<byte>` |  |\n"
+            "| `ws.serve` | `(port: i64, handler: fn(ref WsConn), running: Atomic<bool>, maxMessage: i64 = _WS_MAX_MESSAGE_BYTES): bool` |  |\n"
+            "| `ws.textFrame` | `(data: string, mask: bool = true): Array<u8>` |  |\n"
             "| `ws.upgradeResponse` | `(secKey: string, protocol: string? = null, deflate: bool = false): string` |  |\n"
             "",
         .symbols = _symbols_ws,
@@ -10294,10 +10257,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `XmlAttribute.name` | `: XmlName` |  |\n"
             "| `XmlAttribute.value` | `: string` |  |\n"
             "| `XmlDiagnostic` | `XmlDiagnostic` |  |\n"
-            "| `XmlDiagnostic.column` | `: int` |  |\n"
-            "| `XmlDiagnostic.constructor` | `(kind: XmlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `XmlDiagnostic.column` | `: i64` |  |\n"
+            "| `XmlDiagnostic.constructor` | `(kind: XmlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
             "| `XmlDiagnostic.kind` | `: XmlErrorKind` |  |\n"
-            "| `XmlDiagnostic.line` | `: int` |  |\n"
+            "| `XmlDiagnostic.line` | `: i64` |  |\n"
             "| `XmlDiagnostic.message` | `: string` |  |\n"
             "| `XmlName` | `XmlName` |  |\n"
             "| `XmlName.constructor` | `(prefix: string, local: string): ()` |  |\n"
@@ -10313,10 +10276,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `XmlParseReport.constructor` | `(doc: XmlNode?, diagnostics: Array<XmlDiagnostic>): ()` |  |\n"
             "| `XmlParseReport.diagnostics` | `: Array<XmlDiagnostic>` |  |\n"
             "| `XmlParseReport.doc` | `: XmlNode?` |  |\n"
-            "| `xml.XmlWriteOptions` | `{ indent: int, declaration: bool, encoding: string }` |  |\n"
+            "| `xml.XmlWriteOptions` | `{ indent: i64, declaration: bool, encoding: string }` |  |\n"
             "| `xml.XmlWriteOptions.declaration` | `bool` | Type alias field |\n"
             "| `xml.XmlWriteOptions.encoding` | `string` | Type alias field |\n"
-            "| `xml.XmlWriteOptions.indent` | `int` | Type alias field |\n"
+            "| `xml.XmlWriteOptions.indent` | `i64` | Type alias field |\n"
             "| `xml.attr` | `(node: XmlNode, key: string): string?` |  |\n"
             "| `xml.attributes` | `(node: XmlNode): Array<XmlAttribute>` |  |\n"
             "| `xml.cdata` | `(content: string): XmlNode` |  |\n"
@@ -10357,10 +10320,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlAnchor.constructor` | `(name: string): ()` |  |\n"
             "| `YamlAnchor.name` | `: string` |  |\n"
             "| `YamlDiagnostic` | `YamlDiagnostic` |  |\n"
-            "| `YamlDiagnostic.column` | `: int` |  |\n"
-            "| `YamlDiagnostic.constructor` | `(kind: YamlErrorKind, line: int, column: int, message: string): ()` |  |\n"
+            "| `YamlDiagnostic.column` | `: i64` |  |\n"
+            "| `YamlDiagnostic.constructor` | `(kind: YamlErrorKind, line: i64, column: i64, message: string): ()` |  |\n"
             "| `YamlDiagnostic.kind` | `: YamlErrorKind` |  |\n"
-            "| `YamlDiagnostic.line` | `: int` |  |\n"
+            "| `YamlDiagnostic.line` | `: i64` |  |\n"
             "| `YamlDiagnostic.message` | `: string` |  |\n"
             "| `YamlMapping` | `YamlMapping` |  |\n"
             "| `YamlMapping.constructor` | `(): ()` |  |\n"
@@ -10368,13 +10331,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlMapping.get` | `(key: string): YamlValue?` |  |\n"
             "| `YamlMapping.keys` | `: Array<string>` |  |\n"
             "| `YamlMapping.set` | `(key: string, value: YamlValue): ()` |  |\n"
-            "| `YamlMapping.size` | `(): int` |  |\n"
+            "| `YamlMapping.size` | `(): i64` |  |\n"
             "| `YamlMapping.values` | `: Array<YamlValue>` |  |\n"
             "| `yaml.YamlOptions` | `{ strict: bool }` |  |\n"
             "| `yaml.YamlOptions.strict` | `bool` | Type alias field |\n"
             "| `YamlParseReport` | `YamlParseReport` |  |\n"
-            "| `YamlParseReport.anchors` | `: int` |  |\n"
-            "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: int): ()` |  |\n"
+            "| `YamlParseReport.anchors` | `: i64` |  |\n"
+            "| `YamlParseReport.constructor` | `(data: YamlValue, diagnostics: Array<YamlDiagnostic>, anchors: i64): ()` |  |\n"
             "| `YamlParseReport.data` | `: YamlValue` |  |\n"
             "| `YamlParseReport.diagnostics` | `: Array<YamlDiagnostic>` |  |\n"
             "| `YamlTag` | `YamlTag` |  |\n"
@@ -10385,24 +10348,24 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `YamlTagged.constructor` | `(tag: YamlTag, value: YamlValue): ()` |  |\n"
             "| `YamlTagged.tag` | `: YamlTag` |  |\n"
             "| `YamlTagged.value` | `: YamlValue` |  |\n"
-            "| `yaml.YamlWriteOptions` | `{ indent: int }` |  |\n"
-            "| `yaml.YamlWriteOptions.indent` | `int` | Type alias field |\n"
+            "| `yaml.YamlWriteOptions` | `{ indent: i64 }` |  |\n"
+            "| `yaml.YamlWriteOptions.indent` | `i64` | Type alias field |\n"
             "| `yaml.aliasValue` | `(name: string): YamlValue` |  |\n"
             "| `yaml.asBool` | `(value: YamlValue): bool?` |  |\n"
-            "| `yaml.asFloat` | `(value: YamlValue): float?` |  |\n"
-            "| `yaml.asInt` | `(value: YamlValue): int?` |  |\n"
+            "| `yaml.asFloat` | `(value: YamlValue): f64?` |  |\n"
+            "| `yaml.asInt` | `(value: YamlValue): i64?` |  |\n"
             "| `yaml.asMapping` | `(value: YamlValue): YamlMapping?` |  |\n"
             "| `yaml.asSequence` | `(value: YamlValue): Array<YamlValue>?` |  |\n"
             "| `yaml.asString` | `(value: YamlValue): string?` |  |\n"
-            "| `yaml.at` | `(value: YamlValue, index: int): YamlValue?` |  |\n"
-            "| `yaml.binaryValue` | `(value: Array<byte>): YamlValue` |  |\n"
+            "| `yaml.at` | `(value: YamlValue, index: i64): YamlValue?` |  |\n"
+            "| `yaml.binaryValue` | `(value: Array<u8>): YamlValue` |  |\n"
             "| `yaml.boolValue` | `(value: bool): YamlValue` |  |\n"
-            "| `yaml.floatValue` | `(value: float): YamlValue` |  |\n"
+            "| `yaml.floatValue` | `(value: f64): YamlValue` |  |\n"
             "| `yaml.get` | `(value: YamlValue, key: string): YamlValue?` |  |\n"
-            "| `yaml.intValue` | `(value: int): YamlValue` |  |\n"
+            "| `yaml.intValue` | `(value: i64): YamlValue` |  |\n"
             "| `yaml.isNull` | `(value: YamlValue): bool` |  |\n"
             "| `yaml.keys` | `(value: YamlValue): Array<string>` |  |\n"
-            "| `yaml.length` | `(value: YamlValue): int` |  |\n"
+            "| `yaml.length` | `(value: YamlValue): i64` |  |\n"
             "| `yaml.mappingSet` | `(mapping: ref YamlMapping, key: string, value: YamlValue): ()` |  |\n"
             "| `yaml.mappingValue` | `(mapping: YamlMapping): YamlValue` |  |\n"
             "| `yaml.newMapping` | `(): YamlMapping` |  |\n"
@@ -10422,25 +10385,25 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
         .symbol_count = (int)(sizeof(_symbols_yaml) / sizeof(_symbols_yaml[0])),
     },
 };
-XR_DATADEF const int xmcp_generated_stdlib_count = 34;
+XR_DATADEF const int xmcp_generated_stdlib_count = 33;
 
 XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "# Xray Language Cheatsheet\n"
     "\n"
     "## Basics\n"
     "```xray\n"
-    "var x = 1                         // type inferred as int\n"
+    "var x = 1                         // type inferred as i64\n"
     "var name: string = \"Alice\"        // explicit type\n"
-    "var count: int                    // no initializer: zero value used\n"
+    "var count: i64                    // no initializer: zero value used\n"
     "var maybeName: string?            // OK: defaults to null\n"
     "var empty: string = \"\"            // string requires an explicit initializer\n"
     "```\n"
     "```xray\n"
     "const PI = 3.14159\n"
-    "const MAX_LEN: int = 1024\n"
+    "const MAX_LEN: i64 = 1024\n"
     "```\n"
     "```xray\n"
-    "fn add(a: int, b: int) -> int {\n"
+    "fn add(a: i64, b: i64) -> i64 {\n"
     "    return a + b\n"
     "}\n"
     "\n"
@@ -10448,21 +10411,21 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "    print(\"Hi ${name}\")\n"
     "}\n"
     "\n"
-    "fn echo(x: int) {                       // omitted return type = ()\n"
+    "fn echo(x: i64) {                       // omitted return type = ()\n"
     "    print(x)\n"
     "}\n"
     "```\n"
     "```xray\n"
     "// \xe2\x94\x80\xe2\x94\x80 Arrow lambda: each parameter may be annotated or inferred independently \xe2\x94\x80\xe2\x94\x80\n"
     "arr.map(x -> x * 2)\n"
-    "var add = (x: int, y) -> x + y\n"
+    "var add = (x: i64, y) -> x + y\n"
     "\n"
     "// Expression bodies return implicitly; ref only grants a writable loan\n"
-    "var calculate = (x: ref int) -> x * 2\n"
-    "var doubleInPlace = (x: ref int) -> { x = x * 2 }\n"
+    "var calculate = (x: ref i64) -> x * 2\n"
+    "var doubleInPlace = (x: ref i64) -> { x = x * 2 }\n"
     "\n"
     "// \xe2\x94\x80\xe2\x94\x80 fn lambda: explicit return type, generics, or a full parameter contract \xe2\x94\x80\xe2\x94\x80\n"
-    "var inc = fn(x: int) -> int {\n"
+    "var inc = fn(x: i64) -> i64 {\n"
     "    var y = x + 1\n"
     "    return y\n"
     "}\n"
@@ -10470,16 +10433,16 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "```\n"
     "\n"
     "## Types\n"
-    "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
+    "`i64`, `f64`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n"
     "\n"
-    "`T?` for nullable values | `A | B` for unions | exact `{ field: T }` objects | `JSON.Value`, `JSON.Object`, `Array<byte>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
+    "`T?` for nullable values | `A | B` for unions | exact `{ field: T }` objects | `JSON.Value`, `JSON.Object`, `Array<u8>`, `BigInt`, `Channel<T>`, `Atomic<T>`\n"
     "\n"
     "## Quoted literals\n"
     "`\"...\"` / `r\"...\"`: escaped / raw strings (both interpolate `${...}`)\n"
     "\n"
-    "`b\"...\"` / `br\"...\"`: escaped / raw `[byte; L]`\n"
+    "`b\"...\"` / `br\"...\"`: escaped / raw `[u8; L]`\n"
     "\n"
-    "`c\"...\"` / `cr\"...\"`: escaped / raw `[byte; L+1]` with appended NUL\n"
+    "`c\"...\"` / `cr\"...\"`: escaped / raw `[u8; L+1]` with appended NUL\n"
     "\n"
     "One quote is inline, two quotes are empty, and `Q >= 3` is block form. A block opener is followed immediately by a newline and its exact-count closer is alone on a line.\n"
     "\n"
@@ -10532,10 +10495,10 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "```\n"
     "```xray\n"
     "struct Point {\n"
-    "    x: float\n"
-    "    y: float\n"
+    "    x: f64\n"
+    "    y: f64\n"
     "\n"
-    "    magnitude_sq() -> float {\n"
+    "    magnitude_sq() -> f64 {\n"
     "        return this.x * this.x + this.y * this.y\n"
     "    }\n"
     "}\n"
@@ -10555,8 +10518,8 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "```\n"
     "```xray\n"
     "interface Shape {\n"
-    "    area() -> float\n"
-    "    perimeter() -> float\n"
+    "    area() -> f64\n"
+    "    perimeter() -> f64\n"
     "}\n"
     "\n"
     "// Interface method return types may be omitted (default ())\n"
@@ -10566,18 +10529,18 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "}\n"
     "\n"
     "class Circle implements Shape {\n"
-    "    radius: float\n"
-    "    constructor(r: float) { this.radius = r }\n"
-    "    area() -> float { return 3.14 * this.radius * this.radius }\n"
-    "    perimeter() -> float { return 6.28 * this.radius }\n"
+    "    radius: f64\n"
+    "    constructor(r: f64) { this.radius = r }\n"
+    "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
+    "    perimeter() -> f64 { return 6.28 * this.radius }\n"
     "}\n"
     "\n"
     "// Implement multiple interfaces\n"
     "class Logger implements Shape, Greeter {\n"
-    "    radius: float\n"
-    "    constructor(r: float) { this.radius = r }\n"
-    "    area() -> float { return 3.14 * this.radius * this.radius }\n"
-    "    perimeter() -> float { return 6.28 * this.radius }\n"
+    "    radius: f64\n"
+    "    constructor(r: f64) { this.radius = r }\n"
+    "    area() -> f64 { return 3.14 * this.radius * this.radius }\n"
+    "    perimeter() -> f64 { return 6.28 * this.radius }\n"
     "    greet(name: string) { print(\"hello,\", name) }\n"
     "    log() { print(\"logging\") }\n"
     "}\n"
@@ -10599,7 +10562,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "    NotFound,\n"
     "    InternalError\n"
     "\n"
-    "    fn code() -> int {\n"
+    "    fn code() -> i64 {\n"
     "        return match (this) {\n"
     "            HttpStatus.OK -> 200,\n"
     "            HttpStatus.NotFound -> 404,\n"
@@ -10611,12 +10574,12 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "\n"
     "## Collections\n"
     "```xray\n"
-    "var a: Array<int> = [1, 2, 3]\n"
-    "var b = [1, 2, 3]                // inferred as Array<int>\n"
+    "var a: Array<i64> = [1, 2, 3]\n"
+    "var b = [1, 2, 3]                // inferred as Array<i64>\n"
     "var c: Array<string> = []         // explicit empty array\n"
     "```\n"
     "```xray\n"
-    "var m: Map<string, int> = #{\"a\": 1, \"b\": 2}\n"
+    "var m: Map<string, i64> = #{\"a\": 1, \"b\": 2}\n"
     "var m2 = #{\"a\": 1, \"b\": 2}\n"
     "var empty = #{}                                     // empty Map\n"
     "\n"
@@ -10625,7 +10588,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var maybe = m.get(\"missing\")                        // safe lookup; returns null if absent\n"
     "```\n"
     "```xray\n"
-    "var s: Set<int> = #[1, 2, 3]\n"
+    "var s: Set<i64> = #[1, 2, 3]\n"
     "```\n"
     "```xray\n"
     "// Structural-object literal: identifier or static string key + colon ':'\n"
@@ -10640,7 +10603,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var user = { name, age }                  // equivalent to { name: name, age: age }\n"
     "\n"
     "// Map literal: `#{}` prefix + `:`\n"
-    "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, int>\n"
+    "var m = #{\"k1\": 1, \"k2\": 2}           // type: Map<string, i64>\n"
     "var data: JSON.Object = #{\"name\": \"Alice\", \"age\": 30}\n"
     "data[\"traceId\"] = \"req-1\"               // only Map has dynamic keys\n"
     "```\n"
@@ -10651,12 +10614,12 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var t1 = go worker(0, channel)\n"
     "\n"
     "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: JSON.Object) -> int {\n"
+    "var t2 = go fn(d: JSON.Object) -> i64 {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
     "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
-    "var t3 = go fn() -> int {\n"
+    "var t3 = go fn() -> i64 {\n"
     "    return compute()\n"
     "}()\n"
     "\n"
@@ -10672,10 +10635,10 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var t1 = go compute(2)\n"
     "var t2 = go compute(3)\n"
     "var t3 = go compute(4)\n"
-    "var results: Array<int> = await all [t1, t2, t3]\n"
+    "var results: Array<i64> = await all [t1, t2, t3]\n"
     "// also works on a variable directly, no brackets needed\n"
     "var tasks = [t1, t2, t3]\n"
-    "var results2: Array<int> = await all tasks\n"
+    "var results2: Array<i64> = await all tasks\n"
     "\n"
     "// await any: wait for the first to complete, return its result; the others keep running\n"
     "var first = await any [t1, t2, t3]\n"
@@ -10684,7 +10647,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var firstOk = await anySuccess [t1, t2, t3]\n"
     "```\n"
     "```xray\n"
-    "const ch = Channel<int>(10)\n"
+    "const ch = Channel<i64>(10)\n"
     "ch.send(42)                             // blocking send\n"
     "var v = match (ch.recv()) {\n"
     "    Recv.Value(value) -> value\n"
@@ -10709,8 +10672,8 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "var value = ch.recvOr(-1)\n"
     "```\n"
     "```xray\n"
-    "const ch1 = Channel<int>(2)\n"
-    "const ch2 = Channel<int>(2)\n"
+    "const ch1 = Channel<i64>(2)\n"
+    "const ch2 = Channel<i64>(2)\n"
     "\n"
     "select {\n"
     "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n"
@@ -10723,7 +10686,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "## Safety: compile pass = concurrency safe\n"
     "- `const T`: stable deep-read-only capability; audited synchronization handles retain synchronized interior mutation\n"
     "- `Channel<T>`: communication with well-defined ownership semantics\n"
-    "- `Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (name with `const`)\n"
+    "- `Atomic<T>`: lock-free atomic ops for `i64`/`f64`/`bool` (name with `const`)\n"
     "- `move`: explicit ownership transfer for rebindable local `var` values\n"
     "- execution-local graphs require explicit `copy(...)` or `move`; module-mutable state and short-lived views/pointers cannot cross execution boundaries\n"
     "\n"
@@ -10750,7 +10713,7 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "// 1. visibility belongs to the declaration\n"
     "export fn helper() { return }\n"
     "export final class MyClass {\n"
-    "    value: int\n"
+    "    value: i64\n"
     "    constructor() { this.value = 1 }\n"
     "}\n"
     "export const VERSION = \"1.0\"\n"
@@ -10793,12 +10756,12 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "\n"
     "## Channels: communication\n"
     "```xray\n"
-    "const ch  = Channel<int>(10)    // buffered, capacity = 10\n"
-    "const ch0 = Channel<int>(0)     // unbuffered (synchronous handshake)\n"
+    "const ch  = Channel<i64>(10)    // buffered, capacity = 10\n"
+    "const ch0 = Channel<i64>(0)     // unbuffered (synchronous handshake)\n"
     "const cha = Channel(3)          // element type inferred from the first send\n"
     "```\n"
     "```xray\n"
-    "const ch = Channel<int>(10)\n"
+    "const ch = Channel<i64>(10)\n"
     "ch.send(42)                             // blocking send\n"
     "var v = match (ch.recv()) {\n"
     "    Recv.Value(value) -> value\n"
@@ -10825,7 +10788,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "\n"
     "## Const and synchronized capabilities\n"
     "```xray\n"
-    "const channel = Channel<int>(16)\n"
+    "const channel = Channel<i64>(16)\n"
     "const counter = Atomic(0)\n"
     "\n"
     "var source = [1, 2, 3]\n"
@@ -10840,12 +10803,12 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "var t1 = go worker(0, channel)\n"
     "\n"
     "// Inline logic: a lambda must still form a complete call with explicit arguments\n"
-    "var t2 = go fn(d: JSON.Object) -> int {\n"
+    "var t2 = go fn(d: JSON.Object) -> i64 {\n"
     "    return d.value * 2\n"
     "}(payload)\n"
     "\n"
     "// Parameterless inline logic is still a zero-argument lambda call; go { ... } does not exist\n"
-    "var t3 = go fn() -> int {\n"
+    "var t3 = go fn() -> i64 {\n"
     "    return compute()\n"
     "}()\n"
     "\n"
@@ -10854,23 +10817,23 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "```\n"
     "```xray\n"
     "var data = { value: 10 }\n"
-    "var task = go fn(d: JSON.Object) -> int {\n"
+    "var task = go fn(d: JSON.Object) -> i64 {\n"
     "    return d.value + 1\n"
     "}(move data)        // transfer data ownership to the coroutine; data is unusable afterwards\n"
     "```\n"
     "```xray\n"
-    "var buf = Array<byte>(1024 * 1024)\n"
+    "var buf = Array<u8>(1024 * 1024)\n"
     "\n"
     "// hand off to a coroutine\n"
-    "var t = go fn(b: Array<byte>) -> int {\n"
+    "var t = go fn(b: Array<u8>) -> i64 {\n"
     "    return process(b)\n"
     "}(move buf)\n"
     "// compile error: buf has been moved\n"
     "// print(len(buf))\n"
     "\n"
     "// hand off to a channel\n"
-    "const ch = Channel<Array<byte>>(1)\n"
-    "var payload = Array<byte>(4096)\n"
+    "const ch = Channel<Array<u8>>(1)\n"
+    "var payload = Array<u8>(4096)\n"
     "ch.send(move payload)\n"
     "// compile error: payload has been moved\n"
     "```\n"
@@ -10904,9 +10867,9 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "}\n"
     "\n"
     "// scope: keep task handles and inspect each outcome after the block\n"
-    "var first: Task<int>?\n"
-    "var second: Task<int>?\n"
-    "var third: Task<int>?\n"
+    "var first: Task<i64>?\n"
+    "var second: Task<i64>?\n"
+    "var third: Task<i64>?\n"
     "scope {\n"
     "    first = go failing(\"error1\")\n"
     "    second = go failing(\"error2\")\n"
@@ -10918,8 +10881,8 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "\n"
     "## Select\n"
     "```xray\n"
-    "const ch1 = Channel<int>(2)\n"
-    "const ch2 = Channel<int>(2)\n"
+    "const ch1 = Channel<i64>(2)\n"
+    "const ch2 = Channel<i64>(2)\n"
     "\n"
     "select {\n"
     "    msg from ch1 -> { print(\"got from ch1:\", msg) }      // receive arm\n"
@@ -10930,7 +10893,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "```\n"
     "\n"
     "## Atomic \xe2\x80\x94 lock-free shared state\n"
-    "`Atomic<T>` wraps `int`, `float`, or `bool` with C11 atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation.\n"
+    "`Atomic<T>` wraps `i64`, `f64`, or `bool` with C11 atomic operations. Name it with `const`; its audited methods provide synchronized interior mutation.\n"
     "\n"
     "Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`, `toString`.\n"
     "\n"
@@ -10950,7 +10913,7 @@ XR_DATADEF const char xmcp_generated_concurrency[] =
     "import sync\n"
     "import sys\n"
     "\n"
-    "const m = sync.Mutex<int>(0)\n"
+    "const m = sync.Mutex<i64>(0)\n"
     "const os_m = sys.OsMutex()\n"
     "```\n"
     "";

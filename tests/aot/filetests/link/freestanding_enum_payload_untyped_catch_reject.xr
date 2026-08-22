@@ -1,15 +1,15 @@
 enum FsErr {
-    Bad(int)
+    Bad(i64)
 }
 
-fn mayFail(n: int) -> int {
+fn mayFail(n: i64) -> i64 {
     if (n == 0) {
         throw FsErr.Bad(7)
     }
     return n
 }
 
-fn xray_enum_payload_untyped_catch_reject(n: int) -> int {
+fn xray_enum_payload_untyped_catch_reject(n: i64) -> i64 {
     var out = 0
     try {
         out = mayFail(n)

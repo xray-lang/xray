@@ -7,7 +7,7 @@
 // combined [stack:64][frames:4] slab used by pooled coroutines.
 
 export class Chain {
-    wide(n: int) -> int {
+    wide(n: i64) -> i64 {
         var a0 = n + 0
         var a1 = a0 + 1
         var a2 = a1 + 1
@@ -45,7 +45,7 @@ export class Chain {
              + c0 + c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9
     }
 
-    middle(n: int) -> int {
+    middle(n: i64) -> i64 {
         // Keep many locals live, then dispatch through `this.wide()`
         // which is OP_INVOKE. Caller base + register + callee maxstack
         // must exceed the slab's 64-slot stack for the regression to

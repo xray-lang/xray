@@ -3,8 +3,8 @@ import "../../fixtures/owned_transfer_lib" as transfer
 
 @test
 fn test_selective_import_consumes_owned_param_summary() {
-    const ch: Channel<Array<int>> = Channel(1)
-    var xs = Array<int>(2, 0)
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
     xs[0] = 21
     xs[1] = 22
 
@@ -19,8 +19,8 @@ fn test_selective_import_consumes_owned_param_summary() {
 
 @test
 fn test_namespace_import_consumes_owned_param_summary() {
-    const ch: Channel<Array<int>> = Channel(1)
-    var xs = Array<int>(2, 0)
+    const ch: Channel<Array<i64>> = Channel(1)
+    var xs = Array<i64>(2, 0)
     xs[0] = 31
     xs[1] = 32
 

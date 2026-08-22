@@ -51,13 +51,13 @@ class Dog extends Animal {
 class Counter {
     constructor() {}
 
-    sumValues<K: Hashable>(m: Map<K, int>) -> int {
+    sumValues<K: Hashable>(m: Map<K, i64>) -> i64 {
         var total = 0
         for (k, v in m) { total = total + v }
         return total
     }
 
-    static countKeys<K: Hashable>(m: Map<K, int>) -> int {
+    static countKeys<K: Hashable>(m: Map<K, i64>) -> i64 {
         var n = 0
         for (k, v in m) { n = n + 1 }
         return n
@@ -67,13 +67,13 @@ class Counter {
 @test
 fn test_hashable_bound_on_instance_method() {
     var c = Counter()
-    var m: Map<string, int> = #{"a": 1, "b": 2}
+    var m: Map<string, i64> = #{"a": 1, "b": 2}
     assert_eq(c.sumValues<string>(m), 3)
 }
 
 @test
 fn test_hashable_bound_on_static_method() {
-    var m: Map<string, int> = #{"a": 1, "b": 2, "c": 3}
+    var m: Map<string, i64> = #{"a": 1, "b": 2, "c": 3}
     assert_eq(Counter.countKeys<string>(m), 3)
 }
 
@@ -131,15 +131,15 @@ class Passer {
 @test
 fn test_method_intersection_constraint() {
     var p = Passer()
-    assert_eq(p.passThrough<int>(11), 11)
+    assert_eq(p.passThrough<i64>(11), 11)
     assert_eq(p.passThrough<string>("xy"), "xy")
 }
 
 @test
 fn test_method_mixed_constrained_and_unconstrained() {
     var p = Passer()
-    assert_eq(p.pick<int, string>(1, "one"), "one")
-    assert_eq(p.pick<string, int>("key", 42), 42)
+    assert_eq(p.pick<i64, string>(1, "one"), "one")
+    assert_eq(p.pick<string, i64>("key", 42), 42)
 }
 
 // ===== Method constraint inside a generic class =====
@@ -150,7 +150,7 @@ class Box<T> {
 
     get() -> T { return this.value }
 
-    tag<U: Hashable>(key: U, m: Map<U, int>) -> int {
+    tag<U: Hashable>(key: U, m: Map<U, i64>) -> i64 {
         var total = 0
         for (k, v in m) { total = total + v }
         return total
@@ -159,9 +159,9 @@ class Box<T> {
 
 @test
 fn test_method_constraint_in_generic_class() {
-    var box: Box<int> = Box<int>(10)
+    var box: Box<i64> = Box<i64>(10)
     assert_eq(box.get(), 10)
-    var m: Map<string, int> = #{"x": 5, "y": 6}
+    var m: Map<string, i64> = #{"x": 5, "y": 6}
     assert_eq(box.tag<string>("x", m), 11)
 }
 

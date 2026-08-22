@@ -25,10 +25,10 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 | 类别 | 示例 |
 |--|--|
-| Primitive | `int`、`float`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
-| 精确整数 | `i8`、`i16`、`i32`、`i64`、`byte`..`u64` |
+| Primitive | `i64`、`f64`、`bool`、`string`、`rune`、`()`（Unit，无返回值） |
+| 精确整数 | `i8`、`i16`、`i32`、`i64`、`u8`..`u64` |
 | 精确浮点 | `f32`、`f64` |
-| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<byte>` 是连续字节元素的 `Array` 特化 |
+| 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`；`Array<u8>` 是连续字节元素的 `Array` 特化 |
 | 定长布局 | `[T; N]` |
 | 借用视图 | `Slice<T>`（不拥有数据，受借用生命周期约束，见 §2.4.2） |
 | Prelude 特殊类型/命名空间 | `JSON`（含 `JSON.Value` / `JSON.Object`）、`BigInt`、`Range`、`Regex`、`StringBuilder`、`Atomic<T>`、`Path`、`Thread<T>`、`NetConn`、`NetListener`、`Os*` 同步类型 |
@@ -135,33 +135,33 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 
 #### 2.3.1 整数类型
 
-| 类型 | 范围 | 别名 |
+| 类型 | 范围 | 默认角色 |
 |--|--|--|
 | `i8` | `[-128, 127]` | — |
 | `i16` | `[-32768, 32767]` | — |
 | `i32` | `[-2³¹, 2³¹-1]` | — |
-| `i64` | `[-2⁶³, 2⁶³-1]` | `int`（默认整数类型）|
-| `byte`..`u64` | 无符号对应 | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | 默认整数类型 |
+| `u8`..`u64` | 无符号对应 | — |
 
-- 无唯一数值上下文的整数字面量默认 `int`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
-- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`byte + byte -> byte`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
-- 静态类型为 `byte`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
-- `int` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `int` 边界；`wrapping*` 显式执行默认二补码环绕。
+- 无唯一数值上下文的整数字面量默认 `i64`；有唯一整数上下文时直接取得该类型且必须落在其范围内（`var x: i8 = 200` 编译拒绝）。有唯一浮点上下文时也直接取得该浮点类型，但整数值必须能被它精确表示。
+- 算术：二补码环绕语义（wrap on overflow），不区分 debug / release 构建。同类型整数运算保留该类型并按其宽度环绕（`u8 + u8 -> u8`）；同符号异宽整数使用唯一的较宽类型。不同符号、固定宽度与 `isize`/`usize`、整数与浮点之间不做隐式提升；移位结果取左操作数类型。
+- 静态类型为 `u8`..`u64` 的值在 `print`、`string(x)`、模板字符串、字符串拼接和顺序比较中按无符号解释；例如静态 `u64` 的位型 `0xffff_ffff_ffff_ffff` 显示为 `18446744073709551615`，且大于 `0`。
+- `i64` 的 `checkedAdd` / `checkedSub` / `checkedMul` 在溢出时返回 `null`；`saturating*` 饱和到 `i64` 边界；`wrapping*` 显式执行默认二补码环绕。
 - 已定型表达式不能通过赋值隐式窄化、改变符号或改变目标相关宽度；这些转换必须显式写 `as`。显式整数转换按目标位宽取模并以目标类型的二补码位型解释。
-- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持静态 `uintN` 类型。
+- 动态擦除后的 `XrValue` 只保存整数 payload，不保存有符号性或位宽；跨过 `JSON.Value` / 动态容器等边界后，超过 `i64` 正范围的 `u64` 值在格式化和顺序比较中的行为不保证保留无符号语义。需要无符号语义时保持适当的 exact 无符号静态类型（`u8` / `u16` / `u32` / `u64`）。
 
 #### 2.3.2 浮点类型
 
 | 类型 | 标准 |
 |--|--|
 | `f32` | IEEE-754 单精度 |
-| `f64` | IEEE-754 双精度；`float` 的别名 |
+| `f64` | IEEE-754 双精度；默认浮点类型 |
 
-字面量默认 `float`。
+字面量默认 `f64`。
 
 #### 2.3.3 `bool`
 
-`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: int = true`，也不能 `var b: bool = 1`）。
+`true` / `false`，独立类型，与数值类型**不可隐式互转**（不能 `var x: i64 = true`，也不能 `var b: bool = 1`）。
 
 **条件表达式规则**（`if` / `while` / `for` 条件 / 三元 `?:` / `match` 守卫）：
 
@@ -170,7 +170,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | `bool` | 允许 | 直接布尔判断 |
 | `T?` 且 `T != bool` | 允许 | 仅判断是否为 `null`（不检查内容是否“空”） |
 | `bool?` | 编译错误 | 三态歧义；写 `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
+| `i64` / `f64` / `string` / `rune` / 集合 / 对象 | 编译错误 | 必须写显式比较，如 `n != 0`、`len(s) != 0` |
 
 `&&` / `||` / `!` 的操作数必须是 `bool`；不要把 `T?` 直接放进 `&&` / `||`。
 
@@ -213,7 +213,7 @@ print(smile.toUInt32())   // 128512
 
 - rune 字面量必须恰好包含一个 Unicode scalar；空字面量、多 scalar 字面量和 surrogate 字面量都是编译错误。
 - `rune` 不参与算术、位运算或窄整数赋值：`'a' + 1`、`var n: u32 = 'a'` 都会在分析期拒绝。
-- 显式转换：`int(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
+- 显式转换：`i64(c)` 得到 scalar code point；`rune(n)` 从整数构造 rune 并验证 scalar 合法性；`string(c)` / `c.toString()` 得到单 scalar 字符串。
 - 常用方法见 §14.4.1。
 
 #### 2.3.6 Unit `()`（无返回值）
@@ -245,8 +245,8 @@ xray 的 C FFI 使用一组显式边界类型，避免把普通 xray 对象隐�
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(4) }
@@ -270,8 +270,8 @@ unsafe {
 有序可变数组。详见 §14.7。
 
 ```xray @id=types-array
-var a: Array<int> = [1, 2, 3]
-var b = [1, 2, 3]                // 推断为 Array<int>
+var a: Array<i64> = [1, 2, 3]
+var b = [1, 2, 3]                // 推断为 Array<i64>
 var c: Array<string> = []         // 显式空数组
 ```
 
@@ -286,10 +286,10 @@ var c: Array<string> = []         // 显式空数组
 定长数组可用于 struct inline 字段和局部变量，并支持 struct、嵌套定长数组和引用容器等元素类型，因此可以递归组合：
 
 ```xray
-var bytes: [byte; 4] = [1, 2, 3, 4]
-var zero: [byte; 64] = [0; 64]
+var bytes: [u8; 4] = [1, 2, 3, 4]
+var zero: [u8; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 有目标类型的数组字面量初始化 `[T; N]` 时必须 exact-length；重复初始化 `[value; N]` 的 `N` 同样是正的编译期整数表达式，并且必须和目标类型长度一致。无上下文的普通数组字面量仍推断为动态 `Array<T>`；无上下文的 `[value; N]` 推断为 `[T; N]`。
@@ -297,21 +297,21 @@ var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
 定长数组支持 `len(array)`、索引读取、索引写入、`ref`/`in` 参数传递，以及目标类型为 `Slice<T>` 时通过切片产生借用视图：
 
 ```xray
-var data: [byte; 4] = [5, 6, 7, 8]
-var view: Slice<byte> = data[1:4]
+var data: [u8; 4] = [5, 6, 7, 8]
+var view: Slice<u8> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [byte; 4]
-    payload: [byte; 128]
+    magic: [u8; 4]
+    payload: [u8; 128]
 }
 
-var key: [byte; 4] = [1, 2, 3, 4]
+var key: [u8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> byte {
+fn first(packet: Packet) -> u8 {
     return packet.magic[0]
 }
 ```
@@ -338,19 +338,19 @@ fn first(packet: Packet) -> byte {
 |--|--|--|
 | `array[start:end]` | `Slice<T>` | owner 是 `Array<T>` |
 | `fixedArray[start:end]` | `Slice<T>` | owner 是 `[T; N]` |
-| `str.bytes()` | `Slice<byte>` | owner 是 `string` 的 UTF-8 字节存储 |
+| `str.bytes()` | `Slice<u8>` | owner 是 `string` 的 UTF-8 字节存储 |
 
 ```xray
-var arr: Array<int> = [10, 20, 30, 40]
-var view: Slice<int> = arr[1:3]      // OK：借用 arr
-var all: Slice<int> = arr[:]         // 全长视图，不是拷贝
+var arr: Array<i64> = [10, 20, 30, 40]
+var view: Slice<i64> = arr[1:3]      // OK：借用 arr
+var all: Slice<i64> = arr[:]         // 全长视图，不是拷贝
 var bad = arr[1:3]                   // E0365：切片结果需要显式目标类型
 ```
 
 owner 必须是**具名的局部变量、参数或 receiver 上的字段路径**。不能借用临时值：
 
 ```xray
-var view: Slice<byte> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
+var view: Slice<u8> = makeBytes()[0:2]   // E0384：不能从临时 owner 创建视图
 ```
 
 ##### 能力
@@ -362,13 +362,13 @@ var view: Slice<byte> = makeBytes()[0:2]   // E0384：不能从临时 owner 创�
 
 ```xray @id=types-slice
 fn main() {
-    var arr: Array<int> = [10, 20, 30, 40]
-    var view: Slice<int> = arr[1:3]        // 借用视图，不是拷贝
+    var arr: Array<i64> = [10, 20, 30, 40]
+    var view: Slice<i64> = arr[1:3]        // 借用视图，不是拷贝
     view[1] = 31
     print(arr[2])                          // 31 —— 写穿到 owner
     arr[1] = 21
     print(view[0])                         // 21 —— owner 的元素写入对视图立即可见
-    var owned: Array<int> = copy(arr[1:3]) // 独立的 Array<T>
+    var owned: Array<i64> = copy(arr[1:3]) // 独立的 Array<T>
     arr.push(50)                           // OK：此处没有存活的视图
     print(len(owned))
 }
@@ -387,15 +387,15 @@ main()
 
 ```xray
 fn ok() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     print(len(view))                 // view 的最后一次使用
     bytes.push(3)                    // OK：借用已结束（规则 3）
 }
 
 fn rejected() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     bytes.push(3)                    // E0382：view 仍存活
     print(len(view))
 }
@@ -408,19 +408,19 @@ fn rejected() {
 来源不唯一、或借自函数的局部值时，是编译错误 `E0384`：
 
 ```xray
-fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
     return data[start:]              // OK：唯一来源是参数 data
 }
 
-fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
     if (useA) {
         return a
     }
     return b                         // E0384：多来源
 }
 
-fn alsoBad() -> Slice<int> {
-    var local: Array<int> = [1, 2]
+fn alsoBad() -> Slice<i64> {
+    var local: Array<i64> = [1, 2]
     return local[:]                  // E0384：借自局部值
 }
 ```
@@ -430,7 +430,7 @@ fn alsoBad() -> Slice<int> {
 需要让数据活过 owner，或需要把它放进长生命周期存储时，用 `copy` 把视图物化为独立的 owner：
 
 ```xray
-var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
+var owned: Array<i64> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
 ```
 
 `copy(slice)` 的结果类型是 `Array<T>`，不是 `Slice<T>`；它是唯一能把借用数据变成拥有数据的构造。
@@ -446,7 +446,7 @@ var owned: Array<int> = copy(arr[1:3])   // 独立的 Array<T>，与 arr 无关
 **Map 字面量**必须用 `#{ ... }` 前缀，分隔符用 `:`；`JSON.Object` 使用同一个 Map 字面量：
 
 ```xray @id=types-map
-var m: Map<string, int> = #{"a": 1, "b": 2}
+var m: Map<string, i64> = #{"a": 1, "b": 2}
 var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // 空 Map
 
@@ -463,14 +463,14 @@ var maybe = m.get("missing")                        // 安全查询；不存在�
 | `[]` | `Array<T>` | 数组 |
 | `#[]` | `Set<T>` | 集合 |
 
-`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `int`、`float`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> int` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
+`K` 必须满足 `Hashable`（详见 §9.2）：通常是 `i64`、`f64`、`string`、`bool`、`enum`、`BigInt`，或同时提供 `operator==` 与 `hash() -> i64` 的自定义类型（`operator==` 的参数类型写该类型自己的名字，Xray 没有 `Self` 类型）。泛型键类型必须显式写成 `K: Hashable`。
 
 #### 2.4.4 `Set<T>`
 
 去重集合。详见 §14.9。
 
 ```xray @id=types-set
-var s: Set<int> = #[1, 2, 3]
+var s: Set<i64> = #[1, 2, 3]
 ```
 
 #### 2.4.5 `Channel<T>`
@@ -478,16 +478,16 @@ var s: Set<int> = #[1, 2, 3]
 协程间通信通道。命名通道句柄使用稳定 `const` 绑定；其同步内部可变能力来自受审计 registry（见 §10.5）。
 
 ```xray @id=types-channel
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
-#### 2.4.6 `Array<byte>`
+#### 2.4.6 `Array<u8>`
 
-类型化字节缓冲。语义等价 `Array<byte>`，但底层是连续内存。
+类型化字节缓冲。语义等价 `Array<u8>`，但底层是连续内存。
 
 ```xray
-var buf = Array<byte>(1024)
-var init = Array<byte>([72, 101, 108, 108, 111])
+var buf = Array<u8>(1024)
+var init = Array<u8>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.7 静态结构对象、`JSON.Value` 与对象字面量
@@ -509,7 +509,7 @@ var age = 30
 var user = { name, age }                  // 等价 { name: name, age: age }
 
 // Map 字面量：`#{}` 前缀 + `:`
-var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // 类型: Map<string, i64>
 var data: JSON.Object = #{"name": "Alice", "age": 30}
 data["traceId"] = "req-1"               // 动态键只属于 Map
 ```
@@ -527,7 +527,7 @@ data["traceId"] = "req-1"               // 动态键只属于 Map
 **对象形状类型**：裸对象字面量和 `type T = {...}` 都是 exact 对象形状；访问或赋值未声明字段是编译错误。结构宽度只出现在泛型约束满足关系中：`T: { name: string }` 表示 T 至少包含该字段，调用点仍按实参的具体 exact shape 单态化。尾部 `...` 不属于类型语法。
 
 ```xray
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
@@ -595,14 +595,14 @@ for (i in 3..=5) {
 `T?` 是 `T | null` 的语法糖。
 
 ```xray @id=types-nullable
-var x: int? = null      // OK
-var y: int? = 42        // OK
-var z: int = null       // 编译错误：null 不是 int
+var x: i64? = null      // OK
+var y: i64? = 42        // OK
+var z: i64 = null       // 编译错误：null 不是 i64
 ```
 
 `JSON.Value` 本身包含 `null`，因此 `JSON.Value?` 与 `JSON.Value | null` 是语义重复并在解析阶段报错。解析失败使用 typed error enum 通过 `throw`/`catch` 值返回通道传播；若失败必须作为普通数据保存或返回，则使用领域 ADT 或含显式状态字段的 structural object。不要引入全局 `Result<T,E>`。
 
-**可空原始类型一等公民**：`int?` / `float?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
+**可空原始类型一等公民**：`i64?` / `f64?` / `bool?` 与其它 `T?` 一样是合法类型，泛型与容器会自然产生它们（如 `Map<string, bool>.get(k) -> bool?`、`fn find<T>(...) -> T?` 在 `T = bool` 时）。它们以 tagged 表示承载 `null`，因此 `null` 值在 `print` / `string()` / 字符串拼接中统一显示为 `"null"`（不是底层数值 `0`），VM 与 AOT 一致。
 
 > `bool?` 是三态（`true` / `false` / `null`）。它合法，但**不能直接作条件**（裸 `if (b)` where `b: bool?` 是编译错误，见 §5 / 任务 128）；需显式写 `b == true` / `b != null` / `b ?? false`。
 
@@ -616,13 +616,13 @@ var v = x ?? 0
 var city = user?.address.city
 
 // 3. 强制解包
-var v: int = x!           // 若 x 为 null，运行时 panic NullError
+var v: i64 = x!           // 若 x 为 null，运行时 panic NullError
 
 // 4. 流敏感收窄（完整规则见 §2.13）
 if (x != null) {
-    print(x + 1)          // 此分支内 x 已收窄为 int
+    print(x + 1)          // 此分支内 x 已收窄为 i64
 }
-if (x is int) {
+if (x is i64) {
     print(x + 1)
 }
 ```
@@ -630,20 +630,20 @@ if (x is int) {
 ### 2.6 Union 类型
 
 ```xray @id=types-union-basic
-var v: int | string = 42
+var v: i64 | string = 42
 v = "hello"             // OK
 ```
 
 约束：
 - 最多 **6 个成员**（编译期检查；超限 → 错误）。
 - 成员互不为彼此的子类型（否则会被规范化）。
-- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | float` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
+- **成员必须在运行期可判别**：动态擦除后的值只保留 i64 / f64 两个族，因此 union 至多包含**一个整数族成员**和**一个浮点族成员**。`i16 | i32`、`f32 | f64` 是同一个运行期类型的两个静态名字，`is` / `match` 无法区分，赋值也说不出存的是哪一个 —— 声明即报 `E0390`。
 - 处理 union 值需用 `match` 或 `is` 窄化：
 
 ```xray
-var v: int | string = ...
+var v: i64 | string = ...
 match v {
-    is int    -> print("int: ${v}"),
+    is i64    -> print("i64: ${v}"),
     is string -> print("str: ${v}"),
 }
 ```
@@ -655,8 +655,8 @@ match v {
 - 数值字面量按自己的族选：整数字面量优先选整数族成员，union 没有整数族成员时选浮点族成员（与"整数字面量定型进唯一浮点上下文"一致）；浮点字面量选浮点族成员。字面量必须能被目标精确表示。
 
 ```xray
-var a: int | float = 1        // 精确匹配 int
-var b: int | float = 1.0      // 精确匹配 float
+var a: i64 | f64 = 1        // 精确匹配 i64
+var b: i64 | f64 = 1.0      // 精确匹配 f64
 var c: i32 | string = 7       // 唯一整数族成员：i32
 var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 ```
@@ -664,8 +664,8 @@ var d: f32 | string = 1.5     // 唯一浮点族成员：f32
 `is T` 检查的是运行期值：对定宽数值类型，它问的是"该值能否被 `T` 精确表示"——擦除后的值不保存位宽，这是唯一可回答的形式。在一个合法 union 内，选定成员总能通过它自己的 `is`，其余成员一定失败，因此各分支互斥。
 
 **特殊化**：
-- `int | null` 规范化为 `int?`。
-- `T?` 出现在 union 时：`int? | string` 实际等价 `int | string | null`，规范化为 `(int | string)?`。
+- `i64 | null` 规范化为 `i64?`。
+- `T?` 出现在 union 时：`i64? | string` 实际等价 `i64 | string | null`，规范化为 `(i64 | string)?`。
 
 ### 2.7 元组类型
 
@@ -673,12 +673,12 @@ xray 的元组**是头等公民**——可以作为任意值出现、作为字�
 
 ```xray @id=types-tuple
 // 字面量
-var t = (1, 2, 3)                 // 类型推断为 (int, int, int)
+var t = (1, 2, 3)                 // 类型推断为 (i64, i64, i64)
 var h = (10, "hi", true)          // 异构元组
 var single = (99,)                // 单元素元组：注意尾逗号
 
 // 类型注解
-var p: (int, string) = (7, "ok")
+var p: (i64, string) = (7, "ok")
 
 // 字段访问：.N（N 是编译期常量整数下标）
 var first = t.0                   // 1
@@ -688,12 +688,12 @@ var a     = nest.0.0              // 1
 var b     = nest.1.1              // 4
 
 // 函数返回与解构
-fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
+fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }
 var (q, r) = divmod(17, 5)        // tuple destructure
 
 // 泛型
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-var p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (i64, string)
 ```
 
 **注意事项**：
@@ -720,9 +720,9 @@ main()
 ### 2.8 类型别名
 
 ```xray @id=types-alias
-type Result = int | string
-type Mapper = fn(int) -> int
-type Point = { x: float, y: float }
+type Result = i64 | string
+type Mapper = fn(i64) -> i64
+type Point = { x: f64, y: f64 }
 type Pair<T> = { first: T, second: T }
 type Mapper2<T, U> = fn(T) -> U
 ```
@@ -730,26 +730,26 @@ type Mapper2<T, U> = fn(T) -> U
 别名是**纯语法**等价，不产生新类型，也不产生运行时元数据或 AOT 分支。泛型别名在使用处按类型实参做语法代入：
 
 ```xray
-var p: Pair<int> = { first: 1, second: 2 }  // 等价于 { first: int, second: int }
-var f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<i64> = { first: 1, second: 2 }  // 等价于 { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) -> string(n)
 ```
 
 泛型别名形参只允许名字列表（`<T, U>`）；不带约束。需要约束时应放在使用该别名的泛型函数、class / struct / enum / interface 声明上。别名可前向引用，但循环别名（包括递归对象别名）是编译错误。
 
-**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref int) -> int`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> int)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
+**函数类型语法**：函数类型以 `fn` 引导，写作 `fn(T1, T2) -> R`；参数可带 `ref` / `move` mode（如 `fn(ref i64) -> i64`）。返回 `unit` 时省略箭头段，写作 `fn(T)` / `fn()`——类型位置**不允许**显式写 `-> ()`。这与函数声明位有意不对称：声明位 `fn f() -> ()` 与 `fn f()` 都合法（§5.2），而类型出现在参数、泛型实参、容器元素等密集内联位置，只保留一种拼写。类型位置的裸 `(` 只表示元组或分组括号，与表达式侧和 §2.7 一致——出现逗号才是元组，`(T)` 是分组；因此可空函数类型直接写作 `(fn() -> i64)?`。`CFn<...>` 内同样使用 `fn` 拼写（`CFn<fn(A, B) -> R>`，见 §3.12）。
 
 ### 2.9 类型推断
 
 详见 §7.4。简述：
 
 ```xray @id=types-inference
-var x = 1               // x: int
-var y = 1.5             // y: float
+var x = 1               // x: i64
+var y = 1.5             // y: f64
 var z = "hello"         // z: string
-var a = [1, 2, 3]       // a: Array<int>
-var m = #{"a": 1}    // m: Map<string, int>
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } —— 结构化对象类型
-var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回类型推断
+var f = (x: i64) -> x   // f: fn(i64) -> i64 —— 箭头参数显式、返回类型推断
 ```
 
 ### 2.10 类型兼容性与转换
@@ -758,16 +758,16 @@ var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回�
 
 | 源 | 目标 | 允许与条件 |
 |--|--|--|
-| `T` | `T`（含 `int`=`i64`、`float`=`f64`） | ✅ identity |
+| `T` | `T` | ✅ identity |
 | `i8 → i16 → i32 → i64` | 链上更宽的类型 | ✅ 无损加宽 |
-| `u8/byte → u16 → u32 → u64` | 链上更宽的类型 | ✅ 无损加宽 |
-| `f32` | `f64`（=`float`） | ✅ 无损加宽 |
+| `u8 → u16 → u32 → u64` | 链上更宽的类型 | ✅ 无损加宽 |
+| `f32` | `f64` | ✅ 无损加宽 |
 | 整数字面量 | 唯一整数 / 浮点上下文 | ✅ 直接定型；目标整数可表示，或目标浮点精确可表示 |
 | 已定型整数 | 不同符号、较窄或 `isize`/`usize` 与固定宽度之间 | ❌ 必须显式 `as` |
 | 已定型整数 | 任意浮点类型 | ❌ 必须显式 `as` |
 | 已定型浮点 | 任意整数类型或 `f64 → f32` | ❌ 必须显式 `as` |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
+| `i64` / `f64` / `string` / `bool` / `null` | `JSON.Value` | ✅ JSON 标量零物化 widening |
 | 复合类型 | `JSON.Value` | ❌ 必须写 `JSON.value(value)`，并满足 `JSON.Encodable` |
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ 纯别名 identity |
 | `null` | `T?` | ✅ |
@@ -783,7 +783,7 @@ var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回�
 > fn nameOf<T: User>(value: T) -> string { return value.name }
 > print(nameOf(full))              // OK：T 保留 full 的 concrete exact shape
 >
-> type Opt = { name: string, age: int? }
+> type Opt = { name: string, age: i64? }
 > var o: Opt = { name: "A" }       // OK：age 可空，允许缺省
 > ```
 
@@ -792,12 +792,12 @@ var f = (x: int) -> x   // f: fn(int) -> int —— 箭头参数显式、返回�
 #### 2.10.2 显式 `as`
 
 ```xray @id=types-cast
-var n = x as int        // 失败抛 TypeError
-var n = x as int?       // 失败返回 null（安全转换）
+var n = x as i64        // 失败抛 TypeError
+var n = x as i64?       // 失败返回 null（安全转换）
 ```
 
 适用于：
-- 数值之间（含 `JSON.Value → int`，运行时检查）。
+- 数值之间（含 `JSON.Value → i64`，运行时检查）。
 - `JSON.Value` 到标量类型的运行期检查；复合 typed 解码使用 `JSON.decode<T>` / `JSON.decodeObject<T>`。
 - 父类 → 子类（向下转）。
 
@@ -818,13 +818,13 @@ if (v is User) {
 ### 2.11 typeOf / typeName / Type 枚举
 
 ```xray
-typeOf(value)     // 返回 Type 枚举值（int 表示）
+typeOf(value)     // 返回 Type 枚举值（i64 表示）
 typeName(value)   // 返回类型名字符串
 ```
 
 `Type` 枚举成员：
 
-`Type.int`、`Type.float`、`Type.string`、`Type.bool`、`Type.null`、
+`Type.i64`、`Type.f64`、`Type.string`、`Type.bool`、`Type.null`、
 `Type.Array`、`Type.Map`、`Type.Set`、`Type.Channel`、
 `Type.function`、`Type.class`、`Type.struct`、`Type.enum`、`Type.module`、`Type.bigint`、...
 
@@ -909,7 +909,7 @@ fn check(a: string?) -> bool {
 **N-8（早返回）** 当分支必然终止（`return` / `throw` / `break` / `continue`），其后的代码继承该条件的相反方向事实：
 
 ```xray @id=narrowing-early-return
-fn nameLen(s: string?) -> int {
+fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // 此处 s 已收窄为 string
 }
@@ -1032,7 +1032,7 @@ fn rejected() {
 ```xray
 fn rejected() {
     var buf = [1, 2, 3]
-    const peek = fn() -> int { return len(buf) }
+    const peek = fn() -> i64 { return len(buf) }
     go consume(move buf)       // E0382：closure capture 'peek' is active
     print(peek())
 }
@@ -1042,8 +1042,8 @@ fn rejected() {
 
 ```xray
 fn ok() {
-    var buf: Array<int> = []
-    items.forEach(fn(x: int) { buf.push(x) })   // 调用边界内的捕获
+    var buf: Array<i64> = []
+    items.forEach(fn(x: i64) { buf.push(x) })   // 调用边界内的捕获
     consume(move buf)                            // OK
 }
 ```
@@ -1097,9 +1097,9 @@ fn main() {
     nums.push(4)
     print(nums)          // => [1, 2, 3, 4]
     print(len(nums))     // => 4
-    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
     print(doubled)       // => [2, 4, 6, 8]
-    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
     print(evens)         // => [2, 4]
 }
 
@@ -1115,7 +1115,7 @@ fn main() {
     print(scores.get("alice") ?? 0)   // => 95
     print(len(scores))                 // => 3
 
-    var seen = Set<int>()
+    var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)
@@ -1163,10 +1163,10 @@ Xray is statically typed; every expression has a determined type at compile time
 
 | Category | Examples |
 |--|--|
-| Primitive | `int`, `float`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
-| Sized integers | `i8`, `i16`, `i32`, `i64`, `byte`..`u64` |
+| Primitive | `i64`, `f64`, `bool`, `string`, `rune`, `()` (Unit, no return value) |
+| Sized integers | `i8`, `i16`, `i32`, `i64`, `u8`..`u64` |
 | Sized floats | `f32`, `f64` |
-| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<byte>` is the contiguous-byte specialization of `Array` |
+| Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`; `Array<u8>` is the contiguous-byte specialization of `Array` |
 | Fixed layout | `[T; N]` |
 | Borrowed view | `Slice<T>` (owns no data; constrained by borrow lifetimes, see §2.4.2) |
 | Special prelude types/namespaces | `JSON` (including `JSON.Value` / `JSON.Object`), `BigInt`, `Range`, `Regex`, `StringBuilder`, `Atomic<T>`, `Path`, `Thread<T>`, `NetConn`, `NetListener`, and the `Os*` synchronization types |
@@ -1273,33 +1273,33 @@ Generated from `stdlib/prelude/builtin_symbols.def`, this is the complete set of
 
 #### 2.3.1 Integer Types
 
-| Type | Range | Alias |
+| Type | Range | Default role |
 |--|--|--|
 | `i8` | `[-128, 127]` | — |
 | `i16` | `[-32768, 32767]` | — |
 | `i32` | `[-2³¹, 2³¹-1]` | — |
-| `i64` | `[-2⁶³, 2⁶³-1]` | `int` (default integer type) |
-| `byte`..`u64` | unsigned counterparts | — |
+| `i64` | `[-2⁶³, 2⁶³-1]` | default integer type |
+| `u8`..`u64` | unsigned counterparts | — |
 
-- An integer literal without a unique numeric context defaults to `int`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
-- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`byte + byte -> byte`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
-- Values with static type `byte`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
-- `int.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `int` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
+- An integer literal without a unique numeric context defaults to `i64`; in a unique integer context it directly acquires that type and must fit its range (`var x: i8 = 200` is rejected at compile time). In a unique floating context it directly acquires that floating type, but its integer value must be exactly representable.
+- Arithmetic uses two's-complement wrap-around semantics (no debug/release distinction). Operations on the same integer type keep that type and wrap at its width (`u8 + u8 -> u8`); different widths with the same signedness use the unique wider type. There is no implicit promotion across signedness, between fixed-width integers and `isize`/`usize`, or between integers and floats; shift results keep the left operand's type.
+- Values with static type `u8`..`u64` are interpreted as unsigned by `print`, `string(x)`, template strings, string concatenation, and ordering comparisons; for example, a static `u64` bit pattern of `0xffff_ffff_ffff_ffff` formats as `18446744073709551615` and compares greater than `0`.
+- `i64.checkedAdd` / `checkedSub` / `checkedMul` return `null` on overflow; `saturating*` clamps to the `i64` boundary; `wrapping*` explicitly performs the default two's-complement wrap.
 - An already-typed expression cannot be implicitly narrowed, change signedness, or cross a target-dependent width at assignment. Such conversions require an explicit `as`. Explicit integer conversion reduces modulo the target width and interprets the resulting two's-complement bit pattern as the target type.
-- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value statically typed as `uintN` when unsigned semantics are required.
+- After dynamic erasure, `XrValue` stores only the integer payload, not signedness or width. Across `JSON.Value` / dynamic-container boundaries, `u64` values above the positive `i64` range are not guaranteed to keep unsigned formatting or ordering semantics. Keep the value in the appropriate exact unsigned static type (`u8`, `u16`, `u32`, or `u64`) when unsigned semantics are required.
 
 #### 2.3.2 Floating-Point Types
 
 | Type | Standard |
 |--|--|
 | `f32` | IEEE-754 single precision |
-| `f64` | IEEE-754 double precision; alias of `float` |
+| `f64` | IEEE-754 double precision; default floating type |
 
-Literals default to `float`.
+Literals default to `f64`.
 
 #### 2.3.3 `bool`
 
-`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: int = true` or `var b: bool = 1`).
+`true` / `false`, a standalone type. **No implicit conversion** to/from numeric types (cannot write `var x: i64 = true` or `var b: bool = 1`).
 
 **Condition expression rules** (`if` / `while` / `for` conditions / ternary `?:` / `match` guards):
 
@@ -1308,7 +1308,7 @@ Literals default to `float`.
 | `bool` | yes | direct boolean test |
 | `T?` with `T != bool` | yes | null presence only (content emptiness is **not** checked) |
 | `bool?` | compile error | tri-state ambiguity; write `flag == true` / `flag != null` / `flag ?? false` |
-| `int` / `float` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
+| `i64` / `f64` / `string` / `rune` / collections / objects | compile error | use explicit comparisons such as `n != 0`, `len(s) != 0` |
 
 Operands of `&&` / `||` / `!` must be `bool`; do not place `T?` directly into `&&` / `||`.
 
@@ -1351,7 +1351,7 @@ print(smile.toUInt32())   // 128512
 
 - A rune literal must contain exactly one Unicode scalar; empty literals, multi-scalar literals, and surrogate literals are compile errors.
 - `rune` does not participate in arithmetic, bitwise operations, or narrow-integer assignment: `'a' + 1` and `var n: u32 = 'a'` are rejected by the analyzer.
-- Explicit conversions: `int(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
+- Explicit conversions: `i64(c)` returns the scalar code point; `rune(n)` constructs a rune from an integer and validates that it is a legal scalar; `string(c)` / `c.toString()` returns a one-scalar string.
 - Common methods are listed in §14.4.1.
 
 #### 2.3.6 Unit `()` (no return value)
@@ -1383,8 +1383,8 @@ Raw pointer values may be stored, passed, compared, and offset with `offset(i)` 
 
 ```xray
 extern "C" {
-    fn malloc(n: usize) -> MutPtr<byte>
-    fn free(p: MutPtr<byte>)
+    fn malloc(n: usize) -> MutPtr<u8>
+    fn free(p: MutPtr<u8>)
 }
 
 var p = unsafe { malloc(4) }
@@ -1408,8 +1408,8 @@ unsafe {
 Ordered mutable array. See §14.7.
 
 ```xray @id=types-array
-var a: Array<int> = [1, 2, 3]
-var b = [1, 2, 3]                // inferred as Array<int>
+var a: Array<i64> = [1, 2, 3]
+var b = [1, 2, 3]                // inferred as Array<i64>
 var c: Array<string> = []         // explicit empty array
 ```
 
@@ -1424,10 +1424,10 @@ The `T` in `Array<T>` must be determinable at compile time. An empty `[]` withou
 Fixed arrays work as inline struct fields and local variables. They support struct, nested fixed-array, and reference-container element types, so fixed arrays compose recursively:
 
 ```xray
-var bytes: [byte; 4] = [1, 2, 3, 4]
-var zero: [byte; 64] = [0; 64]
+var bytes: [u8; 4] = [1, 2, 3, 4]
+var zero: [u8; 64] = [0; 64]
 var names: [string; 2] = ["a", "b"]
-var blocks: [[byte; 2]; 2] = [[1, 2], [3, 4]]
+var blocks: [[u8; 2]; 2] = [[1, 2], [3, 4]]
 ```
 
 A target-typed array literal that initializes `[T; N]` must have the exact length; repeat initialization `[value; N]` uses the same positive compile-time integer expression rule and must also match the target length. A normal array literal without context still infers dynamic `Array<T>`; `[value; N]` without context infers `[T; N]`.
@@ -1435,21 +1435,21 @@ A target-typed array literal that initializes `[T; N]` must have the exact lengt
 Fixed arrays support `len(array)`, indexed reads, indexed writes, `ref`/`in` parameter passing, and target-typed slicing into `Slice<T>`:
 
 ```xray
-var data: [byte; 4] = [5, 6, 7, 8]
-var view: Slice<byte> = data[1:4]
+var data: [u8; 4] = [5, 6, 7, 8]
+var view: Slice<u8> = data[1:4]
 view[1] = 99
 ```
 
 ```xray
 struct Packet {
-    magic: [byte; 4]
-    payload: [byte; 128]
+    magic: [u8; 4]
+    payload: [u8; 128]
 }
 
-var key: [byte; 4] = [1, 2, 3, 4]
+var key: [u8; 4] = [1, 2, 3, 4]
 key[1] = 9
 
-fn first(packet: Packet) -> byte {
+fn first(packet: Packet) -> u8 {
     return packet.magic[0]
 }
 ```
@@ -1476,19 +1476,19 @@ A view can only arise from the three sources below, and it **requires an explici
 |--|--|--|
 | `array[start:end]` | `Slice<T>` | the owner is an `Array<T>` |
 | `fixedArray[start:end]` | `Slice<T>` | the owner is a `[T; N]` |
-| `str.bytes()` | `Slice<byte>` | the owner is the string's UTF-8 byte storage |
+| `str.bytes()` | `Slice<u8>` | the owner is the string's UTF-8 byte storage |
 
 ```xray
-var arr: Array<int> = [10, 20, 30, 40]
-var view: Slice<int> = arr[1:3]      // OK: borrows arr
-var all: Slice<int> = arr[:]         // full-length view, not a copy
+var arr: Array<i64> = [10, 20, 30, 40]
+var view: Slice<i64> = arr[1:3]      // OK: borrows arr
+var all: Slice<i64> = arr[:]         // full-length view, not a copy
 var bad = arr[1:3]                   // E0365: a slice result needs an explicit target type
 ```
 
 The owner must be a **named local, a parameter, or a field path rooted at one**. Temporaries cannot be borrowed:
 
 ```xray
-var view: Slice<byte> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
+var view: Slice<u8> = makeBytes()[0:2]   // E0384: cannot create a view from a temporary owner
 ```
 
 ##### Capabilities
@@ -1500,13 +1500,13 @@ var view: Slice<byte> = makeBytes()[0:2]   // E0384: cannot create a view from a
 
 ```xray @id=types-slice
 fn main() {
-    var arr: Array<int> = [10, 20, 30, 40]
-    var view: Slice<int> = arr[1:3]        // borrowed view, not a copy
+    var arr: Array<i64> = [10, 20, 30, 40]
+    var view: Slice<i64> = arr[1:3]        // borrowed view, not a copy
     view[1] = 31
     print(arr[2])                          // 31 — the write goes through to the owner
     arr[1] = 21
     print(view[0])                         // 21 — element writes on the owner are visible here
-    var owned: Array<int> = copy(arr[1:3]) // an independent Array<T>
+    var owned: Array<i64> = copy(arr[1:3]) // an independent Array<T>
     arr.push(50)                           // OK: no view is live at this point
     print(len(owned))
 }
@@ -1525,15 +1525,15 @@ Let view `v` borrow owner `o`. While `v` is **live**:
 
 ```xray
 fn ok() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     print(len(view))                 // last use of view
     bytes.push(3)                    // OK: the borrow already ended (rule 3)
 }
 
 fn rejected() {
-    var bytes: Array<byte> = [1, 2]
-    var view: Slice<byte> = bytes[:]
+    var bytes: Array<u8> = [1, 2]
+    var view: Slice<u8> = bytes[:]
     bytes.push(3)                    // E0382: view is still live
     print(len(view))
 }
@@ -1546,19 +1546,19 @@ A function may return `Slice<T>` **if and only if** the returned view has a **un
 A non-unique source, or a view borrowed from one of the function's own locals, is a compile error (`E0384`):
 
 ```xray
-fn tail(data: Slice<byte>, start: int) -> Slice<byte> {
+fn tail(data: Slice<u8>, start: i64) -> Slice<u8> {
     return data[start:]              // OK: the unique source is the parameter data
 }
 
-fn bad(a: Slice<byte>, b: Slice<byte>, useA: bool) -> Slice<byte> {
+fn bad(a: Slice<u8>, b: Slice<u8>, useA: bool) -> Slice<u8> {
     if (useA) {
         return a
     }
     return b                         // E0384: multiple sources
 }
 
-fn alsoBad() -> Slice<int> {
-    var local: Array<int> = [1, 2]
+fn alsoBad() -> Slice<i64> {
+    var local: Array<i64> = [1, 2]
     return local[:]                  // E0384: borrowed from a local
 }
 ```
@@ -1568,7 +1568,7 @@ fn alsoBad() -> Slice<int> {
 When the data must outlive the owner, or must go into long-lived storage, use `copy` to materialize the view into an independent owner:
 
 ```xray
-var owned: Array<int> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
+var owned: Array<i64> = copy(arr[1:3])   // an independent Array<T>, unrelated to arr
 ```
 
 `copy(slice)` has result type `Array<T>`, not `Slice<T>`; it is the only construct that turns borrowed data into owned data.
@@ -1584,7 +1584,7 @@ Hash table that **preserves insertion order**. See §14.8.
 **Map literals** must use the `#{ ... }` prefix with `:` separators; `JSON.Object` uses the same Map literal:
 
 ```xray @id=types-map
-var m: Map<string, int> = #{"a": 1, "b": 2}
+var m: Map<string, i64> = #{"a": 1, "b": 2}
 var m2 = #{"a": 1, "b": 2}
 var empty = #{}                                     // empty Map
 
@@ -1601,14 +1601,14 @@ var maybe = m.get("missing")                        // safe lookup; returns null
 | `[]` | `Array<T>` | array |
 | `#[]` | `Set<T>` | set |
 
-`K` must satisfy `Hashable` (see §9.2): typically `int`, `float`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> int` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
+`K` must satisfy `Hashable` (see §9.2): typically `i64`, `f64`, `string`, `bool`, `enum`, `BigInt`, or a custom type that provides both `operator==` and `hash() -> i64` (the parameter type of `operator==` is spelled as the type's own name; Xray has no `Self` type). Generic key types must be explicitly constrained as `K: Hashable`.
 
 #### 2.4.4 `Set<T>`
 
 Deduplicated collection. See §14.9.
 
 ```xray @id=types-set
-var s: Set<int> = #[1, 2, 3]
+var s: Set<i64> = #[1, 2, 3]
 ```
 
 #### 2.4.5 `Channel<T>`
@@ -1616,16 +1616,16 @@ var s: Set<int> = #[1, 2, 3]
 Inter-coroutine communication channel. A named channel uses a stable `const` binding; its synchronized interior-mutation capability comes from the audited registry (see §10.5).
 
 ```xray @id=types-channel
-const ch: Channel<int> = Channel<int>(10)
+const ch: Channel<i64> = Channel<i64>(10)
 ```
 
-#### 2.4.6 `Array<byte>`
+#### 2.4.6 `Array<u8>`
 
-Typed byte buffer. Semantically equivalent to `Array<byte>`, but stored as contiguous memory.
+Typed byte buffer. Semantically equivalent to `Array<u8>`, but stored as contiguous memory.
 
 ```xray
-var buf = Array<byte>(1024)
-var init = Array<byte>([72, 101, 108, 108, 111])
+var buf = Array<u8>(1024)
+var init = Array<u8>([72, 101, 108, 108, 111])
 ```
 
 #### 2.4.7 Static Structural Objects, `JSON.Value`, and Object Literals
@@ -1647,7 +1647,7 @@ var age = 30
 var user = { name, age }                  // equivalent to { name: name, age: age }
 
 // Map literal: `#{}` prefix + `:`
-var m = #{"k1": 1, "k2": 2}           // type: Map<string, int>
+var m = #{"k1": 1, "k2": 2}           // type: Map<string, i64>
 var data: JSON.Object = #{"name": "Alice", "age": 30}
 data["traceId"] = "req-1"               // only Map has dynamic keys
 ```
@@ -1665,7 +1665,7 @@ data["traceId"] = "req-1"               // only Map has dynamic keys
 **Object-shape types**: bare object literals and `type T = {...}` are exact object shapes, so accessing or assigning an undeclared field is a compile error. Structural width exists only in generic constraint satisfaction: `T: { name: string }` means that T contains at least that field, while each call is still monomorphized for the argument's concrete exact shape. A trailing `...` is not type syntax.
 
 ```xray
-type User = { name: string, age: int }
+type User = { name: string, age: i64 }
 
 var u: User = { name: "Alice", age: 30 }
 print(u.name)         // OK
@@ -1733,14 +1733,14 @@ Ranges work with `for-in`, range patterns in `match`, and collection queries. Se
 `T?` is sugar for `T | null`.
 
 ```xray @id=types-nullable
-var x: int? = null      // OK
-var y: int? = 42        // OK
-var z: int = null       // compile error: null is not int
+var x: i64? = null      // OK
+var y: i64? = 42        // OK
+var z: i64 = null       // compile error: null is not i64
 ```
 
 `JSON.Value` intrinsically includes `null`, so `JSON.Value?` and `JSON.Value | null` are redundant and rejected during parsing. Parse failures use typed error enums propagated through the `throw`/`catch` value-return channel. When failure must be stored or returned as ordinary data, use a domain ADT or a structural object with an explicit status field. Do not introduce a global `Result<T,E>`.
 
-**Nullable primitives are first-class**: `int?` / `float?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
+**Nullable primitives are first-class**: `i64?` / `f64?` / `bool?` are ordinary `T?` types and arise naturally from generics and containers (e.g. `Map<string, bool>.get(k) -> bool?`, or `fn find<T>(...) -> T?` at `T = bool`). They carry `null` in the tagged representation, so a `null` value renders as `"null"` in `print` / `string()` / string concatenation (never as the raw payload `0`), identically in the VM and AOT.
 
 > `bool?` is tri-state (`true` / `false` / `null`). It is legal but **cannot be used directly as a condition** (a bare `if (b)` where `b: bool?` is a compile error; see §5 / task 128); write `b == true` / `b != null` / `b ?? false`.
 
@@ -1754,13 +1754,13 @@ var v = x ?? 0
 var city = user?.address.city
 
 // 3. Force unwrap
-var v: int = x!           // panics with NullError at runtime if x is null
+var v: i64 = x!           // panics with NullError at runtime if x is null
 
 // 4. Flow-sensitive narrowing (full rules in §2.13)
 if (x != null) {
-    print(x + 1)          // x is narrowed to int in this branch
+    print(x + 1)          // x is narrowed to i64 in this branch
 }
-if (x is int) {
+if (x is i64) {
     print(x + 1)
 }
 ```
@@ -1768,20 +1768,20 @@ if (x is int) {
 ### 2.6 Union Types
 
 ```xray @id=types-union-basic
-var v: int | string = 42
+var v: i64 | string = 42
 v = "hello"             // OK
 ```
 
 Constraints:
 - Up to **6 members** (checked at compile time; over the limit → error).
 - Members must not be subtypes of each other (otherwise normalized).
-- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one float-family member**. `i16 | i32` and `f32 | float` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
+- **Members must be discriminable at run time**: a dynamically erased value keeps only its i64 or f64 family, so a union carries at most **one integer-family member** and at most **one f64-family member**. `i16 | i32` and `f32 | f64` are one runtime type wearing two static names — `is` and `match` cannot tell them apart, and an assignment could not say which one it stored. Declaring one is `E0390`.
 - Working with a union value requires `match` or `is`-based narrowing:
 
 ```xray
-var v: int | string = ...
+var v: i64 | string = ...
 match v {
-    is int    -> print("int: ${v}"),
+    is i64    -> print("i64: ${v}"),
     is string -> print("str: ${v}"),
 }
 ```
@@ -1790,20 +1790,20 @@ match v {
 
 - The source type is **exactly** one member → that member is selected.
 - Otherwise the single member reachable by an implicit conversion from §2.10.1 is selected. Discriminability guarantees at most one member per numeric family, so at most one member qualifies.
-- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the float-family member when the union has none (matching "an integer literal types into a unique floating context"); a float literal selects the float-family member. The literal must be exactly representable in the selected member.
+- A numeric literal selects within its own family: an integer literal prefers the integer-family member, falling back to the f64-family member when the union has none (matching "an integer literal types into a unique floating context"); a f64 literal selects the f64-family member. The literal must be exactly representable in the selected member.
 
 ```xray
-var a: int | float = 1        // exact match: int
-var b: int | float = 1.0      // exact match: float
+var a: i64 | f64 = 1        // exact match: i64
+var b: i64 | f64 = 1.0      // exact match: f64
 var c: i32 | string = 7       // sole integer-family member: i32
-var d: f32 | string = 1.5     // sole float-family member: f32
+var d: f32 | string = 1.5     // sole f64-family member: f32
 ```
 
 `is T` asks about the runtime value: for a fixed-width numeric type it asks whether the value is exactly representable in `T`, because an erased value does not carry its width and that is the only answerable form. Inside a well-formed union the selected member always passes its own `is` and every other member always fails, so the arms are mutually exclusive.
 
 **Special cases**:
-- `int | null` normalizes to `int?`.
-- When `T?` appears in a union: `int? | string` is effectively `int | string | null`, normalized to `(int | string)?`.
+- `i64 | null` normalizes to `i64?`.
+- When `T?` appears in a union: `i64? | string` is effectively `i64 | string | null`, normalized to `(i64 | string)?`.
 
 ### 2.7 Tuple Types
 
@@ -1811,12 +1811,12 @@ Xray's tuples are **first-class** — they may appear as any value, be stored as
 
 ```xray @id=types-tuple
 // Literals
-var t = (1, 2, 3)                 // type inferred as (int, int, int)
+var t = (1, 2, 3)                 // type inferred as (i64, i64, i64)
 var h = (10, "hi", true)          // heterogeneous tuple
 var single = (99,)                // single-element tuple: note trailing comma
 
 // Type annotation
-var p: (int, string) = (7, "ok")
+var p: (i64, string) = (7, "ok")
 
 // Field access: .N (N is a compile-time constant integer index)
 var first = t.0                   // 1
@@ -1826,12 +1826,12 @@ var a     = nest.0.0              // 1
 var b     = nest.1.1              // 4
 
 // Function return and destructuring
-fn divmod(a: int, b: int) -> (int, int) { return (a / b, a % b) }
+fn divmod(a: i64, b: i64) -> (i64, i64) { return (a / b, a % b) }
 var (q, r) = divmod(17, 5)        // tuple destructure
 
 // Generic
 fn pair<A, B>(a: A, b: B) -> (A, B) { return (a, b) }
-var p2 = pair(1, "x")             // (int, string)
+var p2 = pair(1, "x")             // (i64, string)
 ```
 
 **Notes**:
@@ -1858,9 +1858,9 @@ main()
 ### 2.8 Type Aliases
 
 ```xray @id=types-alias
-type Result = int | string
-type Mapper = fn(int) -> int
-type Point = { x: float, y: float }
+type Result = i64 | string
+type Mapper = fn(i64) -> i64
+type Point = { x: f64, y: f64 }
 type Pair<T> = { first: T, second: T }
 type Mapper2<T, U> = fn(T) -> U
 ```
@@ -1870,8 +1870,8 @@ runtime metadata, or AOT branches. A generic alias is substituted at its use
 site:
 
 ```xray
-var p: Pair<int> = { first: 1, second: 2 }  // equivalent to { first: int, second: int }
-var f: Mapper2<int, string> = (n) -> string(n)
+var p: Pair<i64> = { first: 1, second: 2 }  // equivalent to { first: i64, second: i64 }
+var f: Mapper2<i64, string> = (n) -> string(n)
 ```
 
 Generic alias parameters are a name list only (`<T, U>`); constraints are not
@@ -1882,14 +1882,14 @@ errors.
 
 **Function-type syntax.** A function type is led by `fn`, written
 `fn(T1, T2) -> R`; parameters may carry a `ref` / `move` mode (e.g.
-`fn(ref int) -> int`). When the return is `unit` the arrow segment is omitted,
+`fn(ref i64) -> i64`). When the return is `unit` the arrow segment is omitted,
 written `fn(T)` / `fn()` — an explicit `-> ()` is **not** allowed in type
 position. This is a deliberate asymmetry with the declaration position, where
 both `fn f() -> ()` and `fn f()` are valid (§5.2); a type appears in dense
 inline positions (parameters, generic arguments, container elements) and keeps
 a single spelling. A bare `(` in type position is only a tuple or a grouping,
 matching the expression side and §2.7 — a comma makes a tuple, `(T)` groups — so
-a nullable function type is written directly as `(fn() -> int)?`. `CFn<...>`
+a nullable function type is written directly as `(fn() -> i64)?`. `CFn<...>`
 uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 
 ### 2.9 Type Inference
@@ -1897,13 +1897,13 @@ uses the same `fn` spelling (`CFn<fn(A, B) -> R>`, see §3.12).
 See §7.4 for details. In summary:
 
 ```xray @id=types-inference
-var x = 1               // x: int
-var y = 1.5             // y: float
+var x = 1               // x: i64
+var y = 1.5             // y: f64
 var z = "hello"         // z: string
-var a = [1, 2, 3]       // a: Array<int>
-var m = #{"a": 1}    // m: Map<string, int>
+var a = [1, 2, 3]       // a: Array<i64>
+var m = #{"a": 1}    // m: Map<string, i64>
 var p = { name: "A" }   // p: { name: string } — structured object type
-var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred return
+var f = (x: i64) -> x   // f: fn(i64) -> i64 — explicit parameter, inferred return
 ```
 
 ### 2.10 Type Compatibility and Conversion
@@ -1912,16 +1912,16 @@ var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred re
 
 | From | To | Allowed and condition |
 |--|--|--|
-| `T` | `T` (including `int`=`i64`, `float`=`f64`) | ✅ identity |
+| `T` | `T` | ✅ identity |
 | `i8 → i16 → i32 → i64` | a wider type on the chain | ✅ lossless widening |
-| `u8/byte → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
-| `f32` | `f64` (=`float`) | ✅ lossless widening |
+| `u8 → u16 → u32 → u64` | a wider type on the chain | ✅ lossless widening |
+| `f32` | `f64` | ✅ lossless widening |
 | Integer literal | a unique integer / floating context | ✅ direct typing; the integer target represents it, or the floating target represents it exactly |
 | Typed integer | another signedness, a narrower type, or fixed-width ↔ `isize`/`usize` | ❌ explicit `as` required |
 | Typed integer | any floating type | ❌ explicit `as` required |
-| Typed float | any integer type or `f64 → f32` | ❌ explicit `as` required |
+| Typed f64 | any integer type or `f64 → f32` | ❌ explicit `as` required |
 | `T` | `T?` | ✅ |
-| `int` / `float` / `string` / `bool` / `null` | `JSON.Value` | ✅ zero-materialization JSON scalar widening |
+| `i64` / `f64` / `string` / `bool` / `null` | `JSON.Value` | ✅ zero-materialization JSON scalar widening |
 | composite type | `JSON.Value` | ❌ `JSON.value(value)` required, and the type must satisfy `JSON.Encodable` |
 | `Map<string, JSON.Value>` | `JSON.Object` | ✅ pure-alias identity |
 | `null` | `T?` | ✅ |
@@ -1937,7 +1937,7 @@ var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred re
 > fn nameOf<T: User>(value: T) -> string { return value.name }
 > print(nameOf(full))              // OK: T retains full's concrete exact shape
 >
-> type Opt = { name: string, age: int? }
+> type Opt = { name: string, age: i64? }
 > var o: Opt = { name: "A" }       // OK: age is nullable and may be omitted
 > ```
 
@@ -1946,16 +1946,16 @@ var f = (x: int) -> x   // f: fn(int) -> int — explicit parameter, inferred re
 #### 2.10.2 Explicit `as`
 
 ```xray @id=types-cast
-var n = x as int        // throws TypeError on failure
-var n = x as int?       // returns null on failure (safe cast)
+var n = x as i64        // throws TypeError on failure
+var n = x as i64?       // returns null on failure (safe cast)
 ```
 
 Applies to:
-- Between numeric types (including `JSON.Value → int`, checked at runtime).
+- Between numeric types (including `JSON.Value → i64`, checked at runtime).
 - Runtime checks from `JSON.Value` to scalar types; composite typed decoding uses `JSON.decode<T>` / `JSON.decodeObject<T>`.
 - Parent → child (downcast).
 
-Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-float and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; float-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
+Numeric `as` is independent of the host C compiler, optimization level, and VM/AOT backend: integer-to-integer conversion reduces modulo the target width and interprets the same bit pattern with the target signedness; integer-to-f64 and `f64 → f32` use IEEE-754 round-to-nearest, ties-to-even, overflow produces signed infinity, and NaN is normalized to Xray's canonical quiet NaN; f64-to-integer truncates toward zero and throws `XR_ERR_OVERFLOW` (E0422), with message `numeric conversion is out of range`, for NaN, infinity, or a value outside the target range.
 
 `expr as T?` is reserved for fallible dynamic / structural conversion; it is not a numeric checked-cast form. Numeric conversions use `expr as T` and follow the deterministic rules above.
 
@@ -1972,13 +1972,13 @@ Acts only as a type guard; does not change the value.
 ### 2.11 typeOf / typeName / Type Enum
 
 ```xray
-typeOf(value)     // returns a Type enum value (an int representation)
+typeOf(value)     // returns a Type enum value (an i64 representation)
 typeName(value)   // returns the type name as a string
 ```
 
 `Type` enum members:
 
-`Type.int`, `Type.float`, `Type.string`, `Type.bool`, `Type.null`,
+`Type.i64`, `Type.f64`, `Type.string`, `Type.bool`, `Type.null`,
 `Type.Array`, `Type.Map`, `Type.Set`, `Type.Channel`,
 `Type.function`, `Type.class`, `Type.struct`, `Type.enum`, `Type.module`, `Type.bigint`, ...
 
@@ -2063,7 +2063,7 @@ fn check(a: string?) -> bool {
 **N-8 (early exit)** When a branch necessarily terminates (`return` / `throw` / `break` / `continue`), the code after it inherits the opposite-direction fact:
 
 ```xray @id=narrowing-early-return
-fn nameLen(s: string?) -> int {
+fn nameLen(s: string?) -> i64 {
     if (s == null) { return 0 }
     return len(s)                 // s is narrowed to string here
 }
@@ -2186,7 +2186,7 @@ An ordinary synchronous closure captures an outer binding **by reference**, so a
 ```xray
 fn rejected() {
     var buf = [1, 2, 3]
-    const peek = fn() -> int { return len(buf) }
+    const peek = fn() -> i64 { return len(buf) }
     go consume(move buf)       // E0382: closure capture 'peek' is active
     print(peek())
 }
@@ -2196,8 +2196,8 @@ A closure literal that appears only as a **call argument** usually creates no li
 
 ```xray
 fn ok() {
-    var buf: Array<int> = []
-    items.forEach(fn(x: int) { buf.push(x) })   // capture bounded by the call
+    var buf: Array<i64> = []
+    items.forEach(fn(x: i64) { buf.push(x) })   // capture bounded by the call
     consume(move buf)                            // OK
 }
 ```
@@ -2251,9 +2251,9 @@ fn main() {
     nums.push(4)
     print(nums)          // => [1, 2, 3, 4]
     print(len(nums))     // => 4
-    var doubled = nums.map(fn(x: int) -> int { return x * 2 })
+    var doubled = nums.map(fn(x: i64) -> i64 { return x * 2 })
     print(doubled)       // => [2, 4, 6, 8]
-    var evens = nums.filter(fn(x: int) -> bool { return x % 2 == 0 })
+    var evens = nums.filter(fn(x: i64) -> bool { return x % 2 == 0 })
     print(evens)         // => [2, 4]
 }
 
@@ -2269,7 +2269,7 @@ fn main() {
     print(scores.get("alice") ?? 0)   // => 95
     print(len(scores))                 // => 3
 
-    var seen = Set<int>()
+    var seen = Set<i64>()
     seen.add(1)
     seen.add(2)
     seen.add(2)

@@ -1,6 +1,6 @@
-fn denseLookup() -> int {
+fn denseLookup() -> i64 {
     var scores = #{0: 10, 1: 11, 2: 12, 3: 13, 4: 14}
-    var seen: Set<int> = #[0, 1, 2, 3, 4]
+    var seen: Set<i64> = #[0, 1, 2, 3, 4]
     var fromIndex = scores[2]
     var viaGet = scores.get(4)
     var total = fromIndex + viaGet!

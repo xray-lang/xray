@@ -3,29 +3,29 @@
  */
 
 class Counter {
-    _count: int
+    _count: i64
 
     constructor() {
         this._count = 0
     }
 
-    getIncrementer() -> fn() -> int {        return fn() {
+    getIncrementer() -> fn() -> i64 {        return fn() {
             this._count = this._count + 1
             return this._count
         }
     }
 
-    getCount() -> int {        return this._count
+    getCount() -> i64 {        return this._count
     }
 }
 class Nested {
-    _value: int
+    _value: i64
 
-    constructor(v: int) {
+    constructor(v: i64) {
         this._value = v
     }
 
-    getDoubleWrapper() -> fn() -> fn() -> int {        return fn() {
+    getDoubleWrapper() -> fn() -> fn() -> i64 {        return fn() {
             return fn() {
                 return this._value * 2
             }
@@ -33,13 +33,13 @@ class Nested {
     }
 }
 class Adder {
-    _base: int
+    _base: i64
 
-    constructor(base: int) {
+    constructor(base: i64) {
         this._base = base
     }
 
-    createAdder(offset: int) -> fn(int) -> int {        return fn(x) {            return this._base + offset + x
+    createAdder(offset: i64) -> fn(i64) -> i64 {        return fn(x) {            return this._base + offset + x
         }
     }
 }

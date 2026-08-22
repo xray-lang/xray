@@ -2,18 +2,18 @@
 
 import time
 
-fn delayed_value() -> int {
+fn delayed_value() -> i64 {
     time.sleep(80)
     return 7
 }
 
-fn await_and_report(id: int, task: Task<int>, ready: Channel<int>, out: Channel<int>) {
+fn await_and_report(id: i64, task: Task<i64>, ready: Channel<i64>, out: Channel<i64>) {
     ready.send(id)
     var value = await task
     out.send(id * 100 + value)
 }
 
-fn recv_int(ch: Channel<int>) -> int {
+fn recv_int(ch: Channel<i64>) -> i64 {
     return match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> -1
@@ -22,8 +22,8 @@ fn recv_int(ch: Channel<int>) -> int {
 
 @test
 fn test_multiple_task_awaiters() {
-    const ready = Channel<int>(2)
-    const out = Channel<int>(2)
+    const ready = Channel<i64>(2)
+    const out = Channel<i64>(2)
     const task = go delayed_value()
     var a = go await_and_report(1, task, ready, out)
     var b = go await_and_report(2, task, ready, out)

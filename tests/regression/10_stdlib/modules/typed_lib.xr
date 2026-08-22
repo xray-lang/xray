@@ -9,7 +9,7 @@
 
 import math
 
-export fn double_it(n: int) -> int {
+export fn double_it(n: i64) -> i64 {
     return n * 2
 }
 
@@ -17,38 +17,38 @@ export fn greet(name: string) -> string {
     return "Hello, " + name
 }
 
-export fn first_byte(xs: Array<byte>) -> int {
-    return xs[0] as int
+export fn first_byte(xs: Array<u8>) -> i64 {
+    return xs[0] as i64
 }
 
-export fn second_uint8(xs: Array<u8>) -> int {
-    return xs[1] as int
+export fn second_uint8(xs: Array<u8>) -> i64 {
+    return xs[1] as i64
 }
 
-export fn sum_byte_slice(xs: Slice<byte>) -> int {
-    return (xs[0] as int) + (xs[1] as int)
+export fn sum_byte_slice(xs: Slice<u8>) -> i64 {
+    return (xs[0] as i64) + (xs[1] as i64)
 }
 
-export fn sum_uint8_slice(xs: Slice<u8>) -> int {
-    return (xs[0] as int) + (xs[1] as int)
+export fn sum_uint8_slice(xs: Slice<u8>) -> i64 {
+    return (xs[0] as i64) + (xs[1] as i64)
 }
 
 export fn make_uint8_bytes() -> Array<u8> {
     return [7, 8, 9]
 }
 
-export const MAGIC: int = 42
+export const MAGIC: i64 = 42
 
 export class Point {
-    x: int
-    y: int
+    x: i64
+    y: i64
 
-    constructor(x: int, y: int) {
+    constructor(x: i64, y: i64) {
         this.x = x
         this.y = y
     }
 
-    dist() -> float {
-        return math.sqrt((this.x * this.x + this.y * this.y) as float)
+    dist() -> f64 {
+        return math.sqrt((this.x * this.x + this.y * this.y) as f64)
     }
 }

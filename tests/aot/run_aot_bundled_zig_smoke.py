@@ -40,7 +40,7 @@ SKIP_EXIT = 77
 RESTRICTED_PATH = "/usr/bin:/bin"
 CROSS_TARGET = "x86_64-linux-musl"
 
-PROBE_SOURCE = "fn answer() -> int {\n    return 42\n}\n\nanswer()\n"
+PROBE_SOURCE = "fn answer() -> i64 {\n    return 42\n}\n\nanswer()\n"
 
 
 def find_zig() -> "Path | None":

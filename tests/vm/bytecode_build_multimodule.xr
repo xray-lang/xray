@@ -4,12 +4,12 @@ import { Packet, packetScore } from "./modules/bytecode_build_multimodule_lib"
 import { reexportedBonus } from "./modules/bytecode_build_multimodule_facade"
 import { starBonus } from "./modules/bytecode_build_multimodule_star_facade"
 
-fn score(done: Channel<int>) {
+fn score(done: Channel<i64>) {
     var packet = Packet{value: 20, offset: 1}
     done.send(packetScore(packet))
 }
 
-var done = Channel<int>(1)
+var done = Channel<i64>(1)
 var result = 0
 assert(cluster.start({ name: "bundle-preload", port: 0, secret: null, tls: null }))
 scope {

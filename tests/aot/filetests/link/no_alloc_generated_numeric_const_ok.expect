@@ -1,4 +1,4 @@
 contains=xray_no_alloc_generated_numeric_const_ok
-not_contains=allocates via stdlib 'math.MAX_INT'
+not_contains=allocates via stdlib 'math.MAX_I64'
 not_contains=allocates via stdlib 'mem.PROT_READ'
 not_contains=CRASH

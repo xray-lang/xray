@@ -1,21 +1,21 @@
 struct Sample {
-    x: int
-    y: float
+    x: i64
+    y: f64
     ok: bool
-    b: byte
+    b: u8
 }
 
-fn score() -> int {
+fn score() -> i64 {
     var p = Sample{x: 41, y: 2.5, ok: true, b: 30}
     p.x = p.x + 1
     p.b = p.b + 1
     if (p.ok) {
-        return p.x + (p.b as int)
+        return p.x + (p.b as i64)
     }
     return 0
 }
 
-fn measure() -> float {
+fn measure() -> f64 {
     var p = Sample{x: 0, y: 2.5, ok: false, b: 0}
     return p.y
 }

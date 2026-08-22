@@ -28,7 +28,7 @@ print("intBox: ${intBox.toString()}, get: ${intBox.get()}")
 print("strBox: ${strBox.toString()}, get: ${strBox.get()}")
 
 // map transforms the value inside the box
-var doubled = intBox.map(fn(x: int) -> int { return x * 2 })
+var doubled = intBox.map(fn(x: i64) -> i64 { return x * 2 })
 print("doubled: ${doubled.toString()}")
 
 // === Generic pair ===
@@ -68,11 +68,11 @@ class Stack<T> {
         return this.items[len(this.items) - 1]
     }
 
-    size() -> int { return len(this.items) }
+    size() -> i64 { return len(this.items) }
     isEmpty() -> bool { return len(this.items) == 0 }
 }
 
-var stack = Stack<int>()
+var stack = Stack<i64>()
 stack.push(10)
 stack.push(20)
 stack.push(30)
@@ -82,7 +82,7 @@ print("pop: ${stack.pop()}")
 print("size: ${stack.size()}")
 
 // === Nullable types ===
-fn safeDivide(a: float, b: float) -> float? {
+fn safeDivide(a: f64, b: f64) -> f64? {
     if (b == 0.0) { return null }
     return a / b
 }
@@ -93,7 +93,7 @@ print("10/3 = ${ok ?? 0.0}")
 print("10/0 = ${bad ?? 0.0} (fallback)")
 
 // Optional chaining on a statically known nullable field
-type InnerValue = { value: int }
+type InnerValue = { value: i64 }
 type OptionalWrapper = { inner: InnerValue? }
 var obj: OptionalWrapper = { inner: { value: 42 } }
 var empty: OptionalWrapper = { inner: null }

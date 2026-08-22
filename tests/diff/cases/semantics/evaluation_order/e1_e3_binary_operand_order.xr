@@ -1,7 +1,7 @@
 // anchor: eval-order-binary
 // §3.0 E1/E3: left operand fully evaluated (side effects included) before the
 // right operand begins; nesting is depth-first.
-fn t(tag: string, v: int) -> int { print(tag); return v }
+fn t(tag: string, v: i64) -> i64 { print(tag); return v }
 
 fn main() {
     print("-- flat --")

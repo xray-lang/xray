@@ -1,5 +1,5 @@
 import http
 
-fn handle(fd: int) {}
+fn handle(fd: i64) {}
 
 http.setConnHandler(handle)

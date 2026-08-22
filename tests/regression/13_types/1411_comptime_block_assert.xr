@@ -141,7 +141,7 @@ comptime {
 }
 
 comptime {
-    const table: [int; 5] = comptime [2, 4, 6, 8, 10]
+    const table: [i64; 5] = comptime [2, 4, 6, 8, 10]
 
     var sum = comptime 0
     for (value in table) {

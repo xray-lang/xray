@@ -6,7 +6,7 @@
 import time
 
 // === Basic goroutine ===
-fn compute(name: string, n: int) -> int {
+fn compute(name: string, n: i64) -> i64 {
     var sum = 0
     for (i in 0..n) { sum = sum + i }
     print("${name} computed sum(0..${n}) = ${sum}")
@@ -28,7 +28,7 @@ var results = await all [t1, t2, t3]
 print("all results: ${results}")
 
 // === await any (first to finish wins) ===
-fn slowTask(name: string, delay: int) -> string {
+fn slowTask(name: string, delay: i64) -> string {
     time.sleep(delay)
     return "${name} done after ${delay}ms"
 }

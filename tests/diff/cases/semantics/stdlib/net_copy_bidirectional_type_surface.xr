@@ -1,6 +1,6 @@
 import { CopyBidirectionalResult, NetError, copyBidirectional } from net
 
-fn counts(result: CopyBidirectionalResult) -> int {
+fn counts(result: CopyBidirectionalResult) -> i64 {
     return result.aToB + result.bToA
 }
 

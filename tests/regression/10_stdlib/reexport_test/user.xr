@@ -6,7 +6,7 @@ export fn getUser() -> string {
     return "Alice"
 }
 
-export fn getUserAge() -> int {
+export fn getUserAge() -> i64 {
     return 25
 }
 

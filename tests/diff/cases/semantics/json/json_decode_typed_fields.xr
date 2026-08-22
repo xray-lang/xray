@@ -1,4 +1,4 @@
-type User = { name: string, age: int, active: bool, score: float }
+type User = { name: string, age: i64, active: bool, score: f64 }
 
 var valid = JSON.decode<User>(
     JSON.parseValue("{\"name\":\"Ada\",\"age\":37,\"active\":true,\"score\":9.5,\"extra\":1}"),

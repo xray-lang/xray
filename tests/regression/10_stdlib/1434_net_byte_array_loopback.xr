@@ -4,7 +4,7 @@
 import net
 import { NetError } from net
 
-fn tryListen(backlog: int) -> NetListener? {
+fn tryListen(backlog: i64) -> NetListener? {
     try {
         return net.listen(0, backlog)
     } catch (e: NetError) {
@@ -13,7 +13,7 @@ fn tryListen(backlog: int) -> NetListener? {
 }
 
 fn serveBytesEcho(c: NetConn) {
-    var buf = Array<byte>(16)
+    var buf = Array<u8>(16)
     var n = net.readInto(c, ref buf)
     if (n > 0) {
         net.writeBytes(c, buf)
@@ -27,7 +27,7 @@ fn acceptBytesEcho(lst: NetListener) {
 }
 
 fn serveBytesMaxLen(c: NetConn) {
-    var buf = Array<byte>(16)
+    var buf = Array<u8>(16)
     var n = net.readInto(c, ref buf, 3)
     if (n > 0) {
         net.writeBytes(c, buf)
@@ -40,15 +40,15 @@ fn acceptBytesMaxLen(lst: NetListener) {
     go serveBytesMaxLen(conn)
 }
 
-fn serveExactEof(c: NetConn) -> int {
-    var buf = Array<byte>(8)
+fn serveExactEof(c: NetConn) -> i64 {
+    var buf = Array<u8>(8)
     var n = net.readExactInto(c, ref buf, 5)
     assert_eq(len(buf), n)
     net.close(c)
     return n
 }
 
-fn acceptExactEof(lst: NetListener) -> int {
+fn acceptExactEof(lst: NetListener) -> i64 {
     var conn = net.accept(lst)!
     return serveExactEof(conn)
 }
@@ -64,10 +64,10 @@ fn test_byte_array_echo_roundtrip() {
     go acceptBytesEcho(lst)
 
     var c = net.dial("127.0.0.1", port)
-    var payload = Array<byte>([65, 0, 255, 66])
+    var payload = Array<u8>([65, 0, 255, 66])
     assert_eq(net.writeBytes(c, payload), 4)
 
-    var resp = Array<byte>(16)
+    var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
     assert_eq(n, 4)
     assert_eq(resp[0], 65)
@@ -90,10 +90,10 @@ fn test_read_into_maxlen_controls_length() {
     go acceptBytesMaxLen(lst)
 
     var c = net.dial("127.0.0.1", port)
-    var payload = Array<byte>([80, 81, 82, 83, 84])
+    var payload = Array<u8>([80, 81, 82, 83, 84])
     assert_eq(net.writeBytes(c, payload), 5)
 
-    var resp = Array<byte>(16)
+    var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
     assert_eq(n, 3)
     assert_eq(resp[0], 80)
@@ -112,8 +112,8 @@ fn test_read_exact_into_returns_partial_bytes_at_eof() {
     var server = go acceptExactEof(lst)
 
     var c = net.dial("127.0.0.1", lst.port())!
-    var first = Array<byte>([1, 2])
-    var second = Array<byte>([3])
+    var first = Array<u8>([1, 2])
+    var second = Array<u8>([3])
     assert_eq(net.writeBytes(c, first), 2)
     assert_eq(net.writeBytes(c, second), 1)
     assert_true(net.shutdownWrite(c))

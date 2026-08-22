@@ -1,4 +1,4 @@
-fn xray_no_alloc_map_set_inplace_methods_ok(values: ref Map<int, int>, seen: ref Set<int>) -> int {
+fn xray_no_alloc_map_set_inplace_methods_ok(values: ref Map<i64, i64>, seen: ref Set<i64>) -> i64 {
     var first = values.get(1) ?? 0
     var had_two = values.containsKey(2)
     var removed_two = values.delete(2)
@@ -12,7 +12,7 @@ fn xray_no_alloc_map_set_inplace_methods_ok(values: ref Map<int, int>, seen: ref
         (removed_seen ? 1 : 0) + len(values) + len(seen)
 }
 
-var xray_no_alloc_map_set_inplace_map: Map<int, int> = #{1: 7, 2: 9}
-var xray_no_alloc_map_set_inplace_set: Set<int> = #[1, 3]
+var xray_no_alloc_map_set_inplace_map: Map<i64, i64> = #{1: 7, 2: 9}
+var xray_no_alloc_map_set_inplace_set: Set<i64> = #[1, 3]
 print(xray_no_alloc_map_set_inplace_methods_ok(ref xray_no_alloc_map_set_inplace_map,
                                                ref xray_no_alloc_map_set_inplace_set))

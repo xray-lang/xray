@@ -1,6 +1,6 @@
 import parallel
 
-var plan = parallel.Plan<int>(parallel.Options(2), (lane) -> lane)
+var plan = parallel.Plan<i64>(parallel.Options(2), (lane) -> lane)
 
 try {
     plan.forEach(0..20000, (state, i) -> {
@@ -15,7 +15,7 @@ try {
     print(p.message.contains("division by zero"))
 }
 
-const touched = Atomic<int>(0)
+const touched = Atomic<i64>(0)
 plan.forEach(0..4, (state, i) -> {
     touched.add(1, Ordering.Relaxed)
 })

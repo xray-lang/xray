@@ -1,1 +1,1 @@
-Class 'BadReader' method 'read' does not match signature required by interface 'Reader': expected 'fn() -> int', found 'fn() -> string'
+Class 'BadReader' method 'read' does not match signature required by interface 'Reader': expected 'fn() -> i64', found 'fn() -> string'

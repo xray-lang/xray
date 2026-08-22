@@ -1,6 +1,6 @@
 // pidigits - Exact translation from Lua version
 // Signed BigInt: {sign: 1|-1, digits: [low..high]}
-fn bigint(n: int) {
+fn bigint(n: i64) {
     var sign = 1
     var digits = []
     if (n < 0) {
@@ -37,7 +37,7 @@ fn normalize(a) {
     return a
 }
 
-fn compare_abs(a, b): int {
+fn compare_abs(a, b): i64 {
     var da = a.digits
     var db = b.digits
     if (len(da) > len(db)) {
@@ -140,7 +140,7 @@ fn bigint_sub(a, b) {
     return bigint_add(a, nb)
 }
 
-fn bigint_mul_int(a, n: int) {
+fn bigint_mul_int(a, n: i64) {
     if (n == 0) {
         return bigint(0)
     }
@@ -192,7 +192,7 @@ fn bigint_div(a, b) {
     return normalize({ "sign": rs, "digits": qd })
 }
 
-fn bigint_to_int(a): int {
+fn bigint_to_int(a): i64 {
     var d = a.digits
     var r = 0
     var base = 1
@@ -209,23 +209,23 @@ var lft_r = bigint(0)
 var lft_s = bigint(0)
 var lft_t = bigint(1)
 
-fn extract(x: int): int {
+fn extract(x: i64): i64 {
     var num = bigint_add(bigint_mul_int(lft_q, x), lft_r)
     var den = bigint_add(bigint_mul_int(lft_s, x), lft_t)
     var quot = bigint_div(num, den)
     return bigint_to_int(quot)
 }
 
-fn is_safe(digit: int): bool {
+fn is_safe(digit: i64): bool {
     return extract(4) == digit
 }
 
-fn produce(digit: int) {
+fn produce(digit: i64) {
     lft_r = bigint_mul_int(bigint_sub(lft_r, bigint_mul_int(lft_t, digit)), 10)
     lft_q = bigint_mul_int(lft_q, 10)
 }
 
-fn consume(k: int) {
+fn consume(k: i64) {
     var k2 = 2 * k + 1
     var k4 = 4 * k + 2
     var nr = bigint_add(bigint_mul_int(lft_q, k4), bigint_mul_int(lft_r, k2))
@@ -236,7 +236,7 @@ fn consume(k: int) {
     lft_t = nt
 }
 
-fn pidigits(n: int) {
+fn pidigits(n: i64) {
     lft_q = bigint(1)
     lft_r = bigint(0)
     lft_s = bigint(0)
@@ -268,5 +268,5 @@ fn pidigits(n: int) {
     }
 }
 
-var n = len(process.args) > 0 ? int(process.args[0]) ?? 30 : 30
+var n = len(process.args) > 0 ? i64.tryParse(process.args[0]) ?? 30 : 30
 pidigits(n)

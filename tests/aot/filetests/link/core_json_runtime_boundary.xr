@@ -1,6 +1,6 @@
 var obj: JSON.Object = JSON.parseObject("{\"name\":\"xray\",\"count\":3,\"ok\":true}")
 
 print(JSON.require<string>(obj, ["name"]))
-print(JSON.require<int>(obj, ["count"]))
+print(JSON.require<i64>(obj, ["count"]))
 print(JSON.require<bool>(obj, ["ok"]))
 print(typeName(obj))

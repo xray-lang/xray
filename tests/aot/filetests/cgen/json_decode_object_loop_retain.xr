@@ -1,6 +1,6 @@
-type Profile = { id: int, active: bool }
+type Profile = { id: i64, active: bool }
 
-fn run(n: int) -> int {
+fn run(n: i64) -> i64 {
     var object = JSON.parseObject("{\"id\":7,\"active\":true}")
     var i = 0
     var total = 0

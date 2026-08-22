@@ -1,4 +1,4 @@
-fn runtimeValue() -> int {
+fn runtimeValue() -> i64 {
     return 42
 }
 

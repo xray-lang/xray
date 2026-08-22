@@ -1,4 +1,4 @@
-fn copy_words(dst: Slice<u32>, src: Slice<u32>) -> int {
+fn copy_words(dst: Slice<u32>, src: Slice<u32>) -> i64 {
     var window: Slice<u32> = dst[1:3]
     var copied: Slice<u32> = window.copyFrom(src)
     return len(copied)

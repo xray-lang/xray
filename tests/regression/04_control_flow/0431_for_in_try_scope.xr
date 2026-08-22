@@ -1,4 +1,4 @@
-fn tryScopeCounter(n: int) -> Iterator<int> {
+fn tryScopeCounter(n: i64) -> Iterator<i64> {
     for (i in 0..n) {
         yield i
     }

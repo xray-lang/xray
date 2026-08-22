@@ -1,9 +1,9 @@
 import sys
 
 var flag = true
-var t = flag ? sys.Thread.spawn(fn() -> int {
+var t = flag ? sys.Thread.spawn(fn() -> i64 {
     return 1
-}) : sys.Thread.spawn(fn() -> int {
+}) : sys.Thread.spawn(fn() -> i64 {
     return 2
 })
 

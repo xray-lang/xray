@@ -2,7 +2,7 @@ import sys
 
 fn main() {
     var x = 1
-    var t = sys.Thread.spawn(fn() -> int {
+    var t = sys.Thread.spawn(fn() -> i64 {
         return x
     })
     print(t)
