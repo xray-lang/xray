@@ -17,7 +17,13 @@
 #include "../test_framework.h"
 #include "xray_vm.h"
 #include "runtime/xisolate_api.h"
+#include "module/xmodule_identity.h"
 #include <stddef.h>
+
+static const XrModuleIdentityAuthority k_api_defense_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "api-defense-fixture-v1",
+};
 
 /* ========== Isolate Lifecycle NULL Safety ========== */
 
@@ -42,7 +48,8 @@ TEST(api_isolate_dostring_null_isolate) {
         ASSERT_TRUE(1);
         return;
     }
-    int result = xr_isolate_dostring(NULL, "print(1)");
+    int result =
+        xr_isolate_dostring(NULL, "print(1)", &k_api_defense_memory_authority);
     ASSERT_EQ_INT(result, -1);
 }
 
@@ -59,9 +66,26 @@ TEST(api_isolate_dostring_null_source) {
         return;
     }  // alloc failure
 
-    int result = xr_isolate_dostring(iso, NULL);
+    int result = xr_isolate_dostring(iso, NULL, &k_api_defense_memory_authority);
     ASSERT_EQ_INT(result, -1);
 
+    xray_vm_delete(iso);
+}
+
+TEST(api_isolate_dostring_missing_or_invalid_authority) {
+    if (SKIP_NULL_RETURN_TESTS) {
+        ASSERT_TRUE(1);
+        return;
+    }
+    XrVMConfig params = {0};
+    XrVMRuntime *iso = xray_vm_new_full(&params);
+    ASSERT_NOT_NULL(iso);
+    XrModuleIdentityAuthority invalid = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "<eval>",
+    };
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, "print(1)", NULL), -1);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, "print(1)", &invalid), -1);
     xray_vm_delete(iso);
 }
 
@@ -70,7 +94,7 @@ TEST(api_isolate_dofile_null_isolate) {
         ASSERT_TRUE(1);
         return;
     }
-    int result = xr_isolate_dofile(NULL, "test.xr");
+    int result = xr_isolate_dofile(NULL, "test.xr", NULL);
     ASSERT_EQ_INT(result, -1);
 }
 
@@ -86,7 +110,7 @@ TEST(api_isolate_dofile_null_filename) {
         return;
     }
 
-    int result = xr_isolate_dofile(iso, NULL);
+    int result = xr_isolate_dofile(iso, NULL, NULL);
     ASSERT_EQ_INT(result, -1);
 
     xray_vm_delete(iso);
@@ -123,6 +147,7 @@ RUN_TEST_SUITE("API Boundary Defense - NULL Safety");
 RUN_TEST(api_isolate_delete_null);
 RUN_TEST(api_isolate_dostring_null_isolate);
 RUN_TEST(api_isolate_dostring_null_source);
+RUN_TEST(api_isolate_dostring_missing_or_invalid_authority);
 RUN_TEST(api_isolate_dofile_null_isolate);
 RUN_TEST(api_isolate_dofile_null_filename);
 

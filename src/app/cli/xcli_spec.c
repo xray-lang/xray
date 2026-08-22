@@ -22,6 +22,8 @@
 /* ========== Option Specs per Command ========== */
 
 static const XrCliOptionSpec run_options[] = {
+    {"module-id", 0, XR_CLI_VALUE_STRING, false, false, "ID",
+     "Explicit memory-module identity for stdin source"},
     {"trace", 't', XR_CLI_VALUE_NONE, false, false, NULL, "Trace execution"},
     {"dump-bytecode", 'd', XR_CLI_VALUE_NONE, false, false, NULL, "Dump bytecode"},
     {"semantic-plan", 0, XR_CLI_VALUE_STRING, false, false, "FILE",
@@ -36,6 +38,8 @@ static const XrCliOptionSpec run_options[] = {
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec repl_options[] = {
+    {"module-id", 0, XR_CLI_VALUE_STRING, true, false, "ID",
+     "Explicit memory-module identity for this REPL session"},
     {"no-color", 'n', XR_CLI_VALUE_NONE, false, false, NULL, "Disable color output"},
     XR_CLI_OPT_END};
 

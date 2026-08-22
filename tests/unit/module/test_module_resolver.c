@@ -24,11 +24,11 @@
 
 static char g_tmpdir[512];
 
-static XrModuleResolverConfig script_config(void) {
-    XrModuleResolverConfig config = {0};
-    config.authority.kind = XR_MODULE_IDENTITY_SCRIPT;
-    config.authority.physical_root = g_tmpdir;
-    return config;
+static XrModuleIdentityAuthority script_authority(void) {
+    return (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+        .physical_root = g_tmpdir,
+    };
 }
 
 /* Create a temporary directory tree for file-resolution tests. */
@@ -145,8 +145,9 @@ TEST(resolve_relative_file) {
     create_file("src/main.xr", "// entry");
     create_file("src/utils.xr", "// utils");
 
-    XrModuleResolverConfig cfg = script_config();
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
     make_importer(importer, sizeof(importer), "src/main.xr");
@@ -154,6 +155,12 @@ TEST(resolve_relative_file) {
     XrModuleId mid;
     char *err = NULL;
     int rc = xr_module_resolver_resolve(r, "./utils", importer, NULL, &mid, &err);
+    ASSERT_EQ_INT(rc, -1);
+    ASSERT_NOT_NULL(err);
+    xr_free(err);
+    err = NULL;
+
+    rc = xr_module_resolver_resolve(r, "./utils", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -171,15 +178,16 @@ TEST(resolve_relative_dir_index) {
     create_file("src/main.xr", "// entry");
     create_file("src/models/index.xr", "// models index");
 
-    XrModuleResolverConfig cfg = script_config();
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
     make_importer(importer, sizeof(importer), "src/main.xr");
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./models", importer, NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "./models", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -195,15 +203,16 @@ TEST(resolve_relative_not_found) {
     setup_tmpdir();
     create_file("src/main.xr", "// entry");
 
-    XrModuleResolverConfig cfg = script_config();
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
     make_importer(importer, sizeof(importer), "src/main.xr");
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "./nonexist", importer, NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "./nonexist", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     xr_free(err);
@@ -217,15 +226,16 @@ TEST(resolve_parent_relative) {
     create_file("lib/helper.xr", "// helper");
     create_file("src/deep/nested.xr", "// nested");
 
-    XrModuleResolverConfig cfg = script_config();
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
     make_importer(importer, sizeof(importer), "src/deep/nested.xr");
 
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(r, "../../lib/helper", importer, NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(r, "../../lib/helper", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);
@@ -243,18 +253,19 @@ TEST(resolve_caches_results) {
     create_file("src/main.xr", "// entry");
     create_file("src/utils.xr", "// utils");
 
-    XrModuleResolverConfig cfg = script_config();
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
     make_importer(importer, sizeof(importer), "src/main.xr");
 
     XrModuleId mid1, mid2;
     char *err = NULL;
-    int rc1 = xr_module_resolver_resolve(r, "./utils", importer, NULL, &mid1, &err);
+    int rc1 = xr_module_resolver_resolve(r, "./utils", importer, &authority, &mid1, &err);
     ASSERT_EQ_INT(rc1, 0);
 
-    int rc2 = xr_module_resolver_resolve(r, "./utils", importer, NULL, &mid2, &err);
+    int rc2 = xr_module_resolver_resolve(r, "./utils", importer, &authority, &mid2, &err);
     ASSERT_EQ_INT(rc2, 0);
 
     /* Both should resolve to the same canonical path */
@@ -289,8 +300,9 @@ TEST(resolve_single_segment_is_not_project_relative) {
     create_file("src/main.xr", "// entry");
     create_file("src/config.xr", "// config");
 
-    XrModuleResolverConfig cfg = script_config();
+    XrModuleResolverConfig cfg = {0};
     XrModuleResolver *r = xr_module_resolver_new(&cfg);
+    XrModuleIdentityAuthority authority = script_authority();
 
     char importer[1024];
     make_importer(importer, sizeof(importer), "src/main.xr");
@@ -303,7 +315,7 @@ TEST(resolve_single_segment_is_not_project_relative) {
     err = NULL;
 
     /* The same file IS reachable through the explicit relative form. */
-    rc = xr_module_resolver_resolve(r, "./config", importer, NULL, &mid, &err);
+    rc = xr_module_resolver_resolve(r, "./config", importer, &authority, &mid, &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(mid.kind, XR_MOD_FILE);

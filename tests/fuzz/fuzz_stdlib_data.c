@@ -22,6 +22,7 @@
 #include <string.h>
 
 #include "xray_vm.h"
+#include "../../src/module/xmodule_identity.h"
 #include "../../src/runtime/xisolate_api.h"
 
 #define XR_STDLIB_DATA_FUZZ_MAX_INPUT 4096
@@ -166,13 +167,17 @@ static char *build_source(const uint8_t *data, size_t size) {
 }
 
 static int run_source(const char *source) {
+    static const XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "stdlib-data-fuzz-v1",
+    };
     XrVMConfig params = {0};
     XrVMRuntime *iso = xray_vm_new_full(&params);
     if (!iso)
         return 0;
 
     xr_isolate_set_deadline_ms(iso, XR_STDLIB_DATA_FUZZ_DEADLINE_MS);
-    int rc = xr_isolate_dostring(iso, source);
+    int rc = xr_isolate_dostring(iso, source, &authority);
     bool timed_out = xr_isolate_timed_out(iso);
     xray_vm_delete(iso);
 

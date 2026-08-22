@@ -20,6 +20,8 @@
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../module/xmodule_graph.h"
+#include "../module/xmodule_identity.h"
+#include "../module/xmodule_resolver.h"
 #include "../shared/xr_derive_flags.h"
 #include "../shared/xr_hash_core.h"
 #include "../shared/xobject_shape.h"
@@ -1229,19 +1231,81 @@ static XgFuncNameRow *producer_lookup_func_row_scoped(const XgProducer *p, XgMod
     return NULL;
 }
 
-static XgModuleId producer_module_id_for_canonical(const XgProducer *p, const char *canonical) {
+static XgModuleId producer_module_id_for_identity(const XgProducer *p,
+                                                  const char *identity) {
     uint32_t name_id;
     uint64_t canonical_hash;
-    if (!p || !p->evidence || !canonical || !canonical[0])
+    if (!p || !p->evidence || !identity || !xr_module_identity_valid(identity, NULL))
         return XG_NO_ID;
-    name_id = hash_name32(canonical);
-    canonical_hash = hash_text64(canonical);
+    name_id = hash_name32(identity);
+    canonical_hash = hash_text64(identity);
     for (uint32_t i = 0; i < p->evidence->nmodules; i++) {
         const XgModuleSummary *module = &p->evidence->modules[i];
         if (module->name_id == name_id && module->canonical_hash == canonical_hash)
             return module->module_id;
     }
     return XG_NO_ID;
+}
+
+static const XrModuleSpec *producer_graph_spec_for_module_id(const XgProducer *p,
+                                                             XgModuleId module_id) {
+    if (!p || !p->module_graph || module_id == XG_NO_ID)
+        return NULL;
+    const XrModuleSpec *match = NULL;
+    for (int i = 0; i < p->module_graph->spec_count; i++) {
+        const XrModuleSpec *spec = &p->module_graph->specs[i];
+        if (producer_module_id_for_identity(p, spec->canonical) != module_id)
+            continue;
+        if (match)
+            return NULL;
+        match = spec;
+    }
+    return match;
+}
+
+static XgModuleId producer_module_id_for_coordinate(const XgProducer *p,
+                                                    XgModuleId importer_module_id,
+                                                    const char *coordinate) {
+    if (!p || !p->evidence || !coordinate || !coordinate[0])
+        return XG_NO_ID;
+    XgModuleId direct = producer_module_id_for_identity(p, coordinate);
+    if (direct != XG_NO_ID)
+        return direct;
+
+    /* Source import coordinates are resolved through the graph's typed
+     * authority. Never reinterpret a bare coordinate as a durable identity. */
+    const char *resolved_identity = NULL;
+    const XrModuleSpec *importer = producer_graph_spec_for_module_id(p, importer_module_id);
+    if (p->module_graph && p->module_graph->resolver && importer && importer->source_path &&
+        xr_module_identity_authority_valid(&importer->authority)) {
+        XrModuleId resolved = {0};
+        char *error = NULL;
+        if (xr_module_resolver_resolve(p->module_graph->resolver, coordinate,
+                                       importer->source_path, &importer->authority, &resolved,
+                                       &error) == 0) {
+            direct = producer_module_id_for_identity(p, resolved.canonical);
+            xr_module_id_cleanup(&resolved);
+        }
+        xr_free(error);
+        if (direct != XG_NO_ID)
+            return direct;
+    }
+    if (p->module_graph) {
+        for (int i = 0; i < p->module_graph->spec_count; i++) {
+            const XrModuleSpec *spec = &p->module_graph->specs[i];
+            if (!spec->canonical ||
+                !xr_module_identity_authority_valid(&spec->authority) ||
+                !spec->authority.namespace_id ||
+                strcmp(spec->authority.namespace_id, coordinate) != 0)
+                continue;
+            if (resolved_identity && strcmp(resolved_identity, spec->canonical) != 0)
+                return XG_NO_ID;
+            resolved_identity = spec->canonical;
+        }
+    }
+    if (!resolved_identity)
+        return XG_NO_ID;
+    return producer_module_id_for_identity(p, resolved_identity);
 }
 
 static bool producer_reserve_stdlib_imports(XgProducer *p, uint32_t needed) {
@@ -3015,7 +3079,7 @@ static XgClassNameRow *body_resolve_module_member_class(XgBodyCollect *bc,
     if (!bc || !member || !member->name)
         return NULL;
     module = body_stdlib_module_for_expr(bc, member->object);
-    module_id = producer_module_id_for_canonical(bc->producer, module);
+    module_id = producer_module_id_for_coordinate(bc->producer, bc->module_id, module);
     return producer_lookup_class_row_scoped(bc->producer, module_id, hash_name32(member->name),
                                             false);
 }
@@ -3427,7 +3491,8 @@ static const XgPendingBody *body_find_call_body(XgBodyCollect *bc, const CallExp
     if (callee->type == AST_MEMBER_ACCESS && callee->as.member_access.name) {
         const MemberAccessNode *member = &callee->as.member_access;
         const char *module = body_stdlib_module_for_expr(bc, member->object);
-        XgModuleId module_id = producer_module_id_for_canonical(bc->producer, module);
+        XgModuleId module_id =
+            producer_module_id_for_coordinate(bc->producer, bc->module_id, module);
         XgFuncNameRow *module_target =
             producer_lookup_func_row_scoped(bc->producer, module_id, member->name);
         if (module_target)
@@ -8343,7 +8408,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
             import && import->member_name
                 ? producer_lookup_func_row_scoped(
                       bc->producer,
-                      producer_module_id_for_canonical(bc->producer, import->module_name),
+                      producer_module_id_for_coordinate(bc->producer, bc->module_id,
+                                                        import->module_name),
                       import->member_name)
                 : NULL;
         if (!target)
@@ -8436,7 +8502,8 @@ static void collect_callsite(XgBodyCollect *bc, const AstNode *call) {
     } else if (callee && callee->type == AST_MEMBER_ACCESS) {
         const char *stdlib_module =
             body_stdlib_module_for_expr(bc, callee->as.member_access.object);
-        XgModuleId stdlib_module_id = producer_module_id_for_canonical(bc->producer, stdlib_module);
+        XgModuleId stdlib_module_id =
+            producer_module_id_for_coordinate(bc->producer, bc->module_id, stdlib_module);
         XgFuncNameRow *stdlib_target = producer_lookup_func_row_scoped(
             bc->producer, stdlib_module_id, callee->as.member_access.name);
         XgClassNameRow *stdlib_class =

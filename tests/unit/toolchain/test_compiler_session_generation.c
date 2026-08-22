@@ -19,10 +19,17 @@
 #include "api/xrepl.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/value/xchunk.h"
+#include "module/xmodule_identity.h"
+#include "frontend/parser/xparse.h"
 #include "xray_vm.h"
 
 #include <stdio.h>
 #include <string.h>
+
+static const XrModuleIdentityAuthority k_compiler_session_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "compiler-session-fixture-v1",
+};
 
 static XrFingerprint test_fingerprint(uint8_t seed) {
     XrFingerprint fingerprint;
@@ -198,19 +205,23 @@ TEST(production_repl_eval_publishes_and_abandons_declaration_generations) {
     ASSERT_NOT_NULL(session);
 
     XrReplEvalResult first =
-        xr_repl_eval(session, isolate, "var generation_value = 41\n");
+        xr_repl_eval(session, isolate, "var generation_value = 41\n",
+                     &k_compiler_session_memory_authority);
     ASSERT_EQ_UINT(first.status, XR_REPL_EVAL_OK);
     ASSERT_NOT_NULL(first.proto);
-    XrReplEvalResult rejected = xr_repl_eval(session, isolate, "var it = 1\n");
+    XrReplEvalResult rejected = xr_repl_eval(session, isolate, "var it = 1\n",
+                                             &k_compiler_session_memory_authority);
     ASSERT_EQ_UINT(rejected.status, XR_REPL_EVAL_COMPILE_ERROR);
     ASSERT_NULL(rejected.proto);
     XrReplEvalResult third = xr_repl_eval(
-        session, isolate, "var generation_next = generation_value + 1\n");
+        session, isolate, "var generation_next = generation_value + 1\n",
+        &k_compiler_session_memory_authority);
     ASSERT_EQ_UINT(third.status, XR_REPL_EVAL_OK);
     ASSERT_NOT_NULL(third.proto);
     XrReplEvalResult runtime_rejected = xr_repl_eval(
         session, isolate, "enum ReplGenerationError { Bad }\n"
-                          "throw ReplGenerationError.Bad\n");
+                          "throw ReplGenerationError.Bad\n",
+        &k_compiler_session_memory_authority);
     ASSERT_EQ_UINT(runtime_rejected.status, XR_REPL_EVAL_RUNTIME_ERROR);
     ASSERT_NOT_NULL(runtime_rejected.proto);
 
@@ -940,7 +951,28 @@ TEST(production_compile_entry_commits_or_aborts_one_operation) {
 
     XrCompilerSessionIncrementalStats initial =
         xr_compiler_session_incremental_stats(session);
-    XrProto *proto = xr_compile_source_with_path(session, "print(42)\n", "session-ok.xr");
+    XrModuleIdentityAuthority invalid_authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "<eval>",
+    };
+    ASSERT_NULL(xr_compile_source_with_path(session, "print(42)\n", "session-missing.xr",
+                                            NULL));
+    ASSERT_NULL(xr_compile_source_with_path(session, "print(42)\n", "session-invalid.xr",
+                                            &invalid_authority));
+    AstNode *ast = xr_parse_with_source(session, "print(42)\n", "session-ast.xr");
+    ASSERT_NOT_NULL(ast);
+    ASSERT_NULL(xr_compile_ast_with_source(session, ast, "session-ast.xr", NULL));
+    ASSERT_NULL(
+        xr_compile_ast_with_source(session, ast, "session-ast.xr", &invalid_authority));
+    xr_program_destroy(ast);
+    XrCompilerSessionIncrementalStats rejected =
+        xr_compiler_session_incremental_stats(session);
+    ASSERT_EQ_UINT(rejected.completed_operations, initial.completed_operations);
+    ASSERT_EQ_UINT(rejected.fatal_operations, initial.fatal_operations);
+    ASSERT_FALSE(rejected.operation_active);
+
+    XrProto *proto = xr_compile_source_with_path(session, "print(42)\n", "session-ok.xr",
+                                                 &k_compiler_session_memory_authority);
     ASSERT_NOT_NULL(proto);
     xr_instruction_unit_free(proto);
     XrCompilerSessionIncrementalStats succeeded =
@@ -952,7 +984,8 @@ TEST(production_compile_entry_commits_or_aborts_one_operation) {
 
     XrCompilerSessionGenerationSnapshot before_failure =
         xr_compiler_session_generation_snapshot(session);
-    proto = xr_compile_source_with_path(session, "fn broken( {\n", "session-fail.xr");
+    proto = xr_compile_source_with_path(session, "fn broken( {\n", "session-fail.xr",
+                                        &k_compiler_session_memory_authority);
     ASSERT_NULL(proto);
     XrCompilerSessionGenerationSnapshot after_failure =
         xr_compiler_session_generation_snapshot(session);

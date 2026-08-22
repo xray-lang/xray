@@ -1043,7 +1043,11 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
         goto cleanup;
 
     char *build_error = NULL;
-    if (xr_module_graph_build_source(graph, "cgen-test", source, &build_error) != 0) {
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "cgen-test",
+    };
+    if (xr_module_graph_build_source(graph, &authority, source, &build_error) != 0) {
         fprintf(stderr, "  MODULE GRAPH FAILED: %s\n",
                 build_error ? build_error : "unknown graph build error");
         xr_free(build_error);

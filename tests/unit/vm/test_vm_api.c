@@ -18,6 +18,7 @@
 #include "../test_framework.h"
 #include "xray_vm.h"
 #include "runtime/xisolate_api.h"
+#include "module/xmodule_identity.h"
 #include "runtime/class/xinstance.h"
 #include "runtime/object/xarray.h"
 #include "runtime/object/xstring.h"
@@ -31,6 +32,11 @@
 #ifndef _WIN32
 #include <unistd.h>
 #endif
+
+static const XrModuleIdentityAuthority k_vm_api_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "vm-api-fixture-v1",
+};
 
 /* ========== xr_vm_current_ctx contract ========== */
 
@@ -103,7 +109,7 @@ TEST(vm_elided_root_allocates_without_task_identity) {
                       "var xs = [1, 2, 3]\n"
                       "var ys = xs.map(fn(x) { return x * 2 })\n"
                       "var upper = text.upper(\"root\")\n";
-    ASSERT_EQ_INT(xr_isolate_dostring(iso, src), 0);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, src, &k_vm_api_memory_authority), 0);
     ASSERT_NULL(iso->main_coro);
     ASSERT_NULL(xr_current_coro(iso));
 
@@ -237,7 +243,7 @@ TEST(vm_deep_recursion_via_dostring) {
                       "var r = dive(200);\n"
                       "if (r != 200) { throw VmApiErr.CheckFailed; }\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_api_memory_authority);
     ASSERT_EQ_INT(rc, 0);
 
     xray_vm_delete(iso);
@@ -268,7 +274,7 @@ TEST(vm_large_maxstacksize_entry) {
                       "var r = wide();\n"
                       "if (r != 33) { throw VmApiErr.CheckFailed; }\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_api_memory_authority);
     ASSERT_EQ_INT(rc, 0);
 
     xray_vm_delete(iso);
@@ -294,7 +300,7 @@ TEST(vm_vararg_entry) {
                       "var r = sumAll(1, 2, 3, 4, 5)\n"
                       "if (r != 15) { throw VmApiErr.CheckFailed }\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_api_memory_authority);
     ASSERT_EQ_INT(rc, 0);
 
     xray_vm_delete(iso);
@@ -315,7 +321,12 @@ TEST(vm_dofile_debug_null_out_proto_releases_proto) {
     XrVMRuntime *iso = xray_vm_new_full(&params);
     ASSERT_NOT_NULL(iso);
 
-    int rc = xr_isolate_dofile_debug(iso, path, NULL);
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    ASSERT_TRUE(xr_module_identity_script_authority_from_source(path, &authority,
+                                                                 &authority_root));
+    int rc = xr_isolate_dofile_debug(iso, path, &authority, NULL);
+    xr_free(authority_root);
     ASSERT_EQ_INT(rc, 0);
 
     xray_vm_delete(iso);

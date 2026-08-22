@@ -23,6 +23,7 @@
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../module/xmodule.h"
 #include "../module/xmodule_graph.h"
+#include "../module/xmodule_identity.h"
 #include "../module/xmodule_resolver.h"
 #include "../runtime/value/xvalue.h"
 #include "../vm/xic_method.h"
@@ -96,7 +97,7 @@ static bool analyze_graph_exports_for_dostring(XrCompilerSession *session, XrMod
             if (d->severity == XR_DIAG_SEV_ERROR) {
                 graph_errors++;
                 fprintf(stderr, "%s:%d:%d: error: %s\n",
-                        spec->source_path ? spec->source_path : "<eval>", d->location.line,
+                        spec->source_path ? spec->source_path : spec->canonical, d->location.line,
                         d->location.column, d->message);
             }
         }
@@ -134,7 +135,9 @@ static bool preload_graph_modules_for_dostring(XrVMRuntime *isolate, XrModuleGra
 }
 
 static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *session,
-                                       const char *source, DostringGraphState *state) {
+                                       const char *source,
+                                       const XrModuleIdentityAuthority *authority,
+                                       DostringGraphState *state) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     if (!registry || !resolver)
@@ -145,7 +148,7 @@ static bool prepare_graph_for_dostring(XrVMRuntime *isolate, XrCompilerSession *
         return true;
 
     char *err = NULL;
-    if (xr_module_graph_build_source(graph, "<eval>", source, &err) != 0) {
+    if (xr_module_graph_build_source(graph, authority, source, &err) != 0) {
         fprintf(stderr, "Error: %s\n", err ? err : "failed to build eval module graph");
         xr_free(err);
         xr_module_graph_free(graph);
@@ -274,9 +277,13 @@ static char *read_file_source(const char *filename) {
 
 /* ========== Execution API ========== */
 
-int xr_isolate_dostring(XrVMRuntime *isolate, const char *source) {
+int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
+                        const XrModuleIdentityAuthority *authority) {
     xray_api_checkr(isolate != NULL, "xr_isolate_dostring: NULL isolate", -1);
     xray_api_checkr(source != NULL, "xr_isolate_dostring: NULL source", -1);
+    xray_api_checkr(authority != NULL && authority->kind == XR_MODULE_IDENTITY_MEMORY &&
+                        xr_module_identity_authority_valid(authority),
+                    "xr_isolate_dostring: invalid memory module authority", -1);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     if (!session) {
@@ -289,13 +296,13 @@ int xr_isolate_dostring(XrVMRuntime *isolate, const char *source) {
         return -1;
     }
     DostringGraphState graph_state = {0};
-    if (!prepare_graph_for_dostring(isolate, session, source, &graph_state)) {
+    if (!prepare_graph_for_dostring(isolate, session, source, authority, &graph_state)) {
         (void) xr_compiler_session_operation_fail(
             &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
         return -1;
     }
-
-    XrProto *code = xr_compile_source_with_path(session, source, "<eval>");
+    XrProto *code = xr_compile_source_with_path(session, source, authority->namespace_id,
+                                                authority);
     if (code == NULL) {
         dostring_graph_cleanup(session, &graph_state);
         (void) xr_compiler_session_operation_fail(
@@ -304,7 +311,7 @@ int xr_isolate_dostring(XrVMRuntime *isolate, const char *source) {
         return -1;
     }
 
-    int result = execute_and_dump(isolate, code, "<eval>");
+    int result = execute_and_dump(isolate, code, authority->namespace_id);
 
     xr_free_code(isolate, code);
     dostring_graph_cleanup(session, &graph_state);
@@ -315,9 +322,13 @@ int xr_isolate_dostring(XrVMRuntime *isolate, const char *source) {
     return result;
 }
 
-int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename) {
+int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,
+                      const XrModuleIdentityAuthority *authority) {
     xray_api_checkr(isolate != NULL, "xr_isolate_dofile: NULL isolate", -1);
     xray_api_checkr(filename != NULL, "xr_isolate_dofile: NULL filename", -1);
+    xray_api_checkr(authority != NULL && authority->kind != XR_MODULE_IDENTITY_MEMORY &&
+                        xr_module_identity_authority_valid(authority),
+                    "xr_isolate_dofile: file module authority is required", -1);
 
     char *source = read_file_source(filename);
     if (source == NULL) {
@@ -336,7 +347,7 @@ int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename) {
         xr_free(source);
         return -1;
     }
-    XrProto *code = xr_compile_source_with_path(session, source, filename);
+    XrProto *code = xr_compile_source_with_path(session, source, filename, authority);
     if (code == NULL) {
         xr_free(source);
         return -1;
@@ -352,9 +363,13 @@ int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename) {
 
 // Debug version: compile and execute but don't free code (for debug resume)
 // Returns proto via out_proto, caller must free with xr_free_code when done
-int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename, void **out_proto) {
+int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename,
+                            const XrModuleIdentityAuthority *authority, void **out_proto) {
     xray_api_checkr(isolate != NULL, "xr_isolate_dofile_debug: NULL isolate", -1);
     xray_api_checkr(filename != NULL, "xr_isolate_dofile_debug: NULL filename", -1);
+    xray_api_checkr(authority != NULL && authority->kind != XR_MODULE_IDENTITY_MEMORY &&
+                        xr_module_identity_authority_valid(authority),
+                    "xr_isolate_dofile_debug: file module authority is required", -1);
 
     char *source = read_file_source(filename);
     if (source == NULL) {
@@ -373,7 +388,7 @@ int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename, void **o
         xr_free(source);
         return -1;
     }
-    XrProto *code = xr_compile_source_with_path(session, source, filename);
+    XrProto *code = xr_compile_source_with_path(session, source, filename, authority);
     if (code == NULL) {
         xr_free(source);
         return -1;

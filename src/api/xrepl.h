@@ -26,6 +26,7 @@
 typedef struct XrVMRuntime XrVMRuntime;
 typedef struct XrCompilerContext XrCompilerContext;
 typedef struct XrCompilerSession XrCompilerSession;
+typedef struct XrModuleIdentityAuthority XrModuleIdentityAuthority;
 typedef struct XrString XrString;
 typedef struct XrProto XrProto;
 
@@ -115,7 +116,8 @@ typedef struct XrReplEvalResult {
  * - Returns the compiled proto even on runtime failure so callers can free it
  */
 XR_FUNC XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
-                                      const char *source);
+                                      const char *source,
+                                      const XrModuleIdentityAuthority *authority);
 
 /* ========== Interactive Inspection ========== */
 
@@ -137,6 +139,7 @@ XR_FUNC void xr_repl_print_vars(XrVMRuntime *isolate);
  * use the analyzer directly.  Empty / NULL expr is a user error and
  * reports a message without aborting.
  */
-XR_FUNC void xr_repl_print_type(XrVMRuntime *isolate, const char *expr);
+XR_FUNC void xr_repl_print_type(XrVMRuntime *isolate, const char *expr,
+                                const XrModuleIdentityAuthority *authority);
 
 #endif  // XREPL_H

@@ -18,6 +18,7 @@
 #include "../../aot/xaot_driver.h"
 #include "../../base/xmalloc.h"
 #include "../../module/xproto_codec.h"
+#include "../../module/xmodule_identity.h"
 #include "../../module/xproject.h"
 #include "../../runtime/xr_process_shutdown.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -188,9 +189,16 @@ int main(int argc, char **argv) {
     }
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
-    bool ok = stdlib_module
-                  ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)
-                  : xr_compile_to_file(session, input, output, flags);
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    bool have_authority = stdlib_module ||
+                          xr_module_identity_script_authority_from_source(
+                              input, &authority, &authority_root);
+    bool ok = have_authority &&
+              (stdlib_module
+                   ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)
+                   : xr_compile_to_file(session, input, output, flags, &authority));
+    xr_free(authority_root);
     xray_vm_delete(X);
     return ok ? 0 : 1;
 }

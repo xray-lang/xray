@@ -92,8 +92,10 @@ XR_FUNC int xr_bootstrap_container_execute(
 
 // Compile source file with an explicit compiler session and save an internal
 // bootstrap container. These functions are not installed product routes.
+struct XrModuleIdentityAuthority;
 XR_FUNC bool xr_compile_to_file(struct XrCompilerSession *session, const char *source_file,
-                                const char *output_file, int flags);
+                                const char *output_file, int flags,
+                                const struct XrModuleIdentityAuthority *authority);
 XR_FUNC bool xr_compile_stdlib_to_file(struct XrCompilerSession *session,
                                        const char *canonical_module, const char *source_file,
                                        const char *output_file, int flags);

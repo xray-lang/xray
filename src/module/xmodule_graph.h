@@ -132,9 +132,10 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
                                   char **out_err);
 
 /* Build the graph from an in-memory entry source.
- * The caller-supplied id is mandatory and becomes a typed memory authority.
+ * The caller-supplied memory authority is mandatory.
  * Relative imports fail because memory modules have no physical root. */
-XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *explicit_id,
+XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
+                                         const XrModuleIdentityAuthority *entry_authority,
                                          const char *entry_source, char **out_err);
 
 /* Run topological sort (Tarjan SCC).

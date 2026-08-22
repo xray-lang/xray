@@ -134,6 +134,8 @@ XR_FUNC XrJsonValue *xmcp_schema_run(void) {
     XJSON_SET_STRING(s, "type", "object");
     XrJsonValue *p = xjson_new_object();
     schema_add_prop(p, "code", "string", "Xray source code to execute (top-level statements).");
+    schema_add_prop(p, "moduleId", "string",
+                    "Explicit durable identity namespace for this memory module.");
     XrJsonValue *timeout =
         schema_add_prop(p, "timeoutMs", "integer",
                         "Wall-clock time budget in milliseconds (default 2000, max 30000).");
@@ -144,6 +146,7 @@ XR_FUNC XrJsonValue *xmcp_schema_run(void) {
     xjson_object_set(s, "properties", p);
     XrJsonValue *r = xjson_new_array();
     xjson_array_push(r, xjson_new_string("code"));
+    xjson_array_push(r, xjson_new_string("moduleId"));
     xjson_object_set(s, "required", r);
     cached = s;
     return s;

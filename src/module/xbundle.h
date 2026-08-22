@@ -46,7 +46,9 @@ typedef enum {
 } XrBundleFlags;
 
 // Create bundle with options
-XR_FUNC XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFlags flags);
+XR_FUNC XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file,
+                                      const XrModuleIdentityAuthority *authority,
+                                      XrBundleFlags flags);
 
 XR_FUNC void xr_bundle_free(XrBundle *bundle);
 

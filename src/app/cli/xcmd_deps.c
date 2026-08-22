@@ -17,6 +17,8 @@
 #include "xray.h"
 #include "xray_vm.h"
 #include "../../module/xbundle.h"
+#include "../../module/xmodule_identity.h"
+#include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
@@ -84,7 +86,13 @@ XR_FUNC int cmd_deps(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_INTERNAL;
     }
 
-    XrBundle *bundle = xr_bundle_create_ex(X, input_file, XR_BUNDLE_DEFAULT);
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    XrBundle *bundle =
+        xr_module_identity_script_authority_from_source(input_file, &authority, &authority_root)
+            ? xr_bundle_create_ex(X, input_file, &authority, XR_BUNDLE_DEFAULT)
+            : NULL;
+    xr_free(authority_root);
     xray_vm_delete(X);
 
     if (!bundle) {

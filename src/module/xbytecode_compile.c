@@ -64,7 +64,8 @@ static bool stdlib_compile_authority(const char *module_name, const char *source
 }
 
 static bool compile_to_file_impl(XrCompilerSession *session, const char *stdlib_module_name,
-                                 const char *source_file, const char *output_file, int flags) {
+                                 const char *source_file, const char *output_file, int flags,
+                                 const XrModuleIdentityAuthority *authority) {
     if (!session) {
         xr_log_warning("compile", "compiler session is required");
         return false;
@@ -89,7 +90,7 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *stdlib_
         return false;
     }
 
-    XrProto *proto = xr_compile_source_with_path(session, source, source_file);
+    XrProto *proto = xr_compile_source_with_path(session, source, source_file, authority);
     xr_free(source);
 
     if (!proto) {
@@ -140,8 +141,9 @@ static bool compile_to_file_impl(XrCompilerSession *session, const char *stdlib_
 }
 
 bool xr_compile_to_file(XrCompilerSession *session, const char *source_file,
-                        const char *output_file, int flags) {
-    return compile_to_file_impl(session, NULL, source_file, output_file, flags);
+                        const char *output_file, int flags,
+                        const XrModuleIdentityAuthority *authority) {
+    return compile_to_file_impl(session, NULL, source_file, output_file, flags, authority);
 }
 
 bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical_module,
@@ -226,8 +228,8 @@ bool xr_compile_stdlib_to_file(XrCompilerSession *session, const char *canonical
         }
     }
 
-    bool ok =
-        compile_to_file_impl(session, canonical_module, source_file, output_file, flags);
+    bool ok = compile_to_file_impl(session, canonical_module, source_file, output_file, flags,
+                                   &authority);
 
     xr_compiler_session_set_module_graph(session, NULL);
     if (graph_analyzer) {

@@ -32,6 +32,24 @@ static XrVMRuntime *g_iso = NULL;
 static XrCompilerSession *g_session = NULL;
 static XrType stub_int_type = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
+static void init_memory_module_spec(XrModuleSpec *spec) {
+    memset(spec, 0, sizeof(*spec));
+    spec->canonical = "memory-module-v1:id=18:xglobal-fixture-v1";
+    spec->kind = XR_MOD_MEMORY;
+    spec->authority.kind = XR_MODULE_IDENTITY_MEMORY;
+    spec->authority.namespace_id = "xglobal-fixture-v1";
+}
+
+TEST(global_evidence_module_summary_requires_typed_identity) {
+    XrModuleSpec spec = {0};
+    XgModuleSummary summary = {0};
+    ASSERT_FALSE(xg_module_summary_from_module_spec(&summary, 1, &spec));
+    spec.canonical = "<eval>";
+    ASSERT_FALSE(xg_module_summary_from_module_spec(&summary, 1, &spec));
+    init_memory_module_spec(&spec);
+    ASSERT_TRUE(xg_module_summary_from_module_spec(&summary, 1, &spec));
+}
+
 static void finalize_object_shape_fixture(XgObjectShapeSummary *shape) {
     if (!shape)
         return;
@@ -95,7 +113,7 @@ static bool build_global_evidence_from_source(const char *source, XgGlobalEviden
         return false;
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -842,7 +860,7 @@ TEST(global_evidence_cache_keys_are_phase_specific) {
     ASSERT_NE(xg_evidence_cache_key_hash(&base_decl), 0);
     ASSERT_TRUE(xg_evidence_cache_key_matches(&base_decl, &base_decl));
     ASSERT_TRUE(xg_evidence_cache_key_format(&base_decl, encoded, sizeof(encoded)));
-    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=44 phase=1"));
+    ASSERT_NOT_NULL(strstr(encoded, "xg-cache-key v1 schema=46 phase=1"));
     ASSERT_TRUE(xg_evidence_cache_key_parse(encoded, &parsed));
     ASSERT_TRUE(xg_evidence_cache_key_matches(&parsed, &base_decl));
     snprintf(encoded_newline, sizeof(encoded_newline), "%s\n", encoded);
@@ -1216,15 +1234,15 @@ TEST(global_evidence_dump_lists_core_rows) {
     dump = xg_global_evidence_dump(&ev);
     ASSERT_NOT_NULL(dump);
     ASSERT_NOT_NULL(strstr(dump, "xglobal-evidence v1 profile=native_release"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=44 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=44 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=44 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=44 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=declarations schema=46 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=semantic_graph schema=46 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=body_summary schema=46 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "cache-key phase=global_evidence schema=46 module=1"));
     ASSERT_NOT_NULL(strstr(dump, "xg-cache-manifest v1 phases=0xf"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=1 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=2 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=3 module=1"));
-    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=44 phase=4 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=46 phase=1 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=46 phase=2 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=46 phase=3 module=1"));
+    ASSERT_NOT_NULL(strstr(dump, "xg-cache-key v1 schema=46 phase=4 module=1"));
     ASSERT_NOT_NULL(strstr(dump, " content="));
     ASSERT_NOT_NULL(strstr(dump, " key="));
     ASSERT_NOT_NULL(strstr(dump, "counts modules=1 decls=1"));
@@ -6571,7 +6589,7 @@ TEST(global_evidence_producer_finalizes_class_graph_order_independently) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -6640,10 +6658,12 @@ TEST(global_evidence_build_key_uses_explicit_imported_summary_hash) {
     XgGlobalEvidence ev;
 
     memset(specs, 0, sizeof(specs));
-    specs[0].canonical = "entry";
+    init_memory_module_spec(&specs[0]);
+    init_memory_module_spec(&specs[1]);
+    specs[0].canonical = "memory-module-v1:id=16:xglobal-entry-v1";
     specs[0].dep_indices = entry_deps;
     specs[0].dep_count = 1;
-    specs[1].canonical = "dep";
+    specs[1].canonical = "memory-module-v1:id=14:xglobal-dep-v1";
     memset(&graph, 0, sizeof(graph));
     graph.specs = specs;
     graph.spec_count = 2;
@@ -6687,10 +6707,13 @@ TEST(global_evidence_build_skips_imported_package_module_rows) {
     XgGlobalEvidence ev;
 
     memset(specs, 0, sizeof(specs));
-    specs[0].canonical = "codex/pkg";
+    init_memory_module_spec(&specs[0]);
+    init_memory_module_spec(&specs[1]);
+    specs[0].canonical =
+        "module-id-v1:kind=7:package:namespace=15:codex/pkg@1.0.0:path=11:pkg/main.xr";
     specs[0].kind = XR_MOD_PACKAGE;
     specs[0].ast = package_ast;
-    specs[1].canonical = "entry";
+    specs[1].canonical = "memory-module-v1:id=16:xglobal-entry-v1";
     specs[1].kind = XR_MOD_FILE;
     specs[1].ast = entry_ast;
     memset(&graph, 0, sizeof(graph));
@@ -6723,7 +6746,7 @@ TEST(global_evidence_producer_resolves_direct_function_callsite_targets) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -6771,7 +6794,7 @@ TEST(global_evidence_producer_uses_stable_source_identity) {
     ASSERT_NOT_NULL(caller_node);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -6842,7 +6865,7 @@ TEST(global_evidence_producer_disambiguates_same_location_callsites) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -6892,10 +6915,10 @@ TEST(global_evidence_source_identity_survives_body_only_change) {
     ASSERT_NOT_NULL(ast_b);
 
     XrModuleSpec spec_a;
-    memset(&spec_a, 0, sizeof(spec_a));
+    init_memory_module_spec(&spec_a);
     spec_a.ast = ast_a;
     XrModuleSpec spec_b;
-    memset(&spec_b, 0, sizeof(spec_b));
+    init_memory_module_spec(&spec_b);
     spec_b.ast = ast_b;
     int topo_order[1] = {0};
     XrModuleGraph graph_a;
@@ -6946,7 +6969,7 @@ TEST(global_evidence_producer_records_generic_instantiation_roots) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -7428,7 +7451,7 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -7462,7 +7485,7 @@ TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics)
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -7499,11 +7522,13 @@ TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundar
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
-    spec.canonical = "io";
+    spec.canonical = "stdlib-module-v1:module=2:io:path=8:io/io.xr";
     spec.source_path = "<embedded stdlib>/io/io.xr";
     spec.kind = XR_MOD_STDLIB;
+    spec.authority.kind = XR_MODULE_IDENTITY_STDLIB;
+    spec.authority.namespace_id = "io";
     int topo_order[1] = {0};
     XrModuleGraph graph;
     memset(&graph, 0, sizeof(graph));
@@ -7551,7 +7576,7 @@ TEST(global_evidence_composes_recursive_direct_call_effects) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -7585,7 +7610,7 @@ TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -7656,7 +7681,7 @@ TEST(global_evidence_producer_resolves_method_callsite_receivers) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -7782,11 +7807,15 @@ TEST(global_evidence_producer_resolves_namespace_class_constructor_and_local_met
     int topo_order[2] = {0, 1};
     XrModuleGraph graph;
     memset(specs, 0, sizeof(specs));
-    specs[0].canonical = "http";
+    init_memory_module_spec(&specs[0]);
+    init_memory_module_spec(&specs[1]);
+    specs[0].canonical = "stdlib-module-v1:module=4:http:path=12:http/http.xr";
     specs[0].source_path = "<embedded stdlib>/http/http.xr";
     specs[0].kind = XR_MOD_STDLIB;
+    specs[0].authority.kind = XR_MODULE_IDENTITY_STDLIB;
+    specs[0].authority.namespace_id = "http";
     specs[0].ast = http_ast;
-    specs[1].canonical = "entry";
+    specs[1].canonical = "memory-module-v1:id=16:xglobal-entry-v1";
     specs[1].source_path = "entry.xr";
     specs[1].kind = XR_MOD_FILE;
     specs[1].ast = entry_ast;
@@ -7849,7 +7878,7 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
         xr_compiler_session_pop_arena(&canon_scope);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     spec.source_path = "test.xr";
     int topo_order[1] = {0};
@@ -7890,6 +7919,7 @@ TEST(global_evidence_seeds_xi_ids_during_lowering) {
     cfg.run_arc = false;
     cfg.run_emit = false;
     cfg.source_file = "test.xr";
+    cfg.module_identity = spec.canonical;
     cfg.global_evidence = &ev;
     cfg.global_evidence_module_id = 1;
     XiPipelineResult res = xi_pipeline_compile_program(ast, analyzer, g_iso, &cfg);
@@ -7945,7 +7975,7 @@ TEST(global_evidence_producer_resolves_super_constructor_callsite) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8033,7 +8063,7 @@ TEST(global_evidence_producer_resolves_module_init_constructor_callsite) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8103,7 +8133,7 @@ TEST(global_evidence_producer_names_go_lambda_body_anonymous) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8148,7 +8178,7 @@ TEST(global_evidence_producer_fills_callsite_argument_type_keys) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8219,7 +8249,7 @@ TEST(global_evidence_producer_keeps_module_member_calls_out_of_method_dispatch) 
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8279,7 +8309,7 @@ TEST(global_evidence_producer_marks_body_escape_bits) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8327,7 +8357,7 @@ TEST(global_evidence_producer_marks_read_mem_effect) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8388,7 +8418,7 @@ TEST(global_evidence_producer_distinguishes_local_rebinding_leaf_intrinsics_and_
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8455,7 +8485,7 @@ TEST(global_evidence_producer_marks_call_effect) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8495,7 +8525,7 @@ TEST(global_evidence_producer_marks_native_method_calls_as_native_capability) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8530,7 +8560,7 @@ TEST(global_evidence_producer_marks_native_methods_bodyless) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8598,7 +8628,7 @@ TEST(global_evidence_producer_resolves_interface_callsite_receivers) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8711,7 +8741,7 @@ TEST(global_evidence_producer_records_interface_object_storage_uses) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -8885,7 +8915,7 @@ TEST(global_evidence_producer_derives_verified_class_field_layouts) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9205,7 +9235,7 @@ TEST(global_evidence_producer_rejects_error_class_field_type) {
     xr_compiler_session_pop_arena(&tref_scope);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9337,7 +9367,7 @@ TEST(global_evidence_producer_resolves_interface_extends_callsite_methods) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9421,7 +9451,7 @@ TEST(global_evidence_verifier_rejects_ambiguous_interface_extends_methods) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9487,7 +9517,7 @@ TEST(global_evidence_producer_resolves_transitive_interface_implementors) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9637,7 +9667,7 @@ TEST(global_evidence_producer_marks_metadata_reachability) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9696,7 +9726,7 @@ TEST(global_evidence_producer_records_derive_rows) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9822,7 +9852,7 @@ TEST(global_evidence_producer_records_derived_eq_hash_plan) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -9981,7 +10011,7 @@ TEST(global_evidence_producer_records_derived_clone_plan) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -10089,7 +10119,7 @@ TEST(global_evidence_producer_classifies_derived_clone_fields) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -10760,7 +10790,7 @@ TEST(global_evidence_producer_records_user_hashable_direct_call_plan) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -11086,7 +11116,7 @@ TEST(global_evidence_producer_records_sequence_capacity_bulk_encoding_rows) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11207,7 +11237,7 @@ TEST(global_evidence_producer_marks_aliased_counted_loop_capacity_checked) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11272,7 +11302,7 @@ TEST(global_evidence_producer_proves_stringbuilder_literal_append_count) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11352,7 +11382,7 @@ TEST(global_evidence_producer_canonicalizes_byte_u8_sequence_type_keys) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11396,7 +11426,7 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -11489,7 +11519,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_closure_capture) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11556,7 +11586,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_return_receivers) 
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11623,7 +11653,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_typed_param) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11681,7 +11711,7 @@ TEST(global_evidence_producer_propagates_object_shape_through_field_and_containe
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11742,7 +11772,7 @@ TEST(global_evidence_producer_records_object_shape_access) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -11802,7 +11832,7 @@ TEST(global_evidence_producer_records_map_literal_and_key_access) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12036,7 +12066,7 @@ TEST(global_evidence_producer_records_dense_int_map_set_lookup) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12112,7 +12142,7 @@ TEST(global_evidence_producer_records_dense_enum_map_set_lookup) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12187,7 +12217,7 @@ TEST(global_evidence_producer_records_bool_direct_map_shape) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12245,7 +12275,7 @@ TEST(global_evidence_producer_rejects_bool_direct_for_ref_value_map) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12291,7 +12321,7 @@ TEST(global_evidence_producer_propagates_map_shape_through_local_alias) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12343,7 +12373,7 @@ TEST(global_evidence_producer_records_empty_typed_map_set_literals) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12426,7 +12456,7 @@ TEST(global_evidence_producer_records_map_set_method_key_access) {
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12523,7 +12553,7 @@ TEST(global_evidence_producer_propagates_map_set_shape_through_closure_capture) 
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.source_path = "test.xr";
     spec.ast = ast;
     int topo_order[1] = {0};
@@ -12603,7 +12633,7 @@ TEST(global_evidence_producer_marks_static_data_reachability) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12649,7 +12679,7 @@ TEST(global_evidence_publishes_allocation_contracts) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12697,7 +12727,7 @@ TEST(global_evidence_producer_marks_static_data_runtime_init) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12762,7 +12792,7 @@ TEST(global_evidence_producer_marks_runtime_capabilities) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12810,7 +12840,7 @@ TEST(global_evidence_producer_marks_coro_module_runtime_capability) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12866,7 +12896,7 @@ TEST(global_evidence_producer_marks_typed_coro_local_and_pool_submit) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12928,7 +12958,7 @@ TEST(global_evidence_producer_keeps_runtime_control_plane_on_coro_root) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -12983,7 +13013,7 @@ TEST(global_evidence_producer_marks_internal_yield_module_suspendable) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13018,7 +13048,7 @@ TEST(global_evidence_producer_marks_sys_thread_spawn_capability) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13063,7 +13093,7 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13103,7 +13133,7 @@ TEST(global_evidence_producer_keeps_vm_control_calls_out_of_stdlib_links) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13136,7 +13166,7 @@ TEST(global_evidence_producer_ignores_user_member_names_for_runtime_capabilities
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13182,7 +13212,7 @@ TEST(global_evidence_composes_field_receiver_runtime_wait_effects) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13233,7 +13263,7 @@ TEST(global_evidence_producer_marks_module_init_body) {
     ASSERT_NOT_NULL(ast);
 
     XrModuleSpec spec;
-    memset(&spec, 0, sizeof(spec));
+    init_memory_module_spec(&spec);
     spec.ast = ast;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -13776,8 +13806,8 @@ TEST(global_evidence_producer_records_storage_provenance) {
     const XgDeclSummary *module_state = NULL;
     const XgDeclSummary *shared_state = NULL;
     ASSERT_NOT_NULL(ast);
-    memset(&spec, 0, sizeof(spec));
-    spec.canonical = "storage";
+    init_memory_module_spec(&spec);
+    spec.canonical = "memory-module-v1:id=18:xglobal-storage-v1";
     spec.ast = ast;
     memset(&graph, 0, sizeof(graph));
     graph.specs = &spec;
@@ -13945,6 +13975,7 @@ TEST(address_plan_rejects_owner_pointer_field_escape) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("xglobal_summary");
+RUN_TEST(global_evidence_module_summary_requires_typed_identity);
 RUN_TEST(global_evidence_adds_rows_and_grows);
 RUN_TEST(global_evidence_decl_kind_capabilities_are_disjoint);
 RUN_TEST(global_evidence_verifier_rejects_param_storage_key_without_vector);

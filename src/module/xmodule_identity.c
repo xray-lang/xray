@@ -10,6 +10,7 @@
 
 #include "xmodule_identity.h"
 
+#include "../base/xfileio.h"
 #include "../base/xmalloc.h"
 
 #include <ctype.h>
@@ -313,6 +314,29 @@ XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *aut
     *logical_path_out = logical;
     xr_free(root);
     xr_free(source);
+    return true;
+}
+
+XR_FUNC bool xr_module_identity_script_authority_from_source(
+    const char *source_path, XrModuleIdentityAuthority *authority, char **root_out) {
+    if (authority)
+        *authority = (XrModuleIdentityAuthority) {0};
+    if (root_out)
+        *root_out = NULL;
+    if (!source_path || !authority || !root_out)
+        return false;
+    char *source = xr_realpath(source_path);
+    char *root = source ? xr_path_dirname(source) : NULL;
+    xr_free(source);
+    if (!root || !physical_path_is_absolute(root)) {
+        xr_free(root);
+        return false;
+    }
+    *authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+        .physical_root = root,
+    };
+    *root_out = root;
     return true;
 }
 

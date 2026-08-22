@@ -272,7 +272,14 @@ static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
     }
 
     char *graph_err = NULL;
-    if (xr_module_graph_build(graph, filepath, NULL, &graph_err) != 0) {
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    int graph_rc = xr_module_identity_script_authority_from_source(
+                       filepath, &authority, &authority_root)
+                       ? xr_module_graph_build(graph, filepath, &authority, &graph_err)
+                       : -1;
+    xr_free(authority_root);
+    if (graph_rc != 0) {
         snprintf(err_buf, err_buf_sz, "%s", graph_err ? graph_err : "module graph build failed");
         xr_free(graph_err);
         xr_module_graph_free(graph);
@@ -412,7 +419,9 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         goto cleanup_source;
     }
 
-    XrProto *proto = xr_compile_ast_with_source(session, ast, filepath);
+    const XrModuleIdentityAuthority *entry_authority =
+        &active_graph->specs[active_graph->entry_index].authority;
+    XrProto *proto = xr_compile_ast_with_source(session, ast, filepath, entry_authority);
     if (!proto) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");

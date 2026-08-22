@@ -218,12 +218,15 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
         return;
 
     XrModuleSpec *from_spec = &g->specs[spec_idx];
+    if (!xr_module_identity_authority_valid(&from_spec->authority)) {
+        if (!g->unresolved_error)
+            g->unresolved_error = xr_strdup("importer module identity authority is invalid");
+        return;
+    }
     XrModuleId mid;
     char *err = NULL;
-    const XrModuleIdentityAuthority *from_authority =
-        xr_module_identity_authority_valid(&from_spec->authority) ? &from_spec->authority : NULL;
     int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path,
-                                        from_authority, &mid, &err);
+                                        &from_spec->authority, &mid, &err);
     if (rc != 0) {
         /* A registered native module resolves with a NULL source_path rather
          * than failing, so reaching here means the specifier names nothing. */
@@ -249,12 +252,16 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     }
 
     /* Find or create target spec in the graph. */
+    if (!xr_module_identity_authority_valid(&mid.authority)) {
+        if (!g->unresolved_error)
+            g->unresolved_error = xr_strdup("resolved module identity authority is invalid");
+        xr_module_id_cleanup(&mid);
+        return;
+    }
     int target_idx = xr_module_graph_find(g, mid.canonical);
     if (target_idx < 0) {
         target_idx = graph_add_spec(g, mid.canonical, mid.logical_path, mid.source_path, mid.kind,
-                                    xr_module_identity_authority_valid(&mid.authority)
-                                        ? &mid.authority
-                                        : NULL);
+                                    &mid.authority);
         if (target_idx >= 0 && mid.source_path &&
             strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
                     strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
@@ -392,9 +399,10 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
 XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
                                   const XrModuleIdentityAuthority *entry_authority,
                                   char **out_err) {
-    if (!entry_path) {
+    if (!entry_path || !entry_authority) {
         if (out_err)
-            *out_err = xr_strdup("NULL entry_path");
+            *out_err = xr_strdup(!entry_path ? "NULL entry_path"
+                                             : "entry module identity authority is required");
         return -1;
     }
 
@@ -412,56 +420,44 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path,
         abs_path = xr_strdup(entry_path);
     }
 
-    char *script_root = NULL;
     char *entry_identity = NULL;
     char *entry_logical_path = NULL;
-    XrModuleIdentityAuthority authority =
-        entry_authority ? *entry_authority : g->resolver->config.authority;
-    if (!authority.physical_root) {
-        script_root = xr_path_dirname(abs_path);
-        authority.kind = XR_MODULE_IDENTITY_SCRIPT;
-        authority.namespace_id = NULL;
-        authority.physical_root = script_root;
-    }
-    if (!xr_module_identity_from_source(&authority, abs_path, &entry_identity,
+    if (!xr_module_identity_from_source(entry_authority, abs_path, &entry_identity,
                                         &entry_logical_path)) {
         if (out_err)
             *out_err = xr_strdup("entry module escapes or lacks its identity authority");
-        xr_free(script_root);
         xr_free(abs_path);
         return -1;
     }
-    XrModuleKind entry_kind = authority.kind == XR_MODULE_IDENTITY_STDLIB
+    XrModuleKind entry_kind = entry_authority->kind == XR_MODULE_IDENTITY_STDLIB
                                   ? XR_MOD_STDLIB
-                                  : (authority.kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE
-                                                                                  : XR_MOD_FILE);
+                                  : (entry_authority->kind == XR_MODULE_IDENTITY_PACKAGE
+                                         ? XR_MOD_PACKAGE
+                                         : XR_MOD_FILE);
     int rc = graph_build_from_entry(g, entry_identity, entry_logical_path, abs_path, entry_kind,
-                                    &authority, NULL, out_err);
+                                    entry_authority, NULL, out_err);
     xr_free(entry_identity);
     xr_free(entry_logical_path);
-    xr_free(script_root);
     xr_free(abs_path);
     return rc;
 }
 
-XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *explicit_id,
+XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g,
+                                         const XrModuleIdentityAuthority *entry_authority,
                                          const char *entry_source, char **out_err) {
     if (!entry_source) {
         if (out_err)
             *out_err = xr_strdup("NULL entry_source");
         return -1;
     }
-    XrModuleIdentityAuthority authority = {
-        .kind = XR_MODULE_IDENTITY_MEMORY,
-        .namespace_id = explicit_id,
-    };
     char *entry_identity = NULL;
-    if (!xr_module_identity_from_logical(&authority, NULL, &entry_identity)) {
+    if (!entry_authority || entry_authority->kind != XR_MODULE_IDENTITY_MEMORY ||
+        !xr_module_identity_from_logical(entry_authority, NULL, &entry_identity)) {
         if (out_err)
             *out_err = xr_strdup("memory module requires an explicit valid identity");
         return -1;
     }
-    int rc = graph_build_from_entry(g, entry_identity, NULL, NULL, XR_MOD_MEMORY, &authority,
+    int rc = graph_build_from_entry(g, entry_identity, NULL, NULL, XR_MOD_MEMORY, entry_authority,
                                     entry_source, out_err);
     xr_free(entry_identity);
     return rc;

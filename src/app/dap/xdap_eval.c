@@ -513,7 +513,7 @@ static char *debug_evaluate_internal(XrVMRuntime *isolate, const char *expressio
     // node is an AST_PROGRAM whose first child is the parsed expression;
     // xr_program_destroy() releases the program and its owning arena.
     AstNode *program = xr_parse_expression_string(xr_compiler_session_current_for_isolate(isolate),
-                                                  expression, "<eval>");
+                                                  expression, "dap-expression");
     if (!program) {
         if (out_value)
             *out_value = xr_null();

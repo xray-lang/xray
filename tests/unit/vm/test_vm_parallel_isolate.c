@@ -19,12 +19,18 @@
 #include "api/xisolate_profile.h"
 #include "os/os_thread.h"
 #include "runtime/xisolate_api.h"
+#include "module/xmodule_identity.h"
 #include "xray_vm.h"
 
 #include <stdatomic.h>
 
 #define VM_PAR_ISOLATE_RUNNERS 2
 #define VM_PAR_ISOLATE_WORKERS 4
+
+static const XrModuleIdentityAuthority k_vm_parallel_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "vm-parallel-fixture-v1",
+};
 
 static const char *VM_PAR_ISOLATE_SCRIPT =
     "import parallel\n"
@@ -87,7 +93,8 @@ static void *vm_parallel_isolate_runner(void *raw) {
     while (!atomic_load_explicit(run->start, memory_order_acquire))
         xr_thread_yield();
 
-    run->result = xr_isolate_dostring(isolate, VM_PAR_ISOLATE_SCRIPT);
+    run->result = xr_isolate_dostring(isolate, VM_PAR_ISOLATE_SCRIPT,
+                                      &k_vm_parallel_memory_authority);
 
     xray_vm_delete(isolate);
     return NULL;

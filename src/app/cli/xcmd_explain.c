@@ -517,7 +517,12 @@ static int explain_effect_view(const char *subject, bool suspend_view) {
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     XrModuleGraph *graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
     char *graph_error = NULL;
-    if (!graph || xr_module_graph_build(graph, entry, NULL, &graph_error) != 0 ||
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_PROJECT,
+        .namespace_id = project->name,
+        .physical_root = project->root,
+    };
+    if (!graph || xr_module_graph_build(graph, entry, &authority, &graph_error) != 0 ||
         xr_module_graph_topological_sort(graph) != 0 || graph->has_cycle) {
         xr_cli_error("explain", "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);

@@ -179,9 +179,11 @@ struct XrBytecodeModule;
 typedef AstNode *(*XrModuleParseHook)(XrCompilerSession *session, const char *source,
                                       const char *source_file);
 typedef XrProto *(*XrModuleCompileAstHook)(XrCompilerSession *session, AstNode *ast,
-                                           const char *source_file);
+                                           const char *source_file,
+                                           const struct XrModuleIdentityAuthority *authority);
 typedef XrProto *(*XrModuleCompileSourceHook)(XrCompilerSession *session, const char *source,
-                                              const char *source_file);
+                                              const char *source_file,
+                                              const struct XrModuleIdentityAuthority *authority);
 typedef void (*XrModuleAstFreeHook)(AstNode *ast);
 
 typedef struct XrModuleRegistry {

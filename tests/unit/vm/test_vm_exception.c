@@ -21,11 +21,17 @@
 
 #include "runtime/xisolate_internal.h"
 #include "runtime/xisolate_api.h"
+#include "module/xmodule_identity.h"
 #include "runtime/object/xpanic_info.h"
 #include "runtime/object/xarray.h"
 #include "vm/xvm_internal.h"
 
 #include <string.h>
+
+static const XrModuleIdentityAuthority k_vm_exception_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "vm-exception-fixture-v1",
+};
 
 /* Helper: spin up a full-feature isolate with stderr suppression
  * (uncaught throws still update ctx->current_exception). */
@@ -56,7 +62,7 @@ TEST(uncaught_enum_error_returns_nonzero) {
                       "fn level1() { level2() }\n"
                       "level1()\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_exception_memory_authority);
     /* Uncaught error — dostring returns non-zero. */
     ASSERT(rc != 0);
 
@@ -76,7 +82,7 @@ TEST(runtime_error_records_trace) {
     const char *src = "fn divider(a: int, b: int) -> int { return a / b }\n"
                       "var r = divider(10, 0)\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_exception_memory_authority);
     /* Uncaught panic fail-fasts — dostring returns non-zero. */
     ASSERT(rc != 0);
 
@@ -149,7 +155,7 @@ TEST(catch_clears_pending_error_state) {
                       "assert_eq(x, 42)\n"
                       "assert_ne(x, 41)\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_exception_memory_authority);
     ASSERT_EQ_INT(rc, 0);
     /* No error left dangling. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
@@ -177,7 +183,7 @@ TEST(caught_error_rethrow_reaches_top_level) {
                       "fn level1() { level2() }\n"
                       "try { level1() } catch (e) { throw e }\n";
 
-    int rc = xr_isolate_dostring(iso, src);
+    int rc = xr_isolate_dostring(iso, src, &k_vm_exception_memory_authority);
     /* Rethrow propagated uncaught to the top level. */
     ASSERT(rc != 0);
 

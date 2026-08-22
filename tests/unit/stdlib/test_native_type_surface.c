@@ -13,6 +13,7 @@
 
 #include "xray_vm.h"
 #include "runtime/xisolate_api.h"
+#include "module/xmodule_identity.h"
 #include "../../../src/frontend/analyzer/xanalyzer_builtins.h"
 #include "../../../src/frontend/analyzer/xanalyzer_native_types.h"
 #include "../../../src/analysis/xglobal_summary.h"
@@ -20,6 +21,11 @@
 #include "../../../src/runtime/class/xenum.h"
 #include "../../../src/shared/xobject_shape.h"
 #include "../../../stdlib/stdlib_cache.h"
+
+static const XrModuleIdentityAuthority k_native_surface_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "native-surface-fixture-v1",
+};
 
 static XrVMRuntime *make_full_isolate(void) {
     XrVMConfig params = {0};
@@ -51,7 +57,9 @@ static const XaBuiltinMember *find_type_member(const char *type_name, const char
 TEST(native_type_methods_match_runtime_tables) {
     XrVMRuntime *iso = make_full_isolate();
     ASSERT_NOT_NULL(iso);
-    ASSERT_EQ_INT(xr_isolate_dostring(iso, "import mem\n"), 0);
+    ASSERT_EQ_INT(xr_isolate_dostring(iso, "import mem\n",
+                                     &k_native_surface_memory_authority),
+                  0);
 
     int mismatches = xa_native_verify_protocol(iso);
     xray_vm_delete(iso);

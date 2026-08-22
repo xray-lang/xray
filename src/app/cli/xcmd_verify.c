@@ -284,8 +284,13 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     XrModuleRegistry *registry = xr_isolate_get_module_registry(state->isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     state->graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_PROJECT,
+        .namespace_id = state->project->name,
+        .physical_root = state->project->root,
+    };
     if (!state->graph ||
-        xr_module_graph_build(state->graph, state->entry, NULL, &graph_error) != 0 ||
+        xr_module_graph_build(state->graph, state->entry, &authority, &graph_error) != 0 ||
         xr_module_graph_topological_sort(state->graph) != 0 || state->graph->has_cycle) {
         xr_cli_error("verify", "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);

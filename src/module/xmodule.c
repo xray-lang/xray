@@ -15,6 +15,7 @@
 #include "xmodule_diagnostic.h"
 #include "xray_vm.h"
 #include "../stdlib/xstdlib_vm_fastpath.h"
+#include "xmodule_graph.h"
 #include "xmodule_resolver.h"
 #include "xproject.h"
 #include "../base/xchecks.h"
@@ -27,6 +28,7 @@
 #include "../base/xfileio.h"
 #include "../runtime/xerror.h"
 #include "../runtime/mem/xheap.h"
+#include "../toolchain/xcompiler_session.h"
 #include "../base/xhashmap.h"
 #include "../runtime/xray_debug.h"
 #include <stdio.h>
@@ -638,6 +640,49 @@ static const char *get_importer_path(XrVMRuntime *isolate) {
     return xr_isolate_get_script_file(isolate);
 }
 
+/* Resolve a physical I/O locator to the graph-owned typed identity authority.
+ * The physical path is used only to select a live graph node; it never becomes
+ * durable identity text. Ambiguous or graphless lookups fail closed. */
+static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *registry,
+                                                   const char *locator) {
+    if (!registry || !registry->compiler_session || !locator || !locator[0])
+        return NULL;
+    const XrModuleGraph *graph =
+        xr_compiler_session_module_graph(registry->compiler_session);
+    if (!graph)
+        return NULL;
+    const XrModuleSpec *match = NULL;
+    char *locator_realpath = xr_realpath(locator);
+    for (int i = 0; i < graph->spec_count; i++) {
+        const XrModuleSpec *spec = &graph->specs[i];
+        if (!spec->source_path || !spec->canonical ||
+            !xr_module_identity_authority_valid(&spec->authority))
+            continue;
+        bool matches = strcmp(spec->canonical, locator) == 0 ||
+                       strcmp(spec->source_path, locator) == 0;
+        if (!matches && locator_realpath) {
+            char *spec_realpath = xr_realpath(spec->source_path);
+            matches = spec_realpath && strcmp(spec_realpath, locator_realpath) == 0;
+            xr_free(spec_realpath);
+        }
+        if (!matches)
+            continue;
+        if (match && strcmp(match->canonical, spec->canonical) != 0) {
+            xr_free(locator_realpath);
+            return NULL;
+        }
+        match = spec;
+    }
+    xr_free(locator_realpath);
+    return match;
+}
+
+static const XrModuleIdentityAuthority *module_authority_for_source(
+    const XrModuleRegistry *registry, const char *source_path) {
+    const XrModuleSpec *spec = module_spec_for_locator(registry, source_path);
+    return spec ? &spec->authority : NULL;
+}
+
 static const XrBytecodeModule *find_embedded_module(const XrModuleRegistry *registry,
                                                     const char *path) {
     if (!registry || !path)
@@ -708,13 +753,26 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     if (embedded_path)
         return embedded_path;
 
+    /* Compiler-owned import operands may already carry the graph's typed
+     * identity or its physical I/O locator. Route both through the active
+     * graph instead of reinterpreting either as a source-language specifier. */
+    const XrModuleSpec *resolved_spec = module_spec_for_locator(registry, module_name);
+    if (resolved_spec)
+        return xr_strdup(resolved_spec->source_path);
+
     XrModuleResolver *resolver = ensure_resolver(registry);
     if (!resolver)
         return NULL;
 
+    const XrModuleIdentityAuthority *importer_authority =
+        module_authority_for_source(registry, importer);
+    if (!importer_authority)
+        return NULL;
+
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(resolver, module_name, importer, NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(resolver, module_name, importer, importer_authority, &mid,
+                                        &err);
     if (err)
         xr_free(err);
 
@@ -899,7 +957,11 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
                            path);
             return false;
         }
-        code = registry->fn_compile_src(registry->compiler_session, source, path);
+        XrModuleIdentityAuthority authority = {
+            .kind = XR_MODULE_IDENTITY_STDLIB,
+            .namespace_id = module_name,
+        };
+        code = registry->fn_compile_src(registry->compiler_session, source, path, &authority);
         if (!code) {
             xr_isolate_set_current_module(isolate, prev_module);
             xr_free(owned_source);
@@ -1073,7 +1135,18 @@ static XrModule *load_script_module(XrVMRuntime *isolate, XrModule *module, cons
             return NULL;
         }
 
-        code = registry->fn_compile_ast(registry->compiler_session, ast, clean_path);
+        const XrModuleIdentityAuthority *authority =
+            module_authority_for_source(registry, clean_path);
+        if (!authority) {
+            if (registry->fn_ast_free)
+                registry->fn_ast_free(ast);
+            xr_isolate_set_current_module(isolate, prev_module);
+            xr_free(source);
+            xr_free(clean_path);
+            xr_log_warning("module", "typed module authority unavailable for '%s'", path);
+            return NULL;
+        }
+        code = registry->fn_compile_ast(registry->compiler_session, ast, clean_path, authority);
         if (!code) {
             if (registry->fn_ast_free)
                 registry->fn_ast_free(ast);

@@ -27,6 +27,7 @@
 #include "../../../src/runtime/xexec_state.h"
 #include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/toolchain/xcompiler_session.h"
+#include "../../../src/module/xmodule_identity.h"
 #include "xrepl.h"
 #include "xisolate_profile.h"
 #include <stdio.h>
@@ -34,12 +35,18 @@
 
 /* ========== Helpers ========== */
 
+static const XrModuleIdentityAuthority k_repl_memory_authority = {
+    .kind = XR_MODULE_IDENTITY_MEMORY,
+    .namespace_id = "repl-fixture-v1",
+};
+
 static XrVMRuntime *make_repl_iso(void) {
     return xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
 }
 
 static XrProto *eval_repl(XrCompilerSession *session, XrVMRuntime *isolate, const char *source) {
-    XrReplEvalResult result = xr_repl_eval(session, isolate, source);
+    XrReplEvalResult result =
+        xr_repl_eval(session, isolate, source, &k_repl_memory_authority);
     if (result.status == XR_REPL_EVAL_OK)
         return result.proto;
     if (result.proto)
@@ -726,10 +733,30 @@ TEST(repl_it_is_reserved_for_implicit_results) {
     ASSERT_NOT_NULL(iso);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
 
-    XrReplEvalResult result = xr_repl_eval(session, iso, "var it = 1\n");
+    XrReplEvalResult result =
+        xr_repl_eval(session, iso, "var it = 1\n", &k_repl_memory_authority);
     ASSERT_EQ_INT(result.status, XR_REPL_EVAL_COMPILE_ERROR);
     ASSERT_NULL(result.proto);
     ASSERT_FALSE(xr_repl_has_last_result(iso));
+
+    xray_vm_delete(iso);
+}
+
+TEST(repl_eval_requires_explicit_valid_memory_identity) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+    XrModuleIdentityAuthority invalid = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "<eval>",
+    };
+
+    XrReplEvalResult missing = xr_repl_eval(session, iso, "1 + 2\n", NULL);
+    XrReplEvalResult malformed = xr_repl_eval(session, iso, "1 + 2\n", &invalid);
+    ASSERT_EQ_INT(missing.status, XR_REPL_EVAL_COMPILE_ERROR);
+    ASSERT_EQ_INT(malformed.status, XR_REPL_EVAL_COMPILE_ERROR);
+    ASSERT_NULL(missing.proto);
+    ASSERT_NULL(malformed.proto);
 
     xray_vm_delete(iso);
 }
@@ -791,9 +818,9 @@ TEST(repl_print_type_null_and_empty_safe) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
 
-    xr_repl_print_type(iso, NULL);
-    xr_repl_print_type(iso, "");
-    xr_repl_print_type(iso, "   \t  ");
+    xr_repl_print_type(iso, NULL, &k_repl_memory_authority);
+    xr_repl_print_type(iso, "", &k_repl_memory_authority);
+    xr_repl_print_type(iso, "   \t  ", &k_repl_memory_authority);
 
     xray_vm_delete(iso);
     ASSERT_TRUE(1);
@@ -810,7 +837,7 @@ TEST(repl_print_type_simple_expression) {
     FILE *out = tmpfile();
     ASSERT_NOT_NULL(out);
     xr_isolate_set_stdout(iso, out);
-    xr_repl_print_type(iso, "1 + 2");
+    xr_repl_print_type(iso, "1 + 2", &k_repl_memory_authority);
 
     char buf[64];
     read_tmp_output(out, buf, sizeof(buf));
@@ -863,6 +890,7 @@ RUN_TEST(repl_unit_result_does_not_replace_it);
 RUN_TEST(repl_it_reference_is_a_typed_snapshot);
 RUN_TEST(repl_unit_before_value_does_not_create_it);
 RUN_TEST(repl_it_is_reserved_for_implicit_results);
+RUN_TEST(repl_eval_requires_explicit_valid_memory_identity);
 RUN_TEST(repl_auto_echo_evaluates_expression_once);
 
 RUN_TEST_SUITE("REPL Introspection");

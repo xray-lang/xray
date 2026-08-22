@@ -1469,7 +1469,7 @@ AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
 // Returns NULL on parse error (arena is auto-discarded).
 //
 // Example:
-//   AstNode *prog = xr_parse_expression_string(session, "a + b * 2", "<eval>");
+//   AstNode *prog = xr_parse_expression_string(session, "a + b * 2", "dap-expression");
 //   if (!prog) { /* report error */ return; }
 //   AstNode *expr = prog->as.program.statements[0];
 //   ... evaluate expr ...

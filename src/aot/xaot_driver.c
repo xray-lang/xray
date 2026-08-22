@@ -2065,33 +2065,48 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xr_module_system_init_with_script(X, input_path);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    char *script_authority_root = NULL;
+    XrModuleIdentityAuthority authority = {0};
     if (options->project_root && options->project_root[0]) {
-        XrModuleIdentityAuthority authority = {
+        authority = (XrModuleIdentityAuthority) {
             .kind = XR_MODULE_IDENTITY_PROJECT,
             .namespace_id = options->project_name,
             .physical_root = options->project_root,
         };
         if (!options->project_name || !options->project_name[0] ||
-            !xr_module_resolver_set_authority(resolver, &authority)) {
+            !xr_module_identity_authority_valid(&authority)) {
             fprintf(stderr, "Error: failed to install project module identity authority\n");
+            xray_vm_delete(X);
+            return 1;
+        }
+    } else {
+        if (!xr_module_identity_script_authority_from_source(
+                input_path, &authority, &script_authority_root)) {
+            fprintf(stderr, "Error: failed to install script module identity authority\n");
+            xr_free(script_authority_root);
             xray_vm_delete(X);
             return 1;
         }
     }
     if (options->lockfile && !xr_module_resolver_set_lockfile(resolver, options->lockfile)) {
         fprintf(stderr, "Error: failed to install package lock authority\n");
+        xr_free(script_authority_root);
         xray_vm_delete(X);
         return 1;
     }
     XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         fprintf(stderr, "Error: failed to create module graph\n");
+        xr_free(script_authority_root);
         xray_vm_delete(X);
         return 1;
     }
 
     char *build_err = NULL;
-    if (xr_module_graph_build(graph, input_path, NULL, &build_err) != 0) {
+    int graph_rc = xr_module_graph_build(graph, input_path, &authority, &build_err);
+    xr_free(script_authority_root);
+    script_authority_root = NULL;
+    if (graph_rc != 0) {
         fprintf(stderr, "Error: module graph build failed: %s\n", build_err ? build_err : "?");
         xr_free(build_err);
         xr_module_graph_free(graph);

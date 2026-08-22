@@ -12,6 +12,7 @@
 #include "xdap_inspect.h"
 #include "xdap_debug.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../module/xmodule_identity.h"
 #include "../../base/xmalloc.h"
 #include "../../coro/xcoroutine.h"
 #include "../../vm/xvm_coro_state.h"
@@ -1157,8 +1158,14 @@ int xdap_run(XdapController *ctrl) {
                 XrProto *proto = NULL;
                 XdapStdoutCapture out_cap;
                 xdap_stdout_capture_begin(&out_cap);
-                int result =
-                    xr_isolate_dofile_debug(ctrl->isolate, ctrl->program_path, (void **) &proto);
+                XrModuleIdentityAuthority authority = {0};
+                char *authority_root = NULL;
+                int result = xr_module_identity_script_authority_from_source(
+                                 ctrl->program_path, &authority, &authority_root)
+                                 ? xr_isolate_dofile_debug(ctrl->isolate, ctrl->program_path,
+                                                          &authority, (void **) &proto)
+                                 : -1;
+                xr_free(authority_root);
                 xdap_stdout_capture_end(ctrl, &out_cap);
                 ctrl->debug_proto = proto;
 

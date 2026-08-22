@@ -136,7 +136,13 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
     }
 
     char *err = NULL;
-    int rc = xr_module_graph_build(graph, entry_path, NULL, &err);
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    int rc = xr_module_identity_script_authority_from_source(entry_path, &authority,
+                                                              &authority_root)
+                 ? xr_module_graph_build(graph, entry_path, &authority, &err)
+                 : -1;
+    xr_free(authority_root);
     if (rc != 0) {
         fprintf(stderr, "Error: %s\n", err ? err : "graph build failed");
         xr_free(err);

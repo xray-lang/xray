@@ -21,6 +21,7 @@
 #include "../../base/xjson.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xchecks.h"
+#include "../../module/xmodule_identity.h"
 #include "../../runtime/xisolate_api.h"
 #include "xray_vm.h"
 #include <stdio.h>
@@ -143,6 +144,17 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
         return xmcp_make_text_structured_result("Error: 'code' must not be empty", structured,
                                                 true);
     }
+    const char *module_id = xjson_get_string(arguments, "moduleId");
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = module_id,
+    };
+    if (!xr_module_identity_authority_valid(&authority)) {
+        XrJsonValue *structured = build_run_structured(false, -1, "", 0, false, false);
+        return xmcp_make_text_structured_result(
+            "Error: 'moduleId' must be an explicit valid memory-module identity", structured,
+            true);
+    }
 
     /* Resolve quotas. Negative / zero / oversized values fall back to the
      * default rather than getting silently clamped to a confusing minimum. */
@@ -194,7 +206,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_run(XmcpServer *server, const XmcpCallContex
      * reductions instead of yielding to a non-existent scheduler. The
      * wall-clock deadline above remains the sole termination guarantee for
      * tight loops. Skipping the runtime saves the per-call thread spin-up. */
-    int exec_result = xr_isolate_dostring(iso, code);
+    int exec_result = xr_isolate_dostring(iso, code, &authority);
     bool timed_out = xr_isolate_timed_out(iso);
 
     xray_vm_delete(iso);

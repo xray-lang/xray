@@ -250,7 +250,11 @@ TEST(memory_graph_rejects_missing_or_raw_eval_identity_before_publication) {
     xr_free(error);
 
     error = NULL;
-    ASSERT_EQ_INT(xr_module_graph_build_source(&graph, "<eval>", "print(42)\n", &error), -1);
+    XrModuleIdentityAuthority invalid = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "<eval>",
+    };
+    ASSERT_EQ_INT(xr_module_graph_build_source(&graph, &invalid, "print(42)\n", &error), -1);
     ASSERT_NOT_NULL(error);
     ASSERT_NOT_NULL(strstr(error, "explicit valid identity"));
     xr_free(error);

@@ -15,6 +15,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
 #include "../base/xchecks.h"
+#include "../base/xfileio.h"
 #include "../base/xlog.h"
 #include "../frontend/codegen/xcompiler.h"
 #include "../frontend/codegen/xcompiler_context.h"
@@ -23,6 +24,7 @@
 #include "../ir/xi.h"
 #include "../ir/xi_module.h"
 #include "../module/xmodule_graph.h"
+#include "../module/xmodule_identity.h"
 #include "../os/os_thread.h"
 #include "../runtime/value/xchunk.h"
 #include "../toolchain/xcompiler_session.h"
@@ -63,25 +65,79 @@ static bool compile_session_available(XrCompilerSession *session, const char *wh
     return true;
 }
 
+static bool build_compile_unit_identity(const XrModuleIdentityAuthority *authority,
+                                        const char *source_file, char **owned_identity,
+                                        XrCompileUnitIdentity *identity) {
+    *owned_identity = NULL;
+    *identity = (XrCompileUnitIdentity) {0};
+    XrModuleIdentityKind kind = authority ? authority->kind : 0;
+    bool valid = false;
+    if (kind == XR_MODULE_IDENTITY_MEMORY) {
+        valid = xr_module_identity_from_logical(authority, NULL, owned_identity);
+    } else if (kind == XR_MODULE_IDENTITY_STDLIB) {
+        char logical_path[512];
+        int logical_length = authority && authority->namespace_id
+                                 ? snprintf(logical_path, sizeof(logical_path), "%s/%s.xr",
+                                            authority->namespace_id, authority->namespace_id)
+                                 : -1;
+        valid = logical_length > 0 && (size_t) logical_length < sizeof(logical_path) &&
+                xr_module_identity_from_logical(authority, logical_path, owned_identity);
+    } else {
+        char *absolute_source = source_file ? xr_realpath(source_file) : NULL;
+        char *logical_path = NULL;
+        valid = absolute_source && xr_module_identity_from_source(
+                                       authority, absolute_source, owned_identity, &logical_path);
+        xr_free(logical_path);
+        xr_free(absolute_source);
+    }
+    if (!valid)
+        return false;
+    identity->kind = kind == XR_MODULE_IDENTITY_STDLIB
+                         ? XR_COMPILE_UNIT_STDLIB
+                         : (kind == XR_MODULE_IDENTITY_MEMORY ? XR_COMPILE_UNIT_MEMORY
+                                                              : XR_COMPILE_UNIT_USER);
+    identity->module_identity = *owned_identity;
+    identity->stdlib_module_name =
+        kind == XR_MODULE_IDENTITY_STDLIB ? authority->namespace_id : NULL;
+    return true;
+}
+
 // Compile AST to bytecode (internal)
 //
 // The compiler's for-in desugaring creates AST nodes via xr_ast_* helpers.
 // Re-enter the program arena through the active compiler session so these
 // synthetic nodes share the AST lifetime without mutating VM isolate state.
 static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
-                                     const char *source_file, const XrModuleGraph *graph,
+                                     const char *source_file,
+                                     const XrModuleIdentityAuthority *authority,
+                                     const XrModuleGraph *graph,
                                      XiModule **graph_modules, int graph_module_count,
                                      XiModule **out_module, XaAnalyzer *shared_analyzer) {
     if (out_module)
         *out_module = NULL;
     if (!compile_session_available(session, "compile_ast_internal"))
         return NULL;
+    char *owned_identity = NULL;
+    XrCompileUnitIdentity identity = {0};
+    if (!ast || !build_compile_unit_identity(authority, source_file, &owned_identity, &identity)) {
+        xr_log_warning("vm", "compile_ast_internal: explicit module authority is invalid");
+        return NULL;
+    }
     XrCompilerSessionOperationScope operation_scope;
     if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
         xr_log_warning("vm", "compile_ast_internal: compiler session is busy");
+        xr_free(owned_identity);
         return NULL;
     }
-    XR_DCHECK(ast != NULL, "compile_ast_internal: NULL ast");
+    XrCompileUnitIdentity current = xr_compiler_session_compile_unit_identity(session);
+    bool installed_identity = current.module_identity == NULL;
+    if ((installed_identity && !xr_compiler_session_set_compile_unit_identity(session, &identity)) ||
+        (!installed_identity && strcmp(current.module_identity, identity.module_identity) != 0)) {
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_free(owned_identity);
+        return NULL;
+    }
     ensure_compiler_proto_hooks();
 
     XrCompilerSessionScope ast_scope;
@@ -96,8 +152,11 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
         xr_log_warning("vm", "failed to create compiler context");
         if (has_ast_scope)
             xr_compiler_session_pop_arena(&ast_scope);
+        if (installed_identity)
+            xr_compiler_session_set_compile_unit_identity(session, NULL);
         (void) xr_compiler_session_operation_fail(
             &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_free(owned_identity);
         return NULL;
     }
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
@@ -130,6 +189,9 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
     if (has_ast_scope)
         xr_compiler_session_pop_arena(&ast_scope);
 
+    if (installed_identity)
+        xr_compiler_session_set_compile_unit_identity(session, NULL);
+
     bool operation_ok = proto ? xr_compiler_session_operation_succeed(&operation_scope)
                               : xr_compiler_session_operation_fail(
                                     &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
@@ -138,41 +200,66 @@ static XrProto *compile_ast_internal(XrCompilerSession *session, AstNode *ast,
         proto = NULL;
     }
 
+    xr_free(owned_identity);
+
     return proto;
 }
 
 XrProto *xr_compile_ast_with_source(XrCompilerSession *session, AstNode *ast,
-                                    const char *source_file) {
-    return compile_ast_internal(session, ast, source_file, NULL, NULL, 0, NULL, NULL);
+                                    const char *source_file,
+                                    const XrModuleIdentityAuthority *authority) {
+    return compile_ast_internal(session, ast, source_file, authority, NULL, NULL, 0, NULL, NULL);
 }
 
 XrProto *xr_compile_ast_in_graph(XrCompilerSession *session, XaAnalyzer *shared_analyzer,
                                  AstNode *ast, const char *source_file, const XrModuleGraph *graph,
                                  XiModule **graph_modules, int graph_module_count,
-                                 XiModule **out_module) {
-    if (!shared_analyzer || !graph || !graph_modules || graph_module_count <= 0 || !out_module)
+                                 XiModule **out_module,
+                                 const XrModuleIdentityAuthority *authority) {
+    if (!shared_analyzer || !graph || !graph_modules || graph_module_count <= 0 || !out_module ||
+        !authority)
         return NULL;
-    return compile_ast_internal(session, ast, source_file, graph, graph_modules, graph_module_count,
-                                out_module, shared_analyzer);
+    return compile_ast_internal(session, ast, source_file, authority, graph, graph_modules,
+                                graph_module_count, out_module, shared_analyzer);
 }
 
 XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *source,
-                                     const char *source_file) {
+                                     const char *source_file,
+                                     const XrModuleIdentityAuthority *authority) {
     if (!compile_session_available(session, "compile_source_with_path"))
         return NULL;
+    char *owned_identity = NULL;
+    XrCompileUnitIdentity identity = {0};
+    if (!source || !build_compile_unit_identity(authority, source_file, &owned_identity,
+                                                &identity)) {
+        xr_log_warning("vm", "compile_source_with_path: explicit module authority is invalid");
+        return NULL;
+    }
     XrCompilerSessionOperationScope operation_scope;
     if (!xr_compiler_session_operation_begin(session, &operation_scope)) {
         xr_log_warning("vm", "compile_source_with_path: compiler session is busy");
+        xr_free(owned_identity);
         return NULL;
     }
-    XR_DCHECK(source != NULL, "compile_source_with_path: NULL source");
+    XrCompileUnitIdentity current = xr_compiler_session_compile_unit_identity(session);
+    bool installed_identity = current.module_identity == NULL;
+    if ((installed_identity && !xr_compiler_session_set_compile_unit_identity(session, &identity)) ||
+        (!installed_identity && strcmp(current.module_identity, identity.module_identity) != 0)) {
+        (void) xr_compiler_session_operation_fail(
+            &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_free(owned_identity);
+        return NULL;
+    }
     ensure_compiler_proto_hooks();
     // Create compiler context FIRST to ensure type pool is valid during parsing
     XrCompilerContext *ctx = xr_compiler_context_new(session);
     if (!ctx) {
         xr_log_warning("vm", "failed to create compiler context");
+        if (installed_identity)
+            xr_compiler_session_set_compile_unit_identity(session, NULL);
         (void) xr_compiler_session_operation_fail(
             &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_free(owned_identity);
         return NULL;
     }
     xa_analyzer_set_graph(ctx->analyzer, xr_compiler_session_module_graph(session));
@@ -183,8 +270,11 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
     AstNode *ast = xr_parse_with_source(session, source, source_file);
     if (!ast) {
         xr_compiler_context_free(ctx);
+        if (installed_identity)
+            xr_compiler_session_set_compile_unit_identity(session, NULL);
         (void) xr_compiler_session_operation_fail(
             &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
+        xr_free(owned_identity);
         return NULL;
     }
 
@@ -205,6 +295,9 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
     // Free AST (not needed after compilation)
     xr_program_destroy(ast);
 
+    if (installed_identity)
+        xr_compiler_session_set_compile_unit_identity(session, NULL);
+
     bool operation_ok = proto ? xr_compiler_session_operation_succeed(&operation_scope)
                               : xr_compiler_session_operation_fail(
                                     &operation_scope, XR_COMPILER_SESSION_OPERATION_FATAL);
@@ -212,6 +305,8 @@ XrProto *xr_compile_source_with_path(XrCompilerSession *session, const char *sou
         xr_instruction_unit_free(proto);
         proto = NULL;
     }
+
+    xr_free(owned_identity);
 
     return proto;
 }

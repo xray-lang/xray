@@ -73,6 +73,14 @@ static char *abs_path(const char *rel) {
     return buf;
 }
 
+static int build_script_graph(XrModuleGraph *graph, const char *entry, char **error) {
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+        .physical_root = g_tmpdir[0] ? g_tmpdir : "/tmp",
+    };
+    return xr_module_graph_build(graph, entry, &authority, error);
+}
+
 /* ========== Tests ========== */
 
 TEST(graph_new_free) {
@@ -95,7 +103,7 @@ TEST(graph_single_file_no_imports) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("main.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("main.xr"), &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(g->spec_count, 1);
@@ -125,7 +133,7 @@ TEST(graph_linear_deps) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("a.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("a.xr"), &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_NULL(err);
     ASSERT_EQ_INT(g->spec_count, 3);
@@ -157,7 +165,7 @@ TEST(graph_diamond_deps) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("main.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("main.xr"), &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(g->spec_count, 4);
 
@@ -189,7 +197,7 @@ TEST(graph_cycle_self) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("self.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("self.xr"), &err);
     ASSERT_EQ_INT(rc, 0);
 
     rc = xr_module_graph_topological_sort(g);
@@ -214,7 +222,7 @@ TEST(graph_cycle_two) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("a.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("a.xr"), &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(g->spec_count, 2);
 
@@ -241,7 +249,7 @@ TEST(graph_cycle_three) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("a.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("a.xr"), &err);
     ASSERT_EQ_INT(rc, 0);
     ASSERT_EQ_INT(g->spec_count, 3);
 
@@ -269,9 +277,9 @@ TEST(graph_find_by_canonical) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    xr_module_graph_build(g, abs_path("main.xr"), NULL, &err);
+    build_script_graph(g, abs_path("main.xr"), &err);
 
-    /* The entry's canonical is its absolute path */
+    /* The entry is indexed by its exact typed relocatable identity. */
     int idx = xr_module_graph_find(g, g->specs[0].canonical);
     ASSERT_EQ_INT(idx, 0);
 
@@ -289,7 +297,7 @@ TEST(graph_entry_not_found) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, "/tmp/nonexistent_xray_file_9999.xr", NULL, &err);
+    int rc = build_script_graph(g, "/tmp/nonexistent_xray_file_9999.xr", &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     xr_free(err);
@@ -307,7 +315,7 @@ TEST(graph_parse_failure_is_build_failure) {
     XrModuleGraph *g = xr_module_graph_new(g_session, r);
 
     char *err = NULL;
-    int rc = xr_module_graph_build(g, abs_path("invalid.xr"), NULL, &err);
+    int rc = build_script_graph(g, abs_path("invalid.xr"), &err);
     ASSERT_EQ_INT(rc, -1);
     ASSERT_NOT_NULL(err);
     ASSERT_NOT_NULL(strstr(err, "failed to parse module"));

@@ -20,6 +20,7 @@
 #include "xray.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
+#include "../../module/xmodule_identity.h"
 #include "../../module/xmodule_resolver.h"
 #include "../../module/xproject.h"
 #include "../../runtime/xisolate_api.h"
@@ -134,6 +135,7 @@ typedef struct {
     bool dump_ic;
     bool timings;
     const char *semantic_plan;
+    const char *module_id;
     int num_workers;          // 0 = auto-detect
     int coro_watch_interval;  // 0 = disabled, >0 = refresh interval(ms)
     int coro_http_port;       // 0 = disabled, >0 = HTTP port
@@ -297,11 +299,19 @@ static XrVMRuntime *create_run_isolate(const RunOptions *opts, const char *scrip
 
 // Execute code string and cleanup isolate
 static int run_string(const RunOptions *opts, const char *code) {
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = opts->module_id,
+    };
+    if (!xr_module_identity_authority_valid(&authority)) {
+        xr_cli_error("run", "stdin source requires --module-id with a valid memory identity");
+        return 1;
+    }
     XrVMRuntime *iso = create_run_isolate(opts, NULL, 0, NULL);
     if (!iso)
         return 1;
 
-    int result = xr_isolate_dostring(iso, code);
+    int result = xr_isolate_dostring(iso, code, &authority);
     xray_vm_delete(iso);
     return (result != 0) ? 1 : 0;
 }
@@ -316,6 +326,7 @@ static void fill_run_options(RunOptions *opts, const XrCliInvocation *inv) {
     opts->dump_ic = xr_cli_opt_bool(&inv->options, "dump-ic");
     opts->timings = xr_cli_opt_bool(&inv->options, "timings");
     opts->semantic_plan = xr_cli_opt_string(&inv->options, "semantic-plan", NULL);
+    opts->module_id = xr_cli_opt_string(&inv->options, "module-id", NULL);
     opts->num_workers = xr_cli_opt_int(&inv->options, "workers", 0);
     opts->coro_watch_interval = xr_cli_opt_int(&inv->options, "coro-watch", 0);
     opts->coro_http_port = xr_cli_opt_int(&inv->options, "coro-http", 0);
@@ -418,11 +429,36 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
         XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
         if (resolver) {
+            XrModuleIdentityAuthority entry_authority = {0};
+            char *script_root = NULL;
+            if (project) {
+                entry_authority = (XrModuleIdentityAuthority) {
+                    .kind = XR_MODULE_IDENTITY_PROJECT,
+                    .namespace_id = project->name,
+                    .physical_root = project->root,
+                };
+            } else if (!xr_module_identity_script_authority_from_source(
+                           file, &entry_authority, &script_root)) {
+                fprintf(stderr, "Error: cannot establish script module identity authority\n");
+                xr_project_free(project);
+                xray_vm_delete(iso);
+                return XR_CLI_EXIT_FAIL;
+            }
+            if (!xr_module_identity_authority_valid(&entry_authority)) {
+                fprintf(stderr, "Error: invalid project/script module identity authority\n");
+                xr_free(script_root);
+                xr_project_free(project);
+                xray_vm_delete(iso);
+                return XR_CLI_EXIT_FAIL;
+            }
             XrModuleGraph *graph =
                 xr_module_graph_new(xr_compiler_session_current_for_isolate(iso), resolver);
             if (graph) {
                 char *err = NULL;
-                if (xr_module_graph_build(graph, file, NULL, &err) == 0) {
+                int graph_rc = xr_module_graph_build(graph, file, &entry_authority, &err);
+                xr_free(script_root);
+                script_root = NULL;
+                if (graph_rc == 0) {
                     xr_module_graph_topological_sort(graph);
                     if (graph->has_cycle) {
                         fprintf(stderr, "Error: %s\n",
@@ -541,7 +577,15 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                 if (graph)
                     xr_module_graph_free(graph);
             }
+            xr_free(script_root);
         }
+    }
+
+    if (!active_graph) {
+        fprintf(stderr, "Error: failed to build authoritative module graph\n");
+        xr_project_free(project);
+        xray_vm_delete(iso);
+        return XR_CLI_EXIT_FAIL;
     }
 
     /* Start coroutine monitor (if enabled) */
@@ -550,7 +594,9 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     }
 
     /* Execute file */
-    int result = xr_isolate_dofile(iso, file);
+    const XrModuleIdentityAuthority *entry_authority =
+        &active_graph->specs[active_graph->entry_index].authority;
+    int result = xr_isolate_dofile(iso, file, entry_authority);
 
     xr_compiler_session_set_module_graph(session, NULL);
     if (active_graph_analyzer) {

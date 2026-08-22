@@ -128,18 +128,26 @@ struct XrCompilerSession;
 struct XiModule;
 struct XrModuleGraph;
 struct XaAnalyzer;
+struct XrModuleIdentityAuthority;
 XR_FUNC XrProto *xr_compile_ast_with_source(struct XrCompilerSession *session, struct AstNode *ast,
-                                            const char *source_file);
+                                            const char *source_file,
+                                            const struct XrModuleIdentityAuthority *authority);
 XR_FUNC XrProto *xr_compile_ast_in_graph(struct XrCompilerSession *session,
                                          struct XaAnalyzer *shared_analyzer, struct AstNode *ast,
                                          const char *source_file, const struct XrModuleGraph *graph,
                                          struct XiModule **graph_modules, int graph_module_count,
-                                         struct XiModule **out_module);
+                                         struct XiModule **out_module,
+                                         const struct XrModuleIdentityAuthority *authority);
 XR_FUNC XrProto *xr_compile_source_with_path(struct XrCompilerSession *session, const char *source,
-                                             const char *source_file);
-XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source);
-XR_FUNC int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename);
-XR_FUNC int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename, void **out_proto);
+                                             const char *source_file,
+                                             const struct XrModuleIdentityAuthority *authority);
+XR_FUNC int xr_isolate_dostring(XrVMRuntime *isolate, const char *source,
+                                const struct XrModuleIdentityAuthority *authority);
+XR_FUNC int xr_isolate_dofile(XrVMRuntime *isolate, const char *filename,
+                              const struct XrModuleIdentityAuthority *authority);
+XR_FUNC int xr_isolate_dofile_debug(XrVMRuntime *isolate, const char *filename,
+                                    const struct XrModuleIdentityAuthority *authority,
+                                    void **out_proto);
 XR_FUNC int xr_execute(XrVMRuntime *isolate, struct XrProto *code);
 XR_FUNC void xr_free_code(XrVMRuntime *isolate, struct XrProto *proto);
 

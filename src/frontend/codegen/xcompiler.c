@@ -17,7 +17,6 @@
 #include "xcompiler_context.h"
 #include "../../analysis/xglobal_producer.h"
 #include "../../base/xchecks.h"
-#include "../../base/xfileio.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi_pipeline.h"
 #include "../../module/xmodule_graph.h"
@@ -33,32 +32,27 @@
 #include <string.h>
 
 static uint32_t compiler_graph_module_id(const XrModuleGraph *graph, const AstNode *ast,
-                                         const char *source_file) {
+                                         const char *module_identity) {
     uint32_t match = XG_NO_ID;
-    char *source_path = source_file ? xr_realpath(source_file) : NULL;
-    if (!graph || !ast || !graph->topo_order || !source_path) {
-        xr_free(source_path);
+    if (!graph || !ast || !graph->topo_order)
         return XG_NO_ID;
-    }
     for (int ti = 0; ti < graph->topo_count; ti++) {
         int index = graph->topo_order[ti];
         const XrModuleSpec *spec = &graph->specs[index];
         /* The graph owns the exact analyzed AST used to produce its evidence.
          * Imports may reparse that module before bytecode generation, so the
-         * canonical graph source path is the durable identity in that case. */
-        char *spec_path = spec->source_path ? xr_realpath(spec->source_path) : NULL;
-        bool same_module = spec->ast == ast ||
-                           (spec_path && strcmp(spec_path, source_path) == 0);
-        xr_free(spec_path);
+         * explicit typed module identity is the only durable reparse join. */
+        bool same_module =
+            spec->ast == ast ||
+            (module_identity && spec->canonical &&
+             strcmp(spec->canonical, module_identity) == 0);
         if (!same_module)
             continue;
         if (match != XG_NO_ID) {
-            xr_free(source_path);
             return XG_NO_ID;
         }
         match = (uint32_t) (ti + 1);
     }
-    xr_free(source_path);
     return match;
 }
 
@@ -220,8 +214,10 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
             ctx->module_graph ? ctx->module_graph
                               : xr_compiler_session_module_graph(ctx->compiler_session);
         if (evidence_graph) {
+            XrCompileUnitIdentity compile_identity =
+                xr_compiler_session_compile_unit_identity(ctx->compiler_session);
             uint32_t module_id =
-                compiler_graph_module_id(evidence_graph, ast, ctx->source_file);
+                compiler_graph_module_id(evidence_graph, ast, compile_identity.module_identity);
             if (module_id == XG_NO_ID ||
                 !xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
                     &global_evidence, evidence_graph, XG_BUILD_DEV, 0, NULL, 0,

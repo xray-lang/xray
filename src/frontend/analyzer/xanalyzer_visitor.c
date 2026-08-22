@@ -3167,19 +3167,23 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
         return NULL;
 
     /* Resolve the import specifier to a canonical ID */
-    const XrModuleIdentityAuthority *authority = NULL;
-    for (int i = 0; analyzer->current_file && i < graph->spec_count; i++) {
-        if (graph->specs[i].source_path &&
-            strcmp(graph->specs[i].source_path, analyzer->current_file) == 0) {
-            if (graph->specs[i].authority.physical_root)
-                authority = &graph->specs[i].authority;
-            break;
-        }
+    const XrModuleSpec *owner = NULL;
+    for (int i = 0; analyzer->current_module_identity && i < graph->spec_count; i++) {
+        const XrModuleSpec *candidate = &graph->specs[i];
+        if (!candidate->canonical ||
+            strcmp(candidate->canonical, analyzer->current_module_identity) != 0)
+            continue;
+        if (owner)
+            return NULL;
+        owner = candidate;
     }
+    if (!owner || !owner->source_path ||
+        !xr_module_identity_authority_valid(&owner->authority))
+        return NULL;
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, module_name,
-                                             analyzer->current_file, authority, &mid, &err);
+    int rc = xr_module_resolver_resolve(graph->resolver, module_name, owner->source_path,
+                                        &owner->authority, &mid, &err);
     xr_free(err);
     if (rc != 0)
         return NULL;

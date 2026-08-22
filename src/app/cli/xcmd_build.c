@@ -1992,7 +1992,13 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
         return 1;
     }
 
-    XrBundle *bundle = xr_bundle_create_ex(X, input, XR_BUNDLE_DEFAULT);
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    XrBundle *bundle =
+        xr_module_identity_script_authority_from_source(input, &authority, &authority_root)
+            ? xr_bundle_create_ex(X, input, &authority, XR_BUNDLE_DEFAULT)
+            : NULL;
+    xr_free(authority_root);
     if (!bundle) {
         fprintf(stderr, "Error: bytecode bundling failed\n");
         xray_vm_delete(X);

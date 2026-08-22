@@ -23,6 +23,7 @@
 #include "../../module/xproto_codec.h"
 #include "../../module/xmodule.h"
 #include "../../module/xmodule_graph.h"
+#include "../../module/xmodule_identity.h"
 #include "../../module/xmodule_resolver.h"
 #include "../../runtime/value/xchunk.h"
 #include "../../toolchain/xcompiler_session.h"
@@ -87,7 +88,14 @@ static bool prepare_compile_graph(XrVMRuntime *X, XrCompilerSession *session,
         return false;
     }
     char *graph_error = NULL;
-    if (xr_module_graph_build(graph, input_file, NULL, &graph_error) != 0) {
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    int graph_rc = xr_module_identity_script_authority_from_source(
+                       input_file, &authority, &authority_root)
+                       ? xr_module_graph_build(graph, input_file, &authority, &graph_error)
+                       : -1;
+    xr_free(authority_root);
+    if (graph_rc != 0) {
         xr_cli_error("compile", "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);
         xr_module_graph_free(graph);
@@ -216,7 +224,9 @@ XR_FUNC int cmd_compile(const XrCliInvocation *inv) {
         xr_cli_error("compile", "cannot open '%s'", input_file);
         goto cleanup;
     }
-    proto = xr_compile_source_with_path(session, source, input_file);
+    const XrModuleIdentityAuthority *entry_authority =
+        &graph->specs[graph->entry_index].authority;
+    proto = xr_compile_source_with_path(session, source, input_file, entry_authority);
     if (!proto) {
         xr_cli_error("compile", "compilation failed");
         goto cleanup;

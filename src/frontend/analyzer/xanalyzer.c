@@ -816,6 +816,23 @@ static XrModuleSpec *xa_graph_spec_for_ast(XaAnalyzer *analyzer, XrAstNode *ast)
     return NULL;
 }
 
+static XrModuleSpec *xa_graph_spec_for_identity(XaAnalyzer *analyzer,
+                                                const char *module_identity) {
+    XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
+    if (!graph || !module_identity || !xr_module_identity_valid(module_identity, NULL))
+        return NULL;
+    XrModuleSpec *match = NULL;
+    for (int i = 0; i < graph->spec_count; i++) {
+        if (!graph->specs[i].canonical ||
+            strcmp(graph->specs[i].canonical, module_identity) != 0)
+            continue;
+        if (match)
+            return NULL;
+        match = &graph->specs[i];
+    }
+    return match;
+}
+
 static void xa_report_poisoned_export_metadata(XaAnalyzer *analyzer, const AstNode *node,
                                                const char *name) {
     char msg[256];
@@ -849,13 +866,15 @@ static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNo
         return NULL;
 
     const XrModuleSpec *owner = xa_graph_spec_for_ast(analyzer, ast);
-    const char *importer =
-        owner && owner->source_path ? owner->source_path : analyzer->current_file;
+    if (!owner)
+        owner = xa_graph_spec_for_identity(analyzer, analyzer->current_module_identity);
+    if (!owner || !owner->source_path ||
+        !xr_module_identity_authority_valid(&owner->authority))
+        return NULL;
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(
-        graph->resolver, from_path, importer,
-        owner && owner->authority.physical_root ? &owner->authority : NULL, &mid, &err);
+    int rc = xr_module_resolver_resolve(graph->resolver, from_path, owner->source_path,
+                                        &owner->authority, &mid, &err);
     xr_free(err);
     if (rc != 0)
         return NULL;
@@ -1965,6 +1984,8 @@ void xa_analyzer_analyze(XaAnalyzer *analyzer, const char *file, XrAstNode *ast)
     XrModuleSpec *module_spec = xa_graph_spec_for_ast(analyzer, ast);
     XrCompileUnitIdentity compile_identity =
         xr_compiler_session_compile_unit_identity(analyzer->compiler_session);
+    if (!module_spec)
+        module_spec = xa_graph_spec_for_identity(analyzer, compile_identity.module_identity);
     analyzer->current_module_is_stdlib = module_spec
                                              ? module_spec->kind == XR_MOD_STDLIB
                                              : compile_identity.kind == XR_COMPILE_UNIT_STDLIB;

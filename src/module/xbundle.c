@@ -62,7 +62,8 @@ static bool bundle_add_entry(XrBundle *bundle, const char *path, const uint8_t *
 }
 
 static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleResolver *resolver,
-                                         const char *entry_path) {
+                                         const char *entry_path,
+                                         const XrModuleIdentityAuthority *authority) {
     XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         xr_log_warning("bundle", "failed to create module graph");
@@ -70,7 +71,7 @@ static XrModuleGraph *bundle_build_graph(XrCompilerSession *session, XrModuleRes
     }
 
     char *err = NULL;
-    if (xr_module_graph_build(graph, entry_path, NULL, &err) != 0) {
+    if (xr_module_graph_build(graph, entry_path, authority, &err) != 0) {
         xr_log_warning("bundle", "module graph build failed: %s", err ? err : "?");
         xr_free(err);
         xr_module_graph_free(graph);
@@ -175,7 +176,8 @@ static bool bundle_compile_graph(XrVMRuntime *X, XrCompilerSession *session, XaA
 
         XrProto *proto =
             xr_compile_ast_in_graph(session, analyzer, spec->ast, spec->source_path, graph,
-                                    graph_modules, graph->topo_count, &graph_modules[ti]);
+                                    graph_modules, graph->topo_count, &graph_modules[ti],
+                                    &spec->authority);
         if (!proto) {
             xr_log_warning("bundle", "compilation failed: %s", spec->source_path);
             goto cleanup;
@@ -212,10 +214,13 @@ cleanup:
 
 /* ========== Public API ========== */
 
-XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFlags flags) {
+XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file,
+                              const XrModuleIdentityAuthority *authority, XrBundleFlags flags) {
     XR_DCHECK(X != NULL, "bundle_create_ex: NULL isolate");
     XR_DCHECK(entry_file != NULL, "bundle_create_ex: NULL entry_file");
-    if (!X || !entry_file)
+    if (!X || !entry_file || !authority ||
+        !xr_module_identity_authority_valid(authority) ||
+        authority->kind == XR_MODULE_IDENTITY_MEMORY)
         return NULL;
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
@@ -244,7 +249,8 @@ XrBundle *xr_bundle_create_ex(XrVMRuntime *X, const char *entry_file, XrBundleFl
         .lockfile = NULL,
     };
     XrModuleResolver *resolver = xr_module_resolver_new(&rcfg);
-    XrModuleGraph *graph = resolver ? bundle_build_graph(session, resolver, entry_file) : NULL;
+    XrModuleGraph *graph =
+        resolver ? bundle_build_graph(session, resolver, entry_file, authority) : NULL;
     XaAnalyzer *graph_analyzer = graph ? bundle_analyze_dependency_exports(session, graph) : NULL;
     XrModuleGraph *previous_graph = xr_compiler_session_module_graph(session);
     if (!resolver || !graph || !graph_analyzer) {

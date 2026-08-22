@@ -3285,8 +3285,10 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(entry_program != NULL);
 
     XrModuleResolverConfig cfg = {0};
-    cfg.authority.kind = XR_MODULE_IDENTITY_SCRIPT;
-    cfg.authority.physical_root = tmpdir;
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+        .physical_root = tmpdir,
+    };
     XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
     ASSERT(resolver != NULL);
     XrModuleId lib_id;
@@ -3295,59 +3297,59 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XrModuleId callback_id;
     char *resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path,
-                                      &cfg.authority, &lib_id, &resolve_err) == 0);
+                                      &authority, &lib_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_path,
-                                      &cfg.authority, &reexport_id, &resolve_err) == 0);
+                                      &authority, &reexport_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path,
-                                      &cfg.authority, &star_id, &resolve_err) == 0);
+                                      &authority, &star_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_path,
-                                      &cfg.authority, &callback_id, &resolve_err) == 0);
+                                      &authority, &callback_id, &resolve_err) == 0);
     xr_free(resolve_err);
     char *entry_realpath = xr_test_realpath_alloc(entry_path);
     char *entry_canonical = NULL;
     char *entry_logical = NULL;
     ASSERT(entry_realpath != NULL);
-    ASSERT(xr_module_identity_from_source(&cfg.authority, entry_realpath, &entry_canonical,
+    ASSERT(xr_module_identity_from_source(&authority, entry_realpath, &entry_canonical,
                                           &entry_logical));
 
     XrModuleSpec specs[5] = {{.canonical = lib_id.canonical,
                               .logical_path = lib_id.logical_path,
                               .source_path = lib_id.source_path,
-                              .authority = cfg.authority,
+                              .authority = authority,
                               .ast = lib_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 0},
                              {.canonical = reexport_id.canonical,
                               .logical_path = reexport_id.logical_path,
                               .source_path = reexport_id.source_path,
-                              .authority = cfg.authority,
+                              .authority = authority,
                               .ast = reexport_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 1},
                              {.canonical = star_id.canonical,
                               .logical_path = star_id.logical_path,
                               .source_path = star_id.source_path,
-                              .authority = cfg.authority,
+                              .authority = authority,
                               .ast = star_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 2},
                              {.canonical = callback_id.canonical,
                               .logical_path = callback_id.logical_path,
                               .source_path = callback_id.source_path,
-                              .authority = cfg.authority,
+                              .authority = authority,
                               .ast = callback_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 3},
                              {.canonical = entry_canonical,
                               .logical_path = entry_logical,
                               .source_path = entry_realpath,
-                              .authority = cfg.authority,
+                              .authority = authority,
                               .ast = entry_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 4}};

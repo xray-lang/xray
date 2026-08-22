@@ -44,6 +44,11 @@ XR_FUNC bool xr_module_identity_from_source(const XrModuleIdentityAuthority *aut
                                             const char *source_path, char **identity_out,
                                             char **logical_path_out);
 
+/* Build an explicit script authority rooted at the source file's directory.
+ * The returned root is xr_malloc-owned and backs authority->physical_root. */
+XR_FUNC bool xr_module_identity_script_authority_from_source(
+    const char *source_path, XrModuleIdentityAuthority *authority, char **root_out);
+
 /* Validate the exact typed identity grammar and optionally return its kind. */
 XR_FUNC bool xr_module_identity_valid(const char *identity, XrModuleIdentityKind *kind_out);
 

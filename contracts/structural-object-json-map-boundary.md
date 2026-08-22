@@ -107,6 +107,6 @@ anchor-sha256: src/runtime/class/xinstance.c 6825cc9a5d9db270bd569619a0ca5cf68aa
 anchor-sha256: src/runtime/object/xjson.c 4e810c0a2821bbdc2735b88468e0c8229b15931c7b5def75d106cc957c22329c
 anchor-sha256: src/runtime/object/xjson_serde.c fedc692b08039ca3005dd3db5cbcc1e2917217cda878b17f2d7f1515389c7d2b
 anchor-sha256: stdlib/types/json.xr 9e473fe3884a61f6e903c64d3512b27a9d2d2f25f3586226090eb3d644e8486d
-anchor-sha256: src/module/xproto_codec.h 1246f10869b07bafec0150c8e5c26fc272014c8ffa6bcb1e94023a1e1991d1bf
+anchor-sha256: src/module/xproto_codec.h 109ec696fedec4c86fafe43632f8551441f8f1e4c2576a00701c1f2f2750aa3d
 anchor-sha256: src/module/xproto_codec.c fd0259678a73d79bd9703d4c736f2fb3ef9f9b67c3b8a172416f0e6bbce85688
 anchor-sha256: src/aot/xaot_verify.c ab5e9bb717d8197a6bc665cb30aa77f448ee9ac045621fb9562890507b5fbfb5

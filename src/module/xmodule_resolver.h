@@ -83,8 +83,6 @@ typedef struct {
      */
     struct XrLockfile *lockfile;
 
-    /* Required for project/script source imports. Borrowed for resolver lifetime. */
-    XrModuleIdentityAuthority authority;
 } XrModuleResolverConfig;
 
 /* ========== Resolver Instance ========== */
@@ -92,8 +90,6 @@ typedef struct {
 typedef struct XrModuleResolver {
     XrModuleResolverConfig config;
     XrHashMap *cache; /* specifier+importer → XrModuleId (owned) */
-    char *authority_namespace; /* owned backing for config.authority */
-    char *authority_root;      /* owned backing for config.authority */
 } XrModuleResolver;
 
 /* ========== Lifecycle ========== */
@@ -101,9 +97,6 @@ typedef struct XrModuleResolver {
 XR_FUNC XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg);
 XR_FUNC void xr_module_resolver_free(XrModuleResolver *r);
 
-/* Configure the sole project/script identity authority before resolution starts. */
-XR_FUNC bool xr_module_resolver_set_authority(XrModuleResolver *r,
-                                              const XrModuleIdentityAuthority *authority);
 XR_FUNC bool xr_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockfile *lockfile);
 
 /* ========== Resolution API ========== */

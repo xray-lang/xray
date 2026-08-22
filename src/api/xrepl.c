@@ -28,6 +28,7 @@
 #include "../frontend/parser/xast_api.h"
 #include "../frontend/lexer/xlex.h"
 #include "../ir/xi.h"
+#include "../module/xmodule_identity.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
@@ -575,12 +576,15 @@ static void repl_abandon_declaration(
 }
 
 XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
-                              const char *source) {
+                              const char *source,
+                              const XrModuleIdentityAuthority *authority) {
     XrReplEvalResult result = {.proto = NULL, .status = XR_REPL_EVAL_COMPILE_ERROR};
     XR_DCHECK(session != NULL, "xr_repl_eval: NULL compiler session");
     XR_DCHECK(vm_host != NULL, "xr_repl_eval: NULL VM host");
     XR_DCHECK(source != NULL, "xr_repl_eval: NULL source");
-    if (!session || !vm_host || !source)
+    if (!session || !vm_host || !source || !authority ||
+        authority->kind != XR_MODULE_IDENTITY_MEMORY ||
+        !xr_module_identity_authority_valid(authority))
         return result;
     XR_DCHECK(xr_compiler_session_vm_host(session) == vm_host,
               "xr_repl_eval: compiler session VM host mismatch");
@@ -675,7 +679,29 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
      * the analyzer can resolve names from prior inputs. */
     xr_repl_symbols_seed_context(repl_symbols, ctx);
 
+    char *module_identity = NULL;
+    XrCompileUnitIdentity compile_identity = {
+        .kind = XR_COMPILE_UNIT_MEMORY,
+    };
+    if (!xr_module_identity_from_logical(authority, NULL, &module_identity)) {
+        xr_compiler_context_free(ctx);
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        return result;
+    }
+    compile_identity.module_identity = module_identity;
+    if (!xr_compiler_session_set_compile_unit_identity(session, &compile_identity)) {
+        xr_compiler_context_free(ctx);
+        xr_free(module_identity);
+        repl_abandon_declaration(
+            &declaration_scope,
+            XR_COMPILER_SESSION_REPL_DECLARATION_ABANDONED_COMPILE);
+        return result;
+    }
     XrProto *proto = xr_compile(ctx, ast);
+    xr_compiler_session_set_compile_unit_identity(session, NULL);
+    xr_free(module_identity);
 
     if (proto && !ctx->had_error && !xr_entry_plan_derive(proto)) {
         xr_instruction_unit_free(proto);
@@ -828,7 +854,8 @@ void xr_repl_print_vars(XrVMRuntime *isolate) {
         printf("  (no bindings)\n");
 }
 
-void xr_repl_print_type(XrVMRuntime *isolate, const char *expr) {
+void xr_repl_print_type(XrVMRuntime *isolate, const char *expr,
+                        const XrModuleIdentityAuthority *authority) {
     XR_DCHECK(isolate != NULL, "xr_repl_print_type: NULL isolate");
 
     if (!expr)
@@ -852,7 +879,7 @@ void xr_repl_print_type(XrVMRuntime *isolate, const char *expr) {
     snprintf(src, src_size, "print(typeName(%s))\n", expr);
 
     XrCompilerSession *session = repl_compiler_session_for_isolate(isolate);
-    XrReplEvalResult result = xr_repl_eval(session, isolate, src);
+    XrReplEvalResult result = xr_repl_eval(session, isolate, src, authority);
     xr_free(src);
 
     if (!result.proto)

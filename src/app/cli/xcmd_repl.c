@@ -22,6 +22,7 @@
 #include "xray_vm.h"
 #include "../../api/xrepl.h"
 #include "../../runtime/xisolate_api.h"
+#include "../../module/xmodule_identity.h"
 #include "../../vm/xvm_internal.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../base/xmalloc.h"
@@ -62,6 +63,7 @@ typedef struct {
     XrProto **protos;  // Compiled protos (not freed per-input)
     int proto_count;
     int proto_capacity;
+    XrModuleIdentityAuthority authority;
 } ReplState;
 
 #ifdef HAS_READLINE
@@ -455,7 +457,8 @@ static void execute_code(ReplState *state, const char *code) {
     // Compile and execute once. Publishing declarations and `it` is part of
     // xr_repl_eval's successful-transaction boundary.
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
-    XrReplEvalResult result = xr_repl_eval(session, state->isolate, code);
+    XrReplEvalResult result =
+        xr_repl_eval(session, state->isolate, code, &state->authority);
     if (!result.proto) {
         return;  // compile error already reported
     }
@@ -572,7 +575,7 @@ static bool handle_command(ReplState *state, const char *input) {
 
     // .type <expr> — show runtime type of an expression
     if (strncmp(input, ".type", 5) == 0 && (input[5] == '\0' || input[5] == ' ')) {
-        xr_repl_print_type(state->isolate, input + 5);
+        xr_repl_print_type(state->isolate, input + 5, &state->authority);
         return true;
     }
 
@@ -669,6 +672,14 @@ XR_FUNC int cmd_repl(const XrCliInvocation *inv) {
     XR_DCHECK(inv != NULL, "inv is NULL");
 
     ReplState state = {0};
+    state.authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = xr_cli_opt_string(&inv->options, "module-id", NULL),
+    };
+    if (!xr_module_identity_authority_valid(&state.authority)) {
+        xr_cli_error("repl", "--module-id must be an explicit valid memory-module identity");
+        return XR_CLI_EXIT_USAGE;
+    }
     state.use_color = terminal_supports_color();
     if (xr_cli_opt_bool(&inv->options, "no-color"))
         state.use_color = false;

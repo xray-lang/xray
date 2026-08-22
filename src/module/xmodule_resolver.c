@@ -80,35 +80,6 @@ static bool is_relative_specifier(const char *spec) {
 
 /* ========== Lifecycle ========== */
 
-static bool resolver_copy_authority(XrModuleResolver *r,
-                                    const XrModuleIdentityAuthority *authority) {
-    char *namespace_copy = NULL;
-    char *root_copy = NULL;
-    if (authority && authority->namespace_id) {
-        namespace_copy = xr_strdup(authority->namespace_id);
-        if (!namespace_copy)
-            return false;
-    }
-    if (authority && authority->physical_root) {
-        root_copy = xr_strdup(authority->physical_root);
-        if (!root_copy) {
-            xr_free(namespace_copy);
-            return false;
-        }
-    }
-    xr_free(r->authority_namespace);
-    xr_free(r->authority_root);
-    r->authority_namespace = namespace_copy;
-    r->authority_root = root_copy;
-    memset(&r->config.authority, 0, sizeof(r->config.authority));
-    if (authority) {
-        r->config.authority.kind = authority->kind;
-        r->config.authority.namespace_id = r->authority_namespace;
-        r->config.authority.physical_root = r->authority_root;
-    }
-    return true;
-}
-
 XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg) {
     XR_DCHECK(cfg != NULL, "xr_module_resolver_new: NULL config");
 
@@ -117,26 +88,12 @@ XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg) {
         return NULL;
 
     r->config = *cfg;
-    memset(&r->config.authority, 0, sizeof(r->config.authority));
-    if (!resolver_copy_authority(r, &cfg->authority)) {
-        xr_free(r);
-        return NULL;
-    }
     r->cache = xr_hashmap_new();
     if (!r->cache) {
-        xr_free(r->authority_namespace);
-        xr_free(r->authority_root);
         xr_free(r);
         return NULL;
     }
     return r;
-}
-
-bool xr_module_resolver_set_authority(XrModuleResolver *r,
-                                      const XrModuleIdentityAuthority *authority) {
-    if (!r || !authority || !authority->physical_root || xr_hashmap_count(r->cache) != 0)
-        return false;
-    return resolver_copy_authority(r, authority);
 }
 
 bool xr_module_resolver_set_lockfile(XrModuleResolver *r, XrLockfile *lockfile) {
@@ -164,8 +121,6 @@ void xr_module_resolver_free(XrModuleResolver *r) {
         xr_hashmap_foreach(r->cache, free_cached_entry, NULL);
         xr_hashmap_free(r->cache);
     }
-    xr_free(r->authority_namespace);
-    xr_free(r->authority_root);
     xr_free(r);
 }
 
@@ -312,9 +267,19 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
 
 /* ========== Resolution: relative file/directory ========== */
 
-static int resolve_relative(XrModuleResolver *r, const char *specifier, const char *importer_path,
+static int resolve_relative(const char *specifier, const char *importer_path,
                             const XrModuleIdentityAuthority *importer_authority,
                             XrModuleId *out_id, char **err_buf) {
+    const XrModuleIdentityAuthority *authority = importer_authority;
+    if (!xr_module_identity_authority_valid(authority) ||
+        (authority->kind != XR_MODULE_IDENTITY_PROJECT &&
+         authority->kind != XR_MODULE_IDENTITY_SCRIPT &&
+         authority->kind != XR_MODULE_IDENTITY_PACKAGE)) {
+        if (err_buf)
+            *err_buf = make_error("relative import '%s' requires explicit source authority",
+                                  specifier);
+        return -1;
+    }
     /* Determine base directory from importer path */
     char *base_dir = NULL;
     if (importer_path) {
@@ -343,8 +308,6 @@ static int resolve_relative(XrModuleResolver *r, const char *specifier, const ch
         return -1;
     }
 
-    const XrModuleIdentityAuthority *authority =
-        importer_authority ? importer_authority : &r->config.authority;
     out_id->kind = authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE;
     if (!xr_module_identity_from_source(authority, resolved, &out_id->canonical,
                                         &out_id->logical_path)) {
@@ -499,10 +462,8 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
     if (err_buf)
         *err_buf = NULL;
 
-    const XrModuleIdentityAuthority *effective_authority =
-        importer_authority ? importer_authority : &r->config.authority;
     /* Check cache */
-    char *cache_key = make_cache_key(specifier, importer_path, effective_authority);
+    char *cache_key = make_cache_key(specifier, importer_path, importer_authority);
     if (cache_key) {
         XrModuleId *cached = (XrModuleId *) xr_hashmap_get(r->cache, cache_key);
         if (cached) {
@@ -525,7 +486,7 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
      * package import and adding a dependency could take over a directory one.
      * Nothing in the tree used it. */
     if (is_relative_specifier(specifier)) {
-        rc = resolve_relative(r, specifier, importer_path, importer_authority, out_id, err_buf);
+        rc = resolve_relative(specifier, importer_path, importer_authority, out_id, err_buf);
     } else if (strchr(specifier, '/') != NULL) {
         rc = resolve_package(r, specifier, out_id, err_buf);
     } else {
