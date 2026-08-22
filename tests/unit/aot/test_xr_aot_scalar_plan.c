@@ -51,6 +51,8 @@ struct XrCEmissionPlan {
     uint32_t recipe_argument_count;
     XrCCleanupEmissionView *cleanups;
     uint32_t cleanup_count;
+    XrCFunctionAbiEmissionView *function_abis;
+    uint32_t function_abi_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -178,6 +180,21 @@ static XrTargetProfile *build_exact_profile(void) {
     return build_profile(false, false);
 }
 
+static bool build_and_attach_scalar_fixture_semantic(XiFunc *function, char *error,
+                                                      size_t error_size) {
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:scalar-plan-unit-fixture-v1",
+        .path = "scalar-plan-unit-fixture.xr",
+        .name = "scalar_plan_unit_fixture",
+        .init = function,
+    };
+    REQUIRE(function != NULL && function->module == NULL);
+    function->module = &fixture_module;
+    bool built = xr_semantic_plan_build_and_attach(function, error, error_size);
+    function->module = NULL;
+    return built;
+}
+
 static ScalarFixture build_scalar_fixture(void) {
     ScalarFixture fixture = {0};
     fixture.function = xi_func_new("scalar_target_cutover", &scalar_int);
@@ -193,7 +210,7 @@ static ScalarFixture build_scalar_fixture(void) {
     xi_block_set_return(entry, fixture.integer);
     fixture.function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(fixture.function, error, sizeof(error)));
     return fixture;
 }
 
@@ -400,7 +417,7 @@ static void test_cross_function_value_substitution_fails_closed(void) {
     root->children_cap = 1;
     root->nchildren = 1;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     REQUIRE(root->semantic_plan == child->semantic_plan);
 
     XrTargetProfile *profile = build_exact_profile();
@@ -434,7 +451,7 @@ static void test_parameter_identity_requires_exact_member(void) {
     xi_block_set_return(entry, parameter);
     function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *plan = build_target_plan(function->semantic_plan, profile);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
@@ -542,7 +559,7 @@ static ScalarMatrixFixture build_scalar_matrix_fixture(void) {
     xi_block_set_return(entry, fixture.values[0]);
     fixture.function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(fixture.function, error, sizeof(error)));
     return fixture;
 }
 
@@ -635,7 +652,7 @@ static void test_nullable_scalar_binding_is_rejected(void) {
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
 
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target_plan = build_target_plan(function->semantic_plan, profile);
@@ -659,7 +676,7 @@ static void test_nullable_scalar_binding_is_rejected(void) {
     xi_func_free(function);
 }
 
-static void test_aggregate_bindings_are_excluded_from_scalar_projection(void) {
+static void test_aggregate_bindings_use_exact_aggregate_projection(void) {
     XrType *elements[2] = {&scalar_int, &scalar_bool};
     XrType tuple = {
         .kind = XR_KIND_TUPLE,
@@ -686,13 +703,13 @@ static void test_aggregate_bindings_are_excluded_from_scalar_projection(void) {
     function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target_plan = build_target_plan(function->semantic_plan, profile);
     XrCEmissionPlan *emission = NULL;
     REQUIRE(xr_c_emission_plan_build(target_plan, xr_target_profile_fingerprint(profile),
                                      &emission, error, sizeof(error)));
-    REQUIRE(xr_c_emission_plan_value_count(emission) == 2);
+    REQUIRE(xr_c_emission_plan_value_count(emission) == 3);
 
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
@@ -700,9 +717,13 @@ static void test_aggregate_bindings_are_excluded_from_scalar_projection(void) {
                                             &semantic_function, &semantic_value, error,
                                             sizeof(error)));
     XrCValueEmissionView view = {0};
-    REQUIRE(!xr_c_emission_plan_value_view(emission, semantic_value, &view, error,
-                                            sizeof(error)));
-    REQUIRE(strncmp(error, "XR_TARGET_1001", strlen("XR_TARGET_1001")) == 0);
+    REQUIRE(xr_c_emission_plan_value_view(emission, semantic_value, &view, error,
+                                           sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_AGGREGATE);
+    REQUIRE(view.target_register_kind == XR_MACHINE_REP_AGGREGATE);
+    REQUIRE(view.target_memory_kind == XR_MACHINE_REP_AGGREGATE);
+    REQUIRE(view.address_projection == XR_C_ADDRESS_PROJECTION_TUPLE_BACKING);
+    REQUIRE(view.c_type != NULL);
 
     xr_c_emission_plan_free(emission);
     xr_target_plan_free(target_plan);
@@ -755,7 +776,7 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
@@ -856,7 +877,7 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
     emission->profile_fingerprint.bytes[0] ^= 1u;
     REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
                                        error, sizeof(error)));
-    REQUIRE(strncmp(error, "XR_TARGET_1000", strlen("XR_TARGET_1000")) == 0);
+    REQUIRE(strcmp(error, "XR_TARGET_1000: C emission profile fingerprint is stale") == 0);
     emission->profile_fingerprint.bytes[0] ^= 1u;
 
     emission->target_fingerprint.bytes[0] ^= 1u;
@@ -871,7 +892,7 @@ static void test_dynamic_closure_c_emission_is_exact_and_mutation_safe(void) {
     emission->fingerprint.bytes[0] ^= 1u;
 
     uint32_t saved_schema = emission->schema_version;
-    emission->schema_version = 6;
+    emission->schema_version = saved_schema + 1u;
     REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint,
                                        error, sizeof(error)));
     emission->schema_version = saved_schema;
@@ -897,7 +918,7 @@ static void test_panic_catch_c_emission_recipe_is_exact(void) {
     function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(function->semantic_plan, profile);
     REQUIRE((xr_target_plan_completed_family_mask(target) &
@@ -998,7 +1019,7 @@ static void test_string_concat_c_emission_recipe_is_exact(void) {
     function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(function, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target =
         build_target_plan(function->semantic_plan, profile);
@@ -1225,7 +1246,7 @@ static void test_adt_enum_constructor_c_emission_recipe_is_exact(void) {
 
     char error[512] = {0};
     bool semantic_built =
-        xr_semantic_plan_build_and_attach(function, error, sizeof(error));
+        build_and_attach_scalar_fixture_semantic(function, error, sizeof(error));
     if (!semantic_built)
         fprintf(stderr, "ADT enum semantic plan failed: %s\n", error);
     REQUIRE(semantic_built && function->semantic_plan != NULL);
@@ -1319,7 +1340,7 @@ static void test_channel_new_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
@@ -1394,7 +1415,7 @@ static void test_stringbuilder_new_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
@@ -1576,7 +1597,7 @@ static void test_string_slice_range_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -1699,7 +1720,7 @@ static void test_iterator_rune_has_next_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -1784,7 +1805,7 @@ static void test_iterator_rune_next_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -1878,7 +1899,7 @@ static void test_iterator_rune_nth_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -1968,7 +1989,7 @@ static void test_rune_to_uint32_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -2170,7 +2191,7 @@ static void test_rune_is_whitespace_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -2254,7 +2275,7 @@ static void test_string_byte_slice_view_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
@@ -2332,7 +2353,7 @@ static void test_channel_receive_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    REQUIRE(build_and_attach_scalar_fixture_semantic(root, error, sizeof(error)));
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
@@ -2434,7 +2455,7 @@ int main(int argc, char **argv) {
     test_all_scalar_c_spelling_known_answers(false);
     test_all_scalar_c_spelling_known_answers(true);
     test_nullable_scalar_binding_is_rejected();
-    test_aggregate_bindings_are_excluded_from_scalar_projection();
+    test_aggregate_bindings_use_exact_aggregate_projection();
     test_profile_mismatch_fails_before_projection();
     test_dynamic_closure_c_emission_is_exact_and_mutation_safe();
     test_panic_catch_c_emission_recipe_is_exact();

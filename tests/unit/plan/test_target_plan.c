@@ -375,6 +375,21 @@ static XrType stub_target_imported_open_source_instance = {
         },
 };
 
+static bool build_target_unit_fixture_semantic(XiFunc *function, XrSemanticPlan **out,
+                                               char *error, size_t error_size) {
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = function,
+    };
+    REQUIRE(function != NULL && function->module == NULL);
+    function->module = &fixture_module;
+    bool built = xr_semantic_plan_build(function, out, error, error_size);
+    function->module = NULL;
+    return built;
+}
+
 static XrSemanticPlan *build_source_instance_method_semantic(void) {
     XiFunc *root = xi_func_new("target_source_instance_root", &stub_unit);
     XiFunc *callee = xi_func_new("wait", &stub_unit);
@@ -418,6 +433,8 @@ static XrSemanticPlan *build_source_instance_method_semantic(void) {
     XiModule *module =
         xi_module_new("pkg/target_source_instance.xr", "target_source_instance", root);
     REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=25:target-source-instance-v1"));
     root->module = module;
     XiClassMethod methods[2] = {{.name = "wait"}, {.name = "run"}};
     uint16_t child_indices[2] = {0, 1};
@@ -484,6 +501,8 @@ static XrSemanticPlan *build_open_source_instance_method_semantic(XrSemanticPlan
     XiModule *dependency_module =
         xi_module_new("pkg/open_target.xr", "open_target", dependency_root);
     REQUIRE(dependency_module != NULL);
+    REQUIRE(xi_module_set_identity(
+        dependency_module, "memory-module-v1:id=25:open-target-dependency-v1"));
     dependency_root->module = dependency_module;
     XiClassMethod method = {.name = "wait"};
     uint16_t child = 0;
@@ -537,6 +556,8 @@ static XrSemanticPlan *build_open_source_instance_method_semantic(XrSemanticPlan
     caller->stage = XI_STAGE_OPTIMIZED;
     XiModule *caller_module = xi_module_new("pkg/open_target_user.xr", "open_target_user", caller);
     REQUIRE(caller_module != NULL);
+    REQUIRE(xi_module_set_identity(
+        caller_module, "memory-module-v1:id=21:open-target-caller-v1"));
     caller->module = caller_module;
     XiModule *dependency_modules[] = {dependency_module};
     REQUIRE(xr_semantic_plan_build_and_attach_module_set(caller, dependency_modules, 1, error,
@@ -574,7 +595,7 @@ static XrSemanticPlan *build_stringbuilder_constructor_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -615,7 +636,7 @@ static XrSemanticPlan *build_array_intrinsic_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "Array intrinsic semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
@@ -699,7 +720,7 @@ static XrSemanticPlan *build_array_hof_semantic(uint8_t hof_kind) {
 
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(root, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "Array HOF semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
@@ -731,7 +752,7 @@ static XrSemanticPlan *build_array_reserve_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "Array.reserve semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
@@ -1052,7 +1073,7 @@ static XrSemanticPlan *build_map_entry_iterator_semantic(XiMethodSymbolId factor
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "Map entry iterator semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
@@ -1142,7 +1163,7 @@ static XrSemanticPlan *build_string_byte_slice_view_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "string byte-slice Target semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
@@ -1312,7 +1333,7 @@ static XrSemanticPlan *build_single_scalar_semantic(XrType *type) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(build_target_unit_fixture_semantic(function, &plan, error, sizeof(error)));
     xi_func_free(function);
     return plan;
 }
@@ -1366,7 +1387,7 @@ static XrSemanticPlan *build_heap_closure_semantic(bool captured) {
 
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(root, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "heap closure semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
@@ -1395,7 +1416,7 @@ static XrSemanticPlan *build_parameter_without_operation_semantic(void) {
     entry->nvalues = 0;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(build_target_unit_fixture_semantic(function, &plan, error, sizeof(error)));
     REQUIRE(xr_semantic_plan_parameter_count(plan) == 1);
     REQUIRE(xr_semantic_plan_operation_count(plan) == 0);
     entry->values[entry->nvalues++] = parameter;
@@ -1417,7 +1438,7 @@ static XrSemanticPlan *build_scalar_and_effect_void_same_type_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &plan, error, sizeof(error)));
+    REQUIRE(build_target_unit_fixture_semantic(function, &plan, error, sizeof(error)));
     xi_func_free(function);
     return plan;
 }
@@ -1462,7 +1483,7 @@ static XrSemanticPlan *build_nested_aggregate_semantic(void) {
 
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "nested aggregate semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
@@ -1493,7 +1514,7 @@ static XrSemanticPlan *build_unit_enum_aggregate_semantic(XrEnumLayout **out_lay
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "unit-enum aggregate semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
@@ -1576,6 +1597,8 @@ static XrSemanticPlan *build_struct_and_named_aggregate_semantic(bool unknown_ca
     XiModule *module =
         xi_module_new("pkg/target_struct_aggregate.xr", "target_struct_aggregate", function);
     REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=26:target-struct-aggregate-v1"));
     function->module = module;
     module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
     REQUIRE(module->classes != NULL);
@@ -1948,9 +1971,18 @@ static XrSemanticPlan *build_unit_enum_semantic(XrEnumLayout **out_layout) {
     function->arc_borrow_sig->valid = true;
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = function,
+    };
+    REQUIRE(function->module == NULL);
+    function->module = &fixture_module;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
     bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    function->module = NULL;
     if (!built)
         fprintf(stderr, "target source-enum semantic failed: %s\n", error);
     REQUIRE(built && plan != NULL);
@@ -2099,7 +2131,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "c70141b7a70a7ff92d88d9823a454a59caccb85051cbedd2b32b0b099d68df78") == 0);
+                   "87b382efe15684065dc3e479dd8db2b59e3669dd5224174737152e2e7716a4fc") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2886,6 +2918,8 @@ static XrSemanticPlan *build_direct_local_class_argument_semantic(XiOwnership ca
 
     XiModule *module = xi_module_new("pkg/target_class_argument.xr", "target_class_argument", root);
     REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=24:target-class-argument-v1"));
     root->module = module;
     XiClassData source_class = {
         .class_info = &stub_target_source_class_info,
@@ -2988,7 +3022,7 @@ static XrSemanticPlan *build_channel_receive_semantic(XrType *channel_type, XrTy
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "channel-receive semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
@@ -3135,6 +3169,8 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     dependency_root->stage = write_bytes->stage = XI_STAGE_OPTIMIZED;
     XiModule *dependency_module = xi_module_new("stdlib/net/net.xr", "net", dependency_root);
     REQUIRE(dependency_module);
+    REQUIRE(xi_module_set_identity(
+        dependency_module, "memory-module-v1:id=27:source-export-dependency-v1"));
     dependency_root->module = dependency_module;
     dependency_module->nslots = 1;
     dependency_module->nexports = 1;
@@ -3256,6 +3292,8 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
     XiModule *caller_module = xi_module_new("stdlib/http/http.xr", "http", caller_root);
     REQUIRE(caller_module);
+    REQUIRE(xi_module_set_identity(
+        caller_module, "memory-module-v1:id=23:source-export-caller-v1"));
     caller_root->module = caller_module;
     caller_module->nslots = 1;
     XiModule *dependency_modules[] = {dependency_module};
@@ -3400,7 +3438,7 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "e930df98da03c079051e807c89842e952ad2bafbc201c5c71f09da7e01de8773") ==
+    REQUIRE(strcmp(call_hex, "01d4157d33ed0b57ea0afb8c387fae4aae055bf4dde6a490544c3219c099c821") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -3509,7 +3547,7 @@ static XrSemanticPlan *build_lowered_coroutine_direct_call(bool unit_result) {
 
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(root, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "lowered coroutine semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL);
@@ -3549,7 +3587,7 @@ static XrSemanticPlan *build_lowered_coroutine_with_sync_call(void) {
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(root, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "sync call in coroutine semantic fixture failed: %s\n", error);
     REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
@@ -3691,7 +3729,7 @@ static XrSemanticPlan *build_direct_local_aggregate_call(void) {
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *plan = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(root, &plan, error, sizeof(error));
     if (!built)
         fprintf(stderr, "aggregate-call semantic fixture failed: %s\n", error);
     REQUIRE(built);
@@ -4091,7 +4129,7 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "cc7dc7f421cde286cbfa177c1aeea49346b38aeb57d3d8c886157924dbf0679c") ==
+    REQUIRE(strcmp(call_hex, "1ba2f6657f5248e61456a6f95be47a74d0e6d4454c08a2a189de73471cc3ccf0") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -4362,7 +4400,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
             plan->functions[tail_call->caller_function].coroutine_count == 0);
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex, "185e80cb9d394349967c31278094b56807efc25558669326d68c47fad873d488") ==
+    REQUIRE(strcmp(tail_hex, "21b2ab0a3bf524af0bb01edc54ee402afab704140392867fba1c29e0f8ab931b") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
@@ -6413,7 +6451,7 @@ static XrSemanticPlan *build_owned_string_coroutine_lifecycle_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "owned String coroutine SemanticPlan failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
@@ -6462,7 +6500,7 @@ static XrSemanticPlan *build_many_owned_string_coroutine_lifecycles(uint32_t own
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "many lifecycle SemanticPlan failed: %s\n", error);
     REQUIRE(built && semantic != NULL);

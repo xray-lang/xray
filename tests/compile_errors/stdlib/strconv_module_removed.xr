@@ -1,3 +1,0 @@
-import strconv
-
-print(strconv.parseInt("42"))

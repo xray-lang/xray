@@ -2,4 +2,4 @@ capability_id	source_forms	semantic_forms	negative_fixture	replacement
 source-branch-probability-hints	likely(bool)|unlikely(bool)	XI_COPY_KIND_LIKELY|XI_COPY_KIND_UNLIKELY	tests/compile_errors/type/branch_hint_builtins_removed.xr	ordinary bool control expressions
 legacy-scalar-type-spellings	int|byte|float	TK_INT|TK_BYTE|TK_FLOAT|XR_TREF_INT|XR_TREF_BYTE|XR_TREF_FLOAT	tests/compile_errors/type/retired_scalar_type_spellings_removed.xr	i64|u8|f64
 legacy-scalar-global-conversions	int(value)|byte(value)|float(value)	builtin_spelling|global conversion lowering	tests/compile_errors/type/retired_scalar_builtins_removed.xr	expr as exact-type|i64.parse|f64.parse
-legacy-strconv-module	import strconv|strconv.*	stdlib module factory|manifest|generated API owner	tests/compile_errors/stdlib/strconv_module_removed.xr	i64.parse|i64.tryParse|f64.parse|f64.tryParse
+legacy-strconv-module	import strconv|strconv.*	stdlib module factory|manifest|generated API owner	tests/fixtures/removed_compiler_surface/strconv_module_removed.xr	i64.parse|i64.tryParse|f64.parse|f64.tryParse

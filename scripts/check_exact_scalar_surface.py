@@ -22,7 +22,7 @@ TYPE_NEGATIVE = Path("tests/compile_errors/type/retired_scalar_type_spellings_re
 TYPE_EXPECTED = Path(str(TYPE_NEGATIVE) + ".expected")
 CALL_NEGATIVE = Path("tests/compile_errors/type/retired_scalar_builtins_removed.xr")
 CALL_EXPECTED = Path(str(CALL_NEGATIVE) + ".expected")
-MODULE_NEGATIVE = Path("tests/compile_errors/stdlib/strconv_module_removed.xr")
+MODULE_NEGATIVE = Path("tests/fixtures/removed_compiler_surface/strconv_module_removed.xr")
 MODULE_EXPECTED = Path(str(MODULE_NEGATIVE) + ".expected")
 
 REMOVED_PATHS = (
@@ -115,7 +115,7 @@ TOMBSTONE_ROWS = (
     "legacy-scalar-global-conversions\tint(value)|byte(value)|float(value)\tbuiltin_spelling|global conversion lowering\t"
     "tests/compile_errors/type/retired_scalar_builtins_removed.xr\texpr as exact-type|i64.parse|f64.parse",
     "legacy-strconv-module\timport strconv|strconv.*\tstdlib module factory|manifest|generated API owner\t"
-    "tests/compile_errors/stdlib/strconv_module_removed.xr\ti64.parse|i64.tryParse|f64.parse|f64.tryParse",
+    "tests/fixtures/removed_compiler_surface/strconv_module_removed.xr\ti64.parse|i64.tryParse|f64.parse|f64.tryParse",
 )
 
 
@@ -228,7 +228,7 @@ def _check_fixtures(root: Path, errors: list[str]) -> None:
         CALL_NEGATIVE: ('int("42")', "byte(7)", 'float("3.5")'),
         CALL_EXPECTED: ("Undeclared variable 'int'", "Undeclared variable 'byte'", "Undeclared variable 'float'"),
         MODULE_NEGATIVE: ("import strconv", "strconv.parseInt"),
-        MODULE_EXPECTED: ("Module 'strconv' not found",),
+        MODULE_EXPECTED: ("module 'strconv' not found in stdlib",),
     }
     for rel, needles in expected.items():
         path = root / rel
@@ -461,7 +461,7 @@ def self_test() -> int:
         _write(root / CALL_EXPECTED,
                "Undeclared variable 'int'\nUndeclared variable 'byte'\nUndeclared variable 'float'\n")
         _write(root / MODULE_NEGATIVE, 'import strconv\nstrconv.parseInt("42")\n')
-        _write(root / MODULE_EXPECTED, "Module 'strconv' not found\n")
+        _write(root / MODULE_EXPECTED, "module 'strconv' not found in stdlib\n")
         _write(root / "contracts/capability-deletions.tsv", "header\n" + "\n".join(TOMBSTONE_ROWS) + "\n")
         for rel in PUBLIC_BINDING_FILES + PUBLIC_TEXT_FILES + SCRIPT_SOURCE_OWNERS:
             _write(root / rel, "exact surface\n")

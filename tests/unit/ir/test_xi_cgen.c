@@ -936,6 +936,7 @@ static XiFunc *compile_to_ir_with_config(const char *source, XiPipelineConfig cf
 
     cfg.run_emit = false; /* cgen tests need the IR tree, not bytecode */
     cfg.source_file = analyzer_file;
+    cfg.module_identity = "memory-module-v1:id=18:xi-cgen-fixture-v1";
 
     XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
@@ -1097,6 +1098,8 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
     }
 
     XrModuleSpec *entry = &graph->specs[graph->entry_index];
+    cfg.module_identity = entry->canonical;
+    cfg.source_file = entry->source_path;
     cfg.run_emit = false;
     XiPipelineResult result = xi_pipeline_compile_program(entry->ast, analyzer, g_iso, &cfg);
     if (result.status != XI_PIPE_OK) {
@@ -1140,7 +1143,7 @@ TEST(aot_semantic_snapshot_survives_analyzer_pool_churn) {
                       "var value = echo(SnapshotValue.Text(\"ok\"))\n"
                       "print(value)\n";
     XiPipelineConfig cfg = xi_pipeline_aot_config();
-    XiFunc *ir = compile_to_ir_with_config(src, cfg);
+    XiFunc *ir = compile_to_ir_with_module_graph_config(src, cfg);
     TEST_REQUIRE(ir != NULL, "semantic snapshot fixture compiled to AOT IR");
     require_detached_semantic_snapshot(ir);
 
@@ -1180,6 +1183,16 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
         return false;
     if (ir->stage == XI_STAGE_BACKEND)
         return true;
+
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=18:xi-cgen-fixture-v1",
+        .path = "xi-cgen-fixture.xr",
+        .name = "xi_cgen_fixture",
+        .init = ir,
+    };
+    XiModule *saved_module = ir->module;
+    if (!saved_module)
+        ir->module = &fixture_module;
 
     char error[512] = {0};
     XiOptimizedProgram *optimized = NULL;
@@ -1238,9 +1251,12 @@ static bool test_prepare_backend_ir(XiFunc *ir) {
     XiBackendProgram *backend = xi_program_plan_backend(repped, error, sizeof(error));
     if (!backend)
         goto fail;
-    return xi_backend_program_release(backend) == ir;
+    bool released = xi_backend_program_release(backend) == ir;
+    ir->module = saved_module;
+    return released;
 
 fail:
+    ir->module = saved_module;
     fprintf(stderr, "  fixture Backend transition failed for '%s': %s\n",
             ir->name ? ir->name : "<anonymous>", error);
     return false;
@@ -1277,6 +1293,8 @@ static char *generate_c_with_status_and_stats_for_artifact(XiFunc *ir, const cha
     if (!mod) {
         mod = xi_module_new("test.xr", module_name, ir);
         assert(mod != NULL);
+        assert(xi_module_set_identity(
+            mod, "memory-module-v1:id=18:xi-cgen-fixture-v1"));
         own_mod = true;
     } else {
         if (!mod->name)
@@ -1342,6 +1360,8 @@ static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *modul
     if (!mod) {
         mod = xi_module_new("test.xr", module_name, ir);
         assert(mod != NULL);
+        assert(xi_module_set_identity(
+            mod, "memory-module-v1:id=18:xi-cgen-fixture-v1"));
         own_mod = true;
     } else {
         if (!mod->name)

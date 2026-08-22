@@ -1,0 +1,2 @@
+import strconv
+strconv.parseInt("42")

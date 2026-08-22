@@ -3436,6 +3436,22 @@ if(BUILD_TESTS)
         TIMEOUT ${COMPILE_ERROR_TESTS_TIMEOUT}
     )
 
+    # Deleted compiler-owned source surfaces need analyzer-only checks.  The
+    # ordinary compile-error runner executes programs and can therefore stop
+    # at module-graph construction before these diagnostics are observable.
+    add_test(
+        NAME removed_compiler_surface_checks
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/compile_errors/check_removed_compiler_surface.py
+                --xray $<TARGET_FILE:xray>
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(removed_compiler_surface_checks PROPERTIES
+        LABELS "frontend;negative;regression"
+        TIMEOUT 60
+    )
+
     add_test(
         NAME verify_contract_cli
         COMMAND ${XRAY_PYTHON}

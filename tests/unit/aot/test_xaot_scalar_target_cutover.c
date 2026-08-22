@@ -169,6 +169,7 @@ static XrType ordinal_enum_type = {
 static CutoverModule cutover_module_create(const char *name, int64_t value) {
     CutoverModule module = {0};
     char error[512] = {0};
+    bool is_dependency = strcmp(name, "scalar_dep") == 0;
 
     module.function = xi_func_new(name, &scalar_int);
     REQUIRE(module.function != NULL);
@@ -185,13 +186,20 @@ static CutoverModule cutover_module_create(const char *name, int64_t value) {
     module.release->args[0] = module.text;
     xi_block_set_return(entry, module.integer);
     module.function->stage = XI_STAGE_OPTIMIZED;
+    module.module.identity = is_dependency
+                                 ? "memory-module-v1:id=21:scalar-dep-fixture-v1"
+                                 : "memory-module-v1:id=23:scalar-entry-fixture-v1";
+    module.module.path = is_dependency ? "scalar-dep-fixture.xr"
+                                       : "scalar-entry-fixture.xr";
+    module.module.name = name;
+    module.module.init = module.function;
+    module.function->module = &module.module;
     bool semantic_built = xr_semantic_plan_build_and_attach(
         module.function, error, sizeof(error));
+    module.function->module = NULL;
     if (!semantic_built)
         fprintf(stderr, "cutover semantic plan failed: %s\n", error);
     REQUIRE(semantic_built);
-    module.module.init = module.function;
-    module.module.name = name;
     module.module.nslots = 1;
     module.module.slot_enums = scalar_enum_slots;
     return module;
@@ -284,14 +292,18 @@ static void transfer_authority_fixture_create(TransferAuthorityFixture *fixture)
         xi_stage_invariants(XI_STAGE_SEMANTIC_LOWERED);
     REQUIRE(xi_coro_lower(fixture->function, NULL));
     fixture->function->stage = XI_STAGE_OPTIMIZED;
+    fixture->module.identity =
+        "memory-module-v1:id=29:transfer-authority-fixture-v1";
+    fixture->module.path = "transfer-authority-fixture.xr";
+    fixture->module.name = "transfer_authority_fixture";
+    fixture->module.init = fixture->function;
+    fixture->function->module = &fixture->module;
     bool semantic_built = xr_semantic_plan_build_and_attach(
         fixture->function, error, sizeof(error));
     if (!semantic_built)
         fprintf(stderr, "transfer authority semantic plan failed: %s\n", error);
     REQUIRE(semantic_built);
 
-    fixture->module.name = "transfer_authority";
-    fixture->module.init = fixture->function;
     fixture->module_ptr = &fixture->module;
     fixture->profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
@@ -341,6 +353,7 @@ static void transfer_authority_fixture_free(TransferAuthorityFixture *fixture) {
     xg_global_evidence_free(&fixture->evidence);
     xr_target_plan_free(fixture->target_plan);
     xr_target_profile_free(fixture->profile);
+    fixture->function->module = NULL;
     xi_func_free(fixture->function);
     memset(fixture, 0, sizeof(*fixture));
 }
@@ -410,11 +423,16 @@ static void require_target_value_row(const char *dump, const CutoverModule *modu
     memory_rep = xr_target_plan_machine_rep(module->target_plan, binding->memory_rep);
     REQUIRE(register_rep != NULL);
     REQUIRE(memory_rep != NULL);
+    const char *surface = value->op == XI_RELEASE
+                              ? "kind=void rep=void c_type=void "
+                          : value->type == &scalar_int
+                              ? "kind=scalar rep=i64 c_type=int64_t "
+                              : "";
     snprintf(expected, sizeof(expected),
-             "  value v%u op=%s semantic=%u authority=target "
+             "  value v%u op=%s %ssemantic=%u authority=target "
              "family=target-plan "
              "register=%u(kind=%u,bits=%u) memory=%u(kind=%u,size=%u,align=%u) slot=%u\n",
-             value->id, xi_op_name(value->op), semantic_value, binding->register_rep,
+             value->id, xi_op_name(value->op), surface, semantic_value, binding->register_rep,
              (unsigned) register_rep->kind, (unsigned) register_rep->register_bits,
              binding->memory_rep, (unsigned) memory_rep->kind, memory_rep->memory_size,
              (unsigned) memory_rep->memory_align, binding->slot);
@@ -598,7 +616,7 @@ static void test_plan_dump_accepts_eliminated_target_values_only(void) {
     detach_block_value(target_block, target_eliminated.modules[0].text);
     char *dump = xaot_bundle_dump_plan(&target_eliminated.bundle);
     REQUIRE(dump != NULL);
-    REQUIRE(substring_count(dump, " authority=target ") == 5);
+    REQUIRE(substring_count(dump, " authority=target ") == 6);
     xr_free(dump);
     cutover_bundle_free(&target_eliminated);
 
@@ -627,20 +645,24 @@ static void test_plan_dump_preserves_exact_enum_ordinal_authority(void) {
     function->nparams = 1;
     xi_block_set_return(entry, integer);
     function->stage = XI_STAGE_OPTIMIZED;
-    char error[512] = {0};
-    bool semantic_built =
-        xr_semantic_plan_build_and_attach(function, error, sizeof(error));
-    if (!semantic_built)
-        fprintf(stderr, "semantic plan build failed: %s\n", error);
-    REQUIRE(semantic_built);
-
     XiEnumData *slot_enums[] = {&ordinal_enum_data};
     XiModule module = {
-        .name = "enum_dump",
+        .identity = "memory-module-v1:id=20:enum-dump-fixture-v1",
+        .path = "enum-dump-fixture.xr",
+        .name = "enum_dump_fixture",
         .init = function,
         .slot_enums = slot_enums,
         .nslots = 1,
     };
+    function->module = &module;
+    char error[512] = {0};
+    bool semantic_built =
+        xr_semantic_plan_build_and_attach(function, error, sizeof(error));
+    function->module = NULL;
+    if (!semantic_built)
+        fprintf(stderr, "semantic plan build failed: %s\n", error);
+    REQUIRE(semantic_built);
+
     XiModule *modules[] = {&module};
     XrTargetProfile *profile =
         xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
