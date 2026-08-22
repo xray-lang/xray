@@ -94,6 +94,16 @@ HOST_ENTRY_ABI_REQUIRED = 'int main(int argc, char **argv)'
 HOST_ENTRY_ABI_FORBIDDEN = re.compile(r"\b(?:i64|u8|f64)\s+main\s*\(")
 HOST_WARNING_REQUIRED = "-Wimplicit-int-conversion"
 HOST_WARNING_FORBIDDEN = "-Wimplicit-i64-conversion"
+LSP_CANONICAL_DOC_EXPECTATION = Path("tests/unit/lsp/test_lsp_document.c")
+LSP_CANONICAL_DOC_REQUIRED = (
+    'strstr(doc_text, "Array<u8> byte bulk methods") != NULL',
+    'strstr(doc_text, "Array<byte>") == NULL',
+    'strstr(doc_text, "Slice<byte>") == NULL',
+)
+LSP_CANONICAL_DOC_FORBIDDEN = (
+    'strstr(doc_text, "Array<u8>") == NULL',
+    'strstr(doc_text, "Slice<u8>") == NULL',
+)
 
 TOMBSTONE_ROWS = (
     "legacy-scalar-type-spellings\tint|byte|float\tTK_INT|TK_BYTE|TK_FLOAT|XR_TREF_INT|XR_TREF_BYTE|XR_TREF_FLOAT\t"
@@ -349,6 +359,25 @@ def _check_host_source_types(root: Path, errors: list[str]) -> None:
             f"{HOST_ENTRY_ABI_EXPECTATION.as_posix()}: "
             "host compiler warning expectation is missing"
         )
+    lsp_expectation = root / LSP_CANONICAL_DOC_EXPECTATION
+    if not lsp_expectation.is_file():
+        errors.append(
+            f"missing canonical scalar LSP expectation {LSP_CANONICAL_DOC_EXPECTATION.as_posix()}"
+        )
+        return
+    lsp_text = _read(lsp_expectation)
+    for evidence in LSP_CANONICAL_DOC_REQUIRED:
+        if evidence not in lsp_text:
+            errors.append(
+                f"{LSP_CANONICAL_DOC_EXPECTATION.as_posix()}: "
+                f"canonical scalar LSP expectation is missing {evidence!r}"
+            )
+    for residue in LSP_CANONICAL_DOC_FORBIDDEN:
+        if residue in lsp_text:
+            errors.append(
+                f"{LSP_CANONICAL_DOC_EXPECTATION.as_posix()}: "
+                "canonical scalar LSP documentation is rejected as legacy"
+            )
 
 
 def _check_strconv(root: Path, errors: list[str]) -> None:
@@ -427,6 +456,10 @@ def self_test() -> int:
         _write(root / HOST_ENTRY_ABI_EXPECTATION,
                'assert(contains(code, "int main(int argc, char **argv)"));\n'
                'assert(contains(code, "-Wimplicit-int-conversion"));\n')
+        _write(root / LSP_CANONICAL_DOC_EXPECTATION,
+               'ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);\n'
+               'ASSERT(strstr(doc_text, "Array<byte>") == NULL);\n'
+               'ASSERT(strstr(doc_text, "Slice<byte>") == NULL);\n')
         _write(root / "xisa/aot/abi.def", "(define-aot-abi i64)\n(define-aot-abi f64)\n")
         _write(root / "src/aot/xaot_abi_gen.h", 'X(I64, "i64") X(F64, "f64")\n')
 
@@ -467,6 +500,19 @@ def self_test() -> int:
         _write(root / HOST_ENTRY_ABI_EXPECTATION,
                'assert(contains(code, "int main(int argc, char **argv)"));\n'
                'assert(contains(code, "-Wimplicit-int-conversion"));\n')
+        _write(root / LSP_CANONICAL_DOC_EXPECTATION,
+               'ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);\n'
+               'ASSERT(strstr(doc_text, "Array<u8>") == NULL);\n'
+               'ASSERT(strstr(doc_text, "Slice<u8>") == NULL);\n')
+        errors, _ = verify(root)
+        if not any("canonical scalar LSP documentation is rejected as legacy" in error
+                   for error in errors):
+            print("exact scalar LSP documentation mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / LSP_CANONICAL_DOC_EXPECTATION,
+               'ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);\n'
+               'ASSERT(strstr(doc_text, "Array<byte>") == NULL);\n'
+               'ASSERT(strstr(doc_text, "Slice<byte>") == NULL);\n')
         _write(root / "tests/exact_keyword_identifier.xr", "enum Signal {\n    TERM,\n    i64\n}\n")
         errors, _ = verify(root)
         if not any("exact scalar keyword i64 used as an identifier" in error for error in errors):

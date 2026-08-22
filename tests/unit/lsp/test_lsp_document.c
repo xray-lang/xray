@@ -591,8 +591,8 @@ TEST(completion_uint8_array_uses_canonical_byte_docs) {
     const char *doc_text = xjson_get_string(append, "documentation");
     ASSERT(doc_text != NULL);
     ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);
-    ASSERT(strstr(doc_text, "Array<u8>") == NULL);
-    ASSERT(strstr(doc_text, "Slice<u8>") == NULL);
+    ASSERT(strstr(doc_text, "Array<byte>") == NULL);
+    ASSERT(strstr(doc_text, "Slice<byte>") == NULL);
 
     xjson_free(items);
     xlsp_server_free(server);
