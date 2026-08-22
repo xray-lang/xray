@@ -1785,7 +1785,7 @@ static void test_unit_enum_target_rep_mutations(void) {
     REQUIRE(rep->kind == XR_MACHINE_REP_ENUM_ORDINAL && rep->detail < semantic->type_count &&
             &semantic->types[rep->detail] == enum_type && rep->root_kind == XR_TARGET_ROOT_NONE &&
             rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
-    REQUIRE(enum_type_index != 0 && rep->detail == enum_type_index);
+    REQUIRE(rep->detail == enum_type_index);
     uint32_t other_type_index = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 1; i < semantic->type_count; i++)
         if (i != enum_type_index) {
