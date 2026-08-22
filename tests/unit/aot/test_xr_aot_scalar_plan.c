@@ -1450,6 +1450,13 @@ static void test_stringbuilder_new_c_emission_recipe_is_exact(void) {
 static void test_string_runes_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("string_runes_recipe", &scalar_unit);
     REQUIRE(root != NULL);
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:string-runes-aot-fixture-v1",
+        .path = "string-runes-aot-fixture.xr",
+        .name = "string_runes_aot_fixture",
+        .init = root,
+    };
+    root->module = &fixture_module;
     XiBlock *entry = xi_block_new(root);
     REQUIRE(entry != NULL);
     XiValue *source = xi_const_str(root, entry, "authority", &scalar_string);
@@ -1465,7 +1472,9 @@ static void test_string_runes_c_emission_recipe_is_exact(void) {
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    bool semantic_built = xr_semantic_plan_build_and_attach(root, error, sizeof(error));
+    root->module = NULL;
+    REQUIRE(semantic_built);
     XrTargetProfile *profile = build_exact_profile();
     XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
     XiRepPolicy policy = xi_rep_policy_native_boundary();
@@ -2398,6 +2407,11 @@ static void test_channel_receive_c_emission_recipe_is_exact(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "string-runes-emission") == 0) {
+        test_string_runes_c_emission_recipe_is_exact();
+        printf("String.runes C emission authority tests passed\n");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "iterator-rune-nth-emission") == 0) {
         test_iterator_rune_nth_c_emission_recipe_is_exact();
         printf("Iterator<rune>.nth C emission authority tests passed\n");

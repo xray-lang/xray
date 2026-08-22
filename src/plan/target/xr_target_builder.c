@@ -3531,10 +3531,13 @@ static bool note_string_runes_storage_value(XrTargetPlanBuilder *builder,
         .slot_identity = slot_identity,
         .has_slot = true,
     };
+    /* A prior value intent only proves that some family mentioned this type;
+     * it does not prove that family published a layout row. Ask the layout
+     * registry directly: it deduplicates the exact dynamic row and rejects
+     * any competing kind, extent, geometry, root, or ownership. */
     if (!append_slot_intent(builder, &slot, error, error_size) ||
-        (!analysis->used_types[operation->result_type] &&
-         !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
-                               error, error_size)) ||
+        !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
+                              error, error_size) ||
         !append_value_intent(builder, &value, error, error_size))
         return false;
     analysis->defined_values[operation->result_value] = 1;

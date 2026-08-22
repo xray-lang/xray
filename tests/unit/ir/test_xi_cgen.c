@@ -62,6 +62,7 @@ static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
 static const char *g_test_filter = NULL;
+static const char *g_string_runes_c_output = NULL;
 static const char *g_rune_to_string_c_output = NULL;
 
 typedef struct TestAotPlan {
@@ -2744,11 +2745,48 @@ TEST(cgen_string_literal_runes_receiver_emits_immediate_without_local) {
 }
 
 TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
-    XiFunc *ir = compile_to_ir("var iter = \"0123456789abcdef\".runes()\n");
-    TEST_REQUIRE(ir != NULL, "String.runes recipe fixture should compile");
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1165,
+                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {.kind = XR_KIND_STRING, .id = 1166,
+                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 1167,
+                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType *iterator_args[] = {&rune_type};
+    XrType iterator_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 1168,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+        .instance = {.class_name = "Iterator", .type_args = iterator_args,
+                     .type_arg_count = 1},
+    };
+    XiFunc *ir = xi_func_new("string_runes_recipe", &unit_type);
+    XiBlock *entry = ir ? xi_block_new(ir) : NULL;
+    TEST_REQUIRE(entry != NULL, "String.runes recipe fixture allocated");
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=28:string-runes-cgen-fixture-v1",
+        .path = "string-runes-cgen-fixture.xr",
+        .name = "string_runes_cgen_fixture",
+        .init = ir,
+    };
+    ir->module = &fixture_module;
+    entry->sealed = true;
+    XiValue *source = xi_const_str(ir, entry, "0123456789abcdef", &string_type);
+    XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
+    XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
+    TEST_REQUIRE(source && runes && release, "String.runes recipe values allocated");
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = (int64_t) XI_METHOD_SYMBOL_RUNES << 1;
+    runes->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    runes->call_return_ownership.param_index = -1;
+    runes->call_return_ownership.complete = true;
+    release->args[0] = runes;
+    xi_block_set_return(entry, NULL);
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "string_runes_recipe", &had_error);
+    ir->module = NULL;
     TEST_REQUIRE(code != NULL && !had_error,
                  "sealed String.runes recipe should generate");
     TEST_REQUIRE(count_between(code, code + strlen(code),
@@ -2757,6 +2795,13 @@ TEST(cgen_string_runes_consumes_immutable_emission_recipe) {
     TEST_REQUIRE(!contains(code, "xrt_method_0(") &&
                      !contains(code, "XRT_SYM_RUNES"),
                  "String.runes must not select a runtime member by name or symbol id");
+    if (g_string_runes_c_output) {
+        FILE *generated = fopen(g_string_runes_c_output, "wb");
+        TEST_REQUIRE(generated != NULL, "String.runes generated-C output opened");
+        size_t length = strlen(code);
+        TEST_REQUIRE(fwrite(code, 1, length, generated) == length && fclose(generated) == 0,
+                     "String.runes generated-C output written");
+    }
 
     printf("  Generated immutable String.runes recipe %zu bytes of C code\n",
            strlen(code));
@@ -14385,6 +14430,13 @@ int main(int argc, char **argv) {
 
     g_test_filter = getenv("XRAY_TEST_FILTER");
     setup();
+    if ((argc == 2 || argc == 3) && strcmp(argv[1], "string-runes-emission") == 0) {
+        g_string_runes_c_output = argc == 3 ? argv[2] : NULL;
+        run_cgen_string_runes_consumes_immutable_emission_recipe();
+        teardown();
+        puts("String.runes CGen recipe tests passed");
+        return tests_failed > 0 ? 1 : 0;
+    }
     if (argc == 2 && strcmp(argv[1], "iterator-rune-nth-emission") == 0) {
         run_cgen_iterator_rune_nth_consumes_immutable_emission_recipe();
         teardown();

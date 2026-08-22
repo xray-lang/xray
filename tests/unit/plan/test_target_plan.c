@@ -835,21 +835,39 @@ static XrSemanticPlan *build_stringbuilder_append_string_semantic(void) {
     return finish_stringbuilder_semantic(function, entry, "StringBuilder.append(string)");
 }
 
-static XrSemanticPlan *build_string_runes_semantic(void) {
-    XiFunc *function = xi_func_new("target_string_runes", &stub_int);
+/* Keep Iterator<rune> as semantic type zero, matching the hosted text module
+ * that exposed the layout gap. Scalar bookkeeping can already mention type
+ * zero without publishing a layout; the exact String.runes family must still
+ * publish the one dynamic row its owned result requires. */
+static XrSemanticPlan *build_string_runes_leading_type_semantic(void) {
+    XiFunc *function = xi_func_new("target_string_runes_leading_type", &stub_iterator_rune);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
-    XiValue *source = xi_const_str(function, entry, "target-runes", &stub_exact_string);
+    XiValue *source = xi_const_str(function, entry, "target-runes-layout", &stub_exact_string);
     XiValue *runes = xi_value_new(function, entry, XI_CALL_METHOD, &stub_iterator_rune, 1);
-    REQUIRE(source != NULL && runes != NULL);
+    REQUIRE(source && runes);
     runes->args[0] = source;
     runes->aux = (void *) "runes";
-    runes->aux_int = 470;
-    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
-    REQUIRE(release != NULL);
-    release->args[0] = runes;
-    return finish_stringbuilder_semantic(function, entry, "String.runes");
+    runes->aux_int = (int64_t) XI_METHOD_SYMBOL_RUNES << 1;
+    xi_block_set_return(entry, runes);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "target-plan-unit-fixture.xr",
+        .name = "target_plan_unit_fixture",
+        .init = function,
+    };
+    function->module = &fixture_module;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    function->module = NULL;
+    if (!built)
+        fprintf(stderr, "String.runes leading-type semantic failed: %s\n", error);
+    REQUIRE(built && semantic);
+    xi_func_free(function);
+    return semantic;
 }
 
 static XrSemanticPlan *build_string_slice_range_semantic(void) {
@@ -5165,7 +5183,7 @@ static void test_stringbuilder_append_string_call_authority(void) {
 }
 
 static void test_string_runes_call_authority(void) {
-    XrSemanticPlan *semantic = build_string_runes_semantic();
+    XrSemanticPlan *semantic = build_string_runes_leading_type_semantic();
     XrTargetProfile *profile = build_profile(0);
     XrTargetPlan *plan = NULL;
     char error[512] = {0};
@@ -5178,20 +5196,40 @@ static void test_string_runes_call_authority(void) {
         find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_STRING_RUNES);
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(semantic, call->semantic_operation);
-    const XrTargetValueRepRecord *result =
-        operation ? xr_target_plan_value_rep(plan, operation->result_value) : NULL;
+    XrTargetValueRepRecord *result =
+        operation ? (XrTargetValueRepRecord *) xr_target_plan_value_rep(
+                        plan, operation->result_value)
+                  : NULL;
+    XrTargetSlotRecord *slot =
+        result && result->slot < plan->slots_count ? &plan->slots[result->slot] : NULL;
+    XrTargetLayoutRecord *layout = NULL;
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; operation && i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type != operation->result_type)
+            continue;
+        REQUIRE(layout == NULL);
+        layout = &plan->layouts[i];
+        layout_index = i;
+    }
     REQUIRE(operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_STRING_RUNES &&
+            operation->result_type == 0 &&
             call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
             call->callee_function == XR_SEMANTIC_INDEX_NONE &&
             call->result_value == operation->result_value && call->argument_count == 0 &&
             call->flags == 0 && call->result_mode == XR_TARGET_CALL_VALUE &&
             call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
-            call->target_kind == XR_TARGET_CALL_TARGET_STRING_RUNES && result &&
+            call->target_kind == XR_TARGET_CALL_TARGET_STRING_RUNES && result && slot && layout &&
             result->slot == call->result_slot &&
             plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
             plan->machine_reps[result->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
-            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+            plan->machine_reps[result->register_rep].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->machine_reps[result->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            slot->semantic_value == operation->result_value &&
+            slot->semantic_operation == call->semantic_operation &&
+            slot->role == XR_TARGET_SLOT_TEMPORARY && slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            slot->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            layout->kind == XR_TARGET_LAYOUT_DYNAMIC && layout->extent == 0 &&
+            layout->field_count == 0 && layout->root_field_count == 0);
 
     XrStableId saved_identity = call->identity;
     call->identity.bytes[0] ^= 1u;
@@ -5209,10 +5247,75 @@ static void test_string_runes_call_authority(void) {
     call->result_ownership = XR_TARGET_CALL_BORROW;
     expect_verify_failure(plan, "XR_TARGET_1003");
     call->result_ownership = saved_ownership;
-    uint8_t saved_slot_ownership = plan->slots[result->slot].ownership;
-    plan->slots[result->slot].ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    uint8_t saved_slot_ownership = slot->ownership;
+    slot->ownership = XR_TARGET_OWNERSHIP_BORROWED;
     expect_verify_failure(plan, "XR_TARGET_1001");
-    plan->slots[result->slot].ownership = saved_slot_ownership;
+    slot->ownership = saved_slot_ownership;
+    XrStableId saved_slot_identity = slot->identity;
+    slot->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    slot->identity = saved_slot_identity;
+    uint16_t saved_layout_kind = layout->kind;
+    layout->kind = XR_TARGET_LAYOUT_SCALAR;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    layout->kind = saved_layout_kind;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    uint32_t saved_fixed_prefix_size = layout->fixed_prefix_size;
+    layout->fixed_prefix_size += layout->align;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    layout->fixed_prefix_size = saved_fixed_prefix_size;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t wrong_layout_type = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_type_count(semantic); i++) {
+        const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, i);
+        if (type && type->kind == XR_KIND_RUNE)
+            wrong_layout_type = i;
+    }
+    REQUIRE(operands && operation->operand_begin < operand_count &&
+            operands[operation->operand_begin].type != operation->result_type &&
+            wrong_layout_type != XR_SEMANTIC_INDEX_NONE &&
+            wrong_layout_type != operation->result_type);
+    uint32_t saved_layout_type = layout->semantic_type;
+    layout->semantic_type = wrong_layout_type;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    layout->semantic_type = saved_layout_type;
+    xr_target_layout_compute_fingerprint(plan, layout_index, &layout->fingerprint);
+    XrTargetMachineRepRecord *register_rep = &plan->machine_reps[result->register_rep];
+    XrTargetMachineRepRecord *memory_rep = &plan->machine_reps[result->memory_rep];
+    uint8_t saved_register_root = register_rep->root_kind;
+    uint8_t saved_memory_root = memory_rep->root_kind;
+    uint8_t saved_slot_root = slot->root_kind;
+    register_rep->root_kind = XR_TARGET_ROOT_NONE;
+    memory_rep->root_kind = XR_TARGET_ROOT_NONE;
+    slot->root_kind = XR_TARGET_ROOT_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    register_rep->root_kind = saved_register_root;
+    memory_rep->root_kind = saved_memory_root;
+    slot->root_kind = saved_slot_root;
+    uint8_t saved_register_ownership = register_rep->ownership;
+    uint8_t saved_memory_ownership = memory_rep->ownership;
+    register_rep->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    memory_rep->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    slot->ownership = XR_TARGET_OWNERSHIP_BORROWED;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    register_rep->ownership = saved_register_ownership;
+    memory_rep->ownership = saved_memory_ownership;
+    slot->ownership = saved_slot_ownership;
+    if (plan->layouts_count > 1) {
+        uint32_t duplicate_index = layout_index == 0 ? 1u : 0u;
+        XrTargetLayoutRecord *duplicate = &plan->layouts[duplicate_index];
+        uint32_t saved_duplicate_type = duplicate->semantic_type;
+        duplicate->semantic_type = operation->result_type;
+        xr_target_layout_compute_fingerprint(plan, duplicate_index, &duplicate->fingerprint);
+        expect_verify_failure(plan, "XR_TARGET_1001");
+        duplicate->semantic_type = saved_duplicate_type;
+        xr_target_layout_compute_fingerprint(plan, duplicate_index, &duplicate->fingerprint);
+    }
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
     xr_target_plan_free(plan);
@@ -6447,6 +6550,11 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "rune-to-string-result-authority") == 0) {
         test_rune_to_string_result_authority();
         puts("rune.toString result authority tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "string-runes-result-authority") == 0) {
+        test_string_runes_call_authority();
+        puts("String.runes result authority tests passed");
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "source-export-ref-c-emission") == 0) {
