@@ -111,6 +111,8 @@ def framed_tree_hash(root: Path, relatives: Iterable[str]) -> str:
             raise FileNotFoundError(relative)
         name = relative.replace("\\", "/").encode("utf-8")
         content = path.read_bytes()
+        if path.suffix.lower() in TEXT_SUFFIXES:
+            content = content.replace(b"\r\n", b"\n")
         digest.update(len(name).to_bytes(8, "big"))
         digest.update(name)
         digest.update(len(content).to_bytes(8, "big"))
@@ -1357,6 +1359,16 @@ def self_test(manifest_path: Path) -> int:
                         "TM-COMP-MANIFEST-INSTALLED")
         with tempfile.TemporaryDirectory(prefix="xray-completion-governance-") as directory:
             root = Path(directory)
+            lf_root = root / "identity-lf"
+            crlf_root = root / "identity-crlf"
+            lf_root.mkdir()
+            crlf_root.mkdir()
+            (lf_root / "source.c").write_bytes(b"first\nsecond\n")
+            (crlf_root / "source.c").write_bytes(b"first\r\nsecond\r\n")
+            if framed_tree_hash(lf_root, ["source.c"]) != framed_tree_hash(
+                    crlf_root, ["source.c"]):
+                raise AssertionError("framed source identity depends on checkout line endings")
+            results.append("framed-tree-eol->canonical")
             for relative in manifest["residue_scan"]["roots"]:
                 path = root / relative
                 if Path(relative).suffix:
@@ -1785,6 +1797,7 @@ def self_test(manifest_path: Path) -> int:
 
         required_labels = {
             "xrc-source", "vm-include", "opcode-build", "tagged-frame", "xaot-plan",
+            "framed-tree-eol",
             "semantic-authority-row", "semantic-authority-anchor",
             "identity-log", "dependency-graph", "symbol", "installed-manifest",
             "installed-header", "installed", "installed-sdk", "runtime",
