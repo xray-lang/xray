@@ -29,7 +29,13 @@ class ContractSpec:
 
 
 CONTRACT_SPECS = (
-    ContractSpec("intrinsic-identity.md", ("src/frontend/analyzer/xa_intrinsic_registry.def",)),
+    ContractSpec(
+        "intrinsic-identity.md",
+        (
+            "src/frontend/analyzer/xa_intrinsic_registry.def",
+            "src/shared/xr_core_intrinsic.def",
+        ),
+    ),
     ContractSpec("xi-canonical-ops.md", ("xisa/xi/ops.def", "xisa/xi/lowering.def")),
     ContractSpec(
         "effect-semantics.md",

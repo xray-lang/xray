@@ -18,6 +18,7 @@
 #include "../../src/ir/xi_intrinsic_flags.h"
 #include "../../src/frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../../src/frontend/analyzer/xa_intrinsic_registry.h"
+#include "../../src/shared/xr_core_intrinsic.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
 typedef enum {
@@ -464,6 +465,51 @@ static void test_semantic_intrinsic_registry(void) {
                 "parallel Plan.mapInto must publish receiver, arity, and lowering identity");
 }
 
+static void test_core_intrinsic_registry(void) {
+    char error[192];
+    ASSERT_TRUE(xr_core_intrinsic_registry_validate(error, sizeof(error)),
+                "core intrinsic registry must be complete and internally consistent");
+    ASSERT_TRUE(xr_core_intrinsic_count() == XR_CORE_BUILTIN_COUNT,
+                "core intrinsic registry must expose every stable builtin ID");
+
+    const XrCoreIntrinsicDesc *assert_equal =
+        xr_core_intrinsic_by_source_name("assertEqual", strlen("assertEqual"));
+    ASSERT_TRUE(assert_equal && assert_equal->id == XR_CORE_BUILTIN_ASSERT_EQUAL &&
+                    assert_equal->parameter_shape ==
+                        XR_CORE_INTRINSIC_PARAMETER_SHAPE_SAME_TYPE_PAIR_OPTIONAL_MESSAGE &&
+                    assert_equal->semantic_op == XR_CORE_INTRINSIC_SEMANTIC_OP_ASSERT_EQUAL,
+                "assertEqual must expose one typed source binding descriptor");
+    ASSERT_TRUE(xr_core_intrinsic_by_id(XR_CORE_BUILTIN_ASSERT_EQUAL) == assert_equal,
+                "core builtin ID and source-name lookup must share one descriptor");
+
+    const XrCoreIntrinsicDesc *assert_throws =
+        xr_core_intrinsic_by_id(XR_CORE_BUILTIN_ASSERT_THROWS);
+    const XrCoreIntrinsicDesc *assert_panics =
+        xr_core_intrinsic_by_id(XR_CORE_BUILTIN_ASSERT_PANICS);
+    ASSERT_TRUE(assert_throws && assert_panics &&
+                    assert_throws->expected_failure_channel ==
+                        XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR &&
+                    assert_panics->expected_failure_channel ==
+                        XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC &&
+                    assert_throws->expected_failure_channel !=
+                        assert_panics->expected_failure_channel,
+                "typed-error and panic assertions must carry distinct failure channels");
+
+    const XrCoreIntrinsicDesc *print =
+        xr_core_intrinsic_by_source_name("print", strlen("print"));
+    ASSERT_TRUE(print && print->call_form == XR_CORE_INTRINSIC_CALL_FORM_DIRECT_ONLY &&
+                    print->min_arity == 0 && print->max_arity == UINT16_MAX &&
+                    print->target_applicability == XR_CORE_INTRINSIC_TARGET_OUTPUT_ALL,
+                "print must be direct-only because heterogeneous arguments need one call-site plan");
+
+    const char *removed[] = {"likely",       "unlikely",   "assert_true",  "assert_false",
+                             "assert_eq",    "assert_ne",   "assert_throws", NULL};
+    for (size_t i = 0; removed[i]; i++) {
+        ASSERT_TRUE(!xr_core_intrinsic_by_source_name(removed[i], strlen(removed[i])),
+                    "removed source name must not enter the core intrinsic registry");
+    }
+}
+
 int main(void) {
     printf("--- xi_intrinsic.def ---\n");
     test_enum_values();
@@ -484,6 +530,7 @@ int main(void) {
     test_builtin_receiver_registry_metadata();
     test_builtin_receiver_method_placement();
     test_semantic_intrinsic_registry();
+    test_core_intrinsic_registry();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

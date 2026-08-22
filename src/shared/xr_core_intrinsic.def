@@ -1,0 +1,28 @@
+/*
+ * Canonical source identities for compiler-owned core intrinsics.
+ *
+ * XR_CORE_INTRINSIC(id, stable_id, source_name, category, call_form,
+ *                   parameter_shape, min_arity, max_arity, result_shape,
+ *                   effect_kind, flow_rule, expected_failure_channel, semantic_op,
+ *                   target_applicability, diagnostic_name)
+ *
+ * This registry owns source binding identity and target-neutral call facts.
+ * Executable Xi behavior remains owned by the semantic operation registry.
+ */
+
+XR_CORE_INTRINSIC(ASSERT, 1, "assert", ASSERTION, DIRECT_ONLY, BOOL_OPTIONAL_MESSAGE, 1, 2, UNIT,
+                  MAY_PANIC, ASSERT_TRUE, NONE, ASSERT_CONDITION, ASSERTION_ALL,
+                  "condition assertion")
+XR_CORE_INTRINSIC(ASSERT_EQUAL, 2, "assertEqual", ASSERTION, DIRECT_ONLY,
+                  SAME_TYPE_PAIR_OPTIONAL_MESSAGE, 2, 3, UNIT, MAY_PANIC, NONE, NONE,
+                  ASSERT_EQUAL, ASSERTION_ALL, "equality assertion")
+XR_CORE_INTRINSIC(ASSERT_THROWS, 3, "assertThrows", ASSERTION, DIRECT_ONLY,
+                  ACTION_OPTIONAL_MESSAGE, 1, 2, UNIT, INVOKES_ACTION_MAY_PANIC, NONE,
+                  TYPED_ERROR, ASSERT_THROWS, ASSERTION_ALL, "typed-error assertion")
+XR_CORE_INTRINSIC(ASSERT_PANICS, 4, "assertPanics", ASSERTION, DIRECT_ONLY,
+                  ACTION_OPTIONAL_MESSAGE, 1, 2, UNIT, INVOKES_ACTION_MAY_PANIC, NONE,
+                  PANIC, ASSERT_PANICS, ASSERTION_ALL, "panic assertion")
+/* Grouped heterogeneous output requires one call-site plan, so print cannot
+ * be captured or passed as an ordinary callable value. */
+XR_CORE_INTRINSIC(PRINT, 5, "print", OUTPUT, DIRECT_ONLY, VARIADIC_VALUES, 0, UINT16_MAX, UNIT,
+                  OUTPUT_MAY_PANIC, NONE, NONE, PRINT_GROUP, OUTPUT_ALL, "grouped output")
