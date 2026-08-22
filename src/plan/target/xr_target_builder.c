@@ -681,15 +681,24 @@ static bool make_machine_rep(const XrTargetMachineFacts *profile, uint16_t kind,
     return true;
 }
 
-static bool make_unit_enum_rep(const XrTargetPlanBuilder *builder, uint32_t semantic_type,
-                               XrTargetMachineRepRecord *out) {
+/* A scalar representation is not fully identified by its physical geometry.
+ * Unit enums share i64 storage, but their nominal semantic type is part of the
+ * representation identity and is required by the independent verifier. Keep
+ * that typed decision here so every storage family publishes the same row. */
+static bool make_scalar_type_rep(const XrTargetPlanBuilder *builder, uint32_t semantic_type,
+                                 uint16_t kind, XrTargetMachineRepRecord *out) {
     const XrSemanticTypeRecord *type =
         xr_semantic_plan_type(builder ? builder->semantic_plan : NULL, semantic_type);
-    if (!xr_semantic_unit_enum_type_is_exact(type) ||
-        !make_machine_rep(xr_target_profile_machine_facts(builder->profile),
-                          XR_MACHINE_REP_ENUM_ORDINAL, out))
+    uint16_t exact_kind = XR_MACHINE_REP_COUNT;
+    if (!builder || !out ||
+        classify_scalar_type(type, &exact_kind) != XR_TARGET_SCALAR_VALUE || exact_kind != kind ||
+        !make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, out))
         return false;
-    out->detail = semantic_type;
+    if (kind == XR_MACHINE_REP_ENUM_ORDINAL) {
+        if (!xr_semantic_unit_enum_type_is_exact(type))
+            return false;
+        out->detail = semantic_type;
+    }
     return true;
 }
 
@@ -2979,7 +2988,9 @@ static bool note_scalar_value_ex(XrTargetPlanBuilder *builder,
     }
     (void) result_is_address;
     XrTargetMachineRepRecord rep;
-    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, &rep) ||
+    if (!(operation_result_void
+              ? make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, &rep)
+              : make_scalar_type_rep(builder, semantic_type, kind, &rep)) ||
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
                     "target profile cannot materialize a scalar representation");
@@ -3979,7 +3990,7 @@ static bool note_channel_receive_storage_value(XrTargetPlanBuilder *builder,
         return fail(error, error_size, "XR_TARGET_1001",
                     "channel receive result has no exact scalar representation");
     XrTargetMachineRepRecord rep;
-    if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), kind, &rep) ||
+    if (!make_scalar_type_rep(builder, operation->result_type, kind, &rep) ||
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
                     "target profile cannot materialize channel receive storage");
@@ -4137,113 +4148,6 @@ static bool builder_add_scalars(XrTargetPlanBuilder *builder, char *error, size_
     }
     value_storage_analysis_dispose(&analysis);
     builder->completed_family_mask |= XR_TARGET_FAMILY_SCALAR;
-    return true;
-}
-
-static bool note_direct_local_unit_enum_value(
-    XrTargetPlanBuilder *builder, XrTargetValueStorageAnalysis *analysis, uint32_t semantic_value,
-    uint32_t semantic_type, uint32_t semantic_function, uint32_t semantic_operation, uint8_t role,
-    XrStableId source_identity, char *error, size_t error_size) {
-    if (semantic_value >= analysis->total_values || semantic_type >= analysis->type_count ||
-        semantic_function >= xr_semantic_plan_function_count(builder->semantic_plan) ||
-        !xr_semantic_unit_enum_type_is_exact(
-            xr_semantic_plan_type(builder->semantic_plan, semantic_type)))
-        return fail(error, error_size, "XR_TARGET_1001", "unit-enum value identity is not exact");
-    if (analysis->defined_values[semantic_value]) {
-        if (analysis->value_types[semantic_value] != semantic_type ||
-            analysis->value_functions[semantic_value] != semantic_function)
-            return fail(error, error_size, "XR_TARGET_1001",
-                        "unit-enum value identity is ambiguous");
-        return true;
-    }
-    bool parameter_slot = role == XR_TARGET_SLOT_PARAMETER;
-    if ((!parameter_slot &&
-         semantic_operation >= xr_semantic_plan_operation_count(builder->semantic_plan)))
-        return fail(error, error_size, "XR_TARGET_1001", "unit-enum defining operation is missing");
-    XrTargetMachineRepRecord rep;
-    XrStableId slot_identity;
-    if (!make_unit_enum_rep(builder, semantic_type, &rep) ||
-        !append_rep_intent(builder, &rep, error, error_size) ||
-        !make_slot_identity(builder->semantic_plan, semantic_function, role, source_identity,
-                            XR_SEMANTIC_INDEX_NONE, &slot_identity))
-        return fail(error, error_size, "XR_TARGET_1001",
-                    "target profile cannot materialize unit-enum ordinal storage");
-    XrTargetSlotIntent slot = {
-        .identity = slot_identity,
-        .function = semantic_function,
-        .semantic_value = semantic_value,
-        .semantic_operation = parameter_slot ? XR_SEMANTIC_INDEX_NONE : semantic_operation,
-        .logical_slot = XR_SEMANTIC_INDEX_NONE,
-        .register_rep = rep,
-        .memory_rep = rep,
-        .role = role,
-        .root_kind = XR_TARGET_ROOT_NONE,
-        .ownership = XR_TARGET_OWNERSHIP_TRIVIAL,
-        .debug_variable = XR_SEMANTIC_INDEX_NONE,
-    };
-    XrTargetValueIntent value = {
-        .semantic_value = semantic_value,
-        .semantic_function = semantic_function,
-        .semantic_type = semantic_type,
-        .register_rep = rep,
-        .memory_rep = rep,
-        .slot_identity = slot_identity,
-        .has_slot = true,
-    };
-    if (!append_slot_intent(builder, &slot, error, error_size) ||
-        (!analysis->used_types[semantic_type] &&
-         !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_SCALAR, 0, &rep, error,
-                               error_size)) ||
-        !append_value_intent(builder, &value, error, error_size))
-        return false;
-    analysis->defined_values[semantic_value] = 1;
-    analysis->used_types[semantic_type] = 1;
-    analysis->value_types[semantic_value] = semantic_type;
-    analysis->value_functions[semantic_value] = semantic_function;
-    analysis->type_rep_kinds[semantic_type] = XR_MACHINE_REP_ENUM_ORDINAL;
-    return true;
-}
-
-static bool builder_add_direct_local_unit_enum_argument_storage(XrTargetPlanBuilder *builder,
-                                                                char *error, size_t error_size) {
-    if (!builder_begin_family(builder, XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE,
-                              error, error_size))
-        return false;
-    XrTargetValueStorageAnalysis analysis = {0};
-    bool valid =
-        value_storage_analysis_init(builder->semantic_plan, &analysis, error, error_size) &&
-        index_value_operations(builder->semantic_plan, &analysis, error, error_size);
-    uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);
-    for (uint32_t i = 0; valid && i < parameter_count; i++) {
-        const XrSemanticParameterRecord *parameter =
-            xr_semantic_plan_parameter(builder->semantic_plan, i);
-        if (!parameter || !xr_semantic_unit_enum_type_is_exact(
-                              xr_semantic_plan_type(builder->semantic_plan, parameter->type)))
-            continue;
-        valid = note_direct_local_unit_enum_value(
-            builder, &analysis, parameter->value, parameter->type, parameter->function,
-            XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER, parameter->id, error, error_size);
-    }
-    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(builder->semantic_plan);
-    for (uint32_t i = 0; valid && i < operation_count; i++) {
-        const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(builder->semantic_plan, i);
-        if (!operation || operation->opcode == XI_PARAM ||
-            !xr_semantic_unit_enum_type_is_exact(
-                xr_semantic_plan_type(builder->semantic_plan, operation->result_type)))
-            continue;
-        valid = note_direct_local_unit_enum_value(
-            builder, &analysis, operation->result_value, operation->result_type,
-            operation->function, i,
-            operation->opcode == XI_PHI ? XR_TARGET_SLOT_PHI : XR_TARGET_SLOT_TEMPORARY,
-            operation->id, error, error_size);
-    }
-    value_storage_analysis_dispose(&analysis);
-    if (!valid) {
-        builder->poisoned = true;
-        return false;
-    }
-    builder->completed_family_mask |= XR_TARGET_FAMILY_DIRECT_LOCAL_UNIT_ENUM_ARGUMENT_STORAGE;
     return true;
 }
 
@@ -7776,8 +7680,7 @@ static bool collect_layout_dependency(XrTargetPlanBuilder *builder, uint32_t sem
                     "aggregate field has an invalid scalar type fact");
     if (scalar == XR_TARGET_SCALAR_VALUE && scalar_kind != XR_MACHINE_REP_VOID) {
         XrTargetMachineRepRecord rep;
-        if (!make_machine_rep(xr_target_profile_machine_facts(builder->profile), scalar_kind,
-                              &rep) ||
+        if (!make_scalar_type_rep(builder, semantic_type, scalar_kind, &rep) ||
             !append_rep_intent(builder, &rep, error, error_size) ||
             !append_layout_intent(builder, semantic_type, XR_TARGET_LAYOUT_SCALAR, 0, &rep, error,
                                   error_size))
@@ -12869,8 +12772,6 @@ typedef struct {
 
 static const XrTargetFamily k_target_families[] = {
     {"scalars", builder_add_scalars},
-    {"direct_local_unit_enum_argument_storage",
-     builder_add_direct_local_unit_enum_argument_storage},
     {"closure_storage", builder_add_closure_storage},
     {"array_allocation_storage", builder_add_array_allocation_storage},
     {"array_intrinsic_storage", builder_add_array_intrinsic_storage},

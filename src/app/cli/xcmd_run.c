@@ -118,7 +118,7 @@ static int reject_non_executable_artifact(const char *path, XrArtifactProbeResul
     xr_free(bytes);
     if (!decoded) {
         fprintf(stderr, "%s\n",
-                detail[0] ? detail : "XR_ARTIFACT_2000: XTP v40 candidate decoding failed");
+                detail[0] ? detail : "XR_ARTIFACT_2000: XTP v41 candidate decoding failed");
         return XR_CLI_EXIT_FAIL;
     }
     xr_xtp_candidate_release(candidate);

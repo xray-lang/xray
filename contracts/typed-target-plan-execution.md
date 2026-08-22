@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 40 may carry a canonical per-function instruction table and
+TargetPlan schema 41 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -117,7 +117,7 @@ executable family caps parameters at 64 so that density is proved without
 allocating.
 
 Instruction rows participate in the TargetPlan fingerprint as exact 32-byte
-canonical rows. XTP schema 40 preserves the bounded sequential compact stream
+canonical rows. XTP schema 41 preserves the bounded sequential compact stream
 introduced by v34; its directory entry carries the expanded row count, compact byte
 length, `COMPACT` flag, and zero row size. Canonical ULEB128 and signed ZigZag
 payloads plus the format-only superinstruction registry are the sole wire
@@ -224,15 +224,15 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 40 is a hard cutover from v39 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 34 and its compact 225-row Xi operation registry;
-the retired non-lowerable bounds-guard opcode is neither reserved nor
-translated. Schema 34 changed the instruction opcode carrier to an unsigned
+TargetPlan schema 41 is a hard cutover from v40 and every earlier TargetPlan
+schema. It requires SemanticPlan schema 36 and its compact 225-row Xi operation registry;
+the scalar family is the sole owner of exact unit-enum ordinal storage, and the
+retired dedicated family bit is neither reserved nor translated. Schema 34 changed the instruction opcode carrier to an unsigned
 16-bit stable ID while the
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
 authority consumed by the builder, verifier, artifact renderer, and dispatcher.
-XTP schema 40 preserves the compact instruction stream introduced by v34,
+XTP schema 41 preserves the compact instruction stream introduced by v34,
 appends the exact 144-byte entry-expectation section after all prior tables,
 widens each coroutine state with its function-local resume-instruction
 authority, and preserves the exact lifecycle root-map, root-slot, and cleanup
@@ -522,13 +522,13 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 1f44a60860526a33ea0a585d3a14530abc40f6280625c5fcc0145d95eabf684e
+anchor-sha256: src/plan/target/xr_target_plan.h 4991783a6b65297061f062769dc5df4150f42834ddb4c72c52be664ced8cbf12
 anchor-sha256: src/plan/target/xr_target_plan.c 3a4b6829d499a6acf01ae4ec13357ff461b83cf1b88430990ea387724984a6ea
-anchor-sha256: src/plan/target/xr_target_builder.c eb12ca87e384e6c5bc2430a159eda98ece54d1450e157302b49e16a0c6afb664
+anchor-sha256: src/plan/target/xr_target_builder.c c9a3e014ff16629c43af1b21aea3f53d365747c3b1e79080f924746ebd27943c
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
 anchor-sha256: src/plan/target/xr_target_verify.c 9d6fd34f7f2f35f5f05bf702e0042e7109a5f1a0601ecf7bfc3eaa496c736d92
-anchor-sha256: src/plan/format/xr_xtp_schema.h e452a27b2149e30bbafded2799a0a3e2a51fa9df7ffcdbcd41556bde2f230601
+anchor-sha256: src/plan/format/xr_xtp_schema.h ad46aa3b6233cc24e4500c9652593fbbe2fdf83d38858098c775d760cbb2abde
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29
 anchor-sha256: src/plan/format/xr_xtp_rows.c 7e2c7c25d880a3f0d38abf7a48e63f9918c78eaf68e2734b9d0d68bb575abbcd
@@ -536,7 +536,7 @@ anchor-sha256: src/plan/format/xr_xtp_encode.c c5131d9c1ec60d2d19729d21d95dfc013
 anchor-sha256: src/plan/format/xr_xtp_instruction_stream.h 39a81bcf5b337b7fdbf4aafaa4eb8a6ba575d4a1853f6f86c8dca6d0d2e0579a
 anchor-sha256: src/plan/format/xr_xtp_instruction_stream.c d2c219ad22c0f22193abe31436ba5466f7d60b3c4511628a7fa14a0fb2a98773
 anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863cfd86a97cbf47d892f4c945d4ca0e1
-anchor-sha256: src/plan/format/xr_xtp_text.c e28903388f1d938770622e922a184ed3bc495f70cf2c30c5438add5779fc32c7
+anchor-sha256: src/plan/format/xr_xtp_text.c b8b737b6d166b67b3ee005af96e9fd71833676fd4f38e714a3c5098157e80e40
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/vm/xr_typed_dispatch.h 3c3adf76ba8478621d9e6b860e98b111599dc9f4149cef433fbc2db8eee1692a
@@ -549,7 +549,7 @@ anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435
 anchor-sha256: tests/unit/plan/test_xtp_format.c 50cfba1053b1e203996701010e0067915af3ace898e422b5c4ae2de8d9f49c70
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 8dff3879c5e6d4a5ca6a03642164c1c2b7dbd4355245bc2adb4c7142c853daa5
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c ab0658ec1c8e618d3415dcecad4daf66df45e3f289968f4000fa0ca125ac002a
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: tests/unit/ir/test_xi_cgen.c 5df6cfb78011ab3f4c99e3388ad58b8133a179e624e2d3c3bcf8055df8159dfc
 anchor-sha256: tests/unit/ir/test_xi_opt.c bffbaaff1b3d6df205eb05ffc4ef3566faff16ff3ac1cd757072c3ee561410cc

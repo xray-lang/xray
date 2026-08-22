@@ -137,6 +137,26 @@ static XrType stub_float_channel = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_float},
 };
+
+static XrEnumLayout *make_unit_enum_type(XrType *out, uint32_t id, const char *owner,
+                                         const char *name) {
+    static const char *members[] = {"First", "Second"};
+    XrEnumLayout *layout = xr_enum_layout_new(owner, name, members, 2);
+    REQUIRE(out != NULL && layout != NULL && layout->is_zero_payload && layout->layout_id != 0);
+    *out = (XrType) {
+        .kind = XR_KIND_ENUM,
+        .id = id,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .enum_type =
+            {
+                .enum_name = name,
+                .layout_id = layout->layout_id,
+                .layout = layout,
+            },
+    };
+    return layout;
+}
 static XrType stub_module_namespace = {
     .kind = XR_KIND_STRUCT_OBJECT,
     .id = 111,
@@ -1245,6 +1265,38 @@ static XrSemanticPlan *build_nested_aggregate_semantic(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_unit_enum_aggregate_semantic(XrEnumLayout **out_layout) {
+    XrType enum_type;
+    XrEnumLayout *layout =
+        make_unit_enum_type(&enum_type, 122, "tests/aggregate", "AggregateOrdinal");
+    XrType fixed = {
+        .kind = XR_KIND_FIXED_ARRAY,
+        .id = 123,
+        .frozen = true,
+        .is_value_type = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    fixed.fixed_array.element_type = &enum_type;
+    fixed.fixed_array.length = 2;
+    XiFunc *function = xi_func_new("target_unit_enum_aggregate_probe", &fixed);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *result = xi_value_new(function, entry, XI_FIXED_ARRAY_NEW, &fixed, 0);
+    REQUIRE(result != NULL);
+    result->aux_int = 2;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "unit-enum aggregate semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    xi_func_free(function);
+    *out_layout = layout;
+    return plan;
+}
+
 static XrSemanticPlan *build_struct_and_named_aggregate_semantic(bool unknown_call) {
     const char *struct_names[2] = {"count", "ready"};
     XrType *struct_fields[2] = {&stub_int, &stub_bool};
@@ -1669,27 +1721,16 @@ static void target_test_xtp_resign_artifact(uint8_t *bytes, size_t size) {
 }
 
 static XrSemanticPlan *build_unit_enum_semantic(XrEnumLayout **out_layout) {
-    static const char *members[] = {"Standard", "UrlSafe"};
-    XrEnumLayout *layout = xr_enum_layout_new("stdlib/base64", "Base64Alphabet", members, 2);
-    REQUIRE(layout != NULL && layout->is_zero_payload && layout->layout_id != 0);
-    XrType enum_type = {
-        .kind = XR_KIND_ENUM,
-        .id = 18,
-        .frozen = true,
-        .scalar_rep = XR_SCALAR_REP_NONE,
-        .enum_type =
-            {
-                .enum_name = "Base64Alphabet",
-                .layout_id = layout->layout_id,
-                .layout = layout,
-            },
-    };
+    XrType enum_type;
+    XrEnumLayout *layout =
+        make_unit_enum_type(&enum_type, 18, "stdlib/base64", "Base64Alphabet");
     XiFunc *function = xi_func_new("target_source_enum_probe", &stub_int);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(function != NULL && entry != NULL);
     XiValue *ordinal = xi_param(function, entry, 0, &enum_type);
+    XiValue *other_scalar = xi_const_bool(function, entry, true, &stub_bool);
     XiValue *result = xi_const_int(function, entry, 0, &stub_int);
-    REQUIRE(ordinal != NULL && result != NULL);
+    REQUIRE(ordinal != NULL && other_scalar != NULL && result != NULL);
     function->nparams = function->min_params = 1;
     function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
     REQUIRE(function->params != NULL);
@@ -1721,9 +1762,12 @@ static void test_unit_enum_target_rep_mutations(void) {
     char error[512] = {0};
     REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
     const XrSemanticTypeRecord *enum_type = NULL;
+    uint32_t enum_type_index = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < semantic->type_count; i++)
-        if (semantic->types[i].kind == XR_KIND_ENUM)
+        if (semantic->types[i].kind == XR_KIND_ENUM) {
             enum_type = &semantic->types[i];
+            enum_type_index = i;
+        }
     REQUIRE(enum_type != NULL);
     const XrTargetValueRepRecord *binding = NULL;
     uint32_t binding_count = 0;
@@ -1740,18 +1784,38 @@ static void test_unit_enum_target_rep_mutations(void) {
     REQUIRE(rep->kind == XR_MACHINE_REP_ENUM_ORDINAL && rep->detail < semantic->type_count &&
             &semantic->types[rep->detail] == enum_type && rep->root_kind == XR_TARGET_ROOT_NONE &&
             rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
+    REQUIRE(enum_type_index != 0 && rep->detail == enum_type_index);
+    uint32_t other_type_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 1; i < semantic->type_count; i++)
+        if (i != enum_type_index) {
+            other_type_index = i;
+            break;
+        }
+    REQUIRE(other_type_index != XR_SEMANTIC_INDEX_NONE);
+    XrTargetMachineRepRecord *ordinary_scalar = NULL;
+    for (uint32_t i = 0; i < plan->machine_reps_count; i++)
+        if (plan->machine_reps[i].kind == XR_MACHINE_REP_I64)
+            ordinary_scalar = &plan->machine_reps[i];
+    REQUIRE(ordinary_scalar != NULL && ordinary_scalar->detail == 0);
     uint16_t saved_kind = rep->kind;
     uint32_t saved_detail = rep->detail;
     uint8_t saved_root = rep->root_kind;
     rep->kind = XR_MACHINE_REP_I64;
     expect_verify_failure(plan, "XR_TARGET_1001");
     rep->kind = saved_kind;
+    rep->detail = 0;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    rep->detail = other_type_index;
+    expect_verify_failure(plan, "XR_TARGET_1001");
     rep->detail = XR_SEMANTIC_INDEX_NONE;
     expect_verify_failure(plan, "XR_TARGET_1001");
     rep->detail = saved_detail;
     rep->root_kind = XR_TARGET_ROOT_OBJECT;
     expect_verify_failure(plan, "XR_TARGET_1001");
     rep->root_kind = saved_root;
+    ordinary_scalar->detail = enum_type_index;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    ordinary_scalar->detail = 0;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
@@ -2345,6 +2409,43 @@ static void test_builder_materializes_nested_aggregate_family(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_unit_enum_aggregate_dependency_rep(void) {
+    XrEnumLayout *source_layout = NULL;
+    XrSemanticPlan *semantic = build_unit_enum_aggregate_semantic(&source_layout);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    uint32_t enum_type = XR_SEMANTIC_INDEX_NONE;
+    const XrTargetLayoutRecord *enum_layout = NULL;
+    const XrTargetLayoutRecord *fixed_layout = NULL;
+    for (uint32_t i = 0; i < semantic->type_count; i++)
+        if (semantic->types[i].kind == XR_KIND_ENUM)
+            enum_type = i;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        const XrSemanticTypeRecord *type =
+            xr_semantic_plan_type(semantic, plan->layouts[i].semantic_type);
+        if (type && type->kind == XR_KIND_ENUM)
+            enum_layout = &plan->layouts[i];
+        else if (type && type->kind == XR_KIND_FIXED_ARRAY)
+            fixed_layout = &plan->layouts[i];
+    }
+    REQUIRE(enum_type != XR_SEMANTIC_INDEX_NONE && enum_layout != NULL && fixed_layout != NULL);
+    REQUIRE(enum_layout->kind == XR_TARGET_LAYOUT_SCALAR && enum_layout->field_count == 0);
+    REQUIRE(fixed_layout->kind == XR_TARGET_LAYOUT_AGGREGATE && fixed_layout->field_count == 2);
+    for (uint32_t i = 0; i < fixed_layout->field_count; i++) {
+        const XrTargetFieldRecord *field = &plan->fields[fixed_layout->field_begin + i];
+        const XrTargetMachineRepRecord *rep = &plan->machine_reps[field->memory_rep];
+        REQUIRE(rep->kind == XR_MACHINE_REP_ENUM_ORDINAL && rep->detail == enum_type &&
+                field->size == 8 && field->align == 8);
+    }
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_enum_layout_free(source_layout);
+}
+
 static void test_builder_materializes_struct_and_named_aggregates(void) {
     XrSemanticPlan *semantic = build_struct_and_named_aggregate_semantic(false);
     XrTargetProfile *profile = build_profile(0);
@@ -2634,6 +2735,34 @@ static void test_channel_receive_storage_authority(void) {
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     xr_target_plan_free(plan);
     xr_semantic_plan_free(semantic);
+
+    XrType enum_type;
+    XrEnumLayout *enum_layout =
+        make_unit_enum_type(&enum_type, 124, "tests/channel", "ChannelOrdinal");
+    XrType enum_channel = {
+        .kind = XR_KIND_CHANNEL,
+        .id = 125,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .container = {.element_type = &enum_type},
+    };
+    semantic = build_channel_receive_semantic(&enum_channel, &enum_type, false);
+    plan = NULL;
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    receive = NULL;
+    for (uint32_t i = 0; i < semantic->operation_count; i++)
+        if (semantic->operations[i].opcode == XI_CHAN_TRY_RECV)
+            receive = &semantic->operations[i];
+    REQUIRE(receive != NULL);
+    binding = xr_target_plan_value_rep(plan, receive->result_value);
+    REQUIRE(binding != NULL);
+    const XrTargetMachineRepRecord *enum_rep = &plan->machine_reps[binding->memory_rep];
+    REQUIRE(enum_rep->kind == XR_MACHINE_REP_ENUM_ORDINAL &&
+            enum_rep->detail == receive->result_type);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_enum_layout_free(enum_layout);
 
     semantic = build_channel_receive_semantic(&stub_channel, &stub_int, true);
     plan = NULL;
@@ -5634,6 +5763,7 @@ int main(int argc, char **argv) {
     test_builder_materializes_effect_void_independent_of_type();
     test_builder_materializes_exact_heap_closure_storage();
     test_builder_materializes_nested_aggregate_family();
+    test_unit_enum_aggregate_dependency_rep();
     test_builder_materializes_struct_and_named_aggregates();
     test_unknown_call_target_fails_closed();
     test_direct_local_call_adapter_family();

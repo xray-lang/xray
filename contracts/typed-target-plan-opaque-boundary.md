@@ -42,11 +42,11 @@ mutates each forbidden adapter kind and a valid source-export entry
 expectation's identity adapter. Every mutation reaches the structural verifier
 rather than passing because of stale fingerprint bytes.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 1f44a60860526a33ea0a585d3a14530abc40f6280625c5fcc0145d95eabf684e
-anchor-sha256: src/plan/target/xr_target_builder.c eb12ca87e384e6c5bc2430a159eda98ece54d1450e157302b49e16a0c6afb664
+anchor-sha256: src/plan/target/xr_target_plan.h 4991783a6b65297061f062769dc5df4150f42834ddb4c72c52be664ced8cbf12
+anchor-sha256: src/plan/target/xr_target_builder.c c9a3e014ff16629c43af1b21aea3f53d365747c3b1e79080f924746ebd27943c
 anchor-sha256: src/plan/target/xr_target_verify.c 9d6fd34f7f2f35f5f05bf702e0042e7109a5f1a0601ecf7bfc3eaa496c736d92
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d6cff74156a07c9a7751f3e7d5857f65d3d6d05ca1dbc862605f6cc4fa2c5c16
-anchor-sha256: src/vm/xr_typed_frame.h fa468887f8d87a5ff1fdf6c82b863cb7a62a204b4a30542f9fd0c62693486196
+anchor-sha256: src/vm/xr_typed_frame.h 504a12f174dc66f929776775ef00c4bab02d2ec35994b490ce50271add2ab0f3
 anchor-sha256: src/vm/xr_typed_frame.c 397f46fa8647614c06745dc365676989abdc9e079f25a89994b96d9d34fbd405
 anchor-sha256: tests/unit/vm/test_typed_opaque_boundary.c cefad5d23ea5544b24d5060767b62a0d9bc1e8232211192cd0b2a0dfbcc9fc68
 anchor-sha256: tests/unit/CMakeLists.txt 00999ca587b8899ca8c5219a58d587679cec16d91301a8f45abea5b0f27b88bf
