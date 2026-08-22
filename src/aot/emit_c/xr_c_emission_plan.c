@@ -19,6 +19,7 @@
 #include "../../plan/semantic/xr_semantic_string_runes_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_next_shape.h"
+#include "../../plan/semantic/xr_semantic_iterator_rune_nth_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
@@ -34,7 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(32)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(33)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -52,6 +53,7 @@
 #define XR_C_STRING_RUNES_SYMBOL "xrt_string_runes"
 #define XR_C_ITERATOR_RUNE_HAS_NEXT_SYMBOL "xrt_iterator_rune_has_next"
 #define XR_C_ITERATOR_RUNE_NEXT_SYMBOL "xrt_iterator_rune_next"
+#define XR_C_ITERATOR_RUNE_NTH_SYMBOL "xrt_iterator_rune_nth"
 #define XR_C_RUNE_TO_UINT32_SYMBOL "xrt_rune_to_uint32"
 #define XR_C_RUNE_IS_WHITESPACE_SYMBOL "xrt_rune_is_whitespace"
 #define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
@@ -2439,6 +2441,91 @@ static bool exact_iterator_rune_next_recipe(const XrTargetPlan *target_plan,
     return true;
 }
 
+static bool exact_iterator_rune_nth_recipe(const XrTargetPlan *target_plan,
+                                           const XrTargetValueRepRecord *binding,
+                                           uint32_t *receiver_value, uint32_t *index_value) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticOperationRecord *operation = binding_operation(target_plan, binding);
+    uint32_t receiver = UINT32_MAX;
+    uint32_t index = UINT32_MAX;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    if (!semantic || !operation || !binding || operation->result_value != binding->semantic_value ||
+        !xr_semantic_iterator_rune_nth_is_exact(semantic, operation, &receiver, &index) ||
+        operation->operand_begin + 1u >= operand_count)
+        return false;
+    uint32_t semantic_operand = operation->operand_begin + 1u;
+    const XrSemanticOperandRecord *operand = &operands[semantic_operand];
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(semantic, operation->result_type);
+    const XrSemanticTypeRecord *index_type = xr_semantic_plan_type(semantic, operand->type);
+    const XrTargetValueRepRecord *caller = xr_target_plan_value_rep(target_plan, index);
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target_plan, &argument_count);
+    const XrTargetCallRecord *match = NULL;
+    const XrTargetCallArgumentRecord *argument = NULL;
+    XrStableId expected_call;
+    XrStableId expected_argument;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        const XrTargetCallRecord *call = &calls[i];
+        if (call->result_value != binding->semantic_value ||
+            call->calling_convention != XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NTH)
+            continue;
+        if (match || call->semantic_operation >= xr_semantic_plan_operation_count(semantic) ||
+            xr_semantic_plan_operation(semantic, call->semantic_operation) != operation ||
+            call->id != i || call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+            call->caller_function != operation->function ||
+            call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+            call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            call->source_export != XR_SEMANTIC_INDEX_NONE ||
+            !emission_stable_id_is_zero(call->source_export_identity) ||
+            !emission_stable_id_is_zero(call->source_callee_identity) ||
+            call->result_slot != binding->slot ||
+            call->result_register_rep != binding->register_rep ||
+            call->result_memory_rep != binding->memory_rep || call->argument_count != 1 ||
+            call->argument_begin >= argument_count || call->adapter_count != 0 ||
+            call->flags != 0 || call->result_mode != XR_TARGET_CALL_VALUE ||
+            call->result_ownership != XR_TARGET_CALL_NONE ||
+            call->target_kind != XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH)
+            return false;
+        match = call;
+        argument = arguments ? &arguments[call->argument_begin] : NULL;
+    }
+    const XrTargetMachineRepRecord *caller_register =
+        caller ? xr_target_plan_machine_rep(target_plan, caller->register_rep) : NULL;
+    const XrTargetMachineRepRecord *caller_memory =
+        caller ? xr_target_plan_machine_rep(target_plan, caller->memory_rep) : NULL;
+    if (!match || !argument || !result_type || !index_type || !caller || !caller_register ||
+        !caller_memory || operand->value != index ||
+        !emission_identity_from_pair("xray-target-iterator-rune-nth-v1", operation->id,
+                                     result_type->id, receiver, &expected_call) ||
+        !xr_stable_id_equal(match->identity, expected_call) ||
+        !emission_identity_from_pair("xray-target-iterator-rune-nth-argument-v1", operation->id,
+                                     index_type->id, 0, &expected_argument) ||
+        !xr_stable_id_equal(argument->identity, expected_argument) || argument->call != match->id ||
+        argument->semantic_operand != semantic_operand || argument->semantic_value != index ||
+        argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+        argument->caller_slot != caller->slot || argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+        argument->register_rep != caller->register_rep ||
+        argument->memory_rep != caller->memory_rep ||
+        argument->callee_register_rep != caller->register_rep ||
+        argument->callee_memory_rep != caller->memory_rep || argument->ordinal != 0 ||
+        argument->mode != XR_TARGET_CALL_VALUE || argument->ownership != XR_TARGET_CALL_CONSUME ||
+        argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
+        argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        argument->reserved8[0] != 0 || argument->reserved8[1] != 0 || argument->reserved8[2] != 0 ||
+        caller_register->kind != XR_MACHINE_REP_I64 || caller_memory->kind != XR_MACHINE_REP_I64)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver;
+    if (index_value)
+        *index_value = index;
+    return true;
+}
+
 static bool exact_rune_to_uint32_recipe(const XrTargetPlan *target_plan,
                                         const XrTargetValueRepRecord *binding,
                                         uint32_t *receiver_value) {
@@ -3230,6 +3317,11 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_ITERATOR_RUNE_NEXT_SYMBOL) == 0;
+    if (value->materialization == XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH)
+        recipe_valid = value->rep == XR_C_VALUE_REP_RUNE && value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value != UINT32_MAX && value->recipe_symbol &&
+                       strcmp(value->recipe_symbol, XR_C_ITERATOR_RUNE_NTH_SYMBOL) == 0;
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32)
         recipe_valid = value->rep == XR_C_VALUE_REP_U32 && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
@@ -3726,6 +3818,11 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         uint32_t expected_iterator_rune_next_receiver = UINT32_MAX;
         bool expected_iterator_rune_next = exact_iterator_rune_next_recipe(
             target_plan, binding, &expected_iterator_rune_next_receiver);
+        uint32_t expected_iterator_rune_nth_receiver = UINT32_MAX;
+        uint32_t expected_iterator_rune_nth_index = UINT32_MAX;
+        bool expected_iterator_rune_nth = exact_iterator_rune_nth_recipe(
+            target_plan, binding, &expected_iterator_rune_nth_receiver,
+            &expected_iterator_rune_nth_index);
         uint32_t expected_rune_to_uint32_receiver = UINT32_MAX;
         bool expected_rune_to_uint32 =
             exact_rune_to_uint32_recipe(target_plan, binding, &expected_rune_to_uint32_receiver);
@@ -3799,6 +3896,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_stringbuilder_append   ? XR_C_VALUE_MATERIALIZATION_STRINGBUILDER_APPEND_RUNE
             : expected_iterator_rune_has_next ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_HAS_NEXT
             : expected_iterator_rune_next     ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT
+            : expected_iterator_rune_nth      ? XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH
             : expected_rune_to_uint32         ? XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32
             : expected_string_slice_range     ? XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE
             : expected_rune_is_whitespace     ? XR_C_VALUE_MATERIALIZATION_RUNE_IS_WHITESPACE
@@ -3817,6 +3915,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_stringbuilder_append   ? expected_append_receiver
             : expected_iterator_rune_has_next ? expected_iterator_rune_has_next_receiver
             : expected_iterator_rune_next     ? expected_iterator_rune_next_receiver
+            : expected_iterator_rune_nth      ? expected_iterator_rune_nth_receiver
             : expected_rune_to_uint32         ? expected_rune_to_uint32_receiver
             : expected_string_slice_range     ? expected_string_slice_receiver
             : expected_rune_is_whitespace     ? expected_rune_is_whitespace_receiver
@@ -3826,7 +3925,8 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
                                               : UINT32_MAX;
         uint32_t expected_argument = expected_stringbuilder_append ? expected_append_argument
                                      : expected_append_string      ? expected_append_string_argument
-                                                                   : UINT32_MAX;
+                                     : expected_iterator_rune_nth ? expected_iterator_rune_nth_index
+                                                                  : UINT32_MAX;
         const char *expected_symbol =
             expected_adt_enum                 ? XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL
             : expected_channel                ? XR_C_CHANNEL_NEW_SYMBOL
@@ -3836,6 +3936,7 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_stringbuilder_append   ? XR_C_STRINGBUILDER_APPEND_RUNE_SYMBOL
             : expected_iterator_rune_has_next ? XR_C_ITERATOR_RUNE_HAS_NEXT_SYMBOL
             : expected_iterator_rune_next     ? XR_C_ITERATOR_RUNE_NEXT_SYMBOL
+            : expected_iterator_rune_nth      ? XR_C_ITERATOR_RUNE_NTH_SYMBOL
             : expected_rune_to_uint32         ? XR_C_RUNE_TO_UINT32_SYMBOL
             : expected_string_slice_range     ? XR_C_STRING_SLICE_RANGE_SYMBOL
             : expected_rune_is_whitespace     ? XR_C_RUNE_IS_WHITESPACE_SYMBOL
@@ -4704,6 +4805,27 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                 value->materialization =
                                     XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT;
                                 value->recipe_operand_value = receiver;
+                                value->recipe_symbol = owned;
+                            }
+                        }
+                        if (value->materialization == XR_C_VALUE_MATERIALIZATION_NONE) {
+                            uint32_t receiver = UINT32_MAX;
+                            uint32_t index = UINT32_MAX;
+                            if (exact_iterator_rune_nth_recipe(target_plan, binding, &receiver,
+                                                               &index)) {
+                                size_t symbol_length = sizeof(XR_C_ITERATOR_RUNE_NTH_SYMBOL);
+                                char *owned = (char *) xr_malloc(symbol_length);
+                                if (!owned) {
+                                    xr_c_emission_plan_free(plan);
+                                    return emission_error(
+                                        error, error_size, "XR_EXEC_5003",
+                                        "Iterator<rune>.nth recipe allocation failed");
+                                }
+                                memcpy(owned, XR_C_ITERATOR_RUNE_NTH_SYMBOL, symbol_length);
+                                value->materialization =
+                                    XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH;
+                                value->recipe_operand_value = receiver;
+                                value->recipe_argument_value = index;
                                 value->recipe_symbol = owned;
                             }
                         }

@@ -1,0 +1,1 @@
+print("A\u{4F60}\u{1F30D}".runes().nth(1).toUInt32())

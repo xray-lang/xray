@@ -3264,6 +3264,29 @@ static bool cg_iterator_rune_next_emission_view(XiCgenCtx *ctx, const XiFunc *fu
     return true;
 }
 
+static bool cg_iterator_rune_nth_emission_view(XiCgenCtx *ctx, const XiFunc *function,
+                                               const XiValue *value, XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out)
+        return false;
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
+    if (status != CG_VALUE_EMISSION_FOUND ||
+        out->materialization != XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH)
+        return false;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t index = XR_SEMANTIC_INDEX_NONE;
+    if (value->nargs != 2 || !value->args || !value->args[0] || !value->args[1] ||
+        out->rep != XR_C_VALUE_REP_RUNE || !out->recipe_symbol || !out->recipe_symbol[0] ||
+        !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        !cg_value_semantic_id(ctx, function, value->args[1], &index) ||
+        receiver != out->recipe_operand_value || index != out->recipe_argument_value) {
+        (void) cg_value_emission_fail(ctx, "Iterator<rune>.nth has no exact immutable C recipe");
+        return false;
+    }
+    return true;
+}
+
 static bool cg_rune_to_uint32_emission_view(XiCgenCtx *ctx, const XiFunc *function,
                                             const XiValue *value, XrCValueEmissionView *out) {
     if (out)

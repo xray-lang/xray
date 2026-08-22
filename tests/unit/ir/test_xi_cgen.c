@@ -2880,6 +2880,64 @@ TEST(cgen_iterator_rune_next_consumes_immutable_emission_recipe) {
     xi_func_free(ir);
 }
 
+TEST(cgen_iterator_rune_nth_consumes_immutable_emission_recipe) {
+    XrType unit_type = {.kind = XR_KIND_UNIT, .id = 1070,
+                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType string_type = {.kind = XR_KIND_STRING, .id = 1071,
+                          .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType int_type = {.kind = XR_KIND_INT, .id = 1072,
+                       .scalar_rep = XR_NATIVE_I64, .frozen = true};
+    XrType rune_type = {.kind = XR_KIND_RUNE, .id = 1073,
+                        .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
+    XrType *iterator_args[] = {&rune_type};
+    XrType iterator_type = {
+        .kind = XR_KIND_INSTANCE,
+        .id = 1074,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .frozen = true,
+        .instance = {.class_name = "Iterator", .type_args = iterator_args,
+                     .type_arg_count = 1},
+    };
+    XiFunc *ir = xi_func_new("iterator_rune_nth_recipe", &unit_type);
+    XiBlock *entry = ir ? xi_block_new(ir) : NULL;
+    TEST_REQUIRE(entry != NULL, "Iterator<rune>.nth recipe fixture allocated");
+    entry->sealed = true;
+    XiValue *source = xi_const_str(ir, entry, "0123456789abcdef", &string_type);
+    XiValue *runes = xi_value_new(ir, entry, XI_CALL_METHOD, &iterator_type, 1);
+    XiValue *index = xi_const_int(ir, entry, 1, &int_type);
+    XiValue *nth = xi_value_new(ir, entry, XI_CALL_METHOD, &rune_type, 2);
+    XiValue *print = xi_value_new(ir, entry, XI_PRINT, &unit_type, 1);
+    XiValue *release = xi_value_new(ir, entry, XI_RELEASE, &unit_type, 1);
+    TEST_REQUIRE(source && runes && index && nth && print && release,
+                 "Iterator<rune>.nth recipe values allocated");
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = (int64_t) XI_METHOD_SYMBOL_RUNES << 1;
+    nth->args[0] = runes;
+    nth->args[1] = index;
+    nth->aux = (void *) "nth";
+    nth->aux_int = (int64_t) XI_METHOD_SYMBOL_NTH << 1;
+    nth->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    nth->call_return_ownership.param_index = -1;
+    nth->call_return_ownership.complete = true;
+    print->args[0] = nth;
+    release->args[0] = runes;
+    xi_block_set_return(entry, NULL);
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "iterator_rune_nth_recipe", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "sealed Iterator<rune>.nth recipe should generate");
+    const char *nth_call = strstr(code, "xrt_iterator_rune_nth(");
+    TEST_REQUIRE(count_between(code, code + strlen(code), "xrt_iterator_rune_nth(") == 1,
+                 "CGen must consume the exact nth recipe once");
+    TEST_REQUIRE(nth_call && strstr(nth_call, "xrt_iterator_rune_nth(v1, INT64_C(1))") == nth_call,
+                 "CGen must pass the typed iterator and i64 index operands");
+    TEST_REQUIRE(!contains(code, "XRT_SYM_NTH"), "CGen must not select Iterator.nth by symbol id");
+    TEST_REQUIRE(contains(code, "xrt_has_pending_error("),
+                 "Iterator.nth must preserve the pending-error poll");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_rune_to_uint32_consumes_immutable_emission_recipe) {
     XrType unit_type = {.kind = XR_KIND_UNIT, .id = 974,
                         .scalar_rep = XR_SCALAR_REP_NONE, .frozen = true};
@@ -14234,11 +14292,17 @@ TEST(cgen_json_decode_loop_keeps_per_iteration_retain) {
 
 /* ========== Main ========== */
 
-int main(void) {
+int main(int argc, char **argv) {
     printf("=== Xi CGen Unit Tests ===\n\n");
 
     g_test_filter = getenv("XRAY_TEST_FILTER");
     setup();
+    if (argc == 2 && strcmp(argv[1], "iterator-rune-nth-emission") == 0) {
+        run_cgen_iterator_rune_nth_consumes_immutable_emission_recipe();
+        teardown();
+        puts("Iterator<rune>.nth CGen recipe tests passed");
+        return tests_failed > 0 ? 1 : 0;
+    }
 
     run_u64_mul_wide_returns_both_exact_halves();
     run_aot_type_fingerprint_includes_param_modes();
@@ -14275,6 +14339,7 @@ int main(void) {
     run_cgen_string_slice_range_consumes_immutable_emission_recipe();
     run_cgen_iterator_rune_has_next_consumes_immutable_emission_recipe();
     run_cgen_iterator_rune_next_consumes_immutable_emission_recipe();
+    run_cgen_iterator_rune_nth_consumes_immutable_emission_recipe();
     run_cgen_rune_to_uint32_consumes_immutable_emission_recipe();
     run_cgen_rune_is_whitespace_consumes_immutable_emission_recipe();
     run_cgen_span_passed_only_to_direct_call_omits_data_cache();

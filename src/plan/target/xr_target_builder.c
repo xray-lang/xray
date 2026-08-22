@@ -8679,14 +8679,33 @@ static bool collect_iterator_rune_nth_call_intent(XrTargetPlanBuilder *builder,
                     "Iterator<rune>.nth dispatch authority is incomplete");
     const XrSemanticTypeRecord *result_type =
         xr_semantic_plan_type(builder->semantic_plan, operation->result_type);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+    uint32_t semantic_operand = operation->operand_begin + 1u;
+    const XrSemanticOperandRecord *operand =
+        operands && semantic_operand < operand_count ? &operands[semantic_operand] : NULL;
+    const XrSemanticTypeRecord *operand_type =
+        operand ? xr_semantic_plan_type(builder->semantic_plan, operand->type) : NULL;
+    if (!operand || operand->value != index_value || !operand_type)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "Iterator<rune>.nth index authority is incomplete");
     uint32_t argument_begin = builder->call_argument_intent_count;
+    uint32_t call_intent = builder->call_intent_count;
     XrTargetCallArgumentIntent argument = {
+        .call_intent = call_intent,
+        .semantic_operand = semantic_operand,
         .semantic_value = index_value,
+        .caller_storage_value = index_value,
+        .callee_parameter = XR_SEMANTIC_INDEX_NONE,
         .ordinal = 0,
         .mode = XR_TARGET_CALL_VALUE,
-        .ownership = XR_TARGET_CALL_NONE,
+        .ownership = XR_TARGET_CALL_CONSUME,
+        .transfer_mode = operand->transfer_mode,
     };
-    if (!append_call_argument_intent(builder, &argument, error, error_size))
+    if (!stable_identity_from_pair("xray-target-iterator-rune-nth-argument-v1", operation->id,
+                                   operand_type->id, 0, &argument.identity) ||
+        !append_call_argument_intent(builder, &argument, error, error_size))
         return false;
     XrTargetCallIntent call = {
         .semantic_call_target = XR_SEMANTIC_INDEX_NONE,
@@ -12102,8 +12121,11 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_FILL_SCALAR;
             bool array_hof = intent->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_HOF &&
                              intent->target_kind == XR_TARGET_CALL_TARGET_ARRAY_HOF;
+            bool iterator_rune_nth =
+                intent->calling_convention == XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NTH &&
+                intent->target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH;
             const XrSemanticParameterRecord *parameter =
-                array_intrinsic || array_fill || array_hof
+                array_intrinsic || array_fill || array_hof || iterator_rune_nth
                     ? NULL
                     : xr_semantic_plan_parameter(callee_semantic,
                                                  argument_intent->callee_parameter);
@@ -12191,11 +12213,13 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                                 parameter->ownership == XI_OWN_OWNED
                                                     ? XR_TARGET_OWNERSHIP_OWNED
                                                     : XR_TARGET_OWNERSHIP_BORROWED);
-            if (array_intrinsic || array_fill || array_hof) {
+            if (array_intrinsic || array_fill || array_hof || iterator_rune_nth) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
                     return fail(error, error_size, "XR_TARGET_1003",
-                                "Array intrinsic argument lacks exact caller storage");
+                                iterator_rune_nth
+                                    ? "Iterator<rune>.nth index lacks exact caller storage"
+                                    : "Array intrinsic argument lacks exact caller storage");
                 materialized->call_arguments[next_argument] = (XrTargetCallArgumentRecord) {
                     .identity = argument_intent->identity,
                     .call = i,

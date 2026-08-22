@@ -1839,6 +1839,97 @@ static void test_iterator_rune_next_c_emission_recipe_is_exact(void) {
     xi_func_free(root);
 }
 
+static void test_iterator_rune_nth_c_emission_recipe_is_exact(void) {
+    XiFunc *root = xi_func_new("iterator_rune_nth_recipe", &scalar_unit);
+    REQUIRE(root != NULL);
+    XiBlock *entry = xi_block_new(root);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_const_str(root, entry, "authority", &scalar_string);
+    XiValue *runes = xi_value_new(root, entry, XI_CALL_METHOD, &iterator_rune_type, 1);
+    XiValue *index = xi_const_int(root, entry, 1, &scalar_int);
+    XiValue *nth = xi_value_new(root, entry, XI_CALL_METHOD, &rune_type, 2);
+    XiValue *to_u32 = xi_value_new(root, entry, XI_CALL_METHOD, &u32_type, 1);
+    REQUIRE(source && runes && index && nth && to_u32);
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = (int64_t) XI_METHOD_SYMBOL_RUNES << 1;
+    nth->args[0] = runes;
+    nth->args[1] = index;
+    nth->aux = (void *) "nth";
+    nth->aux_int = (int64_t) XI_METHOD_SYMBOL_NTH << 1;
+    nth->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    nth->call_return_ownership.param_index = -1;
+    nth->call_return_ownership.complete = true;
+    to_u32->args[0] = nth;
+    to_u32->aux = (void *) "toUInt32";
+    to_u32->aux_int = (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1;
+    XiValue *release = xi_value_new(root, entry, XI_RELEASE, &scalar_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = runes;
+    xi_block_set_return(entry, NULL);
+    root->stage = XI_STAGE_OPTIMIZED;
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
+    XrTargetProfile *profile = build_exact_profile();
+    XrTargetPlan *target = build_target_plan(root->semantic_plan, profile);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic refinement_diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(target, &policy, &refinement,
+                                                                  &refinement_diag));
+    xr_aot_refinement_plan_free(refinement);
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error, sizeof(error)));
+    uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t runes_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t index_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t nth_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, root, runes, &ignored_function, &runes_value,
+                                            error, sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, root, index, &ignored_function, &index_value,
+                                            error, sizeof(error)));
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, root, nth, &ignored_function, &nth_value, error,
+                                            sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, nth_value, &view, error, sizeof(error)));
+    REQUIRE(view.rep == XR_C_VALUE_REP_RUNE && view.target_register_kind == XR_MACHINE_REP_RUNE &&
+            view.target_memory_kind == XR_MACHINE_REP_RUNE &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NTH &&
+            view.recipe_operand_value == runes_value && view.recipe_argument_value == index_value &&
+            view.recipe_symbol && strcmp(view.recipe_symbol, "xrt_iterator_rune_nth") == 0);
+    XrCValueEmissionView *row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == nth_value)
+            row = &emission->values[i];
+    REQUIRE(row != NULL);
+    uint8_t saved_recipe = row->materialization;
+    row->materialization = XR_C_VALUE_MATERIALIZATION_ITERATOR_RUNE_NEXT;
+    REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    row->materialization = saved_recipe;
+    uint32_t saved_value = row->recipe_operand_value;
+    row->recipe_operand_value = index_value;
+    REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    row->recipe_operand_value = saved_value;
+    saved_value = row->recipe_argument_value;
+    row->recipe_argument_value = runes_value;
+    REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    row->recipe_argument_value = saved_value;
+    const char *saved_symbol = row->recipe_symbol;
+    row->recipe_symbol = "xrt_iterator_nth";
+    REQUIRE(
+        !xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    row->recipe_symbol = saved_symbol;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error, sizeof(error)));
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(root);
+}
+
 static void test_rune_to_uint32_c_emission_recipe_is_exact(void) {
     XiFunc *root = xi_func_new("rune_to_uint32_recipe", &scalar_unit);
     REQUIRE(root != NULL);
@@ -2194,6 +2285,11 @@ static void test_channel_receive_c_emission_recipe_is_exact(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "iterator-rune-nth-emission") == 0) {
+        test_iterator_rune_nth_c_emission_recipe_is_exact();
+        printf("Iterator<rune>.nth C emission authority tests passed\n");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "string-slice-range-emission") == 0) {
         test_string_slice_range_c_emission_recipe_is_exact();
         printf("String range-slice C emission authority tests passed\n");
@@ -2218,6 +2314,7 @@ int main(int argc, char **argv) {
     test_string_slice_range_c_emission_recipe_is_exact();
     test_iterator_rune_has_next_c_emission_recipe_is_exact();
     test_iterator_rune_next_c_emission_recipe_is_exact();
+    test_iterator_rune_nth_c_emission_recipe_is_exact();
     test_rune_to_uint32_c_emission_recipe_is_exact();
     test_rune_is_whitespace_c_emission_recipe_is_exact();
     test_string_byte_slice_view_c_emission_recipe_is_exact();

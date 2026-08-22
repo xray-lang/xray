@@ -305,6 +305,8 @@ add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
+add_test(NAME test_xi_cgen_iterator_rune_nth_emission
+    COMMAND $<TARGET_FILE:test_xi_cgen> iterator-rune-nth-emission)
 target_sources(test_xi_cgen PRIVATE plan/target_profile_test_fixture.c)
 target_compile_definitions(test_xi_cgen PRIVATE
     XRAY_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
@@ -336,6 +338,8 @@ add_test(NAME test_target_array_intrinsic_authority
     COMMAND $<TARGET_FILE:test_target_plan> array-intrinsic-authority)
 add_test(NAME test_target_map_entry_iterator_authority
     COMMAND $<TARGET_FILE:test_target_plan> map-entry-iterator-authority)
+add_test(NAME test_target_iterator_rune_nth_argument_authority
+    COMMAND $<TARGET_FILE:test_target_plan> iterator-rune-nth-argument-authority)
 add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xtp_resource_stress
@@ -551,6 +555,8 @@ set_tests_properties(test_xtp_fuzz_evidence PROPERTIES
     TIMEOUT 90)
 add_xray_unit_test(test_xr_aot_scalar_plan aot/test_xr_aot_scalar_plan.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_test(NAME test_xr_aot_iterator_rune_nth_emission
+    COMMAND $<TARGET_FILE:test_xr_aot_scalar_plan> iterator-rune-nth-emission)
 add_xray_unit_test(test_xaot_scalar_target_cutover aot/test_xaot_scalar_target_cutover.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xr_aot_refinement aot/test_xr_aot_refinement.c

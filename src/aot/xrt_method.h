@@ -1131,6 +1131,13 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     return XR_NULL_VAL;
 }
 
+/* The generated method-symbol registry remains the sole selector authority;
+ * the typed C recipe
+ * supplies the already-proved iterator and native index. */
+static inline uint32_t xrt_iterator_rune_nth(XrValue receiver, int64_t index) {
+    return XR_TO_RUNE(xrt_method_1(receiver, XRT_SYM_NTH, XR_FROM_INT(index)));
+}
+
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
     {
         XrtMethodFn user_fn = xrt_type_find_sym_method(recv, sym);

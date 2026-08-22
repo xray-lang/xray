@@ -37,6 +37,7 @@
 #include "../semantic/xr_semantic_string_runes_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
+#include "../semantic/xr_semantic_iterator_rune_nth_shape.h"
 #include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
@@ -3241,6 +3242,7 @@ static bool collect_exact_dynamic_types(
             xr_semantic_string_runes_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_iterator_rune_has_next_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_iterator_rune_next_is_exact(plan->semantic_plan, operation, NULL) ||
+            xr_semantic_iterator_rune_nth_is_exact(plan->semantic_plan, operation, NULL, NULL) ||
             semantic_map_entries_iterator_is_exact_verify(plan->semantic_plan, operation, NULL,
                                                           NULL) ||
             semantic_map_entry_iterator_has_next_is_exact_verify(plan->semantic_plan, operation,
@@ -5124,6 +5126,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (xr_semantic_iterator_rune_nth_is_exact(semantic, operation, NULL, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (semantic_map_entries_iterator_is_exact_verify(semantic, operation, NULL, NULL) ||
             semantic_map_entry_iterator_has_next_is_exact_verify(semantic, operation, NULL) ||
             semantic_map_entry_iterator_next_is_exact_verify(semantic, operation, NULL)) {
@@ -5350,6 +5359,12 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool iterator_rune_next =
             !semantic_target && xr_semantic_iterator_rune_next_is_exact(
                                     semantic, operation, &iterator_rune_next_receiver);
+        uint32_t iterator_rune_nth_receiver = XR_SEMANTIC_INDEX_NONE;
+        uint32_t iterator_rune_nth_index = XR_SEMANTIC_INDEX_NONE;
+        bool iterator_rune_nth =
+            !semantic_target &&
+            xr_semantic_iterator_rune_nth_is_exact(semantic, operation, &iterator_rune_nth_receiver,
+                                                   &iterator_rune_nth_index);
         uint32_t map_entry_iterator_receiver = XR_SEMANTIC_INDEX_NONE;
         bool map_entries_iterator =
             !semantic_target && semantic_map_entries_iterator_is_exact_verify(
@@ -6397,6 +6412,70 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     result->slot < plan->slots_count &&
                     plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
                     plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+            if (!valid)
+                break;
+        } else if (iterator_rune_nth) {
+            uint32_t semantic_operand = operation->operand_begin + 1u;
+            const XrSemanticOperandRecord *operand =
+                semantic_operand < operand_count ? &operands[semantic_operand] : NULL;
+            const XrSemanticTypeRecord *operand_type =
+                operand ? xr_semantic_plan_type(semantic, operand->type) : NULL;
+            const XrTargetValueRepRecord *caller_value =
+                operand ? xr_target_plan_value_rep(plan, operand->value) : NULL;
+            const XrTargetCallArgumentRecord *argument = next_argument < plan->call_arguments_count
+                                                             ? &plan->call_arguments[next_argument]
+                                                             : NULL;
+            XrStableId argument_identity;
+            uint16_t argument_kind = XR_MACHINE_REP_COUNT;
+            valid =
+                result_type && result_kind == XR_MACHINE_REP_RUNE && !suspends && operand &&
+                operand_type && caller_value && argument &&
+                operand->value == iterator_rune_nth_index &&
+                semantic_type_expected_rep(operand_type, &argument_kind) == 1 &&
+                argument_kind == XR_MACHINE_REP_I64 &&
+                slot_binds_value_in_function(plan, caller_value, operation->function) &&
+                reconstruct_call_identity("xray-target-iterator-rune-nth-v1", operation->id,
+                                          result_type->id, iterator_rune_nth_receiver,
+                                          &expected_identity) &&
+                xr_stable_id_equal(call->identity, expected_identity) &&
+                reconstruct_call_identity("xray-target-iterator-rune-nth-argument-v1",
+                                          operation->id, operand_type->id, 0, &argument_identity) &&
+                xr_stable_id_equal(argument->identity, argument_identity) &&
+                call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                stable_id_is_zero(call->source_export_identity) &&
+                stable_id_is_zero(call->source_callee_identity) && call->argument_count == 1 &&
+                call->flags == 0 &&
+                call->calling_convention == XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NTH &&
+                call->target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH &&
+                call->result_ownership == XR_TARGET_CALL_NONE && result &&
+                result->slot < plan->slots_count &&
+                plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
+                plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+                argument->call == i && argument->semantic_operand == semantic_operand &&
+                argument->semantic_value == iterator_rune_nth_index &&
+                argument->callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+                argument->caller_slot == caller_value->slot &&
+                argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+                argument->register_rep < plan->machine_reps_count &&
+                argument->memory_rep < plan->machine_reps_count &&
+                argument->callee_register_rep < plan->machine_reps_count &&
+                argument->callee_memory_rep < plan->machine_reps_count &&
+                argument->register_rep == caller_value->register_rep &&
+                argument->memory_rep == caller_value->memory_rep &&
+                argument->callee_register_rep == caller_value->register_rep &&
+                argument->callee_memory_rep == caller_value->memory_rep &&
+                plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_I64 &&
+                plan->machine_reps[argument->memory_rep].kind == XR_MACHINE_REP_I64 &&
+                argument->ordinal == 0 && argument->mode == XR_TARGET_CALL_VALUE &&
+                argument->ownership == XR_TARGET_CALL_CONSUME &&
+                argument->transfer_mode == operand->transfer_mode && argument->flags == 0 &&
+                argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+                argument->reserved8[0] == 0 && argument->reserved8[1] == 0 &&
+                argument->reserved8[2] == 0;
+            next_argument++;
             if (!valid)
                 break;
         } else if (map_entries_iterator || map_entry_iterator_has_next ||

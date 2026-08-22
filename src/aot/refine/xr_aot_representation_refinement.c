@@ -32,6 +32,7 @@
 #include "../../plan/semantic/xr_semantic_string_runes_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_next_shape.h"
+#include "../../plan/semantic/xr_semantic_iterator_rune_nth_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../../plan/semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
@@ -4861,6 +4862,114 @@ static bool oracle_iterator_rune_next_call(const VerifyAuthority *ctx, uint32_t 
            *out_machine_kind == XR_MACHINE_REP_RUNE;
 }
 
+/* The index is a caller-only native scalar: the TargetPlan row binds it to
+ * the exact semantic
+ * operand and caller slot, then repeats that representation
+ * on the callee side without inventing
+ * a parameter or an adapter slot. */
+static bool oracle_iterator_rune_nth_call(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                          XrRep *out_storage, uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    const XrSemanticOperationRecord *operation =
+        operation_index < ctx->operation_count
+            ? xr_semantic_plan_operation(ctx->semantic, operation_index)
+            : NULL;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t index_value = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_semantic_iterator_rune_nth_is_exact(ctx->semantic, operation, &receiver,
+                                                &index_value) ||
+        operation->result_value != semantic_value)
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    uint32_t semantic_operand = operation->operand_begin + 1u;
+    const XrSemanticOperandRecord *operand =
+        operands && semantic_operand < operand_count ? &operands[semantic_operand] : NULL;
+    const XrSemanticTypeRecord *result_type =
+        xr_semantic_plan_type(ctx->semantic, operation->result_type);
+    const XrSemanticTypeRecord *index_type =
+        operand ? xr_semantic_plan_type(ctx->semantic, operand->type) : NULL;
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(ctx->target_plan, semantic_value);
+    const XrTargetValueRepRecord *caller = xr_target_plan_value_rep(ctx->target_plan, index_value);
+    uint32_t call_count = 0;
+    uint32_t argument_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(ctx->target_plan, &argument_count);
+    uint32_t call_index = operation_index < ctx->operation_count
+                              ? ctx->call_by_operation[operation_index]
+                              : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetCallRecord *call = calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrTargetCallArgumentRecord *argument =
+        call && arguments && call->argument_begin < argument_count
+            ? &arguments[call->argument_begin]
+            : NULL;
+    const XrTargetMachineRepRecord *index_register =
+        caller ? xr_target_plan_machine_rep(ctx->target_plan, caller->register_rep) : NULL;
+    const XrTargetMachineRepRecord *index_memory =
+        caller ? xr_target_plan_machine_rep(ctx->target_plan, caller->memory_rep) : NULL;
+    XrStableId expected_call;
+    XrStableId expected_argument;
+    XrRep receiver_storage = XR_REP_TAGGED;
+    uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
+    if (!operation || !operand || operand->value != index_value || !result_type || !index_type ||
+        !result || !caller || !call || !argument || !index_register || !index_memory ||
+        !oracle_dynamic_string_runes_storage(ctx, receiver, &receiver_storage, &receiver_kind) ||
+        receiver_storage != XR_REP_TAGGED || receiver_kind != XR_MACHINE_REP_DYN_VALUE ||
+        !aot_pair_identity("xray-target-iterator-rune-nth-v1", operation->id, result_type->id,
+                           receiver, &expected_call) ||
+        !aot_pair_identity("xray-target-iterator-rune-nth-argument-v1", operation->id,
+                           index_type->id, 0, &expected_argument) ||
+        !xr_stable_id_equal(call->identity, expected_call) || call->id != call_index ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->semantic_operation != operation_index ||
+        call->caller_function != operation->function ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !aot_stable_id_is_zero(call->source_export_identity) ||
+        !aot_stable_id_is_zero(call->source_callee_identity) ||
+        call->result_value != semantic_value || call->result_slot != result->slot ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE || call->argument_count != 1 ||
+        call->argument_begin >= argument_count || call->adapter_count != 0 || call->flags != 0 ||
+        call->result_register_rep != result->register_rep ||
+        call->result_memory_rep != result->memory_rep ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NTH ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH ||
+        call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL || call->reserved8[0] != 0 ||
+        call->reserved8[1] != 0 || call->reserved8[2] != 0 ||
+        !xr_stable_id_equal(argument->identity, expected_argument) ||
+        argument->call != call_index || argument->semantic_operand != semantic_operand ||
+        argument->semantic_value != index_value ||
+        argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+        argument->caller_slot != caller->slot || argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+        argument->register_rep != caller->register_rep ||
+        argument->memory_rep != caller->memory_rep ||
+        argument->callee_register_rep != caller->register_rep ||
+        argument->callee_memory_rep != caller->memory_rep || argument->ordinal != 0 ||
+        argument->mode != XR_TARGET_CALL_VALUE || argument->ownership != XR_TARGET_CALL_CONSUME ||
+        argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
+        argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        argument->reserved8[0] != 0 || argument->reserved8[1] != 0 || argument->reserved8[2] != 0 ||
+        index_register->kind != XR_MACHINE_REP_I64 || index_memory->kind != XR_MACHINE_REP_I64)
+        return false;
+    return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind) &&
+           *out_machine_kind == XR_MACHINE_REP_RUNE;
+}
+
+static bool oracle_iterator_rune_source_call(const VerifyAuthority *ctx, uint32_t semantic_value,
+                                             XrRep *out_storage, uint16_t *out_machine_kind) {
+    return oracle_iterator_rune_next_call(ctx, semantic_value, out_storage, out_machine_kind) ||
+           oracle_iterator_rune_nth_call(ctx, semantic_value, out_storage, out_machine_kind);
+}
+
 /* Exact rune-to-u32 conversion preserves the native integer lane and is
  * admitted only for the Rune produced by the frozen Iterator<rune>.next row. */
 static bool oracle_rune_to_uint32_call(const VerifyAuthority *ctx, uint32_t semantic_value,
@@ -4878,7 +4987,7 @@ static bool oracle_rune_to_uint32_call(const VerifyAuthority *ctx, uint32_t sema
         return false;
     XrRep receiver_storage = XR_REP_TAGGED;
     uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
-    if (!oracle_iterator_rune_next_call(ctx, receiver, &receiver_storage, &receiver_kind) ||
+    if (!oracle_iterator_rune_source_call(ctx, receiver, &receiver_storage, &receiver_kind) ||
         receiver_storage != XR_REP_I64 || receiver_kind != XR_MACHINE_REP_RUNE)
         return false;
     const XrSemanticTypeRecord *result_type =
@@ -4949,7 +5058,7 @@ static bool oracle_rune_is_whitespace_call(const VerifyAuthority *ctx, uint32_t 
         return false;
     XrRep receiver_storage = XR_REP_TAGGED;
     uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
-    if (!oracle_iterator_rune_next_call(ctx, receiver, &receiver_storage, &receiver_kind) ||
+    if (!oracle_iterator_rune_source_call(ctx, receiver, &receiver_storage, &receiver_kind) ||
         receiver_storage != XR_REP_I64 || receiver_kind != XR_MACHINE_REP_RUNE)
         return false;
     const XrSemanticTypeRecord *result_type =
@@ -7486,6 +7595,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             if (xr_semantic_iterator_rune_next_is_exact(ctx->semantic, operation, NULL))
                 return oracle_iterator_rune_next_call(ctx, semantic_value, out_storage,
                                                       out_machine_kind);
+            if (xr_semantic_iterator_rune_nth_is_exact(ctx->semantic, operation, NULL, NULL))
+                return oracle_iterator_rune_nth_call(ctx, semantic_value, out_storage,
+                                                     out_machine_kind);
             if (xr_semantic_rune_to_uint32_is_exact(ctx->semantic, operation, NULL))
                 return oracle_rune_to_uint32_call(ctx, semantic_value, out_storage,
                                                   out_machine_kind);
@@ -8209,12 +8321,33 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return true;
             }
             if (operation->opcode == XI_CALL_METHOD &&
+                xr_semantic_iterator_rune_nth_is_exact(ctx->semantic, operation, NULL, NULL)) {
+                XrRep result_storage = XR_REP_TAGGED;
+                if (!oracle_iterator_rune_nth_call(ctx, operation->result_value, &result_storage,
+                                                   &ignored_kind))
+                    return false;
+                if (operand_index == 0) {
+                    if (!oracle_dynamic_string_runes_storage(ctx, source_value, out_storage,
+                                                             &ignored_kind))
+                        return false;
+                    *out_storage = XR_REP_TAGGED;
+                    return true;
+                }
+                if (operand_index != 1 ||
+                    !oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind) ||
+                    ignored_kind != XR_MACHINE_REP_I64)
+                    return false;
+                *out_storage = XR_REP_I64;
+                return true;
+            }
+            if (operation->opcode == XI_CALL_METHOD &&
                 xr_semantic_rune_to_uint32_is_exact(ctx->semantic, operation, NULL)) {
                 XrRep result_storage = XR_REP_TAGGED;
                 if (operand_index != 0 ||
                     !oracle_rune_to_uint32_call(ctx, operation->result_value, &result_storage,
                                                 &ignored_kind) ||
-                    !oracle_iterator_rune_next_call(ctx, source_value, out_storage, &ignored_kind))
+                    !oracle_iterator_rune_source_call(ctx, source_value, out_storage,
+                                                      &ignored_kind))
                     return false;
                 *out_storage = XR_REP_I64;
                 return true;
@@ -8225,7 +8358,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 if (operand_index != 0 ||
                     !oracle_rune_is_whitespace_call(ctx, operation->result_value, &result_storage,
                                                     &ignored_kind) ||
-                    !oracle_iterator_rune_next_call(ctx, source_value, out_storage, &ignored_kind))
+                    !oracle_iterator_rune_source_call(ctx, source_value, out_storage,
+                                                      &ignored_kind))
                     return false;
                 *out_storage = XR_REP_I64;
                 return true;

@@ -912,6 +912,32 @@ static XrSemanticPlan *build_iterator_rune_next_semantic(void) {
     return finish_stringbuilder_semantic(function, entry, "Iterator<rune>.next");
 }
 
+static XrSemanticPlan *build_iterator_rune_nth_semantic(void) {
+    XiFunc *function = xi_func_new("target_iterator_rune_nth", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_const_str(function, entry, "target-nth", &stub_exact_string);
+    XiValue *runes = xi_value_new(function, entry, XI_CALL_METHOD, &stub_iterator_rune, 1);
+    XiValue *index = xi_const_int(function, entry, 1, &stub_int);
+    XiValue *nth = xi_value_new(function, entry, XI_CALL_METHOD, &stub_rune, 2);
+    REQUIRE(source && runes && index && nth);
+    runes->args[0] = source;
+    runes->aux = (void *) "runes";
+    runes->aux_int = (int64_t) XI_METHOD_SYMBOL_RUNES << 1;
+    nth->args[0] = runes;
+    nth->args[1] = index;
+    nth->aux = (void *) "nth";
+    nth->aux_int = (int64_t) XI_METHOD_SYMBOL_NTH << 1;
+    nth->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
+    nth->call_return_ownership.param_index = -1;
+    nth->call_return_ownership.complete = true;
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    REQUIRE(release != NULL);
+    release->args[0] = runes;
+    return finish_stringbuilder_semantic(function, entry, "Iterator<rune>.nth");
+}
+
 static XrSemanticPlan *build_map_entry_iterator_semantic(XiMethodSymbolId factory_symbol,
                                                          bool exact_result_types) {
     XiFunc *function = xi_func_new("target_map_entry_iterator", &stub_int);
@@ -5313,6 +5339,117 @@ static void test_iterator_rune_next_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_iterator_rune_nth_call_argument_authority(void) {
+    XrSemanticPlan *semantic = build_iterator_rune_nth_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan);
+    XrTargetCallRecord *call =
+        find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_ITERATOR_RUNE_NTH);
+    XrSemanticOperationRecord *operation =
+        call ? &semantic->operations[call->semantic_operation] : NULL;
+    uint32_t semantic_operand = operation ? operation->operand_begin + 1u : 0;
+    XrSemanticOperandRecord *operand =
+        semantic_operand < semantic->operand_count ? &semantic->operands[semantic_operand] : NULL;
+    const XrTargetValueRepRecord *result =
+        operation ? xr_target_plan_value_rep(plan, operation->result_value) : NULL;
+    const XrTargetValueRepRecord *caller =
+        operand ? xr_target_plan_value_rep(plan, operand->value) : NULL;
+    XrTargetCallArgumentRecord *argument =
+        call && call->argument_count == 1 ? &plan->call_arguments[call->argument_begin] : NULL;
+    XrStableId zero = {{0}};
+    REQUIRE(operation && operand && caller && result && argument &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ITERATOR_RUNE_NTH &&
+            operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_NTH << 1 && call->id != 0 &&
+            call->target_kind == XR_TARGET_CALL_TARGET_ITERATOR_RUNE_NTH &&
+            call->result_ownership == XR_TARGET_CALL_NONE && call->argument_count == 1 &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_RUNE &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_NONE &&
+            argument->call == call->id && argument->semantic_operand == semantic_operand &&
+            argument->semantic_value == operand->value &&
+            argument->callee_parameter == XR_SEMANTIC_INDEX_NONE &&
+            argument->caller_slot == caller->slot &&
+            argument->callee_slot == XR_SEMANTIC_INDEX_NONE &&
+            argument->register_rep == caller->register_rep &&
+            argument->memory_rep == caller->memory_rep &&
+            argument->callee_register_rep == caller->register_rep &&
+            argument->callee_memory_rep == caller->memory_rep &&
+            plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_I64 &&
+            argument->ordinal == 0 && argument->mode == XR_TARGET_CALL_VALUE &&
+            argument->ownership == XR_TARGET_CALL_CONSUME &&
+            argument->transfer_mode == XR_TRANSFER_SHARE && argument->flags == 0 &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+            !xr_stable_id_equal(argument->identity, zero));
+
+    XrStableId saved_identity = argument->identity;
+    argument->identity = zero;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->identity = saved_identity;
+    argument->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->identity = saved_identity;
+    uint32_t saved_u32 = argument->call;
+    argument->call = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->call = saved_u32;
+    saved_u32 = argument->semantic_operand;
+    argument->semantic_operand = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->semantic_operand = saved_u32;
+    saved_u32 = argument->semantic_value;
+    argument->semantic_value = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->semantic_value = saved_u32;
+    saved_u32 = argument->callee_parameter;
+    argument->callee_parameter = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->callee_parameter = saved_u32;
+    saved_u32 = argument->callee_slot;
+    argument->callee_slot = 0;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->callee_slot = saved_u32;
+    uint16_t saved_u16 = argument->callee_register_rep;
+    argument->callee_register_rep = result->register_rep;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->callee_register_rep = saved_u16;
+    saved_u16 = argument->ordinal;
+    argument->ordinal = 1;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->ordinal = saved_u16;
+    uint8_t saved_u8 = argument->mode;
+    argument->mode = XR_TARGET_CALL_REFERENCE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->mode = saved_u8;
+    saved_u8 = argument->ownership;
+    argument->ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->ownership = saved_u8;
+    saved_u8 = argument->transfer_mode;
+    argument->transfer_mode = XR_TRANSFER_MOVE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    argument->transfer_mode = saved_u8;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    int64_t saved_immediate = operation->semantic_immediate;
+    operation->semantic_immediate = (int64_t) XI_METHOD_SYMBOL_NEXT << 1;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operation->semantic_immediate = saved_immediate;
+    uint8_t saved_action = operand->ownership_action;
+    operand->ownership_action = XR_SEM_OPERAND_BORROW;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operand->ownership_action = saved_action;
+    uint32_t saved_type = operand->type;
+    operand->type = operation->result_type;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    operand->type = saved_type;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_map_entry_iterator_call_authority(void) {
     XrSemanticPlan *semantic = build_map_entry_iterator_semantic(
         XI_METHOD_SYMBOL_ENTRIES_ITERATOR, true);
@@ -6151,6 +6288,11 @@ int main(int argc, char **argv) {
         puts("Map entry iterator TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "iterator-rune-nth-argument-authority") == 0) {
+        test_iterator_rune_nth_call_argument_authority();
+        puts("Iterator<rune>.nth call argument authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "source-export-ref-c-emission") == 0) {
         test_source_export_ref_argument_is_not_array_projection();
         puts("Source-export ref C emission family tests passed");
@@ -6169,6 +6311,7 @@ int main(int argc, char **argv) {
     test_string_slice_range_call_authority();
     test_iterator_rune_has_next_call_authority();
     test_iterator_rune_next_call_authority();
+    test_iterator_rune_nth_call_argument_authority();
     test_map_entry_iterator_call_authority();
     test_rune_to_uint32_call_authority();
     test_rune_is_whitespace_call_authority();

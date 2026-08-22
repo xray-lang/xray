@@ -11447,6 +11447,15 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ")");
         return;
     }
+    XrCValueEmissionView iterator_rune_nth = {0};
+    if (cg_iterator_rune_nth_emission_view(ctx, f, v, &iterator_rune_nth)) {
+        fprintf(out, "%s(", iterator_rune_nth.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
     XrCValueEmissionView iterator_rune_has_next = {0};
     if (cg_iterator_rune_has_next_emission_view(ctx, f, v, &iterator_rune_has_next)) {
         fprintf(out, "%s(", iterator_rune_has_next.recipe_symbol);
