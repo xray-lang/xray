@@ -5459,7 +5459,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 bool argument_class_instance =
                     parameter && parameter->type == operand->type &&
                     xr_semantic_class_instance_parameter_source_class(semantic, parameter_index) !=
-                        XR_SEMANTIC_INDEX_NONE;
+                        XR_SEMANTIC_INDEX_NONE &&
+                    xr_semantic_class_parameter_call_transfer_is_exact(semantic, parameter_index,
+                                                                       operand);
                 uint8_t ownership = operand->ownership_action == XR_SEM_OPERAND_CONSUME
                                         ? XR_TARGET_CALL_CONSUME
                                         : XR_TARGET_CALL_READ;
@@ -5515,14 +5517,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                                                    argument_string_callee_owns
                                                                ? XR_TARGET_OWNERSHIP_OWNED
                                                                : XR_TARGET_OWNERSHIP_BORROWED);
-                /* A receiver hands its instance to the method as a borrow: the
-                 * caller keeps the allocation and answers for it, the method
-                 * only reads through the same tagged value. One carrier under
-                 * two ownerships -- the shape this boundary describes. */
-                bool class_instance_borrow_boundary =
+                /* Rebuild the class hand-over from the semantic parameter. The
+                 * same carrier is borrowed or consumed according to that
+                 * declaration; the serialized call row does not choose. */
+                bool class_instance_boundary =
                     argument_class_instance &&
                     verify_tagged_container_value_boundary(plan, caller_value, callee_value,
-                                                           XR_TARGET_OWNERSHIP_BORROWED);
+                                                           parameter->ownership == XI_OWN_OWNED
+                                                               ? XR_TARGET_OWNERSHIP_OWNED
+                                                               : XR_TARGET_OWNERSHIP_BORROWED);
                 const char *argument_identity_domain =
                     argument_array_ref ? "xray-target-direct-array-ref-argument-v1"
                                        : "xray-target-call-argument-v1";
@@ -5557,9 +5560,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                      * a String parameter may declare and required the call site
                      * to state the matching one. */
                     (parameter->ownership == XI_OWN_NONE || argument_string_value ||
+                     argument_class_instance ||
                      (argument_adt_enum && parameter->ownership == XI_OWN_OWNED) ||
                      ((argument_u8_slice || argument_unit_enum || argument_adt_enum ||
-                       argument_class_instance || argument_array_ref || argument_container_value) &&
+                       argument_array_ref || argument_container_value) &&
                       parameter->ownership == XI_OWN_BORROWED)) &&
                     caller_value && callee_value &&
                     slot_binds_value_in_function(plan, caller_value, operation->function) &&
@@ -5579,7 +5583,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     ((caller_value->register_rep == callee_value->register_rep &&
                       caller_value->memory_rep == callee_value->memory_rep) ||
                      adt_enum_borrow_boundary || array_ref_borrow_boundary ||
-                     container_value_borrow_boundary || class_instance_borrow_boundary) &&
+                     container_value_borrow_boundary || class_instance_boundary) &&
                     plan->machine_reps[argument->register_rep].kind ==
                         (argument_u8_slice         ? XR_MACHINE_REP_VIEW
                          : argument_unit_enum      ? XR_MACHINE_REP_ENUM_ORDINAL

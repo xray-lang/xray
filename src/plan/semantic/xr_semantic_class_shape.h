@@ -283,13 +283,11 @@ static inline uint32_t xr_semantic_class_method_receiver_source_class(const XrSe
 /* The declaration whose instance an ordinary parameter binds, or NONE. Unlike a
  * receiver, such a parameter is written in the source with the class as its
  * declared type, so its own type row names the declaration and the function's
- * identity says nothing about it: the judgement is the row, plus the plan's own
- * record that the binding is a plain shared read that takes no owning
- * reference. An owned class parameter would move the allocation across the call
- * boundary, and this family accounts for no such transfer, so only the borrow
- * the plan recorded is admitted. The parameter must also sit inside its own
- * function's range at the ordinal that range gives it, so a row belonging to
- * another function can never answer for this one. */
+ * identity says nothing about it. The parameter may either take the owning
+ * reference or borrow it; both bind the same tagged carrier, and the call-site
+ * judgement below proves the matching consume or borrow action. The parameter
+ * must also sit inside its own function's range at the ordinal that range gives
+ * it, so a row belonging to another function can never answer for this one. */
 static inline uint32_t xr_semantic_class_argument_source_class(const XrSemanticPlan *plan,
                                                                uint32_t parameter_index) {
     if (!plan || parameter_index == XR_SEMANTIC_INDEX_NONE ||
@@ -298,7 +296,7 @@ static inline uint32_t xr_semantic_class_argument_source_class(const XrSemanticP
     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
     if (!parameter || parameter->value == XR_SEMANTIC_INDEX_NONE ||
         parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        parameter->ownership != XI_OWN_BORROWED ||
+        (parameter->ownership != XI_OWN_OWNED && parameter->ownership != XI_OWN_BORROWED) ||
         (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
         parameter->function >= (uint32_t) xr_semantic_plan_function_count(plan))
         return XR_SEMANTIC_INDEX_NONE;
@@ -307,6 +305,13 @@ static inline uint32_t xr_semantic_class_argument_source_class(const XrSemanticP
         parameter_index < function->parameter_begin ||
         parameter_index - function->parameter_begin >= function->parameter_count ||
         parameter->ordinal != parameter_index - function->parameter_begin)
+        return XR_SEMANTIC_INDEX_NONE;
+    /* Parameter zero of a declared member is owned by the receiver judgement,
+     * even when its type row also names the declaration. Later parameters of
+     * that member remain ordinary arguments. */
+    if (parameter_index == function->parameter_begin &&
+        (function->source_kind == XR_SEM_SOURCE_FUNCTION_CONSTRUCTOR ||
+         function->source_kind == XR_SEM_SOURCE_FUNCTION_INSTANCE_METHOD))
         return XR_SEMANTIC_INDEX_NONE;
     return xr_semantic_class_instance_type_source_class(
         plan, xr_semantic_plan_type(plan, parameter->type));
@@ -340,8 +345,9 @@ static inline uint16_t xr_semantic_source_instance_method_call_kind(uint8_t flag
  * the same outer tagged value for the same reason the construction result does,
  * so the layers that only need to know "is this parameter a proved class
  * instance" ask this one question instead of restating the three. The three are
- * disjoint by construction: a receiver's row is the anonymous instance that
- * names no declaration, and an ordinary parameter's row must name one. */
+ * disjoint by construction: a declared member's first parameter belongs to a
+ * receiver judgement, while the ordinary-argument judgement excludes that
+ * position even when the receiver's type row names its declaration. */
 static inline uint32_t xr_semantic_class_instance_parameter_source_class(const XrSemanticPlan *plan,
                                                                          uint32_t parameter_index) {
     uint32_t source_class =
@@ -352,6 +358,30 @@ static inline uint32_t xr_semantic_class_instance_parameter_source_class(const X
     if (source_class != XR_SEMANTIC_INDEX_NONE)
         return source_class;
     return xr_semantic_class_argument_source_class(plan, parameter_index);
+}
+
+/* A class parameter's ownership declaration and the call operand's action are
+ * one transfer fact. An owned parameter receives the caller's reference and
+ * therefore requires CONSUME; a borrowed parameter leaves responsibility with
+ * the caller and therefore requires BORROW. Both use the shared READ carrier,
+ * so a ref/writeback spelling cannot be admitted by an ownership match alone.
+ * The class-instance judgement is part of this question: an ordinary scalar
+ * with the same ownership numbers must not enter the class storage family. */
+static inline bool xr_semantic_class_parameter_call_transfer_is_exact(
+    const XrSemanticPlan *plan, uint32_t parameter_index,
+    const XrSemanticOperandRecord *operand) {
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, parameter_index);
+    return parameter && operand &&
+           xr_semantic_class_instance_parameter_source_class(plan, parameter_index) !=
+               XR_SEMANTIC_INDEX_NONE &&
+           parameter->mode == XR_PARAM_READ && operand->parameter_mode == XR_PARAM_READ &&
+           parameter->transfer_mode == XR_TRANSFER_SHARE &&
+           operand->transfer_mode == XR_TRANSFER_SHARE &&
+           ((parameter->ownership == XI_OWN_OWNED &&
+             operand->ownership_action == XR_SEM_OPERAND_CONSUME) ||
+            (parameter->ownership == XI_OWN_BORROWED &&
+             operand->ownership_action == XR_SEM_OPERAND_BORROW));
 }
 
 /* The one function the plan records as the constructor of `source_class`, or

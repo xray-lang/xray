@@ -13,6 +13,7 @@
 #include "../../../src/base/xsha256.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_class_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
@@ -2625,6 +2626,80 @@ static XrSemanticPlan *build_direct_local_scalar_calls(uint16_t call_opcode, XrT
     return plan;
 }
 
+static void set_single_parameter_ownership(XiFunc *function, XiOwnership ownership) {
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = ownership;
+    function->arc_borrow_sig->valid = true;
+}
+
+static XrSemanticPlan *build_direct_local_class_argument_semantic(XiOwnership callee_ownership) {
+    XiFunc *root = xi_func_new("target_class_argument_root", &stub_int);
+    XiFunc *child = xi_func_new("target_class_argument_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+
+    root->nparams = root->min_params = 1;
+    child->nparams = child->min_params = 1;
+    root->params = (XiValue **) xr_calloc(1, sizeof(*root->params));
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    REQUIRE(root->params != NULL && child->params != NULL);
+    root->params[0] = xi_param(root, root_entry, 0, &stub_target_source_instance);
+    child->params[0] = xi_param(child, child_entry, 0, &stub_target_source_instance);
+    REQUIRE(root->params[0] != NULL && child->params[0] != NULL);
+    set_single_parameter_ownership(root, XI_OWN_OWNED);
+    set_single_parameter_ownership(child, callee_ownership);
+
+    XiValue *child_result = xi_const_int(child, child_entry, 7, &stub_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(closure != NULL && call != NULL);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    call->args[0] = closure;
+    call->args[1] = root->params[0];
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module = xi_module_new("pkg/target_class_argument.xr", "target_class_argument", root);
+    REQUIRE(module != NULL);
+    root->module = module;
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &source_class;
+    module->nclasses = 1;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local class argument semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
+    root->module = NULL;
+    xi_func_free(root);
+    module->init = NULL;
+    xi_module_free(module);
+    return plan;
+}
+
 static XrSemanticPlan *build_channel_method_semantic(const char *selector,
                                                      int64_t selector_immediate,
                                                      XrType *receiver_type, XrType *result_type,
@@ -3843,6 +3918,116 @@ static void test_direct_local_call_adapter_family(void) {
     xr_target_plan_free(first);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
+}
+
+static void test_direct_local_class_argument_authority(void) {
+    const XiOwnership callee_ownerships[] = {XI_OWN_OWNED, XI_OWN_BORROWED};
+    for (uint32_t test_case = 0; test_case < 2; test_case++) {
+        XiOwnership callee_ownership = callee_ownerships[test_case];
+        XrSemanticPlan *semantic =
+            build_direct_local_class_argument_semantic(callee_ownership);
+        XrTargetProfile *profile = build_profile(0);
+        XrTargetPlan *plan = NULL;
+        char error[512] = {0};
+        const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+        const XrSemanticOperationRecord *operation =
+            target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+        const XrSemanticFunctionRecord *callee =
+            target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+        const XrSemanticParameterRecord *parameter =
+            callee ? xr_semantic_plan_parameter(semantic, callee->parameter_begin) : NULL;
+        uint32_t operand_count = 0;
+        XrSemanticOperandRecord *operands =
+            (XrSemanticOperandRecord *) xr_semantic_plan_operands(semantic, &operand_count);
+        XrSemanticOperandRecord *operand =
+            operation && operation->operand_begin + 1u < operand_count
+                ? &operands[operation->operand_begin + 1u]
+                : NULL;
+        REQUIRE(target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL && operation && callee &&
+                parameter && operand && parameter->ownership == callee_ownership &&
+                operand->ownership_action == (callee_ownership == XI_OWN_OWNED
+                                                   ? XR_SEM_OPERAND_CONSUME
+                                                   : XR_SEM_OPERAND_BORROW) &&
+                xr_semantic_class_argument_source_class(semantic, callee->parameter_begin) !=
+                    XR_SEMANTIC_INDEX_NONE &&
+                xr_semantic_class_parameter_call_transfer_is_exact(
+                    semantic, callee->parameter_begin, operand));
+        uint8_t saved_action = operand->ownership_action;
+        operand->ownership_action = saved_action == XR_SEM_OPERAND_CONSUME
+                                        ? XR_SEM_OPERAND_BORROW
+                                        : XR_SEM_OPERAND_CONSUME;
+        REQUIRE(!xr_semantic_class_parameter_call_transfer_is_exact(
+            semantic, callee->parameter_begin, operand));
+        operand->ownership_action = saved_action;
+
+        bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+        if (!built)
+            fprintf(stderr, "direct-local class argument TargetPlan failed: %s\n", error);
+        REQUIRE(built && plan && plan->calls_count == 1 && plan->call_arguments_count == 1 &&
+                (plan->completed_family_mask & XR_TARGET_FAMILY_SOURCE_CLASS_ARGUMENT_STORAGE) !=
+                    0);
+        XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+        REQUIRE(argument->mode == XR_TARGET_CALL_VALUE && argument->flags == 0 &&
+                argument->ownership == (callee_ownership == XI_OWN_OWNED
+                                             ? XR_TARGET_CALL_CONSUME
+                                             : XR_TARGET_CALL_READ) &&
+                argument->caller_slot < plan->slots_count &&
+                argument->callee_slot < plan->slots_count &&
+                plan->slots[argument->caller_slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+                plan->slots[argument->callee_slot].ownership ==
+                    (callee_ownership == XI_OWN_OWNED ? XR_TARGET_OWNERSHIP_OWNED
+                                                      : XR_TARGET_OWNERSHIP_BORROWED) &&
+                plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+                plan->machine_reps[argument->register_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_OWNED &&
+                plan->machine_reps[argument->memory_rep].ownership ==
+                    XR_TARGET_OWNERSHIP_OWNED &&
+                plan->machine_reps[argument->callee_register_rep].kind ==
+                    XR_MACHINE_REP_DYN_VALUE &&
+                plan->machine_reps[argument->callee_register_rep].ownership ==
+                    (callee_ownership == XI_OWN_OWNED ? XR_TARGET_OWNERSHIP_OWNED
+                                                      : XR_TARGET_OWNERSHIP_BORROWED) &&
+                plan->machine_reps[argument->callee_memory_rep].ownership ==
+                    (callee_ownership == XI_OWN_OWNED ? XR_TARGET_OWNERSHIP_OWNED
+                                                      : XR_TARGET_OWNERSHIP_BORROWED) &&
+                xr_target_plan_verify(plan, error, sizeof(error)));
+
+        uint8_t saved_ownership = argument->ownership;
+        argument->ownership = saved_ownership == XR_TARGET_CALL_CONSUME ? XR_TARGET_CALL_READ
+                                                                        : XR_TARGET_CALL_CONSUME;
+        expect_verify_failure(plan, "XR_TARGET_1003");
+        argument->ownership = saved_ownership;
+        uint8_t saved_slot_ownership = plan->slots[argument->callee_slot].ownership;
+        plan->slots[argument->callee_slot].ownership =
+            saved_slot_ownership == XR_TARGET_OWNERSHIP_OWNED ? XR_TARGET_OWNERSHIP_BORROWED
+                                                              : XR_TARGET_OWNERSHIP_OWNED;
+        expect_verify_failure(plan, "XR_TARGET_1001");
+        plan->slots[argument->callee_slot].ownership = saved_slot_ownership;
+        REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+        xr_target_plan_free(plan);
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+    }
+
+    XrSemanticPlan *scalar =
+        build_direct_local_scalar_calls(XI_CALL, &stub_int, &stub_function);
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(scalar, 0);
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(scalar, target->operation) : NULL;
+    const XrSemanticFunctionRecord *callee =
+        target ? xr_semantic_plan_function(scalar, target->function) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(scalar, &operand_count);
+    const XrSemanticOperandRecord *operand =
+        operation && operation->operand_begin + 1u < operand_count
+            ? &operands[operation->operand_begin + 1u]
+            : NULL;
+    REQUIRE(callee && operand &&
+            !xr_semantic_class_parameter_call_transfer_is_exact(
+                scalar, callee->parameter_begin, operand));
+    xr_semantic_plan_free(scalar);
 }
 
 static void test_direct_local_raw_pointer_call_authority(void) {
@@ -5703,6 +5888,11 @@ static void test_owned_string_coroutine_lifecycle_authority(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "direct-local-class-argument-authority") == 0) {
+        test_direct_local_class_argument_authority();
+        puts("Direct-local class argument authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle-authority") == 0) {
         test_owned_string_coroutine_lifecycle_authority();
         test_large_coroutine_lifecycle_projection_is_bounded();
@@ -5767,6 +5957,7 @@ int main(int argc, char **argv) {
     test_builder_materializes_struct_and_named_aggregates();
     test_unknown_call_target_fails_closed();
     test_direct_local_call_adapter_family();
+    test_direct_local_class_argument_authority();
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();

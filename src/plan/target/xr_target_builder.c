@@ -5259,14 +5259,28 @@ static bool note_source_class_parameter_storage_value(XrTargetPlanBuilder *build
                                                       size_t error_size) {
     const XrSemanticPlan *plan = builder->semantic_plan;
     const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, parameter_index);
-    if (xr_semantic_class_instance_parameter_source_class(plan, parameter_index) ==
-            XR_SEMANTIC_INDEX_NONE ||
-        !parameter || parameter->value >= analysis->total_values ||
+    uint32_t source_class =
+        xr_semantic_class_instance_parameter_source_class(plan, parameter_index);
+    if (source_class == XR_SEMANTIC_INDEX_NONE || !parameter ||
+        parameter->value >= analysis->total_values ||
         parameter->type >= analysis->type_count ||
         parameter->function >= xr_semantic_plan_function_count(plan) ||
-        analysis->defined_values[parameter->value])
+        analysis->defined_values[parameter->value]) {
+        if (target_trace_enabled())
+            fprintf(stderr,
+                    "[target] refused in source-class parameter storage: parameter=%u "
+                    "source_class=%u value=%u/%u type=%u/%u function=%u/%zu already_bound=%u\n",
+                    parameter_index, source_class,
+                    parameter ? parameter->value : XR_SEMANTIC_INDEX_NONE, analysis->total_values,
+                    parameter ? parameter->type : XR_SEMANTIC_INDEX_NONE, analysis->type_count,
+                    parameter ? parameter->function : XR_SEMANTIC_INDEX_NONE,
+                    xr_semantic_plan_function_count(plan),
+                    parameter && parameter->value < analysis->total_values
+                        ? analysis->defined_values[parameter->value]
+                        : 0);
         return fail(error, error_size, "XR_TARGET_1001",
-                    "source class receiver storage authority is incomplete");
+                    "source class parameter storage authority is incomplete");
+    }
     bool owned = parameter->ownership == XI_OWN_OWNED;
     if (!owned && parameter->ownership != XI_OWN_BORROWED)
         return fail(error, error_size, "XR_TARGET_1001",
@@ -9225,9 +9239,11 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          * the constructor receiver. Asking only about the declared-parameter
          * form would refuse every `this`, whose type row is the anonymous
          * instance that names no declaration. */
-        bool exact_class_instance = parameter && parameter->type == operand->type &&
-                                    xr_semantic_class_instance_parameter_source_class(
-                                        plan, parameter_index) != XR_SEMANTIC_INDEX_NONE;
+        bool exact_class_instance =
+            parameter && parameter->type == operand->type &&
+            xr_semantic_class_instance_parameter_source_class(plan, parameter_index) !=
+                XR_SEMANTIC_INDEX_NONE &&
+            xr_semantic_class_parameter_call_transfer_is_exact(plan, parameter_index, operand);
         /* An Array handed over by value. It travels the plain argument path a
          * scalar takes -- the tagged value is copied, the allocation is shared
          * -- so it states no place and no element storage of its own. Whatever
@@ -9284,9 +9300,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
              * site to state the matching one, so a second table restating half
              * of that would be the narrower of two spellings of one rule. */
             (parameter->ownership != XI_OWN_NONE && !exact_string_value &&
+             !exact_class_instance &&
              !(exact_adt_enum && parameter->ownership == XI_OWN_OWNED) &&
-             !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_class_instance ||
-                exact_array_ref || exact_array_value) &&
+             !((exact_u8_slice || exact_unit_enum || exact_adt_enum || exact_array_ref ||
+                exact_array_value) &&
                parameter->ownership == XI_OWN_BORROWED))) {
             if (target_trace_enabled()) {
                 fprintf(stderr,
@@ -9350,9 +9367,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                 }
                 if (parameter && parameter->ownership != XI_OWN_NONE)
                     fprintf(stderr,
-                            "[target]   the parameter states ownership %u, which only an ADT enum "
-                            "(as OWNED) or a reference-capable family (as BORROWED) may carry; a "
-                            "plain scalar must state none\n",
+                            "[target]   the parameter states ownership %u; an owned class, String "
+                            "or ADT enum requires a consuming operand, while a borrowed "
+                            "reference-capable value requires a borrowing operand; a plain "
+                            "scalar must state none\n",
                             parameter->ownership);
                 if (method)
                     fprintf(stderr,
@@ -12094,19 +12112,17 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                 tagged_container_value_boundary(materialized, caller, callee,
                                                 string_callee_owns ? XR_TARGET_OWNERSHIP_OWNED
                                                                    : XR_TARGET_OWNERSHIP_BORROWED);
-            /* A receiver hands its instance to the method as a borrow: the
-             * caller keeps the allocation and answers for it, the method only
-             * reads through the same tagged value. That is one carrier under
-             * two ownerships, which is exactly what this boundary describes --
-             * and the caller's own ownership is deliberately left open, since a
-             * fresh construction owns its instance while a borrowed local does
-             * not. */
-            bool class_instance_borrow_boundary =
+            /* A class instance crosses in the ownership its parameter states.
+             * Borrowing and consuming calls use the same tagged carrier; only
+             * the callee-side ownership changes. */
+            bool class_instance_boundary =
                 parameter &&
                 xr_semantic_class_instance_parameter_source_class(
                     callee_semantic, argument_intent->callee_parameter) != XR_SEMANTIC_INDEX_NONE &&
                 tagged_container_value_boundary(materialized, caller, callee,
-                                                XR_TARGET_OWNERSHIP_BORROWED);
+                                                parameter->ownership == XI_OWN_OWNED
+                                                    ? XR_TARGET_OWNERSHIP_OWNED
+                                                    : XR_TARGET_OWNERSHIP_BORROWED);
             if (array_intrinsic || array_fill || array_hof) {
                 if (argument_intent->call_intent != i || argument_intent->ordinal != ordinal ||
                     !caller || argument_intent->callee_parameter != XR_SEMANTIC_INDEX_NONE)
@@ -12141,7 +12157,7 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                   ((caller->register_rep != callee->register_rep ||
                     caller->memory_rep != callee->memory_rep) &&
                    !adt_enum_borrow_boundary && !array_ref_borrow_boundary &&
-                   !container_value_borrow_boundary && !class_instance_borrow_boundary)))) {
+                   !container_value_borrow_boundary && !class_instance_boundary)))) {
                 if (target_trace_enabled()) {
                     fprintf(stderr,
                             "[target] refused in call argument materialization: argument %u of "
@@ -12167,8 +12183,8 @@ static bool materialize_calls_and_adapters(const XrTargetPlanBuilder *builder,
                                            array_ref_borrow_boundary);
                     target_trace_judgement("tagged container by value boundary",
                                            container_value_borrow_boundary);
-                    target_trace_judgement("class instance borrow boundary",
-                                           class_instance_borrow_boundary);
+                    target_trace_judgement("class instance ownership boundary",
+                                           class_instance_boundary);
                     fprintf(stderr,
                             "[target]   read it as: matching reps need no boundary at all. A "
                             "boundary is what lets the two sides hold the same carrier under "
