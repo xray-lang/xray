@@ -1602,8 +1602,9 @@ TEST(cgen_simple_arith) {
            "native i64 print should not call the generic tagged printer");
     assert(!contains(code, "XR_FROM_INT(v") &&
            "print-only i64 boxes should be elided from generated C");
-    /* Should have a main function that accepts script arguments. */
-    assert(contains(code, "i64 main(i64 argc, char **argv)") && "should have main()");
+    /* The native process entry point follows the host C ABI. Source-language
+     * exact scalar names must never leak into this generated signature. */
+    assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
     const char *linux_feature_test = strstr(code, "#define _GNU_SOURCE 1");
@@ -1641,7 +1642,7 @@ TEST(cgen_simple_arith) {
            contains(code, "#pragma clang diagnostic ignored \"-Wdeclaration-after-statement\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wfloat-equal\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wswitch-enum\"") &&
-           contains(code, "#pragma clang diagnostic ignored \"-Wimplicit-i64-conversion\"") &&
+           contains(code, "#pragma clang diagnostic ignored \"-Wimplicit-int-conversion\"") &&
            contains(code, "#pragma clang diagnostic ignored \"-Wshorten-64-to-32\"") &&
            "generated translation units should isolate Clang-only warning suppressions");
 

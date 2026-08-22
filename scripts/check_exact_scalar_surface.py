@@ -89,6 +89,11 @@ HOST_EXACT_TYPE_RE = re.compile(
     r"(?:^|[;{}(,])\s*(?:(?:static|extern|inline|const|volatile|register|_Atomic)\s+)*"
     r"(?P<name>i64|u8|f64)\b\s*(?:\*\s*)?[A-Za-z_]"
 )
+HOST_ENTRY_ABI_EXPECTATION = Path("tests/unit/ir/test_xi_cgen.c")
+HOST_ENTRY_ABI_REQUIRED = 'int main(int argc, char **argv)'
+HOST_ENTRY_ABI_FORBIDDEN = re.compile(r"\b(?:i64|u8|f64)\s+main\s*\(")
+HOST_WARNING_REQUIRED = "-Wimplicit-int-conversion"
+HOST_WARNING_FORBIDDEN = "-Wimplicit-i64-conversion"
 
 TOMBSTONE_ROWS = (
     "legacy-scalar-type-spellings\tint|byte|float\tTK_INT|TK_BYTE|TK_FLOAT|XR_TREF_INT|XR_TREF_BYTE|XR_TREF_FLOAT\t"
@@ -318,6 +323,32 @@ def _check_host_source_types(root: Path, errors: list[str]) -> None:
                     f"{_relative(path, root)}:{line_no}: source scalar "
                     f"{match.group('name')} used as a host C/C++ type"
                 )
+    entry_expectation = root / HOST_ENTRY_ABI_EXPECTATION
+    if not entry_expectation.is_file():
+        errors.append(f"missing generated-C entry ABI expectation {HOST_ENTRY_ABI_EXPECTATION.as_posix()}")
+        return
+    entry_text = _read(entry_expectation)
+    for line_no, line in enumerate(entry_text.splitlines(), 1):
+        if HOST_ENTRY_ABI_FORBIDDEN.search(line):
+            errors.append(
+                f"{HOST_ENTRY_ABI_EXPECTATION.as_posix()}:{line_no}: "
+                "source scalar leaked into the generated-C entry ABI expectation"
+            )
+        if HOST_WARNING_FORBIDDEN in line:
+            errors.append(
+                f"{HOST_ENTRY_ABI_EXPECTATION.as_posix()}:{line_no}: "
+                "source scalar leaked into a host compiler warning name"
+            )
+    if HOST_ENTRY_ABI_REQUIRED not in entry_text:
+        errors.append(
+            f"{HOST_ENTRY_ABI_EXPECTATION.as_posix()}: "
+            "generated-C entry ABI expectation is missing"
+        )
+    if HOST_WARNING_REQUIRED not in entry_text:
+        errors.append(
+            f"{HOST_ENTRY_ABI_EXPECTATION.as_posix()}: "
+            "host compiler warning expectation is missing"
+        )
 
 
 def _check_strconv(root: Path, errors: list[str]) -> None:
@@ -393,6 +424,9 @@ def self_test() -> int:
         _write(root / "contracts/capability-deletions.tsv", "header\n" + "\n".join(TOMBSTONE_ROWS) + "\n")
         for rel in PUBLIC_BINDING_FILES + PUBLIC_TEXT_FILES + SCRIPT_SOURCE_OWNERS:
             _write(root / rel, "exact surface\n")
+        _write(root / HOST_ENTRY_ABI_EXPECTATION,
+               'assert(contains(code, "int main(int argc, char **argv)"));\n'
+               'assert(contains(code, "-Wimplicit-int-conversion"));\n')
         _write(root / "xisa/aot/abi.def", "(define-aot-abi i64)\n(define-aot-abi f64)\n")
         _write(root / "src/aot/xaot_abi_gen.h", 'X(I64, "i64") X(F64, "f64")\n')
 
@@ -414,6 +448,25 @@ def self_test() -> int:
             print("exact scalar host-type mutation did not fail closed", file=sys.stderr)
             return 1
         _write(root / "src/frontend/parser/host_type_residue.c", "static int parse_count(void);\n")
+        _write(root / HOST_ENTRY_ABI_EXPECTATION,
+               'assert(contains(code, "i64 main(i64 argc, char **argv)"));\n'
+               'assert(contains(code, "-Wimplicit-int-conversion"));\n')
+        errors, _ = verify(root)
+        if not any("source scalar leaked into the generated-C entry ABI expectation" in error
+                   for error in errors):
+            print("exact scalar generated-C entry ABI mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / HOST_ENTRY_ABI_EXPECTATION,
+               'assert(contains(code, "int main(int argc, char **argv)"));\n'
+               'assert(contains(code, "-Wimplicit-i64-conversion"));\n')
+        errors, _ = verify(root)
+        if not any("source scalar leaked into a host compiler warning name" in error
+                   for error in errors):
+            print("exact scalar host warning mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / HOST_ENTRY_ABI_EXPECTATION,
+               'assert(contains(code, "int main(int argc, char **argv)"));\n'
+               'assert(contains(code, "-Wimplicit-int-conversion"));\n')
         _write(root / "tests/exact_keyword_identifier.xr", "enum Signal {\n    TERM,\n    i64\n}\n")
         errors, _ = verify(root)
         if not any("exact scalar keyword i64 used as an identifier" in error for error in errors):
