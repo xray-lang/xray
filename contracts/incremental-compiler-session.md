@@ -94,7 +94,11 @@ Incremental graph reset does not clear this ledger or rewind its next identity;
 only destruction of the owning compiler session ends the declaration history.
 
 The declaration ledger is the authority prerequisite for immutable typed REPL
-generations. The transitional VM still stores REPL bindings in its name-keyed
+generations. Each successfully executed declaration publishes its exact
+session-owned analyzer symbol ID and inferred type beside the runtime binding;
+later lowering must validate and consume that typed authority, and must fail
+closed if either fact is missing or mismatched. A name-only or `any` fallback
+is forbidden. The transitional VM still stores REPL bindings in its name-keyed
 global dictionary; this contract does not claim typed layout ownership,
 closure/task pinning, or replacement of that runtime representation. REPL
 program arenas remain retained because the persistent analyzer owns references
@@ -134,7 +138,8 @@ artifact authority and operation-local verifier output.
 - The REPL focused test proves that a real successful submission publishes,
   a rejected submission abandons without replacing its parent, and the next
   successful submission receives a fresh generation while preserving prior
-  value visibility.
+  value visibility. It also proves cross-input function calls retain exact
+  typed symbol authority and that missing or forged authority fails closed.
 - Dependency graph and cache-store focused tests remain mandatory; the session
   does not weaken their independent validation contracts.
 - The dependency-graph focused test proves exact-facet explanations across
@@ -158,6 +163,6 @@ anchor-sha256: src/incremental/xr_cache_invalidate.h d546845678f14a1c84a11237038
 anchor-sha256: src/incremental/xr_cache_invalidate.c f134e5e0ea324161a54cf4d9e352faf630ce7c27bb8c3c7aaaa2856d195ef828
 anchor-sha256: src/toolchain/xcompiler_session.h 62f34571937418ee3484f2ee60469fc1f8ef10b6ba35dfc7a75299b44342c886
 anchor-sha256: src/toolchain/xcompiler_session.c 58a0ad044e2ade6bb1869e4e562654984d0181e15900ba98a54721c782e4aaad
-anchor-sha256: src/api/xrepl.c ec4a8e2bf6c018bc86cc61bbb73c2aa564f69772982555a1ab72f0414ec7d1f3
+anchor-sha256: src/api/xrepl.c 957a0684ec073538e2394ebe44293f8ca42181da05cd2712427e6ee888324b6a
 anchor-sha256: tests/unit/incremental/test_dependency_graph.c 968768a0272e1fd5d06767e55698d00449f52bee1b67b4316e1e39042eddb888
 anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 38477c734381400a94426de7756a70d27f84fc9a3117542856f4f83ffe578d25

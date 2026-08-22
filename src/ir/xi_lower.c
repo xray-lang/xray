@@ -2683,20 +2683,32 @@ static void build_module_metadata(XiLower *l) {
     f->module = mod;
 }
 
-/* REPL values cross independently compiled submissions through runtime-owned
- * shared slots, so their static type is intentionally erased at this boundary.
- * Keep the erasure and slot bookkeeping in one canonical helper: declarations
- * and versioned implicit results differ only in their storage index. */
-static void xi_lower_seed_repl_slot(XiLower *l, XrString *name, int slot,
+/* A published REPL binding crosses compilation units through runtime-owned
+ * storage, but its compiler authority remains the exact analyzer symbol and
+ * type captured by the successful declaration generation.  Missing authority
+ * is a hard lowering failure; a name-only `any` fallback would erase callable
+ * identity and let later passes guess execution shape from runtime storage. */
+static bool xi_lower_seed_repl_slot(XiLower *l, const XrReplSymbol *symbol, int slot,
                                     uint16_t *next_shared_start) {
-    if (!l || !name || name->length == 0 || slot < 0 || !next_shared_start)
-        return;
-    int vid = xi_lower_var_create(l, 0, name->data, l->type_any);
+    if (!l || !symbol || !symbol->name || symbol->name->length == 0 || !symbol->type ||
+        symbol->symbol_id == 0 || slot < 0 || !next_shared_start)
+        return false;
+    XaSymbol *authority = l->analyzer && l->analyzer->global_scope
+                              ? xa_scope_lookup_by_id(l->analyzer->global_scope,
+                                                      symbol->symbol_id)
+                              : NULL;
+    XrType *authority_type = authority ? xa_analyzer_get_type(l->analyzer, authority) : NULL;
+    if (!authority || !authority->name || strcmp(authority->name, symbol->name->data) != 0 ||
+        authority_type != symbol->type)
+        return false;
+    int vid =
+        xi_lower_var_create(l, symbol->symbol_id, symbol->name->data, symbol->type);
     if (vid < 0 || vid >= l->var_cap)
-        return;
+        return false;
     l->shared_map[vid] = (int16_t) slot;
     if (slot + 1 > (int) *next_shared_start)
         *next_shared_start = (uint16_t) (slot + 1);
+    return true;
 }
 
 XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
@@ -2746,12 +2758,18 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     if (repl_syms) {
         for (int i = 0; i < repl_syms->count; i++) {
             XrReplSymbol *s = &repl_syms->symbols[i];
-            xi_lower_seed_repl_slot(&l, s->name, i, &next_shared_start);
+            if (!xi_lower_seed_repl_slot(&l, s, i, &next_shared_start)) {
+                l.had_error = true;
+                break;
+            }
         }
-        for (int i = 0; i < repl_syms->result_count; i++) {
-            XrString *name = repl_syms->result_names[i];
+        for (int i = 0; !l.had_error && i < repl_syms->result_count; i++) {
             int slot = repl_syms->count + i;
-            xi_lower_seed_repl_slot(&l, name, slot, &next_shared_start);
+            if (!xi_lower_seed_repl_slot(&l, &repl_syms->results[i], slot,
+                                         &next_shared_start)) {
+                l.had_error = true;
+                break;
+            }
         }
     }
 

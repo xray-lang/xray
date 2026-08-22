@@ -9,8 +9,8 @@
  *
  * KEY CONCEPT:
  *   Persistent symbol table that survives across REPL compilation units.
- *   Records which names exist and whether they are const, so each new
- *   compiler context can resolve names from prior inputs.
+ *   Records each published analyzer symbol identity, exact inferred type, and
+ *   constness so each new compiler context consumes typed prior-input facts.
  *   Runtime values live in the globals dict (OP_GETGLOBAL/OP_SETGLOBAL);
  *   the symbol table is metadata only.
  */
@@ -29,11 +29,15 @@ typedef struct XrCompilerSession XrCompilerSession;
 typedef struct XrModuleIdentityAuthority XrModuleIdentityAuthority;
 typedef struct XrString XrString;
 typedef struct XrProto XrProto;
+typedef struct XrType XrType;
 
 /* ========== REPL Symbol Table ========== */
 
 typedef struct XrReplSymbol {
     XrString *name;
+    /* Borrowed from the session-owned persistent analyzer. */
+    XrType *type;
+    uint32_t symbol_id;
     bool is_const;
 } XrReplSymbol;
 
@@ -45,7 +49,7 @@ typedef struct XrReplSymbolTable {
     /* Versioned implicit results are compiler/runtime storage, not user
      * declarations. Keep them separate so completion and `.vars` expose only
      * the stable `it` alias instead of implementation names. */
-    XrString **result_names;
+    XrReplSymbol *results;
     int result_count;
     int result_capacity;
     XrString *latest_result_name;
@@ -75,7 +79,7 @@ XR_FUNC bool xr_repl_peek_int(XrVMRuntime *isolate, const char *name, int64_t *o
 /* Whether this session has a successfully evaluated, meaningful last result. */
 XR_FUNC bool xr_repl_has_last_result(XrVMRuntime *isolate);
 
-// Seed compiler context with prior definitions
+// Seed compiler context with typed prior definitions
 XR_FUNC void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx);
 
 /* ========== REPL Input Completeness Check ========== */

@@ -91,7 +91,7 @@ void xr_repl_symbols_free(XrReplSymbolTable *table) {
     if (table->symbols) {
         xr_free(table->symbols);
     }
-    xr_free(table->result_names);
+    xr_free(table->results);
     xr_free(table);
 }
 
@@ -157,21 +157,42 @@ static void repl_symbols_ensure_capacity(XrReplSymbolTable *table, int needed) {
 }
 
 // Add or update a symbol in the REPL table
-static void repl_symbols_add_or_update(XrReplSymbolTable *table, XrString *name, bool is_const) {
+static bool repl_symbol_from_analyzer(XaAnalyzer *analyzer, XrString *name, bool is_const,
+                                      XrReplSymbol *out) {
+    if (!analyzer || !name || !out)
+        return false;
+    XaSymbol *symbol = xa_analyzer_lookup(analyzer, name->data);
+    XrType *type = symbol ? xa_analyzer_get_type(analyzer, symbol) : NULL;
+    if (!symbol || symbol->id == 0 || !type || XR_TYPE_IS_ERROR(type))
+        return false;
+    out->name = name;
+    out->type = type;
+    out->symbol_id = symbol->id;
+    out->is_const = is_const;
+    return true;
+}
+
+static bool repl_symbols_add_or_update(XrReplSymbolTable *table,
+                                       const XrReplSymbol *published) {
+    if (!table || !published || !published->name || !published->type ||
+        published->symbol_id == 0)
+        return false;
     /* Update existing entry on redefinition */
     for (int i = 0; i < table->count; i++) {
         if (table->symbols[i].name != NULL &&
-            strcmp(table->symbols[i].name->data, name->data) == 0) {
-            table->symbols[i].is_const = is_const;
-            return;
+            strcmp(table->symbols[i].name->data, published->name->data) == 0) {
+            table->symbols[i] = *published;
+            return true;
         }
     }
 
     /* New symbol */
     repl_symbols_ensure_capacity(table, table->count + 1);
-    table->symbols[table->count].name = name;
-    table->symbols[table->count].is_const = is_const;
+    if (table->count >= table->capacity)
+        return false;
+    table->symbols[table->count] = *published;
     table->count++;
+    return true;
 }
 
 void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *ctx) {
@@ -198,7 +219,7 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
         ctx->shared_var_capacity = new_capacity;
     }
 
-    /* Seed names and const flags — slot index is irrelevant for REPL
+    /* Seed typed symbol authority and const flags — slot index is irrelevant for REPL
      * since the lowerer emits OP_GETGLOBAL/OP_SETGLOBAL by name.
      * Use sequential indices so prescan_shared_vars recognizes them
      * as top-level variables (shared_map[vid] >= 0). */
@@ -211,12 +232,12 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
         ctx->shared_vars[i].state = SHARED_STATE_OWNED;
         ctx->shared_vars[i].moved_line = 0;
         ctx->shared_vars[i].moved_column = 0;
-        ctx->shared_vars[i].compile_type = NULL;
+        ctx->shared_vars[i].compile_type = table->symbols[i].type;
     }
 
     for (int i = 0; i < table->result_count; i++) {
         int slot = table->count + i;
-        ctx->shared_vars[slot].name = table->result_names[i];
+        ctx->shared_vars[slot].name = table->results[i].name;
         ctx->shared_vars[slot].index = slot;
         ctx->shared_vars[slot].scope_depth = 0;
         ctx->shared_vars[slot].function_depth = 1;
@@ -224,7 +245,7 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
         ctx->shared_vars[slot].state = SHARED_STATE_OWNED;
         ctx->shared_vars[slot].moved_line = 0;
         ctx->shared_vars[slot].moved_column = 0;
-        ctx->shared_vars[slot].compile_type = NULL;
+        ctx->shared_vars[slot].compile_type = table->results[i].type;
     }
 
     ctx->shared_var_count = total;
@@ -235,13 +256,13 @@ void xr_repl_symbols_seed_context(XrReplSymbolTable *table, XrCompilerContext *c
  * declared by this compilation unit; REPL-seeded prior slots are
  * NULL.  Names from the arena are interned so they outlive the
  * XiFunc. */
-static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrVMRuntime *isolate,
-                                         XrProto *proto) {
+static bool repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrVMRuntime *isolate,
+                                         XaAnalyzer *analyzer, XrProto *proto) {
     if (!table || !proto || !proto->xi_func)
-        return;
+        return false;
     XiFunc *xf = (XiFunc *) proto->xi_func;
     if (!xf->slot_owned_names || xf->nshared == 0)
-        return;
+        return true;
     for (uint16_t slot = 0; slot < xf->nshared; slot++) {
         const char *name = xf->slot_owned_names[slot];
         if (!name)
@@ -249,26 +270,31 @@ static void repl_symbols_collect_from_xi(XrReplSymbolTable *table, XrVMRuntime *
         size_t nlen = strlen(name);
         XrString *interned = xr_string_intern(isolate, name, nlen, 0);
         if (!interned)
-            continue;
+            return false;
         bool is_const = xf->slot_owned_consts && xf->slot_owned_consts[slot] != 0;
-        repl_symbols_add_or_update(table, interned, is_const);
+        XrReplSymbol published;
+        if (!repl_symbol_from_analyzer(analyzer, interned, is_const, &published) ||
+            !repl_symbols_add_or_update(table, &published))
+            return false;
     }
+    return true;
 }
 
-static bool repl_results_append(XrReplSymbolTable *table, XrString *name) {
-    if (!table || !name)
+static bool repl_results_append(XrReplSymbolTable *table, const XrReplSymbol *published) {
+    if (!table || !published || !published->name || !published->type ||
+        published->symbol_id == 0)
         return false;
     if (table->result_count == table->result_capacity) {
         int next_capacity = table->result_capacity ? table->result_capacity * 2 : 8;
-        XrString **next = (XrString **) xr_realloc(
-            table->result_names, (size_t) next_capacity * sizeof(*table->result_names));
+        XrReplSymbol *next = (XrReplSymbol *) xr_realloc(
+            table->results, (size_t) next_capacity * sizeof(*table->results));
         if (!next)
             return false;
-        table->result_names = next;
+        table->results = next;
         table->result_capacity = next_capacity;
     }
-    table->result_names[table->result_count++] = name;
-    table->latest_result_name = name;
+    table->results[table->result_count++] = *published;
+    table->latest_result_name = published->name;
     return true;
 }
 
@@ -675,8 +701,7 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     ctx->post_analyze_hook = repl_elaborate_last_expr;
     ctx->post_analyze_user_data = &echo_plan;
 
-    /* Seed compiler-side shared_vars from the REPL symbol table so
-     * the analyzer can resolve names from prior inputs. */
+    /* Seed compiler-side shared_vars from the published typed REPL bindings. */
     xr_repl_symbols_seed_context(repl_symbols, ctx);
 
     char *module_identity = NULL;
@@ -734,19 +759,22 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
 
     /* Publish only after successful execution. A failed submission cannot
      * change name resolution for the next prompt. */
-    repl_symbols_collect_from_xi(repl_symbols, vm_host, proto);
+    XR_CHECK(repl_symbols_collect_from_xi(repl_symbols, vm_host, repl_analyzer, proto),
+             "successful REPL declarations lacked typed publication authority");
     if (echo_plan.has_result) {
         size_t name_len = strlen(echo_plan.result_name);
         XrString *interned = xr_string_intern(vm_host, echo_plan.result_name, name_len, /*hash=*/0);
         XR_CHECK(interned != NULL, "REPL result name interning failed");
         XR_CHECK(xr_global_dict_has(vm_host->vm.globals, interned),
                  "successful REPL result was not stored in globals");
-        XR_CHECK(repl_results_append(repl_symbols, interned),
-                 "REPL result metadata allocation failed");
-
         XaSymbol *result_symbol =
             xa_scope_lookup(repl_analyzer->current_scope, echo_plan.result_name);
         XR_CHECK(result_symbol != NULL, "REPL result symbol missing after successful analysis");
+        XrReplSymbol published_result;
+        XR_CHECK(repl_symbol_from_analyzer(repl_analyzer, interned, true, &published_result),
+                 "successful REPL result lacked typed publication authority");
+        XR_CHECK(repl_results_append(repl_symbols, &published_result),
+                 "REPL result metadata allocation failed");
         xa_scope_set_alias(repl_analyzer->current_scope, REPL_IT_NAME, result_symbol);
     }
 
@@ -798,7 +826,7 @@ static bool repl_result_is_internal(XrReplSymbolTable *table, XrString *name) {
     if (!table || !name)
         return false;
     for (int i = 0; i < table->result_count; i++) {
-        if (table->result_names[i] == name)
+        if (table->results[i].name == name)
             return true;
     }
     return false;

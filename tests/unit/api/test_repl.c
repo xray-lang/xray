@@ -742,6 +742,48 @@ TEST(repl_it_is_reserved_for_implicit_results) {
     xray_vm_delete(iso);
 }
 
+TEST(repl_cross_input_call_rejects_missing_type_authority) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    ASSERT_NOT_NULL(p1);
+    XrReplSymbolTable *table = xr_repl_symbols_of(iso);
+    int index = find_symbol(table, "inc");
+    ASSERT_GE(index, 0);
+    table->symbols[index].type = NULL;
+
+    XrReplEvalResult rejected =
+        xr_repl_eval(session, iso, "var r = inc(10)\n", &k_repl_memory_authority);
+    ASSERT_EQ_INT(rejected.status, XR_REPL_EVAL_COMPILE_ERROR);
+    ASSERT_NULL(rejected.proto);
+
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
+TEST(repl_cross_input_call_rejects_invalid_symbol_authority) {
+    XrVMRuntime *iso = make_repl_iso();
+    ASSERT_NOT_NULL(iso);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
+
+    XrProto *p1 = eval_repl(session, iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    ASSERT_NOT_NULL(p1);
+    XrReplSymbolTable *table = xr_repl_symbols_of(iso);
+    int index = find_symbol(table, "inc");
+    ASSERT_GE(index, 0);
+    table->symbols[index].symbol_id = UINT32_MAX;
+
+    XrReplEvalResult rejected =
+        xr_repl_eval(session, iso, "var r = inc(10)\n", &k_repl_memory_authority);
+    ASSERT_EQ_INT(rejected.status, XR_REPL_EVAL_COMPILE_ERROR);
+    ASSERT_NULL(rejected.proto);
+
+    xr_free_code(iso, p1);
+    xray_vm_delete(iso);
+}
+
 TEST(repl_eval_requires_explicit_valid_memory_identity) {
     XrVMRuntime *iso = make_repl_iso();
     ASSERT_NOT_NULL(iso);
@@ -874,6 +916,8 @@ RUN_TEST(repl_eval_let_and_const_round_trip);
 RUN_TEST_SUITE("REPL Cross-Input Persistence");
 RUN_TEST(repl_cross_input_symbol_resolves);
 RUN_TEST(repl_cross_input_function_call);
+RUN_TEST(repl_cross_input_call_rejects_missing_type_authority);
+RUN_TEST(repl_cross_input_call_rejects_invalid_symbol_authority);
 RUN_TEST(repl_cross_input_function_reads_shared);
 RUN_TEST(repl_cross_input_function_mutates_shared);
 RUN_TEST(repl_redefinition_reuses_slot);
