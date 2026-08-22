@@ -34,6 +34,7 @@
 #include <stdint.h>
 
 struct XrTargetPlanCancellationToken;
+struct XrLockfile;
 
 /* ========== Feature Set ========== */
 
@@ -167,6 +168,9 @@ typedef struct XaotBuildOptions {
     const XaotTarget *target;
     XrTargetProfile *target_profile; /* borrowed; exact authority is required */
     const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
+    const char *project_root; /* physical I/O root; excluded from durable identities */
+    const char *project_name; /* stable project namespace coordinate */
+    struct XrLockfile *lockfile; /* borrowed exact package authority */
     const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;
     XaotArtifactKind artifact_kind;

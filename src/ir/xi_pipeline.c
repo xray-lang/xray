@@ -590,6 +590,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_tagged_boundary();
+    cfg.module_identity = "memory-module-v1:pipeline";
     return cfg;
 }
 
@@ -606,6 +607,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_arc = true;
     cfg.run_emit = false;
     cfg.run_canonicalize = true;
+    cfg.module_identity = "memory-module-v1:pipeline";
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_native_boundary();
@@ -1065,8 +1067,17 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
 
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
-    if (ir && ir->module)
+    if (ir && ir->module) {
         ir->module->path = cfg->source_file;
+        if (!xi_module_set_identity(ir->module, cfg->module_identity)) {
+            xi_func_free(ir);
+            memset(&gate, 0, sizeof(gate));
+            xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                                  XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+                                  "module identity is missing or cannot be retained");
+            return gate;
+        }
+    }
 
     return run_pipeline(ir, isolate, cfg);
 }
@@ -1124,8 +1135,17 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
-    if (ir && ir->module)
+    if (ir && ir->module) {
         ir->module->path = cfg->source_file;
+        if (!xi_module_set_identity(ir->module, cfg->module_identity)) {
+            xi_func_free(ir);
+            memset(&gate, 0, sizeof(gate));
+            xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                                  XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+                                  "module identity is missing or cannot be retained");
+            return gate;
+        }
+    }
 
     return run_pipeline(ir, isolate, cfg);
 }

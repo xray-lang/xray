@@ -31,6 +31,7 @@
 #include "xray_vm.h"
 #include "../../module/xbundle.h"
 #include "../../module/xproject.h"
+#include "../../module/xlockfile.h"
 #include "../../aot/xaot_driver.h"
 #include "../../ir/xi_arc_verify.h"
 #include "../../base/xfileio.h"
@@ -1542,7 +1543,8 @@ static int cmd_build_native(
     bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
     bool lto, bool rc_guard, const XrToolchainTarget *target,
     const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
-    const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
+    const XrProject *project, const XrNativePackagePlan *native_package_plan,
+    const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1968,7 +1970,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                               dump_xi_evidence, dump_link_manifest, dump_residue, dump_link_command,
                               dry_run_link, c_header, keep_c, cache_dir_arg, rebuild, effective_lto,
                               rc_guard, &target, &toolchain_plan, target_config,
-                              project ? project->native_plan : NULL, objcopy_output);
+                              project, project ? project->native_plan : NULL, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc && cc[0] ? cc : "cc", opt_flag, c_only,
@@ -3287,7 +3289,8 @@ static int cmd_build_native(
     bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
     bool lto, bool rc_guard, const XrToolchainTarget *target,
     const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
-    const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
+    const XrProject *project, const XrNativePackagePlan *native_package_plan,
+    const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
     XrTargetProfile *target_profile = NULL;
@@ -3349,6 +3352,15 @@ static int cmd_build_native(
     build_options.target = &build_target;
     build_options.target_profile = target_profile;
     build_options.native_package_plan = native_package_plan;
+    build_options.project_root = project ? project->root : NULL;
+    build_options.project_name = project ? project->name : NULL;
+    XrLockfile *build_lockfile = NULL;
+    char lockfile_path[XR_PATH_MAX];
+    if (project && project->root) {
+        snprintf(lockfile_path, sizeof(lockfile_path), "%s/xray.lock", project->root);
+        build_lockfile = xr_lockfile_load(lockfile_path);
+    }
+    build_options.lockfile = build_lockfile;
     build_options.capability_provider = has_capability_provider ? &capability_provider : NULL;
     build_options.profile = aot_profile;
     build_options.c_dialect = c_dialect;
@@ -3362,6 +3374,7 @@ static int cmd_build_native(
     build_options.incremental_cache_rebuild = rebuild;
     build_options.incremental_cache_verbose = verbose;
     int rc = xaot_build(input, &build_options, &aot_result);
+    xr_lockfile_free(build_lockfile);
     xr_target_profile_free(target_profile);
     xaot_target_free(&build_target);
     if (rc != 0)

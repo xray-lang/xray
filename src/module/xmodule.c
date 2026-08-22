@@ -703,18 +703,6 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     if (!registry)
         return NULL;
 
-    // Absolute path: return directly
-    if (module_name[0] == '/') {
-        return xr_strdup(module_name);
-    }
-#ifdef XR_OS_WINDOWS
-    if (((module_name[0] >= 'A' && module_name[0] <= 'Z') ||
-         (module_name[0] >= 'a' && module_name[0] <= 'z')) &&
-        module_name[1] == ':') {
-        return xr_strdup(module_name);
-    }
-#endif
-
     const char *importer = get_importer_path(isolate);
     char *embedded_path = resolve_embedded_relative(registry, module_name, importer);
     if (embedded_path)
@@ -724,14 +712,9 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     if (!resolver)
         return NULL;
 
-    /* Determine whether this is a bare name (stdlib) or quoted path.
-     * At runtime the specifier has no quotes, so infer from content:
-     * bare = no slash and no dot-prefix. */
-    bool is_bare = (module_name[0] != '.' && strchr(module_name, '/') == NULL);
-
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(resolver, module_name, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(resolver, module_name, importer, NULL, &mid, &err);
     if (err)
         xr_free(err);
 
@@ -739,18 +722,6 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
         char *result = mid.source_path ? xr_strdup(mid.source_path) : NULL;
         xr_module_id_cleanup(&mid);
         return result;
-    }
-
-    /* Fallback for bare names: try <script_dir>/<name>.xr (legacy compat) */
-    if (is_bare && importer) {
-        char *dir = xr_path_dirname(importer);
-        if (dir) {
-            char path[XR_PATH_MAX];
-            snprintf(path, sizeof(path), "%s/%s.xr", dir, module_name);
-            xr_free(dir);
-            if (xr_fs_exists(path))
-                return xr_strdup(path);
-        }
     }
 
     return NULL;

@@ -3167,10 +3167,19 @@ XR_FUNC XrHashMap *resolve_graph_export_symbols(XaAnalyzer *analyzer, const char
         return NULL;
 
     /* Resolve the import specifier to a canonical ID */
+    const XrModuleIdentityAuthority *authority = NULL;
+    for (int i = 0; analyzer->current_file && i < graph->spec_count; i++) {
+        if (graph->specs[i].source_path &&
+            strcmp(graph->specs[i].source_path, analyzer->current_file) == 0) {
+            if (graph->specs[i].authority.physical_root)
+                authority = &graph->specs[i].authority;
+            break;
+        }
+    }
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, module_name, analyzer->current_file, &mid,
-                                        &err);
+    int rc = xr_module_resolver_resolve(graph->resolver, module_name,
+                                             analyzer->current_file, authority, &mid, &err);
     xr_free(err);
     if (rc != 0)
         return NULL;

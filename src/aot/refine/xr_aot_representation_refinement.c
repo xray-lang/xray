@@ -3067,15 +3067,15 @@ static bool verify_source_namespace_type_authority(VerifyAuthority *ctx,
         const XiImportRef *ref = live->aux ? (const XiImportRef *) live->aux : NULL;
         const char *member = ref ? ref->member_name : NULL;
         /* module_path is the source spelling (for example a package name).
-         * The resolver-bound module path is the durable identity frozen by
-         * SemanticPlan, so independently normalize and compare that path. */
-        const char *resolved_path =
+         * The resolver-bound module identity is the durable value frozen by
+         * SemanticPlan, so compare that identity directly. */
+        const char *resolved_identity =
             ref && xi_import_ref_is_source_module(ref) && ref->resolved_module
-                ? ref->resolved_module->path
+                ? ref->resolved_module->identity
                 : NULL;
-        return live->op == XI_IMPORT_REF && ref && metadata && resolved_path &&
+        return live->op == XI_IMPORT_REF && ref && metadata && resolved_identity &&
                operation->metadata_begin + 1u < metadata_count &&
-               canonical_source_path_matches(metadata[operation->metadata_begin], resolved_path) &&
+               strcmp(metadata[operation->metadata_begin], resolved_identity) == 0 &&
                strcmp(member ? member : "", metadata[operation->metadata_begin + 1u]) == 0;
     }
     if (operation->opcode == XI_COPY) {

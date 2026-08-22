@@ -72,13 +72,13 @@ XR_FUNC const char *xi_resolve_import_canonical(const XrModuleGraph *graph,
     /* Normalize with realpath (resolves symlinks) */
     char resolved[PATH_MAX];
     if (realpath(candidate, resolved)) {
-        int idx = xr_module_graph_find(graph, resolved);
+        int idx = xr_module_graph_find_source(graph, resolved);
         if (idx >= 0)
             return graph->specs[idx].canonical;
     }
 
     /* Try without realpath (file may have been parsed with original path) */
-    int idx = xr_module_graph_find(graph, candidate);
+    int idx = xr_module_graph_find_source(graph, candidate);
     if (idx >= 0)
         return graph->specs[idx].canonical;
 

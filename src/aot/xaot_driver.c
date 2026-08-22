@@ -2065,6 +2065,24 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xr_module_system_init_with_script(X, input_path);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+    if (options->project_root && options->project_root[0]) {
+        XrModuleIdentityAuthority authority = {
+            .kind = XR_MODULE_IDENTITY_PROJECT,
+            .namespace_id = options->project_name,
+            .physical_root = options->project_root,
+        };
+        if (!options->project_name || !options->project_name[0] ||
+            !xr_module_resolver_set_authority(resolver, &authority)) {
+            fprintf(stderr, "Error: failed to install project module identity authority\n");
+            xray_vm_delete(X);
+            return 1;
+        }
+    }
+    if (options->lockfile && !xr_module_resolver_set_lockfile(resolver, options->lockfile)) {
+        fprintf(stderr, "Error: failed to install package lock authority\n");
+        xray_vm_delete(X);
+        return 1;
+    }
     XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         fprintf(stderr, "Error: failed to create module graph\n");
@@ -2420,6 +2438,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
 
         /* Compile using the shared analyzer (has cross-module type info) */
         cfg.source_file = spec->source_path;
+        cfg.module_identity = spec->canonical;
         cfg.global_evidence_module_id = (uint32_t) (ti + 1);
         /* Topological order means modules[0..ti-1] (every dependency) are
          * already compiled, so the pipeline can resolve this module's import

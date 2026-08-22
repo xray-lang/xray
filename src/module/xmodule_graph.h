@@ -41,12 +41,14 @@ typedef enum {
 
 /* ========== Module Spec ========== */
 
-/* One module in the graph.  Owns its AST, canonical ID, and
+/* One module in the graph. Owns its AST, durable identity, and
  * the list of edges (import dependencies). */
 typedef struct XrModuleSpec {
     char *canonical;      /* Canonical module ID (owned, xr_free) */
+    char *logical_path;   /* Authority-root-relative path (owned, xr_free) */
     char *source_path;    /* Absolute path to source file (owned) */
     XrModuleKind kind;    /* stdlib / file / package */
+    XrModuleIdentityAuthority authority; /* Owned strings for source modules */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
     XrModSpecStatus status;
 
@@ -140,6 +142,8 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g);
 
 /* Lookup a module spec by canonical ID.  Returns index or -1. */
 XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical);
+/* Physical-source lookup is local plumbing only; it is never a graph identity key. */
+XR_FUNC int xr_module_graph_find_source(const XrModuleGraph *g, const char *source_path);
 
 /* Initialize every dependency exactly once in topological order and return a
  * table indexed by topo position. The caller owns the table, but not its

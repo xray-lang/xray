@@ -92,6 +92,7 @@ typedef struct XrSuspendabilityCacheEntry {
 
 typedef struct XrSemanticBuildContext {
     XrSemanticPlan *plan;
+    const char *module_identity;
     XrTypeMapEntry *types;
     uint32_t type_count;
     uint32_t type_capacity;
@@ -944,34 +945,34 @@ static int function_index(const XrSemanticBuildContext *ctx, const XiFunc *funct
 }
 
 static bool module_stable_identity(XrSemanticBuildContext *ctx, const XiFunc *root,
-                                   XrStableId *module_id, const char **module_path_out) {
+                                    XrStableId *module_id, const char **module_path_out) {
+    const char *identity = root && root->module ? root->module->identity : NULL;
     const char *module_name =
         root->module && root->module->name ? root->module->name : (root->name ? root->name : "");
-    const char *module_path = root->module && root->module->path
-                                  ? root->module->path
-                                  : (root->source_file ? root->source_file : module_name);
     XrTextBuilder package_key = {0};
     XrTextBuilder module_key = {0};
     XrStableId package_id = {{0}};
     XrFingerprint digest;
+    const char *frozen_identity =
+        identity && identity[0] ? xr_semantic_plan_copy_string(ctx->plan, identity) : NULL;
     bool valid =
-        text_append_format(&package_key, "entity-v1:schema=%u:kind=%u:parent=none:name=",
+        frozen_identity &&
+        text_append_format(&package_key, "entity-v1:schema=%u:kind=%u:parent=none:authority=",
                            XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_PACKAGE) &&
-        text_append_component(&package_key, module_name) &&
+        text_append_component(&package_key, frozen_identity) &&
         xr_stable_id_from_key(package_key.data, &package_id, &digest) &&
-        text_append_format(&module_key,
-                           "entity-v1:schema=%u:kind=%u:parent=", XR_SEMANTIC_SCHEMA_VERSION,
-                           (unsigned) XR_SEM_ENTITY_MODULE) &&
+        text_append_format(&module_key, "entity-v1:schema=%u:kind=%u:parent=",
+                           XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_MODULE) &&
         text_append_stable_id(&module_key, package_id) && text_append(&module_key, ":name=") &&
-        text_append_component(&module_key, module_name) && text_append(&module_key, ":path=") &&
-        text_append_path_component(&module_key, module_path) &&
+        text_append_component(&module_key, module_name) &&
+        text_append(&module_key, ":identity=") &&
+        text_append_component(&module_key, frozen_identity) &&
         xr_stable_id_from_key(module_key.data, module_id, &digest);
-    const char *frozen_path = valid ? copy_canonical_source_file(ctx, module_path) : NULL;
     text_dispose(&package_key);
     text_dispose(&module_key);
-    if (!valid || !frozen_path)
+    if (!valid)
         return fail(ctx, "XR_SEM_0019", "source-class module identity is incomplete");
-    *module_path_out = frozen_path;
+    *module_path_out = frozen_identity;
     return true;
 }
 
@@ -1567,8 +1568,9 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
                 return true;
             const char *module_path = import_ref->module_path ? import_ref->module_path : "";
             if (classify_import_resolution(import_ref) == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
-                import_ref->resolved_module && import_ref->resolved_module->path) {
-                module_path = copy_canonical_source_file(ctx, import_ref->resolved_module->path);
+                import_ref->resolved_module && import_ref->resolved_module->identity) {
+                module_path = xr_semantic_plan_copy_string(
+                    ctx->plan, import_ref->resolved_module->identity);
                 if (!module_path)
                     return fail(ctx, "XR_SEM_0019",
                                 "source import module path identity is incomplete");
@@ -2217,14 +2219,14 @@ static const uint8_t *plan_suspendability(XrSemanticBuildContext *ctx, const XrS
 
 static bool append_dependency(XrSemanticBuildContext *ctx, const XiModule *module,
                               uint32_t *dependency_out) {
-    if (!module || !module->path || !module->path[0] || !module->init ||
+    if (!module || !module->identity || !module->identity[0] || !module->init ||
         !module->init->semantic_plan || !xr_semantic_plan_is_verified(module->init->semantic_plan))
         return false;
     const XrSemanticPlan *dependency_plan = module->init->semantic_plan;
     const XrSemanticEntityRecord *module_entity = plan_module_entity(dependency_plan);
     if (!module_entity)
         return false;
-    const char *module_path = copy_canonical_source_file(ctx, module->path);
+    const char *module_path = xr_semantic_plan_copy_string(ctx->plan, module->identity);
     if (!module_path)
         return false;
     XrFingerprint fingerprint = xr_semantic_plan_fingerprint(dependency_plan);
@@ -3807,9 +3809,7 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->effects = xi_generated_op_effects(value->op);
     record->source_line = value->line;
     if (!xi_source_span_is_empty(value->source_span)) {
-        const char *source_file = function->source_file
-                                      ? function->source_file
-                                      : (function->module ? function->module->path : NULL);
+        const char *source_file = ctx->module_identity;
         if (!xi_source_span_is_complete(value->source_span) || !source_file || !source_file[0])
             return fail(ctx, "XR_SEM_0019", "operation debug span is incomplete");
         record->source_file = copy_canonical_source_file(ctx, source_file);
@@ -4301,12 +4301,20 @@ static bool build_module_entities(XrSemanticBuildContext *ctx, const XiFunc *roo
                                   uint32_t *package_out, uint32_t *module_out) {
     const char *module_name =
         root->module && root->module->name ? root->module->name : (root->name ? root->name : "");
-    const char *module_path = root->module && root->module->path
-                                  ? root->module->path
-                                  : (root->source_file ? root->source_file : module_name);
+    const char *module_identity = root->module ? root->module->identity : NULL;
+    char memory_identity[512];
+    if (!root->module && module_name[0]) {
+        int length = snprintf(memory_identity, sizeof(memory_identity), "memory-module-v1:%s",
+                              module_name);
+        if (length > 0 && (size_t) length < sizeof(memory_identity))
+            module_identity = memory_identity;
+    }
     XrTextBuilder key = {0};
-    bool valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_PACKAGE, XR_SEMANTIC_INDEX_NONE) &&
-                 text_append(&key, ":name=") && text_append_component(&key, module_name);
+    bool valid = module_identity && module_identity[0] &&
+                 begin_entity_key(ctx, &key, XR_SEM_ENTITY_PACKAGE,
+                                  XR_SEMANTIC_INDEX_NONE) &&
+                 text_append(&key, ":authority=") &&
+                 text_append_component(&key, module_identity);
     if (!valid ||
         !append_entity(ctx, XR_SEM_ENTITY_PACKAGE, XR_SEM_ENTITY_SUBJECT_NONE,
                        XR_SEMANTIC_INDEX_NONE, 0, XR_SEMANTIC_INDEX_NONE, &key, package_out)) {
@@ -4315,8 +4323,8 @@ static bool build_module_entities(XrSemanticBuildContext *ctx, const XiFunc *roo
     }
     text_dispose(&key);
     valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_MODULE, *package_out) &&
-            text_append(&key, ":name=") && text_append_component(&key, module_name) &&
-            text_append(&key, ":path=") && text_append_path_component(&key, module_path);
+             text_append(&key, ":name=") && text_append_component(&key, module_name) &&
+            text_append(&key, ":identity=") && text_append_component(&key, module_identity);
     if (!valid || !append_entity(ctx, XR_SEM_ENTITY_MODULE, XR_SEM_ENTITY_SUBJECT_NONE,
                                  XR_SEMANTIC_INDEX_NONE, 0, *package_out, &key, module_out)) {
         text_dispose(&key);
@@ -4948,6 +4956,19 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
         return false;
     }
     XrSemanticBuildContext ctx = {0};
+    char memory_identity[512];
+    if (root->module && root->module->identity) {
+        ctx.module_identity = root->module->identity;
+    } else if (root->name) {
+        int length = snprintf(memory_identity, sizeof(memory_identity), "memory-module-v1:%s",
+                              root->name);
+        if (length <= 0 || (size_t) length >= sizeof(memory_identity)) {
+            if (error && error_size)
+                snprintf(error, error_size, "XR_SEM_0019: module identity is incomplete");
+            return false;
+        }
+        ctx.module_identity = memory_identity;
+    }
     ctx.error = error;
     ctx.error_size = error_size;
     ctx.dependency_modules = dependencies;

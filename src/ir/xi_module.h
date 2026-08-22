@@ -61,6 +61,7 @@ typedef struct XiEnumData {
 /* Per-module compilation unit: holds init function and explicit metadata.
  * All metadata is produced during lowering; no post-hoc IR scanning. */
 typedef struct XiModule {
+    char *identity;      /* durable module identity (owned) */
     const char *path;   /* source file path */
     const char *name;   /* C-safe identifier (e.g. "math_lib") */
     XiFunc *init;       /* module init function (top-level) */
@@ -89,6 +90,9 @@ typedef struct XiModule {
 
 /* Allocate a new XiModule. Caller owns the returned pointer. */
 XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init);
+
+/* Replace the durable identity. NULL/empty identities fail closed. */
+XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity);
 
 /* Free a module and its metadata arrays (does NOT free init/functions). */
 XR_FUNC void xi_module_free(XiModule *mod);

@@ -710,6 +710,15 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
         return NULL;
     mod->path = path;
     mod->name = name;
+    if (name && name[0]) {
+        size_t length = strlen(name) + sizeof("memory-module-v1:");
+        mod->identity = (char *) xr_malloc(length);
+        if (!mod->identity) {
+            xr_free(mod);
+            return NULL;
+        }
+        snprintf(mod->identity, length, "memory-module-v1:%s", name);
+    }
     mod->init = init;
     /* Populate functions array from init's children */
     if (init->nchildren > 0) {
@@ -723,9 +732,21 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
     return mod;
 }
 
+XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity) {
+    if (!mod || !identity || !identity[0])
+        return false;
+    char *owned = xr_strdup(identity);
+    if (!owned)
+        return false;
+    xr_free(mod->identity);
+    mod->identity = owned;
+    return true;
+}
+
 XR_FUNC void xi_module_free(XiModule *mod) {
     if (!mod)
         return;
+    xr_free(mod->identity);
     xr_free(mod->functions);
     xr_free(mod->exports);
     xr_free(mod->classes);

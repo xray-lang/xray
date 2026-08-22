@@ -75,7 +75,10 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g) {
     for (int i = 0; i < g->spec_count; i++) {
         XrModuleSpec *s = &g->specs[i];
         xr_free(s->canonical);
+        xr_free(s->logical_path);
         xr_free(s->source_path);
+        xr_free((char *) s->authority.namespace_id);
+        xr_free((char *) s->authority.physical_root);
         if (s->ast)
             xr_program_destroy(s->ast);
         xr_free(s->dep_indices);
@@ -93,8 +96,9 @@ XR_FUNC void xr_module_graph_free(XrModuleGraph *g) {
 /* ========== Internal Helpers ========== */
 
 /* Add a new spec to the graph.  Returns the index, or -1 on OOM. */
-static int graph_add_spec(XrModuleGraph *g, const char *canonical, const char *source_path,
-                          XrModuleKind kind) {
+static int graph_add_spec(XrModuleGraph *g, const char *canonical, const char *logical_path,
+                          const char *source_path, XrModuleKind kind,
+                          const XrModuleIdentityAuthority *authority) {
     XR_DCHECK(g != NULL, "graph_add_spec: NULL graph");
     XR_DCHECK(canonical != NULL, "graph_add_spec: NULL canonical");
 
@@ -117,18 +121,31 @@ static int graph_add_spec(XrModuleGraph *g, const char *canonical, const char *s
     int idx = g->spec_count++;
     XrModuleSpec *s = &g->specs[idx];
     s->canonical = xr_strdup(canonical);
+    s->logical_path = logical_path ? xr_strdup(logical_path) : NULL;
     s->source_path = source_path ? xr_strdup(source_path) : NULL;
     s->kind = kind;
+    if (authority) {
+        s->authority.kind = authority->kind;
+        s->authority.namespace_id =
+            authority->namespace_id ? xr_strdup(authority->namespace_id) : NULL;
+        s->authority.physical_root =
+            authority->physical_root ? xr_strdup(authority->physical_root) : NULL;
+    }
     s->status = XR_MODSPEC_PENDING;
     s->topo_index = -1;
     s->scc_id = -1;
 
     /* An unindexed spec would let the same canonical id be added twice,
      * so roll the slot back instead of leaving a half-registered entry. */
-    if (!s->canonical ||
+    if (!s->canonical || (logical_path && !s->logical_path) ||
+        (authority && authority->namespace_id && !s->authority.namespace_id) ||
+        (authority && authority->physical_root && !s->authority.physical_root) ||
         !xr_hashmap_set(g->id_index, s->canonical, (void *) (intptr_t) (idx + 1))) {
         xr_free(s->canonical);
+        xr_free(s->logical_path);
         xr_free(s->source_path);
+        xr_free((char *) s->authority.namespace_id);
+        xr_free((char *) s->authority.physical_root);
         memset(s, 0, sizeof(*s));
         g->spec_count--;
         return -1;
@@ -175,6 +192,16 @@ XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical) 
     return (int) (intptr_t) val - 1;
 }
 
+XR_FUNC int xr_module_graph_find_source(const XrModuleGraph *g, const char *source_path) {
+    if (!g || !source_path)
+        return -1;
+    for (int i = 0; i < g->spec_count; i++) {
+        if (g->specs[i].source_path && strcmp(g->specs[i].source_path, source_path) == 0)
+            return i;
+    }
+    return -1;
+}
+
 /* ========== BFS Build ========== */
 
 static char *make_unresolved_message(const char *specifier) {
@@ -192,7 +219,10 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     XrModuleSpec *from_spec = &g->specs[spec_idx];
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path, &mid, &err);
+    int rc = xr_module_resolver_resolve(g->resolver, specifier, from_spec->source_path,
+                                        from_spec->authority.physical_root ? &from_spec->authority
+                                                                          : NULL,
+                                        &mid, &err);
     if (rc != 0) {
         /* A registered native module resolves with a NULL source_path rather
          * than failing, so reaching here means the specifier names nothing. */
@@ -219,7 +249,8 @@ static void graph_resolve_and_add_dep(XrModuleGraph *g, int spec_idx, const char
     /* Find or create target spec in the graph. */
     int target_idx = xr_module_graph_find(g, mid.canonical);
     if (target_idx < 0) {
-        target_idx = graph_add_spec(g, mid.canonical, mid.source_path, mid.kind);
+        target_idx = graph_add_spec(g, mid.canonical, mid.logical_path, mid.source_path, mid.kind,
+                                    mid.authority.physical_root ? &mid.authority : NULL);
         if (target_idx >= 0 && mid.source_path &&
             strncmp(mid.source_path, GRAPH_EMBEDDED_STDLIB_PREFIX,
                     strlen(GRAPH_EMBEDDED_STDLIB_PREFIX)) == 0) {
@@ -265,8 +296,9 @@ static void collect_and_resolve_imports(XrModuleGraph *g, int spec_idx, struct A
 }
 
 static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
-                                  const char *entry_source_path, const char *entry_source,
-                                  char **out_err) {
+                                  const char *entry_logical_path, const char *entry_source_path,
+                                  const XrModuleIdentityAuthority *entry_authority,
+                                  const char *entry_source, char **out_err) {
     XR_DCHECK(g != NULL, "xr_module_graph_build: NULL graph");
     if (!g || !entry_canonical) {
         if (out_err)
@@ -275,7 +307,8 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
     }
 
     /* Add entry spec */
-    int entry_idx = graph_add_spec(g, entry_canonical, entry_source_path, XR_MOD_FILE);
+    int entry_idx = graph_add_spec(g, entry_canonical, entry_logical_path, entry_source_path,
+                                   XR_MOD_FILE, entry_authority);
     if (entry_idx < 0) {
         if (out_err)
             *out_err = xr_strdup("failed to add entry module");
@@ -369,7 +402,29 @@ XR_FUNC int xr_module_graph_build(XrModuleGraph *g, const char *entry_path, char
         abs_path = xr_strdup(entry_path);
     }
 
-    int rc = graph_build_from_entry(g, abs_path, abs_path, NULL, out_err);
+    char *script_root = NULL;
+    char *entry_identity = NULL;
+    char *entry_logical_path = NULL;
+    XrModuleIdentityAuthority authority = g->resolver->config.authority;
+    if (!authority.physical_root) {
+        script_root = xr_path_dirname(abs_path);
+        authority.kind = XR_MODULE_IDENTITY_SCRIPT;
+        authority.namespace_id = NULL;
+        authority.physical_root = script_root;
+    }
+    if (!xr_module_identity_from_source(&authority, abs_path, &entry_identity,
+                                        &entry_logical_path)) {
+        if (out_err)
+            *out_err = xr_strdup("entry module escapes or lacks its identity authority");
+        xr_free(script_root);
+        xr_free(abs_path);
+        return -1;
+    }
+    int rc = graph_build_from_entry(g, entry_identity, entry_logical_path, abs_path, &authority,
+                                    NULL, out_err);
+    xr_free(entry_identity);
+    xr_free(entry_logical_path);
+    xr_free(script_root);
     xr_free(abs_path);
     return rc;
 }
@@ -381,7 +436,8 @@ XR_FUNC int xr_module_graph_build_source(XrModuleGraph *g, const char *entry_id,
             *out_err = xr_strdup("NULL entry_source");
         return -1;
     }
-    return graph_build_from_entry(g, entry_id ? entry_id : "<eval>", NULL, entry_source, out_err);
+    return graph_build_from_entry(g, entry_id ? entry_id : "<eval>", NULL, NULL, NULL,
+                                  entry_source, out_err);
 }
 
 /* ========== Topological Sort (Tarjan SCC) ========== */

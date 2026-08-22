@@ -26,6 +26,7 @@
 #include <stdbool.h>
 #include "../base/xdefs.h"
 #include "../base/xhashmap.h"
+#include "xmodule_identity.h"
 
 /* Forward declarations */
 struct XrVMRuntime;
@@ -35,10 +36,9 @@ struct XrLockfile;
 /* ========== Module ID ========== */
 
 /*
- * Canonical identifier for a resolved module.
+ * Canonical durable identifier for a resolved module.
  * - stdlib:  kind=STDLIB,  canonical="time" (bare name)
- * - file:    kind=FILE,    canonical="/abs/path/to/mod.xr"
- * - package: kind=PACKAGE, canonical="owner/name"
+ * - file/package: canonical is a module-id-v1 length-framed tuple.
  */
 typedef enum {
     XR_MOD_STDLIB,
@@ -49,8 +49,10 @@ typedef enum {
 typedef struct {
     XrModuleKind kind;
     char *canonical;   /* Owned string — caller must xr_free() */
+    char *logical_path; /* Root-relative source path (owned) */
     char *source_path; /* Absolute .xr path, or NULL for native stdlib.
                           Owned string — caller must xr_free() */
+    XrModuleIdentityAuthority authority; /* Owned strings for source modules */
 } XrModuleId;
 
 /* Free contents of an XrModuleId (does NOT free the struct itself). */
@@ -80,6 +82,9 @@ typedef struct {
      * Borrowed pointer; may be NULL.
      */
     struct XrLockfile *lockfile;
+
+    /* Required for project/script source imports. Borrowed for resolver lifetime. */
+    XrModuleIdentityAuthority authority;
 } XrModuleResolverConfig;
 
 /* ========== Resolver Instance ========== */
@@ -87,12 +92,19 @@ typedef struct {
 typedef struct XrModuleResolver {
     XrModuleResolverConfig config;
     XrHashMap *cache; /* specifier+importer → XrModuleId (owned) */
+    char *authority_namespace; /* owned backing for config.authority */
+    char *authority_root;      /* owned backing for config.authority */
 } XrModuleResolver;
 
 /* ========== Lifecycle ========== */
 
 XR_FUNC XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg);
 XR_FUNC void xr_module_resolver_free(XrModuleResolver *r);
+
+/* Configure the sole project/script identity authority before resolution starts. */
+XR_FUNC bool xr_module_resolver_set_authority(XrModuleResolver *r,
+                                              const XrModuleIdentityAuthority *authority);
+XR_FUNC bool xr_module_resolver_set_lockfile(XrModuleResolver *r, struct XrLockfile *lockfile);
 
 /* ========== Resolution API ========== */
 
@@ -110,8 +122,11 @@ XR_FUNC void xr_module_resolver_free(XrModuleResolver *r);
  *                      May be NULL if the caller doesn't need the message.
  * @return              0 on success, -1 on failure
  */
+/* Resolve with the importing module's exact authority. Package-internal relative
+ * imports must use their package authority rather than the entry project root. */
 XR_FUNC int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
-                                       const char *importer_path, XrModuleId *out_id,
-                                       char **err_buf);
+                                       const char *importer_path,
+                                       const XrModuleIdentityAuthority *importer_authority,
+                                       XrModuleId *out_id, char **err_buf);
 
 #endif  // XMODULE_RESOLVER_H

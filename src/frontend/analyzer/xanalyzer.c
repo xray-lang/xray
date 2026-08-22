@@ -853,7 +853,9 @@ static XrHashMap *xa_graph_reexport_source_exports(XaAnalyzer *analyzer, XrAstNo
         owner && owner->source_path ? owner->source_path : analyzer->current_file;
     XrModuleId mid;
     char *err = NULL;
-    int rc = xr_module_resolver_resolve(graph->resolver, from_path, importer, &mid, &err);
+    int rc = xr_module_resolver_resolve(
+        graph->resolver, from_path, importer,
+        owner && owner->authority.physical_root ? &owner->authority : NULL, &mid, &err);
     xr_free(err);
     if (rc != 0)
         return NULL;

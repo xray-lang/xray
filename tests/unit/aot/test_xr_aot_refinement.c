@@ -2719,11 +2719,17 @@ static void test_source_namespace_storage_is_exact_and_fail_closed(void) {
     live_import->module_path = saved_module_path;
     const char *saved_resolved_path = live_import->resolved_module->path;
     live_import->resolved_module->path = "fixture/forged_dependency.xr";
+    /* Physical source locators are not durable identity authority. */
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    live_import->resolved_module->path = saved_resolved_path;
+    char *saved_resolved_identity = live_import->resolved_module->identity;
+    live_import->resolved_module->identity = "module-id-v1:forged";
     REQUIRE(!xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
             diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
-    live_import->resolved_module->path = saved_resolved_path;
+    live_import->resolved_module->identity = saved_resolved_identity;
     int64_t saved_slot = fixture.receiver->aux_int;
     fixture.receiver->aux_int++;
     REQUIRE(!xr_aot_representation_materialization_verify(
@@ -2795,11 +2801,16 @@ static void test_standalone_source_namespace_storage_is_exact_and_fail_closed(vo
     const char *resolved_path = live_import->resolved_module->path;
     live_import->resolved_module->path =
         "fixture/forged_standalone_dependency.xr";
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, fixture.function, fixture.target_plan, &policy, &diag));
+    live_import->resolved_module->path = resolved_path;
+    char *resolved_identity = live_import->resolved_module->identity;
+    live_import->resolved_module->identity = "module-id-v1:forged";
     REQUIRE(!xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
             diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
-    live_import->resolved_module->path = resolved_path;
+    live_import->resolved_module->identity = resolved_identity;
     REQUIRE(xr_aot_representation_materialization_verify(
         &view, fixture.function, fixture.target_plan, &policy, &diag));
 

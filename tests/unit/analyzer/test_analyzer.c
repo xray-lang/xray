@@ -3285,6 +3285,8 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(entry_program != NULL);
 
     XrModuleResolverConfig cfg = {0};
+    cfg.authority.kind = XR_MODULE_IDENTITY_SCRIPT;
+    cfg.authority.physical_root = tmpdir;
     XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
     ASSERT(resolver != NULL);
     XrModuleId lib_id;
@@ -3292,46 +3294,60 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     XrModuleId star_id;
     XrModuleId callback_id;
     char *resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path, &lib_id,
-                                      &resolve_err) == 0);
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_export_module", entry_path,
+                                      &cfg.authority, &lib_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_reexport_module", entry_path,
-                                      &reexport_id, &resolve_err) == 0);
+                                      &cfg.authority, &reexport_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
-    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path, &star_id,
-                                      &resolve_err) == 0);
+    ASSERT(xr_module_resolver_resolve(resolver, "./effect_star_module", entry_path,
+                                      &cfg.authority, &star_id, &resolve_err) == 0);
     xr_free(resolve_err);
     resolve_err = NULL;
     ASSERT(xr_module_resolver_resolve(resolver, "./effect_callback_module", entry_path,
-                                      &callback_id, &resolve_err) == 0);
+                                      &cfg.authority, &callback_id, &resolve_err) == 0);
     xr_free(resolve_err);
-    char *entry_canonical = xr_test_realpath_alloc(entry_path);
-    ASSERT(entry_canonical != NULL);
+    char *entry_realpath = xr_test_realpath_alloc(entry_path);
+    char *entry_canonical = NULL;
+    char *entry_logical = NULL;
+    ASSERT(entry_realpath != NULL);
+    ASSERT(xr_module_identity_from_source(&cfg.authority, entry_realpath, &entry_canonical,
+                                          &entry_logical));
 
     XrModuleSpec specs[5] = {{.canonical = lib_id.canonical,
+                              .logical_path = lib_id.logical_path,
                               .source_path = lib_id.source_path,
+                              .authority = cfg.authority,
                               .ast = lib_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 0},
                              {.canonical = reexport_id.canonical,
+                              .logical_path = reexport_id.logical_path,
                               .source_path = reexport_id.source_path,
+                              .authority = cfg.authority,
                               .ast = reexport_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 1},
                              {.canonical = star_id.canonical,
+                              .logical_path = star_id.logical_path,
                               .source_path = star_id.source_path,
+                              .authority = cfg.authority,
                               .ast = star_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 2},
                              {.canonical = callback_id.canonical,
+                              .logical_path = callback_id.logical_path,
                               .source_path = callback_id.source_path,
+                              .authority = cfg.authority,
                               .ast = callback_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 3},
                              {.canonical = entry_canonical,
-                              .source_path = entry_canonical,
+                              .logical_path = entry_logical,
+                              .source_path = entry_realpath,
+                              .authority = cfg.authority,
                               .ast = entry_program,
                               .status = XR_MODSPEC_RESOLVED,
                               .topo_index = 4}};
@@ -3574,7 +3590,9 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     xr_module_id_cleanup(&reexport_id);
     xr_module_id_cleanup(&star_id);
     xr_module_id_cleanup(&callback_id);
-    free(entry_canonical);
+    xr_free(entry_canonical);
+    xr_free(entry_logical);
+    free(entry_realpath);
     xr_test_unlink(lib_path);
     xr_test_unlink(reexport_path);
     xr_test_unlink(star_path);

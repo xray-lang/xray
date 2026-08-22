@@ -15,14 +15,14 @@
 #include "../base/xfileio.h"
 #include "../base/xhashmap.h"
 #include "../base/xmalloc.h"
-#include "../os/os_dir.h"
 #include "../os/os_fs.h"
 
+#include <ctype.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef _WIN32
+#ifdef XR_OS_WINDOWS
 #include <direct.h>
 #define getcwd _getcwd
 #else
@@ -80,6 +80,35 @@ static bool is_relative_specifier(const char *spec) {
 
 /* ========== Lifecycle ========== */
 
+static bool resolver_copy_authority(XrModuleResolver *r,
+                                    const XrModuleIdentityAuthority *authority) {
+    char *namespace_copy = NULL;
+    char *root_copy = NULL;
+    if (authority && authority->namespace_id) {
+        namespace_copy = xr_strdup(authority->namespace_id);
+        if (!namespace_copy)
+            return false;
+    }
+    if (authority && authority->physical_root) {
+        root_copy = xr_strdup(authority->physical_root);
+        if (!root_copy) {
+            xr_free(namespace_copy);
+            return false;
+        }
+    }
+    xr_free(r->authority_namespace);
+    xr_free(r->authority_root);
+    r->authority_namespace = namespace_copy;
+    r->authority_root = root_copy;
+    memset(&r->config.authority, 0, sizeof(r->config.authority));
+    if (authority) {
+        r->config.authority.kind = authority->kind;
+        r->config.authority.namespace_id = r->authority_namespace;
+        r->config.authority.physical_root = r->authority_root;
+    }
+    return true;
+}
+
 XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg) {
     XR_DCHECK(cfg != NULL, "xr_module_resolver_new: NULL config");
 
@@ -88,9 +117,33 @@ XrModuleResolver *xr_module_resolver_new(const XrModuleResolverConfig *cfg) {
         return NULL;
 
     r->config = *cfg;
+    memset(&r->config.authority, 0, sizeof(r->config.authority));
+    if (!resolver_copy_authority(r, &cfg->authority)) {
+        xr_free(r);
+        return NULL;
+    }
     r->cache = xr_hashmap_new();
-    XR_DCHECK(r->cache != NULL, "xr_module_resolver_new: cache alloc failed");
+    if (!r->cache) {
+        xr_free(r->authority_namespace);
+        xr_free(r->authority_root);
+        xr_free(r);
+        return NULL;
+    }
     return r;
+}
+
+bool xr_module_resolver_set_authority(XrModuleResolver *r,
+                                      const XrModuleIdentityAuthority *authority) {
+    if (!r || !authority || !authority->physical_root || xr_hashmap_count(r->cache) != 0)
+        return false;
+    return resolver_copy_authority(r, authority);
+}
+
+bool xr_module_resolver_set_lockfile(XrModuleResolver *r, XrLockfile *lockfile) {
+    if (!r || xr_hashmap_count(r->cache) != 0)
+        return false;
+    r->config.lockfile = lockfile;
+    return true;
 }
 
 /* Callback to free cached XrModuleId entries during teardown. */
@@ -111,6 +164,8 @@ void xr_module_resolver_free(XrModuleResolver *r) {
         xr_hashmap_foreach(r->cache, free_cached_entry, NULL);
         xr_hashmap_free(r->cache);
     }
+    xr_free(r->authority_namespace);
+    xr_free(r->authority_root);
     xr_free(r);
 }
 
@@ -121,30 +176,51 @@ void xr_module_id_cleanup(XrModuleId *id) {
         xr_free(id->canonical);
         id->canonical = NULL;
     }
+    if (id->logical_path) {
+        xr_free(id->logical_path);
+        id->logical_path = NULL;
+    }
     if (id->source_path) {
         xr_free(id->source_path);
         id->source_path = NULL;
     }
+    xr_free((char *) id->authority.namespace_id);
+    xr_free((char *) id->authority.physical_root);
+    memset(&id->authority, 0, sizeof(id->authority));
 }
 
 /* ========== Cache Key ========== */
 
-/*
- * Build a cache key from specifier + importer path.
- * Format: "<importer_path>\0<specifier>" concatenation via separator '|'.
- * Returns xr_malloc'd string; caller must xr_free().
- */
-static char *make_cache_key(const char *specifier, const char *importer_path) {
-    const char *imp = importer_path ? importer_path : "<entry>";
+/* Build a cache key from the durable importer identity, never its physical path. */
+static char *make_cache_key(const char *specifier, const char *importer_path,
+                            const XrModuleIdentityAuthority *authority) {
+    char *importer_identity = NULL;
+    char *importer_logical = NULL;
+    if (is_relative_specifier(specifier) &&
+        (!importer_path || !authority ||
+         !xr_module_identity_from_source(authority, importer_path, &importer_identity,
+                                         &importer_logical)))
+        return NULL;
+    const char *imp = importer_identity ? importer_identity : "named-module-v1";
     size_t imp_len = strlen(imp);
     size_t spec_len = strlen(specifier);
-    char *key = xr_malloc(imp_len + 1 + spec_len + 1);
-    if (!key)
+    if (imp_len > SIZE_MAX - spec_len - 2) {
+        xr_free(importer_identity);
+        xr_free(importer_logical);
         return NULL;
+    }
+    char *key = xr_malloc(imp_len + 1 + spec_len + 1);
+    if (!key) {
+        xr_free(importer_identity);
+        xr_free(importer_logical);
+        return NULL;
+    }
     memcpy(key, imp, imp_len);
     key[imp_len] = '|';
     memcpy(key + imp_len + 1, specifier, spec_len);
     key[imp_len + 1 + spec_len] = '\0';
+    xr_free(importer_identity);
+    xr_free(importer_logical);
     return key;
 }
 
@@ -155,7 +231,13 @@ static XrModuleId *clone_module_id(const XrModuleId *src) {
         return NULL;
     dst->kind = src->kind;
     dst->canonical = src->canonical ? xr_strdup(src->canonical) : NULL;
+    dst->logical_path = src->logical_path ? xr_strdup(src->logical_path) : NULL;
     dst->source_path = src->source_path ? xr_strdup(src->source_path) : NULL;
+    dst->authority.kind = src->authority.kind;
+    dst->authority.namespace_id =
+        src->authority.namespace_id ? xr_strdup(src->authority.namespace_id) : NULL;
+    dst->authority.physical_root =
+        src->authority.physical_root ? xr_strdup(src->authority.physical_root) : NULL;
     return dst;
 }
 
@@ -163,7 +245,13 @@ static XrModuleId *clone_module_id(const XrModuleId *src) {
 static void copy_module_id(XrModuleId *dst, const XrModuleId *src) {
     dst->kind = src->kind;
     dst->canonical = src->canonical ? xr_strdup(src->canonical) : NULL;
+    dst->logical_path = src->logical_path ? xr_strdup(src->logical_path) : NULL;
     dst->source_path = src->source_path ? xr_strdup(src->source_path) : NULL;
+    dst->authority.kind = src->authority.kind;
+    dst->authority.namespace_id =
+        src->authority.namespace_id ? xr_strdup(src->authority.namespace_id) : NULL;
+    dst->authority.physical_root =
+        src->authority.physical_root ? xr_strdup(src->authority.physical_root) : NULL;
 }
 
 /* ========== Resolution: stdlib ========== */
@@ -174,6 +262,7 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
     if (r->config.native_factories && xr_hashmap_has(r->config.native_factories, name)) {
         out_id->kind = XR_MOD_STDLIB;
         out_id->canonical = xr_strdup(name);
+        out_id->logical_path = xr_strdup(name);
         out_id->source_path = NULL;
 
         /* Also check for script extension: stdlib/<name>/<name>.xr */
@@ -197,9 +286,8 @@ static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out
 /* ========== Resolution: relative file/directory ========== */
 
 static int resolve_relative(XrModuleResolver *r, const char *specifier, const char *importer_path,
+                            const XrModuleIdentityAuthority *importer_authority,
                             XrModuleId *out_id, char **err_buf) {
-    (void) r;
-
     /* Determine base directory from importer path */
     char *base_dir = NULL;
     if (importer_path) {
@@ -228,9 +316,30 @@ static int resolve_relative(XrModuleResolver *r, const char *specifier, const ch
         return -1;
     }
 
-    out_id->kind = XR_MOD_FILE;
-    out_id->canonical = resolved; /* Already absolute (realpath) */
-    out_id->source_path = xr_strdup(resolved);
+    const XrModuleIdentityAuthority *authority =
+        importer_authority ? importer_authority : &r->config.authority;
+    out_id->kind = authority->kind == XR_MODULE_IDENTITY_PACKAGE ? XR_MOD_PACKAGE : XR_MOD_FILE;
+    if (!xr_module_identity_from_source(authority, resolved, &out_id->canonical,
+                                        &out_id->logical_path)) {
+        if (err_buf)
+            *err_buf = make_error("module '%s' escapes or lacks its identity authority",
+                                  specifier);
+        xr_free(resolved);
+        return -1;
+    }
+    out_id->source_path = resolved;
+    out_id->authority.kind = authority->kind;
+    out_id->authority.namespace_id = authority->namespace_id
+                                         ? xr_strdup(authority->namespace_id)
+                                         : NULL;
+    out_id->authority.physical_root = xr_strdup(authority->physical_root);
+    if (!out_id->source_path || !out_id->authority.physical_root ||
+        (authority->namespace_id && !out_id->authority.namespace_id)) {
+        xr_module_id_cleanup(out_id);
+        if (err_buf)
+            *err_buf = make_error("out of memory resolving module '%s'", specifier);
+        return -1;
+    }
     return 0;
 }
 
@@ -245,79 +354,100 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
             *err_buf = make_error("invalid package specifier '%s'", specifier);
         return -1;
     }
+    if (strchr(name, '/')) {
+        if (err_buf)
+            *err_buf = make_error("invalid package specifier '%s'", specifier);
+        return -1;
+    }
+
+    const XrLockedPackage *locked =
+        r->config.lockfile ? xr_lockfile_find(r->config.lockfile, specifier) : NULL;
+    bool checksum_valid = locked && locked->checksum && strlen(locked->checksum) == 71 &&
+                          strncmp(locked->checksum, "sha256:", 7) == 0;
+    for (size_t i = 7; checksum_valid && i < 71; i++)
+        checksum_valid = isxdigit((unsigned char) locked->checksum[i]) != 0;
+    if (!locked || !locked->version || !locked->version[0] || !checksum_valid) {
+        if (err_buf)
+            *err_buf = make_error("package '%s' requires an exact checksummed xray.lock entry",
+                                  specifier);
+        return -1;
+    }
+    const char *version = locked->version;
 
     const char *home = getenv("HOME");
+#ifdef XR_OS_WINDOWS
+    if (!home)
+        home = getenv("USERPROFILE");
+#endif
     if (!home) {
         if (err_buf)
             *err_buf = make_error("HOME not set; cannot locate package '%s'", specifier);
         return -1;
     }
 
-    /* Try lockfile version first */
-    const char *version = NULL;
-    if (r->config.lockfile) {
-        const XrLockedPackage *lp = xr_lockfile_find(r->config.lockfile, specifier);
-        if (lp && lp->version)
-            version = lp->version;
-    }
-
     char path[XR_PATH_MAX];
 
-    if (version) {
-        /* Exact version from lockfile */
-        const char *entries[] = {"src/main.xr", "main.xr"};
-        for (int i = 0; i < 2; i++) {
-            snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s", home, owner, name,
-                     version, entries[i]);
-            if (xr_fs_exists(path)) {
-                char *real = xr_realpath(path);
-                out_id->kind = XR_MOD_PACKAGE;
-                out_id->canonical = xr_strdup(specifier);
-                out_id->source_path = real ? real : xr_strdup(path);
-                return 0;
-            }
-        }
-        /* Try <name>.xr entry */
-        snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s.xr", home, owner, name, version,
-                 name);
+    char package_root[XR_PATH_MAX];
+    int root_length = snprintf(package_root, sizeof(package_root), "%s/.xray/packages/%s/%s/%s",
+                               home, owner, name, version);
+    char namespace_id[256];
+    int namespace_length =
+        snprintf(namespace_id, sizeof(namespace_id), "%s@%s", specifier, version);
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_PACKAGE,
+        .namespace_id = namespace_id,
+        .physical_root = package_root,
+    };
+    if (root_length < 0 || (size_t) root_length >= sizeof(package_root) || namespace_length < 0 ||
+        (size_t) namespace_length >= sizeof(namespace_id) ||
+        !xr_module_identity_authority_valid(&authority)) {
+        if (err_buf)
+            *err_buf = make_error("package '%s' has an invalid locked identity", specifier);
+        return -1;
+    }
+
+    const char *entries[] = {"src/main.xr", "main.xr"};
+    for (int i = 0; i < 2; i++) {
+        snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s", home, owner, name, version,
+                 entries[i]);
         if (xr_fs_exists(path)) {
             char *real = xr_realpath(path);
             out_id->kind = XR_MOD_PACKAGE;
-            out_id->canonical = xr_strdup(specifier);
             out_id->source_path = real ? real : xr_strdup(path);
-            return 0;
+            if (out_id->source_path &&
+                xr_module_identity_from_source(&authority, out_id->source_path,
+                                               &out_id->canonical, &out_id->logical_path)) {
+                out_id->authority.kind = authority.kind;
+                out_id->authority.namespace_id = xr_strdup(namespace_id);
+                out_id->authority.physical_root = xr_strdup(package_root);
+                if (out_id->authority.namespace_id && out_id->authority.physical_root)
+                    return 0;
+            }
+            xr_module_id_cleanup(out_id);
+            if (err_buf)
+                *err_buf = make_error("package '%s' has an invalid identity root", specifier);
+            return -1;
         }
     }
-
-    /* Fallback: scan version directories under ~/.xray/packages/owner/name/ */
-    char pkg_base[XR_PATH_MAX];
-    snprintf(pkg_base, sizeof(pkg_base), "%s/.xray/packages/%s/%s", home, owner, name);
-    XrDirIter *vdir = xr_dir_open(pkg_base);
-    if (vdir) {
-        XrDirEntry ve;
-        while (xr_dir_next(vdir, &ve)) {
-            if (ve.name[0] == '.')
-                continue;
-            snprintf(path, sizeof(path), "%s/%s/src/main.xr", pkg_base, ve.name);
-            if (xr_fs_exists(path)) {
-                xr_dir_close(vdir);
-                char *real = xr_realpath(path);
-                out_id->kind = XR_MOD_PACKAGE;
-                out_id->canonical = xr_strdup(specifier);
-                out_id->source_path = real ? real : xr_strdup(path);
+    snprintf(path, sizeof(path), "%s/.xray/packages/%s/%s/%s/%s.xr", home, owner, name, version,
+             name);
+    if (xr_fs_exists(path)) {
+        char *real = xr_realpath(path);
+        out_id->kind = XR_MOD_PACKAGE;
+        out_id->source_path = real ? real : xr_strdup(path);
+        if (out_id->source_path &&
+            xr_module_identity_from_source(&authority, out_id->source_path, &out_id->canonical,
+                                           &out_id->logical_path)) {
+            out_id->authority.kind = authority.kind;
+            out_id->authority.namespace_id = xr_strdup(namespace_id);
+            out_id->authority.physical_root = xr_strdup(package_root);
+            if (out_id->authority.namespace_id && out_id->authority.physical_root)
                 return 0;
-            }
-            snprintf(path, sizeof(path), "%s/%s/main.xr", pkg_base, ve.name);
-            if (xr_fs_exists(path)) {
-                xr_dir_close(vdir);
-                char *real = xr_realpath(path);
-                out_id->kind = XR_MOD_PACKAGE;
-                out_id->canonical = xr_strdup(specifier);
-                out_id->source_path = real ? real : xr_strdup(path);
-                return 0;
-            }
         }
-        xr_dir_close(vdir);
+        xr_module_id_cleanup(out_id);
+        if (err_buf)
+            *err_buf = make_error("package '%s' has an invalid identity root", specifier);
+        return -1;
     }
 
     if (err_buf)
@@ -331,7 +461,9 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
 /* ========== Main Resolution Entry ========== */
 
 int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
-                               const char *importer_path, XrModuleId *out_id, char **err_buf) {
+                               const char *importer_path,
+                               const XrModuleIdentityAuthority *importer_authority,
+                               XrModuleId *out_id, char **err_buf) {
     XR_DCHECK(r != NULL, "xr_module_resolver_resolve: NULL resolver");
     XR_DCHECK(specifier != NULL, "xr_module_resolver_resolve: NULL specifier");
     XR_DCHECK(out_id != NULL, "xr_module_resolver_resolve: NULL out_id");
@@ -340,8 +472,10 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
     if (err_buf)
         *err_buf = NULL;
 
+    const XrModuleIdentityAuthority *effective_authority =
+        importer_authority ? importer_authority : &r->config.authority;
     /* Check cache */
-    char *cache_key = make_cache_key(specifier, importer_path);
+    char *cache_key = make_cache_key(specifier, importer_path, effective_authority);
     if (cache_key) {
         XrModuleId *cached = (XrModuleId *) xr_hashmap_get(r->cache, cache_key);
         if (cached) {
@@ -364,7 +498,7 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier,
      * package import and adding a dependency could take over a directory one.
      * Nothing in the tree used it. */
     if (is_relative_specifier(specifier)) {
-        rc = resolve_relative(r, specifier, importer_path, out_id, err_buf);
+        rc = resolve_relative(r, specifier, importer_path, importer_authority, out_id, err_buf);
     } else if (strchr(specifier, '/') != NULL) {
         rc = resolve_package(r, specifier, out_id, err_buf);
     } else {
