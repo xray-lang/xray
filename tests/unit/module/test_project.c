@@ -129,7 +129,7 @@ TEST(load_target_config) {
 
 TEST(load_verified_native_package_plan) {
     setup_tmpdir();
-    write_fixture_file("oracle.c", "i64 x(void) { return 1; }\n");
+    write_fixture_file("oracle.c", "int x(void) { return 1; }\n");
     write_project_file(
         "[package]\n"
         "name = \"fixture\"\n"
@@ -225,7 +225,7 @@ TEST(native_package_unknown_target_policy_fails_closed) {
 
 TEST(native_package_hash_mismatch_fails_closed) {
     setup_tmpdir();
-    write_fixture_file("oracle.c", "i64 x(void) { return 1; }\n");
+    write_fixture_file("oracle.c", "int x(void) { return 1; }\n");
     write_project_file(
         "[project]\nname = \"bad\"\n"
         "[native]\nname = \"bad-native\"\nversion = \"1\"\nlicense = \"MIT\"\n"

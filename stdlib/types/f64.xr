@@ -1,6 +1,8 @@
 // Built-in float type — implementation in src/runtime/value/xfloat_methods.c
 class f64 {
+    // @lowered
     static parse(text: string) -> f64
+    // @lowered
     static tryParse(text: string) -> f64?
     abs() -> f64
     toString() -> string

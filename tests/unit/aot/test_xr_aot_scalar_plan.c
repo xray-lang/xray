@@ -483,7 +483,7 @@ static ScalarKnownAnswer scalar_known_answers[] = {
     {{.kind = XR_KIND_INT, .id = 109, .frozen = true, .scalar_rep = XR_NATIVE_USIZE},
      XR_C_VALUE_REP_USIZE, XR_MACHINE_REP_USIZE, 0, 0, "size_t", true},
     {{.kind = XR_KIND_FLOAT, .id = 110, .frozen = true, .scalar_rep = XR_NATIVE_F32},
-     XR_C_VALUE_REP_F32, XR_MACHINE_REP_F32, 32, 4, "f64", false},
+     XR_C_VALUE_REP_F32, XR_MACHINE_REP_F32, 32, 4, "float", false},
     {{.kind = XR_KIND_FLOAT, .id = 111, .frozen = true, .scalar_rep = XR_NATIVE_F64},
      XR_C_VALUE_REP_F64, XR_MACHINE_REP_F64, 64, 8, "double", false},
     {{.kind = XR_KIND_BOOL, .id = 112, .frozen = true, .scalar_rep = XR_SCALAR_REP_NONE},

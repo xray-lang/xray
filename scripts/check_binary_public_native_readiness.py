@@ -22,7 +22,7 @@ from stdlib_manifest import def_public_symbols, load_manifest, load_toml  # noqa
 
 
 RETAINED_STDLIB_MODULES = {"cluster", "http2", "compress", "crypto"}
-TERMINAL_STDLIB_MODULE_COUNT = 34
+TERMINAL_STDLIB_MODULE_COUNT = 33
 L2_PUBLIC_NATIVE = {
     "io": set(),
     "os": {"arch", "eol", "platform", "sep"},

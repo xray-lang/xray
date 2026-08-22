@@ -89,6 +89,10 @@ HOST_EXACT_TYPE_RE = re.compile(
     r"(?:^|[;{}(,])\s*(?:(?:static|extern|inline|const|volatile|register|_Atomic)\s+)*"
     r"(?P<name>i64|u8|f64)\b\s*(?:\*\s*)?[A-Za-z_]"
 )
+HOST_C_FIXTURE_EXACT_TYPE_RE = re.compile(
+    r'write_fixture_file\(\s*"[^"]+\.c"\s*,\s*"[^"]*\b'
+    r'(?P<name>i64|u8|f64)\s+[A-Za-z_][A-Za-z0-9_]*\s*\('
+)
 HOST_ENTRY_ABI_EXPECTATION = Path("tests/unit/ir/test_xi_cgen.c")
 HOST_ENTRY_ABI_REQUIRED = 'int main(int argc, char **argv)'
 HOST_ENTRY_ABI_FORBIDDEN = re.compile(r"\b(?:i64|u8|f64)\s+main\s*\(")
@@ -325,13 +329,21 @@ def _check_source_corpus(root: Path, errors: list[str]) -> int:
 
 def _check_host_source_types(root: Path, errors: list[str]) -> None:
     for path in _iter_files(root, HOST_SOURCE_ROOTS, HOST_SOURCE_SUFFIXES):
-        code = _strip_non_code(_read(path))
+        source = _read(path)
+        code = _strip_non_code(source)
         for line_no, line in enumerate(code.splitlines(), 1):
             match = HOST_EXACT_TYPE_RE.search(line)
             if match:
                 errors.append(
                     f"{_relative(path, root)}:{line_no}: source scalar "
                     f"{match.group('name')} used as a host C/C++ type"
+                )
+        for line_no, line in enumerate(source.splitlines(), 1):
+            match = HOST_C_FIXTURE_EXACT_TYPE_RE.search(line)
+            if match:
+                errors.append(
+                    f"{_relative(path, root)}:{line_no}: source scalar "
+                    f"{match.group('name')} leaked into a generated C fixture"
                 )
     entry_expectation = root / HOST_ENTRY_ABI_EXPECTATION
     if not entry_expectation.is_file():
@@ -456,6 +468,8 @@ def self_test() -> int:
         _write(root / HOST_ENTRY_ABI_EXPECTATION,
                'assert(contains(code, "int main(int argc, char **argv)"));\n'
                'assert(contains(code, "-Wimplicit-int-conversion"));\n')
+        _write(root / "tests/unit/module/host_fixture.c",
+               'write_fixture_file("oracle.c", "int x(void) { return 1; }\\n");\n')
         _write(root / LSP_CANONICAL_DOC_EXPECTATION,
                'ASSERT(strstr(doc_text, "Array<u8> byte bulk methods") != NULL);\n'
                'ASSERT(strstr(doc_text, "Array<byte>") == NULL);\n'
@@ -484,6 +498,14 @@ def self_test() -> int:
         _write(root / HOST_ENTRY_ABI_EXPECTATION,
                'assert(contains(code, "i64 main(i64 argc, char **argv)"));\n'
                'assert(contains(code, "-Wimplicit-int-conversion"));\n')
+        _write(root / "tests/unit/module/host_fixture.c",
+               'write_fixture_file("oracle.c", "i64 x(void) { return 1; }\\n");\n')
+        errors, _ = verify(root)
+        if not any("i64 leaked into a generated C fixture" in error for error in errors):
+            print("exact scalar generated C fixture mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / "tests/unit/module/host_fixture.c",
+               'write_fixture_file("oracle.c", "int x(void) { return 1; }\\n");\n')
         errors, _ = verify(root)
         if not any("source scalar leaked into the generated-C entry ABI expectation" in error
                    for error in errors):

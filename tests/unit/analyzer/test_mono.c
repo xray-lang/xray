@@ -18,8 +18,8 @@
 /* ========== Name Mangling Tests ========== */
 
 TEST(mono_type_tag_basic) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
-    XrTypeRef float_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef float_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_F64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef bool_t = {.kind = XR_TREF_BOOL};
     XrTypeRef error_t = {.kind = XR_TREF_ERROR};
@@ -66,7 +66,7 @@ TEST(mono_scalar_tags_are_semantic_and_unique) {
 }
 
 TEST(mono_mangle_single) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args[] = {&int_t};
     char *result = xr_mono_mangle("identity", args, 1);
     ASSERT_STR_EQ(result, "identity$i64");
@@ -74,7 +74,7 @@ TEST(mono_mangle_single) {
 }
 
 TEST(mono_mangle_multi) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef *args[] = {&int_t, &str_t};
     char *result = xr_mono_mangle("map", args, 2);
@@ -83,7 +83,7 @@ TEST(mono_mangle_multi) {
 }
 
 TEST(mono_mangle_preserves_const_capability_identity) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef *array_children[] = {&int_t};
     XrTypeRef array_t = {
@@ -109,7 +109,7 @@ TEST(mono_mangle_preserves_const_capability_identity) {
 }
 
 TEST(mono_mangle_distinguishes_container_element_types) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef *int_children[] = {&int_t};
     XrTypeRef *str_children[] = {&str_t};
@@ -139,7 +139,7 @@ TEST(mono_mangle_distinguishes_container_element_types) {
 }
 
 TEST(mono_mangle_distinguishes_tuple_and_optional_shapes) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef *pair_children[] = {&int_t, &int_t};
     XrTypeRef *swap_children[] = {&int_t, &str_t};
@@ -201,7 +201,7 @@ TEST(type_substitute_type_param) {
     XrTypeRef param_t = {.kind = XR_TREF_TYPE_PARAM};
     param_t.name = "T";
 
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrMonoTypeMap map[] = {{"T", &int_t}};
 
     XrTypeRef *result = xr_mono_type_substitute(&param_t, map, 1);
@@ -213,7 +213,7 @@ TEST(type_substitute_no_match) {
     XrTypeRef param_t = {.kind = XR_TREF_TYPE_PARAM};
     param_t.name = "U";
 
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrMonoTypeMap map[] = {{"T", &int_t}};
 
     XrTypeRef *result = xr_mono_type_substitute(&param_t, map, 1);
@@ -222,8 +222,8 @@ TEST(type_substitute_no_match) {
 }
 
 TEST(type_substitute_non_param) {
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
-    XrTypeRef concrete = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
+    XrTypeRef concrete = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_F64};
     XrMonoTypeMap map[] = {{"T", &concrete}};
 
     XrTypeRef *result = xr_mono_type_substitute(&int_t, map, 1);
@@ -240,7 +240,7 @@ TEST(type_substitute_array_element) {
     XrTypeRef array_t = {
         .kind = XR_TREF_NAMED, .name = "Array", .nchildren = 1, .children = &elem_child};
 
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrMonoTypeMap map[] = {{"T", &int_t}};
 
     XrTypeRef *result = xr_mono_type_substitute(&array_t, map, 1);
@@ -345,7 +345,7 @@ TEST(ast_clone_with_type_substitution) {
     node.as.var_decl.is_const = false;
     node.as.var_decl.type_annotation = &param_tref;
 
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrMonoTypeMap map[] = {{"T", &int_t}};
 
     AstNode *clone = xr_ast_clone(&node, map, 1);
@@ -363,7 +363,7 @@ TEST(mono_collector_basic) {
     xa_mono_collector_init(&c);
     ASSERT_EQ(c.count, 0);
 
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args[] = {&int_t};
     const char *name = xa_mono_collector_add(&c, "identity", args, 1, false, NULL);
     ASSERT(name != NULL);
@@ -377,7 +377,7 @@ TEST(mono_collector_dedup) {
     XaMonoCollector c;
     xa_mono_collector_init(&c);
 
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args1[] = {&int_t};
     xa_mono_collector_add(&c, "identity", args1, 1, false, NULL);
 
@@ -388,13 +388,13 @@ TEST(mono_collector_dedup) {
     ASSERT_EQ(c.count, 2);
 
     // Same int type again ?should deduplicate
-    XrTypeRef int_t2 = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t2 = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef *args2b[] = {&int_t2};
     xa_mono_collector_add(&c, "identity", args2b, 1, false, NULL);
     ASSERT_EQ(c.count, 2);
 
     // float has different rep ?separate instance
-    XrTypeRef float_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef float_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_F64};
     XrTypeRef *args3[] = {&float_t};
     xa_mono_collector_add(&c, "identity", args3, 1, false, NULL);
     ASSERT_EQ(c.count, 3);
@@ -410,7 +410,7 @@ TEST(mono_mangle_keeps_every_argument_when_wide) {
     enum {
         WIDE = 48
     };
-    XrTypeRef int_t = {.kind = XR_TREF_SCALAR};
+    XrTypeRef int_t = {.kind = XR_TREF_SCALAR, .scalar_rep = XR_NATIVE_I64};
     XrTypeRef str_t = {.kind = XR_TREF_STRING};
     XrTypeRef *args[WIDE];
     for (int i = 0; i < WIDE; i++)

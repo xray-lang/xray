@@ -60,7 +60,7 @@
 #define XR_ERROR_CORE_BYTE_SLICE_STORE_VALUE_EXPECTS_MSG                                           \
     "Slice<u8>.store<T>() expects integer offset and value"
 #define XR_ERROR_CORE_BYTE_SLICE_STORE_FLOAT_VALUE_EXPECTS_MSG                                     \
-    "Slice<u8>.store<T>() expects integer offset and float value"
+    "Slice<u8>.store<T>() expects integer offset and f64 value"
 #define XR_ERROR_CORE_BYTE_SLICE_STORE_U16_RECEIVER_MSG                                            \
     "Slice<u8>.store<u16>() receiver must be Slice<u8>"
 #define XR_ERROR_CORE_BYTE_SLICE_STORE_U16_OOB_MSG "Slice<u8>.store<u16>() offset out of bounds"

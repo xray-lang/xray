@@ -7478,9 +7478,9 @@ TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls) {
     teardown_parser_session();
 }
 
-TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics) {
+TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites) {
     setup_parser_session();
-    const char *source = "fn caller(x: u32) -> i64 { return i64(x) }\n";
+    const char *source = "fn caller(x: u32) -> i64 { return x as i64 }\n";
     AstNode *ast = xr_parse(g_session, source);
     ASSERT_NOT_NULL(ast);
 
@@ -7501,10 +7501,8 @@ TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics)
         xg_global_evidence_build_from_module_graph(&ev, &graph, XG_BUILD_NATIVE_RELEASE, 0));
     ASSERT_EQ_UINT(ev.ndecls, 1);
     ASSERT_EQ_UINT(ev.nbodies, 1);
-    ASSERT_EQ_UINT(ev.ncallsites, 1);
-    ASSERT_EQ_UINT(ev.callsites[0].kind, XG_CALL_NATIVE);
-    ASSERT_EQ_UINT(ev.callsites[0].method_name_id, xg_name_id("i64"));
-    ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL) != 0);
+    ASSERT_EQ_UINT(ev.ncallsites, 0);
+    ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL) == 0);
     ASSERT_TRUE((ev.bodies[0].effect_bits & XG_BODY_MAY_CALL_NATIVE) == 0);
 
     uint32_t composed_effects = UINT32_MAX;
@@ -14026,7 +14024,7 @@ RUN_TEST(global_evidence_producer_disambiguates_same_location_callsites);
 RUN_TEST(global_evidence_source_identity_survives_body_only_change);
 RUN_TEST(global_evidence_producer_records_generic_instantiation_roots);
 RUN_TEST(global_evidence_producer_keeps_unknown_function_values_as_closure_calls);
-RUN_TEST(global_evidence_producer_classifies_builtin_conversions_as_leaf_intrinsics);
+RUN_TEST(global_evidence_producer_keeps_exact_scalar_casts_out_of_callsites);
 RUN_TEST(global_evidence_producer_classifies_stdlib_native_function_calls_as_boundary_calls);
 RUN_TEST(global_evidence_composes_recursive_direct_call_effects);
 RUN_TEST(global_evidence_producer_classifies_extern_function_calls_as_boundary_calls);

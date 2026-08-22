@@ -1,6 +1,8 @@
 // Built-in int type — implementation in src/runtime/value/xint_methods.c
 class i64 {
+    // @lowered
     static parse(text: string) -> i64
+    // @lowered
     static tryParse(text: string) -> i64?
     abs() -> i64
     toString() -> string
