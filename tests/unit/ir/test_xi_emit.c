@@ -645,7 +645,8 @@ TEST(number_parse_error_builtin_identity_requires_matching_typed_metadata) {
         .semantic_immediate = XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
         .constant = XR_SEMANTIC_INDEX_NONE,
         .callable_function = XR_SEMANTIC_INDEX_NONE,
-        .effects = 0,
+        .effects = xi_generated_op_effects(XI_GET_BUILTIN),
+        .flags = xi_generated_op_default_flags(XI_GET_BUILTIN),
         .result_alias_operand = -1,
     };
     XrSemanticPlan plan = {0};
