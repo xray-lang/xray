@@ -22,6 +22,7 @@
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/value/xtype.h"
 #include "../../src/shared/xr_core_intrinsic.h"
+#include "../../src/shared/xr_assertion_plan.h"
 #include "../../src/shared/xr_exact_scalar_registry.h"
 
 /* Generate enum from xi_intrinsic.def — mirrors xm_intrinsic.h */
@@ -568,6 +569,182 @@ static void test_core_intrinsic_registry(void) {
     }
 }
 
+static XrLocation assertion_test_location(void) {
+    XrLocation source = {"assertion_contract.xr", 7, 3, 7, 24};
+    return source;
+}
+
+static void test_assertion_plans_are_registry_projections(void) {
+    XrAssertionPlan condition;
+    XrAssertionPlan equal;
+    ASSERT_TRUE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT, 2, assertion_test_location(),
+                                        XR_CORE_INTRINSIC_TARGET_VM, 0, &condition) ==
+                    XR_ASSERTION_PLAN_OK,
+                "assert plan must derive from the stable builtin row");
+    ASSERT_TRUE(condition.kind == XR_ASSERTION_KIND_CONDITION &&
+                    condition.flow_rule == XR_CORE_INTRINSIC_FLOW_ASSERT_TRUE &&
+                    condition.message_operand == 1 && condition.evaluation_count == 2 &&
+                    condition.evaluation_order[0] == XR_ASSERTION_EVAL_CONDITION &&
+                    condition.evaluation_order[1] == XR_ASSERTION_EVAL_MESSAGE,
+                "assert must retain left-to-right message evaluation and flow refinement");
+
+    ASSERT_TRUE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT_EQUAL, 3,
+                                        assertion_test_location(),
+                                        XR_CORE_INTRINSIC_TARGET_AOT_HOSTED, 0, &equal) ==
+                    XR_ASSERTION_PLAN_OK,
+                "assertEqual plan must derive from the stable builtin row");
+    ASSERT_TRUE(equal.kind == XR_ASSERTION_KIND_EQUAL &&
+                    equal.equality_authority == XR_ASSERTION_EQUALITY_LANGUAGE_DEEP &&
+                    equal.evaluation_order[0] == XR_ASSERTION_EVAL_ACTUAL &&
+                    equal.evaluation_order[1] == XR_ASSERTION_EVAL_EXPECTED &&
+                    equal.evaluation_order[2] == XR_ASSERTION_EVAL_MESSAGE,
+                "assertEqual must select the language deep-equality authority exactly once");
+
+    XrAssertionPlan mutation = equal;
+    mutation.builtin_id = XR_CORE_BUILTIN_ASSERT;
+    ASSERT_TRUE(!xr_assertion_plan_validate(&mutation),
+                "a plan must reject a builtin ID and assertion-kind mismatch");
+    mutation = equal;
+    mutation.evaluation_order[1] = XR_ASSERTION_EVAL_MESSAGE;
+    ASSERT_TRUE(!xr_assertion_plan_validate(&mutation),
+                "a plan must reject reordered assertion operands");
+    mutation = condition;
+    mutation.source.end_column = 0;
+    ASSERT_TRUE(!xr_assertion_plan_validate(&mutation),
+                "a plan must reject an incomplete source span");
+    mutation = condition;
+    mutation.evaluation_order[2] = XR_ASSERTION_EVAL_MESSAGE;
+    ASSERT_TRUE(!xr_assertion_plan_validate(&mutation),
+                "a plan must evaluate an optional message exactly once");
+
+    ASSERT_TRUE(xr_assertion_plan_build(
+                    XR_CORE_BUILTIN_ASSERT, 1, assertion_test_location(),
+                    XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER,
+                    XR_ASSERTION_CAPABILITY_NONE, &condition) ==
+                    XR_ASSERTION_PLAN_MISSING_CAPABILITY,
+                "freestanding assertion planning must reject a missing failure provider");
+}
+
+static void test_assertion_action_channels_are_not_exchangeable(void) {
+    const uint32_t target = XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER;
+    XrAssertionPlan throws_plan;
+    XrAssertionPlan panics_plan;
+    ASSERT_TRUE(xr_assertion_plan_build(
+                    XR_CORE_BUILTIN_ASSERT_THROWS, 1, assertion_test_location(), target,
+                    XR_ASSERTION_CAPABILITY_FAILURE_REPORT |
+                        XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY,
+                    &throws_plan) == XR_ASSERTION_PLAN_OK,
+                "assertThrows requires a typed-error boundary");
+    ASSERT_TRUE(xr_assertion_plan_build(
+                    XR_CORE_BUILTIN_ASSERT_PANICS, 1, assertion_test_location(), target,
+                    XR_ASSERTION_CAPABILITY_FAILURE_REPORT |
+                        XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY,
+                    &panics_plan) == XR_ASSERTION_PLAN_OK,
+                "assertPanics requires a panic boundary");
+    ASSERT_TRUE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT_THROWS, 1,
+                                        assertion_test_location(), target,
+                                        XR_ASSERTION_CAPABILITY_FAILURE_REPORT |
+                                            XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY,
+                                        &throws_plan) == XR_ASSERTION_PLAN_MISSING_CAPABILITY,
+                "a panic boundary cannot satisfy assertThrows planning");
+    ASSERT_TRUE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT_PANICS, 1,
+                                        assertion_test_location(), target,
+                                        XR_ASSERTION_CAPABILITY_FAILURE_REPORT |
+                                            XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY,
+                                        &panics_plan) == XR_ASSERTION_PLAN_MISSING_CAPABILITY,
+                "a typed-error boundary cannot satisfy assertPanics planning");
+
+    ASSERT_TRUE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT_THROWS, 1,
+                                        assertion_test_location(),
+                                        XR_CORE_INTRINSIC_TARGET_VM, 0, &throws_plan) ==
+                    XR_ASSERTION_PLAN_OK &&
+                    xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT_PANICS, 1,
+                                            assertion_test_location(),
+                                            XR_CORE_INTRINSIC_TARGET_VM, 0, &panics_plan) ==
+                        XR_ASSERTION_PLAN_OK,
+                "hosted executors provide both action boundaries");
+
+    XrAssertionFailureKind failure = XR_ASSERTION_FAILURE_COUNT;
+    ASSERT_TRUE(xr_assertion_classify_action_outcome(
+                    &throws_plan, XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_NONE,
+                "assertThrows succeeds only for a pending typed error");
+    ASSERT_TRUE(xr_assertion_classify_action_outcome(
+                    &throws_plan, XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_UNEXPECTED_PANIC,
+                "assertThrows must report panic as the wrong channel");
+    ASSERT_TRUE(xr_assertion_classify_action_outcome(
+                    &throws_plan, XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_EXPECTED_TYPED_ERROR,
+                "assertThrows must distinguish normal return from wrong-channel panic");
+    ASSERT_TRUE(xr_assertion_classify_action_outcome(
+                    &panics_plan, XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_NONE,
+                "assertPanics succeeds only for a current panic");
+    ASSERT_TRUE(xr_assertion_classify_action_outcome(
+                    &panics_plan, XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_UNEXPECTED_TYPED_ERROR,
+                "assertPanics must report typed error as the wrong channel");
+    ASSERT_TRUE(xr_assertion_classify_action_outcome(
+                    &panics_plan, XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_EXPECTED_PANIC,
+                "assertPanics must distinguish normal return from wrong-channel typed error");
+    ASSERT_TRUE(!xr_assertion_classify_action_outcome(
+                    &panics_plan, (XrCoreIntrinsicExpectedFailureChannel) 99, &failure),
+                "unknown action channels must fail closed");
+
+    XrAssertionActionOutcome typed_error = {false, true, false};
+    ASSERT_TRUE(xr_assertion_classify_action_result(&throws_plan, typed_error, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_NONE,
+                "a mutually exclusive typed-error observation must satisfy assertThrows");
+    XrAssertionActionOutcome conflicting = {false, true, true};
+    ASSERT_TRUE(!xr_assertion_classify_action_result(&throws_plan, conflicting, &failure),
+                "simultaneous typed error and panic observations must fail closed");
+    XrAssertionActionOutcome missing = {false, false, false};
+    ASSERT_TRUE(!xr_assertion_classify_action_result(&panics_plan, missing, &failure),
+                "an executor must explicitly report normal return");
+}
+
+static void test_assertion_failure_schema_and_renderer(void) {
+    char rendered[512];
+    XrAssertionFailure failure = {
+        .kind = XR_ASSERTION_FAILURE_VALUES_NOT_EQUAL,
+        .source = assertion_test_location(),
+        .message = "records differ",
+        .actual = "Point{x: 1, y: 2}",
+        .expected = "Point{x: 1, y: 3}",
+    };
+    ASSERT_TRUE(xr_assertion_failure_render(rendered, sizeof(rendered), &failure) > 0,
+                "a valid structured assertion failure must render");
+    ASSERT_TRUE(strcmp(rendered,
+                       "AssertionFailure[values-not-equal] at assertion_contract.xr:7:3\n"
+                       "  message: records differ\n"
+                       "  actual: Point{x: 1, y: 2}\n"
+                       "  expected: Point{x: 1, y: 3}") == 0,
+                "the canonical renderer must preserve field order and labels");
+    size_t rendered_length = strlen(rendered);
+    char exact[512];
+    char short_buffer[512];
+    ASSERT_TRUE(xr_assertion_failure_render(exact, rendered_length + 1u, &failure) ==
+                    (int) rendered_length &&
+                    strcmp(exact, rendered) == 0,
+                "the renderer must accept the exact capacity including the terminator");
+    ASSERT_TRUE(xr_assertion_failure_render(short_buffer, rendered_length, &failure) < 0 &&
+                    short_buffer[0] == '\0',
+                "the renderer must reject and erase truncated failure bytes");
+
+    failure.kind = XR_ASSERTION_FAILURE_UNEXPECTED_PANIC;
+    failure.actual = NULL;
+    failure.expected = NULL;
+    failure.caught_panic = "division by zero";
+    ASSERT_TRUE(xr_assertion_failure_render(rendered, sizeof(rendered), &failure) > 0 &&
+                    strstr(rendered, "caught_panic: division by zero") != NULL,
+                "wrong-channel panic must retain its structured payload");
+    failure.caught_error = "NumberParseError.InvalidSyntax";
+    ASSERT_TRUE(xr_assertion_failure_render(rendered, sizeof(rendered), &failure) < 0,
+                "a failure cannot carry both typed-error and panic channels");
+}
+
 static void test_exact_scalar_registry(void) {
     char error[192];
     const XrExactScalarDesc *i64 = xr_exact_scalar_by_id(XR_EXACT_SCALAR_I64);
@@ -624,6 +801,9 @@ int main(void) {
     test_builtin_receiver_method_placement();
     test_semantic_intrinsic_registry();
     test_core_intrinsic_registry();
+    test_assertion_plans_are_registry_projections();
+    test_assertion_action_channels_are_not_exchangeable();
+    test_assertion_failure_schema_and_renderer();
     test_exact_scalar_registry();
 
     printf("\n=== test_xi_intrinsic: %d passed, %d failed ===\n", g_passed, g_failed);
