@@ -50,18 +50,8 @@ static XrValue string_method_owned_result(XrString *source, XrString *result) {
 
 static void string_set_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
                                           uint32_t member_index, const char *fallback_message) {
-    if (iso && builtin_index >= 0 && builtin_index < XR_USER_GLOBALS_START) {
-        XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
-        XrValue enum_value = xr_runtime_core_builtin(core, builtin_index);
-        if (XR_IS_ENUM_TYPE(enum_value)) {
-            XrEnumType *type = (XrEnumType *) XR_TO_PTR(enum_value);
-            XrEnumAggregateValue *value = xr_enum_zero_payload_value(iso, type, member_index);
-            if (value) {
-                xr_vm_set_pending_error(iso, XR_FROM_PTR(value));
-                return;
-            }
-        }
-    }
+    if (xr_vm_set_builtin_enum_error(iso, builtin_index, member_index))
+        return;
     XrValue exc = xr_panic_info_newf(iso, XR_ERR_INTERNAL, "%s",
                                      fallback_message ? fallback_message
                                                       : "failed to construct typed string error");

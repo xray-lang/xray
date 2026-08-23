@@ -163,6 +163,10 @@ XR_BUILTIN_ENUM("Endian", 0, ENDIAN,
 XR_BUILTIN_ENUM("Utf8Error", 0, NONE,
                 XR_BUILTIN_ENUM_VARIANT("InvalidUtf8", NONE))
 
+XR_BUILTIN_ENUM("NumberParseError", 0, NONE,
+                XR_BUILTIN_ENUM_VARIANT("InvalidSyntax", NONE)
+                XR_BUILTIN_ENUM_VARIANT("OutOfRange", NONE))
+
 XR_BUILTIN_ENUM("StringSliceError", 0, NONE,
                 XR_BUILTIN_ENUM_VARIANT("InvalidByteRange", NONE))
 

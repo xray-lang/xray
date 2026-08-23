@@ -1480,6 +1480,11 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, AstNode *pa
             XiValue *lit = xi_lower_expr(l, pattern->as.pattern_literal.value);
             if (!lit)
                 return NULL;
+            if (lit->op == XI_INDEX_GET && lit->aux_kind == XI_AUX_KIND_ENUM_CASE &&
+                lit->nargs == 2 && lit->args[0] && lit->args[0]->op == XI_GET_BUILTIN &&
+                lit->args[0]->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR && subject->type &&
+                subject->type->kind == XR_KIND_ENUM)
+                lit->type = subject->type;
             return xi_binary(l->func, l->cur_block, XI_EQ, l->type_bool, subject, lit);
         }
 

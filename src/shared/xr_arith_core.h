@@ -8,15 +8,15 @@
  * xr_arith_core.h - Runtime-neutral signed-overflow predicates.
  *
  * KEY CONCEPT:
- *   Single semantic source for the int.addOverflows/subOverflows/mulOverflows
- *   methods (task 153). The VM method (xint_methods.h), the AOT dispatch
+ *   Single semantic source for the i64.addOverflows/subOverflows/mulOverflows
+ *   methods (task 153). The VM method (xi64_methods.h), the AOT dispatch
  *   (xrt_method.h) and the AOT cgen direct lowering all call these, so VM
  *   and AOT produce identical results by construction. All operate on the
  *   64-bit signed `int` domain.
  *
  *   Wrapping arithmetic lives in xr_int_arith_core.h (xr_i64_*_wrap) — the
  *   wrapping helpers that used to live here were duplicates and were
- *   deleted when mem.addWrapping/... moved to int methods.
+ *   deleted when the exact i64 methods became the sole public owner.
  *
  *   Self-contained: depends only on <stdint.h>, so it stays includable from
  *   the freestanding AOT runtime.

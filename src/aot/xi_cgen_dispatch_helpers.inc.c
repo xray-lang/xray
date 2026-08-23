@@ -6573,9 +6573,24 @@ static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 
 static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
-    (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_as: need arg");
+
+    if (cg_number_parse_error_catch_narrow_is_exact(ctx, f, v)) {
+        if (cg_value_plan_storage_rep(ctx, v) != XR_REP_I64 ||
+            xicgen_value_c_storage_rep(ctx, f, v->args[0]) != XR_REP_TAGGED) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: NumberParseError catch narrowing lacks exact ordinal "
+                    "storage\n");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "XR_TO_INT(xrt_enum_box_ordinal(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, "))");
+        return;
+    }
 
     const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v);
     const XaotValuePlan *arg_plan = cg_value_plan_require_legacy(ctx, v->args[0]);
@@ -7356,25 +7371,6 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "XR_FROM_BOOL(false)");
     } else if (strcmp(bn, "print") == 0) {
         xicgen_emit_print_expr(ctx, out, f, v);
-    } else if (strcmp(bn, "i64.parse") == 0 || strcmp(bn, "i64.tryParse") == 0 ||
-               strcmp(bn, "f64.parse") == 0 || strcmp(bn, "f64.tryParse") == 0) {
-        if (v->nargs != 1 || !v->args[0]) {
-            fprintf(stderr, "[xi_cgen] ERROR: exact scalar parse builtin '%s' needs one argument\n",
-                    bn);
-            emit_codegen_abort_expr(out);
-            cg_ctx_set_error(ctx);
-            return;
-        }
-        const char *helper = strcmp(bn, "i64.parse") == 0       ? "xrt_i64_parse"
-                             : strcmp(bn, "i64.tryParse") == 0 ? "xrt_i64_try_parse"
-                             : strcmp(bn, "f64.parse") == 0    ? "xrt_f64_parse"
-                                                               : "xrt_f64_try_parse";
-        XrRep result_rep = xicgen_value_c_storage_rep(ctx, f, v);
-        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, result_rep);
-        fprintf(out, "%s(", helper);
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ")");
-        emit_conversion_suffix(out, suffix);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
@@ -12949,6 +12945,15 @@ static void xicgen_emit_enum_is_predicate(FILE *out, const XiValue *value, uint3
     fprintf(out, ")");
 }
 
+static void xicgen_emit_exact_enum_is_predicate(FILE *out, const XiValue *value,
+                                                uint32_t layout_id) {
+    fprintf(out, "(");
+    emit_vref(out, value);
+    fprintf(out, ".tag == XR_TAG_ENUM && xrt_enum_value_layout_id(");
+    emit_vref(out, value);
+    fprintf(out, ") == %u)", (unsigned) layout_id);
+}
+
 /* Prelude native classes carry no class slot in the shared table; their
  * values answer a dedicated tag, so an is-test against them is a tag
  * compare. Mirrors xi_lower_prelude_native_class_typeid on the VM side. */
@@ -12994,6 +12999,21 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
         fprintf(out, "xrt_enum_descriptor_matches(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %u, %u)", plan->layout_id, (unsigned) kind);
+        return;
+    }
+    if (v->nargs == 2 && v->args[1] &&
+        cg_number_parse_error_namespace_is_exact(ctx, f, v->args[1])) {
+        const XrNumberParseErrorRegistryRow *row =
+            xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+        uint32_t target_layout = cg_enum_layout_id_for_type(ctx, target);
+        if (!row || target_layout != row->enum_layout_id) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: NumberParseError is-test lacks the frozen type identity\n");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        xicgen_emit_exact_enum_is_predicate(out, v->args[0], row->enum_layout_id);
         return;
     }
     uint32_t enum_layout_id = 0;
@@ -13947,6 +13967,16 @@ static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
     if (v->aux_kind == XI_AUX_KIND_ENUM_CASE) {
+        const XiValue *receiver = cg_unwrap_identity_value(v->args[0]);
+        const XiValue *index = cg_unwrap_identity_value(v->args[1]);
+        if (receiver && receiver->op == XI_GET_BUILTIN &&
+            receiver->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR && index &&
+            index->op == XI_CONST && index->type && index->type->kind == XR_KIND_INT &&
+            index->aux_int >= 0 && index->aux_int < XR_NUMBER_PARSE_ERROR_MEMBER_COUNT &&
+            cg_number_parse_error_member_access_is_exact(ctx, f, v) &&
+            emit_static_number_parse_error_member_value_expr(ctx, out, v,
+                                                              (uint32_t) index->aux_int))
+            return;
         const XaotEnumPlan *enum_plan =
             ctx && ctx->aot_bundle && v->enum_metadata_owner
                 ? xaot_bundle_find_enum_plan_for_type(ctx->aot_bundle, v->enum_metadata_owner)
@@ -14243,6 +14273,22 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                            const char *prefix) {
     (void) f;
     (void) prefix;
+    if (v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE) {
+        const char *helper = v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE       ? "xrt_i64_parse"
+                             : v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ? "xrt_i64_try_parse"
+                             : v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE      ? "xrt_f64_parse"
+                                                                                 : "xrt_f64_try_parse";
+        XrRep result_rep = xicgen_value_c_storage_rep(ctx, f, v);
+        const char *suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, result_rep);
+        fprintf(out, "%s(", helper);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, suffix);
+        return;
+    }
     XrRep dst_rep = cg_value_plan_storage_rep(ctx, v);
     XrRep src_rep = cg_value_plan_storage_rep(ctx, v->args[0]);
     if (xr_conversion_kind_is_numeric(v->conversion.kind)) {

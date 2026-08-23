@@ -111,9 +111,14 @@ fixed array of cleanup-region identifiers and a depth; that fixed frame shape
 is not a heap allocation per registration. Any callback object, growable defer
 stack, or runtime push/pop helper is a contract violation.
 
+Exact scalar parsing may call the shared parse kernel and publish the one typed
+error aggregate on required failure. It may not introduce a dynamic selector
+dispatch, a text-to-number conversion shim, or a second parser. `tryParse`
+failure is a null result with no error allocation or pending-error traffic.
+
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c bb60c9222953af83b8a4e2805534a0d793e230bd26f6cdf77feafd4f6dcf7aef
+anchor-sha256: src/aot/xi_cgen.c 5fd20aa77ccff0876510baa6f79ddd6205f2af7c932b7e10ff0b2ae3e3eef204
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c ddf3b8d501ef8beb8999c06970d6ac2b178e11f6ff38ac28cb4c8570a7d4182c
 anchor-sha256: src/app/cli/xcmd_verify.c 89c0d0d5f397d9acdb3098f9f5a04403004d6cf61a7f3a514e4ebf706b967ce9

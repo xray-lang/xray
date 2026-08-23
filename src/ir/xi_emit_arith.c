@@ -11,6 +11,7 @@
 
 #include "xi_emit_internal.h"
 #include "xi_emit_vm_gen.h"
+#include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 
@@ -298,6 +299,19 @@ XR_FUNC void xi_emit_convert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     struct XrType *target = v->type;
     if (!target) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    if (v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE) {
+        bool integer = v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ||
+                       v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE;
+        bool optional = v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
+                        v->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE;
+        uint16_t mode = optional ? XR_CONVERSION_BC_PARSE_OPTIONAL
+                                 : XR_CONVERSION_BC_PARSE_REQUIRED;
+        emit_inst(ctx, CREATE_ABC(integer ? OP_TOINT : OP_TOFLOAT, dst, src, mode));
         return;
     }
     uint16_t conversion = xr_conversion_bytecode_pack(

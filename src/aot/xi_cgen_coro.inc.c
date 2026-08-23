@@ -170,6 +170,7 @@ static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const
         case XR_GLOBAL_VAR_SEND_RESULT:
         case XR_GLOBAL_VAR_TASK_STATUS:
         case XR_GLOBAL_VAR_UTF8_ERROR:
+        case XR_GLOBAL_VAR_NUMBER_PARSE_ERROR:
         case XR_GLOBAL_VAR_STRING_SLICE_ERROR:
         case XR_GLOBAL_VAR_COMPRESSION_ERROR:
         case XR_GLOBAL_VAR_CRYPTO_ERROR:

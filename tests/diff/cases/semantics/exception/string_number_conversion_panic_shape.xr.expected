@@ -1,24 +1,8 @@
-12
 -7
-42
-9223372036854775807
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
-451 i64.parse expects a decimal integer
+i64.InvalidSyntax
+overflow.OutOfRange
 1500.0
-0.5
-1.0
-2.5
--0.125
-451 f64.parse expects a decimal number
-451 f64.parse expects a decimal number
-451 f64.parse expects a decimal number
-451 f64.parse expects a decimal number
-451 f64.parse expects a decimal number
-451 f64.parse expects a decimal number
-451 f64.parse expects a decimal number
+inf.0
+f64.InvalidSyntax
+true
+true

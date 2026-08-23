@@ -341,101 +341,120 @@ TEST(string_core_split_plan_and_each) {
  * whitespace is allowed, but any residue after the digits rejects the input,
  * so i64.parse("12abc") fails instead of quietly yielding 12. */
 TEST(string_parse_int64) {
+    ASSERT_EQ_INT(xr_number_parse_failure_member_index(XR_NUMBER_PARSE_INVALID_SYNTAX), 0);
+    ASSERT_EQ_INT(xr_number_parse_failure_member_index(XR_NUMBER_PARSE_OUT_OF_RANGE), 1);
+    ASSERT_EQ_INT(xr_number_parse_failure_member_index(XR_NUMBER_PARSE_OK), UINT32_MAX);
+    ASSERT_EQ_INT(xr_number_parse_failure_member_index((XrNumberParseFailure) 99), UINT32_MAX);
+
     XrStringParseIntResult parsed =
         xr_string_parse_int64(" \t\r\n-123 \t", strlen(" \t\r\n-123 \t"));
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_EQ_INT(parsed.value, -123);
 
     parsed = xr_string_parse_int64("+42", 3);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_EQ_INT(parsed.value, 42);
 
     /* The span, not a NUL, bounds the parse. */
     const char bounded[] = {'1', '2', '3', '4'};
     parsed = xr_string_parse_int64(bounded, 2);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_EQ_INT(parsed.value, 12);
 
     /* Trailing residue of every shape is a rejection. */
-    ASSERT_FALSE(xr_string_parse_int64("12abc", 5).ok);
-    ASSERT_FALSE(xr_string_parse_int64("-123tail", 8).ok);
-    ASSERT_FALSE(xr_string_parse_int64("1.5", 3).ok);
-    ASSERT_FALSE(xr_string_parse_int64("12 34", 5).ok);
-    ASSERT_FALSE(xr_string_parse_int64("0x10", 4).ok);
+    ASSERT_EQ_INT(xr_string_parse_int64("12abc", 5).failure,
+                  XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("-123tail", 8).failure,
+                  XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("1.5", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("12 34", 5).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("0x10", 4).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
 
-    ASSERT_FALSE(xr_string_parse_int64("abc", 3).ok);
-    ASSERT_FALSE(xr_string_parse_int64("   ", 3).ok);
-    ASSERT_FALSE(xr_string_parse_int64("", 0).ok);
-    ASSERT_FALSE(xr_string_parse_int64("+", 1).ok);
-    ASSERT_FALSE(xr_string_parse_int64("-", 1).ok);
-    ASSERT_FALSE(xr_string_parse_int64(NULL, 0).ok);
+    ASSERT_EQ_INT(xr_string_parse_int64("abc", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("   ", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("", 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("+", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64("-", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_int64(NULL, 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
 
     /* Both int64 extremes are representable; one past either end is rejected
      * rather than saturated the way strtoll would. */
     parsed = xr_string_parse_int64("9223372036854775807", 19);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_EQ_INT(parsed.value, INT64_MAX);
 
     parsed = xr_string_parse_int64("-9223372036854775808", 20);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_EQ_INT(parsed.value, INT64_MIN);
 
-    ASSERT_FALSE(xr_string_parse_int64("9223372036854775808", 19).ok);
-    ASSERT_FALSE(xr_string_parse_int64("-9223372036854775809", 20).ok);
-    ASSERT_FALSE(xr_string_parse_int64("99999999999999999999", 20).ok);
+    ASSERT_EQ_INT(xr_string_parse_int64("9223372036854775808", 19).failure,
+                  XR_NUMBER_PARSE_OUT_OF_RANGE);
+    ASSERT_EQ_INT(xr_string_parse_int64("-9223372036854775809", 20).failure,
+                  XR_NUMBER_PARSE_OUT_OF_RANGE);
+    ASSERT_EQ_INT(xr_string_parse_int64("99999999999999999999", 20).failure,
+                  XR_NUMBER_PARSE_OUT_OF_RANGE);
+    ASSERT_EQ_INT(xr_string_parse_int64("99999999999999999999tail", 24).failure,
+                  XR_NUMBER_PARSE_INVALID_SYNTAX);
 }
 
 TEST(string_parse_float64) {
     XrStringParseFloatResult parsed = xr_string_parse_float64(" \n-3.5e2 ", strlen(" \n-3.5e2 "));
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, -350.0, 0.000001);
 
     parsed = xr_string_parse_float64("+0.25", 5);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, 0.25, 0.000001);
 
     const char bounded[] = {'1', '.', '2', '5', '9'};
     parsed = xr_string_parse_float64(bounded, 4);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, 1.25, 0.000001);
 
     /* Exact f64 parsing accepts these whole-input decimal forms. */
     parsed = xr_string_parse_float64(".5", 2);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, 0.5, 0.000001);
 
     parsed = xr_string_parse_float64("1.", 2);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, 1.0, 0.000001);
 
     parsed = xr_string_parse_float64("0.001", 5);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_FLOAT_EQ(parsed.value, 0.001, 0.0000001);
 
     /* Exactly representable inputs must come back bit-exact, not merely close:
      * this is the fast path that keeps the result correctly rounded. */
     parsed = xr_string_parse_float64("1.5e3", 5);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_TRUE(parsed.value == 1500.0);
 
     parsed = xr_string_parse_float64("-0", 2);
-    ASSERT_TRUE(parsed.ok);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
     ASSERT_TRUE(parsed.value == 0.0);
 
-    ASSERT_FALSE(xr_string_parse_float64("1.5x", 4).ok);
-    ASSERT_FALSE(xr_string_parse_float64("-3.5e2tail", 10).ok);
-    ASSERT_FALSE(xr_string_parse_float64("1e", 2).ok);
-    ASSERT_FALSE(xr_string_parse_float64("1e+", 3).ok);
-    ASSERT_FALSE(xr_string_parse_float64(".", 1).ok);
-    ASSERT_FALSE(xr_string_parse_float64("nope", 4).ok);
+    ASSERT_EQ_INT(xr_string_parse_float64("1.5x", 4).failure,
+                  XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("-3.5e2tail", 10).failure,
+                  XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("1e", 2).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("1e+", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64(".", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("nope", 4).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
     /* Spellings a libc strtod would accept but the language grammar does not. */
-    ASSERT_FALSE(xr_string_parse_float64("inf", 3).ok);
-    ASSERT_FALSE(xr_string_parse_float64("nan", 3).ok);
-    ASSERT_FALSE(xr_string_parse_float64("0x1p3", 5).ok);
+    ASSERT_EQ_INT(xr_string_parse_float64("inf", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("nan", 3).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("0x1p3", 5).failure,
+                  XR_NUMBER_PARSE_INVALID_SYNTAX);
 
-    ASSERT_FALSE(xr_string_parse_float64("\t", 1).ok);
-    ASSERT_FALSE(xr_string_parse_float64("", 0).ok);
-    ASSERT_FALSE(xr_string_parse_float64(NULL, 0).ok);
+    parsed = xr_string_parse_float64("1e400", 5);
+    ASSERT_EQ_INT(parsed.failure, XR_NUMBER_PARSE_OK);
+    ASSERT_TRUE(parsed.value == xr_string_parse_infinity());
+
+    ASSERT_EQ_INT(xr_string_parse_float64("\t", 1).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64("", 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
+    ASSERT_EQ_INT(xr_string_parse_float64(NULL, 0).failure, XR_NUMBER_PARSE_INVALID_SYNTAX);
 }
 
 TEST(string_core_substring_bounds) {

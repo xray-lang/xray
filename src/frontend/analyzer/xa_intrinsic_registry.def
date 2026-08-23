@@ -361,3 +361,16 @@ XA_INTRINSIC(STRING_BYTE_SLICE_VIEW, 6001, "core.string.bytes", CORE,
  * the source member spelling or from a mutable Xi type. */
 XA_INTRINSIC(ARRAY_RESERVE, 6002, "core.array.reserve", CORE, ARRAY_RESERVE,
              WRITE_MAY_THROW, MAY_ALLOC, SAFE, 1, 1, NONE, NONE, 0, NONE, 0)
+
+/* Exact scalar parsing is a compiler-owned namespace operation.  The four
+ * stable identities keep required/optional and integer/floating behavior
+ * distinct after source names have been discarded.  Required failure publishes
+ * a typed error aggregate and may allocate; optional failure only returns null. */
+XA_INTRINSIC(I64_PARSE, 6003, "core.i64.parse", CORE, SCALAR_PARSE, MAY_THROW, MAY_ALLOC, SAFE, 1,
+             1, STATIC_RECEIVER, NONE, 0, I64, 1)
+XA_INTRINSIC(I64_TRY_PARSE, 6004, "core.i64.tryParse", CORE, SCALAR_PARSE, PURE, NO_ALLOC, SAFE, 1,
+             1, STATIC_RECEIVER, NONE, 0, I64, 1)
+XA_INTRINSIC(F64_PARSE, 6005, "core.f64.parse", CORE, SCALAR_PARSE, MAY_THROW, MAY_ALLOC, SAFE, 1,
+             1, STATIC_RECEIVER, NONE, 0, F64, 1)
+XA_INTRINSIC(F64_TRY_PARSE, 6006, "core.f64.tryParse", CORE, SCALAR_PARSE, PURE, NO_ALLOC, SAFE, 1,
+             1, STATIC_RECEIVER, NONE, 0, F64, 1)

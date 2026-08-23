@@ -5,19 +5,19 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xfloat_methods.h - Float builtin method implementations.
+ * xf64_methods.h - f64 builtin method implementations.
  *
  * KEY POINTS:
- *   - All float methods are `static inline` here so AOT-generated C
+ *   - All f64 methods are `static inline` here so AOT-generated C
  *     inlines them at the call site. The address-take inside
- *     xr_float_method_table[] forces a single out-of-line copy for
+ *     xr_f64_method_table[] forces a single out-of-line copy for
  *     the VM dispatcher.
  *   - Pure / no-GC predicates carry the matching flags so AOT
  *     specializers can hoist them above safepoints.
  */
 
-#ifndef XFLOAT_METHODS_H
-#define XFLOAT_METHODS_H
+#ifndef XF64_METHODS_H
+#define XF64_METHODS_H
 
 #include "xvalue.h"
 #include "../object/xstring.h"
@@ -33,23 +33,23 @@
 extern "C" {
 #endif
 
-/* float.toString() -> shortest round-trip string. Allocates.
+/* f64.toString() -> shortest round-trip string. Allocates.
  * Guarantees a decimal point so 0.0.toString() == "0.0", not "0". */
-static inline XrValue xr_float_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_f64_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) args;
     (void) argc;
-    XR_DCHECK(iso != NULL, "xr_float_to_string_method: NULL isolate");
+    XR_DCHECK(iso != NULL, "xr_f64_to_string_method: NULL isolate");
     char buffer[64];
     int len = xr_format_float(buffer, sizeof(buffer), XR_TO_FLOAT(self));
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }
 
-/* float.toFixed(decimals=0) -> fixed-precision string. Allocates. */
-static inline XrValue xr_float_to_fixed_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.toFixed(decimals=0) -> fixed-precision string. Allocates. */
+static inline XrValue xr_f64_to_fixed_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                int argc) {
-    XR_DCHECK(iso != NULL, "xr_float_to_fixed_method: NULL isolate");
+    XR_DCHECK(iso != NULL, "xr_f64_to_fixed_method: NULL isolate");
     int64_t decimals = (argc >= 1 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 0;
     char buffer[64];
     int len = xr_numeric_core_format_fixed(buffer, sizeof(buffer), XR_TO_FLOAT(self), decimals);
@@ -57,8 +57,8 @@ static inline XrValue xr_float_to_fixed_method(XrVMRuntime *iso, XrValue self, X
     return xr_string_value(str);
 }
 
-/* float.floor() -> int. Pure, no GC. */
-static inline XrValue xr_float_floor_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.floor() -> int. Pure, no GC. */
+static inline XrValue xr_f64_floor_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                             int argc) {
     (void) iso;
     (void) args;
@@ -66,8 +66,8 @@ static inline XrValue xr_float_floor_method(XrVMRuntime *iso, XrValue self, XrVa
     return xr_int((xr_Integer) floor(XR_TO_FLOAT(self)));
 }
 
-/* float.ceil() -> int. Pure, no GC. */
-static inline XrValue xr_float_ceil_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.ceil() -> int. Pure, no GC. */
+static inline XrValue xr_f64_ceil_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) iso;
     (void) args;
@@ -75,8 +75,8 @@ static inline XrValue xr_float_ceil_method(XrVMRuntime *iso, XrValue self, XrVal
     return xr_int((xr_Integer) ceil(XR_TO_FLOAT(self)));
 }
 
-/* float.round() -> int. Pure, no GC. */
-static inline XrValue xr_float_round_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.round() -> int. Pure, no GC. */
+static inline XrValue xr_f64_round_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                             int argc) {
     (void) iso;
     (void) args;
@@ -84,16 +84,16 @@ static inline XrValue xr_float_round_method(XrVMRuntime *iso, XrValue self, XrVa
     return xr_int((xr_Integer) round(XR_TO_FLOAT(self)));
 }
 
-/* float.abs() -> float. Pure, no GC. */
-static inline XrValue xr_float_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+/* f64.abs() -> f64. Pure, no GC. */
+static inline XrValue xr_f64_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
     return xr_float(fabs(XR_TO_FLOAT(self)));
 }
 
-/* float.sqrt() -> float. Returns NaN for negative input. Pure, no GC. */
-static inline XrValue xr_float_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.sqrt() -> f64. Returns NaN for negative input. Pure, no GC. */
+static inline XrValue xr_f64_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) iso;
     (void) args;
@@ -104,8 +104,8 @@ static inline XrValue xr_float_sqrt_method(XrVMRuntime *iso, XrValue self, XrVal
     return xr_float(sqrt(value));
 }
 
-/* float.isNaN() -> bool. Pure, no GC. */
-static inline XrValue xr_float_is_nan_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.isNaN() -> bool. Pure, no GC. */
+static inline XrValue xr_f64_is_nan_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;
     (void) args;
@@ -113,8 +113,8 @@ static inline XrValue xr_float_is_nan_method(XrVMRuntime *iso, XrValue self, XrV
     return xr_bool(isnan(XR_TO_FLOAT(self)));
 }
 
-/* float.toI64() -> int (truncation). Pure, no GC. */
-static inline XrValue xr_float_to_int_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* f64.toI64() -> int (truncation). Pure, no GC. */
+static inline XrValue xr_f64_to_int_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;
     (void) args;
@@ -122,8 +122,8 @@ static inline XrValue xr_float_to_int_method(XrVMRuntime *iso, XrValue self, XrV
     return xr_int((xr_Integer) XR_TO_FLOAT(self));
 }
 
-/* float.pow(exponent) -> float. Pure, no GC. */
-static inline XrValue xr_float_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+/* f64.pow(exponent) -> f64. Pure, no GC. */
+static inline XrValue xr_f64_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Number value = XR_TO_FLOAT(self);
     if (argc < 1)
@@ -140,10 +140,10 @@ static inline XrValue xr_float_pow_method(XrVMRuntime *iso, XrValue self, XrValu
 }
 
 struct XrVMRuntime;
-XR_FUNC void xr_float_register_native_type(struct XrVMRuntime *isolate);
+XR_FUNC void xr_f64_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* XFLOAT_METHODS_H */
+#endif /* XF64_METHODS_H */

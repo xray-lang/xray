@@ -29,6 +29,7 @@
 #include "../runtime/class/xclass.h"
 #include "../runtime/object/xstring.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xnumber_parse_error.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -55,6 +56,8 @@ static int prelude_enum_builtin_index(const char *enum_name) {
         return XR_GLOBAL_VAR_TASK_STATUS;
     if (strcmp(enum_name, "Utf8Error") == 0)
         return XR_GLOBAL_VAR_UTF8_ERROR;
+    if (strcmp(enum_name, XR_NUMBER_PARSE_ERROR_NAME) == 0)
+        return XR_GLOBAL_VAR_NUMBER_PARSE_ERROR;
     if (strcmp(enum_name, "StringSliceError") == 0)
         return XR_GLOBAL_VAR_STRING_SLICE_ERROR;
     if (strcmp(enum_name, "CompressionError") == 0)
@@ -62,6 +65,22 @@ static int prelude_enum_builtin_index(const char *enum_name) {
     if (strcmp(enum_name, "CryptoError") == 0)
         return XR_GLOBAL_VAR_CRYPTO_ERROR;
     return -1;
+}
+
+XR_FUNC XiValue *xi_lower_number_parse_error_member_access(
+    XiLower *l, XiValue *enum_value, const char *member_name, struct XrType *result_type, int line) {
+    int member_index = xr_number_parse_error_member_index(member_name);
+    if (!l || !enum_value || !result_type || member_index < 0)
+        return NULL;
+    XiValue *index = xi_const_int(l->func, l->cur_block, member_index, l->type_int);
+    XiValue *value = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
+    if (!index || !value)
+        return NULL;
+    value->args[0] = enum_value;
+    value->args[1] = index;
+    value->aux_kind = XI_AUX_KIND_ENUM_CASE;
+    value->line = (uint32_t) line;
+    return value;
 }
 
 static XiValue *lower_enum_method_closure(XiLower *l, XiFunc *child, uint16_t child_idx,
@@ -163,6 +182,9 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    if (builtin_idx == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR)
+        return xi_lower_number_parse_error_member_access(
+            l, enum_val, ea->member_name, result_type, (int) node->line);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;

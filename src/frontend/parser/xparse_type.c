@@ -28,7 +28,7 @@
 /* ========== Helper Functions ========== */
 
 /* Consume '>' in generic type context, handling '>>' (TK_RSHIFT) split.
- * When parsing Array<Array<int>>, the lexer tokenizes '>>' as TK_RSHIFT;
+ * When parsing Array<Array<i64>>, the lexer tokenizes '>>' as TK_RSHIFT;
  * this function splits it into two '>' tokens. */
 static bool consume_gt_in_generic(Parser *parser) {
     XR_DCHECK(parser != NULL, "consume_gt_in_generic: NULL parser");
@@ -862,16 +862,6 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
         if (strcmp(temp_name, "String") == 0 || strcmp(temp_name, "str") == 0) {
             xr_parser_error(parser, "type 'string' must be lowercase in Xray");
             return xr_tref_string(parser->compiler_session);
-        }
-        if (strcmp(temp_name, "Int") == 0 || strcmp(temp_name, "Integer") == 0 ||
-            strcmp(temp_name, "integer") == 0) {
-            xr_parser_error(parser, "use 'i64' (lowercase) for integer type in Xray");
-            return xr_tref_i64(parser->compiler_session);
-        }
-        if (strcmp(temp_name, "Float") == 0 || strcmp(temp_name, "Double") == 0 ||
-            strcmp(temp_name, "double") == 0) {
-            xr_parser_error(parser, "use 'f64' (lowercase) for floating-point type in Xray");
-            return xr_tref_f64(parser->compiler_session);
         }
         if (strcmp(temp_name, "Bool") == 0 || strcmp(temp_name, "Boolean") == 0 ||
             strcmp(temp_name, "boolean") == 0) {

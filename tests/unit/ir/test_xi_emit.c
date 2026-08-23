@@ -11,6 +11,9 @@
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
+#include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
+#include "../../../src/plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../../../include/xray_vm.h"
 
 #include <stdio.h>
@@ -609,6 +612,165 @@ TEST(conversion_bytecode_modes_are_disjoint) {
     assert(!xr_conversion_bytecode_is_numeric(XR_CONVERSION_BC_PARSE_OPTIONAL));
     assert(!xr_conversion_bytecode_is_parse_required(XR_CONVERSION_BC_PARSE_OPTIONAL));
     assert(xr_conversion_bytecode_is_parse_optional(XR_CONVERSION_BC_PARSE_OPTIONAL));
+}
+
+TEST(number_parse_error_builtin_identity_requires_matching_typed_metadata) {
+    const XrNumberParseErrorRegistryRow *row =
+        xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    assert(row != NULL);
+    assert(row->global_index == 30);
+    assert(xr_number_parse_error_registry_row(29) == NULL);
+    assert(xr_number_parse_error_registry_row(31) == NULL);
+
+    char namespace_type_key[192];
+    int written = snprintf(namespace_type_key, sizeof(namespace_type_key),
+                           "type-v3:%u:0:%u:0:0:0:0:0:0:%u:0:;named:%u:%s[0]",
+                           (unsigned) XR_KIND_CLASS, (unsigned) XR_TID_NULL,
+                           (unsigned) XR_SCALAR_REP_NONE, (unsigned) strlen(row->enum_name),
+                           row->enum_name);
+    assert(written > 0 && (size_t) written < sizeof(namespace_type_key));
+
+    XrSemanticTypeRecord namespace_type = {
+        .canonical_key = namespace_type_key,
+        .kind = XR_KIND_CLASS,
+        .builtin_type = XR_TID_NULL,
+        .source_class = XR_SEMANTIC_INDEX_NONE,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+    };
+    const char *metadata[] = {row->enum_name};
+    XrSemanticOperationRecord namespace_load = {
+        .result_type = 0,
+        .opcode = XI_GET_BUILTIN,
+        .metadata_count = 1,
+        .semantic_immediate = XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+        .constant = XR_SEMANTIC_INDEX_NONE,
+        .callable_function = XR_SEMANTIC_INDEX_NONE,
+        .effects = 0,
+        .result_alias_operand = -1,
+    };
+    XrSemanticPlan plan = {0};
+    plan.types = &namespace_type;
+    plan.type_count = 1;
+    plan.operations = &namespace_load;
+    plan.operation_count = 1;
+    plan.metadata = metadata;
+    plan.metadata_count = 1;
+
+    assert(xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+
+    namespace_load.semantic_immediate = XR_GLOBAL_VAR_NUMBER_PARSE_ERROR + 1;
+    assert(!xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+    namespace_load.semantic_immediate = XR_GLOBAL_VAR_NUMBER_PARSE_ERROR;
+
+    const char *saved_metadata = metadata[0];
+    metadata[0] = "Utf8Error";
+    assert(!xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+    metadata[0] = saved_metadata;
+    namespace_load.metadata_count = 0;
+    assert(!xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+    namespace_load.metadata_count = 1;
+
+    const char *saved_type_key = namespace_type.canonical_key;
+    namespace_type.canonical_key = "type-v3:forged:NumberParseError";
+    assert(!xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+    namespace_type.canonical_key = saved_type_key;
+    namespace_type.kind = XR_KIND_ENUM;
+    assert(!xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+    namespace_type.kind = XR_KIND_CLASS;
+
+    assert(xr_semantic_number_parse_error_namespace_is_exact(&plan, &namespace_load));
+
+    char enum_key[256];
+    written = snprintf(enum_key, sizeof(enum_key),
+                       "source-enum-v1:schema=%u:owner=%u:%s:name=%u:%s:members=2:"
+                       "m0=%u:%s:payloads=0:m1=%u:%s:payloads=0",
+                       (unsigned) XR_SEMANTIC_SCHEMA_VERSION,
+                       (unsigned) strlen(row->nominal_owner), row->nominal_owner,
+                       (unsigned) strlen(row->enum_name), row->enum_name,
+                       (unsigned) strlen(row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX]),
+                       row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX],
+                       (unsigned) strlen(row->members[XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE]),
+                       row->members[XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE]);
+    assert(written > 0 && (size_t) written < sizeof(enum_key));
+    XrStableId enum_identity = {{0}};
+    XrFingerprint enum_digest = {{0}};
+    assert(xr_stable_id_from_key(enum_key, &enum_identity, &enum_digest));
+    XrSemanticTypeRecord enum_type = {
+        .source_enum_identity = enum_identity,
+        .source_enum_key = enum_key,
+        .kind = XR_KIND_ENUM,
+        .builtin_type = XR_TID_NULL,
+        .source_class = XR_SEMANTIC_INDEX_NONE,
+        .enum_layout_id = row->enum_layout_id,
+        .enum_member_count = XR_NUMBER_PARSE_ERROR_MEMBER_COUNT,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .enum_flags = XR_SEM_ENUM_DECLARATION_EXACT | XR_SEM_ENUM_UNIT,
+    };
+    plan.types = &enum_type;
+    assert(xr_semantic_number_parse_error_type_is_exact(&plan, 0));
+
+    enum_type.source_enum_identity = (XrStableId) {{0}};
+    assert(!xr_semantic_number_parse_error_type_is_exact(&plan, 0));
+    enum_type.source_enum_identity = enum_identity;
+    const char *saved_enum_key = enum_type.source_enum_key;
+    enum_type.source_enum_key = "source-enum-v1:forged:NumberParseError";
+    assert(!xr_semantic_number_parse_error_type_is_exact(&plan, 0));
+    enum_type.source_enum_key = saved_enum_key;
+    enum_type.enum_member_count = XR_NUMBER_PARSE_ERROR_MEMBER_COUNT - 1;
+    assert(!xr_semantic_number_parse_error_type_is_exact(&plan, 0));
+    enum_type.enum_member_count = XR_NUMBER_PARSE_ERROR_MEMBER_COUNT;
+    enum_type.enum_layout_id ^= 1u;
+    assert(!xr_semantic_number_parse_error_type_is_exact(&plan, 0));
+    enum_type.enum_layout_id = row->enum_layout_id;
+    assert(xr_semantic_number_parse_error_type_is_exact(&plan, 0));
+}
+
+TEST(emit_scalar_parse_intrinsics_use_exact_vm_modes) {
+    XiFunc *f = make_func("parse-modes", &stub_float64);
+    XiBlock *entry = f->entry;
+    XiValue *source = xi_param(f, entry, 0, &stub_string);
+    const XaIntrinsicId ids[] = {
+        XA_INTRINSIC_I64_PARSE,
+        XA_INTRINSIC_I64_TRY_PARSE,
+        XA_INTRINSIC_F64_PARSE,
+        XA_INTRINSIC_F64_TRY_PARSE,
+    };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); i++) {
+        bool integer = ids[i] == XA_INTRINSIC_I64_PARSE ||
+                       ids[i] == XA_INTRINSIC_I64_TRY_PARSE;
+        XiValue *convert =
+            xi_value_new(f, entry, XI_CONVERT, integer ? &stub_int : &stub_float64, 1);
+        assert(convert != NULL);
+        convert->args[0] = source;
+        convert->xa_intrinsic_id = ids[i];
+        if (ids[i] == XA_INTRINSIC_I64_PARSE || ids[i] == XA_INTRINSIC_F64_PARSE)
+            convert->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        if (i == 3)
+            xi_block_set_return(entry, convert);
+    }
+
+    XrProto *proto = NULL;
+    XiEmitStatus status = xi_emit(f, NULL, &proto);
+    assert(status == XI_EMIT_OK && proto != NULL);
+    int required_i64 = 0, optional_i64 = 0, required_f64 = 0, optional_f64 = 0;
+    for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
+        XrInstruction instruction = PROTO_CODE(proto, i);
+        OpCode opcode = GET_OPCODE(instruction);
+        uint16_t mode = (uint16_t) GETARG_C(instruction);
+        if (opcode == OP_TOINT && xr_conversion_bytecode_is_parse_required(mode))
+            required_i64++;
+        else if (opcode == OP_TOINT && xr_conversion_bytecode_is_parse_optional(mode))
+            optional_i64++;
+        else if (opcode == OP_TOFLOAT && xr_conversion_bytecode_is_parse_required(mode))
+            required_f64++;
+        else if (opcode == OP_TOFLOAT && xr_conversion_bytecode_is_parse_optional(mode))
+            optional_f64++;
+    }
+    assert(required_i64 == 1 && optional_i64 == 1 && required_f64 == 1 && optional_f64 == 1 &&
+           "each stable scalar parse intrinsic must select one disjoint VM byte mode");
+
+    xr_instruction_unit_free(proto);
+    xi_func_free(f);
 }
 
 /* ========== Float Constants ========== */
@@ -1366,6 +1528,8 @@ int main(void) {
     (void) stub_null;
     (void) stub_void;
 
+    run_number_parse_error_builtin_identity_requires_matching_typed_metadata();
+
     /* Basic emission */
     run_emit_return_const_int();
     run_emit_return_void();
@@ -1394,6 +1558,7 @@ int main(void) {
     run_emit_codegen_compiler_fence_projects_to_void_without_runtime_effect();
     run_emit_numeric_conversion_packs_typed_witness();
     run_conversion_bytecode_modes_are_disjoint();
+    run_emit_scalar_parse_intrinsics_use_exact_vm_modes();
 
     /* Float constants */
     run_emit_const_float_small();

@@ -1,4 +1,8 @@
-// Built-in int type — implementation in src/runtime/value/xint_methods.c
+// Built-in i64 type — implementation in src/runtime/value/xi64_methods.c
+enum NumberParseError {
+    InvalidSyntax,
+    OutOfRange
+}
 class i64 {
     // @lowered
     static parse(text: string) -> i64

@@ -55,6 +55,7 @@
 #include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"
 #include "../plan/semantic/xr_semantic_plan.h"
+#include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_escape.h"
 #include "../ir/xi_range.h"
@@ -67,6 +68,7 @@
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xnumber_parse_error.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -2653,6 +2655,53 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const X
     return xr_aot_scalar_semantic_value_id(entry->target_plan, function, value->args[0],
                                            &semantic_function, out, error, sizeof(error)) &&
            semantic_function == function->semantic_plan_function_index;
+}
+
+static const XrSemanticOperationRecord *
+cg_semantic_operation_for_value(XiCgenCtx *ctx, const XiFunc *function, const XiValue *value) {
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *match = NULL;
+    if (!ctx || !function || !value || !function->semantic_plan ||
+        !cg_value_semantic_id(ctx, function, value, &semantic_value))
+        return NULL;
+    uint32_t count = (uint32_t) xr_semantic_plan_operation_count(function->semantic_plan);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticOperationRecord *candidate =
+            xr_semantic_plan_operation(function->semantic_plan, i);
+        if (!candidate || candidate->function != function->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static bool cg_number_parse_error_namespace_is_exact(XiCgenCtx *ctx, const XiFunc *function,
+                                                     const XiValue *value) {
+    return function && function->semantic_plan &&
+           xr_semantic_number_parse_error_namespace_is_exact(
+               function->semantic_plan,
+               cg_semantic_operation_for_value(ctx, function, value));
+}
+
+static bool cg_number_parse_error_member_access_is_exact(XiCgenCtx *ctx,
+                                                         const XiFunc *function,
+                                                         const XiValue *value) {
+    return function && function->semantic_plan &&
+           xr_semantic_number_parse_error_member_access_is_exact(
+               function->semantic_plan,
+               cg_semantic_operation_for_value(ctx, function, value), NULL, NULL, NULL);
+}
+
+static bool cg_number_parse_error_catch_narrow_is_exact(XiCgenCtx *ctx,
+                                                        const XiFunc *function,
+                                                        const XiValue *value) {
+    return function && function->semantic_plan &&
+           xr_semantic_number_parse_error_catch_narrow_is_exact(
+               function->semantic_plan,
+               cg_semantic_operation_for_value(ctx, function, value), NULL);
 }
 
 /* Select a migrated cleanup only through the verified TargetPlan row and its
@@ -9160,6 +9209,42 @@ static bool cg_static_prelude_enum_namespace_is_elided(const XiFunc *f, const Xi
     return seen_use;
 }
 
+/* NumberParseError is a compiler-owned type token, never a runtime Map. Its
+ * only legal hosted uses are the typed catch test and the stable ordinal member
+ * access. Each namespace row must first match the frozen id/type/metadata
+ * authority; other prelude enums continue through their existing paths. */
+static bool cg_number_parse_error_namespace_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                      const XiValue *v) {
+    if (!f || !v || !cg_number_parse_error_namespace_is_exact(ctx, f, v))
+        return false;
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block || block->control == v)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++)
+                if (phi->value.args[ai] == v)
+                    return false;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *user = block->values[vi];
+            if (!user || user == v)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != v)
+                    continue;
+                bool typed_test = user->op == XI_IS && ai == 1;
+                bool typed_member = user->op == XI_INDEX_GET && ai == 0 &&
+                                    cg_number_parse_error_member_access_is_exact(ctx, f, user);
+                if (!typed_test && !typed_member)
+                    return false;
+                seen_use = true;
+            }
+        }
+    }
+    return seen_use;
+}
+
 /* PanicInfo is a compile-time class token in hosted AOT.  Its dedicated
  * constructor emitter recognizes the receiver identity and materializes the
  * exception directly, so the token itself has no C representation.  Keep the
@@ -9526,6 +9611,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_debug_source_var_sync(ctx, out, f, v);
         return;
     }
+    if (cg_number_parse_error_namespace_is_elided(ctx, f, v))
+        return;
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
         return;
     if (cg_panicinfo_constructor_token_is_elided(f, v))
@@ -10733,6 +10820,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if (cg_struct_scalar_field_load_has_no_release_value_use(ctx, f, v))
         return true;
     if (cg_span_phi_snapshot_has_no_release_use(ctx, f, v))
+        return true;
+    if (cg_number_parse_error_namespace_is_elided(ctx, f, v))
         return true;
     if (cg_static_prelude_enum_namespace_is_elided(f, v))
         return true;

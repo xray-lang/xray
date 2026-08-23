@@ -21,7 +21,7 @@
 
 #include "../base/xchecks.h"
 #include "../base/xconstants.h"
-#include "../base/xglobal_indices.h"
+#include "../base/xnumber_parse_error.h"
 #include "../base/xmalloc.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/class/xenum.h"
@@ -816,6 +816,28 @@ static XrEnumType *aot_runtime_register_prelude_enum(XrAotRuntime *runtime, int 
     return type;
 }
 
+static bool aot_runtime_register_number_parse_error(XrAotRuntime *runtime) {
+    const XrNumberParseErrorRegistryRow *row =
+        xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    XrRuntimeCore *core = xr_aot_runtime_core(runtime);
+    if (!row || !core)
+        return false;
+    char *members[XR_NUMBER_PARSE_ERROR_MEMBER_COUNT] = {
+        (char *) row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX],
+        (char *) row->members[XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE],
+    };
+    XrEnumType *type = xr_enum_type_new_core(
+        core, row->nominal_owner, row->enum_name, members, XR_NUMBER_PARSE_ERROR_MEMBER_COUNT);
+    if (!type || !type->layout || type->layout->layout_id != row->enum_layout_id ||
+        type->member_count != XR_NUMBER_PARSE_ERROR_MEMBER_COUNT)
+        return false;
+    for (uint32_t i = 0; i < XR_NUMBER_PARSE_ERROR_MEMBER_COUNT; i++)
+        if (!type->members[i].name || strcmp(type->members[i].name, row->members[i]) != 0)
+            return false;
+    xr_aot_runtime_set_builtin(runtime, (int32_t) row->global_index, XR_FROM_PTR(type));
+    return true;
+}
+
 static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
     char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease", "SeqCst"};
     char *endian_members[] = {"Native", "LE", "BE"};
@@ -844,6 +866,7 @@ static bool aot_runtime_register_prelude_enums(XrAotRuntime *runtime) {
                                              task_status_members, 5, NULL) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error",
                                              utf8_error_members, 1, NULL) &&
+           aot_runtime_register_number_parse_error(runtime) &&
            aot_runtime_register_prelude_enum(runtime, XR_GLOBAL_VAR_STRING_SLICE_ERROR,
                                              "StringSliceError", string_slice_error_members, 1,
                                              NULL) &&
@@ -874,7 +897,8 @@ static bool aot_builtin_index_is_prelude_enum(int32_t index) {
     return index == XR_GLOBAL_VAR_ORDERING || index == XR_GLOBAL_VAR_RECV ||
            index == XR_GLOBAL_VAR_ENDIAN || index == XR_GLOBAL_VAR_SEND_RESULT ||
            index == XR_GLOBAL_VAR_TASK_RESULT || index == XR_GLOBAL_VAR_TASK_STATUS ||
-           index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_STRING_SLICE_ERROR ||
+           index == XR_GLOBAL_VAR_UTF8_ERROR || index == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR ||
+           index == XR_GLOBAL_VAR_STRING_SLICE_ERROR ||
            index == XR_GLOBAL_VAR_COMPRESSION_ERROR || index == XR_GLOBAL_VAR_CRYPTO_ERROR;
 }
 

@@ -601,6 +601,14 @@ emission rather than falling back to compiler-host layout.
   parameter or a call result, and any operation shape that is not exactly
   reconstructible fail closed, and no object may enter the named-aggregate
   path.
+- T19: `NumberParseError` is the sole scalar-text parse failure ABI. Its
+  builtin global index is 30, its enum layout ID is 3802613823, and member
+  indices zero and one name `InvalidSyntax` and `OutOfRange`. Semantic
+  namespace rows, generated C, hosted AOT, freestanding AOT, and the VM must
+  agree on all three numeric identities before publishing the error. Strings
+  remain diagnostic metadata only; an unknown ID, missing typed metadata,
+  wrong layout, wrong member, or already-pending error fails closed and cannot
+  select arbitrary enum storage.
 
 The release evidence includes generated-C filetests, the eleven-case
 cross-target smoke matrix, executed PowerPC64 big- and little-endian
@@ -637,14 +645,14 @@ anchor-sha256: src/aot/xaot_prepare.c 67cf673bba74294a9262e03fc720dd529bbd75ae3d
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c 6da5f0cc9bb69bf85889ed06f5620e9f8c61cfeb513e91ff60ebdf14dbdb0e46
 anchor-sha256: src/aot/xaot_verify.c ca5082d7d43a163ea6ac966d373a4eb0152faa76b14f1e0fc93c2af209d6d8e4
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c db61af1ad5bcc11afb69f23a134a318d585c58addfc6d7822dd35a26ecd61bfd
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c b63876fe2a5307536f1b179553c7e9bb389ae502439ed88e776b4af457f0c036
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
 anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c e1ce34adbd9d214549fa3e1c024c888c9afa01135f731331dd4b7fbad3297fa4
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h f61e0844be523d8db377b421352a326635446f0e9602e32fb5213e814d535954
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 0163afcd7a0a5e9893ed9e99567cf7890d2b82cab8a3ddc2507c4ea4a1bd8107
-anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 575595b18ef6a65fb7c8394178c16174ad6c91c7bcd6807f69e69f18a6fa7430
+anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 9a6cf43eba7f80398e5587caecc975669d37fa7ff75034dbf2e450259e73bf4f
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h abfe201fb679c49334634af0db17ad23152fe896e7f665ae0464f4084505ca65
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 83e9445eb7b1fbf5004cbd198fd0c703839c6ce67f6d6cc34c4f8c78e4938e97
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 9ad3a46f3f41de669f91aa5a6e00452952ef4b0f23c2e9a92ec237a896c5b3b1
@@ -659,14 +667,14 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 2ce47c9c1e150e59ec864d968aaa0d3b5dcf267fd46b93fa127bcec1486e50ae
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0c51f3ae3551c40fa93026af14abe02f9eb5e5310ff7935752836847b0519cc
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 6a445c4991714f7e51af04db8720bb0feca0502329f636818137af30f93715f2
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c bb3414fc08566bc140e788f3ed91e57c59074a0e648c4384cc934b9a98774564
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 9e8c4be5428b832c3295c75a9be38b89d5bbc0146beeb247ec0e94f169f0f591
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 9ea6ac1e4e4afc494618bc7e50110f8c028ec3338aedce4503ffc80a5da40754
-anchor-sha256: src/aot/xi_cgen.c bb60c9222953af83b8a4e2805534a0d793e230bd26f6cdf77feafd4f6dcf7aef
-anchor-sha256: src/ir/xi_opt.c dd0f3899748e06604b0b82f5b48eb3b1246d52b35ab8dd4536b6ea52d86a63ea
+anchor-sha256: src/aot/xi_cgen.c 5fd20aa77ccff0876510baa6f79ddd6205f2af7c932b7e10ff0b2ae3e3eef204
+anchor-sha256: src/ir/xi_opt.c 6689fa926579a40007ca5b772a9bcfac0307ddb2f7de7eac15bd5b07c9f6ae23
 anchor-sha256: src/aot/xrt_coll.h 6c653d90dfdea6a5d2d03c64966c0594f9a262f902eecf7c5e96e31bb1efea16
-anchor-sha256: src/aot/xrt_core_freestanding.h ce002c082865c6458a525a46b9f8d839b3d167a7f2acea4d80b1ecbb27a5b1a8
-anchor-sha256: src/aot/xrt_method.h 24ec72917a8043cde5c7e9522003635b5cae7bee40abfc27b746432b66c6dab8
+anchor-sha256: src/aot/xrt_core_freestanding.h 7f163f58a8a38a569716bae2b1f02f62f90a25562800b0d933b660de6a05c54c
+anchor-sha256: src/aot/xrt_method.h ec377657645eeb7468eb4fe33307beaa296543911293edd03e5aabf3dc92c8e7
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de9756c153a29fc757256e593782f52f535678
 anchor-sha256: src/app/cli/xcmd_build.c 8a23d2a7e93d88e4282b459fa8b4d4651cfbf24ebe70332575424ed7e130c118
@@ -677,3 +685,5 @@ anchor-sha256: stdlib/simd/simd.xr 35c745eb6a37f37a0c7a2d2daf4d4bb953582e9309299
 anchor-sha256: src/aot/xaot_coro.h 51edaa56bb72326f5bacd0998b00d505e0c0533190f4ba0289c10ee954049995
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1ebe380363e08e367a588194d1061ae1bdfcec
 anchor-sha256: src/aot/xrt_provider_abi.h 4deebceb145b02ba5c5836c8688b9c4788a130ab9fd0856d7ecc21dbcd5ce840
+anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1bfd9f84613580b3b6b5ece8bfd9eaa4
+anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e

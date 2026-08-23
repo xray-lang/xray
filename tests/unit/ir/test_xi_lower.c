@@ -836,6 +836,40 @@ TEST(mem_slice_is_caller_proven_nothrow_raw_view) {
     xi_func_free(f);
 }
 
+TEST(scalar_parse_lowering_separates_typed_error_and_optional_flows) {
+    XiFunc *root = lower_source(
+        "fn requiredI(value: string) -> i64 { return i64.parse(value) }\n"
+        "fn optionalI(value: string) -> i64? { return i64.tryParse(value) }\n"
+        "fn requiredF(value: string) -> f64 { return f64.parse(value) }\n"
+        "fn optionalF(value: string) -> f64? { return f64.tryParse(value) }\n");
+    assert(root != NULL);
+    XiFunc *required_i = func_tree_find_func_name(root, "requiredI");
+    XiFunc *optional_i = func_tree_find_func_name(root, "optionalI");
+    XiFunc *required_f = func_tree_find_func_name(root, "requiredF");
+    XiFunc *optional_f = func_tree_find_func_name(root, "optionalF");
+    XiValue *required_i_parse = required_i ? func_tree_find_op(required_i, XI_CONVERT) : NULL;
+    XiValue *optional_i_parse = optional_i ? func_tree_find_op(optional_i, XI_CONVERT) : NULL;
+    XiValue *required_f_parse = required_f ? func_tree_find_op(required_f, XI_CONVERT) : NULL;
+    XiValue *optional_f_parse = optional_f ? func_tree_find_op(optional_f, XI_CONVERT) : NULL;
+    assert(required_i_parse && required_i_parse->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE);
+    assert(optional_i_parse &&
+           optional_i_parse->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE);
+    assert(required_f_parse && required_f_parse->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE);
+    assert(optional_f_parse &&
+           optional_f_parse->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE);
+    assert((required_i_parse->flags & XI_FLAG_MAY_THROW) != 0 &&
+           (required_f_parse->flags & XI_FLAG_MAY_THROW) != 0);
+    assert((optional_i_parse->flags & XI_FLAG_MAY_THROW) == 0 &&
+           (optional_f_parse->flags & XI_FLAG_MAY_THROW) == 0);
+    assert(func_tree_find_op(required_i, XI_ERR_CHECK) &&
+           func_tree_find_op(required_f, XI_ERR_CHECK) &&
+           "required parse must publish a real typed error check");
+    assert(!func_tree_find_op(optional_i, XI_ERR_CHECK) &&
+           !func_tree_find_op(optional_f, XI_ERR_CHECK) &&
+           "tryParse must never poll or write the pending error channel");
+    xi_func_free(root);
+}
+
 TEST(atomic_methods_lower_to_nothrow_canonical_ops) {
     XiFunc *f = lower_source("fn update(counter: Atomic<i64>) -> i64 {\n"
                              "  var before = counter.load(Ordering.Relaxed)\n"
@@ -3233,6 +3267,7 @@ int main(void) {
     run_bytes_new_low_level_methods_lower_to_semantic_ops();
     run_unsafe_byte_slice_integer_loads_and_stores_keep_unchecked_access();
     run_mem_slice_is_caller_proven_nothrow_raw_view();
+    run_scalar_parse_lowering_separates_typed_error_and_optional_flows();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();

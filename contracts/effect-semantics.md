@@ -408,6 +408,16 @@ it cannot add, remove, or complete a source-semantic effect dimension.
     came from inference. The diagnostic never changes the function type,
     effect product, exit status, or runtime semantics.
 
+Exact scalar parsing has one typed failure product. `i64.parse` and
+`f64.parse` may produce only `NumberParseError.InvalidSyntax` or
+`NumberParseError.OutOfRange`, and lowering must place a real `XI_ERR_CHECK`
+after the parse operation. Publishing that typed error aggregate is a
+`MAY_ALLOC`/`MAY_HEAP` path. `i64.tryParse` and `f64.tryParse` return an
+optional value and have no error effect, allocation effect, or pending-error
+write. The shared parser owns failure classification; VM and AOT may publish
+the frozen member but may not reclassify syntax and range failures
+independently.
+
 Constructing a declared class that declares no instance constructor runs no
 user body: it allocates the instance and applies the declared field defaults.
 The whole-program callsite evidence names that construction in its own right
@@ -451,7 +461,7 @@ anchor-sha256: src/app/cli/xcmd_verify.c 89c0d0d5f397d9acdb3098f9f5a04403004d6cf
 anchor-sha256: tests/cli/run_verify_contract_tests.py 5478ddddc8b0ad7ee001e901ceb2a1b4f44c57cee48032ac438f4f7f9187ce18
 anchor-sha256: tests/unit/analyzer/test_analyzer.c 080ef0a0fd3d32671212fa3af62f0a4c4123c56d1ab530c7c5945054ffc46bec
 anchor-sha256: tests/unit/analyzer/test_effect_db.c 15b62bd4e820af1d1798476afe61459372218e26b83db65d00a0f40cb2002bf1
-anchor-sha256: tests/unit/ir/test_xi_lower.c ca01b5a25becdca09610d5910c9775398bf9eff8363437eac8d6ec4b1ddb56a9
+anchor-sha256: tests/unit/ir/test_xi_lower.c d9238d4bad9d277667d5af676be81e77d9f1469bdc58e8b6a648ccde4cffc057
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 9273a00f9e4dc55656e47b8d2d04acfa868e48e14ac53ba3599c7d8e6dfee2c3
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee106075efdec66d5602811f4a5cd7f82ea
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
@@ -476,3 +486,6 @@ anchor-sha256: src/plan/semantic/xr_semantic_verify.c 2bcdc8e045fd715c9b78c94d23
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 39a4accd8c8e23ca8696b8b96a445d129089d7ca18fe6458f4d14dabb3664a99
+anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
+anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
+anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1

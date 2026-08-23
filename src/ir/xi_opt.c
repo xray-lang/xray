@@ -35,6 +35,7 @@
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../plan/semantic/xr_semantic_plan.h"
+#include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_bits_core.h"
@@ -1965,6 +1966,16 @@ static bool sr_array_intrinsic_operand_rep(const XiValue *value, uint16_t argume
 static bool sr_convert_can_return_null(const XiValue *v) {
     if (!v || v->op != XI_CONVERT || v->nargs < 1 || !v->type)
         return false;
+    /* Scalar parsing has a typed, registry-owned failure contract.  Required
+     * parse writes NumberParseError and returns the native scalar only on the
+     * success edge; tryParse is the nullable form.  Do not reconstruct that
+     * distinction from the String receiver or result spelling. */
+    if (v->xa_intrinsic_id == XA_INTRINSIC_I64_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_F64_PARSE)
+        return false;
+    if (v->xa_intrinsic_id == XA_INTRINSIC_I64_TRY_PARSE ||
+        v->xa_intrinsic_id == XA_INTRINSIC_F64_TRY_PARSE)
+        return true;
     if (v->type->kind != XR_KIND_INT && v->type->kind != XR_KIND_FLOAT)
         return false;
 
@@ -2212,6 +2223,7 @@ static bool sr_value_index_container_is_static(const XiValue *value) {
  * native representations. Every other container keeps the native boundary it
  * already carries at its own definition, so no adapter appears there either. */
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy);
+static bool sr_number_parse_error_member_access_is_exact(const XiValue *value);
 
 static XrRep sr_container_operand_rep(const XiValue *container, const XiRepPolicy *policy) {
     const XiValue *v = sr_unwrap_identity_value(container);
@@ -2575,6 +2587,10 @@ static bool sr_def_rep_memory_op(const XiValue *v, XrRep *out) {
         return false;
     switch (v->op) {
         case XI_INDEX_GET:
+            if (sr_number_parse_error_member_access_is_exact(v)) {
+                *out = XR_REP_I64;
+                return true;
+            }
             *out = v->nargs >= 1 && v->args[0] && sr_value_index_container_is_static(v->args[0])
                        ? sr_value_typed_array_elem_rep(v->args[0])
                        : XR_REP_TAGGED;
@@ -2852,6 +2868,54 @@ static bool sr_array_hof_identity_is_exact(const XiValue *value, SrArrayHofIdent
     return true;
 }
 
+static const XrSemanticOperationRecord *
+sr_number_parse_error_operation(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    const XrSemanticPlan *plan = function ? function->semantic_plan : NULL;
+    if (!function || !plan || !xr_semantic_plan_is_verified(plan) ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+        return NULL;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(plan, function->semantic_plan_function_index);
+    if (!semantic_function || value->id >= semantic_function->value_count ||
+        semantic_function->value_begin > UINT32_MAX - value->id)
+        return NULL;
+    uint32_t semantic_value = semantic_function->value_begin + value->id;
+    const XrSemanticOperationRecord *match = NULL;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->function != function->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static bool sr_number_parse_error_member_access_is_exact(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    return value && value->op == XI_INDEX_GET && function && function->semantic_plan &&
+           xr_semantic_number_parse_error_member_access_is_exact(
+               function->semantic_plan, sr_number_parse_error_operation(value), NULL, NULL, NULL);
+}
+
+static bool sr_number_parse_error_catch_narrow_is_exact(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    return value && value->op == XI_AS && function && function->semantic_plan &&
+           xr_semantic_number_parse_error_catch_narrow_is_exact(
+               function->semantic_plan, sr_number_parse_error_operation(value), NULL);
+}
+
+static bool sr_number_parse_error_equality_is_exact(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    return value && value->op == XI_EQ && function && function->semantic_plan &&
+           xr_semantic_number_parse_error_equality_is_exact(
+               function->semantic_plan, sr_number_parse_error_operation(value));
+}
+
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
@@ -2988,6 +3052,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
              * only when an imported source was still unresolved during
              * per-module lowering.  Once LTO supplies its scalar type, the
              * cast is a native representation-preserving conversion. */
+            if (sr_number_parse_error_catch_narrow_is_exact(v))
+                return XR_REP_I64;
             if (sr_as_is_native_numeric_width(v))
                 return sr_type_scalar_rep(v->type);
             return XR_REP_TAGGED;
@@ -3320,6 +3386,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_GE:
             if (sr_compare_uses_null(user))
                 return XR_REP_TAGGED;
+            if (user->op == XI_EQ && sr_number_parse_error_equality_is_exact(user))
+                return XR_REP_I64;
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {
                 return sr_type_scalar_rep(user->args[arg_idx]->type);
             }

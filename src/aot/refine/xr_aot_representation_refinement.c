@@ -45,6 +45,7 @@
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_catch_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_info_shape.h"
+#include "../../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../../plan/semantic/xr_semantic_scalar_copy_shape.h"
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_names.h"
@@ -7560,11 +7561,18 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             break;
         case XI_GET_BUILTIN:
             if (aot_json_namespace_global_is_exact(ctx->semantic, operation) ||
+                xr_semantic_number_parse_error_namespace_is_exact(ctx->semantic, operation) ||
                 xr_semantic_panic_info_global_is_exact(ctx->semantic, operation)) {
                 *out_storage = XR_REP_TAGGED;
                 *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
                 return true;
             }
+            break;
+        case XI_INDEX_GET:
+            if (xr_semantic_number_parse_error_member_access_is_exact(
+                    ctx->semantic, operation, NULL, NULL, NULL))
+                return oracle_machine_storage(ctx, semantic_value, out_storage,
+                                              out_machine_kind);
             break;
         case XI_ARRAY_NEW:
             if (oracle_dynamic_array_allocation_storage(ctx, semantic_value, out_storage,
@@ -8616,6 +8624,46 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return false;
             *out_storage = XR_REP_TAGGED;
             return true;
+        case XI_IS: {
+            /* A runtime type test reads the complete tagged value. In
+             * particular, typed enum catches consume XI_ERR_CATCH this way;
+             * accepting only an exact tagged definition keeps that channel
+             * fail-closed without inventing a scalar adapter. */
+            XrRep definition_storage = XR_REP_VOID;
+            uint16_t definition_kind = XR_MACHINE_REP_COUNT;
+            if (operand_index > 1 ||
+                !oracle_definition_storage(ctx, source_value, &definition_storage,
+                                           &definition_kind))
+                return false;
+            if (definition_storage != XR_REP_TAGGED ||
+                definition_kind != XR_MACHINE_REP_DYN_VALUE) {
+                if (!oracle_machine_storage(ctx, source_value, &definition_storage,
+                                            &definition_kind))
+                    return false;
+            }
+            *out_storage = definition_storage;
+            return true;
+        }
+        case XI_AS: {
+            /* The checked NumberParseError narrowing consumes the same tagged
+             * pending-error carrier that its preceding IS inspected. Keep this
+             * rule tied to the exact builtin enum identity; an arbitrary AS or
+             * another enum receives no storage authority here. */
+            uint32_t caught_value = XR_SEMANTIC_INDEX_NONE;
+            XrRep definition_storage = XR_REP_VOID;
+            uint16_t definition_kind = XR_MACHINE_REP_COUNT;
+            if (operand_index != 0 ||
+                !xr_semantic_number_parse_error_catch_narrow_is_exact(
+                    ctx->semantic, operation, &caught_value) ||
+                caught_value != source_value ||
+                !oracle_definition_storage(ctx, source_value, &definition_storage,
+                                           &definition_kind) ||
+                definition_storage != XR_REP_TAGGED ||
+                definition_kind != XR_MACHINE_REP_DYN_VALUE)
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        }
         case XI_LEN:
             /* The container of a proved length read stays in the tagged carrier
              * its own storage family named; the integer the read produces keeps
@@ -8680,6 +8728,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         }
         case XI_INDEX_SET:
         case XI_INDEX_GET:
+            if (operation->opcode == XI_INDEX_GET) {
+                uint32_t namespace_value = XR_SEMANTIC_INDEX_NONE;
+                uint32_t index_value = XR_SEMANTIC_INDEX_NONE;
+                if (xr_semantic_number_parse_error_member_access_is_exact(
+                        ctx->semantic, operation, &namespace_value, &index_value, NULL)) {
+                    if (operand_index == 0 && source_value == namespace_value) {
+                        *out_storage = XR_REP_TAGGED;
+                        return true;
+                    }
+                    if (operand_index == 1 && source_value == index_value)
+                        return oracle_machine_storage(ctx, source_value, out_storage,
+                                                      &ignored_kind);
+                    return false;
+                }
+            }
             /* A byte-view receiver stays in its frozen VIEW storage. Arrays
              * remain owned tagged allocations, and all indices/elements keep
              * the native scalar storage bound for their own subject. */

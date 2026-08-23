@@ -24,10 +24,23 @@ CALL_NEGATIVE = Path("tests/compile_errors/type/retired_scalar_builtins_removed.
 CALL_EXPECTED = Path(str(CALL_NEGATIVE) + ".expected")
 MODULE_NEGATIVE = Path("tests/fixtures/removed_compiler_surface/strconv_module_removed.xr")
 MODULE_EXPECTED = Path(str(MODULE_NEGATIVE) + ".expected")
+NUMBER_PARSE_REGISTRY = Path("src/base/xnumber_parse_error.h")
+NUMBER_PARSE_PRELUDE = Path("stdlib/prelude/builtin_symbols.def")
+NUMBER_PARSE_SOURCE = Path("stdlib/types/i64.xr")
+NUMBER_PARSE_GENERATED = Path("src/frontend/analyzer/xnative_type_defs.inc.c")
+NUMBER_PARSE_RUNTIME_CONSUMERS = (
+    Path("src/api/xisolate_runtime.c"),
+    Path("src/coro/xaot_coro.c"),
+)
+NUMBER_PARSE_CGEN_PROJECTION = Path("src/aot/xi_cgen_value_helpers.inc.c")
 
 REMOVED_PATHS = (
     Path("src/shared/xr_scalar_type.h"),
     Path("src/shared/xr_scalar_type.def"),
+    Path("src/runtime/value/xint_methods.c"),
+    Path("src/runtime/value/xint_methods.h"),
+    Path("src/runtime/value/xfloat_methods.c"),
+    Path("src/runtime/value/xfloat_methods.h"),
     Path("stdlib/strconv/strconv.xr"),
     Path("stdlib/strconv/strconv.c"),
     Path("spec/source/cards/stdlib/strconv.json"),
@@ -41,6 +54,14 @@ REMOVED_SEMANTIC_TOKENS = (
     "XR_SOURCE_TYPE_INT", "XR_SOURCE_TYPE_FLOAT", "XR_SOURCE_TYPE_BYTE",
     "builtin_spelling", "xr_tref_int", "xr_tref_float", "xr_tref_byte",
     "xr_tref_int_width", "xr_tref_float_width",
+)
+REMOVED_PRIVATE_SCALAR_RE = re.compile(
+    r"\b(?:xint_methods|xfloat_methods|"
+    r"xr_(?:int|float)_(?:register_native_type|[a-z0-9_]+_method))\b"
+    r'|\.name\s*=\s*"(?:Int|Float)"'
+)
+REMOVED_COMPAT_TYPE_RE = re.compile(
+    r'"(?:Int|Integer|integer|Float|Double|double)"'
 )
 SEMANTIC_ROOTS = ("src", "scripts", "tools", "xisa")
 SEMANTIC_SUFFIXES = (".c", ".h", ".inc.c", ".py", ".def")
@@ -216,6 +237,69 @@ def _check_registry(root: Path, errors: list[str]) -> None:
         errors.append("exact scalar registry validator is missing")
 
 
+def _check_number_parse_error_projections(root: Path, errors: list[str]) -> None:
+    paths = (
+        NUMBER_PARSE_REGISTRY,
+        NUMBER_PARSE_PRELUDE,
+        NUMBER_PARSE_SOURCE,
+        NUMBER_PARSE_GENERATED,
+        *NUMBER_PARSE_RUNTIME_CONSUMERS,
+        NUMBER_PARSE_CGEN_PROJECTION,
+    )
+    texts: dict[Path, str] = {}
+    for rel in paths:
+        path = root / rel
+        if not path.is_file():
+            errors.append(f"missing NumberParseError projection {rel.as_posix()}")
+        else:
+            texts[rel] = _read(path)
+    if len(texts) != len(paths):
+        return
+
+    registry = texts[NUMBER_PARSE_REGISTRY]
+    required_registry_rows = (
+        '#define XR_NUMBER_PARSE_ERROR_LAYOUT_ID UINT32_C(3802613823)',
+        '#define XR_NUMBER_PARSE_ERROR_NAME "NumberParseError"',
+        '#define XR_NUMBER_PARSE_ERROR_NOMINAL_OWNER "prelude"',
+        '#define XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME "InvalidSyntax"',
+        '#define XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME "OutOfRange"',
+    )
+    for row in required_registry_rows:
+        if registry.count(row) != 1:
+            errors.append(f"{NUMBER_PARSE_REGISTRY.as_posix()}: frozen registry row drifted: {row}")
+
+    source_enum = re.compile(
+        r"enum\s+NumberParseError\s*\{\s*InvalidSyntax\s*,\s*OutOfRange\s*\}", re.DOTALL
+    )
+    prelude_enum = re.compile(
+        r'XR_BUILTIN_ENUM\("NumberParseError",\s*0,\s*NONE,\s*'
+        r'XR_BUILTIN_ENUM_VARIANT\("InvalidSyntax",\s*NONE\)\s*'
+        r'XR_BUILTIN_ENUM_VARIANT\("OutOfRange",\s*NONE\)\)',
+        re.DOTALL,
+    )
+    if len(prelude_enum.findall(texts[NUMBER_PARSE_PRELUDE])) != 1:
+        errors.append(f"{NUMBER_PARSE_PRELUDE.as_posix()}: NumberParseError projection drifted")
+    for rel in (NUMBER_PARSE_SOURCE, NUMBER_PARSE_GENERATED):
+        projection = texts[rel].replace(r"\n", "\n")
+        if len(source_enum.findall(projection)) != 1:
+            errors.append(f"{rel.as_posix()}: NumberParseError source projection drifted")
+
+    for rel in NUMBER_PARSE_RUNTIME_CONSUMERS:
+        text = texts[rel]
+        if "xr_number_parse_error_registry_row" not in text:
+            errors.append(f"{rel.as_posix()}: runtime does not consume the typed registry row")
+        if "number_parse_error_members[]" in text:
+            errors.append(f"{rel.as_posix()}: duplicate NumberParseError member table remains")
+    cgen = texts[NUMBER_PARSE_CGEN_PROJECTION]
+    for token in (
+        "XR_NUMBER_PARSE_ERROR_NAME",
+        "XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME",
+        "XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME",
+        "XR_NUMBER_PARSE_ERROR_MEMBER_COUNT",
+    ):
+        if token not in cgen:
+            errors.append(f"{NUMBER_PARSE_CGEN_PROJECTION.as_posix()}: missing registry projection {token}")
+
 def _check_fixtures(root: Path, errors: list[str]) -> None:
     expected = {
         POSITIVE_FIXTURE: (
@@ -256,9 +340,31 @@ def _check_removed_paths_and_tokens(root: Path, errors: list[str]) -> None:
         if path.resolve() in {checker, (root / REGISTRY_HEADER).resolve()}:
             continue
         for line_no, line in enumerate(_read(path).splitlines(), 1):
+            if ("3802613823" in line and
+                    path.resolve() != (root / NUMBER_PARSE_REGISTRY).resolve()):
+                errors.append(
+                    f"{_relative(path, root)}:{line_no}: "
+                    "duplicate NumberParseError layout authority"
+                )
             match = token_re.search(line)
             if match:
                 errors.append(f"{_relative(path, root)}:{line_no}: removed semantic token {match.group(0)}")
+            private_match = REMOVED_PRIVATE_SCALAR_RE.search(line)
+            if private_match:
+                errors.append(
+                    f"{_relative(path, root)}:{line_no}: legacy private scalar owner "
+                    f"{private_match.group(0)}"
+                )
+    parser_owner = root / "src/frontend/parser/xparse_type.c"
+    if not parser_owner.is_file():
+        errors.append("missing exact scalar parser owner")
+    else:
+        for line_no, line in enumerate(_read(parser_owner).splitlines(), 1):
+            if REMOVED_COMPAT_TYPE_RE.search(line):
+                errors.append(
+                    f"src/frontend/parser/xparse_type.c:{line_no}: "
+                    "retired scalar compatibility diagnostic remains"
+                )
 
 
 def _check_public_owners(root: Path, errors: list[str]) -> None:
@@ -423,6 +529,7 @@ def _check_tombstones(root: Path, errors: list[str]) -> None:
 def verify(root: Path) -> tuple[list[str], int]:
     errors: list[str] = []
     _check_registry(root, errors)
+    _check_number_parse_error_projections(root, errors)
     _check_fixtures(root, errors)
     _check_removed_paths_and_tokens(root, errors)
     _check_public_owners(root, errors)
@@ -447,6 +554,32 @@ def self_test() -> int:
         ) + "\n"
         _write(root / REGISTRY, rows)
         _write(root / REGISTRY_HEADER, "xr_exact_scalar_registry_validate\n")
+        number_parse_registry = (
+            '#define XR_NUMBER_PARSE_ERROR_LAYOUT_ID UINT32_C(3802613823)\n'
+            '#define XR_NUMBER_PARSE_ERROR_NAME "NumberParseError"\n'
+            '#define XR_NUMBER_PARSE_ERROR_NOMINAL_OWNER "prelude"\n'
+            '#define XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME "InvalidSyntax"\n'
+            '#define XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME "OutOfRange"\n'
+        )
+        number_parse_enum = "enum NumberParseError { InvalidSyntax, OutOfRange }\n"
+        number_parse_prelude = (
+            'XR_BUILTIN_ENUM("NumberParseError", 0, NONE,\n'
+            '  XR_BUILTIN_ENUM_VARIANT("InvalidSyntax", NONE)\n'
+            '  XR_BUILTIN_ENUM_VARIANT("OutOfRange", NONE))\n'
+        )
+        _write(root / NUMBER_PARSE_REGISTRY, number_parse_registry)
+        _write(root / NUMBER_PARSE_PRELUDE, number_parse_prelude)
+        _write(root / NUMBER_PARSE_SOURCE, number_parse_enum)
+        _write(root / NUMBER_PARSE_GENERATED, number_parse_enum)
+        for rel in NUMBER_PARSE_RUNTIME_CONSUMERS:
+            _write(root / rel, "xr_number_parse_error_registry_row(global_index);\n")
+        _write(
+            root / NUMBER_PARSE_CGEN_PROJECTION,
+            "XR_NUMBER_PARSE_ERROR_NAME\n"
+            "XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME\n"
+            "XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME\n"
+            "XR_NUMBER_PARSE_ERROR_MEMBER_COUNT\n",
+        )
         _write(root / POSITIVE_FIXTURE,
                "fn int(value: i64) -> i64 { return value }\n"
                "fn byte(value: u8) -> u8 { return value }\n"
@@ -465,6 +598,7 @@ def self_test() -> int:
         _write(root / "contracts/capability-deletions.tsv", "header\n" + "\n".join(TOMBSTONE_ROWS) + "\n")
         for rel in PUBLIC_BINDING_FILES + PUBLIC_TEXT_FILES + SCRIPT_SOURCE_OWNERS:
             _write(root / rel, "exact surface\n")
+        _write(root / "src/frontend/parser/xparse_type.c", "exact scalar parser\n")
         _write(root / HOST_ENTRY_ABI_EXPECTATION,
                'assert(contains(code, "int main(int argc, char **argv)"));\n'
                'assert(contains(code, "-Wimplicit-int-conversion"));\n')
@@ -483,12 +617,46 @@ def self_test() -> int:
             for error in errors:
                 print(f"  {error}", file=sys.stderr)
             return 1
+        _write(root / NUMBER_PARSE_PRELUDE,
+               number_parse_prelude.replace("OutOfRange", "Overflow"))
+        errors, _ = verify(root)
+        if not any("NumberParseError projection drifted" in error for error in errors):
+            print("NumberParseError member mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / NUMBER_PARSE_PRELUDE, number_parse_prelude)
+        _write(root / NUMBER_PARSE_SOURCE,
+               "enum NumberParseError { OutOfRange, InvalidSyntax }\n")
+        errors, _ = verify(root)
+        if not any("NumberParseError source projection drifted" in error for error in errors):
+            print("NumberParseError order mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / NUMBER_PARSE_SOURCE, number_parse_enum)
+        _write(root / NUMBER_PARSE_REGISTRY,
+               number_parse_registry.replace("3802613823", "3802613822"))
+        errors, _ = verify(root)
+        if not any("frozen registry row drifted" in error for error in errors):
+            print("NumberParseError layout mutation did not fail closed", file=sys.stderr)
+            return 1
+        _write(root / NUMBER_PARSE_REGISTRY, number_parse_registry)
         _write(root / "src/frontend/parser/residue.c", "int token = TK_INT;\n")
         errors, _ = verify(root)
         if not any("TK_INT" in error for error in errors):
             print("exact scalar surface self-test did not fail closed", file=sys.stderr)
             return 1
         _write(root / "src/frontend/parser/residue.c", "int token = 0;\n")
+        _write(root / "src/runtime/value/xint_methods.h", "legacy private owner\n")
+        errors, _ = verify(root)
+        if not any("xint_methods.h: removed owner still exists" in error for error in errors):
+            print("exact scalar private-owner mutation did not fail closed", file=sys.stderr)
+            return 1
+        (root / "src/runtime/value/xint_methods.h").unlink()
+        _write(root / "src/frontend/parser/xparse_type.c", 'if (name == "Integer") {}\n')
+        errors, _ = verify(root)
+        if not any("compatibility diagnostic remains" in error for error in errors):
+            print("exact scalar compatibility-diagnostic mutation did not fail closed",
+                  file=sys.stderr)
+            return 1
+        _write(root / "src/frontend/parser/xparse_type.c", "exact scalar parser\n")
         _write(root / "src/frontend/parser/host_type_residue.c", "static i64 parse_count(void);\n")
         errors, _ = verify(root)
         if not any("i64 used as a host C/C++ type" in error for error in errors):

@@ -48,15 +48,33 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum XrNumberParseFailure {
+    XR_NUMBER_PARSE_OK = 0,
+    XR_NUMBER_PARSE_INVALID_SYNTAX,
+    XR_NUMBER_PARSE_OUT_OF_RANGE,
+} XrNumberParseFailure;
+
 typedef struct XrStringParseIntResult {
-    bool ok;
+    XrNumberParseFailure failure;
     int64_t value;
 } XrStringParseIntResult;
 
 typedef struct XrStringParseFloatResult {
-    bool ok;
+    XrNumberParseFailure failure;
     double value;
 } XrStringParseFloatResult;
+
+static inline uint32_t xr_number_parse_failure_member_index(XrNumberParseFailure failure) {
+    switch (failure) {
+        case XR_NUMBER_PARSE_INVALID_SYNTAX:
+            return 0u;
+        case XR_NUMBER_PARSE_OUT_OF_RANGE:
+            return 1u;
+        case XR_NUMBER_PARSE_OK:
+        default:
+            return UINT32_MAX;
+    }
+}
 
 /* Powers of ten that are exactly representable in binary64: 10^22 is the last
  * one whose significand still fits in 53 bits. */
@@ -131,7 +149,7 @@ static inline double xr_string_parse_scale_pow10(double mantissa, int exp10) {
  * magnitudes.
  */
 static inline XrStringParseIntResult xr_string_parse_int64(const char *data, size_t len) {
-    XrStringParseIntResult out = {false, 0};
+    XrStringParseIntResult out = {XR_NUMBER_PARSE_INVALID_SYNTAX, 0};
     if (!data)
         return out;
 
@@ -149,14 +167,20 @@ static inline XrStringParseIntResult xr_string_parse_int64(const char *data, siz
     int64_t limit = negative ? INT64_MIN : -INT64_MAX;
     int64_t multiply_limit = limit / 10;
     int64_t accumulated = 0;
+    bool out_of_range = false;
     while (pos < len && xr_string_parse_is_digit((unsigned char) data[pos])) {
         int64_t digit = (int64_t) (data[pos] - '0');
-        if (accumulated < multiply_limit)
-            return out;
-        accumulated *= 10;
-        if (accumulated < limit + digit)
-            return out;
-        accumulated -= digit;
+        if (!out_of_range) {
+            if (accumulated < multiply_limit) {
+                out_of_range = true;
+            } else {
+                accumulated *= 10;
+                if (accumulated < limit + digit)
+                    out_of_range = true;
+                else
+                    accumulated -= digit;
+            }
+        }
         pos++;
     }
     if (pos == digit_start)
@@ -167,7 +191,12 @@ static inline XrStringParseIntResult xr_string_parse_int64(const char *data, siz
     if (pos != len)
         return out;
 
-    out.ok = true;
+    if (out_of_range) {
+        out.failure = XR_NUMBER_PARSE_OUT_OF_RANGE;
+        return out;
+    }
+
+    out.failure = XR_NUMBER_PARSE_OK;
     out.value = negative ? accumulated : -accumulated;
     return out;
 }
@@ -181,7 +210,7 @@ static inline XrStringParseIntResult xr_string_parse_int64(const char *data, siz
  * scaling above.
  */
 static inline XrStringParseFloatResult xr_string_parse_float64(const char *data, size_t len) {
-    XrStringParseFloatResult out = {false, 0.0};
+    XrStringParseFloatResult out = {XR_NUMBER_PARSE_INVALID_SYNTAX, 0.0};
     if (!data)
         return out;
 
@@ -280,7 +309,7 @@ static inline XrStringParseFloatResult xr_string_parse_float64(const char *data,
         }
     }
 
-    out.ok = true;
+    out.failure = XR_NUMBER_PARSE_OK;
     out.value = negative ? -value : value;
     return out;
 }

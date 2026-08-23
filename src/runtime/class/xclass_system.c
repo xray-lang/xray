@@ -33,8 +33,8 @@ extern void xr_array_register_native_type(XrVMRuntime *);
 extern void xr_map_register_native_type(XrVMRuntime *);
 extern void xr_set_register_native_type(XrVMRuntime *);
 extern void xr_string_register_native_type(XrVMRuntime *);
-extern void xr_int_register_native_type(XrVMRuntime *);
-extern void xr_float_register_native_type(XrVMRuntime *);
+extern void xr_i64_register_native_type(XrVMRuntime *);
+extern void xr_f64_register_native_type(XrVMRuntime *);
 extern void xr_bool_register_native_type(XrVMRuntime *);
 extern void xr_bigint_register_class(XrVMRuntime *);
 extern void xr_atomic_register_native_type(XrVMRuntime *);
@@ -88,9 +88,9 @@ void xr_core_init(XrVMRuntime *X) {
     X->core->structObjectRootClass =
         xr_class_new_dynamic_root(X, TYPE_NAME_OBJECT, 8, false, XR_BK_STRUCT_OBJECT);
 
-    xr_int_register_native_type(X);
+    xr_i64_register_native_type(X);
     X->core->intClass = xr_isolate_get_native_type_class(X, XR_TINT);
-    xr_float_register_native_type(X);
+    xr_f64_register_native_type(X);
     X->core->floatClass = xr_isolate_get_native_type_class(X, XR_TFLOAT);
     xr_bool_register_native_type(X);
     X->core->boolClass = xr_isolate_get_native_type_class(X, XR_TBOOL);

@@ -28,6 +28,7 @@
 #include "../shared/xr_arith_core.h"  // int.addOverflows/... (task 153)
 #include "../shared/xr_range_core.h"
 #include "../shared/xr_string_core.h"
+#include "../base/xnumber_parse_error.h"
 #include "../base/xunicode.h"
 
 /* Builtin method symbol IDs. */
@@ -47,6 +48,19 @@ static inline void xrt_set_builtin_enum_error(const char *enum_name, const char 
     XrAotEnumAggregate err =
         xrt_enum_aggregate_make(0, (int64_t) member_index, 0, enum_name, member_name, NULL);
     xrt_pending_error = xrt_enum_aggregate_box(err);
+}
+
+static inline bool xrt_set_builtin_enum_error_by_id(int32_t builtin_index,
+                                                    uint32_t member_index) {
+    const XrNumberParseErrorRegistryRow *row =
+        builtin_index < 0 ? NULL : xr_number_parse_error_registry_row((uint32_t) builtin_index);
+    if (xrt_has_pending_error() || !row || member_index >= XR_NUMBER_PARSE_ERROR_MEMBER_COUNT)
+        return false;
+    XrAotEnumAggregate err = xrt_enum_aggregate_make(
+        row->enum_layout_id, (int64_t) member_index, 0, row->enum_name,
+        row->members[member_index], NULL);
+    xrt_pending_error = xrt_enum_aggregate_box(err);
+    return true;
 }
 
 /* toString helper. */
@@ -191,38 +205,50 @@ static inline XrValue xrt_chr(XrValue val) {
  * widen the public parse surface back to a general conversion builtin. */
 static XrValue xrt_i64_parse(XrValue val) {
     if (!XR_IS_STR(val))
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+        xrt_throw_error(XR_ERR_INTERNAL, "i64.parse received a non-string value");
     XrStringParseIntResult parsed =
         xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
-    if (!parsed.ok)
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+    if (parsed.failure != XR_NUMBER_PARSE_OK) {
+        if (!xrt_set_builtin_enum_error_by_id(
+                XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                xr_number_parse_failure_member_index(parsed.failure)))
+            xrt_throw_error(XR_ERR_INTERNAL,
+                            "failed to construct NumberParseError in i64.parse");
+        return XR_NULL_VAL;
+    }
     return XR_FROM_INT(parsed.value);
 }
 
 static XrValue xrt_i64_try_parse(XrValue val) {
     if (!XR_IS_STR(val))
-        return XR_NULL_VAL;
+        xrt_throw_error(XR_ERR_INTERNAL, "i64.tryParse received a non-string value");
     XrStringParseIntResult parsed =
         xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
-    return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
+    return parsed.failure == XR_NUMBER_PARSE_OK ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
 }
 
 static XrValue xrt_f64_parse(XrValue val) {
     if (!XR_IS_STR(val))
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+        xrt_throw_error(XR_ERR_INTERNAL, "f64.parse received a non-string value");
     XrStringParseFloatResult parsed =
         xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
-    if (!parsed.ok)
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+    if (parsed.failure != XR_NUMBER_PARSE_OK) {
+        if (!xrt_set_builtin_enum_error_by_id(
+                XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                xr_number_parse_failure_member_index(parsed.failure)))
+            xrt_throw_error(XR_ERR_INTERNAL,
+                            "failed to construct NumberParseError in f64.parse");
+        return XR_NULL_VAL;
+    }
     return XR_FROM_FLOAT(parsed.value);
 }
 
 static XrValue xrt_f64_try_parse(XrValue val) {
     if (!XR_IS_STR(val))
-        return XR_NULL_VAL;
+        xrt_throw_error(XR_ERR_INTERNAL, "f64.tryParse received a non-string value");
     XrStringParseFloatResult parsed =
         xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
-    return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+    return parsed.failure == XR_NUMBER_PARSE_OK ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
 }
 
 static XrValue xrt_to_int(XrValue val) {
@@ -232,16 +258,6 @@ static XrValue xrt_to_int(XrValue val) {
         return XR_FROM_INT((int64_t) XR_TO_RUNE(val));
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
-    if (XR_IS_STR(val)) {
-        /* Spec 13.2: a string that is not a whole decimal integer throws. The
-         * declared return type is non-null int, so there is no null to hand
-         * back here. */
-        XrStringParseIntResult parsed =
-            xr_string_parse_int64(xr_str_data(val), (size_t) xr_str_len(val));
-        if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
-        return XR_FROM_INT(parsed.value);
-    }
     if (XR_IS_BOOL(val))
         return XR_FROM_INT(val.i != 0 ? 1 : 0);
     return XR_NULL_VAL;
@@ -252,15 +268,6 @@ static XrValue xrt_to_float(XrValue val) {
         return val;
     if (XR_IS_INT(val))
         return XR_FROM_FLOAT((double) XR_TO_INT(val));
-    if (XR_IS_STR(val)) {
-        /* Spec 13.2: see xrt_to_int -- a non-numeric string throws rather than
-         * producing a null the declared float return type forbids. */
-        XrStringParseFloatResult parsed =
-            xr_string_parse_float64(xr_str_data(val), (size_t) xr_str_len(val));
-        if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
-        return XR_FROM_FLOAT(parsed.value);
-    }
     if (XR_IS_BOOL(val))
         return XR_FROM_FLOAT(val.i != 0 ? 1.0 : 0.0);
     return XR_NULL_VAL;

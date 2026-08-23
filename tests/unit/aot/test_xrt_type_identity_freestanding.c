@@ -1,7 +1,15 @@
 /* Compile and execute the no-libc representation adapter with the host MSVC
  * toolchain. Cross-target compilation remains covered by the AOT filetests. */
 
+#define XRT_IMPL
 #include "aot/xrt_core_freestanding.h"
+
+XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len) {
+    (void) message;
+    (void) len;
+    for (;;) {
+    }
+}
 
 int main(void) {
     if (xrt_typeof_id(XR_NULL_VAL) != XR_TYPE_IDENTITY_CORE_NULL)
@@ -96,5 +104,38 @@ int main(void) {
         return 32;
     if (xrt_numeric_width_eval(xr_numeric_widen_f32, 16777217.0) != 16777216.0)
         return 33;
+
+    XRT_STR_LIT_DEF(invalid_syntax_header, "bad");
+    XrValue invalid_syntax = xr_str_lit(&invalid_syntax_header);
+    xrt_pending_error = XR_NULL_VAL;
+    xrt_pending_enum_error = xrt_enum_aggregate_zero();
+    xrt_pending_enum_error_active = 0;
+    if (!XR_IS_NULL(xrt_i64_parse(invalid_syntax)))
+        return 34;
+    if (!xrt_pending_enum_error_active ||
+        xrt_pending_enum_error.layout_id != XR_NUMBER_PARSE_ERROR_LAYOUT_ID ||
+        xrt_pending_enum_error.tag != 0)
+        return 35;
+
+    xrt_pending_enum_error = xrt_enum_aggregate_zero();
+    xrt_pending_enum_error_active = 0;
+    if (xrt_set_builtin_enum_error_by_id(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR - 1, 0) ||
+        xrt_set_builtin_enum_error_by_id(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, 2) ||
+        xrt_set_builtin_enum_error_by_id(
+            XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+            xr_number_parse_failure_member_index(XR_NUMBER_PARSE_OK)) ||
+        xrt_set_builtin_enum_error_by_id(
+            XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+            xr_number_parse_failure_member_index((XrNumberParseFailure) 99)))
+        return 36;
+    if (xrt_pending_enum_error_active || !XR_IS_NULL(xrt_pending_error))
+        return 37;
+
+    xrt_pending_error = XR_FROM_INT(77);
+    if (!XR_IS_NULL(xrt_i64_try_parse(invalid_syntax)))
+        return 38;
+    if (!XR_IS_INT(xrt_pending_error) || XR_TO_INT(xrt_pending_error) != 77 ||
+        xrt_pending_enum_error_active)
+        return 39;
     return 0;
 }

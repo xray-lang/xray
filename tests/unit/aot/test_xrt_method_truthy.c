@@ -43,18 +43,22 @@ static void test_free_aligned(void *ptr) {
 
 #define XRT_ENABLE_SYS_THREAD 1
 #define XRT_IMPL
+static int g_test_pending_error_active;
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wundefined-internal"
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
 static inline int xrt_has_pending_error(void) {
-    return 0;
+    return g_test_pending_error_active;
 }
 #include "../../../src/aot/xrt_method.h"
+#include "../../../src/base/xnumber_parse_error.h"
 #if defined(__clang__)
 #pragma clang diagnostic pop
 #endif
+
+XR_THREAD_LOCAL XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
 
 XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     (void) exc;
@@ -126,6 +130,117 @@ static XrValue test_string_with_bytes(const char *bytes, size_t len) {
         memcpy(xr_str_buf(s), bytes, len);
     xr_str_buf(s)[len] = '\0';
     return s;
+}
+
+static void test_xrt_exact_number_parse_failure_channel(void) {
+    const XrNumberParseErrorRegistryRow *row =
+        xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    ASSERT_TRUE_MSG(row && row->global_index == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR &&
+                        row->enum_layout_id == XR_NUMBER_PARSE_ERROR_LAYOUT_ID,
+                    "AOT parse ABI matches the compiler NumberParseError registry row");
+    g_test_pending_error_active = 0;
+    xrt_pending_error = XR_NULL_VAL;
+
+    XrValue input = test_string_with_bytes("bad", 3);
+    ASSERT_NULL(xrt_i64_parse(input),
+                "i64.parse syntax failure returns through pending_error");
+    xrt_release(input);
+    XrAotEnumAggregate error = xrt_value_to_enum_aggregate(xrt_pending_error);
+    ASSERT_CSTR(error.enum_name, "NumberParseError", "i64.parse publishes typed error owner");
+    ASSERT_TRUE_MSG(error.layout_id == XR_NUMBER_PARSE_ERROR_LAYOUT_ID,
+                    "i64.parse publishes the frozen NumberParseError type identity");
+    ASSERT_CSTR(error.member_name, "InvalidSyntax", "i64 syntax failure member");
+    ASSERT_TRUE_MSG(error.tag == 0, "InvalidSyntax has stable member index zero");
+    xrt_release(xrt_pending_error);
+    xrt_pending_error = XR_NULL_VAL;
+
+    input = test_string_with_bytes("9223372036854775808", 19);
+    ASSERT_NULL(xrt_i64_parse(input),
+                "i64.parse overflow returns through pending_error");
+    xrt_release(input);
+    error = xrt_value_to_enum_aggregate(xrt_pending_error);
+    ASSERT_CSTR(error.member_name, "OutOfRange", "i64 overflow failure member");
+    ASSERT_TRUE_MSG(error.tag == 1, "OutOfRange has stable member index one");
+    xrt_release(xrt_pending_error);
+    xrt_pending_error = XR_NULL_VAL;
+
+    input = test_string_with_bytes("1e+", 3);
+    ASSERT_NULL(xrt_f64_parse(input),
+                "f64.parse syntax failure returns through pending_error");
+    xrt_release(input);
+    error = xrt_value_to_enum_aggregate(xrt_pending_error);
+    ASSERT_CSTR(error.member_name, "InvalidSyntax", "f64 syntax failure member");
+    xrt_release(xrt_pending_error);
+    xrt_pending_error = XR_NULL_VAL;
+
+    input = test_string_with_bytes("1e400", 5);
+    XrValue huge = xrt_f64_parse(input);
+    xrt_release(input);
+    ASSERT_TRUE_MSG(XR_IS_FLOAT(huge) && isinf(XR_TO_FLOAT(huge)) && XR_TO_FLOAT(huge) > 0.0,
+                    "valid huge f64 input produces positive infinity");
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_pending_error),
+                    "successful f64.parse does not publish pending_error");
+
+    ASSERT_TRUE_MSG(!xrt_set_builtin_enum_error_by_id(
+                        XR_GLOBAL_VAR_NUMBER_PARSE_ERROR + 1, 0),
+                    "typed enum publisher rejects an unknown builtin id");
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_pending_error),
+                    "unknown builtin id cannot write pending_error");
+    ASSERT_TRUE_MSG(!xrt_set_builtin_enum_error_by_id(
+                        XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, 2),
+                    "typed enum publisher rejects an unknown member index");
+    ASSERT_TRUE_MSG(!xrt_set_builtin_enum_error_by_id(
+                        XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                        xr_number_parse_failure_member_index(XR_NUMBER_PARSE_OK)),
+                    "typed enum publisher rejects the successful parser state");
+    ASSERT_TRUE_MSG(!xrt_set_builtin_enum_error_by_id(
+                        XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                        xr_number_parse_failure_member_index((XrNumberParseFailure) 99)),
+                    "typed enum publisher rejects a hostile parser state");
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_pending_error),
+                    "unknown member index cannot write pending_error");
+
+    input = test_string_with_bytes("bad", 3);
+    ASSERT_NULL(xrt_i64_try_parse(input),
+                "i64.tryParse returns null on syntax failure without pending_error");
+    xrt_release(input);
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_pending_error),
+                    "i64.tryParse syntax failure does not publish pending_error");
+    input = test_string_with_bytes("9223372036854775808", 19);
+    ASSERT_NULL(xrt_i64_try_parse(input),
+                "i64.tryParse returns null on overflow without pending_error");
+    xrt_release(input);
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_pending_error),
+                    "i64.tryParse overflow does not publish pending_error");
+    input = test_string_with_bytes("1e+", 3);
+    ASSERT_NULL(xrt_f64_try_parse(input),
+                "f64.tryParse returns null on syntax failure without pending_error");
+    xrt_release(input);
+    ASSERT_TRUE_MSG(XR_IS_NULL(xrt_pending_error),
+                    "f64.tryParse syntax failure does not publish pending_error");
+
+    XrValue sentinel = XR_FROM_INT(77);
+    xrt_pending_error = sentinel;
+    g_test_pending_error_active = 1;
+    input = test_string_with_bytes("bad", 3);
+    ASSERT_NULL(xrt_i64_try_parse(input),
+                "i64.tryParse returns null on syntax failure");
+    xrt_release(input);
+    ASSERT_TRUE_MSG(XR_IS_INT(xrt_pending_error) && XR_TO_INT(xrt_pending_error) == 77,
+                    "i64.tryParse never writes pending_error");
+    input = test_string_with_bytes("1e+", 3);
+    ASSERT_NULL(xrt_f64_try_parse(input),
+                "f64.tryParse returns null while another error is pending");
+    xrt_release(input);
+    ASSERT_TRUE_MSG(XR_IS_INT(xrt_pending_error) && XR_TO_INT(xrt_pending_error) == 77,
+                    "f64.tryParse never overwrites pending_error");
+    ASSERT_TRUE_MSG(!xrt_set_builtin_enum_error_by_id(
+                        XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, 0),
+                    "typed enum publisher refuses to overwrite pending_error");
+    ASSERT_TRUE_MSG(XR_IS_INT(xrt_pending_error) && XR_TO_INT(xrt_pending_error) == 77,
+                    "refused typed enum publication preserves pending_error");
+    g_test_pending_error_active = 0;
+    xrt_pending_error = XR_NULL_VAL;
 }
 
 static void test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings(void) {
@@ -294,6 +409,7 @@ static void test_xrt_threadlocal_live_registry(void) {
 }
 
 int main(void) {
+    test_xrt_exact_number_parse_failure_channel();
     test_xrt_to_bool_reuses_truthy_core_for_scalars_and_strings();
     test_xrt_to_bool_reuses_truthy_core_for_sized_containers();
     test_xrt_type_identity_uses_stable_owner_adapter();

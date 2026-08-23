@@ -36,10 +36,15 @@ reinterpretation identities without reassigning the existing registry.
     implementation details outside the source intrinsic surface. The deleted
     spellings are not reserved: user declarations with those names are ordinary
     functions and carry no compiler-owned branch-probability semantics.
+11. Exact scalar text parsing has four stable intrinsic identities:
+    `i64.parse`, `i64.tryParse`, `f64.parse`, and `f64.tryParse`. Numeric `as`
+    conversion is a different semantic family. The receiver type plus the
+    stable intrinsic ID selects parsing; a selector spelling, retired scalar
+    alias, or backend helper name cannot recover that authority.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 3acea091929e3d062fa5183ac6b219dddb1a7df34baa8607b7fac8d5f52b6872
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def bee99f50bb75e1e501a17c813c5ba93f125fd9ba2111930c9ef7d7ac34cc2b49
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449
 anchor-sha256: scripts/check_branch_hint_surface_residue.py 1e1950f0e6bcd58b96d56b35bf8230e95b32ee0915cf62ad10ce5b70589b99aa

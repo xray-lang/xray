@@ -16,7 +16,9 @@
 #include "../runtime/core/xr_runtime_core.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/xisolate_api.h"
-#include "../base/xglobal_indices.h"
+#include "../base/xnumber_parse_error.h"
+
+#include <string.h>
 
 static void isolate_bind_builtin(XrVMRuntime *isolate, int32_t index, XrValue value) {
     if (!isolate || index < 0 || index >= XR_USER_GLOBALS_START)
@@ -36,6 +38,26 @@ static XrEnumType *runtime_register_prelude_enum(XrVMRuntime *isolate, const cha
         return type;
 
     (void) xr_enum_type_set_adt_payloads(type, payload_counts, member_count);
+    return type;
+}
+
+static XrEnumType *runtime_register_number_parse_error(XrVMRuntime *isolate) {
+    const XrNumberParseErrorRegistryRow *row =
+        xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    if (!row)
+        return NULL;
+    char *members[XR_NUMBER_PARSE_ERROR_MEMBER_COUNT] = {
+        (char *) row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX],
+        (char *) row->members[XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE],
+    };
+    XrEnumType *type = runtime_register_prelude_enum(
+        isolate, row->enum_name, members, XR_NUMBER_PARSE_ERROR_MEMBER_COUNT, NULL);
+    if (!type || !type->layout || type->layout->layout_id != row->enum_layout_id ||
+        type->member_count != XR_NUMBER_PARSE_ERROR_MEMBER_COUNT)
+        return NULL;
+    for (uint32_t i = 0; i < XR_NUMBER_PARSE_ERROR_MEMBER_COUNT; i++)
+        if (!type->members[i].name || strcmp(type->members[i].name, row->members[i]) != 0)
+            return NULL;
     return type;
 }
 
@@ -69,6 +91,7 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         runtime_register_prelude_enum(isolate, "TaskStatus", task_status_members, 5, NULL);
     XrEnumType *utf8_error =
         runtime_register_prelude_enum(isolate, "Utf8Error", utf8_error_members, 1, NULL);
+    XrEnumType *number_parse_error = runtime_register_number_parse_error(isolate);
     XrEnumType *string_slice_error = runtime_register_prelude_enum(
         isolate, "StringSliceError", string_slice_error_members, 1, NULL);
     XrEnumType *compression_error = runtime_register_prelude_enum(
@@ -90,6 +113,10 @@ void xr_isolate_register_runtime_prelude_enums(XrVMRuntime *isolate) {
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_TASK_STATUS, XR_FROM_PTR(task_status));
     if (utf8_error)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_UTF8_ERROR, XR_FROM_PTR(utf8_error));
+    if (number_parse_error)
+        isolate_bind_builtin(isolate, (int32_t) xr_number_parse_error_registry_row(
+                                         XR_GLOBAL_VAR_NUMBER_PARSE_ERROR)->global_index,
+                             XR_FROM_PTR(number_parse_error));
     if (string_slice_error)
         isolate_bind_builtin(isolate, XR_GLOBAL_VAR_STRING_SLICE_ERROR,
                              XR_FROM_PTR(string_slice_error));

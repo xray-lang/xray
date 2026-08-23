@@ -1,56 +1,44 @@
-// anchor: string-number-conversion-panic-shape
-// diff-backends: vm
-// diff-aot-reject: XR_TARGET_1003
-// TargetPlan currently rejects the exact scalar parse call before native
-// codegen because it has no exact target authority for the static primitive
-// method. The runtime side is still shared: all profiles call one parse core
-// and one pair of message constants, and the parse core itself is covered by
-// tests/unit/stdlib/test_string_core.c. Drop this directive once TargetPlan
-// admits the parse calls.
-//
-// Required i64/f64 parsing consumes the whole string and throws when it is not
-// a decimal number. Both methods return a non-null scalar, so failed parsing
-// raises the same structured panic, with the same code and text, on every
-// backend. Text parsing is intentionally not an `as` numeric conversion.
-//
-// parse and tryParse share the accepted grammar, so trailing residue such as
-// "12abc" is rejected rather than yielding 12, and integer overflow is
-// rejected instead of saturated.
+// anchor: string-number-parse-error-shape
+// Required i64/f64 parsing consumes the whole string. Failure is a typed
+// NumberParseError; it never crosses the panic channel. The runtime-neutral
+// parser KAT covers the full accepted grammar, while this fixture locks the
+// VM/AOT failure channel and exact public variants.
 
-// Indexed through an array so the values reach the conversion at runtime
-// rather than as folded literals.
-var ints: Array<string> = ["12", "  -7 ", "+42", "9223372036854775807"]
-var i = 0
-while (i < len(ints)) {
-    print(i64.parse(ints[i]))
-    i = i + 1
+var validInt = "  -7 "
+print(i64.parse(validInt))
+
+var invalidInt = "12abc"
+try {
+    print(i64.parse(invalidInt))
+} catch NumberParseError.InvalidSyntax {
+    print("i64.InvalidSyntax")
+} catch NumberParseError.OutOfRange {
+    print("i64.OutOfRange")
 }
 
-var badInts: Array<string> = ["12abc", "", "   ", "0x10", "1.5", "12 34", "+", "9223372036854775808"]
-var j = 0
-while (j < len(badInts)) {
-    try {
-        print(i64.parse(badInts[j]))
-    } catch panic (p) {
-        print(string(p.code) + " " + p.message)
-    }
-    j = j + 1
+var overflowInt = "9223372036854775808"
+try {
+    print(i64.parse(overflowInt))
+} catch NumberParseError.InvalidSyntax {
+    print("overflow.InvalidSyntax")
+} catch NumberParseError.OutOfRange {
+    print("overflow.OutOfRange")
 }
 
-var floats: Array<string> = ["1.5e3", ".5", "1.", "  2.5  ", "-0.125"]
-var k = 0
-while (k < len(floats)) {
-    print(f64.parse(floats[k]))
-    k = k + 1
+var validFloat = "1.5e3"
+print(f64.parse(validFloat))
+var hugeFloat = "1e400"
+print(f64.parse(hugeFloat))
+
+var invalidFloat = "1e+"
+try {
+    print(f64.parse(invalidFloat))
+} catch NumberParseError.InvalidSyntax {
+    print("f64.InvalidSyntax")
+} catch NumberParseError.OutOfRange {
+    print("f64.OutOfRange")
 }
 
-var badFloats: Array<string> = ["1.5x", "", "1e", "1e+", ".", "inf", "nan"]
-var m = 0
-while (m < len(badFloats)) {
-    try {
-        print(f64.parse(badFloats[m]))
-    } catch panic (p) {
-        print(string(p.code) + " " + p.message)
-    }
-    m = m + 1
-}
+var optionalInvalid = "not-a-number"
+print(i64.tryParse(optionalInvalid) == null)
+print(f64.tryParse(optionalInvalid) == null)

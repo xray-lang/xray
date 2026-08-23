@@ -206,17 +206,22 @@ vmcase(OP_TOINT) {
     XrValue val = R(b);
     if (xr_conversion_bytecode_is_parse_required(conversion) ||
         xr_conversion_bytecode_is_parse_optional(conversion)) {
-        XrStringParseIntResult parsed = {0};
-        if (XR_IS_STRING(val)) {
-            XrString *str = XR_TO_STRING(val);
-            parsed = xr_string_parse_int64(str->data, str->length);
-        }
-        if (!parsed.ok) {
+        if (!XR_IS_STRING(val))
+            VM_RUNTIME_ERROR(XR_ERR_INTERNAL, "i64.parse received a non-string value");
+        XrString *str = XR_TO_STRING(val);
+        XrStringParseIntResult parsed = xr_string_parse_int64(str->data, str->length);
+        if (parsed.failure != XR_NUMBER_PARSE_OK) {
             if (xr_conversion_bytecode_is_parse_optional(conversion)) {
                 R(a) = xr_null();
                 vmbreak;
             }
-            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+            if (!xr_vm_set_builtin_enum_error(
+                    isolate, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                    xr_number_parse_failure_member_index(parsed.failure)))
+                VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
+                                 "failed to construct NumberParseError in i64.parse");
+            R(a) = xr_null();
+            vmbreak;
         }
         R(a) = xr_int((xr_Integer) parsed.value);
         vmbreak;
@@ -246,15 +251,6 @@ vmcase(OP_TOINT) {
     } else if (XR_IS_RUNE(val)) {
         /* int(char) yields the Unicode codepoint. */
         R(a) = xr_int((xr_Integer) XR_TO_RUNE(val));
-    } else if (XR_IS_STRING(val)) {
-        /* Spec 13.2: a string that is not a whole decimal integer throws. The
-         * declared return type is non-null int, so there is no null to hand
-         * back here. */
-        XrString *str = XR_TO_STRING(val);
-        XrStringParseIntResult parsed = xr_string_parse_int64(str->data, str->length);
-        if (!parsed.ok)
-            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
-        R(a) = xr_int((xr_Integer) parsed.value);
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_int(XR_TO_BOOL(val) ? 1 : 0);
     } else {
@@ -270,17 +266,22 @@ vmcase(OP_TOFLOAT) {
     XrValue val = R(b);
     if (xr_conversion_bytecode_is_parse_required(conversion) ||
         xr_conversion_bytecode_is_parse_optional(conversion)) {
-        XrStringParseFloatResult parsed = {0};
-        if (XR_IS_STRING(val)) {
-            XrString *str = XR_TO_STRING(val);
-            parsed = xr_string_parse_float64(str->data, str->length);
-        }
-        if (!parsed.ok) {
+        if (!XR_IS_STRING(val))
+            VM_RUNTIME_ERROR(XR_ERR_INTERNAL, "f64.parse received a non-string value");
+        XrString *str = XR_TO_STRING(val);
+        XrStringParseFloatResult parsed = xr_string_parse_float64(str->data, str->length);
+        if (parsed.failure != XR_NUMBER_PARSE_OK) {
             if (xr_conversion_bytecode_is_parse_optional(conversion)) {
                 R(a) = xr_null();
                 vmbreak;
             }
-            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+            if (!xr_vm_set_builtin_enum_error(
+                    isolate, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                    xr_number_parse_failure_member_index(parsed.failure)))
+                VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
+                                 "failed to construct NumberParseError in f64.parse");
+            R(a) = xr_null();
+            vmbreak;
         }
         R(a) = xr_float(parsed.value);
         vmbreak;
@@ -305,14 +306,6 @@ vmcase(OP_TOFLOAT) {
         R(a) = val;
     } else if (XR_IS_INT(val)) {
         R(a) = xr_float((xr_Number) XR_TO_INT(val));
-    } else if (XR_IS_STRING(val)) {
-        /* Spec 13.2: see OP_TOINT -- a non-numeric string throws rather than
-         * producing a null the declared float return type forbids. */
-        XrString *str = XR_TO_STRING(val);
-        XrStringParseFloatResult parsed = xr_string_parse_float64(str->data, str->length);
-        if (!parsed.ok)
-            VM_RUNTIME_ERROR(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
-        R(a) = xr_float(parsed.value);
     } else if (XR_IS_BOOL(val)) {
         R(a) = xr_float(XR_TO_BOOL(val) ? 1.0 : 0.0);
     } else {

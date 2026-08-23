@@ -124,6 +124,8 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
         case XA_INTRINSIC_LOWERING_STRING_BYTE_SLICE_VIEW:
         case XA_INTRINSIC_LOWERING_ARRAY_RESERVE:
             return XI_CALL_BUILTIN;
+        case XA_INTRINSIC_LOWERING_SCALAR_PARSE:
+            return XI_CONVERT;
         case XA_INTRINSIC_LOWERING_NONE:
             return XI_OP_COUNT;
     }
@@ -212,6 +214,9 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
     bool backend_static_arity = stage >= XI_STAGE_BACKEND &&
                                 (desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0 &&
                                 value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
+    bool lowered_scalar_parse_arity =
+        desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE &&
+        value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
     bool backend_encoded_shuffle = stage >= XI_STAGE_BACKEND &&
                                    (desc->flags & XA_INTRINSIC_FLAG_EXPLICIT_SHUFFLE) != 0 &&
                                    value->nargs == 1;
@@ -219,7 +224,8 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                                   value->nargs >= (expected == XI_PAR_FOR ? 4u : 5u);
     bool lowered_codegen_arity = desc->family == XA_INTRINSIC_FAMILY_CODEGEN &&
                                  value->nargs >= desc->min_arity && value->nargs <= desc->max_arity;
-    if (!backend_static_arity && !backend_encoded_shuffle && !lowered_parallel_arity &&
+    if (!backend_static_arity && !lowered_scalar_parse_arity && !backend_encoded_shuffle &&
+        !lowered_parallel_arity &&
         !lowered_codegen_arity && (value->nargs < min_nargs || value->nargs > max_nargs))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid Xi arity %u",
                          value->xa_intrinsic_id, value->nargs);
@@ -338,6 +344,23 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                                  "canonical Array.reserve intrinsic id %u has invalid receiver "
                                  "contract",
                                  value->xa_intrinsic_id);
+        } else if (desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE) {
+            bool integer = desc->id == XA_INTRINSIC_I64_PARSE ||
+                           desc->id == XA_INTRINSIC_I64_TRY_PARSE;
+            bool required = desc->id == XA_INTRINSIC_I64_PARSE ||
+                            desc->id == XA_INTRINSIC_F64_PARSE;
+            uint32_t expected_flags = required ? XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW : 0;
+            if (value->op != XI_CONVERT || value->nargs != 1 || !value->args ||
+                !value->args[0] || !value->args[0]->type ||
+                value->args[0]->type->kind != XR_KIND_STRING || !value->type ||
+                (integer ? value->type->kind != XR_KIND_INT
+                         : value->type->kind != XR_KIND_FLOAT) ||
+                value->aux || value->aux_int != 0 ||
+                value->conversion.kind != XR_CONVERSION_NONE ||
+                value->flags != expected_flags)
+                return set_error(error, error_size,
+                                 "canonical scalar parse intrinsic id %u has invalid typed contract",
+                                 value->xa_intrinsic_id);
         } else {
             return set_error(error, error_size,
                              "canonical intrinsic id %u has unsupported core contract",
@@ -348,7 +371,8 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                          value->xa_intrinsic_id, (unsigned) desc->family);
     }
 
-    if (value->flags != xi_op_default_effects(value->op))
+    if (desc->lowering != XA_INTRINSIC_LOWERING_SCALAR_PARSE &&
+        value->flags != xi_op_default_effects(value->op))
         return set_error(error, error_size, "canonical intrinsic id %u has invalid effect flags %u",
                          value->xa_intrinsic_id, value->flags);
     return true;

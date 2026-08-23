@@ -1,4 +1,4 @@
-// Built-in float type — implementation in src/runtime/value/xfloat_methods.c
+// Built-in f64 type — implementation in src/runtime/value/xf64_methods.c
 class f64 {
     // @lowered
     static parse(text: string) -> f64

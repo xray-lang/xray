@@ -11,6 +11,7 @@
 #include "xanalyzer_builtins.h"
 #include "xanalyzer_native_types.h"
 #include "../../base/xchecks.h"
+#include "../../base/xnumber_parse_error.h"
 #include "../../runtime/value/xtype_names.h"
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../base/xmalloc.h"
@@ -1444,6 +1445,10 @@ static XrType *parse_type_str(XrVMRuntime *X, const char *s, size_t len) {
         type = xr_type_new_enum(X, "TaskStatus");
     } else if (base_len == 9 && strncmp(s, "Utf8Error", 9) == 0) {
         type = xr_type_new_enum(X, "Utf8Error");
+    } else if (base_len == sizeof(XR_NUMBER_PARSE_ERROR_NAME) - 1 &&
+               strncmp(s, XR_NUMBER_PARSE_ERROR_NAME,
+                       sizeof(XR_NUMBER_PARSE_ERROR_NAME) - 1) == 0) {
+        type = xr_type_new_enum(X, XR_NUMBER_PARSE_ERROR_NAME);
     } else if (base_len == 16 && strncmp(s, "StringSliceError", 16) == 0) {
         type = xr_type_new_enum(X, "StringSliceError");
     } else if (base_len == 16 && strncmp(s, "CompressionError", 16) == 0) {

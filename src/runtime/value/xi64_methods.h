@@ -5,18 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xint_methods.h - Int builtin method implementations.
+ * xi64_methods.h - i64 builtin method implementations.
  *
  * KEY POINTS:
- *   - sqrt() and pow() promote to float exactly like the legacy
- *     code path, preserving observable return-type behaviour.
- *   - max/min are polymorphic on the argument type: int+int -> int,
- *     int+float -> float (both branches preserve original semantics).
+ *   - sqrt() and pow() return f64 values.
+ *   - max/min keep an i64 result for i64 operands and promote an f64 operand.
  *   - toString / toHex allocate a string; toBigInt allocates a BigInt.
  */
 
-#ifndef XINT_METHODS_H
-#define XINT_METHODS_H
+#ifndef XI64_METHODS_H
+#define XI64_METHODS_H
 
 #include "xvalue.h"
 #include "../object/xstring.h"
@@ -33,23 +31,23 @@
 extern "C" {
 #endif
 
-/* int.toString() -> decimal string. Allocates. */
-static inline XrValue xr_int_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.toString() -> decimal string. Allocates. */
+static inline XrValue xr_i64_to_string_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) args;
     (void) argc;
-    XR_DCHECK(iso != NULL, "xr_int_to_string_method: NULL isolate");
+    XR_DCHECK(iso != NULL, "xr_i64_to_string_method: NULL isolate");
     char buffer[32];
     int len = snprintf(buffer, sizeof(buffer), "%lld", (long long) XR_TO_INT(self));
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }
 
-/* int.abs() -> int. Pure, no GC.
+/* i64.abs() -> i64. Pure, no GC.
  * INT64_MIN.abs() wraps to INT64_MIN: (-INT64_MIN) is signed-overflow UB,
  * so route the negate through unsigned to match wrap-on-overflow semantics
  * elsewhere in the language (see OP_UNM). */
-static inline XrValue xr_int_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_i64_abs_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -59,18 +57,18 @@ static inline XrValue xr_int_abs_method(XrVMRuntime *iso, XrValue self, XrValue 
     return xr_int(xr_i64_abs_wrap(v));
 }
 
-/* int.toBigInt() -> BigInt. Allocates. */
-static inline XrValue xr_int_to_bigint_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.toBigInt() -> BigInt. Allocates. */
+static inline XrValue xr_i64_to_bigint_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                               int argc) {
     (void) args;
     (void) argc;
-    XR_DCHECK(iso != NULL, "xr_int_to_bigint_method: NULL isolate");
+    XR_DCHECK(iso != NULL, "xr_i64_to_bigint_method: NULL isolate");
     XrBigInt *result = xr_bigint_new(NULL, XR_TO_INT(self));
     return XR_FROM_PTR(result);
 }
 
-/* int.max(other) -> larger of self and other. Polymorphic on arg type. */
-static inline XrValue xr_int_max_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+/* i64.max(other) -> larger of self and other. Polymorphic on arg type. */
+static inline XrValue xr_i64_max_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Integer v = XR_TO_INT(self);
     if (argc < 1)
@@ -87,8 +85,8 @@ static inline XrValue xr_int_max_method(XrVMRuntime *iso, XrValue self, XrValue 
     return xr_int(v);
 }
 
-/* int.min(other) -> smaller of self and other. Polymorphic on arg type. */
-static inline XrValue xr_int_min_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+/* i64.min(other) -> smaller of self and other. Polymorphic on arg type. */
+static inline XrValue xr_i64_min_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Integer v = XR_TO_INT(self);
     if (argc < 1)
@@ -105,8 +103,8 @@ static inline XrValue xr_int_min_method(XrVMRuntime *iso, XrValue self, XrValue 
     return xr_int(v);
 }
 
-/* int.toF64() -> float. Pure, no GC. */
-static inline XrValue xr_int_to_float_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.toF64() -> float. Pure, no GC. */
+static inline XrValue xr_i64_to_float_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                              int argc) {
     (void) iso;
     (void) args;
@@ -114,12 +112,12 @@ static inline XrValue xr_int_to_float_method(XrVMRuntime *iso, XrValue self, XrV
     return xr_float((xr_Number) XR_TO_INT(self));
 }
 
-/* int.toHex() -> hex string. Allocates. */
-static inline XrValue xr_int_to_hex_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.toHex() -> hex string. Allocates. */
+static inline XrValue xr_i64_to_hex_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                            int argc) {
     (void) args;
     (void) argc;
-    XR_DCHECK(iso != NULL, "xr_int_to_hex_method: NULL isolate");
+    XR_DCHECK(iso != NULL, "xr_i64_to_hex_method: NULL isolate");
     xr_Integer v = XR_TO_INT(self);
     char buffer[32];
     int len;
@@ -133,8 +131,8 @@ static inline XrValue xr_int_to_hex_method(XrVMRuntime *iso, XrValue self, XrVal
     return xr_string_value(str);
 }
 
-/* int.pow(exponent) -> float. Pure, no GC. */
-static inline XrValue xr_int_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+/* i64.pow(exponent) -> float. Pure, no GC. */
+static inline XrValue xr_i64_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     (void) args;
     (void) argc;
@@ -144,7 +142,7 @@ static inline XrValue xr_int_sqrt_method(XrVMRuntime *iso, XrValue self, XrValue
     return xr_float(sqrt(value));
 }
 
-static inline XrValue xr_int_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
+static inline XrValue xr_i64_pow_method(XrVMRuntime *iso, XrValue self, XrValue *args, int argc) {
     (void) iso;
     xr_Number value = (xr_Number) XR_TO_INT(self);
     if (argc < 1)
@@ -160,7 +158,7 @@ static inline XrValue xr_int_pow_method(XrVMRuntime *iso, XrValue self, XrValue 
     return xr_float(pow(value, exponent));
 }
 
-static inline XrValue xr_int_checked_add_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_checked_add_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -170,7 +168,7 @@ static inline XrValue xr_int_checked_add_method(XrVMRuntime *iso, XrValue self, 
                                                                          : XR_NULL_VAL;
 }
 
-static inline XrValue xr_int_checked_sub_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_checked_sub_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -180,7 +178,7 @@ static inline XrValue xr_int_checked_sub_method(XrVMRuntime *iso, XrValue self, 
                                                                          : XR_NULL_VAL;
 }
 
-static inline XrValue xr_int_checked_mul_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_checked_mul_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                 int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -190,7 +188,7 @@ static inline XrValue xr_int_checked_mul_method(XrVMRuntime *iso, XrValue self, 
                                                                          : XR_NULL_VAL;
 }
 
-static inline XrValue xr_int_saturating_add_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_saturating_add_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                    int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -198,7 +196,7 @@ static inline XrValue xr_int_saturating_add_method(XrVMRuntime *iso, XrValue sel
     return xr_int(xr_i64_saturating_add(XR_TO_INT(self), XR_TO_INT(args[0])));
 }
 
-static inline XrValue xr_int_saturating_sub_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_saturating_sub_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                    int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -206,7 +204,7 @@ static inline XrValue xr_int_saturating_sub_method(XrVMRuntime *iso, XrValue sel
     return xr_int(xr_i64_saturating_sub(XR_TO_INT(self), XR_TO_INT(args[0])));
 }
 
-static inline XrValue xr_int_saturating_mul_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_saturating_mul_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                    int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -214,7 +212,7 @@ static inline XrValue xr_int_saturating_mul_method(XrVMRuntime *iso, XrValue sel
     return xr_int(xr_i64_saturating_mul(XR_TO_INT(self), XR_TO_INT(args[0])));
 }
 
-static inline XrValue xr_int_wrapping_add_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_wrapping_add_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                  int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -222,7 +220,7 @@ static inline XrValue xr_int_wrapping_add_method(XrVMRuntime *iso, XrValue self,
     return xr_int(xr_i64_add_wrap(XR_TO_INT(self), XR_TO_INT(args[0])));
 }
 
-static inline XrValue xr_int_wrapping_sub_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_wrapping_sub_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                  int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -230,7 +228,7 @@ static inline XrValue xr_int_wrapping_sub_method(XrVMRuntime *iso, XrValue self,
     return xr_int(xr_i64_sub_wrap(XR_TO_INT(self), XR_TO_INT(args[0])));
 }
 
-static inline XrValue xr_int_wrapping_mul_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+static inline XrValue xr_i64_wrapping_mul_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                  int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -242,8 +240,8 @@ static inline XrValue xr_int_wrapping_mul_method(XrVMRuntime *iso, XrValue self,
  * src/shared/xr_arith_core.h). Complement checkedAdd/...: the checked
  * family returns the value (or null), these only report the flag. --- */
 
-/* int.addOverflows(other) -> whether signed self + other overflows. */
-static inline XrValue xr_int_add_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.addOverflows(other) -> whether signed self + other overflows. */
+static inline XrValue xr_i64_add_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                   int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -251,8 +249,8 @@ static inline XrValue xr_int_add_overflows_method(XrVMRuntime *iso, XrValue self
     return xr_bool(xr_arith_core_add_overflows(XR_TO_INT(self), XR_TO_INT(args[0])) != 0);
 }
 
-/* int.subOverflows(other) -> whether signed self - other overflows. */
-static inline XrValue xr_int_sub_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.subOverflows(other) -> whether signed self - other overflows. */
+static inline XrValue xr_i64_sub_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                   int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -260,8 +258,8 @@ static inline XrValue xr_int_sub_overflows_method(XrVMRuntime *iso, XrValue self
     return xr_bool(xr_arith_core_sub_overflows(XR_TO_INT(self), XR_TO_INT(args[0])) != 0);
 }
 
-/* int.mulOverflows(other) -> whether signed self * other overflows. */
-static inline XrValue xr_int_mul_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
+/* i64.mulOverflows(other) -> whether signed self * other overflows. */
+static inline XrValue xr_i64_mul_overflows_method(XrVMRuntime *iso, XrValue self, XrValue *args,
                                                   int argc) {
     (void) iso;
     if (argc < 1 || !XR_IS_INT(args[0]))
@@ -270,10 +268,10 @@ static inline XrValue xr_int_mul_overflows_method(XrVMRuntime *iso, XrValue self
 }
 
 struct XrVMRuntime;
-XR_FUNC void xr_int_register_native_type(struct XrVMRuntime *isolate);
+XR_FUNC void xr_i64_register_native_type(struct XrVMRuntime *isolate);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* XINT_METHODS_H */
+#endif /* XI64_METHODS_H */

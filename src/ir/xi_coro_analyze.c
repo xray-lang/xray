@@ -766,8 +766,7 @@ static bool xi_coro_is_closed_builtin_method_call(const XiValue *v) {
      * bindings start at XR_USER_GLOBALS_START and remain subject to ordinary
      * callsite/target resolution. */
     if (receiver->op == XI_GET_BUILTIN && receiver_type->kind == XR_KIND_CLASS &&
-        receiver->aux_int > XR_GLOBAL_VAR_RESERVED0 && receiver->aux_int < XR_USER_GLOBALS_START &&
-        receiver->aux_int != XR_GLOBAL_VAR_RESERVED30)
+        receiver->aux_int > XR_GLOBAL_VAR_RESERVED0 && receiver->aux_int < XR_USER_GLOBALS_START)
         return true;
     switch (receiver_type->kind) {
         case XR_KIND_INT:

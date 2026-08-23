@@ -116,7 +116,8 @@ static bool lower_semantic_intrinsic_for_aot(XiValue *v) {
     const XaIntrinsicDesc *desc = xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id);
     XR_CHECK(desc != NULL, "Xi value carries unknown canonical intrinsic id");
     bool changed = false;
-    if ((desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0) {
+    if ((desc->flags & XA_INTRINSIC_FLAG_STATIC_RECEIVER) != 0 &&
+        desc->lowering != XA_INTRINSIC_LOWERING_SCALAR_PARSE) {
         XR_CHECK(v->nargs >= 1, "static canonical intrinsic is missing receiver identity");
         if (v->nargs > 1)
             memmove(v->args, v->args + 1, (size_t) (v->nargs - 1) * sizeof(v->args[0]));

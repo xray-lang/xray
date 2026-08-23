@@ -12,7 +12,7 @@
         "src/aot/xrt_method.h",
         "src/runtime/symbol/xsymbol_table.c",
         "src/runtime/symbol/xsymbol_table.h",
-        "src/runtime/value/xint_methods.h",
+        "src/runtime/value/xi64_methods.h",
         "stdlib/mem/mem.c"
       ],
       "profiles": [
@@ -746,7 +746,8 @@
         "src/api/xray_runtime.c",
         "src/ir/xi_opt.c",
         "src/ir/xi_opt_sccp.c",
-        "src/runtime/value/xint_methods.h",
+        "src/runtime/value/xi64_methods.c",
+        "src/runtime/value/xi64_methods.h",
         "src/runtime/value/xvalue.h",
         "src/shared/xr_arith_core.h",
         "src/shared/xr_numeric_core.h",
@@ -1061,7 +1062,7 @@
         "src/ir/xi_opt_sccp.c",
         "src/runtime/object/xbigint.c",
         "src/runtime/object/xbigint.h",
-        "src/runtime/value/xfloat_methods.h",
+        "src/runtime/value/xf64_methods.h",
         "src/runtime/xstrbuf.c",
         "src/vm/xvm.c",
         "src/vm/xvm_dispatch_arith.inc.c",
@@ -1598,6 +1599,7 @@
       ],
       "representation": "native",
       "signatures": [
+        "xr_number_parse_failure_member_index",
         "xr_string_parse_float64",
         "xr_string_parse_infinity",
         "xr_string_parse_int64",
@@ -1608,7 +1610,10 @@
       ],
       "status": "production",
       "test_callers": [
-        "tests/unit/stdlib/test_string_core.c"
+        "tests/unit/aot/test_xrt_method_truthy.c",
+        "tests/unit/aot/test_xrt_type_identity_freestanding.c",
+        "tests/unit/stdlib/test_string_core.c",
+        "tests/unit/vm/test_vm_exception.c"
       ]
     },
     {

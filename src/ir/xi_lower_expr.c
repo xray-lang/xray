@@ -49,7 +49,7 @@
 #include "../shared/xr_array_core.h"
 #include "../../stdlib/stdlib_cache.h"
 #include "../shared/xr_elem_type.h"
-#include "../base/xglobal_indices.h"
+#include "../base/xnumber_parse_error.h"
 #include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xffi_sig.h"
@@ -110,6 +110,7 @@ static int xi_lower_builtin_class_global_index(const char *name) {
         {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
         {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
         {"Utf8Error", XR_GLOBAL_VAR_UTF8_ERROR},
+        {XR_NUMBER_PARSE_ERROR_NAME, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR},
         {"StringSliceError", XR_GLOBAL_VAR_STRING_SLICE_ERROR},
         {"CompressionError", XR_GLOBAL_VAR_COMPRESSION_ERROR},
         {"CryptoError", XR_GLOBAL_VAR_CRYPTO_ERROR},
@@ -2256,6 +2257,12 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
             return false;
         struct XrType *result_type =
             sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
+        if (enum_val->op == XI_GET_BUILTIN &&
+            enum_val->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR) {
+            *out = xi_lower_number_parse_error_member_access(
+                l, enum_val, ma->name, result_type, (int) node->line);
+            return true;
+        }
         XiValue *value = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
         if (value) {
             value->args[0] = enum_val;
@@ -2381,6 +2388,10 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
                                        struct XrType *result_type,
                                        XiSequenceEvidenceIds *sequence_ids) {
     MemberAccessNode *ma = &node->as.member_access;
+    if (obj && obj->op == XI_GET_BUILTIN &&
+        obj->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR && ma->name)
+        return xi_lower_number_parse_error_member_access(
+            l, obj, ma->name, result_type, (int) node->line);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;
@@ -6450,6 +6461,30 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
     }
     if (desc->family == XA_INTRINSIC_FAMILY_CODEGEN)
         return lower_codegen_intrinsic_call(l, node, call, desc);
+    if (desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE) {
+        if (call->arg_count != 1 || !call->arguments[0]) {
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *argument = xi_lower_expr(l, call->arguments[0]);
+        XrType *result_type = xi_lower_node_type(l, node);
+        if (!argument || !result_type || argument->type->kind != XR_KIND_STRING) {
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CONVERT, result_type, 1);
+        if (!value)
+            return NULL;
+        value->args[0] = argument;
+        value->xa_intrinsic_id = (uint32_t) desc->id;
+        bool required = desc->id == XA_INTRINSIC_I64_PARSE ||
+                        desc->id == XA_INTRINSIC_F64_PARSE;
+        value->flags = required ? XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW : 0;
+        value->line = (uint32_t) node->line;
+        if (required)
+            xi_lower_insert_err_check(l, node, true);
+        return value;
+    }
     MemberAccessNode *member = &call->callee->as.member_access;
     XiOp op = xi_semantic_intrinsic_op(desc);
     bool typed_byte_slice = desc->lowering == XA_INTRINSIC_LOWERING_BYTE_SLICE_TYPED_LOAD ||
@@ -6763,39 +6798,6 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * named String. Resolve canonical static constructors to that class. */
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *static_ma = &call->callee->as.member_access;
-        if (static_ma->object && static_ma->object->type == AST_VARIABLE && static_ma->name &&
-            call->arg_count == 1 &&
-            (strcmp(static_ma->object->as.variable.name, "i64") == 0 ||
-             strcmp(static_ma->object->as.variable.name, "f64") == 0) &&
-            (strcmp(static_ma->name, "parse") == 0 ||
-             strcmp(static_ma->name, "tryParse") == 0)) {
-            XiValue *arg = xi_lower_expr(l, call->arguments[0]);
-            if (!arg)
-                return NULL;
-            struct XrType *result_type = xi_lower_node_type(l, node);
-            if (!result_type || xi_lower_type_is_unknown(result_type)) {
-                result_type = strcmp(static_ma->object->as.variable.name, "i64") == 0
-                                  ? xr_type_new_int_width(l->isolate, XR_NATIVE_I64)
-                                  : xr_type_new_float_width(l->isolate, XR_NATIVE_F64);
-                if (strcmp(static_ma->name, "tryParse") == 0)
-                    result_type = xr_type_new_optional(l->isolate, result_type);
-            }
-            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 1);
-            if (!v)
-                return NULL;
-            v->args[0] = arg;
-            char builtin_name[32];
-            snprintf(builtin_name, sizeof(builtin_name), "%s.%s",
-                     static_ma->object->as.variable.name, static_ma->name);
-            v->aux = (void *) arena_strdup(l->func, builtin_name);
-            v->flags |= XI_FLAG_SIDE_EFFECT;
-            if (strcmp(static_ma->name, "parse") == 0) {
-                v->flags |= XI_FLAG_MAY_THROW;
-                xi_lower_insert_err_check(l, node, true);
-            }
-            v->line = (uint32_t) node->line;
-            return v;
-        }
         if (static_ma->object && static_ma->object->type == AST_VARIABLE && static_ma->name &&
             strcmp(static_ma->object->as.variable.name, "string") == 0) {
             bool is_utf8_static = strcmp(static_ma->name, "fromUtf8") == 0 ||

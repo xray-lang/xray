@@ -449,7 +449,7 @@ tests/diff/cases/semantics/stdlib/runtime_domain_bytes.xr
 tests/diff/cases/semantics/stdlib/simd_intrinsic_identity_alias.xr
 tests/diff/cases/semantics/stdlib/simd_portable_integer_vectors.xr
 tests/diff/cases/semantics/stdlib/simd_top_level_shared_vectors.xr
-tests/diff/cases/semantics/stdlib/strconv_contract_direct.xr
+tests/diff/cases/semantics/exception/string_number_conversion_panic_shape.xr
 tests/diff/cases/semantics/stdlib/sync_cache_padded.xr
 tests/diff/cases/semantics/stdlib/sync_fence_alias.xr
 tests/diff/cases/semantics/stdlib/sync_module_import.xr

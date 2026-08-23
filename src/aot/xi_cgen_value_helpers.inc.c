@@ -362,6 +362,7 @@ static const int cg_prelude_enum_builtin_indices[] = {
     XR_GLOBAL_VAR_TASK_RESULT,
     XR_GLOBAL_VAR_TASK_STATUS,
     XR_GLOBAL_VAR_UTF8_ERROR,
+    XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
     XR_GLOBAL_VAR_STRING_SLICE_ERROR,
     XR_GLOBAL_VAR_COMPRESSION_ERROR,
     XR_GLOBAL_VAR_CRYPTO_ERROR,
@@ -400,6 +401,10 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
     static const CgPreludeEnumMember utf8_error[] = {
         {"InvalidUtf8", false},
     };
+    static const CgPreludeEnumMember number_parse_error[] = {
+        {XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME, false},
+        {XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE_NAME, false},
+    };
     static const CgPreludeEnumMember string_slice_error[] = {
         {"InvalidByteRange", false},
     };
@@ -417,6 +422,8 @@ static const CgPreludeEnumData *cg_prelude_enum_data(int builtin_index) {
         {XR_GLOBAL_VAR_TASK_RESULT, "TaskResult", task_result, 5},
         {XR_GLOBAL_VAR_TASK_STATUS, "TaskStatus", task_status, 5},
         {XR_GLOBAL_VAR_UTF8_ERROR, "Utf8Error", utf8_error, 1},
+        {XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_NAME, number_parse_error,
+         XR_NUMBER_PARSE_ERROR_MEMBER_COUNT},
         {XR_GLOBAL_VAR_STRING_SLICE_ERROR, "StringSliceError", string_slice_error, 1},
         {XR_GLOBAL_VAR_COMPRESSION_ERROR, "CompressionError", compression_error, 1},
         {XR_GLOBAL_VAR_CRYPTO_ERROR, "CryptoError", crypto_error, 1},
@@ -608,6 +615,31 @@ static bool emit_static_prelude_enum_member_value_expr(XiCgenCtx *ctx, FILE *out
     else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, ed->enum_name, ed,
                                                           (uint32_t) member_index))
         emit_prelude_enum_member_value_expr(ctx, out, ed, (uint32_t) member_index);
+    emit_conversion_suffix(out, conv_suffix);
+    return true;
+}
+
+static bool emit_static_number_parse_error_member_value_expr(XiCgenCtx *ctx, FILE *out,
+                                                              const XiValue *v,
+                                                              uint32_t member_index) {
+    const XrNumberParseErrorRegistryRow *row =
+        xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    const CgPreludeEnumData *ed = cg_prelude_enum_data(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
+    if (!row || !ed || ed->builtin_index != (int) row->global_index ||
+        ed->member_count != XR_NUMBER_PARSE_ERROR_MEMBER_COUNT ||
+        member_index >= ed->member_count || ed->members[member_index].has_payload ||
+        strcmp(ed->enum_name, row->enum_name) != 0 ||
+        strcmp(ed->members[member_index].name, row->members[member_index]) != 0)
+        return false;
+    XrRep source_rep =
+        ctx && cg_value_plan_storage_rep(ctx, v) == XR_REP_I64 ? XR_REP_I64 : XR_REP_TAGGED;
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, source_rep,
+                                                     cg_value_plan_storage_rep(ctx, v));
+    if (source_rep == XR_REP_I64)
+        fprintf(out, "INT64_C(%u)", (unsigned) member_index);
+    else if (!emit_portable_scalar_enum_member_value_expr(ctx, out, v, row->enum_name, ed,
+                                                          member_index))
+        emit_prelude_enum_member_value_expr(ctx, out, ed, member_index);
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }

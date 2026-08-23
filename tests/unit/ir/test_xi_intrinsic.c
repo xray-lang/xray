@@ -464,6 +464,23 @@ static void test_semantic_intrinsic_registry(void) {
                     (par_map_into->flags & XA_INTRINSIC_FLAG_PLAN_RECEIVER) != 0 &&
                     par_map_into->min_arity == 3 && par_map_into->max_arity == 3,
                 "parallel Plan.mapInto must publish receiver, arity, and lowering identity");
+
+    const XaIntrinsicDesc *i64_parse = xa_intrinsic_by_id(XA_INTRINSIC_I64_PARSE);
+    const XaIntrinsicDesc *i64_try_parse = xa_intrinsic_by_id(XA_INTRINSIC_I64_TRY_PARSE);
+    const XaIntrinsicDesc *f64_parse = xa_intrinsic_by_id(XA_INTRINSIC_F64_PARSE);
+    const XaIntrinsicDesc *f64_try_parse = xa_intrinsic_by_id(XA_INTRINSIC_F64_TRY_PARSE);
+    ASSERT_TRUE(i64_parse && f64_parse &&
+                    i64_parse->effect == XA_INTRINSIC_EFFECT_MAY_THROW &&
+                    f64_parse->effect == XA_INTRINSIC_EFFECT_MAY_THROW &&
+                    i64_parse->allocation == XA_INTRINSIC_ALLOCATION_MAY_ALLOC &&
+                    f64_parse->allocation == XA_INTRINSIC_ALLOCATION_MAY_ALLOC,
+                "required scalar parse must account for typed-error aggregate allocation");
+    ASSERT_TRUE(i64_try_parse && f64_try_parse &&
+                    i64_try_parse->effect == XA_INTRINSIC_EFFECT_PURE &&
+                    f64_try_parse->effect == XA_INTRINSIC_EFFECT_PURE &&
+                    i64_try_parse->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC &&
+                    f64_try_parse->allocation == XA_INTRINSIC_ALLOCATION_NO_ALLOC,
+                "optional scalar parse must stay nothrow and allocation-free");
 }
 
 static void test_core_intrinsic_registry(void) {

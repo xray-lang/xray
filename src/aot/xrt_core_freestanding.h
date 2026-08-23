@@ -58,6 +58,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_enum_metadata_core.h"
 #include "../shared/xr_length_source_core.h"
 #include "../shared/xr_string_concat_core.h"
+#include "../base/xnumber_parse_error.h"
 
 /* Freestanding shares the concat kernel's two passes; the guard names the
  * owner so a second copy cannot appear here unnoticed. */
@@ -841,6 +842,19 @@ static inline int xrt_has_pending_error(void) {
     return !XR_IS_NULL(xrt_pending_error) || xrt_pending_enum_error_active;
 }
 
+static inline bool xrt_set_builtin_enum_error_by_id(int32_t builtin_index,
+                                                    uint32_t member_index) {
+    const XrNumberParseErrorRegistryRow *row =
+        builtin_index < 0 ? NULL : xr_number_parse_error_registry_row((uint32_t) builtin_index);
+    if (xrt_has_pending_error() || !row || member_index >= XR_NUMBER_PARSE_ERROR_MEMBER_COUNT)
+        return false;
+    xrt_pending_enum_error = xrt_enum_aggregate_make(
+        row->enum_layout_id, (int64_t) member_index, 0, row->enum_name,
+        row->members[member_index], NULL);
+    xrt_pending_enum_error_active = 1;
+    return true;
+}
+
 XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
 void xr_hook_write(const char *bytes, size_t len);
 void *xr_hook_alloc(size_t size, size_t align);
@@ -1060,6 +1074,9 @@ static inline XRT_COLD XRT_NORETURN void xrt_freestanding_trap(const char *messa
 #endif
 #ifndef XR_ERR_INVALID_ARG_TYPE
 #define XR_ERR_INVALID_ARG_TYPE 451
+#endif
+#ifndef XR_ERR_INTERNAL
+#define XR_ERR_INTERNAL 500
 #endif
 
 static inline XRT_COLD XRT_NORETURN void xrt_throw_error(int code, const char *message) {
@@ -1781,38 +1798,50 @@ static inline double xrt_math_number(XrValue v) {
  * failure behavior as the VM and hosted AOT profiles. */
 static inline XrValue xrt_i64_parse(XrValue v) {
     if (!XR_IS_STR(v))
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+        xrt_throw_error(XR_ERR_INTERNAL, "i64.parse received a non-string value");
     XrStringParseIntResult parsed =
         xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
-    if (!parsed.ok)
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
+    if (parsed.failure != XR_NUMBER_PARSE_OK) {
+        if (!xrt_set_builtin_enum_error_by_id(
+                XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                xr_number_parse_failure_member_index(parsed.failure)))
+            xrt_throw_error(XR_ERR_INTERNAL,
+                            "failed to construct NumberParseError in i64.parse");
+        return XR_NULL_VAL;
+    }
     return XR_FROM_INT(parsed.value);
 }
 
 static inline XrValue xrt_i64_try_parse(XrValue v) {
     if (!XR_IS_STR(v))
-        return XR_NULL_VAL;
+        xrt_throw_error(XR_ERR_INTERNAL, "i64.tryParse received a non-string value");
     XrStringParseIntResult parsed =
         xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
-    return parsed.ok ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
+    return parsed.failure == XR_NUMBER_PARSE_OK ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_f64_parse(XrValue v) {
     if (!XR_IS_STR(v))
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+        xrt_throw_error(XR_ERR_INTERNAL, "f64.parse received a non-string value");
     XrStringParseFloatResult parsed =
         xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
-    if (!parsed.ok)
-        xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
+    if (parsed.failure != XR_NUMBER_PARSE_OK) {
+        if (!xrt_set_builtin_enum_error_by_id(
+                XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                xr_number_parse_failure_member_index(parsed.failure)))
+            xrt_throw_error(XR_ERR_INTERNAL,
+                            "failed to construct NumberParseError in f64.parse");
+        return XR_NULL_VAL;
+    }
     return XR_FROM_FLOAT(parsed.value);
 }
 
 static inline XrValue xrt_f64_try_parse(XrValue v) {
     if (!XR_IS_STR(v))
-        return XR_NULL_VAL;
+        xrt_throw_error(XR_ERR_INTERNAL, "f64.tryParse received a non-string value");
     XrStringParseFloatResult parsed =
         xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
-    return parsed.ok ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
+    return parsed.failure == XR_NUMBER_PARSE_OK ? XR_FROM_FLOAT(parsed.value) : XR_NULL_VAL;
 }
 
 static inline XrValue xrt_to_int(XrValue v) {
@@ -1822,29 +1851,12 @@ static inline XrValue xrt_to_int(XrValue v) {
         return XR_FROM_INT((int64_t) v.f);
     if (XR_IS_BOOL(v) || XR_IS_RUNE(v))
         return XR_FROM_INT(v.i);
-    if (XR_IS_STR(v)) {
-        /* Spec 13.2, same strict decimal grammar and same message as the VM
-         * and the hosted runtime; this profile reports it through the panic
-         * hook because it has no unwinder to longjmp to. */
-        XrStringParseIntResult parsed =
-            xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
-        if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_I64_PARSE_MSG);
-        return XR_FROM_INT(parsed.value);
-    }
     return XR_FROM_INT(0);
 }
 
 static inline XrValue xrt_to_float(XrValue v) {
     if (XR_IS_FLOAT(v))
         return v;
-    if (XR_IS_STR(v)) {
-        XrStringParseFloatResult parsed =
-            xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
-        if (!parsed.ok)
-            xrt_throw_error(XR_ERR_INVALID_ARG_TYPE, XR_ERROR_CORE_F64_PARSE_MSG);
-        return XR_FROM_FLOAT(parsed.value);
-    }
     return XR_FROM_FLOAT(xrt_math_number(v));
 }
 

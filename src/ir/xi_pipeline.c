@@ -312,8 +312,7 @@ static bool xi_pipeline_coro_is_sealed_builtin_constructor(const XiValue *call) 
     const XiValue *callee = xi_pipeline_coro_unwrap_identity(call->args[0]);
     return callee && callee->op == XI_GET_BUILTIN &&
            callee->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
-           callee->aux_int < XR_USER_GLOBALS_START &&
-           callee->aux_int != XR_GLOBAL_VAR_RESERVED30;
+           callee->aux_int < XR_USER_GLOBALS_START;
 }
 
 static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,

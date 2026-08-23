@@ -8,11 +8,14 @@
 
 #include "xa_intrinsic_registry.h"
 #include "../../runtime/value/xtype.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 
 #include <stdio.h>
 #include <string.h>
 
 #define XA_NATIVE_NONE 0
+#define XA_NATIVE_I64 XR_NATIVE_I64
+#define XA_NATIVE_F64 XR_NATIVE_F64
 #define XA_NATIVE_U8 XR_NATIVE_U8
 #define XA_NATIVE_U32 XR_NATIVE_U32
 #define XA_NATIVE_U64 XR_NATIVE_U64
@@ -95,6 +98,22 @@ XaIntrinsicId xa_intrinsic_compiler_receiver_method(const XrType *receiver,
         return XA_INTRINSIC_NONE;
     if (receiver->kind == XR_KIND_STRING && strcmp(member_name, "bytes") == 0)
         return XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
+    const XrExactScalarDesc *scalar =
+        (receiver->kind == XR_KIND_INT || receiver->kind == XR_KIND_FLOAT)
+            ? xr_exact_scalar_by_native_type(receiver->scalar_rep)
+            : NULL;
+    if (scalar && scalar->id == XR_EXACT_SCALAR_I64) {
+        if (strcmp(member_name, "parse") == 0)
+            return XA_INTRINSIC_I64_PARSE;
+        if (strcmp(member_name, "tryParse") == 0)
+            return XA_INTRINSIC_I64_TRY_PARSE;
+    }
+    if (scalar && scalar->id == XR_EXACT_SCALAR_F64) {
+        if (strcmp(member_name, "parse") == 0)
+            return XA_INTRINSIC_F64_PARSE;
+        if (strcmp(member_name, "tryParse") == 0)
+            return XA_INTRINSIC_F64_TRY_PARSE;
+    }
     if (receiver->kind != XR_KIND_INSTANCE || !xr_type_is_builtin_named_class(receiver, "Atomic"))
         return XA_INTRINSIC_NONE;
     for (size_t i = 0; i < xa_intrinsic_count(); i++) {
