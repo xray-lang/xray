@@ -5817,13 +5817,13 @@ TestDecl ::= '@test' FnDecl
 ```xray
 @test
 fn test_addition() {
-    assert_eq(1 + 1, 2)
+    assertEqual(1 + 1, 2)
 }
 
 @test
 fn test_with_assertions() {
     var result = compute()
-    assert_eq(result, 42)
+    assertEqual(result, 42)
     assert(result > 0)
 }
 ```
@@ -5854,12 +5854,12 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 | 函数 | 语义 |
 |--|--|
 | `assert(cond, msg?)` | `cond` 为 false 时抛异常 |
-| `assert_eq(a, b)` | `a == b` 失败时输出两值 |
-| `assert_ne(a, b)` | `a != b` |
-| `assert_true(cond)` / `assert_false(cond)` | 等价 `assert(cond)` / `assert(!cond)` |
-| `assert_throws(fn)` | 期望 `fn()` 抛异常 |
+| `assertEqual(a, b, msg?)` | 同一静态类型的两个值深相等，否则输出两值 |
+| `assertThrows(action, msg?)` | 仅当 `action()` 返回 typed error 时通过 |
+| `assertPanics(action, msg?)` | 仅当 `action()` 触发 panic 时通过 |
 
-> **命名一致性**：所有断言函数为 `snake_case`（`assert_eq`，不是 `assertEq`）。
+`assert` 只接受 `bool`；用 `assert(!cond)` 表达反向布尔条件。typed error 与 panic
+是互斥失败通道，错误通道的断言不能互换。
 
 ### 12.4 异步测试
 
@@ -5870,7 +5870,7 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 fn test_async_fetch() {
     var task = go fetch_data("http://...")
     var result = await task
-    assert_eq(result.status, 200)
+    assertEqual(result.status, 200)
 }
 ```
 
@@ -5991,11 +5991,9 @@ print(x is i64)                 // true
 | 函数 | 签名 | 说明 |
 |---|---|---|
 | `assert(cond, msg?)` | `(bool, string?) -> ()` | `cond` 为 false 时抛异常 |
-| `assert_true(cond)` | `(bool) -> ()` | 等价 `assert(cond)` |
-| `assert_false(cond)` | `(bool) -> ()` | 等价 `assert(!cond)` |
-| `assert_eq(a, b)` | `(T, T) -> ()` | 深相等断言 |
-| `assert_ne(a, b)` | `(T, T) -> ()` | 深不等断言 |
-| `assert_throws(fn)` | `(fn) -> ()` | 期望函数抛异常 |
+| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | 同一静态类型的值深相等 |
+| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 typed error |
+| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 panic |
 
 ### 13.6 容器构造与静态函数
 

@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 275,
+  "operation_count": 272,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -92,7 +92,7 @@
       ]
     },
     {
-      "benchmark_anchor": "shared-core/assert-condition",
+      "benchmark_anchor": "shared-core/assertion",
       "capabilities": [
         "vm",
         "aot",
@@ -100,18 +100,18 @@
         "freestanding"
       ],
       "current_aot_owner": "representation adapter",
-      "current_shared_owner": "src/shared/xr_assert_condition_core.h",
+      "current_shared_owner": "src/shared/xr_assertion_core.h",
       "current_vm_owner": "representation adapter",
       "effects": [],
       "error_panic_suspend_cancel_publication": [],
       "family": "shared-kernel",
-      "future_semantic_owner": "SemanticOwnerRegistry/assert-condition",
+      "future_semantic_owner": "SemanticOwnerRegistry/assertion",
       "independent_oracle": "shared-kernel-unit-plus-differential-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_assert_condition_core.h",
+      "observable_contract": "src/shared/xr_assertion_core.h",
       "observable_edges": [],
-      "operation_id": "shared.assert-condition",
-      "ownership": "native",
+      "operation_id": "shared.assertion",
+      "ownership": "typed-plan",
       "targets": [
         "vm",
         "aot",
@@ -1605,7 +1605,7 @@
       "benchmark_anchor": "target-machine/xi-class-side-effect",
       "capabilities": [],
       "current_aot_owner": "representation adapter",
-      "current_shared_owner": "src/shared/xr_assert_condition_core.h",
+      "current_shared_owner": "src/shared/xr_assertion_core.h",
       "current_vm_owner": "representation adapter",
       "effects": [
         "side-effect",
@@ -1615,96 +1615,16 @@
         "may-throw"
       ],
       "family": "xi-class-side-effect",
-      "future_semantic_owner": "shared.assert-condition",
+      "future_semantic_owner": "shared.assertion",
       "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
       "migration_task": 278,
-      "observable_contract": "src/shared/xr_assert_condition_core.h",
+      "observable_contract": "src/shared/xr_assertion_core.h",
       "observable_edges": [],
-      "operation_id": "xi.assert",
+      "operation_id": "xi.assertion",
       "ownership": "borrow",
       "targets": [
         "vm-bytecode",
         "aot-c",
-        "aot-verify"
-      ]
-    },
-    {
-      "benchmark_anchor": "target-machine/xi-class-side-effect",
-      "capabilities": [],
-      "current_aot_owner": "representation adapter",
-      "current_shared_owner": "src/shared/xr_assert_condition_core.h",
-      "current_vm_owner": "representation adapter",
-      "effects": [
-        "side-effect",
-        "may-throw"
-      ],
-      "error_panic_suspend_cancel_publication": [
-        "may-throw"
-      ],
-      "family": "xi-class-side-effect",
-      "future_semantic_owner": "shared.assert-condition",
-      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 278,
-      "observable_contract": "src/shared/xr_assert_condition_core.h",
-      "observable_edges": [],
-      "operation_id": "xi.assert.eq",
-      "ownership": "borrow",
-      "targets": [
-        "vm-bytecode",
-        "aot-c",
-        "aot-verify"
-      ]
-    },
-    {
-      "benchmark_anchor": "target-machine/xi-class-side-effect",
-      "capabilities": [],
-      "current_aot_owner": "representation adapter",
-      "current_shared_owner": "src/shared/xr_assert_condition_core.h",
-      "current_vm_owner": "representation adapter",
-      "effects": [
-        "side-effect",
-        "may-throw"
-      ],
-      "error_panic_suspend_cancel_publication": [
-        "may-throw"
-      ],
-      "family": "xi-class-side-effect",
-      "future_semantic_owner": "shared.assert-condition",
-      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 278,
-      "observable_contract": "src/shared/xr_assert_condition_core.h",
-      "observable_edges": [],
-      "operation_id": "xi.assert.ne",
-      "ownership": "borrow",
-      "targets": [
-        "vm-bytecode",
-        "aot-c",
-        "aot-verify"
-      ]
-    },
-    {
-      "benchmark_anchor": "target-machine/xi-class-side-effect",
-      "capabilities": [],
-      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
-      "current_shared_owner": "xisa/xi/ops.def",
-      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
-      "effects": [
-        "side-effect",
-        "may-throw"
-      ],
-      "error_panic_suspend_cancel_publication": [
-        "may-throw"
-      ],
-      "family": "xi-class-side-effect",
-      "future_semantic_owner": "SemanticPlan.operation_registry",
-      "independent_oracle": "typed-source-expected-result-plus-mutation-oracle",
-      "migration_task": 271,
-      "observable_contract": "contracts/xi-canonical-ops.md",
-      "observable_edges": [],
-      "operation_id": "xi.assert.throws",
-      "ownership": "consume",
-      "targets": [
-        "vm-bytecode",
         "aot-verify"
       ]
     },
@@ -7110,5 +7030,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "b16a97e0308725a38d414cefbba19294fd756afb2f15d72fac6b3324869cecbe"
+  "source_tree_fingerprint": "bc615196b137dfb7d477c332be4deb61ab9d4d4643d9cee9cde916cfe00ff788"
 }

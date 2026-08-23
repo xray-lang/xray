@@ -64,7 +64,7 @@ class SourceUnknownInventoryTest(unittest.TestCase):
     def test_unknown_identifier_guard_is_not_live_source_type_surface(self) -> None:
         categories = classify_line(
             "tests/regression/02_variables/0210_unknown_identifier.xr",
-            "assert_eq(unk" "nown, 7)",
+            "assertEqual(unk" "nown, 7)",
         )
         self.assertIn("UNKNOWN_IDENTIFIER_ALLOWED_GUARD", categories)
         self.assertNotIn("SOURCE_UNKNOWN_TYPE_SURFACE", categories)

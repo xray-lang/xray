@@ -5,7 +5,9 @@
   "aliases": [
     "test",
     "assert",
-    "assert_eq",
+    "assertEqual",
+    "assertThrows",
+    "assertPanics",
     "unit_test"
   ],
   "sections": [

@@ -383,7 +383,7 @@ def check_prompt_smoke_examples(root: Path, xray: Path) -> list[str]:
         "write-test": (
             "@test\n"
             "fn test_add() {\n"
-            "    assert_eq(1 + 1, 2)\n"
+            "    assertEqual(1 + 1, 2)\n"
             "}\n"
         ),
     }

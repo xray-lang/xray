@@ -102,11 +102,11 @@ A change to these rules re-runs and, where the expected output moves, updates:
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 8e2ef8dec869ee45b05165d72b136ff1056fd7050aeec3e1d9ec23ef7840f724
+anchor-sha256: xisa/xi/ops.def 6a002bfe21b8b1f505d4354626259884f242d613ff50ed33cfaae4dcfce4cc35
 anchor-sha256: src/ir/xi_tbaa.c 304e00919092f45875e76dc0d9e958bc706ecc8cf0f0b89ed80d51392276f6f4
 anchor-sha256: src/ir/xi_tbaa.h 3f361c253c2a6073043d9a8c77f100cf3b51bc16077fbff3f6f3a381d634c027
 anchor-sha256: src/ir/xi_opt_licm.c 06f7494501b87db38c4426987c7f8242451624d10686309e100f3ca66dac819f
-anchor-sha256: src/ir/xi_opt_gvn_pre.c 1f4bd9cb11456fc45547c485381b1a49a46985c0bbfacf586970612e037d2def
+anchor-sha256: src/ir/xi_opt_gvn_pre.c c15d780954e218c31126ec41717957de62c918dcfb0a521837b938e07f345d1b
 anchor-sha256: src/ir/xi_memssa.c 622da949ed61de3f085e43cbf7f11c6f43ef78ff56714a5b384a2b2174598be7
 anchor-sha256: src/coro/xchannel.c 4ac92d6b0cc987bc5c2809812b6728843231f0c6887f0dde2595f532e474a943
 anchor-sha256: src/coro/xtask.c a58cd9d324c5919b8e60b2130523ee3c544ba600fe36be0fe3a93232faadb0ba

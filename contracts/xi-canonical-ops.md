@@ -85,8 +85,13 @@ compatibility opcode, reserved hole, or second bounds owner.
     it through the generated `xicgen_call` row; rewriting it to `xi.call`,
     accepting that rewrite as an alias, or selecting a backend from live names
     is not a supported lowering path.
+20. Source assertions lower to the single canonical `xi.assertion` operation.
+    Its owned typed auxiliary plan is deep-cloned, verified, dumped, hashed, and
+    destroyed with the Xi value. VM and AOT consume the same plan and stable
+    assertion owner identity. Retired assertion opcodes, spelling-based adapter
+    selection, and shallow source-location pointers are not compatible forms.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 8e2ef8dec869ee45b05165d72b136ff1056fd7050aeec3e1d9ec23ef7840f724
-anchor-sha256: xisa/xi/lowering.def 4de0a8ebdcd77390d5399483f627cc572033f39f924b3032b45c7dacf9ec9eca
+anchor-sha256: xisa/xi/ops.def 6a002bfe21b8b1f505d4354626259884f242d613ff50ed33cfaae4dcfce4cc35
+anchor-sha256: xisa/xi/lowering.def b928743b1e7b3d0cc50bcf2d9779f4c755f189bcb0f6e710e7fa232bce7aa517

@@ -67,7 +67,6 @@ TRUTHINESS_SURROGATE_OWNER_TOKENS = (
 )
 CGEN_TRUTHINESS_CONSUMERS = (
     ("src/aot/xi_cgen.c", "emit_condition_expr_ctx"),
-    ("src/aot/xi_cgen_dispatch_helpers.inc.c", "xicgen_emit_assert_condition"),
     ("src/aot/xi_cgen_dispatch_helpers.inc.c", "xicgen_select"),
 )
 TYPE_IDENTITY_CORE_CONSUMERS = (
@@ -224,7 +223,7 @@ RAW_SCALAR_ACCESS_OPERATIONS = {"xi.ptr.load", "xi.ptr.store"}
 ENUM_METADATA_ACCESS_OPERATIONS = {"xi.enum.variant.at", "xi.enum.payload.at"}
 CELL_ACCESS_OPERATIONS = {"xi.cell.get", "xi.cell.set"}
 NULL_TEST_OPERATIONS = {"xi.isnull"}
-ASSERT_CONDITION_OPERATIONS = {"xi.assert", "xi.assert.eq", "xi.assert.ne"}
+ASSERTION_OPERATIONS = {"xi.assertion"}
 OWNER_FORWARD_OPERATIONS = {"xi.owner.forward"}
 CODEGEN_OPAQUE_OPERATIONS = {"xi.codegen.opaque"}
 CODEGEN_COMPILER_FENCE_OPERATIONS = {"xi.codegen.compiler-fence"}
@@ -2451,93 +2450,73 @@ def verify_null_test_ratchet(root: Path, registry: dict) -> list[str]:
     return errors
 
 
-def verify_assert_condition_ratchet(root: Path, registry: dict) -> list[str]:
+def verify_assertion_ratchet(root: Path, registry: dict) -> list[str]:
     errors: list[str] = []
-    owner_name = "shared.assert-condition"
+    owner_name = "shared.assertion"
     marker = owner_macro_prefix(owner_name)
     owner = next((row for row in registry.get("owners", [])
                   if row.get("owner") == owner_name), None)
-    if owner is None or set(owner.get("operations", [])) != ASSERT_CONDITION_OPERATIONS:
-        errors.append("semantic owner registry has no exact shared.assert-condition family")
-    elif owner.get("cgen_adapter") != "xrt_assert_condition_failed":
-        errors.append("semantic owner registry has no exact assertion CGen adapter")
+    if owner is None or set(owner.get("operations", [])) != ASSERTION_OPERATIONS:
+        errors.append("semantic owner registry has no exact shared.assertion family")
+    elif owner.get("cgen_adapter") != "xrt_assertion_fail":
+        errors.append("semantic owner registry has no assertion symbol projection")
 
-    core_text = (root / "src/shared/xr_assert_condition_core.h").read_text(
+    core_text = (root / "src/shared/xr_assertion_plan.h").read_text(
         encoding="utf-8", errors="strict")
-    for token in (f"{marker}_HI", f"{marker}_LO", "XR_ASSERT_CONDITION_OWNER_APPLY",
-                  "xr_assert_condition_failed_core"):
+    for token in ("XrAssertionPlan", "xr_assertion_classify_action_channels",
+                  "xr_assertion_failure_render", "XR_ASSERTION_FAILURE_CONFLICTING_CHANNELS"):
         if token not in core_text:
-            errors.append("src/shared/xr_assert_condition_core.h: assertion lacks stable owner")
+            errors.append("src/shared/xr_assertion_plan.h: typed assertion schema is incomplete")
             break
 
     vm_text = (root / "src/vm/xvm_dispatch_assert.inc.c").read_text(
         encoding="utf-8", errors="strict")
-    start = vm_text.find("vmcase(OP_ASSERT)")
-    end = vm_text.find("vmbreak;", start)
+    start = vm_text.find("vmcase(OP_ASSERTION)")
+    end = vm_text.find("vmcase(OP_ASSERTION_FILE)", start)
     vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
-    for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
-                  "XR_ASSERT_CONDITION_OWNER_APPLY", "xr_vm_is_truthy"):
+    for token in ("XrAssertionFailure", "xr_assertion_failure_render",
+                  "XR_ASSERTION_FAILURE_CONFLICTING_CHANNELS",
+                  f"{marker}_HI", f"{marker}_LO", "XR_ASSERTION_CONSUMER_GUARD"):
         if token not in vm_body:
-            errors.append("src/vm/xvm_dispatch_assert.inc.c: OP_ASSERT bypasses owner")
+            errors.append("src/vm/xvm_dispatch_assert.inc.c: OP_ASSERTION bypasses typed schema")
             break
-    if "negate ? truthy : !truthy" in vm_body:
-        errors.append("src/vm/xvm_dispatch_assert.inc.c: OP_ASSERT revived a private decision")
+    for retired in ("OP_ASSERT)", "OP_ASSERT_EQ", "OP_ASSERT_NE",
+                    "XR_ASSERT_CONDITION_OWNER_APPLY"):
+        if retired in vm_text:
+            errors.append(f"src/vm/xvm_dispatch_assert.inc.c: retired assertion path {retired}")
 
-    for opcode, expected, legacy in (("OP_ASSERT_EQ", "true", "if (!xr_value_deep_eq"),
-                                     ("OP_ASSERT_NE", "false", "if (xr_value_deep_eq")):
-        start = vm_text.find(f"vmcase({opcode})")
-        end = vm_text.find("vmbreak;", start)
-        vm_body = vm_text[start:end] if start >= 0 and end >= 0 else ""
-        for token in (f"{marker}_HI", f"{marker}_LO", "XR_SEM_CONSUMER_VM",
-                      "XR_ASSERT_CONDITION_OWNER_APPLY", "xr_value_deep_eq", expected):
-            if token not in vm_body:
-                errors.append(
-                    f"src/vm/xvm_dispatch_assert.inc.c: {opcode} bypasses assertion owner")
-                break
-        if legacy in vm_body:
-            errors.append(
-                f"src/vm/xvm_dispatch_assert.inc.c: {opcode} revived a private decision")
-
-    for relative, consumer in (("src/aot/xrt.h", "XR_SEM_CONSUMER_AOT_HOSTED"),
-                               ("src/aot/xrt_core_freestanding.h",
-                                "XR_SEM_CONSUMER_AOT_FREESTANDING")):
-        text = (root / relative).read_text(encoding="utf-8", errors="strict")
-        for token in ("xrt_assert_condition_failed", "XR_ASSERT_CONDITION_OWNER_APPLY",
-                      f"{marker}_HI", f"{marker}_LO", consumer):
-            if token not in text:
-                errors.append(f"{relative}: assertion adapter bypasses owner")
-                break
-
-    c90_text = (root / "src/aot/xrt_c90.h").read_text(encoding="utf-8", errors="strict")
-    for token in ("XR_ASSERT_CONDITION_C90", "#undef XR_ASSERT_CONDITION_C90",
-                  "xrt_assert_condition_failed", "xr_assert_condition_failed_core"):
-        if token not in c90_text:
-            errors.append("src/aot/xrt_c90.h: assertion mechanical adapter is incomplete")
+    hosted = (root / "src/aot/xrt_assertion.h").read_text(encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO", "xrt_assertion_fail",
+                  "xrt_assertion_action", "xrt_assertion_deep_equal"):
+        if token not in hosted:
+            errors.append("src/aot/xrt_assertion.h: hosted assertion binding is incomplete")
+            break
+    freestanding = (root / "src/aot/xrt_core_freestanding.h").read_text(
+        encoding="utf-8", errors="strict")
+    for token in (f"{marker}_HI", f"{marker}_LO",
+                  "XR_ASSERTION_CONSUMER_GUARD",
+                  "xrt_freestanding_assertion_fail",
+                  "xrt_freestanding_assertion_report",
+                  "xr_assertion_failure_render"):
+        if token not in freestanding:
+            errors.append("src/aot/xrt_core_freestanding.h: typed provider is incomplete")
             break
 
     cgen_text = (root / "src/aot/xi_cgen.c").read_text(encoding="utf-8", errors="strict")
-    resolver = extract_c_function(cgen_text, "cg_assert_condition_adapter_name") or ""
+    resolver = extract_c_function(cgen_text, "cg_assertion_adapter_id") or ""
     if (f"{marker}_HI" not in resolver or f"{marker}_LO" not in resolver or
-            "xr_semantic_owner_cgen_adapter" not in resolver):
-        errors.append("src/aot/xi_cgen.c: assertion does not resolve stable adapter")
+            "xr_semantic_owner_has_consumer" not in resolver or "strcmp" in resolver):
+        errors.append("src/aot/xi_cgen.c: assertion does not resolve a stable typed adapter")
     dispatch_text = (root / "src/aot/xi_cgen_dispatch_helpers.inc.c").read_text(
         encoding="utf-8", errors="strict")
-    body = extract_c_function(dispatch_text, "xicgen_assert") or ""
-    for token in ("cg_assert_condition_adapter_name", "xicgen_emit_assert_condition"):
+    body = extract_c_function(dispatch_text, "xicgen_assertion") or ""
+    for token in ("cg_assertion_adapter_id", "xi_assertion_plan",
+                  "CG_ASSERTION_ADAPTER_FREESTANDING"):
         if token not in body:
-            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_assert bypasses owner")
+            errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: XI_ASSERTION bypasses owner")
             break
-    if 'fprintf(out, "(%s("' in body:
-        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: xicgen_assert revived private decision")
-    for function, expected in (("xicgen_assert_eq", "true"),
-                               ("xicgen_assert_ne", "false")):
-        body = extract_c_function(dispatch_text, function) or ""
-        for token in ("cg_assert_condition_adapter_name", "(!%s(xrt_eq(",
-                      f"), {expected}) ?"):
-            if token not in body:
-                errors.append(
-                    f"src/aot/xi_cgen_dispatch_helpers.inc.c: {function} bypasses assertion owner")
-                break
+    if "strcmp(adapter" in body:
+        errors.append("src/aot/xi_cgen_dispatch_helpers.inc.c: assertion parses C symbol identity")
     return errors
 
 
@@ -4014,7 +3993,7 @@ def verify(root: Path, write: bool) -> list[str]:
         errors.extend(verify_enum_metadata_access_ratchet(root, registry))
         errors.extend(verify_cell_access_ratchet(root, registry))
         errors.extend(verify_null_test_ratchet(root, registry))
-        errors.extend(verify_assert_condition_ratchet(root, registry))
+        errors.extend(verify_assertion_ratchet(root, registry))
         errors.extend(verify_owner_forward_ratchet(root, registry))
         errors.extend(verify_codegen_opaque_ratchet(root, registry))
         errors.extend(verify_codegen_compiler_fence_ratchet(root, registry))

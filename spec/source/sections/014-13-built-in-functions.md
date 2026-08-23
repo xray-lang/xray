@@ -65,11 +65,9 @@ print(x is i64)                 // true
 | 函数 | 签名 | 说明 |
 |---|---|---|
 | `assert(cond, msg?)` | `(bool, string?) -> ()` | `cond` 为 false 时抛异常 |
-| `assert_true(cond)` | `(bool) -> ()` | 等价 `assert(cond)` |
-| `assert_false(cond)` | `(bool) -> ()` | 等价 `assert(!cond)` |
-| `assert_eq(a, b)` | `(T, T) -> ()` | 深相等断言 |
-| `assert_ne(a, b)` | `(T, T) -> ()` | 深不等断言 |
-| `assert_throws(fn)` | `(fn) -> ()` | 期望函数抛异常 |
+| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | 同一静态类型的值深相等 |
+| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 typed error |
+| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | 仅期望 panic |
 
 ### 13.6 容器构造与静态函数
 
@@ -151,11 +149,9 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | Function | Signature | Description |
 |---|---|---|
 | `assert(cond, msg?)` | `(bool, string?) -> ()` | throws when `cond` is false |
-| `assert_true(cond)` | `(bool) -> ()` | equivalent to `assert(cond)` |
-| `assert_false(cond)` | `(bool) -> ()` | equivalent to `assert(!cond)` |
-| `assert_eq(a, b)` | `(T, T) -> ()` | deep-equal assertion |
-| `assert_ne(a, b)` | `(T, T) -> ()` | deep-not-equal assertion |
-| `assert_throws(fn)` | `(fn) -> ()` | expects the function to throw |
+| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | deep equality for one static type |
+| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | expects only a typed error |
+| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | expects only a panic |
 
 ### 13.6 Container Constructors and Static Functions
 

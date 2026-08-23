@@ -34,11 +34,10 @@ in `xr_truthy_core_eval`. Removing a declared production binding, changing its
 stable ID marker, or reviving a private truthiness decision fails the owner
 ratchet.
 
-`shared.assert-condition` owns canonical `xi.assert` after truthiness has been
-classified. VM, hosted AOT, freestanding AOT, and CGen consume the same
-expected-true/expected-false failure decision. Error construction, diagnostic
-printing, abort, and trap transport remain backend adapters; `assert_eq`,
-`assert_ne`, and `assert_throws` remain outside this owner.
+`shared.assertion` owns the typed `xi.assertion` plan, action-channel
+classification, failure schema, renderer, and target bindings. VM and AOT
+consume that plan directly; retired condition/equality opcodes and source-name
+switches are not semantic fallbacks.
 
 `primitive.type-identity` owns canonical `xi.typeid`. VM, runtime, hosted AOT,
 freestanding AOT, and CGen consume the generated owner ID and declared consumer
@@ -107,9 +106,9 @@ Generated C may not ask the host compiler to rediscover target layout through
 
 ## Digest anchors
 
-anchor-sha256: contracts/semantic-owners.toml da59d22dc919a7ba21a1b5370cf27a70b06ef88df4314480fa64b45edb40fba8
-anchor-sha256: contracts/semantic-owner-registry.json 6bb58be4ddfd0fa5aa3f2aa7711b2e73965420c6932f1dc0b66a5da2b44d783d
+anchor-sha256: contracts/semantic-owners.toml a32587b98c26b76a01d1483716eb278f653ee35997e604c099e61eba8f49b677
+anchor-sha256: contracts/semantic-owner-registry.json f3619cab5cb4d4a8546346efeed247fa13989dc1e58338cc3605f70b4c2c4932
 anchor-sha256: contracts/hof-shape-matrix.toml e64c5c47454ee0ab56b28086cdded0dd7e962d89cc6bf72b37ba2677a715fbf7
-anchor-sha256: contracts/shared-core-inventory.json 3b6619b7e186a5aa6c7a00a22e0cc1c0862b9d78e356c9911bc75236eb03c55f
-anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h f8b0f54d104bba0113daf72209377d43f4bb6ba1db9281227e063225bfdf9186
-anchor-sha256: scripts/check_semantic_owners.py e4f615d91b5874e218059055190c689ae7831261005657dbd228a89b9d8e2ca3
+anchor-sha256: contracts/shared-core-inventory.json 6ae51451a3d13ca6abf2a3b95ba6a8bf7c55354b10e8bf3c76e15cca738b821a
+anchor-sha256: src/shared/xr_semantic_owner_ids_gen.h c28f5e86cd9ce6d8f12fa0fcde94c16710ddc330732a350116dff491c9b2707e
+anchor-sha256: scripts/check_semantic_owners.py 031caa25352b325a182ea7d52b49b293277ff6e8f1df707cc982c1d61da9513e

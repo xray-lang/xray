@@ -5844,13 +5844,13 @@ TestDecl ::= '@test' FnDecl
 ```xray
 @test
 fn test_addition() {
-    assert_eq(1 + 1, 2)
+    assertEqual(1 + 1, 2)
 }
 
 @test
 fn test_with_assertions() {
     var result = compute()
-    assert_eq(result, 42)
+    assertEqual(result, 42)
     assert(result > 0)
 }
 ```
@@ -5881,12 +5881,12 @@ Xray provides assertion functions as **global builtins** (no `import test` neede
 | Function | Semantics |
 |--|--|
 | `assert(cond, msg?)` | throws when `cond` is false |
-| `assert_eq(a, b)` | prints both values when `a == b` fails |
-| `assert_ne(a, b)` | `a != b` |
-| `assert_true(cond)` / `assert_false(cond)` | equivalent to `assert(cond)` / `assert(!cond)` |
-| `assert_throws(fn)` | expects `fn()` to throw |
+| `assertEqual(a, b, msg?)` | deep-equal values of the same static type; renders both on failure |
+| `assertThrows(action, msg?)` | passes only when `action()` returns a typed error |
+| `assertPanics(action, msg?)` | passes only when `action()` panics |
 
-> **Naming consistency**: all assertion functions are `snake_case` (`assert_eq`, not `assertEq`).
+`assert` accepts only `bool`; use `assert(!cond)` for a negative boolean condition. Typed
+errors and panics are distinct failure channels and their assertions are not interchangeable.
 
 ### 12.4 Async Tests
 
@@ -5897,7 +5897,7 @@ A `@test` function body may use `go` / `await` / `await all` / `await any`:
 fn test_async_fetch() {
     var task = go fetch_data("http://...")
     var result = await task
-    assert_eq(result.status, 200)
+    assertEqual(result.status, 200)
 }
 ```
 
@@ -6018,11 +6018,9 @@ Coroutine launch and waiting are syntax, not global functions: `go`, `await`, `a
 | Function | Signature | Description |
 |---|---|---|
 | `assert(cond, msg?)` | `(bool, string?) -> ()` | throws when `cond` is false |
-| `assert_true(cond)` | `(bool) -> ()` | equivalent to `assert(cond)` |
-| `assert_false(cond)` | `(bool) -> ()` | equivalent to `assert(!cond)` |
-| `assert_eq(a, b)` | `(T, T) -> ()` | deep-equal assertion |
-| `assert_ne(a, b)` | `(T, T) -> ()` | deep-not-equal assertion |
-| `assert_throws(fn)` | `(fn) -> ()` | expects the function to throw |
+| `assertEqual(a, b, msg?)` | `(T, T, string?) -> ()` | deep equality for one static type |
+| `assertThrows(action, msg?)` | `(() -> any, string?) -> ()` | expects only a typed error |
+| `assertPanics(action, msg?)` | `(() -> any, string?) -> ()` | expects only a panic |
 
 ### 13.6 Container Constructors and Static Functions
 

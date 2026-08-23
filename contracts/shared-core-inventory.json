@@ -100,14 +100,13 @@
     },
     {
       "contains_tagged_value": false,
-      "header": "src/shared/xr_assert_condition_core.h",
-      "id": "assert-condition",
+      "header": "src/shared/xr_assertion_core.h",
+      "id": "assertion",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xrt.h",
-        "src/aot/xrt_c90.h",
+        "src/aot/xrt_assertion.h",
         "src/aot/xrt_core_freestanding.h",
-        "src/vm/xvm_internal.h"
+        "src/vm/xvm.c"
       ],
       "profiles": [
         "vm",
@@ -115,14 +114,10 @@
         "hosted",
         "freestanding"
       ],
-      "representation": "native",
-      "signatures": [
-        "xr_assert_condition_failed_core"
-      ],
+      "representation": "typed-plan",
+      "signatures": [],
       "status": "production",
-      "test_callers": [
-        "tests/unit/stdlib/test_assert_condition_core.c"
-      ]
+      "test_callers": []
     },
     {
       "contains_tagged_value": false,
@@ -1692,7 +1687,6 @@
         "src/aot/xrt_value.h",
         "src/ir/xi_emit.c",
         "src/runtime/value/xvalue_truthy.c",
-        "src/shared/xr_assert_condition_core.h",
         "src/vm/xvm_internal.h"
       ],
       "profiles": [

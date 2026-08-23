@@ -62,7 +62,7 @@ SOURCE_UNKNOWN_TYPE_RE = re.compile(
 REMOVED_UNKNOWN_DIAGNOSTIC_RE = re.compile(r"'unknown' type has been removed")
 UNKNOWN_IDENTIFIER_GUARD_RE = re.compile(
     r"\b(?:var|const|let)\s+unknown\b|scan_single\(\"unknown\"\)|"
-    r"\bassert_eq\s*\(\s*unknown\b"
+    r"\bassertEqual\s*\(\s*unknown\b"
 )
 ERROR_TYPE_RECOVERY_RE = re.compile(
     r"\b(?:XR_TREF_ERROR|xr_tref_error|XR_KIND_ERROR|xr_type_new_error)\b"

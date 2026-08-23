@@ -54,7 +54,7 @@ static const XmcpPromptDef PROMPTS[] = {
      {{"description", "Description of what the concurrent code should do", true}}},
     {"write-test",
      "Generate @test functions for the given Xray code. "
-     "Uses assert_eq, assert_true, assert_throws, etc.",
+     "Uses assert, assertEqual, assertThrows, and assertPanics.",
      1,
      {{"code", "Xray source code to write tests for", true}}},
 };
@@ -85,7 +85,7 @@ static const char SYSTEM_PREAMBLE[] =
     "- OOP: class (extends), struct (value type), interface (implements), "
     "enum\n"
     "- Generics: class Box<T>, fn map<T,U>(...)\n"
-    "- Testing: @test annotation, assert_eq/assert_true/assert_throws\n"
+    "- Testing: @test annotation, assert/assertEqual/assertThrows/assertPanics\n"
     "- Modules: import http/json/time/math/io/os/net/ws/crypto etc.\n\n";
 
 static const char CODE_REVIEW_SYSTEM[] =
@@ -135,9 +135,9 @@ static const char WRITE_TEST_SYSTEM[] =
     "Generate @test functions for the given Xray code.\n"
     "1. Use @test annotation before each test function\n"
     "2. Test function signature: fn test_xxx() { ... }\n"
-    "3. Use assert_eq(actual, expected) for equality\n"
-    "4. Use assert_true(cond) / assert_false(cond) for booleans\n"
-    "5. Use assert_throws(fn() { ... }) for error cases\n"
+    "3. Use assertEqual(actual, expected) for same-type deep equality\n"
+    "4. Use assert(cond) or assert(!cond) for booleans\n"
+    "5. Use assertThrows(fn() { ... }) for typed errors and assertPanics for panics\n"
     "6. Cover normal cases, edge cases, and error cases\n"
     "7. Test names should be descriptive\n";
 

@@ -8091,7 +8091,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "testing",
         .title = "Testing",
-        .aliases_csv = "test,assert,assert_eq,unit_test",
+        .aliases_csv = "test,assert,assertEqual,assertThrows,assertPanics,unit_test",
         .body =
             "[Language reference](#12-\xe6\xb5\x8b\xe8\xaf\x95\xe7\xb3\xbb\xe7\xbb\x9f-testing)\n"
             "\n"
@@ -8101,13 +8101,13 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```xray\n"
             "@test\n"
             "fn test_addition() {\n"
-            "    assert_eq(1 + 1, 2)\n"
+            "    assertEqual(1 + 1, 2)\n"
             "}\n"
             "\n"
             "@test\n"
             "fn test_with_assertions() {\n"
             "    var result = compute()\n"
-            "    assert_eq(result, 42)\n"
+            "    assertEqual(result, 42)\n"
             "    assert(result > 0)\n"
             "}\n"
             "```\n"
@@ -8118,7 +8118,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "fn test_async_fetch() {\n"
             "    var task = go fetch_data(\"http://...\")\n"
             "    var result = await task\n"
-            "    assert_eq(result.status, 200)\n"
+            "    assertEqual(result.status, 200)\n"
             "}\n"
             "```\n"
             "\n"
@@ -10729,13 +10729,13 @@ XR_DATADEF const char xmcp_generated_cheatsheet[] =
     "```xray\n"
     "@test\n"
     "fn test_addition() {\n"
-    "    assert_eq(1 + 1, 2)\n"
+    "    assertEqual(1 + 1, 2)\n"
     "}\n"
     "\n"
     "@test\n"
     "fn test_with_assertions() {\n"
     "    var result = compute()\n"
-    "    assert_eq(result, 42)\n"
+    "    assertEqual(result, 42)\n"
     "    assert(result > 0)\n"
     "}\n"
     "```\n"

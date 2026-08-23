@@ -14,9 +14,9 @@ owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
 [[core]]
-id = "assert-condition"
-header = "src/shared/xr_assert_condition_core.h"
-representation = "native"
+id = "assertion"
+header = "src/shared/xr_assertion_core.h"
+representation = "typed-plan"
 owner = "shared-kernel"
 profiles = ["vm", "aot", "hosted", "freestanding"]
 
@@ -532,20 +532,18 @@ fixtures = [
 ]
 
 [[operation]]
-id = "assert-condition"
-observable_contract = "src/shared/xr_assert_condition_core.h"
-semantic_kernel = "src/shared/xr_assert_condition_core.h"
+id = "assertion"
+observable_contract = "src/shared/xr_assertion_plan.h"
+semantic_kernel = "src/shared/xr_assertion_core.h"
 vm_adapter = "src/vm/xvm_dispatch_assert.inc.c"
-aot_adapter = "src/aot/xrt.h"
-typed_plan = "shared.assert-condition"
+aot_adapter = "src/aot/xrt_assertion.h"
+typed_plan = "shared.assertion"
 runtime_fallback = "none"
 fixtures = [
-  "tests/unit/stdlib/test_assert_condition_core.c",
-  "tests/unit/aot/test_xrt_assert_condition_owner_freestanding.c",
-  "tests/unit/aot/test_xrt_assert_condition_owner_c90.c",
-  "tests/unit/ir/test_xi_cgen.c",
-  "tests/unit/vm/test_vm_exception.c",
-  "tests/aot/filetests/link/freestanding_assert_hook.xr",
+  "tests/unit/ir/test_xi_intrinsic.c",
+  "tests/unit/aot/test_xrt_assertion.c",
+  "tests/unit/aot/test_xrt_assertion_freestanding.c",
+  "tests/unit/fixtures/assertion/deep_equality_vm.xr",
 ]
 
 [[operation]]
@@ -1001,7 +999,7 @@ fixtures = [
 
 [[operation_family]]
 id = "arithmetic-conversion"
-canonical_cores = ["arithmetic", "assert-condition", "bits", "null-test", "numeric-conversion", "numeric", "raw-scalar"]
+canonical_cores = ["arithmetic", "assertion", "bits", "null-test", "numeric-conversion", "numeric", "raw-scalar"]
 duplicate_sources = []
 disposition = "single-owner"
 

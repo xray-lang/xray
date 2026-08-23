@@ -34,12 +34,10 @@ API_ID_FIELDS = ("category", "namespace", "name", "kind")
 
 
 GLOBAL_SIGNATURES = {
-    "assert": "(value: any, ...): ()",
-    "assert_eq": "(left: any, right: any, ...): ()",
-    "assert_ne": "(left: any, right: any, ...): ()",
-    "assert_true": "(value: any): ()",
-    "assert_false": "(value: any): ()",
-    "assert_throws": "(fn: function, ...): ()",
+    "assert": "(condition: bool, message?: string): ()",
+    "assertEqual": "(actual: T, expected: T, message?: string): ()",
+    "assertThrows": "(action: () -> any, message?: string): ()",
+    "assertPanics": "(action: () -> any, message?: string): ()",
     "string": "(value: any): string",
     "bool": "(value: any): bool",
     "char": "(value: any): char",
@@ -57,12 +55,10 @@ GLOBAL_SIGNATURES = {
 }
 
 GLOBAL_SUMMARIES = {
-    "assert": "Assert that a value is truthy.",
-    "assert_eq": "Assert equality in tests.",
-    "assert_ne": "Assert inequality in tests.",
-    "assert_true": "Assert that a value is true.",
-    "assert_false": "Assert that a value is false.",
-    "assert_throws": "Assert that a callable throws.",
+    "assert": "Assert that a bool condition is true.",
+    "assertEqual": "Assert deep equality for values of the same static type.",
+    "assertThrows": "Assert that an action returns a typed error.",
+    "assertPanics": "Assert that an action panics.",
     "string": "Convert a value to string.",
     "bool": "Convert a value to bool.",
     "char": "Construct a char from a codepoint.",
@@ -1069,6 +1065,26 @@ def collect_globals(root: Path) -> list[dict[str, Any]]:
     text = path.read_text(encoding="utf-8")
     out: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
+    core_path = root / "src/shared/xr_core_intrinsic.def"
+    core_text = core_path.read_text(encoding="utf-8")
+    for match in re.finditer(
+        r"XR_CORE_INTRINSIC\(\s*[A-Z0-9_]+\s*,\s*[0-9]+\s*,\s*\"([^\"]+)\"",
+        core_text,
+    ):
+        name = match.group(1)
+        seen.add(("function", name))
+        out.append(
+            item(
+                category="global-builtin",
+                namespace="global",
+                name=name,
+                kind="function",
+                signature=GLOBAL_SIGNATURES.get(name, ""),
+                summary=GLOBAL_SUMMARIES.get(name, ""),
+                source=rel(root, core_path),
+                line=line_for_offset(core_text, match.start()),
+            )
+        )
     for kind, pattern in (
         ("function", r'register_builtin_func\s*\(\s*analyzer\s*,\s*"([^"]+)"'),
         ("module", r'register_builtin_module\s*\(\s*analyzer\s*,\s*"([^"]+)"'),

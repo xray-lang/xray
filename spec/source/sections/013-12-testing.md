@@ -21,13 +21,13 @@ TestDecl ::= '@test' FnDecl
 ```xray @id=testing-basic
 @test
 fn test_addition() {
-    assert_eq(1 + 1, 2)
+    assertEqual(1 + 1, 2)
 }
 
 @test
 fn test_with_assertions() {
     var result = compute()
-    assert_eq(result, 42)
+    assertEqual(result, 42)
     assert(result > 0)
 }
 ```
@@ -58,12 +58,12 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 | 函数 | 语义 |
 |--|--|
 | `assert(cond, msg?)` | `cond` 为 false 时抛异常 |
-| `assert_eq(a, b)` | `a == b` 失败时输出两值 |
-| `assert_ne(a, b)` | `a != b` |
-| `assert_true(cond)` / `assert_false(cond)` | 等价 `assert(cond)` / `assert(!cond)` |
-| `assert_throws(fn)` | 期望 `fn()` 抛异常 |
+| `assertEqual(a, b, msg?)` | 同一静态类型的两个值深相等，否则输出两值 |
+| `assertThrows(action, msg?)` | 仅当 `action()` 返回 typed error 时通过 |
+| `assertPanics(action, msg?)` | 仅当 `action()` 触发 panic 时通过 |
 
-> **命名一致性**：所有断言函数为 `snake_case`（`assert_eq`，不是 `assertEq`）。
+`assert` 只接受 `bool`；用 `assert(!cond)` 表达反向布尔条件。typed error 与 panic
+是互斥失败通道，错误通道的断言不能互换。
 
 ### 12.4 异步测试
 
@@ -74,7 +74,7 @@ xray 把断言函数作为**全局内置**（不需 `import test`）。完整签
 fn test_async_fetch() {
     var task = go fetch_data("http://...")
     var result = await task
-    assert_eq(result.status, 200)
+    assertEqual(result.status, 200)
 }
 ```
 
@@ -153,13 +153,13 @@ TestDecl ::= '@test' FnDecl
 ```xray @id=testing-basic
 @test
 fn test_addition() {
-    assert_eq(1 + 1, 2)
+    assertEqual(1 + 1, 2)
 }
 
 @test
 fn test_with_assertions() {
     var result = compute()
-    assert_eq(result, 42)
+    assertEqual(result, 42)
     assert(result > 0)
 }
 ```
@@ -190,12 +190,12 @@ Xray provides assertion functions as **global builtins** (no `import test` neede
 | Function | Semantics |
 |--|--|
 | `assert(cond, msg?)` | throws when `cond` is false |
-| `assert_eq(a, b)` | prints both values when `a == b` fails |
-| `assert_ne(a, b)` | `a != b` |
-| `assert_true(cond)` / `assert_false(cond)` | equivalent to `assert(cond)` / `assert(!cond)` |
-| `assert_throws(fn)` | expects `fn()` to throw |
+| `assertEqual(a, b, msg?)` | deep-equal values of the same static type; renders both on failure |
+| `assertThrows(action, msg?)` | passes only when `action()` returns a typed error |
+| `assertPanics(action, msg?)` | passes only when `action()` panics |
 
-> **Naming consistency**: all assertion functions are `snake_case` (`assert_eq`, not `assertEq`).
+`assert` accepts only `bool`; use `assert(!cond)` for a negative boolean condition. Typed
+errors and panics are distinct failure channels and their assertions are not interchangeable.
 
 ### 12.4 Async Tests
 
@@ -206,7 +206,7 @@ A `@test` function body may use `go` / `await` / `await all` / `await any`:
 fn test_async_fetch() {
     var task = go fetch_data("http://...")
     var result = await task
-    assert_eq(result.status, 200)
+    assertEqual(result.status, 200)
 }
 ```
 

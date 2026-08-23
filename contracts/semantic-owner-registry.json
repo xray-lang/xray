@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "xisa/xi/ops.def",
-  "canonical_fingerprint": "beef5da6a8564c74d8d4550a46608dff5c3fda7c6b1a6b427b29896c00f22c1b",
+  "canonical_fingerprint": "94b32326aeb9aacd2d98d11ccc25aa6c698851b1651006574c7eafff07d79e5c",
   "consumers": {
     "semantic-plan": "0x00000001",
     "vm": "0x00000002",
@@ -112,15 +112,13 @@
       ]
     },
     {
-      "owner": "shared.assert-condition",
-      "owner_id": "524c3594d4cf218e802a66b7ec4a66be",
-      "owner_id_hi": "0x524c3594d4cf218e",
-      "owner_id_lo": "0x802a66b7ec4a66be",
+      "owner": "shared.assertion",
+      "owner_id": "ec9c80b9ce4638216475b4adf79e4de5",
+      "owner_id_hi": "0xec9c80b9ce463821",
+      "owner_id_lo": "0x6475b4adf79e4de5",
       "category": "shared-semantic-kernel",
       "operations": [
-        "xi.assert",
-        "xi.assert.eq",
-        "xi.assert.ne"
+        "xi.assertion"
       ],
       "consumers": [
         "semantic-plan",
@@ -130,7 +128,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_assert_condition_failed",
+      "cgen_adapter": "xrt_assertion_fail",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -140,22 +138,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "XR_ASSERT_CONDITION_OWNER_APPLY"
+          "symbol": "xr_assertion_failure_render"
         },
         {
           "consumer": "aot-hosted",
-          "path": "src/aot/xrt.h",
-          "symbol": "xrt_assert_condition_failed"
+          "path": "src/aot/xrt_assertion.h",
+          "symbol": "xrt_assertion_fail"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_assert_condition_failed"
+          "symbol": "xrt_freestanding_assertion_fail"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_assert_condition_adapter_name"
+          "symbol": "cg_assertion_adapter_id"
         }
       ]
     },
@@ -2189,28 +2187,6 @@
       "category": "declarative-primitive",
       "operations": [
         "xi.as"
-      ],
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        }
-      ]
-    },
-    {
-      "owner": "xi.assert.throws",
-      "owner_id": "dc1a325dbbe92bd3721d6ad82a1a7e27",
-      "owner_id_hi": "0xdc1a325dbbe92bd3",
-      "owner_id_lo": "0x721d6ad82a1a7e27",
-      "category": "declarative-primitive",
-      "operations": [
-        "xi.assert.throws"
       ],
       "consumers": [
         "semantic-plan"
@@ -11273,14 +11249,14 @@
       ]
     },
     {
-      "operation": "xi.assert",
-      "operation_id": "9c7f2ea1a09a1c13e2029a7da4c92d2e",
-      "operation_id_hi": "0x9c7f2ea1a09a1c13",
-      "operation_id_lo": "0xe2029a7da4c92d2e",
-      "owner": "shared.assert-condition",
-      "owner_id": "524c3594d4cf218e802a66b7ec4a66be",
-      "owner_id_hi": "0x524c3594d4cf218e",
-      "owner_id_lo": "0x802a66b7ec4a66be",
+      "operation": "xi.assertion",
+      "operation_id": "15d561afd9918197d01d0c62f017f91a",
+      "operation_id_hi": "0x15d561afd9918197",
+      "operation_id_lo": "0xd01d0c62f017f91a",
+      "owner": "shared.assertion",
+      "owner_id": "ec9c80b9ce4638216475b4adf79e4de5",
+      "owner_id_hi": "0xec9c80b9ce463821",
+      "owner_id_lo": "0x6475b4adf79e4de5",
       "category": "shared-semantic-kernel",
       "consumers": [
         "semantic-plan",
@@ -11290,7 +11266,7 @@
         "cgen"
       ],
       "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_assert_condition_failed",
+      "cgen_adapter": "xrt_assertion_fail",
       "production_bindings": [
         {
           "consumer": "semantic-plan",
@@ -11300,139 +11276,22 @@
         {
           "consumer": "vm",
           "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "XR_ASSERT_CONDITION_OWNER_APPLY"
+          "symbol": "xr_assertion_failure_render"
         },
         {
           "consumer": "aot-hosted",
-          "path": "src/aot/xrt.h",
-          "symbol": "xrt_assert_condition_failed"
+          "path": "src/aot/xrt_assertion.h",
+          "symbol": "xrt_assertion_fail"
         },
         {
           "consumer": "aot-freestanding",
           "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_assert_condition_failed"
+          "symbol": "xrt_freestanding_assertion_fail"
         },
         {
           "consumer": "cgen",
           "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_assert_condition_adapter_name"
-        }
-      ]
-    },
-    {
-      "operation": "xi.assert.eq",
-      "operation_id": "d0d310609a9f09c39bd188df5f5f5d2a",
-      "operation_id_hi": "0xd0d310609a9f09c3",
-      "operation_id_lo": "0x9bd188df5f5f5d2a",
-      "owner": "shared.assert-condition",
-      "owner_id": "524c3594d4cf218e802a66b7ec4a66be",
-      "owner_id_hi": "0x524c3594d4cf218e",
-      "owner_id_lo": "0x802a66b7ec4a66be",
-      "category": "shared-semantic-kernel",
-      "consumers": [
-        "semantic-plan",
-        "vm",
-        "aot-hosted",
-        "aot-freestanding",
-        "cgen"
-      ],
-      "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_assert_condition_failed",
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        },
-        {
-          "consumer": "vm",
-          "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "XR_ASSERT_CONDITION_OWNER_APPLY"
-        },
-        {
-          "consumer": "aot-hosted",
-          "path": "src/aot/xrt.h",
-          "symbol": "xrt_assert_condition_failed"
-        },
-        {
-          "consumer": "aot-freestanding",
-          "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_assert_condition_failed"
-        },
-        {
-          "consumer": "cgen",
-          "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_assert_condition_adapter_name"
-        }
-      ]
-    },
-    {
-      "operation": "xi.assert.ne",
-      "operation_id": "468c8d5b92cf67ae7989d7d04cd4740e",
-      "operation_id_hi": "0x468c8d5b92cf67ae",
-      "operation_id_lo": "0x7989d7d04cd4740e",
-      "owner": "shared.assert-condition",
-      "owner_id": "524c3594d4cf218e802a66b7ec4a66be",
-      "owner_id_hi": "0x524c3594d4cf218e",
-      "owner_id_lo": "0x802a66b7ec4a66be",
-      "category": "shared-semantic-kernel",
-      "consumers": [
-        "semantic-plan",
-        "vm",
-        "aot-hosted",
-        "aot-freestanding",
-        "cgen"
-      ],
-      "consumer_bits": "0x0000001f",
-      "cgen_adapter": "xrt_assert_condition_failed",
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
-        },
-        {
-          "consumer": "vm",
-          "path": "src/vm/xvm_dispatch_assert.inc.c",
-          "symbol": "XR_ASSERT_CONDITION_OWNER_APPLY"
-        },
-        {
-          "consumer": "aot-hosted",
-          "path": "src/aot/xrt.h",
-          "symbol": "xrt_assert_condition_failed"
-        },
-        {
-          "consumer": "aot-freestanding",
-          "path": "src/aot/xrt_core_freestanding.h",
-          "symbol": "xrt_assert_condition_failed"
-        },
-        {
-          "consumer": "cgen",
-          "path": "src/aot/xi_cgen.c",
-          "symbol": "cg_assert_condition_adapter_name"
-        }
-      ]
-    },
-    {
-      "operation": "xi.assert.throws",
-      "operation_id": "dc1a325dbbe92bd3721d6ad82a1a7e27",
-      "operation_id_hi": "0xdc1a325dbbe92bd3",
-      "operation_id_lo": "0x721d6ad82a1a7e27",
-      "owner": "xi.assert.throws",
-      "owner_id": "dc1a325dbbe92bd3721d6ad82a1a7e27",
-      "owner_id_hi": "0xdc1a325dbbe92bd3",
-      "owner_id_lo": "0x721d6ad82a1a7e27",
-      "category": "declarative-primitive",
-      "consumers": [
-        "semantic-plan"
-      ],
-      "consumer_bits": "0x00000001",
-      "cgen_adapter": null,
-      "production_bindings": [
-        {
-          "consumer": "semantic-plan",
-          "path": "src/plan/semantic/xr_semantic_ops.c",
-          "symbol": "xr_semantic_op_contract"
+          "symbol": "cg_assertion_adapter_id"
         }
       ]
     },
