@@ -253,7 +253,9 @@ static int run_hooks(XrVMRuntime *X, XrTestFunc *hooks, int count) {
 }
 
 static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
-                                     const char *filepath, XrModuleGraph **out_graph,
+                                     const char *filepath,
+                                     const XrModuleIdentityAuthority *entry_authority,
+                                     XrModuleGraph **out_graph,
                                      XaAnalyzer **out_analyzer, char *err_buf, size_t err_buf_sz) {
     if (out_graph)
         *out_graph = NULL;
@@ -272,13 +274,9 @@ static int prepare_test_module_graph(XrVMRuntime *X, XrCompilerSession *session,
     }
 
     char *graph_err = NULL;
-    XrModuleIdentityAuthority authority = {0};
-    char *authority_root = NULL;
-    int graph_rc = xr_module_identity_script_authority_from_source(
-                       filepath, &authority, &authority_root)
-                       ? xr_module_graph_build(graph, filepath, &authority, &graph_err)
+    int graph_rc = entry_authority
+                       ? xr_module_graph_build(graph, filepath, entry_authority, &graph_err)
                        : -1;
-    xr_free(authority_root);
     if (graph_rc != 0) {
         snprintf(err_buf, err_buf_sz, "%s", graph_err ? graph_err : "module graph build failed");
         xr_free(graph_err);
@@ -382,6 +380,8 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
     xr_module_system_init_with_script(X, filepath);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
+    XrModuleIdentityAuthority entry_authority = {0};
+    char *entry_authority_root = NULL;
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
     XrCompilerSessionOperationScope compile_operation = {0};
@@ -393,8 +393,17 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         result->errors = 1;
         goto cleanup_graph;
     }
-    if (prepare_test_module_graph(X, session, filepath, &active_graph, &active_graph_analyzer,
-                                  graph_error, sizeof(graph_error)) != 0) {
+    if (!xr_module_identity_script_authority_from_source(
+            filepath, &entry_authority, &entry_authority_root)) {
+        result->has_error = true;
+        snprintf(result->error_msg, sizeof(result->error_msg),
+                 "cannot establish test module identity authority");
+        result->errors = 1;
+        goto cleanup_graph;
+    }
+    if (prepare_test_module_graph(X, session, filepath, &entry_authority, &active_graph,
+                                  &active_graph_analyzer, graph_error,
+                                  sizeof(graph_error)) != 0) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "%s",
                  graph_error[0] ? graph_error : "module graph preparation failed");
@@ -419,9 +428,7 @@ static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFile
         goto cleanup_source;
     }
 
-    const XrModuleIdentityAuthority *entry_authority =
-        &active_graph->specs[active_graph->entry_index].authority;
-    XrProto *proto = xr_compile_ast_with_source(session, ast, filepath, entry_authority);
+    XrProto *proto = xr_compile_ast_with_source(session, ast, filepath, &entry_authority);
     if (!proto) {
         result->has_error = true;
         snprintf(result->error_msg, sizeof(result->error_msg), "compile failed");
@@ -566,6 +573,7 @@ cleanup_graph:
     }
     if (active_graph)
         xr_module_graph_free(active_graph);
+    xr_free(entry_authority_root);
     xray_vm_delete(X);
 }
 
