@@ -57,6 +57,7 @@
 #include "../ir/xi_opt.h"
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
+#include "../plan/target/xr_target_capability.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_escape.h"
 #include "../ir/xi_range.h"
@@ -5307,22 +5308,65 @@ static const char *cg_truthiness_adapter_name(XiCgenCtx *ctx) {
     return adapter;
 }
 
-static const char *cg_assert_condition_adapter_name(XiCgenCtx *ctx) {
-    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,
-                                        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO,
+typedef enum CgAssertionAdapterId {
+    CG_ASSERTION_ADAPTER_INVALID = 0,
+    CG_ASSERTION_ADAPTER_HOSTED = 1,
+    CG_ASSERTION_ADAPTER_FREESTANDING = 2,
+} CgAssertionAdapterId;
+
+/* Semantic selection is sealed by the stable owner and target profile.  The
+ * C symbol in the generated owner table is a final projection only; it is
+ * never parsed or compared to recover assertion identity. */
+static CgAssertionAdapterId cg_assertion_adapter_id(XiCgenCtx *ctx) {
+    if (!xr_semantic_owner_has_consumer(XR_SEM_OWNER_ID_SHARED_ASSERTION_HI,
+                                        XR_SEM_OWNER_ID_SHARED_ASSERTION_LO,
                                         XR_SEM_CONSUMER_CGEN)) {
-        fprintf(stderr, "[xi_cgen] ERROR: assert-condition owner has no CGen consumer\n");
+        fprintf(stderr, "[xi_cgen] ERROR: assertion owner has no CGen consumer\n");
         cg_ctx_set_error(ctx);
-        return NULL;
+        return CG_ASSERTION_ADAPTER_INVALID;
     }
-    const char *adapter = xr_semantic_owner_cgen_adapter(
-        XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI, XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO);
-    if (!adapter || !adapter[0]) {
-        fprintf(stderr, "[xi_cgen] ERROR: assert-condition owner has no CGen adapter\n");
-        cg_ctx_set_error(ctx);
+    return ctx && ctx->freestanding_profile ? CG_ASSERTION_ADAPTER_FREESTANDING
+                                             : CG_ASSERTION_ADAPTER_HOSTED;
+}
+
+static const XrTargetPlan *cg_function_target_plan(XiCgenCtx *ctx,
+                                                   const XiFunc *function) {
+    if (!ctx || !function || !function->semantic_plan)
         return NULL;
+    const XrTargetPlan *match = NULL;
+    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
+        const CgValueEmissionRegistryEntry *entry =
+            &ctx->value_emission_registry[i];
+        if (entry->semantic_plan != function->semantic_plan)
+            continue;
+        if (match || !entry->target_plan ||
+            !xr_target_plan_is_verified(entry->target_plan))
+            return NULL;
+        match = entry->target_plan;
     }
-    return adapter;
+    return match;
+}
+
+static bool cg_freestanding_assertion_authorized(
+    XiCgenCtx *ctx, const XiFunc *function, const XrAssertionPlan *assertion) {
+    if (!assertion ||
+        (assertion->kind != XR_ASSERTION_KIND_CONDITION &&
+         assertion->kind != XR_ASSERTION_KIND_EQUAL))
+        return false;
+    const XrTargetPlan *target_plan =
+        cg_function_target_plan(ctx, function);
+    uint64_t capability_mask = 0;
+    if (!target_plan ||
+        !xr_target_plan_capability_mask(target_plan, &capability_mask))
+        return false;
+    const uint64_t required = XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+        xr_target_capability_mask(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+    return (capability_mask & required) == required &&
+           (capability_mask &
+            (xr_target_capability_mask(
+                 XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY) |
+             xr_target_capability_mask(
+                 XR_TARGET_CAPABILITY_PANIC_BOUNDARY))) == 0;
 }
 
 static const char *cg_owner_forward_adapter_name(XiCgenCtx *ctx) {
@@ -8409,10 +8453,6 @@ static bool cg_native_box_use_consumes_native_rep(XiCgenCtx *ctx, const XiFunc *
         return false;
 
     XiOp op = (XiOp) user->op;
-    if (op == XI_ASSERT && arg_index == 0 && user->nargs >= 1 && user->args[0] &&
-        user->args[0]->op == XI_BOX && user->args[0]->type &&
-        user->args[0]->type->kind == XR_KIND_BOOL)
-        return true;
     if (op == XI_EQ || op == XI_NE) {
         const XiValue *get = NULL;
         bool const_value = false;

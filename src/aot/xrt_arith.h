@@ -1051,7 +1051,9 @@ static inline XrValue xrt_value_to_string(XrValue v) {
         return v;
     XrValue sbv = xrt_strbuf_new();
     xrt_format_value(v, (xrt_strbuf_t *) sbv.ptr, 0);
-    return xrt_strbuf_finish(sbv);
+    XrValue rendered = xrt_strbuf_finish(sbv);
+    xrt_release(sbv);
+    return rendered;
 }
 
 /* =========================================================================

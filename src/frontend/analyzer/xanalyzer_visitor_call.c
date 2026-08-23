@@ -3089,6 +3089,31 @@ static AstNode *xa_call_unwrap_grouping(AstNode *node) {
     return node;
 }
 
+typedef enum XaAssertEqualContextKind {
+    XA_ASSERT_EQUAL_CONTEXT_NONE = 0,
+    XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL,
+    XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL,
+    XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL,
+} XaAssertEqualContextKind;
+
+/* Literal operands do not own a static T until the resolved SAME_T constraint
+ * supplies one.  Classify only expression shapes that are pure and can safely
+ * wait for the other operand's type; arbitrary expressions remain anchors and
+ * are always inferred in source order. */
+static XaAssertEqualContextKind xa_assert_equal_context_kind(AstNode *node) {
+    AstNode *direct = xa_call_unwrap_grouping(node);
+    if (direct && direct->type == AST_LITERAL_NULL)
+        return XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL;
+    AstNode *literal = xa_contextual_numeric_literal_node(node);
+    if (!literal)
+        return XA_ASSERT_EQUAL_CONTEXT_NONE;
+    if (literal->type == AST_UNARY_NEG)
+        literal = xa_call_unwrap_grouping(literal->as.unary.operand);
+    return literal && literal->type == AST_LITERAL_FLOAT
+               ? XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL
+               : XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL;
+}
+
 static bool xa_parallel_options_callee_is_parallel(XaInferContext *ctx, AstNode *callee) {
     callee = xa_call_unwrap_grouping(callee);
     if (!ctx || !callee)
@@ -7565,6 +7590,73 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         strcmp(math_member, "max") == 0 || strcmp(math_member, "clamp") == 0);
     bool math_first_arg_seen = false;
     bool math_int_shape = false;
+    bool core_assert_equal = fn_sym && fn_sym->is_builtin && fn_links &&
+                             fn_links->core_builtin_id == XR_CORE_BUILTIN_ASSERT_EQUAL;
+    XaAssertEqualContextKind assert_equal_context_kinds[2] = {
+        XA_ASSERT_EQUAL_CONTEXT_NONE,
+        XA_ASSERT_EQUAL_CONTEXT_NONE,
+    };
+    XrType *assert_equal_unanchored_type = NULL;
+    XrType *assert_equal_preinferred_second = NULL;
+    bool assert_equal_mixed_unanchored_numeric = false;
+    if (core_assert_equal && call->arg_count >= 2 && call->arguments[0] &&
+        call->arguments[1]) {
+        assert_equal_context_kinds[0] =
+            xa_assert_equal_context_kind(call->arguments[0]);
+        assert_equal_context_kinds[1] =
+            xa_assert_equal_context_kind(call->arguments[1]);
+        bool first_numeric = assert_equal_context_kinds[0] ==
+                                 XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL ||
+                             assert_equal_context_kinds[0] ==
+                                 XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL;
+        bool second_numeric = assert_equal_context_kinds[1] ==
+                                  XA_ASSERT_EQUAL_CONTEXT_INT_LITERAL ||
+                              assert_equal_context_kinds[1] ==
+                                  XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL;
+        if (first_numeric && second_numeric &&
+            assert_equal_context_kinds[0] == assert_equal_context_kinds[1]) {
+            assert_equal_unanchored_type =
+                assert_equal_context_kinds[0] == XA_ASSERT_EQUAL_CONTEXT_FLOAT_LITERAL
+                    ? xr_type_new_float(ctx->analyzer->isolate)
+                    : xr_type_new_int(ctx->analyzer->isolate);
+        } else if (first_numeric && second_numeric) {
+            /* Neither literal owns T, and unlike two literals from the same
+             * numeric family there is no unique exact default.  Analyze both
+             * independently so SAME_T rejects the mixed pair; never let the
+             * source order turn one literal into a widening authority. */
+            assert_equal_mixed_unanchored_numeric = true;
+        } else if (assert_equal_context_kinds[0] ==
+                       XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL &&
+                   assert_equal_context_kinds[1] ==
+                       XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL) {
+            assert_equal_unanchored_type = xr_type_new_null(ctx->analyzer->isolate);
+        }
+
+        /* When the first operand is a pure contextual literal and the second
+         * is the only anchor, infer that anchor once before visiting the
+         * literal.  Runtime evaluation remains left-to-right in lowering; the
+         * analyzer only delays a side-effect-free literal so argument order
+         * cannot change the SAME_T solution. */
+        if (assert_equal_context_kinds[0] != XA_ASSERT_EQUAL_CONTEXT_NONE &&
+            assert_equal_context_kinds[1] == XA_ASSERT_EQUAL_CONTEXT_NONE &&
+            call->arguments[1]->type != AST_SPREAD_EXPR) {
+            XrType *saved_expected = ctx->expected_type;
+            XrType *saved_from_signature = ctx->expected_from_signature;
+            bool saved_copy_view = ctx->allow_view_expr_for_copy;
+            ctx->expected_type = NULL;
+            ctx->expected_from_signature = NULL;
+            ctx->allow_view_expr_for_copy = false;
+            const char *parallel_callback_label =
+                xa_parallel_callback_label_for_plan(parallel_call_plan, 1);
+            XrParamMode param_mode = xa_call_param_mode(callee_type, 1);
+            XrCallArgAccess access = xa_call_arg_access(call, 1);
+            assert_equal_preinferred_second = xa_visit_call_arg_for_param_mode(
+                ctx, call->arguments[1], parallel_callback_label, access, param_mode);
+            ctx->allow_view_expr_for_copy = saved_copy_view;
+            ctx->expected_type = saved_expected;
+            ctx->expected_from_signature = saved_from_signature;
+        }
+    }
     int slot = 0;
     for (int i = 0; i < call->arg_count; i++) {
         AstNode *arg_node = call->arguments[i];
@@ -7666,10 +7758,32 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             ctx, fn_links, callee_type, call, effective_arg_types, slot, declared_param_type);
         XrType *saved_expected = ctx->expected_type;
         bool saved_copy_view = ctx->allow_view_expr_for_copy;
+        XrType *assert_equal_context_type = NULL;
+        XaAssertEqualContextKind assert_equal_context_kind =
+            core_assert_equal && slot >= 0 && slot < 2
+                ? assert_equal_context_kinds[slot]
+                : XA_ASSERT_EQUAL_CONTEXT_NONE;
+        if (assert_equal_context_kind != XA_ASSERT_EQUAL_CONTEXT_NONE &&
+            !assert_equal_mixed_unanchored_numeric) {
+            if (assert_equal_unanchored_type) {
+                assert_equal_context_type = assert_equal_unanchored_type;
+            } else if (slot == 0 && assert_equal_preinferred_second) {
+                assert_equal_context_type = assert_equal_preinferred_second;
+            } else if (slot == 1 && effective_arg_types && effective_arg_types[0]) {
+                assert_equal_context_type = effective_arg_types[0];
+            }
+            if (assert_equal_context_type && assert_equal_context_type->is_nullable &&
+                assert_equal_context_kind != XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL) {
+                assert_equal_context_type =
+                    xr_type_non_nullable(ctx->analyzer->isolate, assert_equal_context_type);
+            }
+        }
         if (math_preserves_numeric_shape && !math_first_arg_seen) {
             ctx->expected_type = NULL;
         } else if (math_preserves_numeric_shape && math_int_shape) {
             ctx->expected_type = xr_type_new_int(ctx->analyzer->isolate);
+        } else if (assert_equal_context_type) {
+            ctx->expected_type = assert_equal_context_type;
         } else if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             ctx->expected_type = param_type;
         }
@@ -7705,8 +7819,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             pre_expansion_tail = ctx->analyzer->diagnostics_tail;
             pre_expansion_count = ctx->analyzer->diagnostic_count;
         }
-        XrType *arg_type = xa_visit_call_arg_for_param_mode(ctx, arg_node, parallel_callback_label,
-                                                            access, param_mode);
+        XrType *arg_type =
+            core_assert_equal && i == 1 && assert_equal_preinferred_second
+                ? assert_equal_preinferred_second
+                : xa_visit_call_arg_for_param_mode(ctx, arg_node, parallel_callback_label, access,
+                                                   param_mode);
         if (guard_default_expansion) {
             ctx->default_expansion_depth--;
             ctx->file_path = saved_expansion_file;
@@ -7717,6 +7834,30 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         ctx->allow_view_expr_for_copy = saved_copy_view;
         ctx->expected_type = saved_expected;
         ctx->expected_from_signature = saved_from_signature;
+        if (assert_equal_context_type) {
+            XrType *same_t = assert_equal_context_type;
+            if (slot == 0 && assert_equal_preinferred_second)
+                same_t = assert_equal_preinferred_second;
+            else if (slot == 1 && effective_arg_types && effective_arg_types[0])
+                same_t = effective_arg_types[0];
+            XrType *same_t_value = same_t && same_t->is_nullable
+                                       ? xr_type_non_nullable(ctx->analyzer->isolate, same_t)
+                                       : same_t;
+            bool null_matches =
+                assert_equal_context_kind == XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL &&
+                XR_TYPE_IS_NULL(arg_type) && same_t &&
+                (same_t->is_nullable || XR_TYPE_IS_NULL(same_t));
+            bool numeric_matches =
+                assert_equal_context_kind != XA_ASSERT_EQUAL_CONTEXT_NULL_LITERAL && same_t_value &&
+                xr_type_equals(same_t_value, arg_type);
+            if (null_matches || numeric_matches) {
+                /* A contextual literal inhabits the assertion's single T even
+                 * when T is nullable.  Its expression node keeps the concrete
+                 * non-null storage type so lowering does not invent a numeric
+                 * conversion across the nullable boundary. */
+                arg_type = same_t;
+            }
+        }
         if (math_preserves_numeric_shape && !math_first_arg_seen) {
             math_first_arg_seen = true;
             math_int_shape = arg_type && XR_TYPE_IS_INT(arg_type);
@@ -8193,6 +8334,51 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
+    }
+
+    /* The registry owns the same-T relation for assertEqual.  Its callable
+     * shape uses unknown placeholders only so both operands receive ordinary
+     * expression context; the resolved BuiltinId, never its spelling, seals
+     * the actual relation after both arguments have been inferred exactly
+     * once. */
+    bool assert_equal_same_t = false;
+    if (core_assert_equal && arg_count >= 2 && effective_arg_types && effective_arg_types[0] &&
+        effective_arg_types[1] && !XR_TYPE_IS_UNKNOWN(effective_arg_types[0]) &&
+        !XR_TYPE_IS_UNKNOWN(effective_arg_types[1]) &&
+        !XR_TYPE_IS_ERROR(effective_arg_types[0]) && !XR_TYPE_IS_ERROR(effective_arg_types[1])) {
+        XrType *actual_type = effective_arg_types[0];
+        XrType *expected_type = effective_arg_types[1];
+        assert_equal_same_t = xr_type_equals(actual_type, expected_type);
+        if (!assert_equal_same_t && actual_type->is_nullable != expected_type->is_nullable) {
+            XrType *nullable_type = actual_type->is_nullable ? actual_type : expected_type;
+            XrType *value_type = actual_type->is_nullable ? expected_type : actual_type;
+            XrType *nullable_value_type =
+                xr_type_non_nullable(ctx->analyzer->isolate, nullable_type);
+            if (xr_type_equals(nullable_value_type, value_type)) {
+                /* Ordinary nullability widening supplies one T for both
+                 * operands.  Numeric families still require exact equality;
+                 * this never licenses i64/f64 coercion. */
+                effective_arg_types[0] = nullable_type;
+                effective_arg_types[1] = nullable_type;
+                assert_equal_same_t = true;
+            }
+        }
+    }
+    if (core_assert_equal && arg_count >= 2 && effective_arg_types && effective_arg_types[0] &&
+        effective_arg_types[1] && !XR_TYPE_IS_UNKNOWN(effective_arg_types[0]) &&
+        !XR_TYPE_IS_UNKNOWN(effective_arg_types[1]) &&
+        !XR_TYPE_IS_ERROR(effective_arg_types[0]) && !XR_TYPE_IS_ERROR(effective_arg_types[1]) &&
+        !assert_equal_same_t) {
+        XrLocation loc = {.file = ctx->file_path,
+                          .line = call->arguments[1] ? call->arguments[1]->line : node->line,
+                          .column = call->arguments[1] ? call->arguments[1]->column : node->column};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "assertEqual requires both values to have the same type, got '%s' and '%s'",
+                 xr_type_to_string(effective_arg_types[0]),
+                 xr_type_to_string(effective_arg_types[1]));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE, msg,
+                                   &loc);
     }
 
     XrType *final_type = return_type ? return_type : xr_type_new_unknown(NULL);

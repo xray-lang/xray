@@ -21,6 +21,9 @@ XR_FUNC bool xtc_target_profile_build_native_hosted(
     const XrToolchainTarget *target,
     const XrTargetCodegenFacts *codegen,
     XrTargetProfile **out, char *error, size_t error_size);
+XR_FUNC bool xtc_target_profile_build_native_freestanding(
+    const XrToolchainTarget *target, const XrTargetCodegenFacts *codegen,
+    uint64_t provider_mask, XrTargetProfile **out, char *error, size_t error_size);
 XR_FUNC bool xtc_target_profile_build_current_native_hosted(
     const XrTargetCodegenFacts *codegen,
     XrTargetProfile **out, char *error, size_t error_size);

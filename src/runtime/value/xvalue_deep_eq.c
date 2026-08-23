@@ -9,216 +9,221 @@
  */
 
 #include "xvalue.h"
+#include "xvalue_hash.h"
 #include "../class/xclass.h"
 #include "../class/xinstance.h"
 #include "../mem/xobj_header.h"
 #include "../object/xarray.h"
 #include "../object/xjson.h"
 #include "../object/xmap.h"
+#include "../object/xset.h"
 #include "../object/xstring.h"
-#include <math.h>
+#include "../object/xtuple.h"
+#include "../../shared/xr_deep_equality.h"
+#include <stdint.h>
 #include <string.h>
 
-// Cycle protection for deep equality. Deeply nested / self- or
-// mutually-referential containers (Json/Array/Map) would otherwise recurse
-// until the C stack is exhausted (SIGSEGV). We bound recursion with a depth
-// limit (matching JSON_MAX_DEPTH in xjson_serde.c) and detect cycles with a
-// stack of the container pairs currently on the recursion path: re-encountering
-// the same (a,b) pair means both sides form isomorphic cycles and are equal.
-#define DEEP_EQ_MAX_DEPTH 256
-
-typedef struct {
-    const void *a;
-    const void *b;
-} DeepEqPair;
-
-typedef struct {
-    int depth;
-    int seen_count;
-    /* Hash containers need a reflexive relation: a stored key must find itself.
-     * Under this mode NaN equals NaN so a NaN-carrying key stays reachable,
-     * while the `==` operator keeps IEEE semantics. */
-    bool key_equivalence;
-    DeepEqPair seen[DEEP_EQ_MAX_DEPTH];
-} DeepEqCtx;
-
-static bool xr_json_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
-static bool xr_array_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
-static bool xr_map_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b);
-
-static bool deep_eq_ctx(DeepEqCtx *ctx, XrValue a, XrValue b) {
-    if (a.tag == b.tag && a.i == b.i) {
-        if (a.tag == XR_TAG_F64 && isnan(a.f))
-            return ctx->key_equivalence;
-        if (a.tag == XR_TAG_PTR && a.ptr != NULL)
-            goto deep_compare;
+static bool vm_deep_describe(void *adapter, XrValue value, XrDeepEqualityNode *out) {
+    (void) adapter;
+    if (!out)
+        return false;
+    *out = (XrDeepEqualityNode){
+        .kind = XR_DEEP_EQUALITY_IDENTITY,
+        .identity = value.ptr,
+    };
+    if (!XR_IS_PTR(value) || !value.ptr)
         return true;
-    }
-
-    /* Different tags never compare equal: an integer against a float needs an
-     * explicit conversion, so no tagged path may answer true where the static
-     * rule rejects the program outright. */
-    if (a.tag != b.tag)
-        return false;
-
-    switch (a.tag) {
-        case XR_TAG_NULL:
+    switch (value.heap_type) {
+        case XR_TSTRING:
+            out->kind = XR_DEEP_EQUALITY_STRING;
             return true;
-        case XR_TAG_BOOL:
-        case XR_TAG_I64:
-            return a.i == b.i;
-        case XR_TAG_F64:
-            if (isnan(a.f) && isnan(b.f))
-                return ctx->key_equivalence;
-            return a.f == b.f;
-        case XR_TAG_PTR:
-            goto deep_compare;
-        default:
-            return a.i == b.i;
-    }
-
-deep_compare: {
-    if (a.heap_type == XR_TSTRING || b.heap_type == XR_TSTRING) {
-        if (a.heap_type != XR_TSTRING || b.heap_type != XR_TSTRING || !a.ptr ||
-            !b.ptr)
-            return false;
-        XrString *str_a = (XrString *) a.ptr;
-        XrString *str_b = (XrString *) b.ptr;
-        if (str_a == str_b)
+        case XR_TARRAY: {
+            XrArray *array = xr_value_to_array(value);
+            if (!array || array->length < 0)
+                return false;
+            out->kind = XR_DEEP_EQUALITY_ARRAY;
+            out->nominal_identity = array->elem_type;
+            out->logical_count = out->iteration_extent = (uint32_t) array->length;
             return true;
-        if (str_a->length != str_b->length)
-            return false;
-        return memcmp(str_a->data, str_b->data, str_a->length) == 0;
-    }
-    XrObjHeader *gc_a = (XrObjHeader *) a.ptr;
-    XrObjHeader *gc_b = (XrObjHeader *) b.ptr;
-    if (gc_a == gc_b)
-        return true;
-    if (!gc_a || !gc_b)
-        return false;
-    if (XR_OBJ_GET_TYPE(gc_a) != XR_OBJ_GET_TYPE(gc_b))
-        return false;
-
-    // Strings do not recurse — no cycle guard needed.
-    // Containers: guard against cycles + unbounded depth before recursing.
-    bool is_container = (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY || XR_OBJ_GET_TYPE(gc_a) == XR_TMAP ||
-                         XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE);
-    if (is_container) {
-        for (int i = 0; i < ctx->seen_count; i++) {
-            if (ctx->seen[i].a == gc_a && ctx->seen[i].b == gc_b)
-                return true;  // isomorphic cycle on both sides
         }
-        if (ctx->depth >= DEEP_EQ_MAX_DEPTH || ctx->seen_count >= DEEP_EQ_MAX_DEPTH)
-            return false;  // depth/capacity bound: never overflow the C stack
-        ctx->seen[ctx->seen_count].a = gc_a;
-        ctx->seen[ctx->seen_count].b = gc_b;
-        ctx->seen_count++;
-        ctx->depth++;
+        case XR_TMAP: {
+            XrMap *map = xr_value_to_map(value);
+            if (!map)
+                return false;
+            out->kind = XR_DEEP_EQUALITY_MAP;
+            out->logical_count = map->count;
+            out->iteration_extent = map->nentries;
+            return true;
+        }
+        case XR_TSET: {
+            XrSet *set = xr_value_to_set(value);
+            if (!set)
+                return false;
+            out->kind = XR_DEEP_EQUALITY_SET;
+            out->logical_count = set->count;
+            out->iteration_extent = set->nentries;
+            return true;
+        }
+        case XR_TINSTANCE:
+            break;
+        default:
+            return true;
     }
-
-    bool result;
-    if (XR_OBJ_GET_TYPE(gc_a) == XR_TINSTANCE) {
-        XrInstance *ia = (XrInstance *) gc_a;
-        XrInstance *ib = (XrInstance *) gc_b;
-        if (ia->klass && ia->klass->builtin_kind == XR_BK_STRUCT_OBJECT)
-            result = xr_json_equals_deep(ctx, a, b);
-        else if (ia->klass && ia->klass == ib->klass &&
-                 (ia->klass->flags & XR_CLASS_DERIVE_EQ) != 0) {
-            uint32_t field_count = xr_class_instance_field_count(ia->klass);
-            result = true;
-            for (uint32_t i = 0; i < field_count; i++) {
-                if (!deep_eq_ctx(ctx, ia->fields[i], ib->fields[i])) {
-                    result = false;
-                    break;
-                }
-            }
-        } else
-            result = (gc_a == gc_b);
-    } else if (XR_OBJ_GET_TYPE(gc_a) == XR_TARRAY) {
-        result = xr_array_equals_deep(ctx, a, b);
-    } else if (XR_OBJ_GET_TYPE(gc_a) == XR_TMAP) {
-        result = xr_map_equals_deep(ctx, a, b);
-    } else {
-        result = (gc_a == gc_b);
-    }
-
-    if (is_container) {
-        ctx->seen_count--;
-        ctx->depth--;
-    }
-    return result;
-}
-}
-
-bool xr_value_deep_key_eq(XrValue a, XrValue b) {
-    DeepEqCtx ctx = {0};
-    ctx.key_equivalence = true;
-    return deep_eq_ctx(&ctx, a, b);
-}
-
-bool xr_value_deep_eq(XrValue a, XrValue b) {
-    DeepEqCtx ctx = {0};
-    return deep_eq_ctx(&ctx, a, b);
-}
-
-static bool xr_json_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
-    XrObjectInstance *ja = xr_value_to_object_instance(a);
-    XrObjectInstance *jb = xr_value_to_object_instance(b);
-    if (!ja || !jb)
+    XrInstance *instance = xr_value_to_instance(value);
+    XrClass *klass = instance ? instance->klass : NULL;
+    if (!klass)
         return false;
-
-    XrClass *ca = ja->klass;
-    XrClass *cb = jb->klass;
-    if (!ca || !cb || ca->field_count != cb->field_count)
-        return false;
-
-    for (int i = 0; i < ca->field_count; i++) {
-        int sym_a = ca->fields[i].symbol;
-        int idx_b = xr_class_lookup_field(cb, sym_a);
-        if (idx_b < 0)
+    if (klass->builtin_kind == XR_BK_TUPLE) {
+        out->kind = XR_DEEP_EQUALITY_TUPLE;
+        out->logical_count = out->iteration_extent = xr_class_instance_field_count(klass);
+    } else if (klass->builtin_kind == XR_BK_ADT_ENUM) {
+        XrEnumAggregateValue *aggregate = xr_value_to_enum_aggregate(value);
+        XrEnumType *enum_type = aggregate ? aggregate->enum_type : NULL;
+        if (!aggregate || !enum_type)
             return false;
-        XrValue va = xr_instance_get_dynamic_field(ja, (uint16_t) i);
-        XrValue vb = xr_instance_get_dynamic_field(jb, (uint16_t) idx_b);
-        if (!deep_eq_ctx(ctx, va, vb))
-            return false;
+        out->kind = XR_DEEP_EQUALITY_ENUM;
+        out->nominal_identity = enum_type->layout && enum_type->layout->layout_id
+                                    ? enum_type->layout->layout_id
+                                    : (uint64_t) (uintptr_t) enum_type;
+        out->ordinal = aggregate->member_index;
+        out->logical_count = out->iteration_extent = aggregate->payload_count;
+    } else if (klass->builtin_kind == XR_BK_STRUCT_OBJECT) {
+        out->kind = XR_DEEP_EQUALITY_STRUCT_OBJECT;
+        out->nominal_identity = xr_class_object_domain(klass);
+        out->logical_count = out->iteration_extent = klass->field_count;
+    } else if ((klass->flags & XR_CLASS_DERIVE_EQ) != 0) {
+        out->kind = XR_DEEP_EQUALITY_DERIVED_INSTANCE;
+        out->nominal_identity = (uint64_t) (uintptr_t) klass;
+        out->logical_count = out->iteration_extent = xr_class_instance_field_count(klass);
     }
     return true;
 }
 
-static bool xr_array_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
-    XrArray *aa = xr_value_to_array(a);
-    XrArray *ab = xr_value_to_array(b);
-    if (!aa || !ab)
-        return false;
-    if (aa->length != ab->length)
-        return false;
+static bool vm_deep_fallback_equal(void *adapter, XrValue left, XrValue right) {
+    bool key_equivalence = adapter != NULL;
+    return key_equivalence ? xr_value_key_eq(left, right) : xr_value_eq(left, right);
+}
 
-    for (int i = 0; i < aa->length; i++) {
-        if (!deep_eq_ctx(ctx, xr_array_get_element(aa, i), xr_array_get_element(ab, i)))
+static bool vm_deep_string_equal(void *adapter, XrValue left, XrValue right) {
+    (void) adapter;
+    XrString *a = XR_IS_STRING(left) ? XR_TO_STRING(left) : NULL;
+    XrString *b = XR_IS_STRING(right) ? XR_TO_STRING(right) : NULL;
+    return a && b && (a == b || (a->length == b->length &&
+                                 memcmp(a->data, b->data, a->length) == 0));
+}
+
+static bool vm_deep_sequence_element(void *adapter, XrValue sequence, uint32_t index,
+                                     XrValue *out) {
+    (void) adapter;
+    if (!out)
+        return false;
+    if (XR_IS_ARRAY(sequence)) {
+        XrArray *array = xr_value_to_array(sequence);
+        if (!array || index >= (uint32_t) array->length)
             return false;
+        *out = xr_array_get_element(array, (int) index);
+        return true;
+    }
+    XrInstance *instance = xr_value_to_instance(sequence);
+    if (!instance || !instance->klass)
+        return false;
+    if (instance->klass->builtin_kind == XR_BK_ADT_ENUM) {
+        XrEnumAggregateValue *aggregate = xr_value_to_enum_aggregate(sequence);
+        if (!aggregate || index >= aggregate->payload_count)
+            return false;
+        *out = aggregate->payloads[index];
+        return true;
+    }
+    uint32_t count = xr_class_instance_field_count(instance->klass);
+    if (index >= count)
+        return false;
+    *out = instance->fields[index];
+    return true;
+}
+
+static bool vm_deep_map_entry(void *adapter, XrValue value, uint32_t slot, bool *present,
+                              XrValue *key, XrValue *entry_value) {
+    (void) adapter;
+    XrMap *map = xr_value_to_map(value);
+    if (!map || !present || !key || !entry_value || slot >= map->nentries)
+        return false;
+    XrMapEntry *entry = xr_map_entry(map, slot);
+    *present = !XR_MAP_ENTRY_EMPTY(entry);
+    if (*present) {
+        *key = entry->key;
+        *entry_value = entry->value;
     }
     return true;
 }
 
-static bool xr_map_equals_deep(DeepEqCtx *ctx, XrValue a, XrValue b) {
-    XrMap *ma = xr_value_to_map(a);
-    XrMap *mb = xr_value_to_map(b);
-    if (!ma || !mb)
+static bool vm_deep_map_find(void *adapter, XrValue value, XrValue key, bool *found,
+                             XrValue *entry_value) {
+    (void) adapter;
+    XrMap *map = xr_value_to_map(value);
+    if (!map || !found || !entry_value)
         return false;
-    if (ma->count != mb->count)
-        return false;
-
-    for (uint32_t i = 0; i < ma->nentries; i++) {
-        XrMapEntry *node = xr_map_entry(ma, i);
-        if (XR_MAP_ENTRY_EMPTY(node))
-            continue;
-
-        bool found = false;
-        XrValue val_b = xr_map_get(mb, node->key, &found);
-        if (!found)
-            return false;
-        if (!deep_eq_ctx(ctx, node->value, val_b))
-            return false;
-    }
+    *entry_value = xr_map_get(map, key, found);
     return true;
+}
+
+static bool vm_deep_set_entry(void *adapter, XrValue value, uint32_t slot, bool *present,
+                              XrValue *entry_value) {
+    (void) adapter;
+    XrSet *set = xr_value_to_set(value);
+    if (!set || !present || !entry_value || slot >= set->nentries)
+        return false;
+    XrSetEntry *entry = xr_set_entry(set, slot);
+    *present = !XR_SET_ENTRY_EMPTY(entry);
+    if (*present)
+        *entry_value = entry->value;
+    return true;
+}
+
+static bool vm_deep_set_contains(void *adapter, XrValue value, XrValue entry_value,
+                                 bool *contains) {
+    (void) adapter;
+    XrSet *set = xr_value_to_set(value);
+    if (!set || !contains)
+        return false;
+    *contains = xr_set_has(set, entry_value);
+    return true;
+}
+
+static bool vm_deep_struct_field_pair(void *adapter, XrValue left, XrValue right,
+                                      uint32_t left_ordinal, XrValue *left_value,
+                                      XrValue *right_value) {
+    (void) adapter;
+    XrObjectInstance *a = xr_value_to_object_instance(left);
+    XrObjectInstance *b = xr_value_to_object_instance(right);
+    if (!a || !b || !a->klass || !b->klass || left_ordinal >= a->klass->field_count ||
+        !left_value || !right_value)
+        return false;
+    int symbol = a->klass->fields[left_ordinal].symbol;
+    int right_index = xr_class_lookup_field(b->klass, symbol);
+    if (right_index < 0)
+        return false;
+    *left_value = xr_instance_get_dynamic_field(a, (uint16_t) left_ordinal);
+    *right_value = xr_instance_get_dynamic_field(b, (uint16_t) right_index);
+    return true;
+}
+
+static const XrDeepEqualityOps vm_deep_equality_ops = {
+    .describe = vm_deep_describe,
+    .fallback_equal = vm_deep_fallback_equal,
+    .string_equal = vm_deep_string_equal,
+    .sequence_element = vm_deep_sequence_element,
+    .map_entry = vm_deep_map_entry,
+    .map_find_key_equivalent = vm_deep_map_find,
+    .set_entry = vm_deep_set_entry,
+    .set_contains_key_equivalent = vm_deep_set_contains,
+    .struct_field_pair = vm_deep_struct_field_pair,
+};
+
+bool xr_value_deep_key_eq(XrValue left, XrValue right) {
+    uint8_t key_equivalence = 1;
+    return xr_deep_equality_apply(&vm_deep_equality_ops, &key_equivalence, left, right);
+}
+
+bool xr_value_deep_eq(XrValue left, XrValue right) {
+    return xr_deep_equality_apply(&vm_deep_equality_ops, NULL, left, right);
 }

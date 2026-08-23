@@ -3486,6 +3486,15 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
              * canonical representation-selection boundary native so no BOX
              * adapter can mutate that authority. */
             return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
+        case XI_ASSERTION: {
+            const XrAssertionPlan *assertion = xi_assertion_plan(user);
+            if (!assertion || arg_idx >= assertion->arity)
+                return XR_REP_TAGGED;
+            if (assertion->kind == XR_ASSERTION_KIND_CONDITION && arg_idx == 0 &&
+                user->args[arg_idx])
+                return sr_type_scalar_rep(user->args[arg_idx]->type);
+            return XR_REP_TAGGED;
+        }
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
                 return sr_type_native_boundary_rep(user->args[0]->type);

@@ -89,12 +89,14 @@ static const XlspDocEntry builtin_docs[] = {
     {"typeName", "```xray\ntypeName(value): string\ntypeName<T>(): string\n```\n\nReturns the "
                  "debug/display type name of a value or static type."},
     {"assert", "```xray\nassert(condition, message?)\n```\n\nAsserts that condition is true."},
-    {"assert_true", "```xray\nassert_true(value)\n```\n\nAsserts that value is truthy."},
-    {"assert_false", "```xray\nassert_false(value)\n```\n\nAsserts that value is falsy."},
-    {"assert_eq",
-     "```xray\nassert_eq(actual, expected)\n```\n\nAsserts that actual equals expected."},
-    {"assert_ne", "```xray\nassert_ne(actual, unexpected)\n```\n\nAsserts that actual does not "
-                  "equal unexpected."},
+    {"assertEqual",
+     "```xray\nassertEqual(actual, expected, message?)\n```\n\nAsserts deep equality for two "
+     "values of the same static type."},
+    {"assertThrows",
+     "```xray\nassertThrows(action, message?)\n```\n\nPasses only when action returns a "
+     "typed error."},
+    {"assertPanics",
+     "```xray\nassertPanics(action, message?)\n```\n\nPasses only when action panics."},
     {"len", "```xray\nlen(value): i64\n```\n\nReturns the length of a string, array, or map."},
     {"range", "```xray\nrange(start, end, step?): Array\n```\n\nCreates an array of numbers."},
     {"string", "```xray\nstring(value): string\n```\n\nConverts value to string."},
@@ -1221,14 +1223,12 @@ static const char *type_query_param_docs[] = {"Value to inspect"};
 static const char *assert_params[] = {"condition", "message"};
 static const char *assert_param_docs[] = {"Condition to assert", "Optional error message"};
 
-static const char *assert_one_params[] = {"value"};
-static const char *assert_one_param_docs[] = {"Value to check"};
-
-static const char *assert_eq_params[] = {"actual", "expected"};
-static const char *assert_eq_param_docs[] = {"Actual value", "Expected value"};
-
-static const char *assert_ne_params[] = {"actual", "unexpected"};
-static const char *assert_ne_param_docs[] = {"Actual value", "Unexpected value"};
+static const char *assertion_equal_params[] = {"actual", "expected", "message"};
+static const char *assertion_equal_param_docs[] = {"Actual value", "Expected value",
+                                                   "Optional error message"};
+static const char *assert_action_params[] = {"action", "message"};
+static const char *assert_action_param_docs[] = {"Zero-argument action",
+                                                 "Optional error message"};
 
 static const FunctionSignature builtin_signatures[] = {
     {"print", "print(value, ...)", "Prints values to stdout", print_params, print_param_docs, 2},
@@ -1239,14 +1239,12 @@ static const FunctionSignature builtin_signatures[] = {
      type_query_param_docs, 1},
     {"assert", "assert(condition, message?)", "Asserts condition is true", assert_params,
      assert_param_docs, 2},
-    {"assert_true", "assert_true(value)", "Asserts value is truthy", assert_one_params,
-     assert_one_param_docs, 1},
-    {"assert_false", "assert_false(value)", "Asserts value is falsy", assert_one_params,
-     assert_one_param_docs, 1},
-    {"assert_eq", "assert_eq(actual, expected)", "Asserts values are equal", assert_eq_params,
-     assert_eq_param_docs, 2},
-    {"assert_ne", "assert_ne(actual, unexpected)", "Asserts values are not equal", assert_ne_params,
-     assert_ne_param_docs, 2},
+    {"assertEqual", "assertEqual(actual, expected, message?)", "Asserts deep equality",
+     assertion_equal_params, assertion_equal_param_docs, 3},
+    {"assertThrows", "assertThrows(action, message?)", "Expects a typed error",
+     assert_action_params, assert_action_param_docs, 2},
+    {"assertPanics", "assertPanics(action, message?)", "Expects a panic", assert_action_params,
+     assert_action_param_docs, 2},
     {NULL, NULL, NULL, NULL, NULL, 0}};
 
 static int xlsp_signature_param_count(const char *label) {

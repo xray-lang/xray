@@ -156,8 +156,8 @@ TEST(catch_clears_pending_error_state) {
                       "}\n"
                       "assert(caught)\n"
                       "var x = 42\n"
-                      "assert_eq(x, 42)\n"
-                      "assert_ne(x, 41)\n";
+                      "assertEqual(x, 42)\n"
+                      "assert(!(x == 41))\n";
 
     int rc = xr_isolate_dostring(iso, src, &k_vm_exception_memory_authority);
     ASSERT_EQ_INT(rc, 0);

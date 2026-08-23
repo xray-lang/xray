@@ -2231,45 +2231,16 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
-(define-xi-op xi.assert
+(define-xi-op xi.assertion
   :class side-effect
-  :arity 1
+  :arity variadic
+  :result-kind void
   :result-ownership none
   :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.assert.eq
-  :class side-effect
-  :arity 2
-  :result-ownership none
-  :own-use borrow
-  :effects (side-effect may-throw)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.assert.ne
-  :class side-effect
-  :arity 2
-  :result-ownership none
-  :own-use borrow
-  :effects (side-effect may-throw)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify))
-
-(define-xi-op xi.assert.throws
-  :class side-effect
-  :arity 1
-  :result-ownership none
-  :own-use consume
-  :effects (side-effect may-throw)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-verify))
 
 (define-xi-op xi.typeid
   :class type
@@ -2698,7 +2669,6 @@
     xi.try
     xi.catch
     xi.end.try
-    xi.assert.throws
     xi.typeid
     xi.typename
     xi.len
@@ -2750,9 +2720,7 @@
     xi.static.bytes.ptr
     xi.cell.get
     xi.cell.set
-    xi.assert
-    xi.assert.eq
-    xi.assert.ne
+    xi.assertion
     xi.isnull
     xi.enum.variant.at
     xi.enum.payload.at
@@ -3013,12 +2981,10 @@
     (runtime "src/runtime/value/xvalue_truthy.c" "xr_value_is_truthy")
   ))
 
-(define-xi-observable-owner shared.assert-condition
+(define-xi-observable-owner shared.assertion
   :category shared-semantic-kernel
   :operations (
-    xi.assert
-    xi.assert.eq
-    xi.assert.ne
+    xi.assertion
   )
   :consumers (
     semantic-plan
@@ -3027,13 +2993,13 @@
     aot-freestanding
     cgen
   )
-  :cgen-adapter xrt_assert_condition_failed
+  :cgen-adapter xrt_assertion_fail
   :production-bindings (
     (semantic-plan "src/plan/semantic/xr_semantic_ops.c" "xr_semantic_op_contract")
-    (vm "src/vm/xvm_dispatch_assert.inc.c" "XR_ASSERT_CONDITION_OWNER_APPLY")
-    (aot-hosted "src/aot/xrt.h" "xrt_assert_condition_failed")
-    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_assert_condition_failed")
-    (cgen "src/aot/xi_cgen.c" "cg_assert_condition_adapter_name")
+    (vm "src/vm/xvm_dispatch_assert.inc.c" "xr_assertion_failure_render")
+    (aot-hosted "src/aot/xrt_assertion.h" "xrt_assertion_fail")
+    (aot-freestanding "src/aot/xrt_core_freestanding.h" "xrt_freestanding_assertion_fail")
+    (cgen "src/aot/xi_cgen.c" "cg_assertion_adapter_id")
   ))
 
 (define-xi-observable-owner shared.target-layout-query

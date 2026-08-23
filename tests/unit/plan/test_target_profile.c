@@ -68,7 +68,7 @@ static void test_structured_build_kat_and_exact_gate(void) {
                    expected_object_header, sizeof(expected_object_header)) == 0);
     REQUIRE(memcmp(first->facts.provider_set_fingerprint.bytes,
                    expected_provider_set, sizeof(expected_provider_set)) == 0);
-    REQUIRE(first->facts.schema_version == 2);
+    REQUIRE(first->facts.schema_version == XR_TARGET_PROFILE_SCHEMA_VERSION);
     REQUIRE(first->facts.string_literal.dynamic_tag ==
             XR_RUNTIME_STRING_LITERAL_DYNAMIC_TAG);
     REQUIRE(first->facts.string_literal.view_size ==

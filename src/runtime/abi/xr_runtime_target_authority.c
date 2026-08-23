@@ -155,9 +155,12 @@ static bool set_native_platform_identity(XrTargetMachineFacts *machine) {
     return true;
 }
 
-static bool make_native_machine_facts(XrTargetMachineFacts *out) {
+static bool make_native_machine_facts(uint8_t runtime_profile,
+                                      XrTargetMachineFacts *out) {
     if (!out || FLT_RADIX != 2 || FLT_MANT_DIG != 24 ||
-        DBL_MANT_DIG != 53 || sizeof(float) != 4 || sizeof(double) != 8)
+        DBL_MANT_DIG != 53 || sizeof(float) != 4 || sizeof(double) != 8 ||
+        (runtime_profile != XR_TARGET_RUNTIME_PROFILE_HOSTED &&
+         runtime_profile != XR_TARGET_RUNTIME_PROFILE_FREESTANDING))
         return false;
     XrTargetMachineFacts machine;
     memset(&machine, 0, sizeof(machine));
@@ -165,7 +168,7 @@ static bool make_native_machine_facts(XrTargetMachineFacts *out) {
     if (!layout || !set_native_architecture(&machine) ||
         !set_native_platform_identity(&machine))
         return false;
-    machine.runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED;
+    machine.runtime_profile = runtime_profile;
     machine.data_layout = *layout;
     fill_native_atomic_facts(&machine);
     if ((machine.atomic_width_mask & XR_TARGET_ATOMIC_WIDTH_32) == 0)
@@ -636,7 +639,8 @@ static bool make_operation(XrTargetProviderOperationContract *out,
     return canonical_id(key, &out->stable_id);
 }
 
-static bool make_hosted_providers(XrTargetProviderContract providers[2],
+static bool make_hosted_providers(
+    XrTargetProviderContract providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT],
                                   uint8_t target_endian) {
     uint8_t pointer_width = (uint8_t) sizeof(void *);
     uint8_t pointer_alignment = (uint8_t) _Alignof(void *);
@@ -666,7 +670,8 @@ static bool make_hosted_providers(XrTargetProviderContract providers[2],
                        XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE),
         usize_slot,
     };
-    memset(providers, 0, 2 * sizeof(providers[0]));
+    memset(providers, 0,
+           XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT * sizeof(providers[0]));
     providers[0] = (XrTargetProviderContract) {
         .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
         .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
@@ -706,7 +711,7 @@ static bool make_hosted_providers(XrTargetProviderContract providers[2],
         .operation_count = 1,
         .runtime_profile = XR_TARGET_RUNTIME_PROFILE_HOSTED,
         .provider_kind = XR_TARGET_PROVIDER_PANIC,
-        .panic_behavior = XR_TARGET_PROVIDER_PANIC_NO_RETURN,
+        .panic_behavior = XR_TARGET_PROVIDER_PANIC_UNWINDS,
     };
     return canonical_id("xray.runtime.provider.v1/hosted/panic",
                         &providers[1].contract_id) &&
@@ -716,16 +721,140 @@ static bool make_hosted_providers(XrTargetProviderContract providers[2],
                make_call_abi(void_result, panic_parameters, 2, target_endian),
                XR_TARGET_PROVIDER_EFFECT_PANICS,
                XR_TARGET_PROVIDER_LIFETIME_BORROWS,
-               XR_TARGET_PROVIDER_FAILURE_NO_RETURN);
+               XR_TARGET_PROVIDER_FAILURE_PANICS);
 }
 
-XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
-    XrRuntimeTargetAuthority *out) {
+static bool make_freestanding_providers(
+    uint64_t provider_mask,
+    XrTargetProviderContract providers[XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT],
+    size_t *out_count, uint8_t target_endian) {
+    if (!providers || !out_count)
+        return false;
+    uint8_t pointer_width = (uint8_t) sizeof(void *);
+    uint8_t pointer_alignment = (uint8_t) _Alignof(void *);
+    XrTargetProviderCallSlotAbi void_result = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_VOID, 0, 0,
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi usize_slot = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, pointer_width,
+        pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi const_pointer_borrowed = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+        pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+        XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE);
+    XrTargetProviderCallSlotAbi allocate_result = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+        pointer_alignment, XR_TARGET_PROVIDER_CALL_OWNERSHIP_RETURNED_OWNED,
+        XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE);
+    XrTargetProviderCallSlotAbi status_result = make_call_slot(
+        XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1, 1,
+        XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0);
+    XrTargetProviderCallSlotAbi allocate_parameters[] = {usize_slot, usize_slot};
+    XrTargetProviderCallSlotAbi free_parameters[] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+                       pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_CONSUMED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE),
+    };
+    XrTargetProviderCallSlotAbi panic_parameters[] = {
+        const_pointer_borrowed,
+        usize_slot,
+    };
+    XrTargetProviderCallSlotAbi report_parameters[] = {
+        make_call_slot(XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS, pointer_width,
+                       pointer_alignment,
+                       XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                       XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE),
+        const_pointer_borrowed,
+        usize_slot,
+    };
+    memset(providers, 0,
+           XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT * sizeof(providers[0]));
+    providers[0] = (XrTargetProviderContract) {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING,
+        .operation_count = 2,
+        .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
+        .provider_kind = XR_TARGET_PROVIDER_ALLOCATOR,
+        .allocator_max_alignment = (uint32_t) _Alignof(void *),
+        .allocator_sized_free = 0,
+        .allocator_zeroed_allocation = 0,
+        .allocator_thread_safe = 0,
+    };
+    if (!canonical_id("xray.runtime.provider.v1/freestanding/allocator-hooks",
+                      &providers[0].contract_id) ||
+        !make_operation(
+            &providers[0].operations[0],
+            "xray.runtime.provider-operation.v1/freestanding-hook/alloc",
+            make_call_abi(allocate_result, allocate_parameters, 2,
+                          target_endian),
+            XR_TARGET_PROVIDER_EFFECT_ALLOCATES,
+            XR_TARGET_PROVIDER_LIFETIME_RETURNS_OWNED, 0) ||
+        !make_operation(
+            &providers[0].operations[1],
+            "xray.runtime.provider-operation.v1/freestanding-hook/free",
+            make_call_abi(void_result, free_parameters, 1, target_endian),
+            XR_TARGET_PROVIDER_EFFECT_DEALLOCATES,
+            XR_TARGET_PROVIDER_LIFETIME_CONSUMES_OWNED, 0))
+        return false;
+    qsort(providers[0].operations, providers[0].operation_count,
+          sizeof(providers[0].operations[0]), compare_stable_id_first);
+
+    providers[1] = (XrTargetProviderContract) {
+        .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+        .flags = XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING,
+        .operation_count = 1,
+        .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
+        .provider_kind = XR_TARGET_PROVIDER_PANIC,
+        .panic_behavior = XR_TARGET_PROVIDER_PANIC_NO_RETURN,
+    };
+    if (!canonical_id("xray.runtime.provider.v1/freestanding/panic-hook",
+                      &providers[1].contract_id) ||
+        !make_operation(
+            &providers[1].operations[0],
+            "xray.runtime.provider-operation.v1/freestanding-hook/panic",
+            make_call_abi(void_result, panic_parameters, 2, target_endian),
+            XR_TARGET_PROVIDER_EFFECT_PANICS,
+            XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+            XR_TARGET_PROVIDER_FAILURE_NO_RETURN))
+        return false;
+
+    size_t count = 2;
+    if ((provider_mask & XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO)) != 0) {
+        providers[2] = (XrTargetProviderContract) {
+            .schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+            .abi_schema_version = XR_RUNTIME_ABI_SCHEMA_VERSION,
+            .flags = XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING,
+            .operation_count = 1,
+            .runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING,
+            .provider_kind = XR_TARGET_PROVIDER_IO,
+        };
+        if (!canonical_id("xray.runtime.provider.v1/freestanding/io-hooks",
+                          &providers[2].contract_id) ||
+            !make_operation(
+                &providers[2].operations[0],
+                "xray.runtime.provider-operation.v1/io/assertion-report",
+                make_call_abi(status_result, report_parameters, 3,
+                              target_endian),
+                XR_TARGET_PROVIDER_EFFECT_IO,
+                XR_TARGET_PROVIDER_LIFETIME_BORROWS,
+                XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS))
+            return false;
+        count++;
+    }
+    *out_count = count;
+    return true;
+}
+
+static XrRuntimeAbiStatus make_native_authority_base(
+    uint8_t runtime_profile, XrRuntimeTargetAuthority *out) {
     if (!out)
         return XR_RUNTIME_ABI_INVALID_ARGUMENT;
     XrRuntimeTargetAuthority authority;
     memset(&authority, 0, sizeof(authority));
-    if (!make_native_machine_facts(&authority.machine))
+    if (!make_native_machine_facts(runtime_profile, &authority.machine))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     XrRuntimeAbiStatus status =
         xr_runtime_object_header_native_materialization_facts(
@@ -759,9 +888,8 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
     if (!make_dynamic_value(&abi->dynamic_value, target_endian) ||
         !make_domain_record(&abi->domain_identity) ||
         !make_extent_record(&abi->extent_descriptor) ||
-        !make_layout_record(&abi->layout_descriptor) || !make_callback(
-            &abi->extent_provider_callback) ||
-        !make_hosted_providers(authority.providers, target_endian))
+        !make_layout_record(&abi->layout_descriptor) ||
+        !make_callback(&abi->extent_provider_callback))
         return XR_RUNTIME_ABI_INVALID_IDENTITY;
     if (abi->pointer_width != authority.machine.data_layout.pointer.size ||
         abi->dynamic_value.size != authority.machine.data_layout.xr_value.size ||
@@ -773,13 +901,63 @@ XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
     status = xr_runtime_abi_contract_fingerprint(abi, &fingerprint);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
+    *out = authority;
+    return XR_RUNTIME_ABI_OK;
+}
+
+XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
+    XrRuntimeTargetAuthority *out) {
+    XrRuntimeTargetAuthority authority;
+    XrRuntimeAbiStatus status = make_native_authority_base(
+        XR_TARGET_RUNTIME_PROFILE_HOSTED, &authority);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    uint8_t target_endian = authority.object_header_materialization.target_endian;
+    if (!make_hosted_providers(authority.providers, target_endian))
+        return XR_RUNTIME_ABI_INVALID_IDENTITY;
+    XrFingerprint fingerprint;
     uint64_t provider_mask = 0;
+    const size_t hosted_provider_count = 2;
     status = xr_target_provider_set_fingerprint(
-        authority.providers, XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT,
+        authority.providers, hosted_provider_count,
         &provider_mask, &fingerprint);
     if (status != XR_RUNTIME_ABI_OK)
         return status;
-    authority.provider_count = XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT;
+    authority.provider_count = hosted_provider_count;
+    *out = authority;
+    return XR_RUNTIME_ABI_OK;
+}
+
+XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(
+    uint64_t provider_mask, XrRuntimeTargetAuthority *out) {
+    const uint64_t supported =
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+    if (!out || (provider_mask & ~supported) != 0 ||
+        (provider_mask & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
+            XR_TARGET_FOUNDATION_CAPABILITY_MASK)
+        return XR_RUNTIME_ABI_INVALID_ARGUMENT;
+
+    XrRuntimeTargetAuthority authority;
+    XrRuntimeAbiStatus status = make_native_authority_base(
+        XR_TARGET_RUNTIME_PROFILE_FREESTANDING, &authority);
+    if (status != XR_RUNTIME_ABI_OK)
+        return status;
+    size_t selected_count = 0;
+    if (!make_freestanding_providers(provider_mask, authority.providers,
+                                     &selected_count,
+                                     authority.object_header_materialization.target_endian))
+        return XR_RUNTIME_ABI_INVALID_IDENTITY;
+    authority.provider_count = selected_count;
+
+    uint64_t verified_mask = 0;
+    XrFingerprint fingerprint;
+    status = xr_target_provider_set_fingerprint(authority.providers, authority.provider_count,
+                                                &verified_mask, &fingerprint);
+    if (status != XR_RUNTIME_ABI_OK ||
+        (verified_mask & XR_TARGET_PROVIDER_MASK_ALL) != provider_mask)
+        return status == XR_RUNTIME_ABI_OK ? XR_RUNTIME_ABI_INVALID_IDENTITY : status;
     *out = authority;
     return XR_RUNTIME_ABI_OK;
 }

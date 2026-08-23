@@ -21,6 +21,7 @@
 #define XANALYZER_FLOW_H
 
 #include "../../runtime/value/xtype.h"
+#include "../../shared/xr_core_intrinsic.h"
 #include "xa_ownership.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -160,8 +161,9 @@ XR_FUNC int xa_flow_closure_writes_collect(XaFlowBuilder *builder, XrAstNode *bo
 XR_FUNC void xa_flow_closure_writes_restore(XaFlowBuilder *builder, int saved_count);
 XR_FUNC bool xa_flow_narrowing_suppressed(const XaFlowBuilder *builder, const char *name);
 
-// API: inject an `assert(cond)` fact into the following flow (spec §2.13 N-7).
-XR_FUNC void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr);
+// API: apply a registry-owned assertion flow rule after the call succeeds.
+XR_FUNC void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr,
+                                            XrCoreIntrinsicFlowRule rule);
 
 // Narrowing helpers (fact operators of spec §2.13 N-4)
 XR_FUNC XrType *xa_narrow_by_typeid(XrType *type, XrTypeId type_id, bool assume_true);

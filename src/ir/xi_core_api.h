@@ -14,6 +14,12 @@ XR_FUNC void xi_func_compute_effects(XiFunc *f);
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode);
 XR_FUNC XrParamMode xi_func_param_passing_mode(const XiFunc *f, uint16_t index);
 XR_FUNC bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src);
+XR_FUNC bool xi_value_set_assertion_plan(XiFunc *f, XiValue *value,
+                                         const XrAssertionPlan *plan);
+XR_FUNC bool xi_value_clone_assertion_plan(XiFunc *f, XiValue *dst, const XiValue *src);
+/* Clone metadata between values of the same operation.  Unlike the shallow
+ * field copier, this preserves ownership for operation-specific aux payloads. */
+XR_FUNC bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src);
 
 XR_FUNC XiBlock *xi_block_new(XiFunc *f);
 XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);

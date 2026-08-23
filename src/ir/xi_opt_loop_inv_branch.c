@@ -292,7 +292,8 @@ static bool create_version(XiFunc *f, const XiLoop *loop, XiBlock *branch_block,
         XiPhi *clone = xi_phi_new(f, header_clone, phi->value.type, 2);
         if (!clone)
             return false;
-        xi_value_copy_metadata(&clone->value, &phi->value);
+        if (!xi_value_clone_metadata(f, &clone->value, &phi->value))
+            return false;
         if (!map_add(&version->values, &phi->value, &clone->value))
             return false;
         version->added_values++;
@@ -316,7 +317,8 @@ static bool create_version(XiFunc *f, const XiLoop *loop, XiBlock *branch_block,
     for (uint32_t mi = 0; mi < version->values.count; mi++) {
         XiValue *source = version->values.old_values[mi];
         XiValue *clone = version->values.new_values[mi];
-        xi_value_copy_metadata(clone, source);
+        if (!xi_value_clone_metadata(f, clone, source))
+            return false;
         for (uint16_t a = 0; a < source->nargs; a++)
             clone->args[a] = resolve_value(&version->values, source->args[a]);
         xi_value_rebase_view_evidence(clone);
@@ -488,7 +490,8 @@ static bool materialize_direct_exit_merges(XiFunc *f, const XiLoop *loop, XiValu
         XiPhi *merge = xi_phi_new(f, exit, source->type, exit->npreds);
         if (!merge)
             return false;
-        xi_value_copy_metadata(&merge->value, source);
+        if (!xi_value_clone_metadata(f, &merge->value, source))
+            return false;
         for (uint16_t a = 0; a < merge->value.nargs; a++)
             merge->value.args[a] = source;
         merges[i] = &merge->value;

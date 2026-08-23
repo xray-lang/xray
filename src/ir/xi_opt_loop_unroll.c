@@ -214,10 +214,6 @@ static void lu_replace_all_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
 
 /* ========== Full Unroll ========== */
 
-static void clone_value_metadata(XiValue *dst, const XiValue *src) {
-    xi_value_copy_metadata(dst, src);
-}
-
 static XiValue *resolve_arg(const UnrollMap *map, XiValue *arg) {
     if (!arg)
         return NULL;
@@ -249,7 +245,8 @@ static bool emit_unrolled_body(XiFunc *f, XiBlock **body_order, uint32_t body_co
             XiValue *clone = xi_value_new(f, dst_blk, orig->op, orig->type, orig->nargs);
             if (!clone)
                 return false;
-            clone_value_metadata(clone, orig);
+            if (!xi_value_clone_metadata(f, clone, orig))
+                return false;
             for (uint16_t a = 0; a < orig->nargs; a++) {
                 clone->args[a] = resolve_arg(map, orig->args[a]);
             }

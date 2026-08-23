@@ -619,6 +619,19 @@ static bool snapshot_value(XiSemanticSnapshot *snapshot, XiValue *value) {
         XiParallelReduceData *data = (XiParallelReduceData *) value->aux;
         data->accumulator_type = snapshot_type(snapshot, data->accumulator_type);
         data->state_type = snapshot_type(snapshot, data->state_type);
+    } else if (value->aux_kind == XI_AUX_KIND_ASSERTION_PLAN) {
+        XrAssertionPlan *plan = value->op == XI_ASSERTION ? (XrAssertionPlan *) value->aux : NULL;
+        if (!plan || !xr_assertion_plan_validate(plan)) {
+            snapshot_note_failure(snapshot, "Xi assertion plan metadata");
+            snapshot->failure_value_op = (int) value->op;
+            return false;
+        }
+        plan->source.file = snapshot_strdup(snapshot, plan->source.file);
+        if (!plan->source.file || !xr_assertion_plan_validate(plan)) {
+            snapshot_note_failure(snapshot, "Xi assertion plan source path");
+            snapshot->failure_value_op = (int) value->op;
+            return false;
+        }
     }
     return !snapshot->failed;
 }

@@ -69,9 +69,7 @@
     X(CELL_SET, "xi.cell.set", xicgen_cell_set) \
     X(LOAD_UPVAL, "xi.load.upval", xicgen_load_upval) \
     X(STORE_UPVAL, "xi.store.upval", xicgen_store_upval) \
-    X(ASSERT, "xi.assert", xicgen_assert) \
-    X(ASSERT_EQ, "xi.assert.eq", xicgen_assert_eq) \
-    X(ASSERT_NE, "xi.assert.ne", xicgen_assert_ne) \
+    X(ASSERTION, "xi.assertion", xicgen_assertion) \
     X(TYPEID, "xi.typeid", xicgen_typeid) \
     X(TYPENAME, "xi.typename", xicgen_typename) \
     X(LEN, "xi.len", xicgen_len) \

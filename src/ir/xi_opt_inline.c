@@ -457,7 +457,8 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     if (!cloned)
         return NULL;
 
-    xi_value_copy_metadata(cloned, src);
+    if (!xi_value_clone_metadata(caller, cloned, src))
+        return NULL;
     /* var_id names a source variable inside the callee's own numbering, and
      * every consumer of it — register coalescing in the VM emitter, ARC's
      * same-variable matching, closure binding — reads it as an identity claim

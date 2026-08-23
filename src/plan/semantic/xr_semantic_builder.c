@@ -1544,10 +1544,6 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
         case XI_AS:
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
-        case XI_ASSERT_THROWS:
         case XI_GET_BUILTIN:
             return add_metadata(ctx, record, (const char *) value->aux);
         case XI_CALL_BUILTIN:
@@ -4093,6 +4089,28 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;
     record->return_complete = value_ownership.complete ? 1u : 0u;
+    if (value->op == XI_ASSERTION) {
+        const XrAssertionPlan *plan = xi_assertion_plan(value);
+        if (!plan || !xr_assertion_plan_validate(plan) || plan->arity != value->nargs ||
+            !xi_source_span_is_complete(value->source_span) ||
+            plan->source.line != value->source_span.start_line ||
+            plan->source.column != value->source_span.start_column ||
+            plan->source.end_line != value->source_span.end_line ||
+            plan->source.end_column != value->source_span.end_column)
+            return fail(ctx, "XR_SEM_0019", "assertion plan authority is incomplete");
+        record->semantic_immediate = 0;
+        record->intrinsic_kind = XR_SEM_INTRINSIC_ASSERTION;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_SCHEMA] = plan->schema_version;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_BUILTIN_ID] = plan->builtin_id;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_KIND] = plan->kind;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_FAILURE_CHANNEL] =
+            plan->expected_failure_channel;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_FLOW_RULE] = plan->flow_rule;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_EQUALITY] = plan->equality_authority;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_TARGET] = plan->target;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES] =
+            plan->required_capabilities;
+    }
     if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
         const XiViewEvidence *view = &value->view_evidence;
         XrType *element = value->type && XR_TYPE_IS_SLICE(value->type)
@@ -4135,6 +4153,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (!add_operation_metadata(ctx, value, record) ||
         !append_source_namespace_dependency(ctx, value) || !append_constant(ctx, value, record))
         return false;
+    if (value->op == XI_ASSERTION) {
+        XrAssertionPlan semantic_plan;
+        if (!xr_semantic_operation_assertion_plan(record, &semantic_plan))
+            return fail(ctx, "XR_SEM_0019", "assertion semantic projection is not exact");
+    }
     if (xi_string_runes_exact(value)) {
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRING_RUNES;
         if (!xr_semantic_string_runes_is_exact(ctx->plan, record, NULL))

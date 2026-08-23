@@ -4900,6 +4900,79 @@ static void test_string_concat_cleanup_materialization_is_exact(void) {
     xi_func_free(function);
 }
 
+static void test_assertion_plan_and_native_condition_materialization_are_exact(void) {
+    XiFunc *function = xi_func_new("assertion_materialization", &scalar_unit);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(function && entry);
+    XiValue *condition = xi_const_bool(function, entry, true, &scalar_bool);
+    XiValue *assertion = xi_value_new(function, entry, XI_ASSERTION, &scalar_unit, 1);
+    REQUIRE(condition && assertion);
+    assertion->args[0] = condition;
+    assertion->source_span = (XiSourceSpan) {11, 5, 11, 17};
+    XrLocation source = {"tests/assertion_materialization.xr", 11, 5, 11, 17};
+    XrAssertionPlan assertion_plan;
+    REQUIRE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT, 1, source,
+                                    XR_CORE_INTRINSIC_TARGET_AOT_HOSTED,
+                                    XR_ASSERTION_CAPABILITY_ALL,
+                                    &assertion_plan) == XR_ASSERTION_PLAN_OK);
+    REQUIRE(xi_value_set_assertion_plan(function, assertion, &assertion_plan));
+    xi_block_set_return(entry, NULL);
+
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=28:assertion-materialization-v1",
+        .path = "tests/assertion_materialization.xr",
+        .name = "assertion_materialization",
+        .init = function,
+    };
+    REQUIRE(function->module == NULL);
+    function->module = &fixture_module;
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    function->module = NULL;
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(condition->rep == XR_REP_I64 && condition->op != XI_BOX);
+    REQUIRE(assertion->nargs == 1 && assertion->args[0] == condition);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    XrAssertionPlan *live = (XrAssertionPlan *) xi_assertion_plan(assertion);
+    REQUIRE(live != NULL);
+    XrAssertionKind saved_kind = live->kind;
+    live->kind = XR_ASSERTION_KIND_EQUAL;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    live->kind = saved_kind;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    uint16_t saved_arity = live->arity;
+    live->arity = 2;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    live->arity = saved_arity;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    XrRep saved_rep = condition->rep;
+    condition->rep = XR_REP_TAGGED;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    condition->rep = saved_rep;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    xr_aot_refinement_plan_free(plan);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "source-class-array-fill-refinement") == 0) {
         test_source_class_array_fill_refinement_is_exact_and_fail_closed();
@@ -4915,6 +4988,11 @@ int main(int argc, char **argv) {
         test_direct_local_tagged_ref_argument_authority_is_exact();
         test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_closed();
         printf("TargetPlan tagged-ref AOT refinement tests passed\n");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "assertion-materialization") == 0) {
+        test_assertion_plan_and_native_condition_materialization_are_exact();
+        puts("Assertion AOT refinement tests passed");
         return 0;
     }
     if (argc != 1) {
@@ -4953,6 +5031,7 @@ int main(int argc, char **argv) {
     test_source_class_array_fill_refinement_is_exact_and_fail_closed();
     test_array_hof_refinement_is_exact_and_fail_closed();
     test_string_concat_cleanup_materialization_is_exact();
+    test_assertion_plan_and_native_condition_materialization_are_exact();
     test_enum_descriptor_adapter_refuses_without_layout_family();
     printf("TargetPlan-native AOT refinement tests passed\n");
     return 0;

@@ -10,6 +10,8 @@
 #include "../../../src/ir/xi_coro_analyze.h"
 #include "../../../src/ir/xi_coro_exception_verify.h"
 #include "../../../src/ir/xi_coro_lower.h"
+#include "../../../src/ir/xi_edit.h"
+#include "../../../src/ir/xi_semantic_snapshot.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xffi_sig.h"
@@ -112,6 +114,109 @@ static bool verify_stage_fail(const XiFunc *f, XiStage stage) {
     if (ok)
         return false;
     return err[0] != '\0';
+}
+
+static XiValue *make_owned_assertion(XiFunc *f, char *source_file) {
+    XiBlock *entry = f && f->nblocks ? f->blocks[0] : NULL;
+    if (!entry || !source_file)
+        return NULL;
+    XiValue *condition = xi_const_bool(f, entry, true, &stub_bool);
+    XiValue *assertion = xi_value_new(f, entry, XI_ASSERTION, &stub_unit, 1);
+    if (!condition || !assertion)
+        return NULL;
+    assertion->args[0] = condition;
+    assertion->source_span = (XiSourceSpan) {7, 3, 7, 18};
+    XrLocation source = {source_file, 7, 3, 7, 18};
+    XrAssertionPlan plan;
+    if (xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT, 1, source,
+                                XR_CORE_INTRINSIC_TARGET_VM,
+                                XR_ASSERTION_CAPABILITY_NONE, &plan) != XR_ASSERTION_PLAN_OK ||
+        !xi_value_set_assertion_plan(f, assertion, &plan))
+        return NULL;
+    XiValue *result = xi_const_int(f, entry, 0, &stub_int);
+    if (!result)
+        return NULL;
+    xi_block_set_return(entry, result);
+    return assertion;
+}
+
+TEST(assertion_plan_aux_is_owned_cloned_snapshotted_and_verified) {
+    char *parser_owned_file = (char *) malloc(32);
+    ASSERT(parser_owned_file != NULL);
+    strcpy(parser_owned_file, "ephemeral/assertion.xr");
+
+    XiFunc *source = make_func("assertion_source");
+    ASSERT(source != NULL);
+    XiValue *source_assertion = make_owned_assertion(source, parser_owned_file);
+    ASSERT(source_assertion != NULL);
+    const XrAssertionPlan *source_plan = xi_assertion_plan(source_assertion);
+    ASSERT(source_plan != NULL && source_plan->source.file != parser_owned_file);
+    memset(parser_owned_file, 'x', strlen(parser_owned_file));
+    free(parser_owned_file);
+    ASSERT(xr_assertion_plan_validate(source_plan));
+    ASSERT(strcmp(source_plan->source.file, "ephemeral/assertion.xr") == 0);
+    ASSERT(verify_ok(source));
+
+    XiFunc *clone = make_func("assertion_clone");
+    ASSERT(clone != NULL);
+    XiBlock *clone_entry = clone->blocks[0];
+    XiValue *clone_condition = xi_const_bool(clone, clone_entry, true, &stub_bool);
+    XiValue *clone_assertion = xi_value_new(clone, clone_entry, XI_ASSERTION, &stub_unit, 1);
+    ASSERT(clone_condition != NULL && clone_assertion != NULL);
+    clone_assertion->args[0] = clone_condition;
+    ASSERT(xi_value_clone_metadata(clone, clone_assertion, source_assertion));
+    XiValue *clone_result = xi_const_int(clone, clone_entry, 0, &stub_int);
+    ASSERT(clone_result != NULL);
+    xi_block_set_return(clone_entry, clone_result);
+    const XrAssertionPlan *clone_plan = xi_assertion_plan(clone_assertion);
+    ASSERT(clone_plan != NULL && clone_plan != source_plan);
+    ASSERT(clone_plan->source.file != source_plan->source.file);
+    ASSERT(strcmp(clone_plan->source.file, source_plan->source.file) == 0);
+
+    XiEditFingerprint source_fp = xi_edit_fingerprint(source);
+    XiEditFingerprint clone_fp = xi_edit_fingerprint(clone);
+    ASSERT(source_fp.values == clone_fp.values);
+    const char *before_snapshot_file = clone_plan->source.file;
+    ASSERT(xi_semantic_snapshot_detach(clone));
+    clone_plan = xi_assertion_plan(clone_assertion);
+    ASSERT(clone_plan != NULL && clone_plan->source.file != before_snapshot_file);
+    ASSERT(strcmp(clone_plan->source.file, "ephemeral/assertion.xr") == 0);
+
+    xi_func_free(source);
+    ASSERT(xr_assertion_plan_validate(clone_plan));
+    XrAssertionFailure failure = {
+        .kind = XR_ASSERTION_FAILURE_CONDITION_FALSE,
+        .source = clone_plan->source,
+    };
+    char rendered[256];
+    ASSERT(xr_assertion_failure_render(rendered, sizeof(rendered), &failure) > 0);
+    ASSERT(strstr(rendered, "ephemeral/assertion.xr:7:3") != NULL);
+
+    FILE *dump = tmpfile();
+    ASSERT(dump != NULL);
+    xi_func_dump(clone, dump);
+    fflush(dump);
+    rewind(dump);
+    char dump_text[1024] = {0};
+    ASSERT(fread(dump_text, 1, sizeof(dump_text) - 1, dump) > 0);
+    fclose(dump);
+    ASSERT(strstr(dump_text, "assertion=1 builtin=1") != NULL);
+    ASSERT(strstr(dump_text, "ephemeral/assertion.xr:7:3-7:18") != NULL);
+
+    clone_assertion->aux_kind = XI_AUX_KIND_NONE;
+    ASSERT(verify_fail(clone));
+    clone_assertion->aux_kind = XI_AUX_KIND_ASSERTION_PLAN;
+    ASSERT(verify_ok(clone));
+
+    XiValue *hostile = xi_const_bool(clone, clone_entry, true, &stub_bool);
+    ASSERT(hostile != NULL);
+    hostile->aux_kind = XI_AUX_KIND_ASSERTION_PLAN;
+    hostile->aux = clone_assertion->aux;
+    ASSERT(verify_fail(clone));
+    hostile->aux_kind = XI_AUX_KIND_NONE;
+    hostile->aux = NULL;
+    ASSERT(verify_ok(clone));
+    xi_func_free(clone);
 }
 
 static void mark_coro_lower_input(XiFunc *f) {
@@ -2510,6 +2615,7 @@ int main(void) {
     printf("=== Xi Extended Verifier Tests ===\n\n");
     test_filter = getenv("XRAY_TEST_FILTER");
 
+    run_assertion_plan_aux_is_owned_cloned_snapshotted_and_verified();
     run_coro_depth_bound_fails_closed();
 
     run_non_unit_return_requires_value();

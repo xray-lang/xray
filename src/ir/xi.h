@@ -43,6 +43,7 @@
 #include "../base/xdefs.h"
 #include "../base/xconstants.h"
 #include "../shared/xr_conversion.h"
+#include "../shared/xr_assertion_plan.h"
 #include "../shared/xr_copy_core.h"
 #include "../shared/xr_param_mode.h"
 #include "../shared/xr_elem_type.h"
@@ -173,6 +174,7 @@ typedef enum {
     XI_AUX_KIND_ENUM_NAMESPACE = 7,
     XI_AUX_KIND_ENUM_CASE = 8,
     XI_AUX_KIND_BIGINT_DIGITS = 9,
+    XI_AUX_KIND_ASSERTION_PLAN = 10,
 } XiAuxKind;
 
 /* Source-variable IDs are carried on XiValue for backend register/cell
@@ -341,7 +343,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_SCOPE_ENTER   —                    scope mode
  *  XI_SCOPE_EXIT    —                    scope mode
  *  XI_YIELD         —                    0=immediate, >0=poll/reduction hint
- *  XI_ASSERT        loc string (char*)   0=assert_true, 1=assert_false
+ *  XI_ASSERTION     XrAssertionPlan*     —
  *  XI_GET_BUILTIN   name string (char*)  global index
  *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
  *  XI_PAR_FOR       XiParallelForData*   —
@@ -661,10 +663,7 @@ typedef enum {
     XI_END_TRY, /* end try-catch region */
 
     /* Builtin calls: compile-time recognized functions */
-    XI_ASSERT,        /* args[0]=cond; aux=loc_string; aux_int: 0=true,1=false */
-    XI_ASSERT_EQ,     /* args[0]=actual, args[1]=expected; aux=loc_string */
-    XI_ASSERT_NE,     /* args[0]=actual, args[1]=unexpected; aux=loc_string */
-    XI_ASSERT_THROWS, /* args[0]=fn; aux=loc_string; emits try-catch sequence */
+    XI_ASSERTION,     /* args follow typed XrAssertionPlan in aux */
     XI_TYPEID,        /* args[0]=value; result=int XrTypeId */
     XI_TYPENAME,      /* args[0]=value; result=string typename */
     XI_LEN,           /* args[0]=Lengthable value */
@@ -1359,6 +1358,12 @@ typedef struct XiMapLiteralData {
 
 static inline const XiCallPlan *xi_call_plan(const XiValue *v) {
     return v ? v->call_plan : NULL;
+}
+
+static inline const XrAssertionPlan *xi_assertion_plan(const XiValue *v) {
+    return v && v->op == XI_ASSERTION && v->aux_kind == XI_AUX_KIND_ASSERTION_PLAN
+               ? (const XrAssertionPlan *) v->aux
+               : NULL;
 }
 
 static inline bool xi_load_field_is_adt(const XiValue *v) {

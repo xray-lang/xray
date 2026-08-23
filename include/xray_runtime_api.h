@@ -43,7 +43,7 @@ typedef struct XrRuntime XrRuntime;
 typedef struct XrModule XrModule;
 typedef struct XrExport XrExport;
 
-#define XR_RUNTIME_CONFIG_SCHEMA_VERSION UINT32_C(1)
+#define XR_RUNTIME_CONFIG_SCHEMA_VERSION UINT32_C(2)
 
 typedef void *(*XrRuntimeAllocateProvider)(void *context, size_t size,
                                            size_t alignment);
@@ -52,9 +52,8 @@ typedef void *(*XrRuntimeAllocateProvider)(void *context, size_t size,
  * facade; it is not an object-layout destructor. */
 typedef void (*XrRuntimeDeallocateFinalizer)(void *context, void *allocation,
                                              size_t size, size_t alignment);
-/* The hosted panic contract is NO_RETURN. Returning from this callback is a
- * host contract violation; normal activation and scalar execution do not call
- * it speculatively. */
+/* The hosted panic contract unwinds to the runtime boundary so assertPanics
+ * can observe it without substituting the typed-error channel. */
 typedef void (*XrRuntimePanicProvider)(void *context, const char *message,
                                       size_t message_size);
 

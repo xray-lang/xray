@@ -122,6 +122,48 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
     return true;
 }
 
+bool xi_value_set_assertion_plan(XiFunc *f, XiValue *value, const XrAssertionPlan *plan) {
+    if (!f || !value || value->op != XI_ASSERTION || !plan ||
+        !xr_assertion_plan_validate(plan))
+        return false;
+    XrAssertionPlan *owned =
+        (XrAssertionPlan *) xi_func_arena_alloc(f, (uint32_t) sizeof(*owned));
+    if (!owned)
+        return false;
+    *owned = *plan;
+    size_t file_len = strlen(plan->source.file);
+    if (file_len >= UINT32_MAX)
+        return false;
+    char *file = (char *) xi_func_arena_alloc(f, (uint32_t) file_len + 1u);
+    if (!file)
+        return false;
+    memcpy(file, plan->source.file, file_len + 1u);
+    owned->source.file = file;
+    if (!xr_assertion_plan_validate(owned))
+        return false;
+    value->aux = owned;
+    value->aux_kind = XI_AUX_KIND_ASSERTION_PLAN;
+    return true;
+}
+
+bool xi_value_clone_assertion_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
+    if (!f || !dst || !src)
+        return false;
+    if (src->op != XI_ASSERTION)
+        return src->aux_kind != XI_AUX_KIND_ASSERTION_PLAN;
+    const XrAssertionPlan *plan = xi_assertion_plan(src);
+    return plan && xi_value_set_assertion_plan(f, dst, plan);
+}
+
+bool xi_value_clone_metadata(XiFunc *f, XiValue *dst, const XiValue *src) {
+    if (!f || !dst || !src || dst->op != src->op)
+        return false;
+    xi_value_copy_metadata(dst, src);
+    if (src->aux_kind == XI_AUX_KIND_ASSERTION_PLAN)
+        return xi_value_clone_assertion_plan(f, dst, src);
+    return true;
+}
+
 XR_FUNC bool xi_func_set_param_passing_mode(XiFunc *f, uint16_t index, XrParamMode mode) {
     if (!f || index >= f->nparams || !f->params || !f->params[index])
         return false;

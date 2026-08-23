@@ -28,19 +28,6 @@ typedef struct XrRuntimeEntryRegistryRow {
     atomic_uint_least64_t revision;
 } XrRuntimeEntryRegistryRow;
 
-typedef enum XrRuntimeActivationRegistrationRole {
-    XR_RUNTIME_ACTIVATION_PROVIDER = 1,
-    XR_RUNTIME_ACTIVATION_FINALIZER = 2,
-} XrRuntimeActivationRegistrationRole;
-
-typedef struct XrRuntimeActivationRegistration {
-    XrStableId provider_contract;
-    XrStableId operation;
-    uint16_t provider_kind;
-    uint8_t role;
-    uint8_t reserved;
-} XrRuntimeActivationRegistration;
-
 struct XrRuntimeModuleActivation {
     XrRuntimeEntryRegistry *registry;
     XrRuntimeGenerationAuthority *authority;
@@ -703,14 +690,40 @@ static bool activation_operation_role(
     }
     if (operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_PANICS &&
         operation->lifetime_flags == XR_TARGET_PROVIDER_LIFETIME_BORROWS &&
-        operation->failure_flags == XR_TARGET_PROVIDER_FAILURE_NO_RETURN) {
+        operation->failure_flags == XR_TARGET_PROVIDER_FAILURE_PANICS) {
         *role = XR_RUNTIME_ACTIVATION_PROVIDER;
         return bindings->panic != NULL;
     }
     return false;
 }
 
-static bool activation_requirements_build(
+static bool activation_operation_required(
+    uint32_t capability,
+    const XrTargetProviderOperationContract *operation) {
+    if (!operation)
+        return false;
+    if (capability == XR_TARGET_CAPABILITY_ALLOCATOR)
+        return operation->effect_flags ==
+                   XR_TARGET_PROVIDER_EFFECT_ALLOCATES ||
+               operation->effect_flags ==
+                   XR_TARGET_PROVIDER_EFFECT_DEALLOCATES;
+    if (capability == XR_TARGET_CAPABILITY_PANIC ||
+        capability == XR_TARGET_CAPABILITY_PANIC_BOUNDARY)
+        return operation->effect_flags == XR_TARGET_PROVIDER_EFFECT_PANICS;
+    return false;
+}
+
+static bool activation_requirement_present(
+    const XrRuntimeActivationRegistration *requirements, uint32_t count,
+    uint16_t provider_kind, XrStableId operation) {
+    for (uint32_t i = 0; i < count; i++)
+        if (requirements[i].provider_kind == provider_kind &&
+            xr_stable_id_equal(requirements[i].operation, operation))
+            return true;
+    return false;
+}
+
+XR_FUNCDEF bool xr_runtime_activation_requirements_build(
     const XrTargetPlan *plan, const XrRuntimeProviderBindings *bindings,
     XrRuntimeActivationRegistration *requirements, uint32_t capacity,
     uint32_t *requirement_count, uint32_t *provider_count,
@@ -733,16 +746,33 @@ static bool activation_requirements_build(
         xr_target_plan_capabilities(plan, &capability_count);
     for (uint32_t i = 0; i < capability_count; i++) {
         const XrTargetCapabilityRecord *capability = &capabilities[i];
+        if (!xr_target_capability_kind_valid(capability->capability) ||
+            capability->provider !=
+                xr_target_capability_provider(capability->capability))
+            return false;
+        if (capability->provider == XR_TARGET_PROVIDER_INVALID)
+            continue;
+        if (capability->provider >= XR_TARGET_PROVIDER_KIND_COUNT)
+            return false;
         const XrTargetProviderContract *contract =
             activation_provider_contract(&runtime, capability->provider);
-        if (!contract || contract->provider_kind != capability->capability)
+        if (!contract || contract->provider_kind != capability->provider)
             return false;
+        bool matched = false;
         for (uint16_t operation_index = 0;
              operation_index < contract->operation_count; operation_index++) {
-            if (*requirement_count >= capacity)
-                return false;
             const XrTargetProviderOperationContract *operation =
                 &contract->operations[operation_index];
+            if (!activation_operation_required(capability->capability,
+                                               operation))
+                continue;
+            matched = true;
+            if (activation_requirement_present(
+                    requirements, *requirement_count,
+                    contract->provider_kind, operation->stable_id))
+                continue;
+            if (*requirement_count >= capacity)
+                return false;
             uint8_t role = 0;
             if (!activation_operation_role(operation, bindings, &role))
                 return false;
@@ -760,6 +790,8 @@ static bool activation_requirements_build(
             else
                 (*provider_count)++;
         }
+        if (!matched)
+            return false;
     }
     return *provider_count != 0 && *finalizer_count != 0;
 }
@@ -839,7 +871,7 @@ bool xr_runtime_activation_publish_module(
     uint32_t requirement_count = 0;
     uint32_t provider_count = 0;
     uint32_t finalizer_count = 0;
-    if (!activation_requirements_build(
+    if (!xr_runtime_activation_requirements_build(
             plan, &bindings, requirements,
             XR_RUNTIME_ACTIVATION_MAX_REGISTRATIONS, &requirement_count,
             &provider_count, &finalizer_count))

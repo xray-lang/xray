@@ -359,28 +359,11 @@
   :vm-bytecode (driver xi_emit_store_upval)
   :aot-c (driver xicgen_store_upval))
 
-(lower xi.assert
+(lower xi.assertion
   :match ()
   :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_assert)
-  :aot-c (driver xicgen_assert))
-
-(lower xi.assert.eq
-  :match ()
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_assert_eq)
-  :aot-c (driver xicgen_assert_eq))
-
-(lower xi.assert.ne
-  :match ()
-  :required-targets (vm-bytecode aot-c)
-  :vm-bytecode (driver xi_emit_assert_ne)
-  :aot-c (driver xicgen_assert_ne))
-
-(lower xi.assert.throws
-  :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_assert_throws))
+  :vm-bytecode (driver xi_emit_assertion)
+  :aot-c (driver xicgen_assertion))
 
 (lower xi.typeid
   :match ()

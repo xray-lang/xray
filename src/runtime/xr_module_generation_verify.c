@@ -17,6 +17,7 @@
 #include "../base/xsha256.h"
 #include "../plan/semantic/xr_semantic_ids.h"
 #include "../plan/target/xr_target_instruction_verify.h"
+#include "../plan/target/xr_target_capability.h"
 #include "../plan/target/xr_target_plan.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_verify.h"
@@ -56,7 +57,7 @@ static void verifier_hash_u64(XrSHA256Context *context, uint64_t value) {
 static void verifier_generation_fingerprint(
     const XrModuleGenerationIdentity *identity,
     uint8_t out[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE]) {
-    static const uint8_t domain[] = "xray-module-generation-v1\0";
+    static const uint8_t domain[] = "xray-module-generation-v2\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -166,13 +167,21 @@ static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
                       "generation native runtime identity is unavailable");
     uint8_t actual_generation[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
     verifier_generation_fingerprint(identity, actual_generation);
+    uint64_t expected_capability_mask = 0;
+    if (!xr_target_semantic_capability_mask(
+            xr_target_plan_semantic_plan(plan),
+            facts->machine.runtime_profile,
+            &expected_capability_mask))
+        return reject(diagnostic, diagnostic_size, "XR_TARGET_1004",
+                      "generation semantic capability closure is invalid");
     if (identity->target_plan_schema_version !=
             xr_target_plan_schema_version(plan) ||
         identity->completed_family_mask !=
             xr_target_plan_completed_family_mask(plan) ||
         identity->required_capability_mask !=
-            XR_TARGET_FOUNDATION_CAPABILITY_MASK ||
-        (identity->required_capability_mask & ~provider_mask) != 0 ||
+            expected_capability_mask ||
+        !xr_target_capability_mask_is_backed(
+            identity->required_capability_mask, provider_mask) ||
         memcmp(identity->semantic_fingerprint,
                xr_target_plan_semantic_fingerprint(plan).bytes,
                XR_RUNTIME_GENERATION_FINGERPRINT_SIZE) != 0 ||

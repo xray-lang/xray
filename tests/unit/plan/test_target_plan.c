@@ -22,6 +22,7 @@
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_capability.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/aot/refine/xr_aot_representation_refinement.h"
 #include "../../../src/ir/xi_opt.h"
@@ -37,6 +38,7 @@
 #include "../../../src/runtime/value/xenum_layout.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
+#include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -428,6 +430,72 @@ static bool build_target_unit_fixture_semantic(XiFunc *function, XrSemanticPlan 
     bool built = xr_semantic_plan_build(function, out, error, error_size);
     function->module = NULL;
     return built;
+}
+
+static XrSemanticPlan *build_assertion_semantic(XrCoreBuiltinId builtin_id) {
+    XiFunc *function = xi_func_new("assertion_capability_probe", &stub_unit);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(builtin_id);
+    REQUIRE(desc != NULL &&
+            desc->category == XR_CORE_INTRINSIC_CATEGORY_ASSERTION);
+    XiValue *arguments[2] = {0};
+    uint16_t arity = 1;
+    if (builtin_id == XR_CORE_BUILTIN_ASSERT) {
+        arguments[0] = xi_const_bool(function, entry, true, &stub_bool);
+    } else if (builtin_id == XR_CORE_BUILTIN_ASSERT_EQUAL) {
+        arity = 2;
+        arguments[0] = xi_const_int(function, entry, 1, &stub_int);
+        arguments[1] = xi_const_int(function, entry, 1, &stub_int);
+    } else {
+        arguments[0] = xi_param(function, entry, 0, &stub_exact_function);
+        function->params = (XiValue **) xr_malloc(sizeof(*function->params));
+        REQUIRE(function->params != NULL);
+        function->params[0] = arguments[0];
+        function->nparams = 1;
+    }
+    REQUIRE(arguments[0] != NULL && (arity == 1 || arguments[1] != NULL));
+    XiValue *assertion =
+        xi_value_new(function, entry, XI_ASSERTION, &stub_unit, arity);
+    REQUIRE(assertion != NULL);
+    for (uint16_t i = 0; i < arity; i++)
+        assertion->args[i] = arguments[i];
+    assertion->source_span = (XiSourceSpan) {3, 5, 3, 24};
+    XrLocation source = {"assertion-capability.xr", 3, 5, 3, 24};
+    XrAssertionPlan plan;
+    REQUIRE(xr_assertion_plan_build(
+                builtin_id, arity, source,
+                XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
+                XR_ASSERTION_CAPABILITY_NONE, &plan) == XR_ASSERTION_PLAN_OK);
+    REQUIRE(xi_value_set_assertion_plan(function, assertion, &plan));
+    xi_block_set_return(entry, assertion);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error,
+                                                    sizeof(error));
+    if (!built)
+        fprintf(stderr, "assertion semantic fixture failed: %s\n", error);
+    REQUIRE(built);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrTargetProfile *build_native_profile_with_provider_count(
+    XrRuntimeTargetAuthority *authority, size_t provider_count) {
+    XrTargetProfileBuildInput input = {
+        .machine = authority->machine,
+        .runtime_abi = &authority->runtime_abi,
+        .object_header_materialization =
+            &authority->object_header_materialization,
+        .string_contract = &authority->string_contract,
+        .providers = authority->providers,
+        .provider_count = provider_count,
+    };
+    XrTargetProfile *profile = NULL;
+    char error[512] = {0};
+    REQUIRE(xr_target_profile_build(&input, &profile, error, sizeof(error)));
+    return profile;
 }
 
 static XrSemanticPlan *build_source_instance_method_semantic(void) {
@@ -7481,6 +7549,193 @@ static void test_string_byte_slice_view_target_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_assertion_target_capability_authority(void) {
+    const XrCoreBuiltinId builtins[] = {
+        XR_CORE_BUILTIN_ASSERT,
+        XR_CORE_BUILTIN_ASSERT_EQUAL,
+        XR_CORE_BUILTIN_ASSERT_THROWS,
+        XR_CORE_BUILTIN_ASSERT_PANICS,
+    };
+    const uint64_t expected_extra[] = {
+        0,
+        0,
+        XR_TARGET_CAPABILITY_MASK(
+            XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY),
+        XR_TARGET_CAPABILITY_MASK(
+            XR_TARGET_CAPABILITY_PANIC_BOUNDARY),
+    };
+    for (size_t i = 0; i < sizeof(builtins) / sizeof(builtins[0]); i++) {
+        XrRuntimeTargetAuthority authority;
+        REQUIRE(xr_runtime_target_authority_native_hosted(&authority) ==
+                XR_RUNTIME_ABI_OK);
+        XrTargetProfile *profile = build_native_profile_with_provider_count(
+            &authority, authority.provider_count);
+        XrSemanticPlan *semantic = build_assertion_semantic(builtins[i]);
+        XrTargetPlan *plan = NULL;
+        char error[512] = {0};
+        bool built = xr_target_plan_build(semantic, profile, &plan, error,
+                                          sizeof(error));
+        if (!built)
+            fprintf(stderr, "assertion capability plan failed: %s\n", error);
+        REQUIRE(built && plan != NULL);
+        uint64_t mask = 0;
+        REQUIRE(xr_target_plan_capability_mask(plan, &mask));
+        REQUIRE(mask == (XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+                         expected_extra[i]));
+        uint32_t capability_count = 0;
+        const XrTargetCapabilityRecord *records =
+            xr_target_plan_capabilities(plan, &capability_count);
+        REQUIRE(records != NULL && capability_count ==
+                                       (builtins[i] == XR_CORE_BUILTIN_ASSERT ||
+                                                builtins[i] ==
+                                                    XR_CORE_BUILTIN_ASSERT_EQUAL
+                                            ? 2u
+                                            : 3u));
+        XrTargetCapabilityRecord *mutable_records =
+            (XrTargetCapabilityRecord *) records;
+        if (capability_count == 3) {
+            uint16_t saved_provider = mutable_records[2].provider;
+            mutable_records[2].provider =
+                saved_provider == XR_TARGET_PROVIDER_PANIC
+                    ? XR_TARGET_PROVIDER_IO
+                    : XR_TARGET_PROVIDER_PANIC;
+            expect_verify_failure(plan, "XR_TARGET_1004");
+            mutable_records[2].provider = saved_provider;
+            uint32_t saved_capability = mutable_records[2].capability;
+            mutable_records[2].capability =
+                XR_TARGET_CAPABILITY_ASSERTION_REPORT;
+            expect_verify_failure(plan, "XR_TARGET_1004");
+            mutable_records[2].capability = saved_capability;
+        }
+        REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+        xr_target_plan_free(plan);
+        xr_semantic_plan_free(semantic);
+        xr_target_profile_free(profile);
+    }
+
+    XrRuntimeTargetAuthority hosted_without_report;
+    REQUIRE(xr_runtime_target_authority_native_hosted(&hosted_without_report) ==
+            XR_RUNTIME_ABI_OK);
+    XrTargetProfile *profile =
+        build_native_profile_with_provider_count(&hosted_without_report,
+                                                 hosted_without_report.provider_count);
+    XrSemanticPlan *semantic =
+        build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(hosted_without_report.provider_count == 2 &&
+            (hosted_without_report.providers[0].provider_kind ==
+                 XR_TARGET_PROVIDER_IO ||
+             hosted_without_report.providers[1].provider_kind ==
+                 XR_TARGET_PROVIDER_IO) == false);
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)) &&
+            plan != NULL);
+    uint64_t hosted_mask = 0;
+    REQUIRE(xr_target_plan_capability_mask(plan, &hosted_mask) &&
+            hosted_mask == XR_TARGET_FOUNDATION_CAPABILITY_MASK);
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    XrRuntimeTargetAuthority freestanding;
+    const uint64_t freestanding_provider_mask =
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+    REQUIRE(xr_runtime_target_authority_native_freestanding(
+                freestanding_provider_mask, &freestanding) ==
+            XR_RUNTIME_ABI_OK);
+    profile = build_native_profile_with_provider_count(
+        &freestanding, freestanding.provider_count);
+    semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
+    REQUIRE(xr_target_plan_build(semantic, profile, &plan, error,
+                                 sizeof(error)) &&
+            plan != NULL);
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    const XrCoreBuiltinId unsupported_freestanding_actions[] = {
+        XR_CORE_BUILTIN_ASSERT_THROWS,
+        XR_CORE_BUILTIN_ASSERT_PANICS,
+    };
+    for (size_t i = 0;
+         i < sizeof(unsupported_freestanding_actions) /
+                 sizeof(unsupported_freestanding_actions[0]);
+         i++) {
+        profile = build_native_profile_with_provider_count(
+            &freestanding, freestanding.provider_count);
+        semantic =
+            build_assertion_semantic(unsupported_freestanding_actions[i]);
+        plan = NULL;
+        REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                      sizeof(error)) &&
+                plan == NULL && strstr(error, "XR_TARGET_1004") != NULL &&
+                strstr(error, "capturable failure boundary") != NULL);
+        xr_semantic_plan_free(semantic);
+        xr_target_profile_free(profile);
+    }
+
+    XrRuntimeTargetAuthority freestanding_wrong_report_id = freestanding;
+    freestanding_wrong_report_id.providers[2]
+        .operations[0]
+        .stable_id.bytes[0] ^= 1u;
+    profile = build_native_profile_with_provider_count(
+        &freestanding_wrong_report_id,
+        freestanding_wrong_report_id.provider_count);
+    semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                  sizeof(error)) &&
+            plan == NULL && strstr(error, "XR_TARGET_1004") != NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    XrRuntimeTargetAuthority freestanding_wrong_report_abi = freestanding;
+    freestanding_wrong_report_abi.providers[2]
+        .operations[0]
+        .call_abi.result.width = 2;
+    freestanding_wrong_report_abi.providers[2]
+        .operations[0]
+        .call_abi.result.alignment = 2;
+    profile = build_native_profile_with_provider_count(
+        &freestanding_wrong_report_abi,
+        freestanding_wrong_report_abi.provider_count);
+    semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT_EQUAL);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                  sizeof(error)) &&
+            plan == NULL && strstr(error, "XR_TARGET_1004") != NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    profile = build_native_profile_with_provider_count(&freestanding, 2);
+    semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                  sizeof(error)) &&
+            plan == NULL && strstr(error, "XR_TARGET_1004") != NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    XrRuntimeTargetAuthority no_unwind;
+    REQUIRE(xr_runtime_target_authority_native_hosted(&no_unwind) ==
+            XR_RUNTIME_ABI_OK);
+    no_unwind.providers[1].panic_behavior =
+        XR_TARGET_PROVIDER_PANIC_NO_RETURN;
+    no_unwind.providers[1].operations[0].failure_flags =
+        XR_TARGET_PROVIDER_FAILURE_NO_RETURN;
+    profile = build_native_profile_with_provider_count(
+        &no_unwind, no_unwind.provider_count);
+    semantic = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT_PANICS);
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error,
+                                  sizeof(error)) &&
+            plan == NULL && strstr(error, "XR_TARGET_1004") != NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+}
+
 static void test_structural_mutations_fail_closed(void) {
     XrSemanticPlan *semantic = build_semantic_plan();
     XrTargetProfile *profile = build_profile(0);
@@ -8113,6 +8368,11 @@ int main(int argc, char **argv) {
         puts("Source-class Array.fill authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "assertion-capability-authority") == 0) {
+        test_assertion_target_capability_authority();
+        puts("Assertion TargetPlan capability authority tests passed");
+        return 0;
+    }
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
@@ -8136,6 +8396,7 @@ int main(int argc, char **argv) {
     test_rune_to_uint32_call_authority();
     test_rune_is_whitespace_call_authority();
     test_string_byte_slice_view_target_authority();
+    test_assertion_target_capability_authority();
     test_channel_receive_storage_authority();
     test_channel_close_call_authority();
     test_source_export_call_authority();

@@ -17,6 +17,7 @@
 #define XR_SEMANTIC_PLAN_H
 
 #include "xr_semantic_ids.h"
+#include "../../shared/xr_assertion_plan.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -90,8 +91,24 @@ typedef enum XrSemanticIntrinsicKind {
     XR_SEM_INTRINSIC_MAP_ENTRIES_ITERATOR = 21,
     XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_HAS_NEXT = 22,
     XR_SEM_INTRINSIC_MAP_ENTRY_ITERATOR_NEXT = 23,
+    XR_SEM_INTRINSIC_ASSERTION = 24,
     XR_SEM_INTRINSIC_COUNT,
 } XrSemanticIntrinsicKind;
+
+/* XI_ASSERTION reserves all eight generic evidence slots as one typed
+ * projection of XrAssertionPlan. Other operations retain their established
+ * evidence meanings. */
+typedef enum XrSemanticAssertionEvidenceSlot {
+    XR_SEM_ASSERT_EVIDENCE_SCHEMA = 0,
+    XR_SEM_ASSERT_EVIDENCE_BUILTIN_ID = 1,
+    XR_SEM_ASSERT_EVIDENCE_KIND = 2,
+    XR_SEM_ASSERT_EVIDENCE_FAILURE_CHANNEL = 3,
+    XR_SEM_ASSERT_EVIDENCE_FLOW_RULE = 4,
+    XR_SEM_ASSERT_EVIDENCE_EQUALITY = 5,
+    XR_SEM_ASSERT_EVIDENCE_TARGET = 6,
+    XR_SEM_ASSERT_EVIDENCE_CAPABILITIES = 7,
+    XR_SEM_ASSERT_EVIDENCE_COUNT = 8,
+} XrSemanticAssertionEvidenceSlot;
 
 typedef enum XrSemanticArrayHofKind {
     XR_SEM_ARRAY_HOF_NONE = 0,
@@ -462,6 +479,9 @@ typedef struct XrSemanticOperationRecord {
     uint8_t array_hof_kind;
     uint8_t array_result_element_storage;
 } XrSemanticOperationRecord;
+
+XR_FUNC bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *operation,
+                                                   XrAssertionPlan *out);
 
 typedef struct XrSemanticEdgeRecord {
     XrStableId id;

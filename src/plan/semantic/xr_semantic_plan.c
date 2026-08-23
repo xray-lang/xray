@@ -10,6 +10,7 @@
 
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_ops.h"
+#include "../../ir/xi.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
@@ -30,6 +31,39 @@ static void set_error(char *error, size_t size, const char *code, const char *de
 static bool stable_id_is_zero(XrStableId id) {
     XrStableId zero = {{0}};
     return xr_stable_id_equal(id, zero);
+}
+
+bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *operation,
+                                          XrAssertionPlan *out) {
+    if (!operation || !out || operation->opcode != XI_ASSERTION ||
+        operation->auxiliary_kind != XI_AUX_KIND_ASSERTION_PLAN ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE || !operation->source_file ||
+        !operation->source_file[0] ||
+        operation->evidence[XR_SEM_ASSERT_EVIDENCE_SCHEMA] !=
+            XR_ASSERTION_PLAN_SCHEMA_VERSION)
+        return false;
+    XrLocation source = {
+        .file = operation->source_file,
+        .line = operation->source_start_line,
+        .column = operation->source_start_column,
+        .end_line = operation->source_end_line,
+        .end_column = operation->source_end_column,
+    };
+    if (operation->operand_count > UINT16_MAX ||
+        xr_assertion_plan_build(
+            (XrCoreBuiltinId) operation->evidence[XR_SEM_ASSERT_EVIDENCE_BUILTIN_ID],
+            operation->operand_count, source,
+            operation->evidence[XR_SEM_ASSERT_EVIDENCE_TARGET],
+            operation->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES], out) !=
+            XR_ASSERTION_PLAN_OK)
+        return false;
+    return out->kind == operation->evidence[XR_SEM_ASSERT_EVIDENCE_KIND] &&
+           out->expected_failure_channel ==
+               operation->evidence[XR_SEM_ASSERT_EVIDENCE_FAILURE_CHANNEL] &&
+           out->flow_rule == operation->evidence[XR_SEM_ASSERT_EVIDENCE_FLOW_RULE] &&
+           out->equality_authority == operation->evidence[XR_SEM_ASSERT_EVIDENCE_EQUALITY];
 }
 
 static int compare_id_key_ref(const void *left, const void *right) {

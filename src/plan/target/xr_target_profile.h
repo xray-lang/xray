@@ -25,8 +25,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(2)
-#define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(46)
+#define XR_TARGET_PROFILE_SCHEMA_VERSION UINT32_C(3)
+#define XR_TARGET_PLAN_SCHEMA_VERSION UINT32_C(47)
 
 typedef struct XrTargetProfile XrTargetProfile;
 

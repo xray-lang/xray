@@ -215,6 +215,66 @@ bool xtc_target_profile_build_native_hosted(
     return xr_target_profile_build(&input, out, error, error_size);
 }
 
+bool xtc_target_profile_build_native_freestanding(
+    const XrToolchainTarget *target, const XrTargetCodegenFacts *codegen,
+    uint64_t provider_mask, XrTargetProfile **out, char *error, size_t error_size) {
+    if (out)
+        *out = NULL;
+    if (!target || !codegen || !out)
+        return authority_error(error, error_size, "numeric target authority is missing");
+    if (!target->is_native)
+        return authority_error(error, error_size,
+                               "cross-target freestanding ABI authority is unavailable");
+    if (codegen->reserved16 != 0 || codegen->reserved32 != 0)
+        return authority_error(error, error_size, "codegen authority contains reserved data");
+
+    XrTargetMachineFacts machine;
+    memset(&machine, 0, sizeof(machine));
+    if (!map_architecture(target->arch, &machine.architecture) ||
+        !map_operating_system(target->os, &machine.operating_system) ||
+        !map_environment(target->abi, &machine.environment) ||
+        !map_native_abi(target, &machine.native_abi))
+        return authority_error(error, error_size,
+                               "numeric native target identity is unsupported");
+    const XrTargetDataLayout *native_layout = xr_target_data_layout_host();
+    if (!native_layout || target->pointer_bits != (int) (sizeof(void *) * 8) ||
+        (target->endian == XR_TOOLCHAIN_TARGET_ENDIAN_LITTLE) !=
+            (*(const uint8_t *) &(const uint16_t) {1} == 1))
+        return authority_error(error, error_size,
+                               "numeric target does not match the native process");
+    machine.data_layout = *native_layout;
+    machine.runtime_profile = XR_TARGET_RUNTIME_PROFILE_FREESTANDING;
+    machine.float_feature_mask = XR_TARGET_FLOAT_IEEE754 | XR_TARGET_FLOAT_STRICT;
+    machine.vector_feature_mask = codegen->vector_feature_mask;
+    machine.maximum_vector_bits = codegen->maximum_vector_bits;
+    fill_native_atomic_facts(&machine);
+
+    XrRuntimeTargetAuthority runtime;
+    XrRuntimeAbiStatus status =
+        xr_runtime_target_authority_native_freestanding(provider_mask, &runtime);
+    if (status != XR_RUNTIME_ABI_OK)
+        return authority_error(
+            error, error_size,
+            "canonical freestanding hook provider contract is invalid");
+    if (runtime.runtime_abi.pointer_width != machine.data_layout.pointer.size ||
+        runtime.runtime_abi.target_endian !=
+            (machine.data_layout.endian == XR_TARGET_ENDIAN_LITTLE
+                 ? XR_RUNTIME_ENDIAN_LITTLE
+                 : XR_RUNTIME_ENDIAN_BIG) ||
+        !layout_equal(native_layout, &machine.data_layout))
+        return authority_error(error, error_size,
+                               "native freestanding hook ABI authority is invalid");
+    XrTargetProfileBuildInput input = {
+        .machine = machine,
+        .runtime_abi = &runtime.runtime_abi,
+        .object_header_materialization = &runtime.object_header_materialization,
+        .string_contract = &runtime.string_contract,
+        .providers = runtime.providers,
+        .provider_count = runtime.provider_count,
+    };
+    return xr_target_profile_build(&input, out, error, error_size);
+}
+
 bool xtc_target_profile_build_current_native_hosted(
     const XrTargetCodegenFacts *codegen, XrTargetProfile **out, char *error,
     size_t error_size) {

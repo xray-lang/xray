@@ -68,10 +68,7 @@
     X(CELL_SET, xi_emit_cell_set) \
     X(LOAD_UPVAL, xi_emit_load_upval) \
     X(STORE_UPVAL, xi_emit_store_upval) \
-    X(ASSERT, xi_emit_assert) \
-    X(ASSERT_EQ, xi_emit_assert_eq) \
-    X(ASSERT_NE, xi_emit_assert_ne) \
-    X(ASSERT_THROWS, xi_emit_assert_throws) \
+    X(ASSERTION, xi_emit_assertion) \
     X(TYPEID, xi_emit_typeid) \
     X(TYPENAME, xi_emit_typename) \
     X(LEN, xi_emit_len) \

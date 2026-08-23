@@ -464,7 +464,8 @@ static XiValue *pre_clone_value(XiFunc *f, XiBlock *pred, const XiValue *tmpl) {
         return NULL;
     for (uint16_t a = 0; a < tmpl->nargs; a++)
         ins->args[a] = tmpl->args[a];
-    xi_value_copy_metadata(ins, tmpl);
+    if (!xi_value_clone_metadata(f, ins, tmpl))
+        return NULL;
     return ins;
 }
 

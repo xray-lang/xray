@@ -1118,7 +1118,7 @@ static bool emit_class_native_ensure_type_id_expr(XiCgenCtx *ctx, FILE *out,
 
 static bool cg_class_native_has_inspect_sidecar(const XiClassData *cd) {
     return cd && cd->instance_layout &&
-           (cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON)) != 0;
+           (cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON | XR_DERIVE_EQ)) != 0;
 }
 
 static void emit_class_native_inspect_fields_name(FILE *out, const char *prefix,
@@ -1580,7 +1580,8 @@ static void emit_class_native_type_derive_init(XiCgenCtx *ctx, FILE *out, const 
     (void) ctx;
     if (!cd)
         return;
-    uint32_t derive_flags = cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON);
+    uint32_t derive_flags =
+        cd->derive_flags & (XR_DERIVE_INSPECT | XR_DERIVE_JSON | XR_DERIVE_EQ);
     if (derive_flags == 0)
         return;
     fprintf(out, "xrt_type_set_derive(%s, %uu, ", type_id_expr, (unsigned) derive_flags);

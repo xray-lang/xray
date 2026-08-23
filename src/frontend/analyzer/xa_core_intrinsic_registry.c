@@ -169,17 +169,17 @@ static uint32_t assertion_required_capabilities(XrAssertionKind kind) {
     return capabilities;
 }
 
-static bool assertion_target_is_single(uint32_t target) {
+static bool assertion_target_is_valid(uint32_t target) {
     const uint32_t targets = XR_CORE_INTRINSIC_TARGET_VM |
                              XR_CORE_INTRINSIC_TARGET_AOT_HOSTED |
                              XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER;
-    return (target & targets) != 0 && (target & (target - 1u)) == 0 && (target & ~targets) == 0;
+    return (target & targets) != 0 && (target & ~targets) == 0;
 }
 
 bool xr_assertion_plan_validate(const XrAssertionPlan *plan) {
     if (!plan || plan->schema_version != XR_ASSERTION_PLAN_SCHEMA_VERSION ||
         !xr_assertion_location_is_complete(plan->source) ||
-        !assertion_target_is_single(plan->target) ||
+        !assertion_target_is_valid(plan->target) ||
         plan->kind <= XR_ASSERTION_KIND_NONE || plan->kind >= XR_ASSERTION_KIND_COUNT ||
         plan->equality_authority >= XR_ASSERTION_EQUALITY_COUNT ||
         plan->expected_failure_channel >= XR_CORE_INTRINSIC_FAILURE_CHANNEL_COUNT ||
@@ -249,7 +249,7 @@ XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id, uint16
                                               XrLocation source, uint32_t target,
                                               uint32_t available_capabilities,
                                               XrAssertionPlan *out) {
-    if (!out || !xr_assertion_location_is_complete(source) || !assertion_target_is_single(target))
+    if (!out || !xr_assertion_location_is_complete(source) || !assertion_target_is_valid(target))
         return XR_ASSERTION_PLAN_INVALID_ARGUMENT;
     memset(out, 0, sizeof(*out));
     const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(builtin_id);
@@ -259,11 +259,16 @@ XrAssertionPlanStatus xr_assertion_plan_build(XrCoreBuiltinId builtin_id, uint16
         return XR_ASSERTION_PLAN_NOT_ASSERTION;
     if (arity < desc->min_arity || arity > desc->max_arity)
         return XR_ASSERTION_PLAN_INVALID_ARITY;
-    if ((desc->target_applicability & target) == 0)
+    if ((desc->target_applicability & target) != target)
         return XR_ASSERTION_PLAN_UNSUPPORTED_TARGET;
 
     uint32_t required_capabilities = assertion_required_capabilities(kind);
-    if (target == XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER &&
+    /* A target-neutral semantic plan records what it requires.  Only an exact
+     * freestanding plan request may claim provider availability here; the
+     * TargetPlan builder later proves mixed/portable plans against the frozen
+     * target profile. */
+    if (target ==
+            XR_CORE_INTRINSIC_TARGET_AOT_FREESTANDING_ASSERTION_PROVIDER &&
         (available_capabilities & required_capabilities) != required_capabilities)
         return XR_ASSERTION_PLAN_MISSING_CAPABILITY;
 
@@ -331,17 +336,11 @@ bool xr_assertion_classify_action_outcome(
 bool xr_assertion_classify_action_result(const XrAssertionPlan *plan,
                                          XrAssertionActionOutcome outcome,
                                          XrAssertionFailureKind *failure_kind) {
-    unsigned observations = (outcome.returned_normally ? 1u : 0u) +
-                            (outcome.has_typed_error ? 1u : 0u) +
-                            (outcome.has_panic ? 1u : 0u);
-    if (observations != 1u)
+    if (!failure_kind || !xr_assertion_plan_validate(plan) ||
+        (plan->kind != XR_ASSERTION_KIND_THROWS && plan->kind != XR_ASSERTION_KIND_PANICS))
         return false;
-    XrCoreIntrinsicExpectedFailureChannel channel = XR_CORE_INTRINSIC_FAILURE_CHANNEL_NONE;
-    if (outcome.has_typed_error)
-        channel = XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR;
-    else if (outcome.has_panic)
-        channel = XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC;
-    return xr_assertion_classify_action_outcome(plan, channel, failure_kind);
+    return xr_assertion_classify_action_channels(plan->expected_failure_channel, outcome,
+                                                 failure_kind);
 }
 
 bool xr_core_intrinsic_registry_validate(char *error, size_t error_size) {

@@ -342,6 +342,8 @@ add_test(NAME test_target_plan_fingerprint_direct_local_call
     COMMAND $<TARGET_FILE:test_target_plan> fingerprint-direct-local-call)
 add_test(NAME test_target_plan_fingerprint_tail_coroutine_chain
     COMMAND $<TARGET_FILE:test_target_plan> fingerprint-tail-coroutine-chain)
+add_test(NAME test_target_assertion_capability_authority
+    COMMAND $<TARGET_FILE:test_target_plan> assertion-capability-authority)
 add_test(NAME test_target_array_intrinsic_authority
     COMMAND $<TARGET_FILE:test_target_plan> array-intrinsic-authority)
 add_test(NAME test_target_map_entry_iterator_authority
@@ -648,6 +650,42 @@ add_xray_unit_test(test_xrt_exception_tls aot/test_xrt_exception_tls.c)
 add_xray_unit_test(test_type_names_parity aot/test_type_names_parity.c)
 set_tests_properties(test_type_names_parity PROPERTIES LABELS "aot;vm;shared-core")
 add_xray_unit_test(test_xrt_method_truthy aot/test_xrt_method_truthy.c)
+add_executable(test_xrt_assertion aot/test_xrt_assertion.c)
+target_compile_definitions(test_xrt_assertion PRIVATE XR_TEST_HAS_PROCESS_SHUTDOWN=1)
+target_include_directories(test_xrt_assertion PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+add_test(NAME test_xrt_assertion COMMAND $<TARGET_FILE:test_xrt_assertion>)
+set_tests_properties(test_xrt_assertion PROPERTIES LABELS "aot;vm;assertion;shared-core")
+add_test(NAME test_assertion_vm_equality
+    COMMAND $<TARGET_FILE:xray> run
+            ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/deep_equality_vm.xr)
+set_tests_properties(test_assertion_vm_equality PROPERTIES
+    LABELS "vm;assertion;shared-core")
+add_test(NAME test_assertion_retired_names_are_ordinary
+    COMMAND $<TARGET_FILE:xray> run
+            ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/retired_names_are_ordinary.xr)
+set_tests_properties(test_assertion_retired_names_are_ordinary PROPERTIES
+    LABELS "frontend;vm;assertion;removed-surface")
+add_test(NAME test_assertion_same_t_contextual
+    COMMAND $<TARGET_FILE:xray> run
+            ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/same_t_contextual.xr)
+set_tests_properties(test_assertion_same_t_contextual PROPERTIES
+    LABELS "frontend;vm;assertion;type-system")
+add_executable(test_xrt_assertion_freestanding aot/test_xrt_assertion_freestanding.c)
+target_compile_definitions(test_xrt_assertion_freestanding PRIVATE
+    XRAY_PROFILE_FREESTANDING=1)
+target_include_directories(test_xrt_assertion_freestanding PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/include
+)
+add_test(NAME test_xrt_assertion_freestanding
+    COMMAND $<TARGET_FILE:test_xrt_assertion_freestanding>)
+set_tests_properties(test_xrt_assertion_freestanding PROPERTIES
+    LABELS "aot;freestanding;assertion;shared-core")
 add_executable(test_xrt_type_identity_freestanding aot/test_xrt_type_identity_freestanding.c)
 target_compile_definitions(test_xrt_type_identity_freestanding PRIVATE
     XRAY_PROFILE_FREESTANDING=1)
@@ -793,30 +831,6 @@ add_xray_unit_test(test_http2_huffman http/test_http2_huffman.c)
 # ============================================================================
 
 add_xray_unit_test(test_array_core stdlib/test_array_core.c)
-add_executable(test_assert_condition_core stdlib/test_assert_condition_core.c)
-target_include_directories(test_assert_condition_core PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}
-)
-add_test(NAME test_assert_condition_core COMMAND $<TARGET_FILE:test_assert_condition_core>)
-add_xray_unit_test(test_xrt_assert_condition_owner_freestanding
-    aot/test_xrt_assert_condition_owner_freestanding.c)
-if(NOT WIN32)
-    add_executable(test_xrt_assert_condition_owner_c90
-        aot/test_xrt_assert_condition_owner_c90.c)
-    target_include_directories(test_xrt_assert_condition_owner_c90 PRIVATE
-        ${XRAY_COMMON_INCLUDES}
-        ${CMAKE_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}
-    )
-    set_target_properties(test_xrt_assert_condition_owner_c90 PROPERTIES
-        C_STANDARD 90
-        C_STANDARD_REQUIRED ON
-        C_EXTENSIONS OFF
-    )
-    add_test(NAME test_xrt_assert_condition_owner_c90
-        COMMAND $<TARGET_FILE:test_xrt_assert_condition_owner_c90>)
-endif()
 add_xray_unit_test(test_byte_array_copy_core stdlib/test_byte_array_copy_core.c)
 add_xray_unit_test(test_byte_array_repeat_core stdlib/test_byte_array_repeat_core.c)
 add_executable(test_byte_array_append_core stdlib/test_byte_array_append_core.c)

@@ -4174,103 +4174,62 @@ static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     emit_codegen_abort_expr(out);
 }
 
-static void xicgen_emit_assert_condition(XiCgenCtx *ctx, FILE *out, const XiValue *condition) {
-    const char *adapter = cg_truthiness_adapter_name(ctx);
-    if (!adapter) {
+static void xicgen_assertion(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) prefix;
+    const XrAssertionPlan *plan = xi_assertion_plan(v);
+    CgAssertionAdapterId adapter = cg_assertion_adapter_id(ctx);
+    if (!xr_assertion_plan_validate(plan) || plan->arity != v->nargs ||
+        adapter == CG_ASSERTION_ADAPTER_INVALID) {
+        cg_ctx_set_error(ctx);
         emit_codegen_abort_expr(out);
         return;
     }
-    fprintf(out, "%s(", adapter);
-    emit_value_as_rep_ctx(ctx, out, condition, XR_REP_TAGGED);
+    if (adapter == CG_ASSERTION_ADAPTER_FREESTANDING) {
+        if (!cg_freestanding_assertion_authorized(ctx, f, plan)) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: freestanding assertion has no exact TargetPlan provider binding\n");
+            cg_ctx_set_error(ctx);
+            emit_codegen_abort_expr(out);
+            return;
+        }
+    }
+
+    const XiValue *message = plan->message_operand == XR_ASSERTION_OPERAND_NONE
+                                 ? NULL
+                                 : v->args[plan->message_operand];
+    if (plan->kind == XR_ASSERTION_KIND_CONDITION) {
+        fprintf(out, "%s(",
+                adapter == CG_ASSERTION_ADAPTER_FREESTANDING
+                    ? "xrt_freestanding_assertion_condition"
+                    : "xrt_assertion_condition");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    } else if (plan->kind == XR_ASSERTION_KIND_EQUAL) {
+        fprintf(out, "%s(",
+                adapter == CG_ASSERTION_ADAPTER_FREESTANDING
+                    ? "xrt_freestanding_assertion_equal"
+                    : "xrt_assertion_equal");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
+    } else {
+        fprintf(out, "xrt_assertion_action(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", %s",
+                plan->kind == XR_ASSERTION_KIND_THROWS
+                    ? "XR_CORE_INTRINSIC_FAILURE_CHANNEL_TYPED_ERROR"
+                    : "XR_CORE_INTRINSIC_FAILURE_CHANNEL_PANIC");
+    }
+    fprintf(out, ", ");
+    emit_c_string_literal(out, plan->source.file);
+    fprintf(out, ", UINT32_C(%u), UINT32_C(%u), UINT32_C(%u), UINT32_C(%u), ",
+            plan->source.line, plan->source.column, plan->source.end_line,
+            plan->source.end_column);
+    if (message)
+        emit_value_as_rep_ctx(ctx, out, message, XR_REP_TAGGED);
+    else
+        fprintf(out, "XR_NULL_VAL");
     fprintf(out, ")");
-}
-
-static void xicgen_assert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                          const char *prefix) {
-    (void) f;
-    (void) prefix;
-    XR_DCHECK(v->nargs >= 1, "xicgen_assert: need cond");
-    const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
-    bool invert = (v->aux_int == 1);
-    const char *adapter = cg_assert_condition_adapter_name(ctx);
-    if (!adapter) {
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    fprintf(out, "(!%s(", adapter);
-    xicgen_emit_assert_condition(ctx, out, v->args[0]);
-    fprintf(out, ", %s) ? XR_NULL_VAL : (", invert ? "false" : "true");
-    if (ctx && ctx->freestanding_profile) {
-        fprintf(out, "xrt_freestanding_trap(\"Assertion failed%s: %s\"), XR_NULL_VAL))",
-                invert ? " (expected false)" : "", loc);
-        return;
-    }
-    fprintf(out, "fprintf(stderr, \"Assertion failed%s: %s\\n\"), abort(), XR_NULL_VAL))",
-            invert ? " (expected false)" : "", loc);
-}
-
-static void xicgen_assert_eq(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) f;
-    (void) prefix;
-    XR_DCHECK(v->nargs >= 2, "xicgen_assert_eq: need 2 args");
-    const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
-    const char *adapter = cg_assert_condition_adapter_name(ctx);
-    if (!adapter) {
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    if (ctx && ctx->freestanding_profile) {
-        fprintf(out, "(!%s(xrt_eq(", adapter);
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out,
-                "), true) ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_eq failed: %s\"), "
-                "XR_NULL_VAL))",
-                loc);
-        return;
-    }
-    fprintf(out, "(!%s(xrt_eq(", adapter);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out,
-            "), true) ? XR_NULL_VAL : (fprintf(stderr, \"assert_eq failed: %s\\n\"), abort(), "
-            "XR_NULL_VAL))",
-            loc);
-}
-
-static void xicgen_assert_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) f;
-    (void) prefix;
-    XR_DCHECK(v->nargs >= 2, "xicgen_assert_ne: need 2 args");
-    const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
-    const char *adapter = cg_assert_condition_adapter_name(ctx);
-    if (!adapter) {
-        emit_codegen_abort_expr(out);
-        return;
-    }
-    if (ctx && ctx->freestanding_profile) {
-        fprintf(out, "(!%s(xrt_eq(", adapter);
-        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-        fprintf(out,
-                "), false) ? XR_NULL_VAL : (xrt_freestanding_trap(\"assert_ne failed: %s\"), "
-                "XR_NULL_VAL))",
-                loc);
-        return;
-    }
-    fprintf(out, "(!%s(xrt_eq(", adapter);
-    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ", ");
-    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_TAGGED);
-    fprintf(out,
-            "), false) ? XR_NULL_VAL : (fprintf(stderr, \"assert_ne failed: %s\\n\"), abort(), "
-            "XR_NULL_VAL))",
-            loc);
 }
 
 static void xicgen_typeid(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -9536,7 +9495,7 @@ static bool xicgen_value_is_proven_nothrow(XiCgenCtx *ctx, const XiFunc *current
     /* Hosted/freestanding ASSERT lowers to an immediate abort/trap on failure;
      * it never publishes through xrt_pending_error.  Treat the successful edge
      * as a usable proof without adding a redundant TLS poll. */
-    if (v->op == XI_ASSERT)
+    if (v->op == XI_ASSERTION)
         return true;
     if (v->xa_intrinsic_id != XA_INTRINSIC_NONE) {
         const XaIntrinsicDesc *desc = xa_intrinsic_by_id((XaIntrinsicId) v->xa_intrinsic_id);
@@ -9603,13 +9562,15 @@ static const XiValue *xicgen_prev_pending_error_source(const XiValue *check) {
 static bool xicgen_assert_is_parallel_body_safe(XiCgenCtx *ctx, const XiFunc *current,
                                                 const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->op != XI_ASSERT || v->nargs < 1 || !v->args[0])
+    const XrAssertionPlan *plan = xi_assertion_plan(v);
+    if (!v || v->op != XI_ASSERTION || !plan ||
+        plan->kind != XR_ASSERTION_KIND_CONDITION || v->nargs < 1 || !v->args[0])
         return false;
 
     const XiValue *cond = cg_unwrap_identity_value(v->args[0]);
     if (cond && cond->op == XI_CONST && cond->type && cond->type->kind == XR_KIND_BOOL) {
         bool truth = cond->aux_int != 0;
-        return v->aux_int == 1 ? !truth : truth;
+        return truth;
     }
     return xicgen_value_is_proven_nothrow(ctx, current, cond, 0);
 }

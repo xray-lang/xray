@@ -909,12 +909,13 @@ bool xa_flow_narrowing_suppressed(const XaFlowBuilder *builder, const char *name
     return false;
 }
 
-/* `assert(cond)` / `assert_true(cond)` / `assert_false(cond)` inject the
- * condition's fact into the following code (spec §2.13 N-7). The assert
- * builtins always evaluate and always throw on failure — they are never
- * stripped — so code after them may rely on the condition holding. */
-void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr) {
+/* A successfully completed condition assertion injects the registry-owned
+ * fact into following code. No source spelling participates in this decision. */
+void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr,
+                                    XrCoreIntrinsicFlowRule rule) {
     if (!builder || !expr)
+        return;
+    if (rule != XR_CORE_INTRINSIC_FLOW_ASSERT_TRUE)
         return;
     AstNode *node = (AstNode *) expr;
     if (node->type != AST_CALL_EXPR)
@@ -922,20 +923,10 @@ void xa_flow_apply_assert_narrowing(XaFlowBuilder *builder, XrAstNode *expr) {
     CallExprNode *call = &node->as.call_expr;
     if (!call->callee || call->callee->type != AST_VARIABLE || call->arg_count < 1)
         return;
-    const char *name = call->callee->as.variable.name;
-    if (!name)
-        return;
-    bool assume_true;
-    if (strcmp(name, "assert") == 0 || strcmp(name, "assert_true") == 0)
-        assume_true = true;
-    else if (strcmp(name, "assert_false") == 0)
-        assume_true = false;
-    else
-        return;
     AstNode *condition = call->arguments ? call->arguments[0] : NULL;
     if (!condition)
         return;
-    builder->current_flow = xa_flow_create_condition(builder, (XrAstNode *) condition, assume_true);
+    builder->current_flow = xa_flow_create_condition(builder, (XrAstNode *) condition, true);
 }
 
 // ============================================================================

@@ -14,6 +14,7 @@
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/xr_runtime_artifact_authority_internal.h"
+#include "../../../src/shared/xr_assertion_plan.h"
 #include "../../../include/xray_target_plan_load.h"
 #include "../../../include/xray_runtime_generation.h"
 #include "../../../src/base/xmalloc.h"
@@ -71,6 +72,12 @@ static bool xtp_fixture_build(XiFunc *root, XrSemanticPlan **plan, char *error,
 #define xr_semantic_plan_build xtp_fixture_build
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_bool = {
+    .kind = XR_KIND_BOOL,
+    .id = 8,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
     .id = 3,
@@ -109,6 +116,40 @@ static XrType stub_string = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
 };
+
+static XrSemanticPlan *build_assertion_artifact_semantic_plan(void) {
+    XiFunc *function =
+        xi_func_new("xtp_assertion_artifact", &stub_unit);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    XiValue *condition = entry
+                             ? xi_const_bool(function, entry, true,
+                                             &stub_bool)
+                             : NULL;
+    XiValue *assertion = entry
+                             ? xi_value_new(function, entry, XI_ASSERTION,
+                                            &stub_unit, 1)
+                             : NULL;
+    REQUIRE(function && entry && condition && assertion);
+    assertion->args[0] = condition;
+    assertion->source_span = (XiSourceSpan) {5, 1, 5, 13};
+    XrAssertionPlan assertion_plan;
+    XrLocation source = {"xtp-format-fixture.xr", 5, 1, 5, 13};
+    REQUIRE(xr_assertion_plan_build(
+                XR_CORE_BUILTIN_ASSERT, 1, source,
+                XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
+                XR_ASSERTION_CAPABILITY_NONE, &assertion_plan) ==
+            XR_ASSERTION_PLAN_OK);
+    REQUIRE(xi_value_set_assertion_plan(function, assertion,
+                                        &assertion_plan));
+    xi_block_set_return(entry, assertion);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char diagnostic[512] = {0};
+    REQUIRE(xr_semantic_plan_build(function, &semantic, diagnostic,
+                                   sizeof(diagnostic)));
+    xi_func_free(function);
+    return semantic;
+}
 
 static XrSemanticPlan *build_string_concat_release_semantic_plan(void) {
     XiFunc *function = xi_func_new("xtp_string_concat_release", &stub_int);
@@ -1474,6 +1515,31 @@ static void test_runtime_factory_owns_native_profile(void) {
     dispose_fixture(&fixture);
 }
 
+static void test_assertion_artifact_capability_identity(void) {
+    XrSemanticPlan *semantic = build_assertion_artifact_semantic_plan();
+    XrRuntimeArtifactAuthority *authority = NULL;
+    char diagnostic[512] = {0};
+    REQUIRE(xr_runtime_artifact_authority_create_internal(
+        semantic, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(authority != NULL);
+    const uint64_t expected = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
+    REQUIRE(authority->identity.required_capability_mask == expected);
+    XrRuntimeArtifactAuthorityIdentity saved = authority->identity;
+    authority->identity.required_capability_mask =
+        XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+    xr_runtime_artifact_authority_compute_fingerprint(
+        &authority->identity, authority->identity.authority_fingerprint);
+    REQUIRE(!xr_runtime_artifact_authority_verify(
+        authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(strstr(diagnostic, "XR_TARGET_1004") != NULL);
+    authority->identity = saved;
+    REQUIRE(xr_runtime_artifact_authority_verify(
+        authority, diagnostic, sizeof(diagnostic)));
+    xr_runtime_artifact_authority_free(authority);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_public_xsm_authority_loads_exact_semantics(void) {
     XtpFixture fixture = make_fixture();
     uint8_t *xsm = NULL;
@@ -2266,6 +2332,7 @@ int main(int argc, char **argv) {
     test_identity_and_typed_mutations();
     test_runtime_machine_authority_is_exact_and_scalar_only();
     test_runtime_factory_owns_native_profile();
+    test_assertion_artifact_capability_identity();
     test_public_xsm_authority_loads_exact_semantics();
     test_independent_verifier_rejects_forged_machine_profiles();
     test_runtime_load_rejects_foreign_profile_artifacts();

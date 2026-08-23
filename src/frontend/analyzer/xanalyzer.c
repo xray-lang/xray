@@ -25,6 +25,7 @@
 #include "../../runtime/value/xtype_internal.h"
 #include "../../runtime/value/xenum_layout.h"
 #include "../../shared/xr_exact_scalar_registry.h"
+#include "../../shared/xr_core_intrinsic.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_types.h"
@@ -63,6 +64,21 @@ static void register_builtin_func(XaAnalyzer *analyzer, const char *name, XrType
         links->declared_type = type;
         links->is_definitely_assigned = true;
     }
+}
+
+/* Register a compiler-owned core callable by its stable registry identity.
+ * Source spelling is a display/binding projection only and is never recovered
+ * by downstream semantic consumers. */
+static void register_core_builtin_func(XaAnalyzer *analyzer, XrCoreBuiltinId id, XrType *type) {
+    const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(id);
+    XR_DCHECK(desc != NULL, "register_core_builtin_func: invalid builtin id");
+    register_builtin_func(analyzer, desc->source_name, type);
+    XaSymbol *sym = xa_scope_lookup(analyzer->global_scope, desc->source_name);
+    XaSymbolLinks *links = sym ? xa_analyzer_get_links(analyzer, sym) : NULL;
+    XR_DCHECK(sym && sym->is_builtin && links,
+              "register_core_builtin_func: builtin binding missing");
+    if (links)
+        links->core_builtin_id = id;
 }
 
 // Register a builtin module namespace (XA_SYM_MODULE triggers member signature lookup)
@@ -280,17 +296,29 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
 
     register_exact_scalar_namespaces(analyzer);
 
-    // Test framework: fn(...any) -> void
-    XrType *fn_assert = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
+    /* Assertions are direct compiler intrinsics with exact surface shapes.
+     * `assertEqual`'s same-T relation is checked at the resolved call site;
+     * unknown here means a value of any one inferred type, not truthiness. */
+    XrType *assert_params[2] = {t_bool, t_string};
+    XrType *fn_assert =
+        xr_type_new_function(analyzer->isolate, assert_params, 2, t_void, false);
     fn_assert->function.min_params = 1;
-    register_builtin_func(analyzer, "assert", fn_assert);
-    XrType *fn_assert2 = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
-    fn_assert2->function.min_params = 2;
-    register_builtin_func(analyzer, "assert_eq", fn_assert2);
-    register_builtin_func(analyzer, "assert_ne", fn_assert2);
-    register_builtin_func(analyzer, "assert_true", fn_assert);
-    register_builtin_func(analyzer, "assert_false", fn_assert);
-    register_builtin_func(analyzer, "assert_throws", fn_assert);
+    register_core_builtin_func(analyzer, XR_CORE_BUILTIN_ASSERT, fn_assert);
+
+    XrType *equal_params[3] = {p_any, p_any, t_string};
+    XrType *fn_assert_equal =
+        xr_type_new_function(analyzer->isolate, equal_params, 3, t_void, false);
+    fn_assert_equal->function.min_params = 2;
+    register_core_builtin_func(analyzer, XR_CORE_BUILTIN_ASSERT_EQUAL, fn_assert_equal);
+
+    XrType *action_type =
+        xr_type_new_function(analyzer->isolate, NULL, 0, p_any, false);
+    XrType *action_params[2] = {action_type, t_string};
+    XrType *fn_assert_action =
+        xr_type_new_function(analyzer->isolate, action_params, 2, t_void, false);
+    fn_assert_action->function.min_params = 1;
+    register_core_builtin_func(analyzer, XR_CORE_BUILTIN_ASSERT_THROWS, fn_assert_action);
+    register_core_builtin_func(analyzer, XR_CORE_BUILTIN_ASSERT_PANICS, fn_assert_action);
 
     // The exact numeric surface uses `as` for numeric conversion and
     // i64/f64.parse for text. No numeric type name is a global callable.
@@ -337,7 +365,7 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     // print: fn(...any) -> void
     XrType *fn_print = xr_type_new_function(analyzer->isolate, NULL, 0, t_void, true);
     fn_print->function.min_params = 0;
-    register_builtin_func(analyzer, "print", fn_print);
+    register_core_builtin_func(analyzer, XR_CORE_BUILTIN_PRINT, fn_print);
 
     // Modules/namespaces (XA_SYM_MODULE enables member signature lookup)
     register_builtin_module(analyzer, "JSON");

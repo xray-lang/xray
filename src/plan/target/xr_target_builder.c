@@ -15,6 +15,7 @@
 
 #include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_target_builder.h"
+#include "xr_target_capability.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
@@ -13471,15 +13472,67 @@ static bool materialize_debug_facts(const XrTargetPlanBuilder *builder,
     return true;
 }
 
-static bool materialize_foundation_capabilities(const XrTargetPlanBuilder *builder,
-                                                XrTargetMaterializedPlan *materialized, char *error,
-                                                size_t error_size) {
+static bool materialize_capabilities(const XrTargetPlanBuilder *builder,
+                                     XrTargetMaterializedPlan *materialized,
+                                     char *error, size_t error_size) {
     const XrTargetProfileDraft *facts = xr_target_profile_facts(builder->profile);
     if (!facts || (facts->provider_mask & XR_TARGET_FOUNDATION_CAPABILITY_MASK) !=
                       XR_TARGET_FOUNDATION_CAPABILITY_MASK)
         return fail(error, error_size, "XR_TARGET_1004",
                     "target profile lacks a foundation capability provider");
-    materialized->capability_count = 2;
+    const XrTargetMachineFacts *machine =
+        xr_target_profile_machine_facts(builder->profile);
+    if (!machine)
+        return fail(error, error_size, "XR_TARGET_1004",
+                    "target profile has no exact runtime identity");
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(builder->semantic_plan, &operand_count);
+    uint32_t assertion_requirements = XR_ASSERTION_CAPABILITY_NONE;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(builder->semantic_plan); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION)
+            continue;
+        XrAssertionPlan assertion;
+        if (!xr_semantic_operation_assertion_plan(operation, &assertion))
+            return fail(error, error_size, "XR_TARGET_1004",
+                        "assertion capability requirement is not exact");
+        if (machine->runtime_profile ==
+                XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+            assertion.kind == XR_ASSERTION_KIND_EQUAL) {
+            if (!operands || operation->operand_count < 2 || operand_count < 2 ||
+                operation->operand_begin > operand_count - 2u)
+                return fail(error, error_size, "XR_TARGET_1004",
+                            "freestanding assertion equality operands are missing");
+            const XrSemanticTypeRecord *left = xr_semantic_plan_type(
+                builder->semantic_plan,
+                operands[operation->operand_begin].type);
+            const XrSemanticTypeRecord *right = xr_semantic_plan_type(
+                builder->semantic_plan,
+                operands[operation->operand_begin + 1u].type);
+            if (!xr_target_freestanding_assertion_equality_type_supported(left) ||
+                !xr_target_freestanding_assertion_equality_type_supported(right) ||
+                left->kind != right->kind || left->scalar_rep != right->scalar_rep ||
+                left->enum_layout_id != right->enum_layout_id)
+                return fail(error, error_size, "XR_TARGET_1004",
+                            "freestanding assertion equality type has no exact renderer/equality adapter");
+        }
+        assertion_requirements |= assertion.required_capabilities;
+    }
+    uint32_t assertion_count =
+        ((machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+          (assertion_requirements & XR_ASSERTION_CAPABILITY_FAILURE_REPORT)) ? 1u : 0u) +
+        ((assertion_requirements & XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY) ? 1u : 0u) +
+        ((assertion_requirements & XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY) ? 1u : 0u);
+    if (machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+        (assertion_requirements &
+         (XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY |
+          XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY)) != 0)
+        return fail(error, error_size, "XR_TARGET_1004",
+                    "freestanding assertion action requires a capturable failure boundary");
+    materialized->capability_count = 2u + assertion_count;
     materialized->capabilities = (XrTargetCapabilityRecord *) allocate_records(
         materialized->capability_count, sizeof(*materialized->capabilities));
     if (!materialized->capabilities)
@@ -13496,6 +13549,41 @@ static bool materialize_foundation_capabilities(const XrTargetPlanBuilder *build
         .provider = XR_TARGET_PROVIDER_PANIC,
         .flags = XR_TARGET_CAPABILITY_REQUIRED,
     };
+    uint32_t next = 2;
+#define XR_APPEND_ASSERTION_CAPABILITY(assertion_bit, target_capability)                         \
+    do {                                                                                         \
+        if ((assertion_requirements & (assertion_bit)) != 0) {                                   \
+            uint64_t capability_bit = xr_target_capability_mask(target_capability);              \
+            uint16_t provider = xr_target_capability_provider(target_capability);                 \
+            if (capability_bit == 0 ||                                                           \
+                (target_capability != XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY &&               \
+                 (facts->provider_mask & capability_bit) == 0))                                  \
+                return fail(error, error_size, "XR_TARGET_1004",                                \
+                            "target profile lacks a required assertion capability");            \
+            materialized->capabilities[next] = (XrTargetCapabilityRecord) {                      \
+                .id = next,                                                                      \
+                .capability = target_capability,                                                  \
+                .provider = provider,                                                             \
+                .flags = XR_TARGET_CAPABILITY_REQUIRED,                                           \
+            };                                                                                   \
+            next++;                                                                              \
+        }                                                                                        \
+    } while (0)
+    if (machine->runtime_profile == XR_TARGET_RUNTIME_PROFILE_FREESTANDING) {
+        XR_APPEND_ASSERTION_CAPABILITY(
+            XR_ASSERTION_CAPABILITY_FAILURE_REPORT,
+            XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+    }
+    XR_APPEND_ASSERTION_CAPABILITY(
+        XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY,
+        XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY);
+    XR_APPEND_ASSERTION_CAPABILITY(
+        XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY,
+        XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
+#undef XR_APPEND_ASSERTION_CAPABILITY
+    if (next != materialized->capability_count)
+        return fail(error, error_size, "XR_TARGET_1004",
+                    "assertion capability closure is incomplete");
     return true;
 }
 
@@ -13519,7 +13607,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_coroutine_state_calls(builder, materialized, error, error_size) ||
         !materialize_typed_instructions(builder, materialized, error, error_size) ||
         !materialize_debug_facts(builder, materialized, error, error_size) ||
-        !materialize_foundation_capabilities(builder, materialized, error, error_size)) {
+        !materialize_capabilities(builder, materialized, error, error_size)) {
         builder->poisoned = true;
         return false;
     }

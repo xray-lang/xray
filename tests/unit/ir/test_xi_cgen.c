@@ -5036,10 +5036,10 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
     const char *check_end = next_static_after(check);
     TEST_REQUIRE(!contains_between(check, check_end, "XR_FROM_BOOL("),
                  "native bool assert conditions must not materialize tagged boxes");
-    TEST_REQUIRE(count_between(check, check_end, "Assertion failed") == 2,
-                 "both assertions must remain as native abort checks");
-    TEST_REQUIRE(count_between(check, check_end, "xrt_assert_condition_failed(") == 2,
-                 "both assertions must consume the stable assertion owner adapter");
+    TEST_REQUIRE(count_between(check, check_end, "xrt_assertion_condition(") == 2,
+                 "both assertions must consume the typed condition adapter");
+    TEST_REQUIRE(!contains_between(check, check_end, "xrt_assert_condition_failed("),
+                 "typed assertions must not retain the retired condition helper");
     TEST_REQUIRE(!contains_between(check, check_end, "({"),
                  "assert lowering must remain portable C11");
 
@@ -5048,10 +5048,10 @@ TEST(cgen_native_bool_assert_does_not_materialize_box) {
     xi_func_free(ir);
 }
 
-TEST(cgen_assert_equality_consumes_stable_owner_adapter) {
+TEST(cgen_assertion_calls_use_typed_adapters) {
     const char *src = "fn checkEquality(value: i64) {\n"
-                      "    assert_eq(value, 7)\n"
-                      "    assert_ne(value, 8)\n"
+                      "    assertEqual(value, 7)\n"
+                      "    assert(!(value == 8))\n"
                       "}\n"
                       "checkEquality(7)\n";
 
@@ -5065,13 +5065,12 @@ TEST(cgen_assert_equality_consumes_stable_owner_adapter) {
     const char *check = find_static_function_definition(code, "checkEquality");
     TEST_REQUIRE(check != NULL, "assert equality function should be emitted");
     const char *check_end = next_static_after(check);
-    TEST_REQUIRE(count_between(check, check_end,
-                               "xrt_assert_condition_failed(xrt_eq(") == 2,
-                 "assert_eq and assert_ne must consume the stable assertion owner adapter");
-    TEST_REQUIRE(contains_between(check, check_end, "), true)"),
-                 "assert_eq must expect equality");
-    TEST_REQUIRE(contains_between(check, check_end, "), false)"),
-                 "assert_ne must expect inequality");
+    TEST_REQUIRE(count_between(check, check_end, "xrt_assertion_equal(") == 1,
+                 "assertEqual must consume the typed equality adapter");
+    TEST_REQUIRE(count_between(check, check_end, "xrt_assertion_condition(") == 1,
+                 "negated equality must remain an ordinary typed condition assertion");
+    TEST_REQUIRE(!contains_between(check, check_end, "xrt_assert_condition_failed("),
+                 "typed assertion calls must not retain the retired condition helper");
 
     printf("  Generated owner-backed assertion equality %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -14256,7 +14255,7 @@ TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
                       "    return item ?? 0\n"
                       "}\n"
                       "var task = go consumer()\n"
-                      "assert_true(queue.push(7, 0))\n"
+                      "assert(queue.push(7, 0))\n"
                       "print(await task)\n"
                       "queue.close()\n";
 
@@ -14305,7 +14304,7 @@ TEST(cgen_coro_work_queue_pop_i64_optional_uses_typed_abi) {
                       "    return value * 2\n"
                       "}\n"
                       "var task = go consumer()\n"
-                      "assert_true(queue.push(21, 0))\n"
+                      "assert(queue.push(21, 0))\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
@@ -14387,8 +14386,8 @@ TEST(cgen_coro_result_group_recv_i64_optional_uses_typed_abi) {
 TEST(cgen_work_queue_native_methods_use_aot_helpers) {
     const char *src = "const queue: WorkQueue<i64> = WorkQueue<i64>(4, 2)\n"
                       "fn use_queue() -> i64 {\n"
-                      "    assert_true(queue.push(1, 0))\n"
-                      "    assert_eq(queue.pushRange(2, 2, 0), 2)\n"
+                      "    assert(queue.push(1, 0))\n"
+                      "    assertEqual(queue.pushRange(2, 2, 0), 2)\n"
                       "    var (value, ok) = queue.tryPop(0)\n"
                       "    if (!ok) { return -1 }\n"
                       "    if (queue.isClosed) { return -2 }\n"
@@ -14704,7 +14703,7 @@ int main(int argc, char **argv) {
     run_cgen_struct_scalar_field_ref_skips_release_load();
     run_cgen_mem_slice_struct_pointer_owner_load_is_elided();
     run_cgen_native_bool_assert_does_not_materialize_box();
-    run_cgen_assert_equality_consumes_stable_owner_adapter();
+    run_cgen_assertion_calls_use_typed_adapters();
     run_cgen_span_phi_snapshot_is_debug_only();
     run_cgen_span_ref_only_value_omits_unused_data_cache();
     run_cgen_struct_value_abi_uses_canonical_layout_typedef();

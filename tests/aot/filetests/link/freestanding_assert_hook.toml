@@ -7,3 +7,9 @@ main = "freestanding_assert_hook.xr"
 [[export.c]]
 xray = "xray_assert_hook_shape"
 symbol = "xray_assert_hook_shape"
+
+[target.native]
+profile = "freestanding"
+runtime_provider = "xray-freestanding-hooks-v1"
+runtime_capabilities = ["allocator", "panic", "assertion-report"]
+runtime_hooks = ["alloc", "free", "panic", "assertion_report"]

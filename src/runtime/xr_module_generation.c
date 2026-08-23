@@ -18,6 +18,7 @@
 #include "../base/xsha256.h"
 #include "../plan/semantic/xr_semantic_ids.h"
 #include "../plan/target/xr_target_instruction_verify.h"
+#include "../plan/target/xr_target_capability.h"
 #include "../plan/target/xr_target_plan.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_verify.h"
@@ -58,7 +59,7 @@ static void hash_u64(XrSHA256Context *context, uint64_t value) {
 }
 
 static void compute_generation_fingerprint(XrModuleGenerationIdentity *identity) {
-    static const uint8_t domain[] = "xray-module-generation-v1\0";
+    static const uint8_t domain[] = "xray-module-generation-v2\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -80,28 +81,6 @@ static void compute_generation_fingerprint(XrModuleGenerationIdentity *identity)
     xr_sha256_update(&context, identity->object_header_fingerprint,
                      XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
     xr_sha256_final(&context, identity->generation_fingerprint);
-}
-
-static bool plan_capability_mask(const XrTargetPlan *plan, uint64_t *out) {
-    uint32_t count = 0;
-    const XrTargetCapabilityRecord *records =
-        xr_target_plan_capabilities(plan, &count);
-    uint64_t mask = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        const XrTargetCapabilityRecord *record = &records[i];
-        if (record->id != i ||
-            record->provider != record->capability ||
-            record->provider <= XR_TARGET_PROVIDER_INVALID ||
-            record->provider >= XR_TARGET_PROVIDER_KIND_COUNT ||
-            record->flags != XR_TARGET_CAPABILITY_REQUIRED)
-            return false;
-        uint64_t bit = XR_TARGET_PROVIDER_MASK(record->provider);
-        if ((mask & bit) != 0)
-            return false;
-        mask |= bit;
-    }
-    *out = mask;
-    return true;
 }
 
 static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_number,
@@ -139,11 +118,17 @@ static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_numb
         xr_runtime_object_header_abi_fingerprint(&object_header,
                                                  &object_fingerprint) !=
             XR_RUNTIME_ABI_OK ||
-        !plan_capability_mask(plan, &capability_mask))
+        !xr_target_plan_capability_mask(plan, &capability_mask))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "TargetPlan does not bind the canonical native runtime identity");
-    if (capability_mask != XR_TARGET_FOUNDATION_CAPABILITY_MASK ||
-        (capability_mask & ~provider_mask) != 0 ||
+    uint64_t expected_capability_mask = 0;
+    if (!xr_target_semantic_capability_mask(
+            xr_target_plan_semantic_plan(plan),
+            facts->machine.runtime_profile,
+            &expected_capability_mask) ||
+        capability_mask != expected_capability_mask ||
+        !xr_target_capability_mask_is_backed(capability_mask,
+                                             provider_mask) ||
         !xr_fingerprint_equal(facts->runtime_abi_fingerprint,
                               runtime_fingerprint) ||
         !xr_fingerprint_equal(facts->provider_set_fingerprint,

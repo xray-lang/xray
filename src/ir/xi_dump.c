@@ -214,6 +214,16 @@ static void dump_value(FILE *out, const XiValue *v) {
     } else if (v->op == XI_GET_GLOBAL || v->op == XI_SET_GLOBAL) {
         const char *nm = (const char *) v->aux;
         fprintf(out, " [name=%s]", nm ? nm : "?");
+    } else if (v->op == XI_ASSERTION) {
+        const XrAssertionPlan *plan = xi_assertion_plan(v);
+        if (xr_assertion_plan_validate(plan)) {
+            fprintf(out, " [assertion=%u builtin=%u source=%s:%u:%u-%u:%u target=0x%x]",
+                    (unsigned) plan->kind, (unsigned) plan->builtin_id, plan->source.file,
+                    plan->source.line, plan->source.column, plan->source.end_line,
+                    plan->source.end_column, plan->target);
+        } else {
+            fprintf(out, " [assertion=<invalid>]");
+        }
     }
     if (v->xa_intrinsic_id != 0 && v->op != XI_CALL)
         fprintf(out, " [intrinsic=%u]", v->xa_intrinsic_id);

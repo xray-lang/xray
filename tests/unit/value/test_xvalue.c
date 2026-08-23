@@ -296,7 +296,8 @@ TEST(value_equality_null) {
 }
 
 TEST(value_equality_cross_type) {
-    // Runtime equality is tag exact; integer/float comparison requires an explicit conversion.
+    // Deep equality is tag-strict.  Source-level assertEqual additionally
+    // requires one shared static T, so numeric conversion must be explicit.
     ASSERT_FALSE(xr_value_deep_eq(xr_int(0), xr_float(0.0)));
     ASSERT_FALSE(xr_value_deep_eq(xr_int(42), xr_float(42.0)));
     // Other distinct value tags are likewise never equal.

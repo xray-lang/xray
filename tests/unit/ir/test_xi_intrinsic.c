@@ -698,8 +698,9 @@ static void test_assertion_action_channels_are_not_exchangeable(void) {
                     failure == XR_ASSERTION_FAILURE_NONE,
                 "a mutually exclusive typed-error observation must satisfy assertThrows");
     XrAssertionActionOutcome conflicting = {false, true, true};
-    ASSERT_TRUE(!xr_assertion_classify_action_result(&throws_plan, conflicting, &failure),
-                "simultaneous typed error and panic observations must fail closed");
+    ASSERT_TRUE(xr_assertion_classify_action_result(&throws_plan, conflicting, &failure) &&
+                    failure == XR_ASSERTION_FAILURE_CONFLICTING_CHANNELS,
+                "simultaneous typed error and panic observations need a fail-closed failure row");
     XrAssertionActionOutcome missing = {false, false, false};
     ASSERT_TRUE(!xr_assertion_classify_action_result(&panics_plan, missing, &failure),
                 "an executor must explicitly report normal return");
@@ -743,6 +744,14 @@ static void test_assertion_failure_schema_and_renderer(void) {
     failure.caught_error = "NumberParseError.InvalidSyntax";
     ASSERT_TRUE(xr_assertion_failure_render(rendered, sizeof(rendered), &failure) < 0,
                 "a failure cannot carry both typed-error and panic channels");
+    failure.kind = XR_ASSERTION_FAILURE_CONFLICTING_CHANNELS;
+    ASSERT_TRUE(xr_assertion_failure_render(rendered, sizeof(rendered), &failure) > 0 &&
+                    strstr(rendered, "conflicting-failure-channels") != NULL &&
+                    strstr(rendered, "caught_error: NumberParseError.InvalidSyntax") != NULL &&
+                    strstr(rendered, "caught_panic: division by zero") != NULL,
+                "the conflicting-channel failure must retain both observations explicitly");
+    ASSERT_TRUE(xr_assertion_failure_render_size(&failure) == (int) strlen(rendered),
+                "renderer measurement must match the exact canonical byte count");
 }
 
 static void test_exact_scalar_registry(void) {

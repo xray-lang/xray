@@ -1892,9 +1892,8 @@ static inline void xrt_map_init_header(xrt_map_t *m) {
     m->class_name = NULL;
 }
 
-/* Instance equality that honors a hand-written operator ==. Both keys are the
- * same class (their equal hashes put them in one bucket), so the query's eq_fn
- * governs; falls through to xrt_eq (reference identity) when the class has none.
+/* Instance equality that honors a hand-written operator == only after exact
+ * native type identity agrees.  Hash collisions do not prove nominal identity.
  * Pointers are borrowed, matching the specialized-plan convention. */
 static inline int xrt_value_key_eq(XrValue stored, XrValue query) {
     /* Map and Set key identity is reflexive even for NaN. The hash path already
@@ -1904,6 +1903,10 @@ static inline int xrt_value_key_eq(XrValue stored, XrValue query) {
         return stored.f == query.f || (isnan(stored.f) && isnan(query.f));
     if (query.tag == XR_TAG_PTR && query.heap_type == XR_TINSTANCE && query.ptr && stored.ptr &&
         stored.tag == XR_TAG_PTR && stored.heap_type == XR_TINSTANCE) {
+        uint16_t query_type = xrt_aot_class_type_id((const XrObjHeader *) query.ptr);
+        uint16_t stored_type = xrt_aot_class_type_id((const XrObjHeader *) stored.ptr);
+        if (query_type != stored_type)
+            return 0;
         XrtUserEqFn eq_fn = xrt_instance_user_eq_fn(query);
         if (eq_fn)
             return eq_fn(NULL, stored.ptr, query.ptr) != 0;

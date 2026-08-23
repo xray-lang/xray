@@ -2883,7 +2883,7 @@ static bool prepare_span_assert_precedes_window(const XiValue *assertion, const 
     return false;
 }
 
-/* A successful XI_ASSERT is a checked capability boundary: code after it may
+/* A successful condition XI_ASSERTION is a checked capability boundary: code after it may
  * consume the asserted relation without repeating the same bounds branch.
  * The proof stays deliberately narrow (start >= 0 and start <= len-count), is
  * recorded in the AOT plan, and is independently re-derived by the verifier. */
@@ -2904,7 +2904,9 @@ static bool prepare_span_window_assert_bounds_proven(const XiFunc *func, const X
             continue;
         for (uint32_t vi = 0; vi < block->nvalues && (!start_nonnegative || !upper_proven); vi++) {
             const XiValue *value = block->values[vi];
-            if (!value || value->op != XI_ASSERT || value->nargs < 1 || value->aux_int != 0 ||
+            const XrAssertionPlan *assertion_plan = xi_assertion_plan(value);
+            if (!value || value->op != XI_ASSERTION || !assertion_plan ||
+                assertion_plan->kind != XR_ASSERTION_KIND_CONDITION || value->nargs < 1 ||
                 !prepare_span_assert_precedes_window(value, window))
                 continue;
             if (!start_nonnegative)

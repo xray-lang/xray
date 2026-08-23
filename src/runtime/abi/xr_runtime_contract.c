@@ -1351,6 +1351,92 @@ static XrRuntimeAbiStatus verify_provider(
     return verify_provider_kind_facts(provider, effects, failures);
 }
 
+static bool provider_operation_id_from_key(const char *key, XrStableId *out) {
+    static const uint8_t domain[] = "xray-entity-id-v2\0";
+    if (!key || !out)
+        return false;
+    size_t length = strlen(key);
+    uint8_t encoded_length[8];
+    uint64_t width = (uint64_t) length;
+    for (unsigned i = 0; i < sizeof(encoded_length); i++)
+        encoded_length[i] = (uint8_t) (width >> (i * 8));
+    XrSHA256Context context;
+    uint8_t digest[XR_FINGERPRINT_BYTES];
+    xr_sha256_init(&context);
+    xr_sha256_update(&context, domain, sizeof(domain) - 1u);
+    xr_sha256_update(&context, encoded_length, sizeof(encoded_length));
+    xr_sha256_update(&context, (const uint8_t *) key, length);
+    xr_sha256_final(&context, digest);
+    memcpy(out->bytes, digest, sizeof(out->bytes));
+    return true;
+}
+
+static bool provider_call_slot_exact(const XrTargetProviderCallSlotAbi *slot,
+                                     uint8_t value_kind, uint8_t width,
+                                     uint8_t alignment, uint8_t ownership,
+                                     uint8_t flags) {
+    return slot && slot->value_kind == value_kind && slot->width == width &&
+           slot->alignment == alignment && slot->ownership == ownership &&
+           slot->flags == flags && bytes_are_zero(slot->reserved8,
+                                                  sizeof(slot->reserved8)) &&
+           slot->reserved64 == 0;
+}
+
+/* The assertion report capability is present only when the canonical IO
+ * operation identity and its complete call ABI agree.  An unrelated IO
+ * operation, a renamed operation, or a call-shape mutation cannot satisfy the
+ * plan requirement. */
+static bool provider_has_assertion_report(
+    const XrTargetProviderContract *provider) {
+    if (!provider || provider->provider_kind != XR_TARGET_PROVIDER_IO)
+        return false;
+    XrStableId expected = {{0}};
+    if (!provider_operation_id_from_key(
+            "xray.runtime.provider-operation.v1/io/assertion-report",
+            &expected))
+        return false;
+    for (uint16_t i = 0; i < provider->operation_count; i++) {
+        const XrTargetProviderOperationContract *operation =
+            &provider->operations[i];
+        const XrTargetProviderCallAbiContract *abi = &operation->call_abi;
+        if (id_compare(operation->stable_id, expected) != 0)
+            continue;
+        if (operation->effect_flags != XR_TARGET_PROVIDER_EFFECT_IO ||
+            operation->lifetime_flags != XR_TARGET_PROVIDER_LIFETIME_BORROWS ||
+            operation->failure_flags !=
+                XR_TARGET_PROVIDER_FAILURE_RETURNS_STATUS ||
+            abi->schema_version != XR_RUNTIME_ABI_SCHEMA_VERSION ||
+            abi->parameter_count != 3 ||
+            abi->calling_convention !=
+                XR_TARGET_PROVIDER_CALLING_CONVENTION_C ||
+            abi->variadic != 0 ||
+            !provider_call_slot_exact(
+                &abi->result,
+                XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER, 1, 1,
+                XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0) ||
+            !provider_call_slot_exact(
+                &abi->parameters[0],
+                XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS,
+                abi->pointer_width, abi->pointer_alignment,
+                XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                XR_TARGET_PROVIDER_CALL_SLOT_NULLABLE) ||
+            !provider_call_slot_exact(
+                &abi->parameters[1],
+                XR_TARGET_PROVIDER_CALL_VALUE_DATA_ADDRESS,
+                abi->pointer_width, abi->pointer_alignment,
+                XR_TARGET_PROVIDER_CALL_OWNERSHIP_BORROWED,
+                XR_TARGET_PROVIDER_CALL_SLOT_CONST_POINTEE) ||
+            !provider_call_slot_exact(
+                &abi->parameters[2],
+                XR_TARGET_PROVIDER_CALL_VALUE_UNSIGNED_INTEGER,
+                abi->pointer_width, abi->pointer_alignment,
+                XR_TARGET_PROVIDER_CALL_OWNERSHIP_NONE, 0))
+            return false;
+        return true;
+    }
+    return false;
+}
+
 static XrRuntimeAbiStatus verify_provider_set(
     const XrTargetProviderContract *providers, size_t provider_count,
     uint64_t *derived_mask) {
@@ -1377,9 +1463,18 @@ static XrRuntimeAbiStatus verify_provider_set(
                 return XR_RUNTIME_ABI_INVALID_ORDER;
         }
         mask |= XR_TARGET_PROVIDER_MASK(providers[i].provider_kind);
+        if (providers[i].provider_kind == XR_TARGET_PROVIDER_PANIC &&
+            providers[i].panic_behavior == XR_TARGET_PROVIDER_PANIC_UNWINDS)
+            mask |= XR_TARGET_CAPABILITY_MASK(
+                XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
+        if (provider_has_assertion_report(&providers[i]))
+            mask |= XR_TARGET_CAPABILITY_MASK(
+                XR_TARGET_CAPABILITY_ASSERTION_REPORT);
     }
     uint64_t required = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
-    if ((mask & required) != required || (mask & ~XR_TARGET_PROVIDER_MASK_ALL) != 0)
+    if ((mask & required) != required ||
+        (mask & ~(XR_TARGET_PROVIDER_MASK_ALL |
+                  XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK)) != 0)
         return XR_RUNTIME_ABI_INVALID_PROVIDER_SET;
     *derived_mask = mask;
     return XR_RUNTIME_ABI_OK;

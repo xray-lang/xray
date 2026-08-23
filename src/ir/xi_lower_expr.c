@@ -3857,12 +3857,78 @@ static XiValue *lower_ct_value(XiLower *l, AstNode *node, const XrCtValue *value
     }
 }
 
-/* Generate a location string constant for assert diagnostics.
- * Format: "line <N>" using the AST node's line number. */
-static const char *make_assert_loc(XiLower *l, int line) {
-    char buf[64];
-    snprintf(buf, sizeof(buf), "line %d", line);
-    return arena_strdup(l->func, buf);
+static XrCoreBuiltinId lower_core_builtin_id(XiLower *l, AstNode *callee) {
+    if (!l || !l->analyzer || !callee || callee->type != AST_VARIABLE ||
+        callee->as.variable.symbol_id == 0)
+        return XR_CORE_BUILTIN_NONE;
+    XaSymbol *symbol =
+        xa_scope_lookup_by_id(l->analyzer->global_scope, callee->as.variable.symbol_id);
+    return symbol && symbol->is_builtin ? symbol->links.core_builtin_id : XR_CORE_BUILTIN_NONE;
+}
+
+/* Lower one resolved assertion identity into a single typed Xi operation.
+ * Argument order is preserved by the linear loop; the optional message is an
+ * ordinary operand and therefore cannot be skipped or evaluated twice. */
+static XiValue *lower_core_assertion_call(XiLower *l, AstNode *node, CallExprNode *call,
+                                          XrCoreBuiltinId builtin_id) {
+    const XrCoreIntrinsicDesc *desc = xr_core_intrinsic_by_id(builtin_id);
+    if (!desc || desc->category != XR_CORE_INTRINSIC_CATEGORY_ASSERTION)
+        return NULL;
+
+    /* Call AST nodes do not own a complete delimiter range.  The resolved
+     * builtin variable does own the stable source identity, so freeze the
+     * exact callee-token span instead of inventing a call-expression end. */
+    const AstNode *source_node = call->callee;
+    uint32_t source_line = source_node && source_node->line > 0
+                               ? (uint32_t) source_node->line
+                               : (node->line > 0 ? (uint32_t) node->line : 0);
+    uint32_t source_column = source_node && source_node->column > 0
+                                 ? (uint32_t) source_node->column
+                                 : (node->column > 0 ? (uint32_t) node->column : 0);
+    XrLocation source = {
+        .file = l->analyzer ? l->analyzer->current_file : NULL,
+        .line = source_line,
+        .column = source_column,
+        .end_line = source_line,
+        .end_column = source_column ? source_column + (uint32_t) strlen(desc->source_name) : 0,
+    };
+    XrAssertionPlan plan;
+    if (xr_assertion_plan_build(builtin_id, (uint16_t) call->arg_count, source,
+                                XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
+                                XR_ASSERTION_CAPABILITY_NONE, &plan) != XR_ASSERTION_PLAN_OK) {
+        l->had_error = true;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+
+    XiValue *operands[XR_ASSERTION_MAX_OPERANDS] = {0};
+    for (int i = 0; i < call->arg_count; i++) {
+        operands[i] = xi_lower_expr(l, call->arguments[i]);
+        if (!operands[i]) {
+            l->had_error = true;
+            return xi_const_null(l->func, l->cur_block, l->type_null);
+        }
+    }
+    XiValue *assertion = xi_value_new(l->func, l->cur_block, XI_ASSERTION, l->type_unit,
+                                      (uint16_t) call->arg_count);
+    if (!assertion) {
+        l->had_error = true;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    for (int i = 0; i < call->arg_count; i++)
+        assertion->args[i] = operands[i];
+    if (!xi_value_set_assertion_plan(l->func, assertion, &plan)) {
+        l->had_error = true;
+        return xi_const_null(l->func, l->cur_block, l->type_null);
+    }
+    assertion->source_span = (XiSourceSpan){
+        .start_line = source.line,
+        .start_column = source.column,
+        .end_line = source.end_line,
+        .end_column = source.end_column,
+    };
+    assertion->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    assertion->line = (uint32_t) node->line;
+    return xi_const_null(l->func, l->cur_block, l->type_null);
 }
 
 /* Intercept known compile-time builtin function calls.
@@ -3872,85 +3938,6 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
     struct XrType *rtype = xi_lower_node_type(l, node);
     int line = node->line;
 
-    /* assert(cond) / assert(cond, msg) → XI_ASSERT */
-    if (strcmp(fname, "assert") == 0 && (call->arg_count == 1 || call->arg_count == 2)) {
-        XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_unit, 1);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = cond;
-        v->aux = (void *) make_assert_loc(l, call->arguments[0]->line);
-        v->aux_int = 0; /* 0 = assert_true */
-        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        v->line = (uint32_t) line;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    /* assert_true(cond) → XI_ASSERT aux_int=0 */
-    if (strcmp(fname, "assert_true") == 0 && call->arg_count == 1) {
-        XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_unit, 1);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = cond;
-        v->aux = (void *) make_assert_loc(l, call->arguments[0]->line);
-        v->aux_int = 0;
-        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        v->line = (uint32_t) line;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    /* assert_false(cond) → XI_ASSERT aux_int=1 */
-    if (strcmp(fname, "assert_false") == 0 && call->arg_count == 1) {
-        XiValue *cond = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT, l->type_unit, 1);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = cond;
-        v->aux = (void *) make_assert_loc(l, call->arguments[0]->line);
-        v->aux_int = 1; /* 1 = assert_false */
-        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        v->line = (uint32_t) line;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    /* assert_eq(actual, expected) → XI_ASSERT_EQ */
-    if (strcmp(fname, "assert_eq") == 0 && call->arg_count == 2) {
-        XiValue *actual = xi_lower_expr(l, call->arguments[0]);
-        XiValue *expected = xi_lower_expr(l, call->arguments[1]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_EQ, l->type_unit, 2);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = actual;
-        v->args[1] = expected;
-        v->aux = (void *) make_assert_loc(l, call->arguments[0]->line);
-        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        v->line = (uint32_t) line;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    /* assert_ne(actual, unexpected) → XI_ASSERT_NE */
-    if (strcmp(fname, "assert_ne") == 0 && call->arg_count == 2) {
-        XiValue *actual = xi_lower_expr(l, call->arguments[0]);
-        XiValue *unexpected = xi_lower_expr(l, call->arguments[1]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_NE, l->type_unit, 2);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = actual;
-        v->args[1] = unexpected;
-        v->aux = (void *) make_assert_loc(l, call->arguments[0]->line);
-        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        v->line = (uint32_t) line;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
-    /* assert_throws(fn) → XI_ASSERT_THROWS */
-    if (strcmp(fname, "assert_throws") == 0 && call->arg_count == 1) {
-        XiValue *fn_val = xi_lower_expr(l, call->arguments[0]);
-        XiValue *v = xi_value_new(l->func, l->cur_block, XI_ASSERT_THROWS, l->type_unit, 1);
-        if (!v)
-            return xi_const_null(l->func, l->cur_block, l->type_null);
-        v->args[0] = fn_val;
-        v->aux = (void *) make_assert_loc(l, call->arguments[0]->line);
-        v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-        v->line = (uint32_t) line;
-        return xi_const_null(l->func, l->cur_block, l->type_null);
-    }
     /* typeOf(x) → TypeId int. */
     if (strcmp(fname, "typeOf") == 0 && call->arg_count == 1) {
         XiValue *arg = xi_lower_expr(l, call->arguments[0]);
@@ -7748,6 +7735,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * and emit specialized Xi ops instead of generic XI_CALL. */
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fname = call->callee->as.variable.name;
+        XrCoreBuiltinId core_builtin_id = lower_core_builtin_id(l, call->callee);
+        XiValue *core_assertion =
+            lower_core_assertion_call(l, node, call, core_builtin_id);
+        if (core_assertion)
+            return core_assertion;
         const XaParallelCallPlan *analyzer_parallel_plan =
             lower_analyzer_parallel_call_plan(l, node);
         if (analyzer_parallel_plan && !analyzer_parallel_plan->is_plan_method) {

@@ -31,7 +31,13 @@ const char *xr_builtins[] = {
 #define XR_BUILTIN_ENUM(name, arity, vm_slot, variants) name,
 #define XR_BUILTIN_IFACE(name, arity) name,
 #include "../../../stdlib/prelude/builtin_symbols.def"
-    "Coro",         "CoroPool",  "__dir__",       "__file__",    "process", "assert", "assert_eq",
-    "assert_false", "assert_ne", "assert_throws", "assert_true", "bool",    "chr",    "copy",
-    "dump",         "len",       "print",         "rune",
+#define XR_CORE_INTRINSIC(id, stable_id, source_name, category, call_form, parameter_shape,       \
+                          min_arity, max_arity, result_shape, effect_kind, flow_rule,               \
+                          expected_failure_channel, semantic_op, target_applicability,              \
+                          diagnostic_name)                                                          \
+    source_name,
+#include "../../../shared/xr_core_intrinsic.def"
+#undef XR_CORE_INTRINSIC
+    "Coro", "CoroPool", "__dir__", "__file__", "process", "bool", "chr", "copy", "dump",
+    "len", "rune",
     "string",       "typeName",  "typeOf",        NULL};

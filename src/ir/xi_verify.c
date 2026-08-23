@@ -445,6 +445,18 @@ static void verify_value(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk, co
             return;
     }
 
+    /* Assertion semantics are carried only by an arena-owned typed plan.  A
+     * missing owner, hostile aux kind on another op, stale arity, or invalid
+     * source path must fail before any optimizer/backend can inspect it. */
+    if (v->op == XI_ASSERTION || v->aux_kind == XI_AUX_KIND_ASSERTION_PLAN) {
+        const XrAssertionPlan *plan = xi_assertion_plan(v);
+        if (!plan || !xr_assertion_plan_validate(plan) || plan->arity != v->nargs) {
+            verr(ctx, "func '%s': assertion v%u has invalid or unowned AssertionPlan", f->name,
+                 v->id);
+            return;
+        }
+    }
+
     if (v->view_evidence.complete) {
         const XiViewEvidence *view = &v->view_evidence;
         if (!XR_TYPE_IS_SLICE(v->type)) {

@@ -48,6 +48,15 @@ static int tests_failed = 0;
     }                                                                                              \
     static void test_##name(void)
 
+#define TEST_REQUIRE(condition)                                                                    \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "test requirement failed: %s (%s:%d)\n", #condition, __FILE__,       \
+                    __LINE__);                                                                     \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
     XiFunc *f = xi_func_new(name, ret);
@@ -1511,6 +1520,98 @@ TEST(emit_local_addr_pins_source_slot) {
     xi_func_free(f);
 }
 
+TEST(emit_assertion_action_scratch_has_explicit_ownership) {
+    XrVMRuntime *isolate = new_test_isolate();
+    TEST_REQUIRE(isolate != NULL);
+    XiFunc *f = make_func("assertion_action_ownership", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *action = xi_param(f, entry, 0, &stub_string);
+    XiValue *assertion = xi_value_new(f, entry, XI_ASSERTION, &stub_void, 1);
+    TEST_REQUIRE(action != NULL && assertion != NULL);
+    assertion->args[0] = action;
+    assertion->source_span = (XiSourceSpan) {4, 5, 4, 31};
+    XrAssertionPlan plan;
+    XrLocation source = {"assertion_action_ownership.xr", 4, 5, 4, 31};
+    TEST_REQUIRE(xr_assertion_plan_build(XR_CORE_BUILTIN_ASSERT_PANICS, 1, source,
+                                         XR_CORE_INTRINSIC_TARGET_VM,
+                                         XR_ASSERTION_CAPABILITY_ALL,
+                                         &plan) == XR_ASSERTION_PLAN_OK);
+    TEST_REQUIRE(xi_value_set_assertion_plan(f, assertion, &plan));
+    xi_block_set_return(entry, NULL);
+
+    XrProto *proto = NULL;
+    XiEmitStatus status = xi_emit(f, isolate, &proto);
+    TEST_REQUIRE(status == XI_EMIT_OK && proto != NULL);
+
+    int call_pc = -1;
+    int catch_pc = -1;
+    int first_error_catch_pc = -1;
+    int dup_count = 0;
+    for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+        OpCode op = GET_OPCODE(PROTO_CODE(proto, pc));
+        if (op == OP_CALL)
+            call_pc = pc;
+        else if (op == OP_CATCH)
+            catch_pc = pc;
+        else if (op == OP_ERR_CATCH && first_error_catch_pc < 0)
+            first_error_catch_pc = pc;
+        else if (op == OP_DUP)
+            dup_count++;
+    }
+    TEST_REQUIRE(call_pc >= 9 && catch_pc >= 3 && first_error_catch_pc >= 2);
+    uint32_t call_base = GETARG_A(PROTO_CODE(proto, call_pc));
+    TEST_REQUIRE(call_base >= 5u);
+    uint32_t base = call_base - 5u;
+    TEST_REQUIRE(dup_count == 1);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc - 4)) == OP_DUP &&
+                 GETARG_A(PROTO_CODE(proto, call_pc - 4)) == base + 4u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc - 5)) == OP_MOVE &&
+                 GETARG_A(PROTO_CODE(proto, call_pc - 5)) == base + 4u &&
+                 GETARG_B(PROTO_CODE(proto, call_pc - 5)) == GETARG_B(PROTO_CODE(proto, 0)));
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc - 3)) == OP_MOVE &&
+                 GETARG_A(PROTO_CODE(proto, call_pc - 3)) == base + 5u &&
+                 GETARG_B(PROTO_CODE(proto, call_pc - 3)) == GETARG_B(PROTO_CODE(proto, 0)));
+
+    /* The normal path releases the retained action guard before probing the
+     * typed-error channel.  The typed path consumes the ordinary result before
+     * ERR_CATCH replaces the same slot. */
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc + 2)) == OP_DROP &&
+                 GETARG_A(PROTO_CODE(proto, call_pc + 2)) == base + 4u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc + 3)) == OP_LOADNULL &&
+                 GETARG_A(PROTO_CODE(proto, call_pc + 3)) == base + 4u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc + 4)) == OP_MOVE &&
+                 GETARG_A(PROTO_CODE(proto, call_pc + 4)) == base &&
+                 GETARG_B(PROTO_CODE(proto, call_pc + 4)) == base + 5u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, call_pc + 5)) == OP_LOADNULL &&
+                 GETARG_A(PROTO_CODE(proto, call_pc + 5)) == base + 5u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, first_error_catch_pc - 2)) == OP_DROP &&
+                 GETARG_A(PROTO_CODE(proto, first_error_catch_pc - 2)) == base);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, first_error_catch_pc - 1)) == OP_LOADNULL &&
+                 GETARG_A(PROTO_CODE(proto, first_error_catch_pc - 1)) == base);
+
+    /* A panic skips the normal continuation, so the catch frontier releases
+     * the guard and clears the borrowed action alias before binding the owned
+     * panic observation. */
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, catch_pc - 3)) == OP_DROP &&
+                 GETARG_A(PROTO_CODE(proto, catch_pc - 3)) == base + 4u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, catch_pc - 2)) == OP_LOADNULL &&
+                 GETARG_A(PROTO_CODE(proto, catch_pc - 2)) == base + 4u);
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, catch_pc - 1)) == OP_LOADNULL &&
+                 GETARG_A(PROTO_CODE(proto, catch_pc - 1)) == base + 5u);
+    TEST_REQUIRE(GETARG_A(PROTO_CODE(proto, catch_pc)) == base + 1u);
+
+    int return_pc = PROTO_CODE_COUNT(proto) - 1;
+    TEST_REQUIRE(GET_OPCODE(PROTO_CODE(proto, return_pc)) == OP_RETURN0);
+    for (uint32_t slot = 0; slot < 6u; slot++) {
+        XrInstruction clear = PROTO_CODE(proto, return_pc - 6 + (int) slot);
+        TEST_REQUIRE(GET_OPCODE(clear) == OP_LOADNULL && GETARG_A(clear) == base + slot);
+    }
+
+    xr_instruction_unit_free(proto);
+    xi_func_free(f);
+    xray_vm_delete(isolate);
+}
+
 /* ========== Error Handling ========== */
 
 TEST(emit_status_str) {
@@ -1596,6 +1697,7 @@ int main(void) {
     run_emit_identity_as_establishes_owned_result();
     run_emit_cancelled_builtin();
     run_emit_local_addr_pins_source_slot();
+    run_emit_assertion_action_scratch_has_explicit_ownership();
 
     /* Error handling */
     run_emit_status_str();

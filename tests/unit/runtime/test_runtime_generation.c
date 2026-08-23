@@ -14,6 +14,7 @@
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/xr_module_generation_internal.h"
+#include "../../../src/shared/xr_assertion_plan.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,18 @@
     } while (0)
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_bool = {
+    .kind = XR_KIND_BOOL,
+    .id = 2,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
+static XrType stub_unit = {
+    .kind = XR_KIND_UNIT,
+    .id = 3,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 
 static bool ensure_fixture_module_identity(XiFunc *root) {
     if (!root)
@@ -70,8 +83,12 @@ static XrTargetPlan *finish_plan(XiFunc *root,
     REQUIRE(xr_target_profile_build(&input, &profile, diagnostic,
                                     sizeof(diagnostic)));
     XrTargetPlan *plan = NULL;
-    REQUIRE(xr_target_plan_build(semantic, profile, &plan, diagnostic,
-                                 sizeof(diagnostic)));
+    bool targeted = xr_target_plan_build(semantic, profile, &plan,
+                                         diagnostic, sizeof(diagnostic));
+    if (!targeted)
+        fprintf(stderr, "runtime generation target failed: %s\n",
+                diagnostic);
+    REQUIRE(targeted);
     REQUIRE(xr_target_plan_is_verified(plan));
     *semantic_out = semantic;
     *profile_out = profile;
@@ -87,6 +104,36 @@ static XrTargetPlan *build_plan(XrSemanticPlan **semantic_out,
     XiValue *result = xi_const_int(function, entry, 42, &stub_int);
     REQUIRE(result != NULL);
     xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    return finish_plan(function, semantic_out, profile_out);
+}
+
+static XrTargetPlan *build_assertion_plan(
+    XrSemanticPlan **semantic_out, XrTargetProfile **profile_out) {
+    XiFunc *function =
+        xi_func_new("generation_assertion_probe", &stub_unit);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    XiValue *condition = entry
+                             ? xi_const_bool(function, entry, true,
+                                             &stub_bool)
+                             : NULL;
+    XiValue *assertion = entry
+                             ? xi_value_new(function, entry, XI_ASSERTION,
+                                            &stub_unit, 1)
+                             : NULL;
+    REQUIRE(function && entry && condition && assertion);
+    assertion->args[0] = condition;
+    assertion->source_span = (XiSourceSpan) {3, 1, 3, 13};
+    XrAssertionPlan assertion_plan;
+    XrLocation source = {"runtime-generation-fixture.xr", 3, 1, 3, 13};
+    REQUIRE(xr_assertion_plan_build(
+                XR_CORE_BUILTIN_ASSERT, 1, source,
+                XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
+                XR_ASSERTION_CAPABILITY_NONE, &assertion_plan) ==
+            XR_ASSERTION_PLAN_OK);
+    REQUIRE(xi_value_set_assertion_plan(function, assertion,
+                                        &assertion_plan));
+    xi_block_set_return(entry, assertion);
     function->stage = XI_STAGE_OPTIMIZED;
     return finish_plan(function, semantic_out, profile_out);
 }
@@ -538,6 +585,35 @@ static void test_actual_identity_mutations(XrTargetPlan *plan) {
         &authority, diagnostic, sizeof(diagnostic)));
 }
 
+static void test_assertion_generation_capability_identity(
+    XrTargetPlan *plan) {
+    char diagnostic[512] = {0};
+    XrRuntimeGenerationBudget budget = make_budget(1);
+    XrRuntimeGenerationAuthority *authority = NULL;
+    XrLoadedModuleGeneration *generation = NULL;
+    REQUIRE(xr_runtime_generation_authority_create(
+        &budget, &authority, diagnostic, sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_load_verified_target_plan(
+        authority, plan, &generation, diagnostic, sizeof(diagnostic)));
+    const uint64_t expected = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
+    REQUIRE(generation->identity.required_capability_mask == expected);
+    xr_mutex_lock(&authority->gate);
+    generation->identity.required_capability_mask =
+        XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+        XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+    xr_mutex_unlock(&authority->gate);
+    REQUIRE(!xr_module_generation_verify(generation, diagnostic,
+                                         sizeof(diagnostic)));
+    REQUIRE(strstr(diagnostic, "XR_TARGET_1004") != NULL ||
+            strstr(diagnostic, "XR_EXEC_5008") != NULL);
+    REQUIRE(xr_module_generation_rollback(generation, diagnostic,
+                                          sizeof(diagnostic)));
+    REQUIRE(xr_module_generation_unload(&generation, diagnostic,
+                                        sizeof(diagnostic)));
+    REQUIRE(xr_runtime_generation_authority_destroy(
+        &authority, diagnostic, sizeof(diagnostic)));
+}
+
 typedef struct LoadContext {
     XrRuntimeGenerationAuthority *authority;
     XrTargetPlan *plan;
@@ -605,6 +681,10 @@ int main(void) {
     XrTargetProfile *multi_profile = NULL;
     XrTargetPlan *multi = build_multi_function_plan(
         &multi_semantic, &multi_profile);
+    XrSemanticPlan *assertion_semantic = NULL;
+    XrTargetProfile *assertion_profile = NULL;
+    XrTargetPlan *assertion = build_assertion_plan(
+        &assertion_semantic, &assertion_profile);
     uint32_t function_count = 0;
     REQUIRE(xr_target_plan_function_execution_family_mask(unsupported, 0) == 0);
     REQUIRE(xr_target_plan_function_execution_family_mask(zero, 0) ==
@@ -619,6 +699,7 @@ int main(void) {
     test_divide_by_zero_generation_fails_at_execution(zero);
     test_independent_state_machine_verifier();
     test_actual_identity_mutations(plan);
+    test_assertion_generation_capability_identity(assertion);
     test_concurrent_generation_budget(plan);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
@@ -632,6 +713,9 @@ int main(void) {
     xr_target_plan_free(multi);
     xr_target_profile_free(multi_profile);
     xr_semantic_plan_free(multi_semantic);
+    xr_target_plan_free(assertion);
+    xr_target_profile_free(assertion_profile);
+    xr_semantic_plan_free(assertion_semantic);
     puts("runtime generation authority tests passed");
     return 0;
 }

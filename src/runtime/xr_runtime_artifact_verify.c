@@ -17,6 +17,7 @@
 #include "abi/xr_runtime_target_authority.h"
 #include "../plan/semantic/xr_semantic_verify.h"
 #include "../plan/target/xr_target_profile_internal.h"
+#include "../plan/target/xr_target_capability.h"
 #include "../plan/target/xr_target_verify.h"
 #include <stdio.h>
 #include <string.h>
@@ -75,8 +76,14 @@ XRAY_API bool xr_runtime_artifact_authority_verify(
     if (identity->required_family_mask != XR_TARGET_REQUIRED_FAMILIES)
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1001",
                     "artifact authority family closure is incomplete");
-    if (identity->required_capability_mask !=
-        XR_TARGET_FOUNDATION_CAPABILITY_MASK)
+    uint64_t expected_capability_mask = 0;
+    const XrTargetProfileDraft *profile_facts =
+        xr_target_profile_facts(authority->target_profile);
+    if (!profile_facts ||
+        !xr_target_semantic_capability_mask(authority->semantic_plan,
+                                            profile_facts->machine.runtime_profile,
+                                            &expected_capability_mask) ||
+        identity->required_capability_mask != expected_capability_mask)
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "artifact authority capability closure is not exact");
 
@@ -119,7 +126,8 @@ XRAY_API bool xr_runtime_artifact_authority_verify(
                     "artifact authority does not bind the canonical native machine facts");
     if (identity->provider_mask != provider_mask ||
         facts->provider_mask != provider_mask ||
-        (identity->required_capability_mask & ~provider_mask) != 0 ||
+        !xr_target_capability_mask_is_backed(
+            identity->required_capability_mask, provider_mask) ||
         !fingerprint_equal_bytes(runtime_fingerprint,
                                  identity->runtime_abi_fingerprint) ||
         !fingerprint_equal_bytes(provider_fingerprint,
@@ -171,28 +179,6 @@ XR_FUNCDEF bool xr_runtime_artifact_authority_bind_candidate(
     return true;
 }
 
-static bool plan_capability_mask(const XrTargetPlan *plan, uint64_t *out) {
-    uint32_t count = 0;
-    const XrTargetCapabilityRecord *capabilities =
-        xr_target_plan_capabilities(plan, &count);
-    uint64_t mask = 0;
-    for (uint32_t i = 0; i < count; i++) {
-        const XrTargetCapabilityRecord *record = &capabilities[i];
-        if (record->id != i ||
-            record->capability <= XR_TARGET_PROVIDER_INVALID ||
-            record->capability >= XR_TARGET_PROVIDER_KIND_COUNT ||
-            record->provider != record->capability ||
-            record->flags != XR_TARGET_CAPABILITY_REQUIRED)
-            return false;
-        uint64_t bit = XR_TARGET_PROVIDER_MASK(record->provider);
-        if ((mask & bit) != 0)
-            return false;
-        mask |= bit;
-    }
-    *out = mask;
-    return true;
-}
-
 XR_FUNCDEF bool xr_runtime_artifact_authority_bind_plan(
     const XrRuntimeArtifactAuthority *authority, const XrTargetPlan *plan,
     char *diagnostic, size_t diagnostic_size) {
@@ -214,9 +200,10 @@ XR_FUNCDEF bool xr_runtime_artifact_authority_bind_plan(
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "TargetPlan identity does not match its authority package");
     uint64_t capability_mask = 0;
-    if (!plan_capability_mask(plan, &capability_mask) ||
+    if (!xr_target_plan_capability_mask(plan, &capability_mask) ||
         capability_mask != authority->identity.required_capability_mask ||
-        (capability_mask & ~authority->identity.provider_mask) != 0)
+        !xr_target_capability_mask_is_backed(
+            capability_mask, authority->identity.provider_mask))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "TargetPlan capability closure is missing or unbound");
     return true;

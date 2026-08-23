@@ -8654,6 +8654,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             *out_storage = XR_REP_TAGGED;
             return true;
         }
+        case XI_ASSERTION: {
+            XrAssertionPlan assertion;
+            if (!xr_semantic_operation_assertion_plan(operation, &assertion) ||
+                operand_index >= assertion.arity)
+                return false;
+            if (assertion.kind == XR_ASSERTION_KIND_CONDITION && operand_index == 0)
+                return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
+            XrRep carrier_storage = XR_REP_TAGGED;
+            if (!oracle_tagged_reference_carrier_storage(ctx, source_value, &carrier_storage,
+                                                         &ignored_kind) &&
+                !oracle_machine_storage(ctx, source_value, &carrier_storage, &ignored_kind))
+                return false;
+            *out_storage = XR_REP_TAGGED;
+            return true;
+        }
         case XI_GO:
             if (operand_index == 0) {
                 if (!oracle_direct_local_go_callee_use(ctx, operation_index, operand_index,
@@ -9819,9 +9834,50 @@ static bool materialized_adapter_kind_matches(const XrAotRepresentationAdapterRe
     }
 }
 
+static bool materialized_assertion_plan_matches(const XrSemanticOperationRecord *operation,
+                                                const XiValue *value) {
+    if (!operation || !value || value->op != XI_ASSERTION || !value->type ||
+        value->type->kind != XR_KIND_UNIT || !value->args)
+        return false;
+    XrAssertionPlan frozen;
+    const XrAssertionPlan *live = xi_assertion_plan(value);
+    if (!live || !xr_semantic_operation_assertion_plan(operation, &frozen) ||
+        !xr_assertion_plan_validate(live) || live->schema_version != frozen.schema_version ||
+        live->builtin_id != frozen.builtin_id || live->kind != frozen.kind ||
+        !live->source.file || !live->source.file[0] ||
+        live->source.line != frozen.source.line || live->source.column != frozen.source.column ||
+        live->source.end_line != frozen.source.end_line ||
+        live->source.end_column != frozen.source.end_column ||
+        live->equality_authority != frozen.equality_authority ||
+        live->expected_failure_channel != frozen.expected_failure_channel ||
+        live->flow_rule != frozen.flow_rule || live->effect != frozen.effect ||
+        live->target != frozen.target ||
+        live->required_capabilities != frozen.required_capabilities ||
+        live->flags != frozen.flags || live->arity != frozen.arity ||
+        live->arity != value->nargs || live->message_operand != frozen.message_operand ||
+        live->evaluation_count != frozen.evaluation_count)
+        return false;
+    for (uint32_t i = 0; i < XR_ASSERTION_MAX_OPERANDS; i++)
+        if (live->evaluation_order[i] != frozen.evaluation_order[i])
+            return false;
+    for (uint16_t i = 0; i < value->nargs; i++) {
+        const XiValue *operand = value->args[i];
+        XrRep expected = live->kind == XR_ASSERTION_KIND_CONDITION && i == 0
+                             ? XR_REP_I64
+                             : XR_REP_TAGGED;
+        if (!operand || operand->rep != expected ||
+            (i == 0 && live->kind == XR_ASSERTION_KIND_CONDITION &&
+             (operand->op == XI_BOX || !operand->type || operand->type->kind != XR_KIND_BOOL)))
+            return false;
+    }
+    return true;
+}
+
 static bool materialized_operation_shape_matches(const XrSemanticOperationRecord *operation,
                                                  const XiValue *value, uint32_t local_value) {
-    return operation && value && value->backend_origin == XI_BACKEND_VALUE_NONE &&
+    return operation && value &&
+           (value->op != XI_ASSERTION || materialized_assertion_plan_matches(operation, value)) &&
+           value->backend_origin == XI_BACKEND_VALUE_NONE &&
            value->id == local_value && operation->opcode == value->op &&
            operation->operand_count == value->nargs &&
            operation->auxiliary_kind == value->aux_kind &&
@@ -10031,6 +10087,14 @@ static bool verify_exact_dynamic_storage_materialization(const XrAotRefinementPl
                 valid = false;
                 break;
             }
+        }
+        if (operation->opcode == XI_ASSERTION &&
+            (!user || !materialized_operation_shape_matches(
+                           operation, user,
+                           operation->result_value - semantic_function->value_begin))) {
+            set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i, operation->result_value, i);
+            valid = false;
+            break;
         }
         for (uint16_t a = 0; valid && a < operation->operand_count; a++) {
             uint32_t source_value = operands[operation->operand_begin + a].value;

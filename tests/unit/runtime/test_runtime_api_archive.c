@@ -121,6 +121,21 @@ static void test_runtime_requires_a_complete_budget(void) {
     CHECK(strstr(diagnostic, "XR_EXEC_5003") != NULL,
           "zero budget diagnostic code");
 
+    XrRuntimeConfig retired = make_config();
+    retired.schema_version = 1;
+    CHECK(!xr_runtime_create(&retired, &runtime, diagnostic,
+                             sizeof(diagnostic)),
+          "runtime accepted the pre-provider-binding config schema");
+    CHECK(runtime == NULL,
+          "retired config schema left a runtime handle");
+    retired = make_config();
+    retired.reserved = 1;
+    CHECK(!xr_runtime_create(&retired, &runtime, diagnostic,
+                             sizeof(diagnostic)),
+          "runtime accepted a nonzero reserved config word");
+    CHECK(runtime == NULL,
+          "reserved config mutation left a runtime handle");
+
     XrRuntimeConfig config = make_config();
     config.activation.max_active_provider_registrations = UINT32_C(65537);
     CHECK(!xr_runtime_create(&config, &runtime, diagnostic,

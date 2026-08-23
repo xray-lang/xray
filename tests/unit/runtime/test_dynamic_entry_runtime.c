@@ -15,6 +15,7 @@
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
+#include "../../../src/shared/xr_assertion_plan.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/xr_dynamic_entry_runtime.h"
 #include "../../../src/runtime/xr_module_generation_internal.h"
@@ -148,6 +149,12 @@ typedef struct DynamicDebugProbe {
 } DynamicDebugProbe;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_bool = {
+    .kind = XR_KIND_BOOL,
+    .id = 5,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+};
 static XrType stub_unit = {
     .kind = XR_KIND_UNIT,
     .id = 2,
@@ -162,6 +169,17 @@ static XrType stub_function = {
         {
             .return_type = &stub_int,
             .throw_effect = XR_FN_EFFECT_NO_THROW,
+        },
+};
+static XrType stub_assertion_action = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 6,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function =
+        {
+            .return_type = &stub_int,
+            .throw_effect = XR_FN_EFFECT_MAY_THROW,
         },
 };
 static XrType stub_module_namespace = {
@@ -208,6 +226,130 @@ static XrTargetProfile *build_profile(void) {
     REQUIRE(xr_target_profile_build(&input, &profile, diagnostic,
                                     sizeof(diagnostic)));
     return profile;
+}
+
+typedef struct AssertionActivationFixture {
+    XrSemanticPlan *semantic;
+    XrTargetProfile *profile;
+    XrTargetPlan *plan;
+} AssertionActivationFixture;
+
+static AssertionActivationFixture build_assertion_activation_fixture(
+    XrCoreBuiltinId builtin_id) {
+    XiFunc *function =
+        xi_func_new("assertion_activation_probe", &stub_unit);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function && entry);
+    uint16_t arity = 1;
+    XiValue *arguments[2] = {0};
+    if (builtin_id == XR_CORE_BUILTIN_ASSERT) {
+        arguments[0] = xi_const_bool(function, entry, true, &stub_bool);
+    } else if (builtin_id == XR_CORE_BUILTIN_ASSERT_EQUAL) {
+        arity = 2;
+        arguments[0] = xi_const_int(function, entry, 1, &stub_int);
+        arguments[1] = xi_const_int(function, entry, 1, &stub_int);
+    } else {
+        arguments[0] =
+            xi_param(function, entry, 0, &stub_assertion_action);
+        function->params =
+            (XiValue **) xr_malloc(sizeof(*function->params));
+        REQUIRE(function->params != NULL);
+        function->params[0] = arguments[0];
+        function->nparams = 1;
+    }
+    REQUIRE(arguments[0] && (arity == 1 || arguments[1]));
+    XiValue *assertion =
+        xi_value_new(function, entry, XI_ASSERTION, &stub_unit, arity);
+    REQUIRE(assertion != NULL);
+    for (uint16_t i = 0; i < arity; i++)
+        assertion->args[i] = arguments[i];
+    XrAssertionPlan assertion_plan;
+    XrLocation source = {
+        "assertion-activation-fixture.xr", 4, 3, 4, 24,
+    };
+    assertion->source_span = (XiSourceSpan) {4, 3, 4, 24};
+    REQUIRE(xr_assertion_plan_build(
+                builtin_id, arity, source,
+                XR_CORE_INTRINSIC_TARGET_ASSERTION_ALL,
+                XR_ASSERTION_CAPABILITY_NONE, &assertion_plan) ==
+            XR_ASSERTION_PLAN_OK);
+    REQUIRE(xi_value_set_assertion_plan(function, assertion,
+                                        &assertion_plan));
+    xi_block_set_return(entry, assertion);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule fixture_module = {
+        .identity =
+            "memory-module-v1:id=31:assertion-activation-fixture-v1",
+        .path = "assertion-activation-fixture.xr",
+        .name = "assertion_activation_fixture",
+        .init = function,
+    };
+    function->module = &fixture_module;
+    AssertionActivationFixture fixture = {0};
+    char diagnostic[512] = {0};
+    bool semantic_built = xr_semantic_plan_build(
+        function, &fixture.semantic, diagnostic, sizeof(diagnostic));
+    if (!semantic_built)
+        fprintf(stderr, "assertion activation fixture failed: %s\n",
+                diagnostic);
+    REQUIRE(semantic_built);
+    function->module = NULL;
+    xi_func_free(function);
+    fixture.profile = build_profile();
+    REQUIRE(xr_target_plan_build(fixture.semantic, fixture.profile,
+                                 &fixture.plan, diagnostic,
+                                 sizeof(diagnostic)));
+    return fixture;
+}
+
+static void dispose_assertion_activation_fixture(
+    AssertionActivationFixture *fixture) {
+    xr_target_plan_free(fixture->plan);
+    xr_target_profile_free(fixture->profile);
+    xr_semantic_plan_free(fixture->semantic);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static void test_assertion_activation_requirements_are_exact(void) {
+    const XrCoreBuiltinId builtins[] = {
+        XR_CORE_BUILTIN_ASSERT,
+        XR_CORE_BUILTIN_ASSERT_EQUAL,
+        XR_CORE_BUILTIN_ASSERT_THROWS,
+        XR_CORE_BUILTIN_ASSERT_PANICS,
+    };
+    for (size_t builtin_index = 0;
+         builtin_index < sizeof(builtins) / sizeof(builtins[0]);
+         builtin_index++) {
+        AssertionActivationFixture fixture =
+            build_assertion_activation_fixture(builtins[builtin_index]);
+        XrRuntimeActivationRegistration requirements[16] = {0};
+        uint32_t requirement_count = 0;
+        uint32_t provider_count = 0;
+        uint32_t finalizer_count = 0;
+        XrRuntimeProviderBindings bindings = {
+            .allocate = activation_allocate,
+            .deallocate = activation_deallocate,
+            .panic = activation_panic,
+        };
+        REQUIRE(xr_runtime_activation_requirements_build(
+            fixture.plan, &bindings, requirements, 16,
+            &requirement_count, &provider_count, &finalizer_count));
+        REQUIRE(requirement_count == 3 && provider_count == 2 &&
+                finalizer_count == 1);
+        uint32_t panic_rows = 0;
+        for (uint32_t i = 0; i < requirement_count; i++) {
+            REQUIRE(requirements[i].reserved == 0);
+            if (requirements[i].provider_kind == XR_TARGET_PROVIDER_PANIC)
+                panic_rows++;
+        }
+        /* The typed-error boundary has no provider row.  The panic boundary
+         * maps to the existing PANIC operation and is deduplicated.  Hosted
+         * assertion failures remain in the captured exception channel and do
+         * not register the freestanding-only report operation. */
+        REQUIRE(panic_rows == 1);
+        dispose_assertion_activation_fixture(&fixture);
+    }
 }
 
 static uint64_t shifted_target_immediate(
@@ -433,6 +575,9 @@ static void build_dynamic_fixture(DynamicFixtureMode mode,
     XiModule *dependency_module = xi_module_new(
         dependency_path, dependency_name, dependency_root);
     REQUIRE(dependency_module);
+    REQUIRE(xi_module_set_identity(
+        dependency_module,
+        "memory-module-v1:id=27:dynamic-entry-dependency-v1"));
     dependency_root->module = dependency_module;
     dependency_module->nslots = 2;
     dependency_module->nexports = 2;
@@ -530,6 +675,9 @@ static void build_dynamic_fixture(DynamicFixtureMode mode,
         alternate ? "stdlib/other/caller.xr" : "stdlib/http/http.xr",
         alternate ? "other_caller" : "http", caller_root);
     REQUIRE(caller_module);
+    REQUIRE(xi_module_set_identity(
+        caller_module,
+        "memory-module-v1:id=23:dynamic-entry-caller-v1"));
     caller_root->module = caller_module;
     caller_module->nslots = 1;
     XiModule *dependencies[] = {dependency_module};
@@ -2087,6 +2235,7 @@ static void test_native_i64_adapter_bidirectional_closure(void) {
 }
 
 int main(void) {
+    test_assertion_activation_requirements_are_exact();
     test_module_entry_batch_is_atomic();
     test_dynamic_entry_authority_cache_and_lifetime();
     test_dynamic_entry_all_exit_release();

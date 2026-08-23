@@ -73,6 +73,7 @@
 #include "../shared/xr_pod_slice_core.h"
 #include "../shared/xr_regex_core.h"
 #include "../shared/xr_slice_window_core.h"
+#include "../shared/xr_assertion_core.h"
 
 #include "../runtime/mem/xcoro_heap.h"
 #include "../runtime/mem/xalloc_unified.h"
@@ -362,9 +363,9 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
  *
  * After this macro control never falls through: it either gotos
  * startfunc (panic handler) or returns XR_VM_RUNTIME_ERROR. */
-#define VM_RUNTIME_ERROR(code, fmt, ...)                                                           \
+#define VM_THROW_EXCEPTION_VALUE(exception_value)                                                  \
     do {                                                                                           \
-        XrValue _exc = xr_panic_info_newf(isolate, (code), fmt, ##__VA_ARGS__);                    \
+        XrValue _exc = (exception_value);                                                          \
         savepc();                                                                                  \
         {                                                                                          \
             XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;                             \
@@ -385,6 +386,9 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
             return XR_VM_RUNTIME_ERROR;                                                            \
         goto startfunc;                                                                            \
     } while (0)
+
+#define VM_RUNTIME_ERROR(code, fmt, ...)                                                           \
+    VM_THROW_EXCEPTION_VALUE(xr_panic_info_newf(isolate, (code), fmt, ##__VA_ARGS__))
 
 #define VM_ARRAY_INDEX_OOB(raw_idx, raw_length)                                                    \
     do {                                                                                           \
@@ -926,7 +930,7 @@ startfunc:
 /* Assertion + regex literal opcodes — see file comment in
  * xvm_dispatch_assert.inc.c. The include expands inside
  * the dispatch switch and pulls in the vmcase bodies for
- * OP_ASSERT / OP_ASSERT_EQ / OP_ASSERT_NE / OP_REGEX_COMPILE. */
+ * OP_ASSERTION metadata records and OP_REGEX_COMPILE. */
 #include "xvm_dispatch_assert.inc.c"
 
 /* Coroutine + scheduler opcodes — see xvm_dispatch_coro.inc.c. */

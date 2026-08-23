@@ -25,6 +25,41 @@ static uint64_t hash_u64(uint64_t hash, uint64_t value) {
     return hash;
 }
 
+static uint64_t hash_bytes(uint64_t hash, const void *data, size_t size) {
+    const uint8_t *bytes = (const uint8_t *) data;
+    for (size_t i = 0; i < size; i++) {
+        hash ^= bytes[i];
+        hash *= FNV_PRIME;
+    }
+    return hash;
+}
+
+static uint64_t hash_assertion_plan(uint64_t hash, const XrAssertionPlan *plan) {
+    if (!xr_assertion_plan_validate(plan))
+        return hash_u64(hash, UINT64_MAX);
+    hash = hash_u64(hash, plan->schema_version);
+    hash = hash_u64(hash, plan->builtin_id);
+    hash = hash_u64(hash, plan->kind);
+    hash = hash_bytes(hash, plan->source.file, strlen(plan->source.file));
+    hash = hash_u64(hash, plan->source.line);
+    hash = hash_u64(hash, plan->source.column);
+    hash = hash_u64(hash, plan->source.end_line);
+    hash = hash_u64(hash, plan->source.end_column);
+    hash = hash_u64(hash, plan->equality_authority);
+    hash = hash_u64(hash, plan->expected_failure_channel);
+    hash = hash_u64(hash, plan->flow_rule);
+    hash = hash_u64(hash, plan->effect);
+    hash = hash_u64(hash, plan->target);
+    hash = hash_u64(hash, plan->required_capabilities);
+    hash = hash_u64(hash, plan->flags);
+    hash = hash_u64(hash, plan->arity);
+    hash = hash_u64(hash, plan->message_operand);
+    hash = hash_u64(hash, plan->evaluation_count);
+    for (size_t i = 0; i < sizeof(plan->evaluation_order) / sizeof(plan->evaluation_order[0]); i++)
+        hash = hash_u64(hash, plan->evaluation_order[i]);
+    return hash;
+}
+
 static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool include_type) {
     if (!value)
         return hash_u64(hash, UINT64_MAX);
@@ -33,7 +68,11 @@ static uint64_t value_semantic_hash(uint64_t hash, const XiValue *value, bool in
     hash = hash_u64(hash, value->flags);
     hash = hash_u64(hash, value->nargs);
     hash = hash_u64(hash, (uint64_t) value->aux_int);
-    hash = hash_u64(hash, (uintptr_t) value->aux);
+    hash = hash_u64(hash, value->aux_kind);
+    if (value->aux_kind == XI_AUX_KIND_ASSERTION_PLAN)
+        hash = hash_assertion_plan(hash, xi_assertion_plan(value));
+    else
+        hash = hash_u64(hash, (uintptr_t) value->aux);
     hash = hash_u64(hash, value->var_id);
     hash = hash_u64(hash, value->lowering_flags);
     hash = hash_u64(hash, (uint64_t) value->conversion.kind);

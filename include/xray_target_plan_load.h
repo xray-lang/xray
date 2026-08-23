@@ -27,7 +27,7 @@ typedef struct XrTargetProfile XrTargetProfile;
 typedef struct XrTargetPlan XrTargetPlan;
 typedef struct XrRuntimeArtifactAuthority XrRuntimeArtifactAuthority;
 
-#define XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION UINT32_C(1)
+#define XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION UINT32_C(2)
 #define XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE 32u
 
 typedef struct XrRuntimeArtifactAuthorityIdentity {

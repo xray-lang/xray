@@ -93,9 +93,15 @@ static const char *const k_repl_keywords[] = {
     "final",      "operator", "void",
     "string",     "bool",     "Array",       "Map",          "Set",
     "JSON.Value", "Channel",  "Array<u8>", "BigInt",       "StringBuilder",
-    "PanicInfo",  "Regex",    "print",       "dump",         "typeOf",
-    "typeName",   "assert",   "assert_true", "assert_false", "assert_eq",
-    "assert_ne",  "copy",     "chr",         "Coro",         "CoroPool",
+    "PanicInfo",  "Regex",    "dump",         "typeOf",       "typeName",
+#define XR_CORE_INTRINSIC(id, stable_id, source_name, category, call_form, parameter_shape,       \
+                          min_arity, max_arity, result_shape, effect_kind, flow_rule,               \
+                          expected_failure_channel, semantic_op, target_applicability,              \
+                          diagnostic_name)                                                          \
+    source_name,
+#include "../../shared/xr_core_intrinsic.def"
+#undef XR_CORE_INTRINSIC
+    "copy",        "chr",      "Coro",         "CoroPool",
     NULL,
 };
 

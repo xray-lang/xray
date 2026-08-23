@@ -15,6 +15,7 @@
 #include "../plan/format/xr_xsm_schema.h"
 #include "../plan/semantic/xr_semantic_verify.h"
 #include "../plan/target/xr_target_profile_internal.h"
+#include "../plan/target/xr_target_capability.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -35,7 +36,7 @@ static void hash_u64(XrSHA256Context *context, uint64_t value) {
 XR_FUNCDEF void xr_runtime_artifact_authority_compute_fingerprint(
     const XrRuntimeArtifactAuthorityIdentity *identity,
     uint8_t out[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE]) {
-    static const uint8_t domain[] = "xray-runtime-artifact-authority-v1\0";
+    static const uint8_t domain[] = "xray-runtime-artifact-authority-v2\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -148,11 +149,19 @@ static bool populate_identity(
         XR_TARGET_FOUNDATION_CAPABILITY_MASK)
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "native runtime authority lacks a foundation capability");
+    uint64_t required_capability_mask = 0;
+    if (!xr_target_semantic_capability_mask(semantic_plan,
+                                            profile_facts->machine.runtime_profile,
+                                            &required_capability_mask) ||
+        !xr_target_capability_mask_is_backed(required_capability_mask,
+                                             provider_mask))
+        return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
+                    "semantic capability closure lacks an exact runtime provider");
 
     memset(identity, 0, sizeof(*identity));
     identity->schema_version = XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION;
     identity->required_family_mask = XR_TARGET_REQUIRED_FAMILIES;
-    identity->required_capability_mask = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
+    identity->required_capability_mask = required_capability_mask;
     identity->provider_mask = provider_mask;
     copy_fingerprint(identity->semantic_fingerprint,
                      xr_semantic_plan_fingerprint(semantic_plan));

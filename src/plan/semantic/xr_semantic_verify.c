@@ -2797,6 +2797,14 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         }
         if (!operation_debug_span_valid(plan, i))
             return report(error, error_size, "XR_SEM_0019", "operation debug span is invalid");
+        if (operation->opcode == XI_ASSERTION ||
+            operation->auxiliary_kind == XI_AUX_KIND_ASSERTION_PLAN ||
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ASSERTION) {
+            XrAssertionPlan assertion_plan;
+            if (!xr_semantic_operation_assertion_plan(operation, &assertion_plan))
+                return report(error, error_size, "XR_SEM_0019",
+                              "assertion operation lacks an exact typed plan");
+        }
         if (!verify_string_byte_slice_view(plan, operation, error, error_size))
             return false;
         if (!verify_string_runes(plan, operation, error, error_size))

@@ -3947,7 +3947,10 @@ XR_FUNC bool xaot_bundle_set_capability_provider(XaotBundle *bundle,
     const uint32_t known_hooks = XAOT_PROVIDER_HOOK_TASK_ALLOC | XAOT_PROVIDER_HOOK_SUBMIT |
                                  XAOT_PROVIDER_HOOK_PARK_WAKE | XAOT_PROVIDER_HOOK_TIMER |
                                  XAOT_PROVIDER_HOOK_EXECUTOR_PUMP |
-                                 XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE;
+                                 XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE |
+                                 XAOT_PROVIDER_HOOK_ASSERTION_REPORT |
+                                 XAOT_PROVIDER_HOOK_ALLOC | XAOT_PROVIDER_HOOK_FREE |
+                                 XAOT_PROVIDER_HOOK_PANIC;
     for (uint32_t i = 0; i < capability_count; i++)
         known_capabilities |= capabilities[i];
     if (!bundle || !provider || bundle->global_evidence_plan.evidence ||

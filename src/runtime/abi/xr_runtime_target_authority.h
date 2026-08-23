@@ -16,7 +16,7 @@
 #include "xr_runtime_string_object.h"
 #include "xr_target_machine_facts.h"
 
-#define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 2
+#define XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT 3
 
 /* Owned, pointer-free snapshot. The native runtime constructs this from its
  * concrete C layouts and canonical registries; consumers may copy the value
@@ -36,6 +36,12 @@ typedef struct XrRuntimeTargetAuthority {
  * deliberately not inferred from the host. */
 XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_hosted(
     XrRuntimeTargetAuthority *out);
+
+/* Builds the native freestanding ABI from the standard hook contract.  The
+ * selector is only an allow-list for canonical provider rows; callers cannot
+ * author operation IDs, call ABIs, effects, or failure behavior. */
+XR_FUNC XrRuntimeAbiStatus xr_runtime_target_authority_native_freestanding(
+    uint64_t provider_mask, XrRuntimeTargetAuthority *out);
 
 /* Exact comparison is field-wise so C padding can never become authority.
  * The current native authority deliberately supports only scalar execution;

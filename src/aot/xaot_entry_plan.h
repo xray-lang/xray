@@ -17,6 +17,11 @@
 
 struct XaotBundle;
 
+/* Exact identity of the built-in freestanding hook manifest.  Arbitrary
+ * project strings are not provider authority; a different identity requires
+ * a validated manifest whose operation ABI feeds TargetProfile construction. */
+#define XAOT_FREESTANDING_HOOK_PROVIDER_ID "xray-freestanding-hooks-v1"
+
 enum {
     XAOT_PROVIDER_ABI_VERSION = 1,
     XAOT_PROVIDER_HOOK_TASK_ALLOC = 1u << 0,
@@ -25,6 +30,10 @@ enum {
     XAOT_PROVIDER_HOOK_TIMER = 1u << 3,
     XAOT_PROVIDER_HOOK_EXECUTOR_PUMP = 1u << 4,
     XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE = 1u << 5,
+    XAOT_PROVIDER_HOOK_ASSERTION_REPORT = 1u << 6,
+    XAOT_PROVIDER_HOOK_ALLOC = 1u << 7,
+    XAOT_PROVIDER_HOOK_FREE = 1u << 8,
+    XAOT_PROVIDER_HOOK_PANIC = 1u << 9,
 };
 
 typedef struct XaotTargetCapabilityProvider {

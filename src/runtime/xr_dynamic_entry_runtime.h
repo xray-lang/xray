@@ -23,6 +23,19 @@ typedef struct XrRuntimeEntryRegistry XrRuntimeEntryRegistry;
 typedef struct XrRuntimeDynamicEntryCache XrRuntimeDynamicEntryCache;
 typedef struct XrRuntimeModuleActivation XrRuntimeModuleActivation;
 
+typedef enum XrRuntimeActivationRegistrationRole {
+    XR_RUNTIME_ACTIVATION_PROVIDER = 1,
+    XR_RUNTIME_ACTIVATION_FINALIZER = 2,
+} XrRuntimeActivationRegistrationRole;
+
+typedef struct XrRuntimeActivationRegistration {
+    XrStableId provider_contract;
+    XrStableId operation;
+    uint16_t provider_kind;
+    uint8_t role;
+    uint8_t reserved;
+} XrRuntimeActivationRegistration;
+
 typedef struct XrRuntimeDynamicEntryCacheStats {
     uint64_t hits;
     uint64_t misses;
@@ -55,6 +68,14 @@ XR_FUNC bool xr_runtime_activation_registry_configure(
     const XrRuntimeActivationBudget *budget,
     const XrRuntimeProviderBindings *bindings, char *diagnostic,
     size_t diagnostic_size);
+/* Re-derives the exact activation set from a verified TargetPlan.  Tests and
+ * publication share this owner so providerless semantic capabilities and
+ * duplicate provider mappings cannot drift into different activation rules. */
+XR_FUNC bool xr_runtime_activation_requirements_build(
+    const XrTargetPlan *plan, const XrRuntimeProviderBindings *bindings,
+    XrRuntimeActivationRegistration *requirements, uint32_t capacity,
+    uint32_t *requirement_count, uint32_t *provider_count,
+    uint32_t *finalizer_count);
 
 XR_FUNC bool xr_runtime_entry_handle_create(
     XrRuntimeEntryHandle **handle, char *diagnostic,

@@ -25,7 +25,7 @@ typedef struct XrTargetPlan XrTargetPlan;
 typedef struct XrRuntimeGenerationAuthority XrRuntimeGenerationAuthority;
 typedef struct XrLoadedModuleGeneration XrLoadedModuleGeneration;
 
-#define XR_RUNTIME_GENERATION_SCHEMA_VERSION UINT32_C(1)
+#define XR_RUNTIME_GENERATION_SCHEMA_VERSION UINT32_C(2)
 #define XR_RUNTIME_GENERATION_FINGERPRINT_SIZE 32u
 
 typedef enum XrModuleGenerationState {

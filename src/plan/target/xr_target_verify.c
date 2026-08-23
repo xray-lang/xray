@@ -15,6 +15,7 @@
 
 #include "../semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_target_verify.h"
+#include "xr_target_capability.h"
 #include "xr_target_instruction_verify.h"
 #include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
@@ -266,7 +267,9 @@ bool xr_target_profile_verify(const XrTargetProfile *profile, char *error, size_
                                  XR_TARGET_VECTOR_AVX512 | XR_TARGET_VECTOR_NEON |
                                  XR_TARGET_VECTOR_SVE | XR_TARGET_VECTOR_VSX |
                                  XR_TARGET_VECTOR_LSX | XR_TARGET_VECTOR_WASM128;
-    const uint64_t provider_mask = XR_TARGET_PROVIDER_MASK_ALL;
+    const uint64_t provider_mask =
+        XR_TARGET_PROVIDER_MASK_ALL |
+        XR_TARGET_PROVIDER_DERIVED_CAPABILITY_MASK;
     if ((machine->atomic_width_mask & ~atomic_width_mask) != 0 ||
         (machine->atomic_order_mask & ~atomic_order_mask) != 0 ||
         (machine->float_feature_mask & ~float_mask) != 0 ||
@@ -7510,24 +7513,93 @@ static bool verify_adapters_and_capabilities(const XrTargetPlan *plan, char *err
         return report(error, error_size, "XR_TARGET_1003",
                       "DIRECT_LOCAL scalar calls require an exact empty adapter partition");
     const XrTargetProfileDraft *facts = xr_target_profile_facts(plan->profile);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(plan->semantic_plan, &operand_count);
     uint64_t capability_mask = 0;
+    uint64_t expected_mask = XR_TARGET_FOUNDATION_CAPABILITY_MASK;
+    for (uint32_t i = 0;
+         i < xr_semantic_plan_operation_count(plan->semantic_plan); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(plan->semantic_plan, i);
+        if (!operation || operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION)
+            continue;
+        XrAssertionPlan assertion;
+        if (!xr_semantic_operation_assertion_plan(operation, &assertion))
+            return report(error, error_size, "XR_TARGET_1004",
+                          "assertion capability requirement is not exact");
+        if (facts && facts->machine.runtime_profile ==
+                         XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+            assertion.kind == XR_ASSERTION_KIND_EQUAL) {
+            if (!operands || operation->operand_count < 2 || operand_count < 2 ||
+                operation->operand_begin > operand_count - 2u)
+                return report(error, error_size, "XR_TARGET_1004",
+                              "freestanding assertion equality operands are missing");
+            const XrSemanticTypeRecord *left = xr_semantic_plan_type(
+                plan->semantic_plan,
+                operands[operation->operand_begin].type);
+            const XrSemanticTypeRecord *right = xr_semantic_plan_type(
+                plan->semantic_plan,
+                operands[operation->operand_begin + 1u].type);
+            if (!xr_target_freestanding_assertion_equality_type_supported(left) ||
+                !xr_target_freestanding_assertion_equality_type_supported(right) ||
+                left->kind != right->kind || left->scalar_rep != right->scalar_rep ||
+                left->enum_layout_id != right->enum_layout_id)
+                return report(error, error_size, "XR_TARGET_1004",
+                              "freestanding assertion equality type has no exact renderer/equality adapter");
+        }
+        if (facts && facts->machine.runtime_profile ==
+                         XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+            (assertion.required_capabilities &
+             XR_ASSERTION_CAPABILITY_FAILURE_REPORT) != 0)
+            expected_mask |= xr_target_capability_mask(
+                XR_TARGET_CAPABILITY_ASSERTION_REPORT);
+        if ((assertion.required_capabilities &
+             XR_ASSERTION_CAPABILITY_TYPED_ERROR_BOUNDARY) != 0)
+            expected_mask |= xr_target_capability_mask(
+                XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY);
+        if ((assertion.required_capabilities &
+             XR_ASSERTION_CAPABILITY_PANIC_BOUNDARY) != 0)
+            expected_mask |= xr_target_capability_mask(
+                XR_TARGET_CAPABILITY_PANIC_BOUNDARY);
+    }
+    if (!facts ||
+        (facts->machine.runtime_profile ==
+             XR_TARGET_RUNTIME_PROFILE_FREESTANDING &&
+         (expected_mask &
+          (xr_target_capability_mask(
+               XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY) |
+           xr_target_capability_mask(
+               XR_TARGET_CAPABILITY_PANIC_BOUNDARY))) != 0))
+        return report(error, error_size, "XR_TARGET_1004",
+                      "target runtime cannot capture the required assertion failure channel");
     for (uint32_t i = 0; i < plan->capabilities_count; i++) {
         const XrTargetCapabilityRecord *record = &plan->capabilities[i];
-        if (record->id != i || record->capability <= XR_TARGET_PROVIDER_INVALID ||
-            record->capability >= XR_TARGET_PROVIDER_KIND_COUNT ||
-            record->provider != record->capability ||
+        uint16_t expected_provider =
+            xr_target_capability_provider(record->capability);
+        uint64_t bit = xr_target_capability_mask(record->capability);
+        if (record->id != i || bit == 0 ||
+            record->provider != expected_provider ||
             record->flags != XR_TARGET_CAPABILITY_REQUIRED)
             return report(error, error_size, "XR_TARGET_1004",
                           "capability record is not canonically provider-bound");
-        uint64_t bit = XR_TARGET_PROVIDER_MASK(record->provider);
-        if ((capability_mask & bit) != 0 || !facts || (facts->provider_mask & bit) == 0)
+        if ((capability_mask & bit) != 0 ||
+            (i != 0 && plan->capabilities[i - 1].capability >=
+                           record->capability) ||
+            !facts ||
+            (record->capability !=
+                 XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY &&
+             (facts->provider_mask & bit) == 0) ||
+            (expected_provider != XR_TARGET_PROVIDER_INVALID &&
+             (facts->provider_mask &
+              XR_TARGET_PROVIDER_MASK(expected_provider)) == 0))
             return report(error, error_size, "XR_TARGET_1004",
                           "capability provider is absent or duplicated");
         capability_mask |= bit;
     }
-    if (capability_mask != XR_TARGET_FOUNDATION_CAPABILITY_MASK)
+    if (capability_mask != expected_mask)
         return report(error, error_size, "XR_TARGET_1004",
-                      "TargetPlan foundation capability closure is incomplete");
+                      "TargetPlan capability closure is incomplete");
     return true;
 }
 

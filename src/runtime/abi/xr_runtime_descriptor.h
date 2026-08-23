@@ -23,6 +23,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* This version describes the pointer-free ABI record shapes and call-slot
+ * encoding.  Provider catalog membership and operation semantics are exact
+ * values sealed by the provider-set fingerprint and TargetProfile schema, so
+ * adding assertion-report and changing PANIC to UNWINDS does not reinterpret
+ * an ABI record with this shape. */
 #define XR_RUNTIME_ABI_SCHEMA_VERSION UINT32_C(1)
 #define XR_RUNTIME_EXTENT_OPERAND_NONE UINT16_MAX
 #define XR_RUNTIME_DOMAIN_INSTANCE_INVALID UINT32_C(0)

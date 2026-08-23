@@ -87,7 +87,7 @@ int memcmp(const void *a, const void *b, size_t n);
 #include "../shared/xr_slice_window_core.h" /* canonical strict contiguous window */
 #include "../shared/xr_numeric_core.h"
 #include "../shared/xr_null_test_core.h"
-#include "../shared/xr_assert_condition_core.h"
+#include "../shared/xr_assertion_core.h"
 #include "../shared/xr_compare_core.h"
 #define xrt_compare_route(kind, left_class, right_class)                                           \
     XR_COMPARE_OWNER_ROUTE(XR_SEM_OWNER_ID_SHARED_COMPARE_HI, XR_SEM_OWNER_ID_SHARED_COMPARE_LO,   \
@@ -171,10 +171,6 @@ int memcmp(const void *a, const void *b, size_t n);
                              XR_SEM_OWNER_ID_SHARED_NULL_TEST_LO,                                  \
                              XR_SEM_CONSUMER_AOT_FREESTANDING,                                     \
                              xr_null_test_pointer_is_null_core((const void *) (pointer)))
-#define xrt_assert_condition_failed(truthy, expected_truthy)                                       \
-    XR_ASSERT_CONDITION_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_HI,                    \
-                                    XR_SEM_OWNER_ID_SHARED_ASSERT_CONDITION_LO,                    \
-                                    XR_SEM_CONSUMER_AOT_FREESTANDING, (truthy), (expected_truthy))
 #define xrt_data_pointer_project(address, lifetime)                                                \
     XR_DATA_POINTER_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_DATA_POINTER_HI,                            \
                                 XR_SEM_OWNER_ID_SHARED_DATA_POINTER_LO,                            \
@@ -859,6 +855,11 @@ XRT_COLD XRT_NORETURN void xr_hook_panic(const char *message, size_t len);
 void xr_hook_write(const char *bytes, size_t len);
 void *xr_hook_alloc(size_t size, size_t align);
 void xr_hook_free(void *ptr);
+/* Exact operation bound by
+ * xray.runtime.provider-operation.v1/io/assertion-report.  The built-in hook
+ * manifest freezes a NULL context; a different context contract requires a
+ * separately validated provider manifest. */
+bool xr_hook_assertion_report(void *context, const char *bytes, size_t len);
 void *xr_hook_page_alloc(size_t size, int64_t prot);
 bool xr_hook_page_protect(void *ptr, size_t size, int64_t prot);
 bool xr_hook_page_free(void *ptr, size_t size);
@@ -1984,6 +1985,149 @@ static inline int64_t xrt_compare_tagged_equal(XrCompareKind kind, XrValue a, Xr
 
 static inline int64_t xrt_eq(XrValue a, XrValue b) {
     return xrt_compare_tagged_equal(XR_COMPARE_EQ, a, b);
+}
+
+enum {
+    XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY = 32,
+    XRT_FREESTANDING_ASSERTION_FAILURE_CAPACITY = 1024,
+};
+
+static inline bool xrt_freestanding_assertion_value_text(
+    XrValue value,
+    char storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY],
+    const char **out) {
+    if (!storage || !out)
+        return false;
+    *out = NULL;
+    if (XR_IS_INT(value)) {
+        if (xr_numeric_core_format_i64(
+                storage, XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY,
+                value.i) < 0)
+            return false;
+        *out = storage;
+        return true;
+    }
+    if (XR_IS_BOOL(value)) {
+        *out = value.i ? "true" : "false";
+        return true;
+    }
+    if (XR_IS_NULL(value)) {
+        *out = "null";
+        return true;
+    }
+    if (XR_IS_STR(value) && value.ptr && xr_str_data(value)) {
+        *out = xr_str_data(value);
+        return true;
+    }
+    return false;
+}
+
+static inline bool xrt_freestanding_assertion_values_equal(XrValue left,
+                                                            XrValue right,
+                                                            bool *out) {
+    if (!out)
+        return false;
+    uint32_t left_tag = left.tag == XR_TAG_STR_ARC ? XR_TAG_STR : left.tag;
+    uint32_t right_tag = right.tag == XR_TAG_STR_ARC ? XR_TAG_STR : right.tag;
+    if (left_tag != right_tag)
+        return false;
+    if (left_tag == XR_TAG_STR) {
+        int64_t left_length = left.ptr ? xr_str_len(left) : -1;
+        int64_t right_length = right.ptr ? xr_str_len(right) : -1;
+        if (left_length < 0 || right_length < 0 || !xr_str_data(left) ||
+            !xr_str_data(right))
+            return false;
+        *out = left_length == right_length &&
+               memcmp(xr_str_data(left), xr_str_data(right),
+                      (size_t) left_length) == 0;
+        return true;
+    }
+    if (left_tag != XR_TAG_I64 && left_tag != XR_TAG_BOOL &&
+        left_tag != XR_TAG_NULL)
+        return false;
+    *out = xrt_compare_tagged_equal(XR_COMPARE_EQ, left, right) != 0;
+    return true;
+}
+
+static inline bool xrt_freestanding_assertion_report(
+    const XrAssertionFailure *failure, char *scratch,
+    size_t scratch_capacity) {
+    if (!scratch || scratch_capacity == 0)
+        return false;
+    int rendered = xr_assertion_failure_render(scratch, scratch_capacity,
+                                               failure);
+    return rendered >= 0 && (size_t) rendered < scratch_capacity &&
+           xr_hook_assertion_report(NULL, scratch, (size_t) rendered);
+}
+
+static inline XRT_COLD XRT_NORETURN void xrt_freestanding_assertion_fail(
+    const XrAssertionFailure *failure) {
+    XR_ASSERTION_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_ASSERTION_HI,
+                             XR_SEM_OWNER_ID_SHARED_ASSERTION_LO);
+    XR_ASSERTION_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_FREESTANDING);
+    char scratch[XRT_FREESTANDING_ASSERTION_FAILURE_CAPACITY];
+    if (!xrt_freestanding_assertion_report(failure, scratch,
+                                           sizeof(scratch)))
+        xrt_freestanding_trap(
+            "freestanding assertion provider rejected failure bytes");
+    xrt_freestanding_trap("freestanding assertion failed");
+}
+
+static inline XrValue xrt_freestanding_assertion_condition(
+    int64_t condition, const char *file, uint32_t line, uint32_t column,
+    uint32_t end_line, uint32_t end_column, XrValue message) {
+    if (condition)
+        return XR_NULL_VAL;
+    const char *message_text = NULL;
+    if (!XR_IS_NULL(message)) {
+        if (!XR_IS_STR(message) || !message.ptr || !xr_str_data(message))
+            xrt_freestanding_trap(
+                "typed assertion message is not a string");
+        message_text = xr_str_data(message);
+    }
+    XrAssertionFailure failure = {
+        .kind = XR_ASSERTION_FAILURE_CONDITION_FALSE,
+        .source = {file, line, column, end_line, end_column},
+        .message = message_text,
+    };
+    xrt_freestanding_assertion_fail(&failure);
+}
+
+static inline XrValue xrt_freestanding_assertion_equal(
+    XrValue actual, XrValue expected, const char *file, uint32_t line,
+    uint32_t column, uint32_t end_line, uint32_t end_column,
+    XrValue message) {
+    bool equal = false;
+    if (!xrt_freestanding_assertion_values_equal(actual, expected, &equal))
+        xrt_freestanding_trap(
+            "freestanding assertion equality operands violate TargetPlan");
+    if (equal)
+        return XR_NULL_VAL;
+    const char *message_text = NULL;
+    if (!XR_IS_NULL(message)) {
+        if (!XR_IS_STR(message) || !message.ptr || !xr_str_data(message))
+            xrt_freestanding_trap(
+                "typed assertion message is not a string");
+        message_text = xr_str_data(message);
+    }
+    char actual_storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY];
+    char expected_storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY];
+    const char *actual_text = NULL;
+    const char *expected_text = NULL;
+    if (!xrt_freestanding_assertion_value_text(actual, actual_storage,
+                                               &actual_text) ||
+        !xrt_freestanding_assertion_value_text(expected, expected_storage,
+                                               &expected_text))
+        xrt_freestanding_trap(
+            "freestanding assertion renderer operands violate TargetPlan");
+    XrAssertionFailure failure = {
+        .kind = XR_ASSERTION_FAILURE_VALUES_NOT_EQUAL,
+        .source = {file, line, column, end_line, end_column},
+        .message = message_text,
+        .actual = actual_text,
+        .expected = expected_text,
+    };
+    xrt_freestanding_assertion_fail(&failure);
 }
 
 /* Freestanding ordering: the integer lane when both operands are integers, the

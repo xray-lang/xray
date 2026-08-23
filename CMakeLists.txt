@@ -1314,6 +1314,10 @@ add_dependencies(xray_core
 set(XRAY_COMPILER_BACKEND_SOURCES
     src/base/xsha256.c
     src/base/xtarget_data_layout.c
+    # Assertion SemanticPlan verification consumes the stable core-intrinsic
+    # registry.  This registry is immutable shared compiler metadata, not a
+    # mutable analyzer-owned frontend graph.
+    src/frontend/analyzer/xa_core_intrinsic_registry.c
     ${PLAN_SEMANTIC_SRC}
     ${PLAN_OWNERSHIP_SRC}
     src/plan/format/xr_artifact_kind.c
@@ -1402,6 +1406,10 @@ add_dependencies(xray_rt_coro gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-m
 # dispatch. Source, bytecode, and legacy VM entry points are not linkable from
 # this product boundary.
 set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
+    # Semantic assertion verification consumes the same machine-readable core
+    # intrinsic registry as analyzer lowering.  The runtime archive links this
+    # owner directly; it does not reconstruct assertion names or plan rules.
+    src/frontend/analyzer/xa_core_intrinsic_registry.c
     src/plan/format/xr_artifact_kind.c
     src/plan/format/xr_xsm_decode.c
     src/plan/format/xr_xtp_artifact.c
@@ -3223,6 +3231,20 @@ if(BUILD_TESTS)
         LABELS "aot;freestanding;provider;smoke"
         PROCESSORS 1
         TIMEOUT 30
+    )
+
+    add_test(
+        NAME aot_freestanding_assertion_provider
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_freestanding_assertion_provider_test.py
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_freestanding_assertion_provider PROPERTIES
+        LABELS "aot;freestanding;provider;assertion;smoke"
+        PROCESSORS 1
+        SKIP_RETURN_CODE 77
+        TIMEOUT 60
     )
 
     add_test(

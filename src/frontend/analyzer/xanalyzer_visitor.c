@@ -568,10 +568,13 @@ typedef enum XaParallelFunctionValueStatus {
     XA_PARALLEL_FN_VALUE_DYNAMIC,
 } XaParallelFunctionValueStatus;
 
-static bool xa_parallel_assert_call_name(const char *name) {
-    return name && (strcmp(name, "assert") == 0 || strcmp(name, "assert_true") == 0 ||
-                    strcmp(name, "assert_false") == 0 || strcmp(name, "assert_eq") == 0 ||
-                    strcmp(name, "assert_ne") == 0 || strcmp(name, "assert_throws") == 0);
+static const XrCoreIntrinsicDesc *xa_parallel_core_assertion(XaInferContext *ctx,
+                                                             AstNode *callee) {
+    XaSymbol *sym = ctx && callee ? xa_resolve_variable_symbol(ctx, callee) : NULL;
+    const XaSymbolLinks *links = sym ? &sym->links : NULL;
+    const XrCoreIntrinsicDesc *desc =
+        links ? xr_core_intrinsic_by_id(links->core_builtin_id) : NULL;
+    return desc && desc->category == XR_CORE_INTRINSIC_CATEGORY_ASSERTION ? desc : NULL;
 }
 
 static XaScope *xa_parallel_find_function_scope_for_symbol(XaScope *scope, XaSymbol *sym) {
@@ -973,13 +976,10 @@ static const char *xa_parallel_callback_call_effect_feature(XaParallelCallbackEf
         return unknown_effect_feature;
     }
 
-    if (call->callee->type == AST_VARIABLE &&
-        xa_parallel_assert_call_name(call->callee->as.variable.name)) {
-        const char *name = call->callee->as.variable.name;
-        XaSymbol *sym = ctx ? xa_resolve_variable_symbol(ctx, call->callee) : NULL;
-        if (sym && sym->kind == XA_SYM_FUNCTION && sym->is_builtin)
-            return name ? name : "assert";
-    }
+    const XrCoreIntrinsicDesc *assertion =
+        call->callee->type == AST_VARIABLE ? xa_parallel_core_assertion(ctx, call->callee) : NULL;
+    if (assertion)
+        return assertion->source_name;
 
     bool callee_suspend = false;
     AstNode *inline_body = xa_parallel_inline_body(call->callee);
@@ -6119,7 +6119,17 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_expr(ctx, inner);
                 xa_warn_discarded_sys_thread_spawn(ctx, inner);
                 xa_warn_discarded_sys_os_resource_factory(ctx, inner);
-                xa_flow_apply_assert_narrowing(ctx->flow, inner);
+                XrCoreIntrinsicFlowRule flow_rule = XR_CORE_INTRINSIC_FLOW_NONE;
+                if (inner && inner->type == AST_CALL_EXPR) {
+                    CallExprNode *call = &inner->as.call_expr;
+                    const XrCoreIntrinsicDesc *desc =
+                        call->callee && call->callee->type == AST_VARIABLE
+                            ? xa_parallel_core_assertion(ctx, call->callee)
+                            : NULL;
+                    if (desc)
+                        flow_rule = desc->flow_rule;
+                }
+                xa_flow_apply_assert_narrowing(ctx->flow, inner, flow_rule);
             }
             break;
         }

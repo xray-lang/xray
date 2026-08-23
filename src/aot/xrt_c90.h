@@ -264,12 +264,6 @@ typedef struct XrValue {
 #define xrt_null_test_tagged(tag) xr_null_test_tagged_core((uint8_t) (tag))
 #define xrt_null_test_pointer(pointer) xr_null_test_pointer_is_null_core((const void *) (pointer))
 
-#define XR_ASSERT_CONDITION_C90 1
-#include "../shared/xr_assert_condition_core.h"
-#undef XR_ASSERT_CONDITION_C90
-#define xrt_assert_condition_failed(truthy, expected_truthy)                                     \
-    xr_assert_condition_failed_core((truthy), (expected_truthy))
-
 static XrValue xrt_c90_null_value(void) {
     XrValue value;
     memset(&value, 0, sizeof(value));

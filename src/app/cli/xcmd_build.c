@@ -3218,6 +3218,14 @@ static uint32_t xaot_cli_provider_hook_by_name(const char *name) {
         return XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
     if (strcmp(name, "interrupt_complete") == 0)
         return XAOT_PROVIDER_HOOK_INTERRUPT_COMPLETE;
+    if (strcmp(name, "assertion_report") == 0)
+        return XAOT_PROVIDER_HOOK_ASSERTION_REPORT;
+    if (strcmp(name, "alloc") == 0)
+        return XAOT_PROVIDER_HOOK_ALLOC;
+    if (strcmp(name, "free") == 0)
+        return XAOT_PROVIDER_HOOK_FREE;
+    if (strcmp(name, "panic") == 0)
+        return XAOT_PROVIDER_HOOK_PANIC;
     return 0;
 }
 
@@ -3237,11 +3245,15 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
                                                  XrCliBuildProfile profile,
                                                  const XrToolchainTarget *target,
                                                  XaotTargetCapabilityProvider *out,
-                                                 bool *out_present, char *err, size_t err_size) {
+                                                 bool *out_present,
+                                                 uint64_t *out_runtime_provider_mask,
+                                                 char *err, size_t err_size) {
     bool present = config && ((config->runtime_provider && config->runtime_provider[0]) ||
                               config->n_runtime_capabilities > 0 || config->n_runtime_hooks > 0);
     if (out_present)
         *out_present = present;
+    if (out_runtime_provider_mask)
+        *out_runtime_provider_mask = 0;
     if (!present)
         return true;
     if (!out || !config->runtime_provider || !config->runtime_provider[0]) {
@@ -3253,10 +3265,37 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
         snprintf(err, err_size, "runtime_provider is only valid for freestanding targets");
         return false;
     }
+    if (strcmp(config->runtime_provider,
+               XAOT_FREESTANDING_HOOK_PROVIDER_ID) != 0) {
+        snprintf(err, err_size,
+                 "unsupported freestanding runtime_provider '%s'; expected exact built-in identity '%s' or a validated provider manifest",
+                 config->runtime_provider,
+                 XAOT_FREESTANDING_HOOK_PROVIDER_ID);
+        return false;
+    }
     memset(out, 0, sizeof(*out));
     out->abi_version = XAOT_PROVIDER_ABI_VERSION;
+    bool assertion_report_capability = false;
+    bool assertion_report_hook = false;
+    bool allocator_capability = false;
+    bool panic_capability = false;
+    bool alloc_hook = false;
+    bool free_hook = false;
+    bool panic_hook = false;
     for (int i = 0; i < config->n_runtime_capabilities; i++) {
         const char *name = config->runtime_capabilities[i];
+        if (name && strcmp(name, "assertion-report") == 0) {
+            assertion_report_capability = true;
+            continue;
+        }
+        if (name && strcmp(name, "allocator") == 0) {
+            allocator_capability = true;
+            continue;
+        }
+        if (name && strcmp(name, "panic") == 0) {
+            panic_capability = true;
+            continue;
+        }
         uint32_t capability = xaot_cli_provider_capability_by_name(name);
         if (capability == 0) {
             snprintf(err, err_size, "unknown target runtime capability '%s'", name ? name : "");
@@ -3271,8 +3310,43 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
             snprintf(err, err_size, "unknown target runtime hook '%s'", name ? name : "");
             return false;
         }
+        if (hook == XAOT_PROVIDER_HOOK_ASSERTION_REPORT)
+            assertion_report_hook = true;
+        else if (hook == XAOT_PROVIDER_HOOK_ALLOC)
+            alloc_hook = true;
+        else if (hook == XAOT_PROVIDER_HOOK_FREE)
+            free_hook = true;
+        else if (hook == XAOT_PROVIDER_HOOK_PANIC)
+            panic_hook = true;
         out->hook_bits |= hook;
     }
+    if (assertion_report_capability != assertion_report_hook) {
+        snprintf(err, err_size,
+                 "freestanding assertion-report capability and exact hook must be declared together");
+        return false;
+    }
+    if (allocator_capability != (alloc_hook && free_hook) || alloc_hook != free_hook) {
+        snprintf(err, err_size,
+                 "freestanding allocator capability requires exact alloc and free hooks");
+        return false;
+    }
+    if (panic_capability != panic_hook) {
+        snprintf(err, err_size,
+                 "freestanding panic capability requires the exact panic hook");
+        return false;
+    }
+    if (!allocator_capability || !panic_capability) {
+        snprintf(err, err_size,
+                 "freestanding provider is missing allocator or panic foundation hooks");
+        return false;
+    }
+    if (out_runtime_provider_mask) {
+        *out_runtime_provider_mask |=
+            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+    }
+    if (assertion_report_capability && out_runtime_provider_mask)
+        *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
     uint64_t hash = XR_FNV64_OFFSET_BASIS;
     hash = xaot_hash_fold_str(hash, "xray-target-runtime-provider-v1");
     hash = xaot_hash_fold_str(hash, config->runtime_provider);
@@ -3302,6 +3376,7 @@ static int cmd_build_native(
     XrTargetProfile *target_profile = NULL;
     XaotTargetCapabilityProvider capability_provider;
     bool has_capability_provider = false;
+    uint64_t runtime_provider_mask = 0;
     XaotTarget build_target;
     XaotBuildProfile aot_profile = profile == XR_CLI_BUILD_PROFILE_FREESTANDING
                                        ? XAOT_BUILD_PROFILE_FREESTANDING
@@ -3328,29 +3403,32 @@ static int cmd_build_native(
             return 2;
         }
     }
-    {
-        XrTargetCodegenFacts codegen;
-        char profile_err[256] = "invalid numeric target codegen facts";
-        if (!xaot_target_profile_codegen_facts(&build_target, &codegen) ||
-            profile != XR_CLI_BUILD_PROFILE_HOSTED ||
-            !xtc_target_profile_build_native_hosted(target, &codegen, &target_profile, profile_err,
-                                                    sizeof(profile_err))) {
-            fprintf(stderr, "Error: %s\n",
-                    profile == XR_CLI_BUILD_PROFILE_HOSTED
-                        ? profile_err
-                        : "freestanding TargetProfile authority is unavailable");
-            xaot_target_free(&build_target);
-            return 1;
-        }
-    }
     memset(&build_options, 0, sizeof(build_options));
     {
         char provider_err[256];
         if (!xaot_cli_provider_from_target_config(target_config, profile, target,
                                                   &capability_provider, &has_capability_provider,
+                                                  &runtime_provider_mask,
                                                   provider_err, sizeof(provider_err))) {
             fprintf(stderr, "Error: %s\n", provider_err);
             xr_target_profile_free(target_profile);
+            xaot_target_free(&build_target);
+            return 1;
+        }
+    }
+    {
+        XrTargetCodegenFacts codegen;
+        char profile_err[256] = "invalid numeric target codegen facts";
+        bool profile_ok = xaot_target_profile_codegen_facts(&build_target, &codegen) &&
+                          (profile == XR_CLI_BUILD_PROFILE_HOSTED
+                               ? xtc_target_profile_build_native_hosted(
+                                     target, &codegen, &target_profile, profile_err,
+                                     sizeof(profile_err))
+                               : xtc_target_profile_build_native_freestanding(
+                                     target, &codegen, runtime_provider_mask, &target_profile,
+                                     profile_err, sizeof(profile_err)));
+        if (!profile_ok) {
+            fprintf(stderr, "Error: %s\n", profile_err);
             xaot_target_free(&build_target);
             return 1;
         }

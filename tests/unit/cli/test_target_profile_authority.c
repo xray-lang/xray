@@ -64,8 +64,7 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     uint64_t provider_mask = 0;
     CHECK(xr_runtime_target_authority_native_hosted(&authority) ==
           XR_RUNTIME_ABI_OK);
-    CHECK(authority.provider_count ==
-          XR_RUNTIME_TARGET_AUTHORITY_PROVIDER_COUNT);
+    CHECK(authority.provider_count == 2);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &first) ==
           XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_abi_contract_fingerprint(&authority.runtime_abi, &second) ==
@@ -76,7 +75,9 @@ static void test_runtime_owner_publishes_validated_structures(void) {
               &second) == XR_RUNTIME_ABI_OK);
     CHECK(provider_mask ==
           (XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-           XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC)));
+           XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC) |
+           XR_TARGET_CAPABILITY_MASK(
+               XR_TARGET_CAPABILITY_PANIC_BOUNDARY)));
     CHECK(xr_runtime_string_object_contract_verify(
               &authority.string_contract) == XR_RUNTIME_ABI_OK);
     CHECK(xr_runtime_string_literal_materialization_contract_verify(
@@ -86,6 +87,94 @@ static void test_runtime_owner_publishes_validated_structures(void) {
     authority.string_contract.literal_view.dynamic_tag++;
     CHECK(xr_runtime_string_object_contract_verify(
               &authority.string_contract) != XR_RUNTIME_ABI_OK);
+}
+
+static void test_freestanding_authority_is_not_hosted_projection(void) {
+    const uint64_t foundation =
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+    const uint64_t requested =
+        foundation | XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
+    XrRuntimeTargetAuthority hosted;
+    XrRuntimeTargetAuthority freestanding;
+    XrRuntimeTargetAuthority minimal;
+    XrFingerprint hosted_provider_fingerprint;
+    XrFingerprint freestanding_provider_fingerprint;
+    uint64_t hosted_mask = 0;
+    uint64_t freestanding_mask = 0;
+
+    CHECK(xr_runtime_target_authority_native_hosted(&hosted) ==
+          XR_RUNTIME_ABI_OK);
+    CHECK(xr_runtime_target_authority_native_freestanding(
+              requested, &freestanding) == XR_RUNTIME_ABI_OK);
+    CHECK(xr_runtime_target_authority_native_freestanding(
+              foundation, &minimal) == XR_RUNTIME_ABI_OK);
+    CHECK(freestanding.machine.runtime_profile ==
+          XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+    CHECK(freestanding.provider_count == 3);
+    CHECK(minimal.provider_count == 2);
+    CHECK(xr_target_provider_set_fingerprint(
+              hosted.providers, hosted.provider_count, &hosted_mask,
+              &hosted_provider_fingerprint) == XR_RUNTIME_ABI_OK);
+    CHECK(xr_target_provider_set_fingerprint(
+              freestanding.providers, freestanding.provider_count,
+              &freestanding_mask, &freestanding_provider_fingerprint) ==
+          XR_RUNTIME_ABI_OK);
+    CHECK(!xr_fingerprint_equal(hosted_provider_fingerprint,
+                                freestanding_provider_fingerprint));
+    CHECK((freestanding_mask & XR_TARGET_PROVIDER_MASK_ALL) == requested);
+    CHECK((freestanding_mask & XR_TARGET_CAPABILITY_MASK(
+                                  XR_TARGET_CAPABILITY_ASSERTION_REPORT)) != 0);
+    CHECK((freestanding_mask & XR_TARGET_CAPABILITY_MASK(
+                                  XR_TARGET_CAPABILITY_PANIC_BOUNDARY)) == 0);
+    static const uint8_t expected_kinds[] = {
+        XR_TARGET_PROVIDER_ALLOCATOR,
+        XR_TARGET_PROVIDER_PANIC,
+        XR_TARGET_PROVIDER_IO,
+    };
+    for (size_t i = 0; i < freestanding.provider_count; i++) {
+        CHECK(freestanding.providers[i].runtime_profile ==
+              XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+        CHECK(freestanding.providers[i].flags ==
+              XR_TARGET_PROVIDER_AVAILABLE_FREESTANDING);
+        CHECK(freestanding.providers[i].provider_kind == expected_kinds[i]);
+        CHECK(memcmp(freestanding.providers[i].contract_id.bytes,
+                     hosted.providers[i].contract_id.bytes,
+                     sizeof(freestanding.providers[i].contract_id.bytes)) != 0);
+    }
+    CHECK(xr_runtime_target_authority_native_freestanding(
+              XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR),
+              &minimal) == XR_RUNTIME_ABI_INVALID_ARGUMENT);
+    CHECK(xr_runtime_target_authority_native_freestanding(
+              XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC),
+              &minimal) == XR_RUNTIME_ABI_INVALID_ARGUMENT);
+
+    XaotTarget aot_target = {0};
+    XrToolchainTarget native_target;
+    XrTargetCodegenFacts codegen;
+    XrTargetProfile *hosted_profile = NULL;
+    XrTargetProfile *freestanding_profile = NULL;
+    char error[256];
+    CHECK(xtc_target_parse("native", &native_target, NULL, 0));
+    CHECK(xaot_target_init(&aot_target, NULL));
+    CHECK(xaot_target_profile_codegen_facts(&aot_target, &codegen));
+    CHECK(xtc_target_profile_build_native_hosted(
+        &native_target, &codegen, &hosted_profile, error, sizeof(error)));
+    CHECK(xtc_target_profile_build_native_freestanding(
+        &native_target, &codegen, requested, &freestanding_profile, error,
+        sizeof(error)));
+    CHECK(hosted_profile != NULL);
+    CHECK(freestanding_profile != NULL);
+    if (hosted_profile && freestanding_profile) {
+        CHECK(!xr_fingerprint_equal(
+            xr_target_profile_fingerprint(hosted_profile),
+            xr_target_profile_fingerprint(freestanding_profile)));
+        CHECK(!xr_target_profile_require_exact(
+            hosted_profile, freestanding_profile, NULL, 0));
+    }
+    xr_target_profile_free(freestanding_profile);
+    xr_target_profile_free(hosted_profile);
+    xaot_target_free(&aot_target);
 }
 
 static void test_cross_target_and_reserved_facts_fail_closed(void) {
@@ -179,6 +268,7 @@ static void test_aot_rejects_missing_profile_before_source_work(void) {
 int main(void) {
     test_native_authority_is_deterministic();
     test_runtime_owner_publishes_validated_structures();
+    test_freestanding_authority_is_not_hosted_projection();
     test_cross_target_and_reserved_facts_fail_closed();
     test_compiler_session_retains_exact_profile();
     test_compiler_session_rejects_conflicting_layout_authority();

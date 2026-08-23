@@ -1499,129 +1499,214 @@ XR_FUNC void xi_emit_scope_exit(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* ========== Assert ========== */
 
-XR_FUNC void xi_emit_assert(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    (void) dst;
-    if (v->nargs < 1) {
+static void xi_emit_patch_local_jump(EmitCtx *ctx, int jump_pc, int target_pc) {
+    XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, jump_pc);
+    if (!inst || target_pc < 0) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    XiEmitReg cond = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    int loc_k = add_const_string(ctx, (const char *) v->aux);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    emit_inst(ctx, CREATE_ABC(OP_ASSERT, cond, (uint8_t) loc_k, (uint8_t) v->aux_int));
+    *inst = CREATE_sJ(OP_JMP, target_pc - (jump_pc + 1));
 }
 
-XR_FUNC void xi_emit_assert_eq(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    (void) dst;
-    if (v->nargs < 2) {
+static bool xi_emit_assertion_record(EmitCtx *ctx, const XrAssertionPlan *plan, XiEmitReg base,
+                                     XrAssertionFailureKind failure_kind) {
+    if (!xr_assertion_plan_validate(plan) || failure_kind <= XR_ASSERTION_FAILURE_NONE ||
+        failure_kind >= XR_ASSERTION_FAILURE_COUNT || plan->source.line > UINT32_C(0xFFFFFF) ||
+        plan->source.column > UINT32_C(0xFFFFFF) ||
+        plan->source.end_line > UINT32_C(0xFFFFFF) ||
+        plan->source.end_column > UINT32_C(0xFFFFFF)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
+        return false;
     }
-    XiEmitReg actual = reg_of(ctx, v->args[0]);
-    XiEmitReg expected = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    int loc_k = add_const_string(ctx, (const char *) v->aux);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    emit_inst(ctx, CREATE_ABC(OP_ASSERT_EQ, actual, expected, (uint8_t) loc_k));
+    int file_k = add_const_string(ctx, plan->source.file);
+    if (ctx->status != XI_EMIT_OK || file_k < 0 || (uint64_t) file_k > MAXARG_Bx) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+    uint64_t start = ((uint64_t) plan->source.line << 24u) | plan->source.column;
+    uint64_t end = ((uint64_t) plan->source.end_line << 24u) | plan->source.end_column;
+    emit_inst(ctx, CREATE_ABC(OP_ASSERTION, base, failure_kind, plan->kind));
+    emit_inst(ctx, CREATE_ABx(OP_ASSERTION_FILE, XR_ASSERTION_PLAN_SCHEMA_VERSION, file_k));
+    emit_inst(ctx, CREATE_Ax(OP_ASSERTION_SPAN_START, start));
+    emit_inst(ctx, CREATE_Ax(OP_ASSERTION_SPAN_END, end));
+    return ctx->status == XI_EMIT_OK;
 }
 
-XR_FUNC void xi_emit_assert_ne(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    (void) dst;
-    if (v->nargs < 2) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    XiEmitReg actual = reg_of(ctx, v->args[0]);
-    XiEmitReg unexpected = reg_of(ctx, v->args[1]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    int loc_k = add_const_string(ctx, (const char *) v->aux);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-    emit_inst(ctx, CREATE_ABC(OP_ASSERT_NE, actual, unexpected, (uint8_t) loc_k));
-}
-
-/* assert_throws(fn): pass iff fn() faults — either via the value-return
- * error channel (throw <enum>) OR via a panic (div-by-zero, expr!, …).
- * An OP_TRY panic handler wraps the call so panics are caught too.
- *
- * Layout (relative to try_pc):
- *   +0  TRY  Bx=Lpanic            ; panic handler (catch_offset patched)
- *   +1  NOP                       ; finally placeholder (consumed by OP_TRY)
- *   +2  MOVE call_reg, fn_reg
- *   +3  CALL call_reg, 0, 1       ; call fn()
- *   +4  END_TRY                   ; no panic → pop handler
- *   +5  ERR_HAS check_reg         ; pending error?
- *   +6  TEST  check_reg, 1        ; has error → exec next; no error → skip
- *   +7  JMP  -> Lpass
- *   +8  LOADK err_reg, msg        ; no fault at all → assertion fails
- *   +9  ERR_RETURN err_reg
- *  +10  Lpass: ERR_CATCH call_reg ; error-channel fault → clear, pass
- *  +11  JMP  -> Lend
- *  +12  Lpanic: CATCH call_reg    ; panic unwind lands here; clear panic
- *  +13  END_TRY                   ; pop handler
- *  +14  Lend: (continue) */
-XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    (void) dst;
-    if (v->nargs < 1) {
-        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-        return;
-    }
-    XiEmitReg fn_reg = reg_of(ctx, v->args[0]);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-
-    const char *loc = v->aux ? (const char *) v->aux : "unknown";
-    char msg[128];
-    snprintf(msg, sizeof(msg), "assertion failed at %s: expected throw", loc);
-    int msg_k = add_const_string(ctx, msg);
-    if (ctx->status != XI_EMIT_OK)
-        return;
-
-    if (ctx->next_reg + 3 > MAX_REGS) {
+static bool xi_emit_assertion_alloc_scratch(EmitCtx *ctx, uint16_t count, XiEmitReg *base) {
+    if (!ctx || !base || count == 0 || ctx->next_reg + count > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-        return;
+        return false;
     }
-    XiEmitReg call_reg = (XiEmitReg) ctx->next_reg++;
-    XiEmitReg err_reg = (XiEmitReg) ctx->next_reg++;
-    XiEmitReg check_reg = (XiEmitReg) ctx->next_reg++;
+    *base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg += count;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
+    return true;
+}
+
+static void xi_emit_assertion_free_scratch(EmitCtx *ctx, XiEmitReg base, uint16_t count) {
+    for (uint16_t i = 0; i < count; i++)
+        free_reg(ctx, (XiEmitReg) (base + i));
+}
+
+static void xi_emit_assertion_value(EmitCtx *ctx, XiValue *v, const XrAssertionPlan *plan) {
+    XiEmitReg first = reg_of(ctx, v->args[0]);
+    XiEmitReg second = NO_REG;
+    XiEmitReg message = NO_REG;
+    if (plan->kind == XR_ASSERTION_KIND_EQUAL)
+        second = reg_of(ctx, v->args[1]);
+    if (plan->message_operand != XR_ASSERTION_OPERAND_NONE)
+        message = reg_of(ctx, v->args[plan->message_operand]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+
+    XiEmitReg base;
+    if (!xi_emit_assertion_alloc_scratch(ctx, 3, &base))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, base, first, 0));
+    if (second != NO_REG)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 1u, second, 0));
+    else
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 1u, 0, 0));
+    if (message != NO_REG)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 2u, message, 0));
+    else
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 2u, 0, 0));
+    (void) xi_emit_assertion_record(
+        ctx, plan, base,
+        plan->kind == XR_ASSERTION_KIND_CONDITION ? XR_ASSERTION_FAILURE_CONDITION_FALSE
+                                                  : XR_ASSERTION_FAILURE_VALUES_NOT_EQUAL);
+    xi_emit_assertion_free_scratch(ctx, base, 3);
+}
+
+static void xi_emit_assertion_action(EmitCtx *ctx, XiValue *v, const XrAssertionPlan *plan) {
+    XiEmitReg action = reg_of(ctx, v->args[0]);
+    XiEmitReg message = NO_REG;
+    if (plan->message_operand != XR_ASSERTION_OPERAND_NONE)
+        message = reg_of(ctx, v->args[plan->message_operand]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+
+    /* base+0 is the normal result or typed error, base+1 the panic and base+2
+     * the message.  base+3 is a private channel probe, base+4 owns a temporary
+     * action retain, and base+5 is the borrowed call slot.  The call slot must
+     * be last: a closure frame starts immediately after it and may overwrite
+     * every higher register while it runs.  Keeping observations below that
+     * frontier preserves them across the call and lets the conflict row retain
+     * both instead of choosing one. */
+    XiEmitReg base;
+    if (!xi_emit_assertion_alloc_scratch(ctx, 6, &base))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 1u, 0, 0));
+    if (message != NO_REG)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 2u, message, 0));
+    else
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 2u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 3u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 4u, action, 0));
+    emit_inst(ctx, CREATE_ABC(OP_DUP, base + 4u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 5u, action, 0));
 
     int try_pc = current_pc(ctx);
-    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0)); /* +0 catch offset patched below */
-    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0)); /* +1 finally placeholder */
+    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0));
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_CALL, base + 5u, 0, 1));
+    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_DROP, base + 4u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 4u, 0, 0));
+    /* Transfer the owned normal result out of the call slot before any
+     * channel classification.  Clearing the source is a move, not a release. */
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, base, base + 5u, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 5u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, base + 3u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_TEST, base + 3u, 1, 0));
+    int typed_jump = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
 
-    emit_inst(ctx, CREATE_ABC(OP_MOVE, call_reg, fn_reg, 0)); /* +2 */
-    emit_inst(ctx, CREATE_ABC(OP_CALL, call_reg, 0, 1));      /* +3 */
+    (void) xi_emit_assertion_record(
+        ctx, plan, base,
+        plan->kind == XR_ASSERTION_KIND_THROWS ? XR_ASSERTION_FAILURE_EXPECTED_TYPED_ERROR
+                                               : XR_ASSERTION_FAILURE_EXPECTED_PANIC);
+    int normal_end_jump = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
 
-    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));         /* +4 no panic → pop */
-    emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, check_reg, 0, 0)); /* +5 */
-    emit_inst(ctx, CREATE_ABC(OP_TEST, check_reg, 1, 0));    /* +6 */
-    emit_inst(ctx, CREATE_sJ(OP_JMP, 2));                    /* +7 → Lpass(+10) */
+    int typed_pc = current_pc(ctx);
+    /* A typed error is observed only after an ordinary return.  Consume that
+     * return value before OP_ERR_CATCH replaces the call slot. */
+    emit_inst(ctx, CREATE_ABC(OP_DROP, base, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_ERR_CATCH, base, 0, 0));
+    int typed_end_jump = -1;
+    if (plan->kind == XR_ASSERTION_KIND_PANICS) {
+        (void) xi_emit_assertion_record(ctx, plan, base,
+                                        XR_ASSERTION_FAILURE_UNEXPECTED_TYPED_ERROR);
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_DROP, base, 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base, 0, 0));
+        typed_end_jump = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    }
 
-    emit_inst(ctx, CREATE_ABx(OP_LOADK, err_reg, msg_k));     /* +8 */
-    emit_inst(ctx, CREATE_ABC(OP_ERR_RETURN, err_reg, 0, 0)); /* +9 */
+    int panic_pc = current_pc(ctx);
+    /* A longjmp leaves base+5 holding only the borrowed action alias.  Release
+     * the explicit keepalive owner, then erase the alias before any assertion
+     * failure cleanup is allowed to consume action observations. */
+    emit_inst(ctx, CREATE_ABC(OP_DROP, base + 4u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 4u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 5u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_CATCH, base + 1u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, base + 3u, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_TEST, base + 3u, 1, 0));
+    int conflict_jump = current_pc(ctx);
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
+    int panic_end_jump = -1;
+    if (plan->kind == XR_ASSERTION_KIND_THROWS) {
+        (void) xi_emit_assertion_record(ctx, plan, base, XR_ASSERTION_FAILURE_UNEXPECTED_PANIC);
+    } else {
+        emit_inst(ctx, CREATE_ABC(OP_DROP, base + 1u, 0, 0));
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + 1u, 0, 0));
+        panic_end_jump = current_pc(ctx);
+        emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+    }
 
-    emit_inst(ctx, CREATE_ABC(OP_ERR_CATCH, call_reg, 0, 0)); /* +10 Lpass */
-    emit_inst(ctx, CREATE_sJ(OP_JMP, 2));                     /* +11 → Lend(+14) */
+    int conflict_pc = current_pc(ctx);
+    emit_inst(ctx, CREATE_ABC(OP_ERR_CATCH, base, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
+    (void) xi_emit_assertion_record(ctx, plan, base,
+                                    XR_ASSERTION_FAILURE_CONFLICTING_CHANNELS);
+    int end_pc = current_pc(ctx);
 
-    emit_inst(ctx, CREATE_ABC(OP_CATCH, call_reg, 0, 0)); /* +12 Lpanic */
-    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));      /* +13 pop */
-    /* +14 Lend */
+    XrInstruction *try_inst = PROTO_CODE_PTR(ctx->proto, try_pc);
+    if (!try_inst) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+    } else {
+        *try_inst = CREATE_ABx(OP_TRY, 0, panic_pc);
+    }
+    xi_emit_patch_local_jump(ctx, typed_jump, typed_pc);
+    xi_emit_patch_local_jump(ctx, normal_end_jump, end_pc);
+    if (typed_end_jump >= 0)
+        xi_emit_patch_local_jump(ctx, typed_end_jump, end_pc);
+    xi_emit_patch_local_jump(ctx, conflict_jump, conflict_pc);
+    if (panic_end_jump >= 0)
+        xi_emit_patch_local_jump(ctx, panic_end_jump, end_pc);
+    for (uint16_t i = 0; i < 6; i++)
+        emit_inst(ctx, CREATE_ABC(OP_LOADNULL, base + i, 0, 0));
+    xi_emit_assertion_free_scratch(ctx, base, 6);
+}
 
-    /* Patch OP_TRY catch_offset to the absolute pc of Lpanic (+12). */
-    XrInstruction *code = PROTO_CODE_BASE(ctx->proto);
-    code[try_pc] = CREATE_ABx(OP_TRY, 0, try_pc + 12);
-
-    free_reg(ctx, call_reg);
-    free_reg(ctx, err_reg);
-    free_reg(ctx, check_reg);
+XR_FUNC void xi_emit_assertion(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    (void) dst;
+    const XrAssertionPlan *plan = xi_assertion_plan(v);
+    if (!xr_assertion_plan_validate(plan) || plan->arity != v->nargs) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    if (plan->kind == XR_ASSERTION_KIND_CONDITION || plan->kind == XR_ASSERTION_KIND_EQUAL)
+        xi_emit_assertion_value(ctx, v, plan);
+    else
+        xi_emit_assertion_action(ctx, v, plan);
 }
 
 /* ========== Regex Literal ========== */

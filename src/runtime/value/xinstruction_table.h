@@ -339,9 +339,12 @@
       "R[A] = modules[B].exports[C] (selective import)")                                           \
     _(LOAD_MODULE, FMT_AB, KOP_AB_NEW_LIT, "R[A] = modules[B] (whole-module import)")              \
     _(SET_EXPORT, FMT_ABC, KOP_SPECIAL, "module.exports[A] = R[B], name=K[C] (slot-indexed)")      \
-    _(ASSERT, FMT_ABC, KOP_SPECIAL, "if !R[A] throw AssertError(K[B]); C=1: negate")               \
-    _(ASSERT_EQ, FMT_ABC, KOP_SPECIAL, "if R[A] != R[B] throw AssertError(K[C])")                  \
-    _(ASSERT_NE, FMT_ABC, KOP_SPECIAL, "if R[A] == R[B] throw AssertError(K[C])")                  \
+    _(ASSERTION, FMT_ABC, KOP_SPECIAL, "typed assertion: base=R[A], failure=B, plan-kind=C")       \
+    _(ASSERTION_FILE, FMT_ABx, KOP_SPECIAL, "assertion metadata: schema=A, source-file=K[Bx]")     \
+    _(ASSERTION_SPAN_START, FMT_SPECIAL, KOP_SPECIAL,                                              \
+      "assertion metadata: packed start line/column")                                             \
+    _(ASSERTION_SPAN_END, FMT_SPECIAL, KOP_SPECIAL,                                                \
+      "assertion metadata: packed end line/column")                                               \
     _(REGEX_COMPILE, FMT_ABC, KOP_ABC_BIN_K, "R[A] = regex.compile(K[B], K[C])")                   \
     _(GO, FMT_ABC, KOP_ABC_BIN_LIT,                                                                \
       "R[A]=task = go R[B](R[B+1]..R[B+C&0x7F]), C bit7=fire-and-forget")                          \
