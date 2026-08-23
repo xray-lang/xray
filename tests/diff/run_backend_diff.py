@@ -41,7 +41,7 @@ import os
 import sys
 import tempfile
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Optional
 
 
@@ -111,11 +111,22 @@ def cache_cpu_count() -> int:
     return os.cpu_count() or 1
 
 
+def canonical_path_text(path: PurePath) -> str:
+    """Return the one path spelling accepted by ratchet manifests.
+
+    Baselines are repository artifacts shared by Windows and POSIX runners, so
+    native separators are not semantic.  Keep the conversion in one helper:
+    result names, baseline membership, and diagnostics must all see the same
+    forward-slash spelling.
+    """
+    return path.as_posix()
+
+
 def rel_path(path: Path) -> str:
     try:
-        return str(path.resolve().relative_to(PROJECT_DIR))
+        return canonical_path_text(path.resolve().relative_to(PROJECT_DIR))
     except ValueError:
-        return str(path)
+        return canonical_path_text(path)
 
 
 def safe_name(rel: str) -> str:

@@ -13,7 +13,7 @@ import os
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 from _support import bootstrap_xraytest, load_module
@@ -24,6 +24,20 @@ _RUNNER = Path(__file__).resolve().parents[2] / "diff" / "run_backend_diff.py"
 
 
 rbd = load_module("rbd_under_test", _RUNNER)
+
+
+class PathIdentityTest(unittest.TestCase):
+    def test_windows_path_uses_manifest_separator(self):
+        self.assertEqual(
+            rbd.canonical_path_text(
+                PureWindowsPath("tests", "diff", "cases", "nested", "case.xr")
+            ),
+            "tests/diff/cases/nested/case.xr",
+        )
+
+    def test_repository_relative_case_name_is_manifest_canonical(self):
+        case = rbd.PROJECT_DIR / "tests" / "diff" / "cases" / "case.xr"
+        self.assertEqual(rbd.rel_path(case), "tests/diff/cases/case.xr")
 
 
 class JobConfigTest(unittest.TestCase):

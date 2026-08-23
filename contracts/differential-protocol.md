@@ -41,8 +41,13 @@ the program-output comparison remain byte-native and are not normalized.
    two is what made this net unreadable while the native backend was
    fail-closed ahead of its per-construct authorities: on the native lane 564
    refusals hid a single real divergence, and on the embedded lane 68 hid nine.
+10. Ratchet case identity is the repository-relative path written with `/`
+    separators on every host. Native path separators are non-semantic checkout
+    details. Result names, divergence baselines, and refusal baselines must all
+    consume this one canonical spelling so the same governed case cannot leave
+    and re-enter a baseline solely because the runner changed operating system.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.py 90d7ab23536d4e7e9794d543dccdbeec2dd6579ac96ee2896ce7932695643069
+anchor-sha256: tests/diff/run_backend_diff.py 4826b13296a11bc9cee2402f85c1d34bb1b23abf988394a31787befdd31cf4c1
 anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7
