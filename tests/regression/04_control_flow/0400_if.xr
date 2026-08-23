@@ -10,7 +10,7 @@ fn test_if_true() {
     if (true) {
         result = 1
     }
-    assert_eq(result, 1)
+    assertEqual(result, 1)
 }
 
 @test
@@ -19,7 +19,7 @@ fn test_if_false() {
     if (false) {
         result = 1
     }
-    assert_eq(result, 0)
+    assertEqual(result, 0)
 }
 
 @test
@@ -29,7 +29,7 @@ fn test_if_expression() {
     if (x > 5) {
         result = 1
     }
-    assert_eq(result, 1)
+    assertEqual(result, 1)
 }
 
 // ===== if-else =====
@@ -42,7 +42,7 @@ fn test_if_else_true() {
     } else {
         result = "no"
     }
-    assert_eq(result, "yes")
+    assertEqual(result, "yes")
 }
 
 @test
@@ -53,7 +53,7 @@ fn test_if_else_false() {
     } else {
         result = "no"
     }
-    assert_eq(result, "no")
+    assertEqual(result, "no")
 }
 
 @test
@@ -65,7 +65,7 @@ fn test_if_else_expression() {
     } else {
         result = "small"
     }
-    assert_eq(result, "small")
+    assertEqual(result, "small")
 }
 
 // ===== if-else if-else =====
@@ -81,7 +81,7 @@ fn test_elseif_first() {
     } else {
         result = "other"
     }
-    assert_eq(result, "one")
+    assertEqual(result, "one")
 }
 
 @test
@@ -95,7 +95,7 @@ fn test_elseif_second() {
     } else {
         result = "other"
     }
-    assert_eq(result, "two")
+    assertEqual(result, "two")
 }
 
 @test
@@ -109,7 +109,7 @@ fn test_elseif_else() {
     } else {
         result = "other"
     }
-    assert_eq(result, "other")
+    assertEqual(result, "other")
 }
 
 @test
@@ -127,7 +127,7 @@ fn test_multiple_elseif() {
     } else {
         grade = "F"
     }
-    assert_eq(grade, "C")
+    assertEqual(grade, "C")
 }
 
 // ===== 嵌套 if =====
@@ -147,7 +147,7 @@ fn test_nested_if() {
     } else {
         result = "x<=0"
     }
-    assert_eq(result, "x>0, y>5")
+    assertEqual(result, "x>0, y>5")
 }
 
 @test
@@ -164,7 +164,7 @@ fn test_deep_nested() {
             }
         }
     }
-    assert_eq(result, 6)
+    assertEqual(result, 6)
 }
 
 // ===== 显式条件（非 truthy） =====
@@ -173,9 +173,9 @@ fn test_deep_nested() {
 fn test_explicit_bool_condition() {
     var result = ""
     if (true) { result = "yes" } else { result = "no" }
-    assert_eq(result, "yes")
+    assertEqual(result, "yes")
     if (false) { result = "yes" } else { result = "no" }
-    assert_eq(result, "no")
+    assertEqual(result, "no")
 }
 
 @test
@@ -183,10 +183,10 @@ fn test_nullable_presence_condition() {
     var s: string? = null
     var result = ""
     if (s) { result = "present" } else { result = "absent" }
-    assert_eq(result, "absent")
+    assertEqual(result, "absent")
     var empty: string? = ""
     if (empty) { result = "present" } else { result = "absent" }
-    assert_eq(result, "present")
+    assertEqual(result, "present")
 }
 
 // ===== 复合条件 =====
@@ -199,7 +199,7 @@ fn test_and_condition() {
     if (x > 0 && y > 0) {
         result = true
     }
-    assert_eq(result, true)
+    assertEqual(result, true)
 }
 
 @test
@@ -210,7 +210,7 @@ fn test_or_condition() {
     if (x > 0 || y > 0) {
         result = true
     }
-    assert_eq(result, true)
+    assertEqual(result, true)
 }
 
 @test
@@ -220,7 +220,7 @@ fn test_not_condition() {
     if (!flag) {
         result = 1
     }
-    assert_eq(result, 1)
+    assertEqual(result, 1)
 }
 
 // ===== 边界条件 =====
@@ -231,7 +231,7 @@ fn test_empty_if_body() {
     if (x < 5) {
         // 空体
     }
-    assert_eq(x, 10)  // 什么都没发生
+    assertEqual(x, 10)  // 什么都没发生
 }
 
 @test
@@ -245,6 +245,6 @@ fn test_if_only_once() {
     if (x > 3) {
         count++
     }
-    assert_eq(count, 2)
+    assertEqual(count, 2)
 }
 

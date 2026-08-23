@@ -53,19 +53,19 @@ fn utf16DecodeFails(data: Slice<u8>) -> bool {
 
 @test
 fn test_hex_encode() {
-    assert_eq(hexEncodeText("Hello"), "48656c6c6f")
+    assertEqual(hexEncodeText("Hello"), "48656c6c6f")
 }
 
 @test
 fn test_hex_encode_empty() {
-    assert_eq(hexEncodeText(""), "")
+    assertEqual(hexEncodeText(""), "")
 }
 
 @test
 fn test_hex_encode_special() {
     // Tab = 0x09, newline = 0x0a
-    assert_eq(hexEncodeText("\t"), "09")
-    assert_eq(hexEncodeText("\n"), "0a")
+    assertEqual(hexEncodeText("\t"), "09")
+    assertEqual(hexEncodeText("\n"), "0a")
 }
 
 // ===== Hex decode (returns Array<byte>) =====
@@ -73,74 +73,74 @@ fn test_hex_encode_special() {
 @test
 fn test_hex_decode_bytes() {
     var bytes = encoding.hexDecode("48656c6c6f")
-    assert_eq(len(bytes), 5)
-    assert_eq(bytes[0], 0x48)  // 'H'
-    assert_eq(bytes[4], 0x6f)  // 'o'
+    assertEqual(len(bytes), 5)
+    assertEqual(bytes[0], 0x48)  // 'H'
+    assertEqual(bytes[4], 0x6f)  // 'o'
 }
 
 @test
 fn test_hex_decode_text_composition() {
-    assert_eq(hexDecodeText("48656c6c6f"), "Hello")
+    assertEqual(hexDecodeText("48656c6c6f"), "Hello")
 }
 
 @test
 fn test_hex_decode_invalid() {
-    assert_eq(hexDecodeFails("gg"), true)
-    assert_eq(hexDecodeFails("abc"), true)  // odd length
+    assertEqual(hexDecodeFails("gg"), true)
+    assertEqual(hexDecodeFails("abc"), true)  // odd length
 }
 
 @test
 fn test_hex_decode_empty() {
     var bytes = encoding.hexDecode("")
-    assert_eq(len(bytes), 0)
+    assertEqual(len(bytes), 0)
 }
 
 @test
 fn test_hex_decode_uppercase() {
-    assert_eq(hexDecodeText("48656C6C6F"), "Hello")
+    assertEqual(hexDecodeText("48656C6C6F"), "Hello")
 }
 
 // ===== Hex valid =====
 
 @test
 fn test_hex_valid() {
-    assert_eq(encoding.hexValid("48656c6c6f"), true)
-    assert_eq(encoding.hexValid("ABCDEF"), true)
-    assert_eq(encoding.hexValid("gg"), false)
-    assert_eq(encoding.hexValid("abc"), false)  // odd length
-    assert_eq(encoding.hexValid(""), true)
+    assertEqual(encoding.hexValid("48656c6c6f"), true)
+    assertEqual(encoding.hexValid("ABCDEF"), true)
+    assertEqual(encoding.hexValid("gg"), false)
+    assertEqual(encoding.hexValid("abc"), false)  // odd length
+    assertEqual(encoding.hexValid(""), true)
 }
 
 // ===== UTF-8 =====
 
 @test
 fn test_utf8_valid() {
-    assert_eq(utf8ValidText("Hello"), true)
-    assert_eq(utf8ValidText("你好"), true)
-    assert_eq(utf8ValidText(""), true)
+    assertEqual(utf8ValidText("Hello"), true)
+    assertEqual(utf8ValidText("你好"), true)
+    assertEqual(utf8ValidText(""), true)
 }
 
 @test
 fn test_utf8_invalid_bytes() {
     var cont = Array<u8>(1)
     cont[0] = 0x80
-    assert_eq(encoding.utf8Valid(cont[:]), false)
+    assertEqual(encoding.utf8Valid(cont[:]), false)
 
     var overlong = Array<u8>(2)
     overlong[0] = 0xC0
     overlong[1] = 0x80
-    assert_eq(encoding.utf8Valid(overlong[:]), false)
+    assertEqual(encoding.utf8Valid(overlong[:]), false)
 
     var truncated = Array<u8>(2)
     truncated[0] = 0xE2
     truncated[1] = 0x82
-    assert_eq(encoding.utf8Valid(truncated[:]), false)
+    assertEqual(encoding.utf8Valid(truncated[:]), false)
 
     var surrogate = Array<u8>(3)
     surrogate[0] = 0xED
     surrogate[1] = 0xA0
     surrogate[2] = 0x80
-    assert_eq(encoding.utf8Valid(surrogate[:]), false)
+    assertEqual(encoding.utf8Valid(surrogate[:]), false)
 }
 
 // ===== UTF-16 =====
@@ -148,45 +148,45 @@ fn test_utf8_invalid_bytes() {
 @test
 fn test_utf16_encode_decode_le() {
     var units = encoding.utf16Encode("AB")
-    assert_eq(len(units), 4)
+    assertEqual(len(units), 4)
     // LE: 'A' = 0x0041 -> [0x41, 0x00]
-    assert_eq(units[0], 0x41)
-    assert_eq(units[1], 0x00)
+    assertEqual(units[0], 0x41)
+    assertEqual(units[1], 0x00)
     var decoded = encoding.utf16Decode(units[:])
-    assert_eq(decoded, "AB")
+    assertEqual(decoded, "AB")
 }
 
 @test
 fn test_utf16_encode_decode_be() {
     var units = encoding.utf16Encode("AB", utf16EncodeOptions(Endian.BE))
-    assert_eq(len(units), 4)
+    assertEqual(len(units), 4)
     // BE: 'A' = 0x0041 -> [0x00, 0x41]
-    assert_eq(units[0], 0x00)
-    assert_eq(units[1], 0x41)
+    assertEqual(units[0], 0x00)
+    assertEqual(units[1], 0x41)
     var decoded = encoding.utf16Decode(units[:], utf16Options(Endian.BE))
-    assert_eq(decoded, "AB")
+    assertEqual(decoded, "AB")
 }
 
 @test
 fn test_utf16_cjk() {
     var units = encoding.utf16Encode("你好")
-    assert_eq(len(units), 4)  // 2 BMP chars x 2 bytes
+    assertEqual(len(units), 4)  // 2 BMP chars x 2 bytes
     var decoded = encoding.utf16Decode(units[:])
-    assert_eq(decoded, "你好")
+    assertEqual(decoded, "你好")
 }
 
 @test
 fn test_utf16_empty() {
     var units = encoding.utf16Encode("")
-    assert_eq(len(units), 0)
+    assertEqual(len(units), 0)
     var decoded = encoding.utf16Decode(units[:])
-    assert_eq(decoded, "")
+    assertEqual(decoded, "")
 }
 
 @test
 fn test_utf16_odd_length_invalid() {
     var bytes = Array<u8>(1)
-    assert_eq(utf16DecodeFails(bytes[:]), true)
+    assertEqual(utf16DecodeFails(bytes[:]), true)
 }
 
 @test
@@ -194,19 +194,19 @@ fn test_utf16_surrogate_errors() {
     var low = Array<u8>(2)
     low[0] = 0x00
     low[1] = 0xDC
-    assert_eq(utf16DecodeFails(low[:]), true)
+    assertEqual(utf16DecodeFails(low[:]), true)
 
     var missing = Array<u8>(2)
     missing[0] = 0x00
     missing[1] = 0xD8
-    assert_eq(utf16DecodeFails(missing[:]), true)
+    assertEqual(utf16DecodeFails(missing[:]), true)
 
     var invalid = Array<u8>(4)
     invalid[0] = 0x00
     invalid[1] = 0xD8
     invalid[2] = 0x41
     invalid[3] = 0x00
-    assert_eq(utf16DecodeFails(invalid[:]), true)
+    assertEqual(utf16DecodeFails(invalid[:]), true)
 }
 
 @test
@@ -216,9 +216,9 @@ fn test_utf16_bom_options() {
     bom[1] = 0xFF
     bom[2] = 0
     bom[3] = 65
-    assert_eq(encoding.utf16Decode(bom[:]), "A")
+    assertEqual(encoding.utf16Decode(bom[:]), "A")
     var kept = encoding.utf16Decode(bom[:], utf16Options(Endian.BE, false))
-    assert_eq(len(kept), 2)
-    assert_eq(kept.runes().nth(0), '\u{FEFF}')
-    assert_eq(kept.runes().nth(1), 'A')
+    assertEqual(len(kept), 2)
+    assertEqual(kept.runes().nth(0), '\u{FEFF}')
+    assertEqual(kept.runes().nth(1), 'A')
 }

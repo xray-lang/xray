@@ -13,8 +13,8 @@ fn test_typed_boundary_rejects_unknown_by_default() {
     }
     assert(rejected)
     var request = JSON.parse<Request>(raw, JSON.UnknownFields.Ignore)
-    assert_eq(request.action, "activate")
-    assert_eq(request.userId, 7)
+    assertEqual(request.action, "activate")
+    assertEqual(request.userId, 7)
 }
 
 @test
@@ -24,7 +24,7 @@ fn test_parse_with_rest_transform_and_merge() {
     )
     parts.rest.set("processed", true)
     var merged = JSON.merge(parts)
-    assert_eq(JSON.require<string>(merged, ["action"]), "activate")
-    assert_eq(JSON.require<string>(merged, ["trace"]), "t1")
-    assert_eq(JSON.require<bool>(merged, ["processed"]), true)
+    assertEqual(JSON.require<string>(merged, ["action"]), "activate")
+    assertEqual(JSON.require<string>(merged, ["trace"]), "t1")
+    assertEqual(JSON.require<bool>(merged, ["processed"]), true)
 }

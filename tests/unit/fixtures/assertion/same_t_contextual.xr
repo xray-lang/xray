@@ -1,0 +1,42 @@
+var octet = 7 as u8
+var nullableValue: i64? = 7
+var nullableNull: i64? = null
+var value: i64 = 7
+
+assertEqual(octet, 7)
+assertEqual(7, octet)
+
+assertEqual(nullableNull, null)
+assertEqual(null, nullableNull)
+assertEqual(nullableValue, 7)
+assertEqual(7, nullableValue)
+assertEqual(nullableValue, value)
+assertEqual(value, nullableValue)
+
+assertEqual(1, 1)
+assertEqual(1.0, 1.0)
+
+var evaluationOrder = 0
+
+fn actualOnce() -> i64 {
+    evaluationOrder = evaluationOrder * 10 + 1
+    return 7
+}
+
+fn expectedOnce() -> i64 {
+    evaluationOrder = evaluationOrder * 10 + 2
+    return 7
+}
+
+assertEqual(actualOnce(), expectedOnce())
+assertEqual(evaluationOrder, 12)
+
+var anchoredCount = 0
+
+fn anchoredOnce() -> u8 {
+    anchoredCount = anchoredCount + 1
+    return 7 as u8
+}
+
+assertEqual(7, anchoredOnce())
+assertEqual(anchoredCount, 1)

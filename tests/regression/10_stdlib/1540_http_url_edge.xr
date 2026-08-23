@@ -9,7 +9,7 @@ fn test_url_encode_decode_roundtrip() {
     var original = "hello world"
     var encoded = http.urlEncode(original)
     var decoded = http.urlDecode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }
 
 // ===== Special characters =====
@@ -19,7 +19,7 @@ fn test_url_encode_special() {
     var encoded = http.urlEncode("a+b=c&d")
     assert(encoded.contains("%"))
     var decoded = http.urlDecode(encoded)
-    assert_eq(decoded, "a+b=c&d")
+    assertEqual(decoded, "a+b=c&d")
 }
 
 @test
@@ -27,7 +27,7 @@ fn test_url_encode_symbols() {
     var original = "!@#$%^&*()_+-=[]{}|;':\",./<>?"
     var encoded = http.urlEncode(original)
     var decoded = http.urlDecode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }
 
 // ===== Chinese characters =====
@@ -38,7 +38,7 @@ fn test_url_encode_chinese() {
     var encoded = http.urlEncode(original)
     assert(encoded.contains("%"))
     var decoded = http.urlDecode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }
 
 // ===== Pure ASCII (no encoding needed) =====
@@ -47,7 +47,7 @@ fn test_url_encode_chinese() {
 fn test_url_encode_ascii_passthrough() {
     var ascii = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     var encoded = http.urlEncode(ascii)
-    assert_eq(encoded, ascii)
+    assertEqual(encoded, ascii)
 }
 
 // ===== Empty string =====
@@ -55,13 +55,13 @@ fn test_url_encode_ascii_passthrough() {
 @test
 fn test_url_encode_empty() {
     var encoded = http.urlEncode("")
-    assert_eq(encoded, "")
+    assertEqual(encoded, "")
 }
 
 @test
 fn test_url_decode_empty() {
     var decoded = http.urlDecode("")
-    assert_eq(decoded, "")
+    assertEqual(decoded, "")
 }
 
 // ===== Space encoding =====
@@ -69,7 +69,7 @@ fn test_url_decode_empty() {
 @test
 fn test_url_encode_space() {
     var encoded = http.urlEncode("hello world")
-    assert_eq(encoded, "hello%20world")
+    assertEqual(encoded, "hello%20world")
 }
 
 // ===== Double encoding prevention =====
@@ -77,7 +77,7 @@ fn test_url_encode_space() {
 @test
 fn test_url_decode_percent() {
     var decoded = http.urlDecode("hello%20world")
-    assert_eq(decoded, "hello world")
+    assertEqual(decoded, "hello world")
 }
 
 // ===== Long string =====
@@ -90,5 +90,5 @@ fn test_url_encode_long() {
     }
     var encoded = http.urlEncode(original)
     var decoded = http.urlDecode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }

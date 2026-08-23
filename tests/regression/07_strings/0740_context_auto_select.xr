@@ -28,15 +28,15 @@ fn test_single_thread_context() {
     // 在主线程中执行字符串拼接
     // 应该使用 Isolate 的 vm_ctx.tmp_strbuf
     var result = "hello" + " " + "world"
-    assert_eq(result, "hello world")
+    assertEqual(result, "hello world")
     
     // 多次拼接，验证缓冲区重用正确
     var s1 = "a" + "b"
     var s2 = "c" + "d"
     var s3 = "e" + "f"
-    assert_eq(s1, "ab")
-    assert_eq(s2, "cd")
-    assert_eq(s3, "ef")
+    assertEqual(s1, "ab")
+    assertEqual(s2, "cd")
+    assertEqual(s3, "ef")
 }
 
 @test
@@ -44,11 +44,11 @@ fn test_single_thread_long_concat() {
     // 测试长字符串拼接（使用 XrStrBuf 路径）
     var base = "x".repeat(100)
     var result = base + base
-    assert_eq(len(result), 200)
+    assertEqual(len(result), 200)
     
     // 验证内容正确
-    assert_eq(result.runes().nth(0), 'x')
-    assert_eq(result.runes().nth(199), 'x')
+    assertEqual(result.runes().nth(0), 'x')
+    assertEqual(result.runes().nth(199), 'x')
 }
 
 // ===== 多核模式测试 =====
@@ -76,7 +76,7 @@ fn test_multicore_context_isolation() {
     // 验证每个协程的结果独立且正确
     for (var i = 0; i < n; i++) {
         var expected = "task_" + string(i) + "_data"
-        assert_eq(results[i], expected)
+        assertEqual(results[i], expected)
     }
 }
 
@@ -103,10 +103,10 @@ fn test_multicore_concurrent_long_concat() {
     for (var i = 0; i < n; i++) {
         var id_str = string(i)
         var expected_len = 50 + 1 + len(id_str) + 1 + 50
-        assert_eq(len(results[i]), expected_len)
+        assertEqual(len(results[i]), expected_len)
         
         // 验证包含正确的 id
-        assert_eq(results[i].contains("_" + string(i) + "_"), true)
+        assertEqual(results[i].contains("_" + string(i) + "_"), true)
     }
 }
 
@@ -128,8 +128,8 @@ fn test_context_switch_correctness() {
     
     var coro_result = await t
     
-    assert_eq(main_result, "main_start_end")
-    assert_eq(coro_result, "coro_result")
+    assertEqual(main_result, "main_start_end")
+    assertEqual(coro_result, "coro_result")
 }
 
 @test
@@ -139,7 +139,7 @@ fn test_nested_coro_context() {
     var t = go context_outer_task("test")
     var result = await t
     
-    assert_eq(result, "outer_test_inner_test")
+    assertEqual(result, "outer_test_inner_test")
 }
 
 // ===== 属性测试：随机并发拼接 =====
@@ -179,7 +179,7 @@ fn test_property_concurrent_concat_correctness() {
                 actual_parts = actual_parts + 1
             }
         }
-        assert_eq(actual_parts, expected_parts)
+        assertEqual(actual_parts, expected_parts)
     }
 }
 
@@ -210,7 +210,7 @@ fn test_property_buffer_reuse_safety() {
         var results = all_results[i]
         for (var j = 0; j < 5; j++) {
             var expected = "id" + string(i) + "_iter" + string(j)
-            assert_eq(results[j], expected)
+            assertEqual(results[j], expected)
         }
     }
 }

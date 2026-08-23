@@ -5,6 +5,6 @@ fn plus_one(x: i64) -> i64 {
 @test
 fn test_out_identifier_call_argument_not_marker() {
     var out = 41
-    assert_eq(plus_one(out), 42)
-    assert_eq(plus_one(out + 1), 43)
+    assertEqual(plus_one(out), 42)
+    assertEqual(plus_one(out + 1), 43)
 }

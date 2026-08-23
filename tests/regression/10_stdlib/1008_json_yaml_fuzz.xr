@@ -18,7 +18,7 @@ fn test_json_nested_paths() {
         }
         text += "42"
         for (_ in 0..depth) { text += "}" }
-        assert_eq(JSON.require<i64>(JSON.parseValue(text), path), 42)
+        assertEqual(JSON.require<i64>(JSON.parseValue(text), path), 42)
     }
 }
 
@@ -27,17 +27,17 @@ fn test_json_wide_objects() {
     var object: JSON.Object = JSON.parseObject("{}")
     for (i in 0..100) { object.set("f" + string(i), i) }
     var round = JSON.parseValue(JSON.stringify(object))
-    assert_eq(JSON.require<i64>(round, ["f0"]), 0)
-    assert_eq(JSON.require<i64>(round, ["f99"]), 99)
+    assertEqual(JSON.require<i64>(round, ["f0"]), 0)
+    assertEqual(JSON.require<i64>(round, ["f99"]), 99)
 }
 
 @test
 fn test_yaml_typed_roundtrip() {
     var source = "name: xray\nversion: 2\nitems: [one, two]"
     var parsed = yaml.parse(source)
-    assert_eq(yaml.asString(yaml.get(parsed, "name")!), "xray")
-    assert_eq(get_int(parsed, "version"), 2)
+    assertEqual(yaml.asString(yaml.get(parsed, "name")!), "xray")
+    assertEqual(get_int(parsed, "version"), 2)
     var emitted = yaml.stringify(parsed)
     var reparsed = yaml.parse(emitted)
-    assert_eq(get_int(reparsed, "version"), 2)
+    assertEqual(get_int(reparsed, "version"), 2)
 }

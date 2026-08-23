@@ -5,32 +5,32 @@
 fn test_bigint_equality() {
     var a = 1000000000000n
     var c = 1000000000000n
-    assert_eq(a == c, true)
-    assert_eq(a != c, false)
+    assertEqual(a == c, true)
+    assertEqual(a != c, false)
 }
 
 @test
 fn test_bigint_inequality() {
     var a = 1000000000000n
     var b = 2000000000000n
-    assert_eq(a != b, true)
-    assert_eq(a == b, false)
+    assertEqual(a != b, true)
+    assertEqual(a == b, false)
 }
 
 @test
 fn test_bigint_less_than() {
     var a = 1000000000000n
     var b = 2000000000000n
-    assert_eq(a < b, true)
-    assert_eq(b < a, false)
+    assertEqual(a < b, true)
+    assertEqual(b < a, false)
 }
 
 @test
 fn test_bigint_greater_than() {
     var a = 1000000000000n
     var b = 2000000000000n
-    assert_eq(b > a, true)
-    assert_eq(a > b, false)
+    assertEqual(b > a, true)
+    assertEqual(a > b, false)
 }
 
 @test
@@ -38,9 +38,9 @@ fn test_bigint_less_equal() {
     var a = 100n
     var b = 100n
     var c = 200n
-    assert_eq(a <= b, true)
-    assert_eq(a <= c, true)
-    assert_eq(c <= a, false)
+    assertEqual(a <= b, true)
+    assertEqual(a <= c, true)
+    assertEqual(c <= a, false)
 }
 
 @test
@@ -48,24 +48,24 @@ fn test_bigint_greater_equal() {
     var a = 100n
     var b = 100n
     var c = 50n
-    assert_eq(a >= b, true)
-    assert_eq(a >= c, true)
-    assert_eq(c >= a, false)
+    assertEqual(a >= b, true)
+    assertEqual(a >= c, true)
+    assertEqual(c >= a, false)
 }
 
 @test
 fn test_mixed_bigint_int_comparison() {
     var big = 100n
     var small = 50
-    assert_eq(big > small, true)
-    assert_eq(small < big, true)
-    assert_eq(big == 100, true)
-    assert_eq(100 == big, true)
-    assert_eq(big != 99, true)
+    assertEqual(big > small, true)
+    assertEqual(small < big, true)
+    assertEqual(big == 100, true)
+    assertEqual(100 == big, true)
+    assertEqual(big != 99, true)
 }
 
 @test
 fn test_bigint_type_annotation() {
     var x: BigInt = 123n
-    assert_eq(x.toString(), "123")
+    assertEqual(x.toString(), "123")
 }

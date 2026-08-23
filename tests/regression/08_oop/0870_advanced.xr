@@ -39,8 +39,8 @@ class Rectangle extends Shape {
 @test
 fn test_super_method_with_extension() {
     var rect = Rectangle(5, 3)
-    assert_eq(rect.describe(), "Shape: Rectangle (5x3)")
-    assert_eq(rect.area(), 15)
+    assertEqual(rect.describe(), "Shape: Rectangle (5x3)")
+    assertEqual(rect.area(), 15)
 }
 
 // ===== 三层继承 + super =====
@@ -92,11 +92,11 @@ class C extends B {
 @test
 fn test_three_level_inheritance() {
     var c = C(1, 2, 3)
-    assert_eq(c.value, 1)
-    assert_eq(c.extra, 2)
-    assert_eq(c.more, 3)
-    assert_eq(c.getValue(), 6)  // 1 + 2 + 3
-    assert_eq(c.describe(), "A:1,B:2,C:3")
+    assertEqual(c.value, 1)
+    assertEqual(c.extra, 2)
+    assertEqual(c.more, 3)
+    assertEqual(c.getValue(), 6)  // 1 + 2 + 3
+    assertEqual(c.describe(), "A:1,B:2,C:3")
 }
 
 // ===== super 在不同方法中调用 =====
@@ -129,8 +129,8 @@ class FileLogger extends Logger {
 @test
 fn test_super_in_chain() {
     var fl = FileLogger("app.log")
-    assert_eq(fl.log("test"), "FILE: test -> app.log")
-    assert_eq(fl.warn("error"), "[WARN] FILE: error -> app.log")
+    assertEqual(fl.log("test"), "FILE: test -> app.log")
+    assertEqual(fl.warn("error"), "[WARN] FILE: error -> app.log")
 }
 
 // ===== 方法作为一等公民 =====
@@ -148,12 +148,12 @@ class Processor {
 @test
 fn test_method_reference() {
     var p = Processor(3)
-    assert_eq(p.process(5), 15)
+    assertEqual(p.process(5), 15)
 
     // 方法绑定到实例
     var fn_ref = p.process
     // 注意：这需要语言支持绑定方法
-    // assert_eq(fn_ref(5), 15)
+    // assertEqual(fn_ref(5), 15)
 }
 
 // ===== 类内部调用其他方法 =====
@@ -175,9 +175,9 @@ class Calculator {
 @test
 fn test_internal_method_calls() {
     var calc = Calculator(10)
-    assert_eq(calc.add(5), 15)
-    assert_eq(calc.addTwice(3), 26)  // (10+3) + (10+3)
-    assert_eq(calc.addChain(1, 2, 3), 16)  // (10+1) + (10+2) + (10+3) - 20
+    assertEqual(calc.add(5), 15)
+    assertEqual(calc.addTwice(3), 26)  // (10+3) + (10+3)
+    assertEqual(calc.addChain(1, 2, 3), 16)  // (10+1) + (10+2) + (10+3) - 20
 }
 
 // ===== 构造函数中调用方法 =====
@@ -197,8 +197,8 @@ class Initializer {
 @test
 fn test_constructor_calls_method() {
     var init = Initializer("hello")
-    assert_eq(init.data, "hello")
-    assert_eq(init.processed, "[hello]")
+    assertEqual(init.data, "hello")
+    assertEqual(init.processed, "[hello]")
 }
 
 // ===== 字段初始化顺序 =====
@@ -218,9 +218,9 @@ class Ordered {
 @test
 fn test_field_init_order() {
     var o = Ordered()
-    assert_eq(o.a, 1)
-    assert_eq(o.b, 2)
-    assert_eq(o.c, 3)
+    assertEqual(o.a, 1)
+    assertEqual(o.b, 2)
+    assertEqual(o.c, 3)
 }
 
 // ===== 对象作为参数 =====
@@ -247,9 +247,9 @@ fn test_object_as_param() {
     var b2 = Box(20)
     var b3 = b1.add(b2)
 
-    assert_eq(b3.value, 30)
-    assert_eq(b1.equals(b2), false)
-    assert_eq(b1.equals(Box(10)), true)
+    assertEqual(b3.value, 30)
+    assertEqual(b1.equals(b2), false)
+    assertEqual(b1.equals(Box(10)), true)
 }
 
 // ===== 对象数组 =====
@@ -272,16 +272,16 @@ fn test_object_array() {
         Item("orange", 75)
     ]
 
-    assert_eq(len(items), 3)
-    assert_eq(items[0].name, "apple")
-    assert_eq(items[1].price, 50)
+    assertEqual(len(items), 3)
+    assertEqual(items[0].name, "apple")
+    assertEqual(items[1].price, 50)
 
     // 计算总价
     var total = 0
     for (item in items) {
         total = total + item.price
     }
-    assert_eq(total, 225)
+    assertEqual(total, 225)
 }
 
 // ===== 对象存入 Map =====
@@ -302,8 +302,8 @@ fn test_object_in_map() {
     users["alice"] = MapUser("Alice", 10)
     users["bob"] = MapUser("Bob", 5)
 
-    assert_eq(users["alice"].name, "Alice")
-    assert_eq(users["alice"].level, 10)
-    assert_eq(users["bob"].name, "Bob")
-    assert_eq(users["bob"].level, 5)
+    assertEqual(users["alice"].name, "Alice")
+    assertEqual(users["alice"].level, 10)
+    assertEqual(users["bob"].name, "Bob")
+    assertEqual(users["bob"].level, 5)
 }

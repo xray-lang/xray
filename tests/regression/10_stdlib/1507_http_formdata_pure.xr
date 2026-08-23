@@ -36,11 +36,11 @@ fn test_formdata_file_build() {
 fn test_formdata_limits() {
     var limited = formData(3, 3)
     assert(!limited.append("field", "abcd"))
-    assert_eq(limited.totalSize, 0)
+    assertEqual(limited.totalSize, 0)
 
     var unlimited = formData(0, 0)
     assert(unlimited.append("field", "abcd"))
-    assert_eq(unlimited.totalSize, 4)
+    assertEqual(unlimited.totalSize, 4)
 }
 
 @test
@@ -51,7 +51,7 @@ fn test_formdata_file_limit() {
 
     var limited = formData(0, 3)
     assert(!limited.appendFile("file", bigPath))
-    assert_eq(limited.totalSize, 0)
+    assertEqual(limited.totalSize, 0)
 }
 
 print("All http formdata pure tests passed")

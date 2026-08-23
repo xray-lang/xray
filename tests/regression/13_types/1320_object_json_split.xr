@@ -6,33 +6,33 @@ type User = { id: i64, name: string }
 @test
 fn test_default_object() {
     var user = { id: 1, name: "Ada" }
-    assert_eq(typeName(user), "object")
-    assert_eq(user.id, 1)
-    assert_eq(user.name, "Ada")
+    assertEqual(typeName(user), "object")
+    assertEqual(user.id, 1)
+    assertEqual(user.name, "Ada")
     user.name = "Grace"
-    assert_eq(user.name, "Grace")
+    assertEqual(user.name, "Grace")
 }
 
 @test
 fn test_object_alias_assignment() {
     var user: User = { id: 7, name: "Lin" }
-    assert_eq(typeName(user), "object")
-    assert_eq(user.id, 7)
-    assert_eq(user.name, "Lin")
+    assertEqual(typeName(user), "object")
+    assertEqual(user.id, 7)
+    assertEqual(user.name, "Lin")
 }
 
 @test
 fn test_json_object_is_map() {
     var payload: JSON.Object = JSON.parseObject("{\"id\":1,\"name\":\"Ada\"}")
     payload.set("extra", true)
-    assert_eq(typeName(payload), "Map")
-    assert_eq(payload.get("extra"), true)
+    assertEqual(typeName(payload), "Map")
+    assertEqual(JSON.require<bool>(payload.get("extra")!, []), true)
 }
 
 @test
 fn test_json_array_literal_context() {
     var payload: JSON.Value = JSON.parseValue("[1,\"two\",true]")
-    assert_eq(typeName(payload), "Array")
+    assertEqual(typeName(payload), "Array")
 }
 
 @test
@@ -40,7 +40,7 @@ fn test_json_decode_object() {
     var data = JSON.parseValue("{\"id\": 9, \"name\": \"Ray\"}")
     var user = JSON.decode<User>(data)
     assert(user != null)
-    assert_eq(typeName(user), "object")
-    assert_eq(user!.id, 9)
-    assert_eq(user!.name, "Ray")
+    assertEqual(typeName(user), "object")
+    assertEqual(user!.id, 9)
+    assertEqual(user!.name, "Ray")
 }

@@ -33,8 +33,8 @@ class IntBox implements Container<i64> {
 @test
 fn test_implements_with_type_args() {
     var b = IntBox(42)
-    assert_eq(b.get(0), 42)
-    assert_eq(b.size(), 1)
+    assertEqual(b.get(0), 42)
+    assertEqual(b.size(), 1)
 }
 
 // ===== 多类型参数泛型接口 + 带类型实参的 extends =====
@@ -73,9 +73,9 @@ class StringIntEntry implements KVDescriptor<string, i64> {
 @test
 fn test_extends_with_type_args() {
     var e = StringIntEntry("age", 30)
-    assert_eq(e.key(), "age")
-    assert_eq(e.value(), 30)
-    assert_eq(e.describe(), "age")
+    assertEqual(e.key(), "age")
+    assertEqual(e.value(), 30)
+    assertEqual(e.describe(), "age")
 }
 
 // ===== 接口属性签名 =====
@@ -99,7 +99,7 @@ class PropertyBuffer implements HasLength {
 @test
 fn test_interface_property() {
     var b = PropertyBuffer(10)
-    assert_eq(b.length, 10)
+    assertEqual(b.length, 10)
 }
 
 // ===== 接口属性 + const 修饰 =====
@@ -130,8 +130,8 @@ class Item implements Identifiable {
 @test
 fn test_interface_const_property() {
     var it = Item(7, "widget")
-    assert_eq(it.id, 7)
-    assert_eq(it.name, "widget")
+    assertEqual(it.id, 7)
+    assertEqual(it.name, "widget")
 }
 
 // ===== 泛型接口 + 属性混合 =====
@@ -143,7 +143,7 @@ interface SizedCollection<T> {
 
 @test
 fn test_generic_interface_with_property_declares() {
-    assert_eq(1, 1)
+    assertEqual(1, 1)
 }
 
 // ===== 受约束的泛型类型参数 =====
@@ -159,5 +159,5 @@ interface Stats<T: Numeric> {
 
 @test
 fn test_constrained_generic_interface() {
-    assert_eq(1, 1)
+    assertEqual(1, 1)
 }

@@ -8,5 +8,5 @@ const GOOD = comptime {
 
 @test
 fn test_comptime_block_struct_value_const_cache() {
-    assert_eq(GOOD.x, 41)
+    assertEqual(GOOD.x, 41)
 }

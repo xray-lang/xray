@@ -8,9 +8,9 @@ fn test_map_basic() {
     var doubled = arr.map(fn(x) {
         return x * 2
     })
-    assert_eq(len(doubled), 5)
-    assert_eq(doubled[0], 2)
-    assert_eq(doubled[4], 10)
+    assertEqual(len(doubled), 5)
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[4], 10)
 }
 
 @test
@@ -19,7 +19,7 @@ fn test_map_empty() {
     var result = arr.map(fn(x) {
         return x * 2
     })
-    assert_eq(len(result), 0)
+    assertEqual(len(result), 0)
 }
 
 @test
@@ -28,9 +28,9 @@ fn test_map_to_different_type() {
     var strs = arr.map(fn(x) {
         return x.toString()
     })
-    assert_eq(strs[0], "1")
-    assert_eq(strs[1], "2")
-    assert_eq(strs[2], "3")
+    assertEqual(strs[0], "1")
+    assertEqual(strs[1], "2")
+    assertEqual(strs[2], "3")
 }
 
 // ===== filter =====
@@ -40,10 +40,10 @@ fn test_filter_basic() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(len(evens), 3)
-    assert_eq(evens[0], 2)
-    assert_eq(evens[1], 4)
-    assert_eq(evens[2], 6)
+    assertEqual(len(evens), 3)
+    assertEqual(evens[0], 2)
+    assertEqual(evens[1], 4)
+    assertEqual(evens[2], 6)
 }
 
 @test
@@ -52,7 +52,7 @@ fn test_filter_none() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(len(evens), 0)
+    assertEqual(len(evens), 0)
 }
 
 @test
@@ -61,7 +61,7 @@ fn test_filter_all() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(len(evens), 4)
+    assertEqual(len(evens), 4)
 }
 
 @test
@@ -70,7 +70,7 @@ fn test_filter_empty() {
     var result = arr.filter(fn(x) {
         return true
     })
-    assert_eq(len(result), 0)
+    assertEqual(len(result), 0)
 }
 
 // ===== reduce =====
@@ -80,7 +80,7 @@ fn test_reduce_sum() {
     var sum = arr.reduce(fn(acc, x) {
         return acc + x
     }, 0)
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 }
 
 @test
@@ -89,7 +89,7 @@ fn test_reduce_product() {
     var product = arr.reduce(fn(acc, x) {
         return acc * x
     }, 1)
-    assert_eq(product, 24)
+    assertEqual(product, 24)
 }
 
 @test
@@ -98,7 +98,7 @@ fn test_reduce_max() {
     var max = arr.reduce(fn(a, b) {
         return a > b ? a : b
     }, arr[0])
-    assert_eq(max, 9)
+    assertEqual(max, 9)
 }
 
 @test
@@ -107,7 +107,7 @@ fn test_reduce_min() {
     var min = arr.reduce(fn(a, b) {
         return a < b ? a : b
     }, arr[0])
-    assert_eq(min, 1)
+    assertEqual(min, 1)
 }
 
 @test
@@ -116,7 +116,7 @@ fn test_reduce_empty() {
     var sum = arr.reduce(fn(acc, x) {
         return acc + x
     }, 0)
-    assert_eq(sum, 0)
+    assertEqual(sum, 0)
 }
 
 @test
@@ -125,7 +125,7 @@ fn test_reduce_single() {
     var sum = arr.reduce(fn(acc, x) {
         return acc + x
     }, 0)
-    assert_eq(sum, 42)
+    assertEqual(sum, 42)
 }
 
 // ===== forEach =====
@@ -136,7 +136,7 @@ fn test_foreach_basic() {
     arr.forEach(fn(x) {
         sum += x
     })
-    assert_eq(sum, 6)
+    assertEqual(sum, 6)
 }
 
 @test
@@ -146,7 +146,7 @@ fn test_foreach_empty() {
     arr.forEach(fn(x) {
         count++
     })
-    assert_eq(count, 0)
+    assertEqual(count, 0)
 }
 
 // ===== 链式调用 =====
@@ -159,8 +159,8 @@ fn test_chain_map_filter() {
         return x > 5
     })
     // [6, 8, 10]
-    assert_eq(len(result), 3)
-    assert_eq(result[0], 6)
+    assertEqual(len(result), 3)
+    assertEqual(result[0], 6)
 }
 
 @test
@@ -172,9 +172,9 @@ fn test_chain_filter_map() {
         return x * x
     })
     // [4, 16, 36]
-    assert_eq(len(result), 3)
-    assert_eq(result[0], 4)
-    assert_eq(result[2], 36)
+    assertEqual(len(result), 3)
+    assertEqual(result[0], 4)
+    assertEqual(result[2], 36)
 }
 
 @test
@@ -188,7 +188,7 @@ fn test_chain_map_filter_reduce() {
         return a + b
     }, 0)
     // 60
-    assert_eq(result, 60)
+    assertEqual(result, 60)
 }
 
 // ===== 实际应用 =====
@@ -200,7 +200,7 @@ fn test_sum_of_squares() {
     }).reduce(fn(a, b) {
         return a + b
     }, 0)
-    assert_eq(sumOfSquares, 30)
+    assertEqual(sumOfSquares, 30)
 }
 
 @test
@@ -209,7 +209,7 @@ fn test_count_matches() {
     var startsWithA = words.filter(fn(w) {
         return w.startsWith("a")
     })
-    assert_eq(len(startsWithA), 2)
+    assertEqual(len(startsWithA), 2)
 }
 
 @test
@@ -221,7 +221,7 @@ fn test_flatten_single_level() {
             flat.push(x)
         }
     }
-    assert_eq(len(flat), 6)
-    assert_eq(flat[0], 1)
-    assert_eq(flat[5], 6)
+    assertEqual(len(flat), 6)
+    assertEqual(flat[0], 1)
+    assertEqual(flat[5], 6)
 }

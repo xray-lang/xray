@@ -5,8 +5,8 @@
 @test
 fn test_basic_object() {
     var point = { "x": 10, "y": 20 }
-    assert_eq(point.x, 10)
-    assert_eq(point.y, 20)
+    assertEqual(point.x, 10)
+    assertEqual(point.y, 20)
 }
 
 @test
@@ -14,34 +14,34 @@ fn test_object_field_modify() {
     var point = { "x": 10, "y": 20 }
     point.x = 100
     point.y = 200
-    assert_eq(point.x, 100)
-    assert_eq(point.y, 200)
+    assertEqual(point.x, 100)
+    assertEqual(point.y, 200)
 }
 
 // ===== 多字段对象 =====
 @test
 fn test_multi_field_object() {
     var person = { "name": "Alice", "age": 25, "active": true }
-    assert_eq(person.name, "Alice")
-    assert_eq(person.age, 25)
-    assert_eq(person.active, true)
+    assertEqual(person.name, "Alice")
+    assertEqual(person.age, 25)
+    assertEqual(person.active, true)
 }
 
 @test
 fn test_object_field_update() {
     var person = { "name": "Bob", "age": 30 }
     person.age = 31
-    assert_eq(person.age, 31)
+    assertEqual(person.age, 31)
 }
 
 // ===== 嵌套对象 =====
 @test
 fn test_nested_object() {
     var rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
-    assert_eq(rect.origin.x, 0)
-    assert_eq(rect.origin.y, 0)
-    assert_eq(rect.size.width, 100)
-    assert_eq(rect.size.height, 50)
+    assertEqual(rect.origin.x, 0)
+    assertEqual(rect.origin.y, 0)
+    assertEqual(rect.size.width, 100)
+    assertEqual(rect.size.height, 50)
 }
 
 @test
@@ -49,28 +49,28 @@ fn test_nested_object_modify() {
     var rect = { "origin": { "x": 0, "y": 0 }, "size": { "width": 100, "height": 50 } }
     rect.origin.x = 10
     rect.size.width = 200
-    assert_eq(rect.origin.x, 10)
-    assert_eq(rect.size.width, 200)
+    assertEqual(rect.origin.x, 10)
+    assertEqual(rect.size.width, 200)
 }
 
 // ===== 单字段对象 =====
 @test
 fn test_single_field_object() {
     var single = { "value": 42 }
-    assert_eq(single.value, 42)
+    assertEqual(single.value, 42)
     single.value = 99
-    assert_eq(single.value, 99)
+    assertEqual(single.value, 99)
 }
 
 // ===== 不同类型值 =====
 @test
 fn test_mixed_types() {
     var data = { "count": 100, "ratio": 0.5, "name": "test", "flag": true, "empty": null }
-    assert_eq(data.count, 100)
-    assert_eq(data.ratio, 0.5)
-    assert_eq(data.name, "test")
-    assert_eq(data.flag, true)
-    assert_eq(data.empty, null)
+    assertEqual(data.count, 100)
+    assertEqual(data.ratio, 0.5)
+    assertEqual(data.name, "test")
+    assertEqual(data.flag, true)
+    assertEqual(data.empty, null)
 }
 
 // ===== 对象作为函数参数 =====
@@ -80,7 +80,7 @@ fn test_object_as_param() {
         return p.x
     }
     var point = { x: 42, y: 0 }
-    assert_eq(getX(point), 42)
+    assertEqual(getX(point), 42)
 }
 
 // ===== 对象作为返回值 =====
@@ -90,17 +90,17 @@ fn test_object_as_return() {
         return { x, y }
     }
     var p = makePoint(3, 4)
-    assert_eq(p.x, 3)
-    assert_eq(p.y, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
 }
 
 // ===== 对象数组 =====
 @test
 fn test_object_array() {
     var points = [{ "x": 0, "y": 0 }, { "x": 1, "y": 1 }, { "x": 2, "y": 2 }]
-    assert_eq(len(points), 3)
-    assert_eq(points[0].x, 0)
-    assert_eq(points[2].y, 2)
+    assertEqual(len(points), 3)
+    assertEqual(points[0].x, 0)
+    assertEqual(points[2].y, 2)
 }
 
 @test
@@ -108,7 +108,7 @@ fn test_object_field_shorthand() {
     var users = ["alice", "bob"]
     var orders = [1, 2, 3]
     var dashboard = { users, count: len(orders) }
-    assert_eq(len(dashboard.users), 2)
-    assert_eq(dashboard.users[0], "alice")
-    assert_eq(dashboard.count, 3)
+    assertEqual(len(dashboard.users), 2)
+    assertEqual(dashboard.users[0], "alice")
+    assertEqual(dashboard.count, 3)
 }

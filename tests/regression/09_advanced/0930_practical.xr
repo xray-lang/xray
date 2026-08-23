@@ -11,10 +11,10 @@ fn test_fibonacci() {
         return fib(n - 1) + fib(n - 2)
     }
     
-    assert_eq(fib(0), 0)
-    assert_eq(fib(1), 1)
-    assert_eq(fib(5), 5)
-    assert_eq(fib(10), 55)
+    assertEqual(fib(0), 0)
+    assertEqual(fib(1), 1)
+    assertEqual(fib(5), 5)
+    assertEqual(fib(10), 55)
 }
 
 // ===== 阶乘 =====
@@ -26,9 +26,9 @@ fn test_factorial() {
         return n * fact(n - 1)
     }
     
-    assert_eq(fact(0), 1)
-    assert_eq(fact(1), 1)
-    assert_eq(fact(5), 120)
+    assertEqual(fact(0), 1)
+    assertEqual(fact(1), 1)
+    assertEqual(fact(5), 120)
 }
 
 // ===== 质数判断 =====
@@ -47,11 +47,11 @@ fn test_is_prime() {
         return true
     }
     
-    assert_eq(isPrime(2), true)
-    assert_eq(isPrime(3), true)
-    assert_eq(isPrime(4), false)
-    assert_eq(isPrime(17), true)
-    assert_eq(isPrime(18), false)
+    assertEqual(isPrime(2), true)
+    assertEqual(isPrime(3), true)
+    assertEqual(isPrime(4), false)
+    assertEqual(isPrime(17), true)
+    assertEqual(isPrime(18), false)
 }
 
 // ===== 最大公约数 =====
@@ -69,9 +69,9 @@ fn test_gcd() {
         return x
     }
     
-    assert_eq(gcd(12, 8), 4)
-    assert_eq(gcd(17, 13), 1)
-    assert_eq(gcd(100, 25), 25)
+    assertEqual(gcd(12, 8), 4)
+    assertEqual(gcd(17, 13), 1)
+    assertEqual(gcd(100, 25), 25)
 }
 
 // ===== 二分查找 =====
@@ -94,10 +94,10 @@ fn test_binary_search() {
     }
     
     var arr = [1, 3, 5, 7, 9, 11, 13]
-    assert_eq(binarySearch(arr, 7), 3)
-    assert_eq(binarySearch(arr, 1), 0)
-    assert_eq(binarySearch(arr, 13), 6)
-    assert_eq(binarySearch(arr, 4), -1)
+    assertEqual(binarySearch(arr, 7), 3)
+    assertEqual(binarySearch(arr, 1), 0)
+    assertEqual(binarySearch(arr, 13), 6)
+    assertEqual(binarySearch(arr, 4), -1)
 }
 
 // ===== 冒泡排序 =====
@@ -119,8 +119,8 @@ fn test_bubble_sort() {
     
     var arr = [64, 34, 25, 12, 22, 11, 90]
     bubbleSort(ref arr)
-    assert_eq(arr[0], 11)
-    assert_eq(arr[6], 90)
+    assertEqual(arr[0], 11)
+    assertEqual(arr[6], 90)
 }
 
 // ===== 字符串反转 =====
@@ -137,9 +137,9 @@ fn test_reverse_string() {
         return result
     }
     
-    assert_eq(reverse("hello"), "olleh")
-    assert_eq(reverse("a"), "a")
-    assert_eq(reverse(""), "")
+    assertEqual(reverse("hello"), "olleh")
+    assertEqual(reverse("a"), "a")
+    assertEqual(reverse(""), "")
 }
 
 // ===== 计数器类 =====
@@ -156,7 +156,7 @@ fn test_counter_class() {
     c.inc()
     c.inc()
     c.dec()
-    assert_eq(c.getValue(), 2)
+    assertEqual(c.getValue(), 2)
 }
 
 // ===== 栈实现 =====
@@ -174,12 +174,12 @@ fn test_stack() {
     }
     
     var s = Stack()
-    assert_eq(len(s) == 0, true)
+    assertEqual(len(s) == 0, true)
     s.push(1)
     s.push(2)
     s.push(3)
-    assert_eq(s.peek(), 3)
-    assert_eq(s.pop(), 3)
-    assert_eq(s.pop(), 2)
-    assert_eq(len(s) == 0, false)
+    assertEqual(s.peek(), 3)
+    assertEqual(s.pop(), 3)
+    assertEqual(s.pop(), 2)
+    assertEqual(len(s) == 0, false)
 }

@@ -35,56 +35,56 @@ fn makeBranch() -> Branch {
 @test
 fn test_chain_reaches_value() {
     var b: Branch? = makeBranch()
-    assert_eq(b?.leaf.value, 21)
+    assertEqual(b?.leaf.value, 21)
 }
 
 @test
 fn test_chain_short_circuits_on_null_prefix() {
     var b: Branch? = null
-    assert_eq(b?.leaf.value, null)
+    assertEqual(b?.leaf.value, null)
 }
 
 @test
 fn test_chain_method_call_reaches_value() {
     var b: Branch? = makeBranch()
-    assert_eq(b?.leaf.doubled(), 42)
+    assertEqual(b?.leaf.doubled(), 42)
 }
 
 @test
 fn test_chain_method_call_short_circuits() {
     var b: Branch? = null
-    assert_eq(b?.leaf.doubled(), null)
+    assertEqual(b?.leaf.doubled(), null)
 }
 
 @test
 fn test_chain_last_link_may_be_nullable() {
     var b: Branch? = makeBranch()
-    assert_eq(b?.leaf.tag, "tagged")
+    assertEqual(b?.leaf.tag, "tagged")
 }
 
 @test
 fn test_explicit_link_for_nullable_member() {
     var b: Branch? = makeBranch()
-    assert_eq(b?.maybeLeaf?.value, null)
+    assertEqual(b?.maybeLeaf?.value, null)
 }
 
 @test
 fn test_optional_index_chain() {
     var rows: Array<Array<i64>>? = [[1, 2], [3, 4]]
-    assert_eq(rows?[1][0], 3)
+    assertEqual(rows?[1][0], 3)
     var missing: Array<Array<i64>>? = null
-    assert_eq(missing?[1][0], null)
+    assertEqual(missing?[1][0], null)
 }
 
 @test
 fn test_grouping_ends_the_chain() {
     var b: Branch? = makeBranch()
     var inner = (b?.leaf)
-    assert_eq(inner != null ? inner.value : 0, 21)
+    assertEqual(inner != null ? inner.value : 0, 21)
 }
 
 @test
 fn test_chain_result_feeds_coalesce() {
     var b: Branch? = null
-    assert_eq(b?.leaf.value ?? -1, -1)
+    assertEqual(b?.leaf.value ?? -1, -1)
 }

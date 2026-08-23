@@ -15,8 +15,8 @@ fn test_early_return() {
         return -1
     }
     
-    assert_eq(findPositive([-1, -2, 3, 4]), 3)
-    assert_eq(findPositive([-1, -2, -3]), -1)
+    assertEqual(findPositive([-1, -2, 3, 4]), 3)
+    assertEqual(findPositive([-1, -2, -3]), -1)
 }
 
 @test
@@ -28,8 +28,8 @@ fn test_guard_clause() {
         return a / b
     }
     
-    assert_eq(divide(10, 2), 5)
-    assert_eq(divide(10, 0), null)
+    assertEqual(divide(10, 2), 5)
+    assertEqual(divide(10, 0), null)
 }
 
 // ===== 多条件提前返回 =====
@@ -44,11 +44,11 @@ fn test_multiple_guards() {
         return "large"
     }
     
-    assert_eq(classify(-5), "negative")
-    assert_eq(classify(0), "zero")
-    assert_eq(classify(5), "small")
-    assert_eq(classify(50), "medium")
-    assert_eq(classify(500), "large")
+    assertEqual(classify(-5), "negative")
+    assertEqual(classify(0), "zero")
+    assertEqual(classify(5), "small")
+    assertEqual(classify(50), "medium")
+    assertEqual(classify(500), "large")
 }
 
 // ===== 嵌套循环提前返回 =====
@@ -67,9 +67,9 @@ fn test_nested_return() {
     }
     
     var result = findPair([1, 2, 3, 4], 5)
-    assert_eq(result != null, true)
-    assert_eq(result![0], 0)
-    assert_eq(result![1], 3)
+    assertEqual(result != null, true)
+    assertEqual(result![0], 0)
+    assertEqual(result![1], 3)
 }
 
 // ===== 递归提前返回 =====
@@ -91,8 +91,8 @@ fn test_recursive_return() {
     }
     
     var arr = [1, 3, 5, 7, 9]
-    assert_eq(binarySearch(arr, 5, 0, len(arr) - 1), 2)
-    assert_eq(binarySearch(arr, 4, 0, len(arr) - 1), -1)
+    assertEqual(binarySearch(arr, 5, 0, len(arr) - 1), 2)
+    assertEqual(binarySearch(arr, 4, 0, len(arr) - 1), -1)
 }
 
 // ===== 空返回 =====
@@ -109,8 +109,8 @@ fn test_void_return() {
     }
     
     process(false)
-    assert_eq(executed, false)
+    assertEqual(executed, false)
     
     process(true)
-    assert_eq(executed, true)
+    assertEqual(executed, true)
 }

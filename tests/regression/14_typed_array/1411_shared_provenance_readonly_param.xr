@@ -6,5 +6,5 @@ fn readFirst(view: Slice<u8>) -> i64 {
 fn test_shared_provenance_readonly_param() {
     const bytes = Array<u8>(2, 4)
     const view: Slice<u8> = bytes[:]
-    assert_eq(readFirst(view), 6)
+    assertEqual(readFirst(view), 6)
 }

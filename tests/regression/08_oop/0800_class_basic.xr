@@ -21,14 +21,14 @@ class Point {
 @test
 fn test_class_instantiation() {
     var p = Point(3, 4)
-    assert_eq(p.x, 3)
-    assert_eq(p.y, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
 }
 
 @test
 fn test_class_method() {
     var p = Point(5, 10)
-    assert_eq(p.toString(), "(5, 10)")
+    assertEqual(p.toString(), "(5, 10)")
 }
 
 // ===== 方法调用 =====
@@ -56,14 +56,14 @@ class Counter {
 @test
 fn test_method_modifies_state() {
     var c = Counter()
-    assert_eq(c.getValue(), 0)
+    assertEqual(c.getValue(), 0)
 
     c.increment()
     c.increment()
-    assert_eq(c.getValue(), 2)
+    assertEqual(c.getValue(), 2)
 
     c.decrement()
-    assert_eq(c.getValue(), 1)
+    assertEqual(c.getValue(), 1)
 }
 
 // ===== 多个实例 =====
@@ -77,8 +77,8 @@ fn test_multiple_instances() {
     c1.increment()
     c2.increment()
 
-    assert_eq(c1.getValue(), 2)
-    assert_eq(c2.getValue(), 1)
+    assertEqual(c1.getValue(), 2)
+    assertEqual(c2.getValue(), 1)
 }
 
 // ===== 方法返回 this =====
@@ -104,7 +104,7 @@ class Builder {
 fn test_method_chaining() {
     var b = Builder()
     var result = b.append("hello").append(" ").append("world").build()
-    assert_eq(result, "hello world")
+    assertEqual(result, "hello world")
 }
 
 // ===== 默认值 =====
@@ -122,8 +122,8 @@ class Config {
 @test
 fn test_default_values() {
     var cfg = Config()
-    assert_eq(cfg.name, "default")
-    assert_eq(cfg.enabled, true)
+    assertEqual(cfg.name, "default")
+    assertEqual(cfg.enabled, true)
 }
 
 // ===== 字段访问 =====
@@ -141,8 +141,8 @@ class Person {
 @test
 fn test_field_read() {
     var p = Person("Alice", 30)
-    assert_eq(p.name, "Alice")
-    assert_eq(p.age, 30)
+    assertEqual(p.name, "Alice")
+    assertEqual(p.age, 30)
 }
 
 @test
@@ -150,8 +150,8 @@ fn test_field_write() {
     var p = Person("Alice", 30)
     p.name = "Bob"
     p.age = 25
-    assert_eq(p.name, "Bob")
-    assert_eq(p.age, 25)
+    assertEqual(p.name, "Bob")
+    assertEqual(p.age, 25)
 }
 
 // ===== 多参数方法 =====
@@ -169,7 +169,7 @@ class Calculator {
 @test
 fn test_multi_param_methods() {
     var calc = Calculator()
-    assert_eq(calc.add(3, 5), 8)
-    assert_eq(calc.multiply(2, 3, 4), 24)
+    assertEqual(calc.add(3, 5), 8)
+    assertEqual(calc.multiply(2, 3, 4), 24)
 }
 

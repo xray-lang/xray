@@ -10,5 +10,5 @@ struct U32x4 {
 @test
 fn test_user_simd_names_are_not_intrinsics() {
     var result = U32x4{value: 2}.bitXor(U32x4{value: 3})
-    assert_eq(result, 5)
+    assertEqual(result, 5)
 }

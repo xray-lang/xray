@@ -12,8 +12,8 @@ fn test_while_count_up() {
         sum += i
         i++
     }
-    assert_eq(sum, 10)  // 0+1+2+3+4
-    assert_eq(i, 5)
+    assertEqual(sum, 10)  // 0+1+2+3+4
+    assertEqual(i, 5)
 }
 
 @test
@@ -24,8 +24,8 @@ fn test_while_count_down() {
         sum += i
         i--
     }
-    assert_eq(sum, 15)  // 5+4+3+2+1
-    assert_eq(i, 0)
+    assertEqual(sum, 15)  // 5+4+3+2+1
+    assertEqual(i, 0)
 }
 
 // ===== 边界条件 =====
@@ -36,7 +36,7 @@ fn test_while_never_run() {
     while (false) {
         count++
     }
-    assert_eq(count, 0)
+    assertEqual(count, 0)
 }
 
 @test
@@ -47,7 +47,7 @@ fn test_while_once() {
         count++
         i++
     }
-    assert_eq(count, 1)
+    assertEqual(count, 1)
 }
 
 @test
@@ -56,7 +56,7 @@ fn test_while_condition_becomes_false() {
     while (i < 0) {
         i++  // 永远不会执行
     }
-    assert_eq(i, 10)
+    assertEqual(i, 10)
 }
 
 // ===== break =====
@@ -70,7 +70,7 @@ fn test_while_break() {
         }
         i++
     }
-    assert_eq(i, 5)
+    assertEqual(i, 5)
 }
 
 @test
@@ -84,7 +84,7 @@ fn test_while_break_early() {
             break
         }
     }
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 }
 
 // ===== continue =====
@@ -100,7 +100,7 @@ fn test_while_continue() {
         }
         sum += i
     }
-    assert_eq(sum, 25)  // 1+3+5+7+9
+    assertEqual(sum, 25)  // 1+3+5+7+9
 }
 
 @test
@@ -117,7 +117,7 @@ fn test_while_continue_and_break() {
         }
         result.push(i)
     }
-    assert_eq(len(result), 4)  // [1,3,5,7]
+    assertEqual(len(result), 4)  // [1,3,5,7]
 }
 
 // ===== 嵌套 while =====
@@ -134,7 +134,7 @@ fn test_while_nested() {
         }
         i++
     }
-    assert_eq(total, 9)
+    assertEqual(total, 9)
 }
 
 @test
@@ -152,7 +152,7 @@ fn test_while_nested_break() {
         }
         i++
     }
-    assert_eq(count, 9)  // 3 * 3
+    assertEqual(count, 9)  // 3 * 3
 }
 
 // ===== 复杂条件 =====
@@ -167,7 +167,7 @@ fn test_while_and_condition() {
         j--
         count++
     }
-    assert_eq(count, 5)
+    assertEqual(count, 5)
 }
 
 @test
@@ -178,7 +178,7 @@ fn test_while_or_condition() {
         i++
         count++
     }
-    assert_eq(count, 5)
+    assertEqual(count, 5)
 }
 
 // ===== 实际应用 =====
@@ -196,8 +196,8 @@ fn test_while_find() {
         }
         i++
     }
-    assert_eq(found, true)
-    assert_eq(i, 3)
+    assertEqual(found, true)
+    assertEqual(i, 3)
 }
 
 @test
@@ -209,6 +209,6 @@ fn test_while_accumulate() {
         sum += arr[i]
         i++
     }
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 }
 

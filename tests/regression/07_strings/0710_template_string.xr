@@ -10,14 +10,14 @@ import text
 fn test_basic_interpolation() {
     var name = "World"
     var s = "Hello, ${name}!"
-    assert_eq(s, "Hello, World!")
+    assertEqual(s, "Hello, World!")
 }
 
 @test
 fn test_number_interpolation() {
     var x = 42
     var s = "The answer is ${x}"
-    assert_eq(s, "The answer is 42")
+    assertEqual(s, "The answer is 42")
 }
 
 // ===== 表达式插值 =====
@@ -27,14 +27,14 @@ fn test_expression_interpolation() {
     var a = 10
     var b = 20
     var s = "Sum: ${a + b}"
-    assert_eq(s, "Sum: 30")
+    assertEqual(s, "Sum: 30")
 }
 
 @test
 fn test_method_call_interpolation() {
     var name = "alice"
     var s = "Hello, ${text.upper(name)}!"
-    assert_eq(s, "Hello, ALICE!")
+    assertEqual(s, "Hello, ALICE!")
 }
 
 // ===== 多变量插值 =====
@@ -45,7 +45,7 @@ fn test_multi_variable() {
     var last = "Doe"
     var age = 30
     var s = "${first} ${last}, age ${age}"
-    assert_eq(s, "John Doe, age 30")
+    assertEqual(s, "John Doe, age 30")
 }
 
 // ===== 嵌套引号 =====
@@ -54,41 +54,41 @@ fn test_multi_variable() {
 fn test_nested_quotes() {
     var name = "test"
     var s = "He said \"Hello, ${name}\""
-    assert_eq(s.contains("Hello"), true)
+    assertEqual(s.contains("Hello"), true)
 }
 
 @test
 fn test_same_quote_in_interpolation() {
     var s = "${"x"}"
-    assert_eq(s, "x")
+    assertEqual(s, "x")
 }
 
 @test
 fn test_same_quote_with_inner_brace() {
     var s = "value=${"a}b"}"
-    assert_eq(s, "value=a}b")
+    assertEqual(s, "value=a}b")
 }
 
 @test
 fn test_same_quote_map_index() {
     var m = #{"k": "value"}
     var s = "${m["k"]}"
-    assert_eq(s, "value")
+    assertEqual(s, "value")
 }
 
 @test
 fn test_nested_template_in_interpolation() {
     var name = "Ada"
     var s = "outer ${"inner ${name}"}"
-    assert_eq(s, "outer inner Ada")
+    assertEqual(s, "outer inner Ada")
 }
 
 @test
 fn test_single_quote_literal_in_interpolation() {
     var close = "${'}'}"
     var quote = "${'"'}"
-    assert_eq(close, "}")
-    assert_eq(quote, "\"")
+    assertEqual(close, "}")
+    assertEqual(quote, "\"")
 }
 
 // ===== 空插值 =====
@@ -96,13 +96,13 @@ fn test_single_quote_literal_in_interpolation() {
 @test
 fn test_empty_template() {
     var s = ""
-    assert_eq(s, "")
+    assertEqual(s, "")
 }
 
 @test
 fn test_no_interpolation() {
     var s = "plain text"
-    assert_eq(s, "plain text")
+    assertEqual(s, "plain text")
 }
 
 // ===== 布尔和 null 插值 =====
@@ -111,14 +111,14 @@ fn test_no_interpolation() {
 fn test_bool_interpolation() {
     var flag = true
     var s = "Flag is ${flag}"
-    assert_eq(s, "Flag is true")
+    assertEqual(s, "Flag is true")
 }
 
 @test
 fn test_null_interpolation() {
     var x = null
     var s = "Value is ${x}"
-    assert_eq(s, "Value is null")
+    assertEqual(s, "Value is null")
 }
 
 // ===== 多行模板 =====
@@ -130,5 +130,5 @@ fn test_multiline() {
 Hello,
 ${name}!
 """
-    assert_eq(s.contains("Alice"), true)
+    assertEqual(s.contains("Alice"), true)
 }

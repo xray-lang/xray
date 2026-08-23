@@ -7,13 +7,13 @@ import text
 @test
 fn test_large_int() {
     var big = 1000000000
-    assert_eq(big, 1000000000)
+    assertEqual(big, 1000000000)
 }
 
 @test
 fn test_negative_large_int() {
     var neg = -999999999
-    assert_eq(neg, -999999999)
+    assertEqual(neg, -999999999)
 }
 
 @test
@@ -21,97 +21,97 @@ fn test_int_overflow_behavior() {
     var a = 2147483647
     // max 32-bit
     var b = a + 1
-    assert_eq(b > a, true)
+    assertEqual(b > a, true)
 }
 
 // ===== 浮点特殊值 =====
 @test
 fn test_small_float() {
     var small = 0.0001
-    assert_eq(small > 0, true)
-    assert_eq(small < 1, true)
+    assertEqual(small > 0, true)
+    assertEqual(small < 1, true)
 }
 
 @test
 fn test_negative_float() {
     var neg = -0.5
-    assert_eq(neg < 0, true)
+    assertEqual(neg < 0, true)
 }
 
 @test
 fn test_float_precision() {
     var a = 0.1 + 0.2
     // 浮点精度问题：0.1 + 0.2 != 0.3
-    assert_eq(a > 0.29, true)
-    assert_eq(a < 0.31, true)
+    assertEqual(a > 0.29, true)
+    assertEqual(a < 0.31, true)
 }
 
 // ===== 空值处理 =====
 @test
 fn test_null_comparison() {
     var x = null
-    assert_eq(x == null, true)
-    assert_eq(x != null, false)
+    assertEqual(x == null, true)
+    assertEqual(x != null, false)
 }
 
 @test
 fn test_null_in_array() {
     var arr = [1, null, 3]
-    assert_eq(arr[1], null)
-    assert_eq(len(arr), 3)
+    assertEqual(arr[1], null)
+    assertEqual(len(arr), 3)
 }
 
 @test
 fn test_null_in_map() {
     var m = #{"key": null}
-    assert_eq(m.get("key"), null)
-    assert_eq(m.containsKey("key"), true)
+    assertEqual(m.get("key"), null)
+    assertEqual(m.containsKey("key"), true)
 }
 
 // ===== 空字符串 =====
 @test
 fn test_empty_string() {
     var s = ""
-    assert_eq(len(s), 0)
-    assert_eq(s == "", true)
+    assertEqual(len(s), 0)
+    assertEqual(s == "", true)
 }
 
 @test
 fn test_whitespace_string() {
     var s = "   "
-    assert_eq(len(s), 3)
-    assert_eq(text.trim(s), "")
+    assertEqual(len(s), 3)
+    assertEqual(text.trim(s), "")
 }
 
 // ===== 空集合 =====
 @test
 fn test_empty_array() {
     var arr: Array<i64> = []
-    assert_eq(len(arr), 0)
+    assertEqual(len(arr), 0)
 }
 
 @test
 fn test_empty_map() {
     var m: Map<string, i64> = #{}
-    assert_eq(len(m), 0)
+    assertEqual(len(m), 0)
 }
 
 @test
 fn test_empty_set() {
     var s: Set<i64> = #[]
-    assert_eq(len(s), 0)
+    assertEqual(len(s), 0)
 }
 
 // ===== 零值 =====
 @test
 fn test_zero_int() {
     var x = 0
-    assert_eq(x == 0, true)
-    assert_eq(!(x != 0), true)
+    assertEqual(x == 0, true)
+    assertEqual(!(x != 0), true)
 }
 
 @test
 fn test_zero_float() {
     var x = 0
-    assert_eq(x == 0, true)
+    assertEqual(x == 0, true)
 }

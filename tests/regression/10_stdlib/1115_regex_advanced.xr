@@ -16,48 +16,48 @@ import regex
 fn test_lazy_plus() {
     var re = regex.compile("a+?")
     var result = regex.find(re, "aaa")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "a")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "a")
 }
 
 @test
 fn test_lazy_star() {
     var re = regex.compile("a*?")
     var result = regex.find(re, "aaa")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "")
 }
 
 @test
 fn test_lazy_question() {
     var re = regex.compile("a??")
     var result = regex.find(re, "a")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "")
 }
 
 @test
 fn test_lazy_repeat() {
     var re = regex.compile("a{2,}?")
     var result = regex.find(re, "aaaa")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "aa")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "aa")
 }
 
 @test
 fn test_greedy_plus() {
     var re = regex.compile("a+")
     var result = regex.find(re, "aaa")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "aaa")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "aaa")
 }
 
 @test
 fn test_greedy_star() {
     var re = regex.compile("a*")
     var result = regex.find(re, "aaa")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "aaa")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "aaa")
 }
 
 // ========================================
@@ -68,23 +68,23 @@ fn test_greedy_star() {
 fn test_ignorecase_inline() {
     var re = regex.compile("(?i)hello")
     var result = regex.find(re, "HELLO World")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "HELLO")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "HELLO")
 }
 
 @test
 fn test_ignorecase_flag() {
     var re = regex.compile("hello", "i")
     var result = regex.find(re, "HeLLo")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "HeLLo")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "HeLLo")
 }
 
 @test
 fn test_case_sensitive() {
     var re = regex.compile("hello")
     var result = regex.find(re, "HELLO")
-    assert_eq(result, null)
+    assertEqual(result, null)
 }
 
 // ========================================
@@ -95,16 +95,16 @@ fn test_case_sensitive() {
 fn test_multiline_caret() {
     var re = regex.compile("(?m)^world")
     var result = regex.find(re, "hello\nworld")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "world")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "world")
 }
 
 @test
 fn test_multiline_dollar() {
     var re = regex.compile("(?m)hello$")
     var result = regex.find(re, "hello\nworld")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "hello")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "hello")
 }
 
 // ========================================
@@ -115,15 +115,15 @@ fn test_multiline_dollar() {
 fn test_dotall() {
     var re = regex.compile("(?s)a.b")
     var result = regex.find(re, "a\nb")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "a\nb")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "a\nb")
 }
 
 @test
 fn test_dot_no_newline() {
     var re = regex.compile("a.b")
     var result = regex.find(re, "a\nb")
-    assert_eq(result, null)
+    assertEqual(result, null)
 }
 
 // ========================================
@@ -135,6 +135,6 @@ fn test_combined_flags() {
     // (?im) 忽略大小写 + 多行
     var re = regex.compile("(?im)^hello")
     var result = regex.find(re, "world\nHELLO")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "HELLO")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "HELLO")
 }

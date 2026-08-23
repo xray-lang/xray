@@ -20,9 +20,9 @@ fn test_protocol_detection() {
 
 @test
 fn test_default_ports() {
-    assert_eq(getDefaultPort("https://example.com"), 443)
-    assert_eq(getDefaultPort("http://example.com"), 80)
-    assert_eq(getDefaultPort("ftp://example.com"), -1)
+    assertEqual(getDefaultPort("https://example.com"), 443)
+    assertEqual(getDefaultPort("http://example.com"), 80)
+    assertEqual(getDefaultPort("ftp://example.com"), -1)
 }
 
 print("All https tests passed")

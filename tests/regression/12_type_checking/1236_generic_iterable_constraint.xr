@@ -69,39 +69,39 @@ fn sizeOf<T: Lengthable>(x: T) -> i64 {
 // ===== Iterable<int>: built-in containers =====
 @test
 fn test_iterate_array_through_type_param() {
-    assert_eq(total([1, 2, 3]), 6)
+    assertEqual(total([1, 2, 3]), 6)
 }
 
 @test
 fn test_iterate_set_through_type_param() {
     var s: Set<i64> = #[1, 2, 3]
-    assert_eq(total(s), 6)
+    assertEqual(total(s), 6)
 }
 
 // ===== Iterable<int>: prelude Range =====
 @test
 fn test_iterate_range_literal_through_type_param() {
-    assert_eq(total(1..5), 10)  // 1+2+3+4, end exclusive
+    assertEqual(total(1..5), 10)  // 1+2+3+4, end exclusive
 }
 
 @test
 fn test_iterate_range_value_through_type_param() {
     var r = 2..6
-    assert_eq(count(r), 4)
-    assert_eq(total(r), 14)  // 2+3+4+5
+    assertEqual(count(r), 4)
+    assertEqual(total(r), 14)  // 2+3+4+5
 }
 
 // ===== Iterable<string>: string-keyed domains =====
 @test
 fn test_iterate_map_keys_through_type_param() {
     var m: Map<string, i64> = #{"aa": 1, "bbb": 2}
-    assert_eq(keyLengths(m), 5)
+    assertEqual(keyLengths(m), 5)
 }
 
 @test
 fn test_iterate_json_fields_through_type_param() {
     var j: JSON.Object = JSON.parseObject("{\"a\":1,\"bb\":2,\"ccc\":3}")
-    assert_eq(keyLengths(j), 6)
+    assertEqual(keyLengths(j), 6)
 }
 
 // ===== Key-value iteration =====
@@ -116,7 +116,7 @@ fn sumValues<T: Iterable<string>>(xs: T) -> i64 {
 @test
 fn test_keyvalue_iteration_through_type_param() {
     var m: Map<string, i64> = #{"x": 4, "y": 5}
-    assert_eq(sumValues(m), 9)
+    assertEqual(sumValues(m), 9)
 }
 
 // ===== Element type is enforced, not erased =====
@@ -129,7 +129,7 @@ fn firstPlusOne<T: Iterable<i64>>(xs: T) -> i64 {
 
 @test
 fn test_constraint_element_type_flows_into_body() {
-    assert_eq(firstPlusOne([41, 0]), 42)
+    assertEqual(firstPlusOne([41, 0]), 42)
 }
 
 // ===== Lengthable =====
@@ -138,18 +138,18 @@ fn test_lengthable_builtin_domains() {
     var m: Map<string, i64> = #{"x": 1, "y": 2}
     var s: Set<i64> = #[1, 2, 3]
     var j: JSON.Object = JSON.parseObject("{\"a\":1}")
-    assert_eq(sizeOf([1, 2, 3]), 3)
-    assert_eq(sizeOf("hey"), 3)
-    assert_eq(sizeOf(m), 2)
-    assert_eq(sizeOf(s), 3)
-    assert_eq(sizeOf(j), 1)
+    assertEqual(sizeOf([1, 2, 3]), 3)
+    assertEqual(sizeOf("hey"), 3)
+    assertEqual(sizeOf(m), 2)
+    assertEqual(sizeOf(s), 3)
+    assertEqual(sizeOf(j), 1)
 }
 
 @test
 fn test_lengthable_range() {
-    assert_eq(sizeOf(1..4), 3)
+    assertEqual(sizeOf(1..4), 3)
     var r = 0..10
-    assert_eq(sizeOf(r), 10)
+    assertEqual(sizeOf(r), 10)
 }
 
 // ===== Intersection constraint =====
@@ -163,14 +163,14 @@ fn sumPlusSize<T: Iterable<i64> & Lengthable>(xs: T) -> i64 {
 
 @test
 fn test_iterable_and_lengthable_intersection() {
-    assert_eq(sumPlusSize([1, 2, 3]), 9)  // 3 + 6
-    assert_eq(sumPlusSize(1..4), 9)       // 3 + (1+2+3)
+    assertEqual(sumPlusSize([1, 2, 3]), 9)  // 3 + 6
+    assertEqual(sumPlusSize(1..4), 9)       // 3 + (1+2+3)
 }
 
 // ===== Explicit type arguments =====
 @test
 fn test_explicit_type_argument() {
-    assert_eq(total<Array<i64>>([2, 3]), 5)
+    assertEqual(total<Array<i64>>([2, 3]), 5)
 }
 
 // ===== Iterator<T>: what a generator returns is its own iterable =====
@@ -184,8 +184,8 @@ fn upTo(limit: i64) -> Iterator<i64> {
 
 @test
 fn test_generator_iterator_through_type_param() {
-    assert_eq(total(upTo(4)), 10)  // 1+2+3+4
-    assert_eq(count(upTo(3)), 3)
+    assertEqual(total(upTo(4)), 10)  // 1+2+3+4
+    assertEqual(count(upTo(3)), 3)
 }
 
 // ===== Nested generic: no monomorphization, runtime iterator() protocol =====
@@ -199,8 +199,8 @@ fn test_nested_generic_uses_runtime_protocol() {
         return n
     }
     var s: Set<i64> = #[4, 5]
-    assert_eq(nestedTotal([1, 2, 3]), 6)
-    assert_eq(nestedTotal(s), 9)
+    assertEqual(nestedTotal([1, 2, 3]), 6)
+    assertEqual(nestedTotal(s), 9)
 }
 
 // ===== Generic class carrying the constraint =====
@@ -223,9 +223,9 @@ class Bag<T: Iterable<i64>> {
 @test
 fn test_generic_class_constraint() {
     var fromArray = Bag([1, 2, 3])
-    assert_eq(fromArray.total(), 6)
+    assertEqual(fromArray.total(), 6)
     var fromRange = Bag(1..5)
-    assert_eq(fromRange.total(), 10)
+    assertEqual(fromRange.total(), 10)
 }
 
 // ===== Class upper bound with a custom iterator() =====
@@ -273,7 +273,7 @@ fn totalSteps<T: Steps>(xs: T) -> i64 {
 
 @test
 fn test_class_bound_with_custom_iterator() {
-    assert_eq(totalSteps(Steps(1, 5)), 10)
+    assertEqual(totalSteps(Steps(1, 5)), 10)
 }
 
 print("All generic Iterable/Lengthable constraint tests passed!")

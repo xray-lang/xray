@@ -32,7 +32,7 @@ fn test_single_producer_consumer() {
     var result = await cons
     print("消费总和:", result)
     // 0+1+2+...+19 = 190
-    assert_eq(result, 190)
+    assertEqual(result, 190)
     print("✓ 单生产者-消费者测试通过")
 }
 
@@ -63,7 +63,7 @@ fn test_multi_producer() {
     await p3
     var result = await cons
     print("多生产者接收数:", result)
-    assert_eq(result, 30)
+    assertEqual(result, 30)
     print("✓ 多生产者测试通过")
 }
 
@@ -96,7 +96,7 @@ fn test_multi_consumer() {
     var r3 = await c3
     var total = r1 + r2 + r3
     print("多消费者总接收:", total)
-    assert_eq(total, 30)
+    assertEqual(total, 30)
     print("✓ 多消费者测试通过")
 }
 

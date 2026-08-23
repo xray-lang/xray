@@ -29,9 +29,9 @@ fn asBool(value: TomlValue) -> bool {
 fn test_parse_basic() {
     var data = "name = \"Alice\"\nage = 30\nactive = true"
     var obj = toml.parse(data)
-    assert_eq(asString(field(obj, "name")), "Alice")
-    assert_eq(asInt(field(obj, "age")), 30)
-    assert_eq(asBool(field(obj, "active")), true)
+    assertEqual(asString(field(obj, "name")), "Alice")
+    assertEqual(asInt(field(obj, "age")), 30)
+    assertEqual(asBool(field(obj, "active")), true)
 }
 
 // ===== Table (section) =====
@@ -41,8 +41,8 @@ fn test_parse_table() {
     var data = "[server]\nhost = \"localhost\"\nport = 8080"
     var obj = toml.parse(data)
     var server = field(obj, "server")
-    assert_eq(asString(field(server, "host")), "localhost")
-    assert_eq(asInt(field(server, "port")), 8080)
+    assertEqual(asString(field(server, "host")), "localhost")
+    assertEqual(asInt(field(server, "port")), 8080)
 }
 
 // ===== Array =====
@@ -52,8 +52,8 @@ fn test_parse_array() {
     var data = "ports = [80, 443, 8080]"
     var obj = toml.parse(data)
     var ports = field(obj, "ports")
-    assert_eq(asInt(item(ports, 0)), 80)
-    assert_eq(asInt(item(ports, 2)), 8080)
+    assertEqual(asInt(item(ports, 0)), 80)
+    assertEqual(asInt(item(ports, 2)), 8080)
 }
 
 // ===== Inline table =====
@@ -62,7 +62,7 @@ fn test_parse_array() {
 fn test_parse_inline_table() {
     var data = "point = { x = 10, y = 20 }"
     var obj = toml.parse(data)
-    assert_eq(asInt(field(field(obj, "point"), "x")), 10)
+    assertEqual(asInt(field(field(obj, "point"), "x")), 10)
 }
 
 // ===== Number formats =====
@@ -71,9 +71,9 @@ fn test_parse_inline_table() {
 fn test_parse_number_formats() {
     var data = "hex = 0xDEADBEEF\noct = 0o755\nbin = 0b11010110"
     var obj = toml.parse(data)
-    assert_eq(asInt(field(obj, "hex")), 3735928559)
-    assert_eq(asInt(field(obj, "oct")), 493)
-    assert_eq(asInt(field(obj, "bin")), 214)
+    assertEqual(asInt(field(obj, "hex")), 3735928559)
+    assertEqual(asInt(field(obj, "oct")), 493)
+    assertEqual(asInt(field(obj, "bin")), 214)
 }
 
 // ===== Stringify =====
@@ -94,6 +94,6 @@ fn test_parse_nested_table() {
     var data = "[database]\n[database.primary]\nhost = \"db1\"\n[database.replica]\nhost = \"db2\""
     var obj = toml.parse(data)
     var database = field(obj, "database")
-    assert_eq(asString(field(field(database, "primary"), "host")), "db1")
-    assert_eq(asString(field(field(database, "replica"), "host")), "db2")
+    assertEqual(asString(field(field(database, "primary"), "host")), "db1")
+    assertEqual(asString(field(field(database, "replica"), "host")), "db2")
 }

@@ -51,6 +51,6 @@ fn test_method_dispatch_through_deep_chain() {
     // L9 overrides tag(), L10..L12 inherit it through the deep chain.
     var a = L7()
     var b = L12()
-    assert_eq(a.tag(), "L0")
-    assert_eq(b.tag(), "L9")
+    assertEqual(a.tag(), "L0")
+    assertEqual(b.tag(), "L9")
 }

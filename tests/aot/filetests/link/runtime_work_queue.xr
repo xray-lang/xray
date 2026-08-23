@@ -1,11 +1,11 @@
 import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sync
 const queue: WorkQueue<i64> = WorkQueue<i64>(4, 2)
 
-assert_true(queue.push(1, 0))
+assert(queue.push(1, 0))
 var (value, ok) = queue.tryPop(0)
 print(ok)
 print(value)
-assert_eq(queue.pushRange(10, 3, 0), 3)
+assertEqual(queue.pushRange(10, 3, 0), 3)
 var (a, a_ok) = queue.tryPop(0)
 var (b, b_ok) = queue.tryPop(1)
 var (c, c_ok) = queue.tryPop(2)

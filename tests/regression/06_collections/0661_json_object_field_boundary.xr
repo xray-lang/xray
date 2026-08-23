@@ -12,9 +12,9 @@ fn update(state: ref State, value: i64) {
 fn test_static_object_hot_updates() {
     var state: State = { count: 0, last: null, flag: false }
     for (i in 0..100) { update(ref state, i) }
-    assert_eq(state.count, 100)
-    assert_eq(state.last, 99)
-    assert_eq(state.flag, false)
+    assertEqual(state.count, 100)
+    assertEqual(state.last, 99)
+    assertEqual(state.flag, false)
 }
 
 @test
@@ -25,5 +25,5 @@ fn test_dynamic_json_path_chain() {
     }
     var sum = 0
     for (i in 0..10) { sum += JSON.require<i64>(root, ["nodes", string(i), "value"]) }
-    assert_eq(sum, 285)
+    assertEqual(sum, 285)
 }

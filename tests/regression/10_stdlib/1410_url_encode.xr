@@ -11,49 +11,49 @@ import url
 fn test_encode_no_change() {
     // 字母数字不需要编码
     var encoded = url.encode("hello")
-    assert_eq(encoded, "hello")
+    assertEqual(encoded, "hello")
 }
 
 @test
 fn test_encode_space() {
     // 空格编码为 %20
     var encoded = url.encode("hello world")
-    assert_eq(encoded, "hello%20world")
+    assertEqual(encoded, "hello%20world")
 }
 
 @test
 fn test_encode_special_chars() {
     // 特殊字符编码
     var encoded = url.encode("a=1&b=2")
-    assert_eq(encoded, "a%3D1%26b%3D2")
+    assertEqual(encoded, "a%3D1%26b%3D2")
 }
 
 @test
 fn test_encode_chinese() {
     // 中文字符编码
     var encoded = url.encode("你好")
-    assert_eq(encoded, "%E4%BD%A0%E5%A5%BD")
+    assertEqual(encoded, "%E4%BD%A0%E5%A5%BD")
 }
 
 @test
 fn test_encode_mixed() {
     // 混合字符编码
     var encoded = url.encode("hello 世界!")
-    assert_eq(encoded, "hello%20%E4%B8%96%E7%95%8C%21")
+    assertEqual(encoded, "hello%20%E4%B8%96%E7%95%8C%21")
 }
 
 @test
 fn test_encode_reserved_chars() {
     // 保留字符不编码：- _ . ~
     var encoded = url.encode("a-b_c.d~e")
-    assert_eq(encoded, "a-b_c.d~e")
+    assertEqual(encoded, "a-b_c.d~e")
 }
 
 @test
 fn test_encode_percent() {
     // 百分号编码
     var encoded = url.encode("100%")
-    assert_eq(encoded, "100%25")
+    assertEqual(encoded, "100%25")
 }
 
 // ============================================================
@@ -64,35 +64,35 @@ fn test_encode_percent() {
 fn test_decode_no_change() {
     // 普通字符串不变
     var decoded = url.decode("hello")
-    assert_eq(decoded, "hello")
+    assertEqual(decoded, "hello")
 }
 
 @test
 fn test_decode_percent_20() {
     // %20 解码为空格
     var decoded = url.decode("hello%20world")
-    assert_eq(decoded, "hello world")
+    assertEqual(decoded, "hello world")
 }
 
 @test
 fn test_decode_plus_sign() {
     // RFC 3986 decode: '+' stays as '+' (use decodeForm for form data)
     var decoded = url.decode("hello+world")
-    assert_eq(decoded, "hello+world")
+    assertEqual(decoded, "hello+world")
 }
 
 @test
 fn test_decode_special_chars() {
     // 特殊字符解码
     var decoded = url.decode("a%3D1%26b%3D2")
-    assert_eq(decoded, "a=1&b=2")
+    assertEqual(decoded, "a=1&b=2")
 }
 
 @test
 fn test_decode_chinese() {
     // 中文字符解码
     var decoded = url.decode("%E4%BD%A0%E5%A5%BD")
-    assert_eq(decoded, "你好")
+    assertEqual(decoded, "你好")
 }
 
 @test
@@ -100,8 +100,8 @@ fn test_decode_mixed_case() {
     // 大小写十六进制都能解码
     var decoded1 = url.decode("%2f")
     var decoded2 = url.decode("%2F")
-    assert_eq(decoded1, "/")
-    assert_eq(decoded2, "/")
+    assertEqual(decoded1, "/")
+    assertEqual(decoded2, "/")
 }
 
 // ============================================================
@@ -114,7 +114,7 @@ fn test_roundtrip_simple() {
     var original = "hello world"
     var encoded = url.encode(original)
     var decoded = url.decode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }
 
 @test
@@ -123,7 +123,7 @@ fn test_roundtrip_special() {
     var original = "a=1&b=2"
     var encoded = url.encode(original)
     var decoded = url.decode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }
 
 @test
@@ -132,5 +132,5 @@ fn test_roundtrip_unicode() {
     var original = "你好世界"
     var encoded = url.encode(original)
     var decoded = url.decode(encoded)
-    assert_eq(decoded, original)
+    assertEqual(decoded, original)
 }

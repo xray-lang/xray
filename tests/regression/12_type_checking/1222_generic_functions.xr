@@ -34,34 +34,34 @@ fn double<T>(x: T) -> T {
 fn test_generic_functions() {
 
     // Test 1: Implicit type inference
-    assert_eq(identity(42), 42)
-    assert_eq(identity("hello"), "hello")
-    assert_eq(identity(true), true)
+    assertEqual(identity(42), 42)
+    assertEqual(identity("hello"), "hello")
+    assertEqual(identity(true), true)
     // Test 2: Explicit type parameter
-    assert_eq(identity<i64>(100), 100)
-    assert_eq(identity<string>("world"), "world")
-    assert_eq(identity<bool>(false), false)
+    assertEqual(identity<i64>(100), 100)
+    assertEqual(identity<string>("world"), "world")
+    assertEqual(identity<bool>(false), false)
 
     // Multiple type parameters
 
     // Test 3: Multiple type params - implicit
     var (p1a, p1b) = makePair(1, "one")
-    assert_eq(p1a, 1)
-    assert_eq(p1b, "one")
+    assertEqual(p1a, 1)
+    assertEqual(p1b, "one")
     // Test 4: Multiple type params - explicit  
     var (p2a, p2b) = makePair<string, i64>("age", 30)
-    assert_eq(p2a, "age")
-    assert_eq(p2b, 30)
+    assertEqual(p2a, "age")
+    assertEqual(p2b, 30)
 
     // Generic array functions
 
 
     // Test 5: Array functions
-    assert_eq(first([1, 2, 3]), 1)
-    assert_eq(last([1, 2, 3]), 3)
-    assert_eq(first(["a", "b", "c"]), "a")
-    assert_eq(last(["x", "y", "z"]), "z")
-    assert_eq(first([]), null)
+    assertEqual(first([1, 2, 3]), 1)
+    assertEqual(last([1, 2, 3]), 3)
+    assertEqual(first(["a", "b", "c"]), "a")
+    assertEqual(last(["x", "y", "z"]), "z")
+    assertEqual(first([]), null)
 
     // Higher-order generic functions
 
@@ -69,25 +69,25 @@ fn test_generic_functions() {
     var doubled = apply(5, fn(n) {
         return n * 2
     })
-    assert_eq(doubled, 10)
+    assertEqual(doubled, 10)
     var length = apply("hello", fn(s) {
         return len(s)
     })
-    assert_eq(length, 5)
+    assertEqual(length, 5)
 
     // Generic with array result
 
     // Test 7: Wrap
     var intArr = wrap(42)
-    assert_eq(intArr[0], 42)
-    assert_eq(len(intArr), 1)
+    assertEqual(intArr[0], 42)
+    assertEqual(len(intArr), 1)
     var strArr = wrap("test")
-    assert_eq(strArr[0], "test")
+    assertEqual(strArr[0], "test")
 
     // Nested generic calls
 
     // Test 8: Nested calls
     var result = wrap(identity(99))
-    assert_eq(result[0], 99)
+    assertEqual(result[0], 99)
 }
 

@@ -14,7 +14,7 @@ fn test_reduce_nested_findIndex() {
         return acc + idx
     }, 0)
     // row0: idx=2 (30>25), row1: idx=0 (40>25), row2: idx=0 (70>25) => 2+0+0=2
-    assert_eq(indexSum, 2)
+    assertEqual(indexSum, 2)
 }
 
 @test
@@ -24,7 +24,7 @@ fn test_findIndex_with_nested_reduce() {
     var idx = matrix.findIndex(fn(row) {
         return row.reduce(fn(a, b) { return a + b }, 0) > 20
     })
-    assert_eq(idx, 1)
+    assertEqual(idx, 1)
 }
 
 @test
@@ -34,13 +34,13 @@ fn test_findIndex_with_nested_every() {
     var idx = groups.findIndex(fn(g) {
         return g.every(fn(x) { return x % 2 == 0 })
     })
-    assert_eq(idx, 0)
+    assertEqual(idx, 0)
 
     // Find first group where all elements > 5
     var idx2 = groups.findIndex(fn(g) {
         return g.every(fn(x) { return x > 5 })
     })
-    assert_eq(idx2, 2)
+    assertEqual(idx2, 2)
 }
 
 // ===== map + reduce combination =====
@@ -57,15 +57,15 @@ fn test_map_then_reduce_nested() {
         var total = s.scores.reduce(fn(a, b) { return a + b }, 0)
         return total / len(s.scores)
     })
-    assert_eq(averages[0], 90)
-    assert_eq(averages[1], 75)
-    assert_eq(averages[2], 92)
+    assertEqual(averages[0], 90)
+    assertEqual(averages[1], 75)
+    assertEqual(averages[2], 92)
 
     var maxAvg = averages.reduce(fn(a, b) {
         if (a > b) { return a }
         return b
     }, 0)
-    assert_eq(maxAvg, 92)
+    assertEqual(maxAvg, 92)
 }
 
 // ===== filter + map + reduce pipeline =====
@@ -84,7 +84,7 @@ fn test_filter_map_reduce_pipeline() {
     }).map(fn(d) -> i64 {
         return d.values.reduce(fn(a, b) -> i64 { return a + b }, 0)
     }).reduce(fn(a, b) -> i64 { return a + b }, 0)
-    assert_eq(totalA, 15)
+    assertEqual(totalA, 15)
 }
 
 // ===== Nested map producing nested arrays =====
@@ -96,10 +96,10 @@ fn test_nested_map_with_filter() {
         return row.filter(fn(x) { return x % 2 == 0 }).map(fn(x) { return x * x })
     })
     // row0: [4, 16], row1: [36, 64], row2: [100, 144]
-    assert_eq(result[0][0], 4)
-    assert_eq(result[0][1], 16)
-    assert_eq(result[1][0], 36)
-    assert_eq(result[2][1], 144)
+    assertEqual(result[0][0], 4)
+    assertEqual(result[0][1], 16)
+    assertEqual(result[1][0], 36)
+    assertEqual(result[2][1], 144)
 }
 
 // ===== forEach nested with side effects =====
@@ -113,10 +113,10 @@ fn test_nested_forEach_with_accumulation() {
             products.push(x * x)
         })
     })
-    assert_eq(len(products), 6)
-    assert_eq(products[0], 1)
-    assert_eq(products[3], 16)
-    assert_eq(products[5], 36)
+    assertEqual(len(products), 6)
+    assertEqual(products[0], 1)
+    assertEqual(products[3], 16)
+    assertEqual(products[5], 36)
 }
 
 // ===== some/every nested =====
@@ -128,7 +128,7 @@ fn test_some_with_nested_some() {
     var result = matrix.some(fn(row) {
         return row.some(fn(x) { return x % 4 == 0 })
     })
-    assert_eq(result, true)
+    assertEqual(result, true)
 }
 
 @test
@@ -139,7 +139,7 @@ fn test_every_with_nested_filter() {
         return len(g.filter(fn(x) { return x > 5 })) >= 2
     })
     // group0 filter: [6] => length=1 => false
-    assert_eq(result, false)
+    assertEqual(result, false)
 }
 
 // ===== reduce building complex structure =====
@@ -164,10 +164,10 @@ fn test_reduce_build_nested_map() {
         items!.push(e.item)
         return next
     }, seed)
-    assert_eq(len(grouped.get("fruit")!), 2)
-    assert_eq(len(grouped.get("veg")!), 2)
-    assert_eq(grouped.get("fruit")![0], "apple")
-    assert_eq(grouped.get("veg")![1], "pea")
+    assertEqual(len(grouped.get("fruit")!), 2)
+    assertEqual(len(grouped.get("veg")!), 2)
+    assertEqual(grouped.get("fruit")![0], "apple")
+    assertEqual(grouped.get("veg")![1], "pea")
 }
 
 // ===== Chain with closure capturing loop variable =====
@@ -181,9 +181,9 @@ fn test_higher_order_with_for_loop() {
         results.push(sum)
     }
     // i=0: 1+2+3=6, i=1: 2+3+4=9, i=2: 3+4+5=12
-    assert_eq(results[0], 6)
-    assert_eq(results[1], 9)
-    assert_eq(results[2], 12)
+    assertEqual(results[0], 6)
+    assertEqual(results[1], 9)
+    assertEqual(results[2], 12)
 }
 
 // ===== map + findIndex + reduce cross-combination =====
@@ -199,13 +199,13 @@ fn test_map_findIndex_reduce_combo() {
             return b
         }, 0)
     })
-    assert_eq(maxValues[0], 5)
-    assert_eq(maxValues[1], 8)
-    assert_eq(maxValues[2], 9)
+    assertEqual(maxValues[0], 5)
+    assertEqual(maxValues[1], 8)
+    assertEqual(maxValues[2], 9)
 
     // findIndex on reduce results — tests any-type value comparison
     var idx = maxValues.findIndex(fn(v) { return v > 8 })
-    assert_eq(idx, 2)
+    assertEqual(idx, 2)
 }
 
 // ===== findIndex with inline reduce in callback =====
@@ -221,7 +221,7 @@ fn test_findIndex_inline_reduce() {
         }, 0)
         return mx > 8
     })
-    assert_eq(idx, 2)
+    assertEqual(idx, 2)
 }
 
 // ===== Deep nesting: 4 levels of higher-order =====
@@ -236,7 +236,7 @@ fn test_four_level_nesting() {
             }, 0)
         }, 0)
     }, 0)
-    assert_eq(flat_sum, 36)
+    assertEqual(flat_sum, 36)
 }
 
 // ===== map(reduce) + findIndex chain (call_status bug regression) =====
@@ -248,11 +248,11 @@ fn test_map_reduce_findIndex_chain() {
         return r.reduce(fn(a, b) { return a + b }, 0)
     })
     // sums = [12, 3, 60]
-    assert_eq(sums[0], 12)
-    assert_eq(sums[1], 3)
-    assert_eq(sums[2], 60)
+    assertEqual(sums[0], 12)
+    assertEqual(sums[1], 3)
+    assertEqual(sums[2], 60)
     var idx = sums.findIndex(fn(s) { return s > 50 })
-    assert_eq(idx, 2)
+    assertEqual(idx, 2)
 }
 
 // ===== map + filter + findIndex + every cross combination =====
@@ -269,9 +269,9 @@ fn test_multi_method_chain() {
     // row0 evens: [2,4] -> every>5 = false
     // row1 evens: [10,20,30] -> every>5 = true
     // row2 evens: [8] -> every>5 = true
-    assert_eq(results[0], false)
-    assert_eq(results[1], true)
-    assert_eq(results[2], true)
+    assertEqual(results[0], false)
+    assertEqual(results[1], true)
+    assertEqual(results[2], true)
 }
 
 // ===== Nested some with map =====
@@ -285,7 +285,7 @@ fn test_nested_some_with_map() {
         return doubled.some(fn(x) { return x > 15 })
     })
     // row2 doubled: [14,16,18] -> 16>15 = true
-    assert_eq(found, true)
+    assertEqual(found, true)
 }
 
 // ===== reduce building array of arrays =====
@@ -305,11 +305,11 @@ fn test_reduce_builds_grouped_arrays() {
         }
         return next
     }, [seed])
-    assert_eq(len(chunks), 3)
-    assert_eq(len(chunks[0]), 3)
-    assert_eq(chunks[0][0], 1)
-    assert_eq(chunks[1][0], 4)
-    assert_eq(chunks[2][2], 9)
+    assertEqual(len(chunks), 3)
+    assertEqual(len(chunks[0]), 3)
+    assertEqual(chunks[0][0], 1)
+    assertEqual(chunks[1][0], 4)
+    assertEqual(chunks[2][2], 9)
 }
 
 // ===== filter + map + reduce + findIndex interleaved in loop =====
@@ -333,9 +333,9 @@ fn test_interleaved_in_loop() {
     // d0: big=[12],doubled=[24],total=24,first=1
     // d1: big=[20,15,10,25],doubled=[40,30,20,50],total=140,first=0
     // d2: big=[100],doubled=[200],total=200,first=4
-    assert_eq(summaries[0], "total=24,first=1")
-    assert_eq(summaries[1], "total=140,first=0")
-    assert_eq(summaries[2], "total=200,first=4")
+    assertEqual(summaries[0], "total=24,first=1")
+    assertEqual(summaries[1], "total=140,first=0")
+    assertEqual(summaries[2], "total=200,first=4")
 }
 
 // ===== 5-level deep nesting: map(map(filter(reduce))) =====
@@ -351,10 +351,10 @@ fn test_five_level_deep() {
         })
     })
     // plane0: [1+3=4, 5=5], plane1: [7+9=16, 11=11]
-    assert_eq(result[0][0], 4)
-    assert_eq(result[0][1], 5)
-    assert_eq(result[1][0], 16)
-    assert_eq(result[1][1], 11)
+    assertEqual(result[0][0], 4)
+    assertEqual(result[0][1], 5)
+    assertEqual(result[1][0], 16)
+    assertEqual(result[1][1], 11)
 }
 
 // ===== Stress: large array with chained operations =====
@@ -389,8 +389,8 @@ fn test_forEach_with_index_accumulator() {
         })
         rowIdx = rowIdx + 1
     })
-    assert_eq(len(indexed), 6)
-    assert_eq(indexed[0], "[0,0]=10")
-    assert_eq(indexed[3], "[1,0]=40")
-    assert_eq(indexed[5], "[1,2]=60")
+    assertEqual(len(indexed), 6)
+    assertEqual(indexed[0], "[0,0]=10")
+    assertEqual(indexed[3], "[1,0]=40")
+    assertEqual(indexed[5], "[1,2]=60")
 }

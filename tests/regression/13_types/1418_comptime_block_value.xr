@@ -53,17 +53,17 @@ const BLOCK_POINT = comptime {
 
 @test
 fn test_comptime_block_returns_scalar_value() {
-    assert_eq(BLOCK_SUM, 10)
-    assert_eq(BLOCK_TEXT, "ok")
+    assertEqual(BLOCK_SUM, 10)
+    assertEqual(BLOCK_TEXT, "ok")
 
     var local = comptime {
         var value = comptime 2
         value *= 6
         return value
     }
-    assert_eq(local, 12)
+    assertEqual(local, 12)
 
-    assert_eq(BLOCK_LOCAL, 4)
+    assertEqual(BLOCK_LOCAL, 4)
 }
 
 @test
@@ -72,13 +72,13 @@ fn test_comptime_block_returns_tuple_value() {
         var base = comptime 20
         return (base, base + 2, "runtime")
     }
-    assert_eq(runtime.0, 20)
-    assert_eq(runtime.1, 22)
-    assert_eq(runtime.2, "runtime")
+    assertEqual(runtime.0, 20)
+    assertEqual(runtime.1, 22)
+    assertEqual(runtime.2, "runtime")
 
     var picked = comptime (BLOCK_TUPLE.0 + BLOCK_TUPLE.1)
-    assert_eq(picked, 21)
-    assert_eq(BLOCK_TUPLE.2, "block")
+    assertEqual(picked, 21)
+    assertEqual(BLOCK_TUPLE.2, "block")
 }
 
 @test
@@ -88,12 +88,12 @@ fn test_comptime_block_returns_fixed_array_value() {
         const values: [i64; 3] = comptime [base, base + 1, base + 2]
         return values
     })
-    assert_eq(runtime[0], 30)
-    assert_eq(runtime[1], 31)
-    assert_eq(runtime[2], 32)
+    assertEqual(runtime[0], 30)
+    assertEqual(runtime[1], 31)
+    assertEqual(runtime[2], 32)
 
     var picked = comptime (BLOCK_TABLE[0] + BLOCK_TABLE[2])
-    assert_eq(picked, 12)
+    assertEqual(picked, 12)
 }
 
 @test
@@ -102,14 +102,14 @@ fn test_comptime_block_returns_struct_value() {
         var x = comptime 7
         return BlockPoint{x: x, y: BLOCK_SUM}
     }
-    assert_eq(point.x, 7)
-    assert_eq(point.y, 10)
+    assertEqual(point.x, 7)
+    assertEqual(point.y, 10)
 
     var nested = comptime {
         const inner = comptime BlockPoint{x: BLOCK_POINT.x, y: BLOCK_POINT.y + 1}
         return BlockBox{p: inner, tag: BLOCK_SUM + 1}
     }
-    assert_eq(nested.p.x, 3)
-    assert_eq(nested.p.y, 5)
-    assert_eq(nested.tag, 11)
+    assertEqual(nested.p.x, 3)
+    assertEqual(nested.p.y, 5)
+    assertEqual(nested.tag, 11)
 }

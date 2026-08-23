@@ -17,7 +17,7 @@ fn test_primitive_param() {
     // 协程应该使用原始值 21
     print("原值（已修改）:", value)
     print("协程结果:", result)
-    assert_eq(result, 42)
+    assertEqual(result, 42)
     // 21 * 2 = 42，不是 200
     print("✓ 基本类型参数测试通过")
 }
@@ -36,7 +36,7 @@ fn test_const_array_param() {
     var result = await task
     print("数组:", arr)
     print("协程求和结果:", result)
-    assert_eq(result, 15)
+    assertEqual(result, 15)
     // 1+2+3+4+5 = 15
     print("✓ const 数组参数测试通过")
 }
@@ -48,7 +48,7 @@ fn test_multiple_params() {
     var task = go worker(10, 20, 30)
     var result = await task
     print("多参数结果:", result)
-    assert_eq(result, 60)
+    assertEqual(result, 60)
     print("✓ 多参数测试通过")
 }
 
@@ -62,7 +62,7 @@ fn test_string_param() {
     msg = "Changed"
     var result = await task
     print("结果:", result)
-    assert_eq(result, "Hello, World!")
+    assertEqual(result, "Hello, World!")
     print("✓ 字符串参数测试通过")
 }
 

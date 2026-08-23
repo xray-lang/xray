@@ -7,17 +7,17 @@
 @test
 fn test_nullable_annotation() {
     var x: i64? = null
-    assert_eq(x, null)
+    assertEqual(x, null)
     x = 42
-    assert_eq(x, 42)
+    assertEqual(x, 42)
 }
 
 @test
 fn test_nullable_assignment() {
     var x: i64? = 10
-    assert_eq(x, 10)
+    assertEqual(x, 10)
     x = null
-    assert_eq(x, null)
+    assertEqual(x, null)
 }
 
 // ===== Null Check Narrowing =====
@@ -26,7 +26,7 @@ fn test_null_check_if() {
     var x: i64? = 42
     if (x != null) {
         var y = x + 1
-        assert_eq(y, 43)
+        assertEqual(y, 43)
     }
 }
 
@@ -39,17 +39,17 @@ fn test_null_check_else() {
     } else {
         result = x
     }
-    assert_eq(result, -1)
+    assertEqual(result, -1)
 }
 
 @test
 fn test_null_coalescing() {
     var x: i64? = null
     var y = x ?? 100
-    assert_eq(y, 100)
+    assertEqual(y, 100)
     var z: i64? = 50
     var w = z ?? 100
-    assert_eq(w, 50)
+    assertEqual(w, 50)
 }
 
 // ===== Optional Chaining =====
@@ -65,20 +65,20 @@ fn test_optional_chain_basic() {
     var p: Person? = null
     // Optional chaining should return null if p is null
     var name = p?.name
-    assert_eq(name, null)
+    assertEqual(name, null)
     p = Person("Alice")
     name = p?.name
-    assert_eq(name, "Alice")
+    assertEqual(name, "Alice")
 }
 
 @test
 fn test_optional_chain_method() {
     var arr: Array<i64>? = null
     var count = arr == null ? null : len(arr!)
-    assert_eq(count, null)
+    assertEqual(count, null)
     arr = [1, 2, 3]
     count = len(arr!)
-    assert_eq(count, 3)
+    assertEqual(count, 3)
 }
 
 // ===== Function with Nullable Parameters =====
@@ -90,8 +90,8 @@ fn test_nullable_param() {
         }
         return "Hello, " + name
     }
-    assert_eq(greet(null), "Hello, Guest")
-    assert_eq(greet("Alice"), "Hello, Alice")
+    assertEqual(greet(null), "Hello, Guest")
+    assertEqual(greet("Alice"), "Hello, Alice")
 }
 
 @test
@@ -106,9 +106,9 @@ fn test_nullable_return() {
     }
     var arr = [10, 20, 30]
     var idx = findIndex(arr, 20)
-    assert_eq(idx, 1)
+    assertEqual(idx, 1)
     idx = findIndex(arr, 99)
-    assert_eq(idx, null)
+    assertEqual(idx, null)
 }
 
 // ===== Nested Null Checks =====
@@ -131,10 +131,10 @@ fn test_nested_nullable() {
     var p = Person()
     // Nested optional chain
     var city = p.address?.city
-    assert_eq(city, null)
+    assertEqual(city, null)
     p.address = Address("Beijing")
     city = p.address?.city
-    assert_eq(city, "Beijing")
+    assertEqual(city, "Beijing")
 }
 
 // ===== Nullable Presence Narrowing =====
@@ -146,11 +146,11 @@ fn test_nullable_presence_string() {
     }
     var empty: string? = ""
     if (empty) {
-        assert_eq(len(empty), 0)
+        assertEqual(len(empty), 0)
     }
     var hello: string? = "hello"
     if (hello) {
-        assert_eq(len(hello), 5)
+        assertEqual(len(hello), 5)
     }
 }
 
@@ -162,11 +162,11 @@ fn test_nullable_presence_number() {
     }
     var zero: i64? = 0
     if (zero) {
-        assert_eq(zero + 1, 1)
+        assertEqual(zero + 1, 1)
     }
     var forty: i64? = 42
     if (forty) {
-        assert_eq(forty + 1, 43)
+        assertEqual(forty + 1, 43)
     }
 }
 
@@ -174,15 +174,15 @@ fn test_nullable_presence_number() {
 @test
 fn test_array_nullable_elements() {
     var arr = [1, null, 3]
-    assert_eq(arr[0], 1)
-    assert_eq(arr[1], null)
-    assert_eq(arr[2], 3)
+    assertEqual(arr[0], 1)
+    assertEqual(arr[1], null)
+    assertEqual(arr[2], 3)
 }
 
 @test
 fn test_map_nullable_values() {
     var m = #{"a": 1, "b": null}
-    assert_eq(m.get("a"), 1)
-    assert_eq(m.get("b"), null)
-    assert_eq(m.get("c"), null)
+    assertEqual(m.get("a"), 1)
+    assertEqual(m.get("b"), null)
+    assertEqual(m.get("c"), null)
 }

@@ -4,5 +4,5 @@
 @test
 fn test_unknown_identifier_name() {
     var unknown = 7
-    assert_eq(unknown, 7)
+    assertEqual(unknown, 7)
 }

@@ -10,7 +10,7 @@ fn byteScore(payload: Array<u8>) -> i64 {
 fn test_cross_module_generic_enum_payload_type() {
     match (makeByteArray()) {
         Result.Ok(payload) -> {
-            assert_eq(byteScore(payload), 67)
+            assertEqual(byteScore(payload), 67)
         }
         Result.Err(_)      -> {
             assert(false)
@@ -22,10 +22,10 @@ fn test_cross_module_generic_enum_payload_type() {
 fn test_cross_module_enum_static_domains() {
     var count = 0
     for (signal in Traffic) {
-        assert_eq(signal.ordinal, count)
+        assertEqual(signal.ordinal, count)
         count += 1
     }
-    assert_eq(count, 3)
-    assert_eq(Traffic.variants[1].name, "Ready")
-    assert_eq(Result<i64>.variants[0].payloads[0].type, Type.i64)
+    assertEqual(count, 3)
+    assertEqual(Traffic.variants[1].name, "Ready")
+    assertEqual(Result<i64>.variants[0].payloads[0].type, Type.i64)
 }

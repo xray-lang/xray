@@ -14,12 +14,12 @@ fn observe(values: ref Array<i64>) -> i64 {
 @test
 fn test_writable_places_accept_ref() {
     var value = 1
-    assert_eq(bump(ref value), 2)
+    assertEqual(bump(ref value), 2)
 
     var slot = 0
-    assert_eq(fill(ref slot), 7)
-    assert_eq(slot, 7)
+    assertEqual(fill(ref slot), 7)
+    assertEqual(slot, 7)
 
     var values = Array<i64>(0)
-    assert_eq(observe(ref values), 0)
+    assertEqual(observe(ref values), 0)
 }

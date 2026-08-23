@@ -43,9 +43,9 @@ fn test_nested_object_survival() {
     // Verify all nested data is intact
     for (var i = 0; i < 200; i++) {
         var c = containers[i]
-        assert_eq(c.map.idx, i)
-        assert_eq(c.arr[1], i * 2)
-        assert_eq(c.name, "container_" + string(i))
+        assertEqual(c.map.idx, i)
+        assertEqual(c.arr[1], i * 2)
+        assertEqual(c.name, "container_" + string(i))
     }
 }
 
@@ -68,8 +68,8 @@ fn test_alloc_interleaved_phases() {
 
     // Verify both phases intact
     for (var i = 0; i < 100; i++) {
-        assert_eq(phase1[i].id, i)
-        assert_eq(phase2[i].id, i + 100)
+        assertEqual(phase1[i].id, i)
+        assertEqual(phase2[i].id, i + 100)
     }
 }
 
@@ -89,7 +89,7 @@ fn test_deep_reference_chain() {
     // Walk the chain and verify
     current = head
     for (var count = 0; count < 50; count++) {
-        assert_eq(current.value, count)
+        assertEqual(current.value, count)
         if (count < 49) {
             current = current.next!
         }
@@ -117,7 +117,7 @@ fn test_high_churn_with_live_roots() {
 
     // Live roots must survive all the churn
     for (var i = 0; i < 50; i++) {
-        assert_eq(live[i], "persistent_" + string(i))
+        assertEqual(live[i], "persistent_" + string(i))
     }
 }
 
@@ -130,8 +130,8 @@ fn test_repeated_alloc_rounds() {
             data.push({ cycle: cycle, idx: i })
         }
         // Verify last batch
-        assert_eq(data[99].cycle, cycle)
-        assert_eq(data[99].idx, 99)
+        assertEqual(data[99].cycle, cycle)
+        assertEqual(data[99].idx, 99)
     }
 }
 

@@ -51,9 +51,9 @@ fn test_net_udp_apis() {
 fn test_lookup_consistent() {
     var a1 = net.lookup("localhost")
     var a2 = net.lookup("localhost")
-    assert_eq(len(a1), len(a2))
+    assertEqual(len(a1), len(a2))
     if (len(a1) > 0) {
-        assert_eq(a1[0].toString(), a2[0].toString())
+        assertEqual(a1[0].toString(), a2[0].toString())
     }
 }
 
@@ -63,7 +63,7 @@ fn test_lookup_type() {
     var addrs = net.lookup("localhost")
     for (var i = 0; i < len(addrs); i++) {
         assert(len(addrs[i].value) > 0)
-        assert_eq(addrs[i].value, addrs[i].toString())
+        assertEqual(addrs[i].value, addrs[i].toString())
     }
 }
 

@@ -17,18 +17,18 @@ fn regex_dynamic_match_text(pattern: string, text: string, expected: string) -> 
 @test
 fn test_jit_regex_find_null_and_index_get() {
     for (var i = 0; i < 260; i++) {
-        assert_eq(regex_dynamic_match_ok("(?s)a.b", "a\nb"), true)
-        assert_eq(regex_dynamic_match_ok("hello", "hello"), true)
-        assert_eq(regex_dynamic_match_text("\\P{Han}+", "你好World", "World"), true)
+        assertEqual(regex_dynamic_match_ok("(?s)a.b", "a\nb"), true)
+        assertEqual(regex_dynamic_match_ok("hello", "hello"), true)
+        assertEqual(regex_dynamic_match_text("\\P{Han}+", "你好World", "World"), true)
     }
 
     var ignorecase = regex.compile("hello", "i")
-    assert_eq(regex.find(ignorecase, "HeLLo") != null, true)
-    assert_eq(regex_dynamic_match_ok("hello", "HELLO"), false)
+    assertEqual(regex.find(ignorecase, "HeLLo") != null, true)
+    assertEqual(regex_dynamic_match_ok("hello", "HELLO"), false)
 
     var dotall = regex.compile("(?s)a.b")
-    assert_eq(regex.find(dotall, "a\nb") != null, true)
-    assert_eq(regex_dynamic_match_ok("a.b", "a\nb"), false)
+    assertEqual(regex.find(dotall, "a\nb") != null, true)
+    assertEqual(regex_dynamic_match_ok("a.b", "a\nb"), false)
 
-    assert_eq(regex_dynamic_match_ok("a", ""), false)
+    assertEqual(regex_dynamic_match_ok("a", ""), false)
 }

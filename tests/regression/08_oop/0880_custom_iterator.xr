@@ -44,7 +44,7 @@ fn test_basic_range_iterator() {
     for (i in CustomRange(1, 6)) {
         sum = sum + i
     }
-    assert_eq(sum, 15)  // 1+2+3+4+5
+    assertEqual(sum, 15)  // 1+2+3+4+5
 }
 
 @test
@@ -53,7 +53,7 @@ fn test_empty_range() {
     for (i in CustomRange(5, 5)) {
         count = count + 1
     }
-    assert_eq(count, 0)
+    assertEqual(count, 0)
 }
 
 @test
@@ -62,7 +62,7 @@ fn test_single_element_range() {
     for (i in CustomRange(42, 43)) {
         result = i
     }
-    assert_eq(result, 42)
+    assertEqual(result, 42)
 }
 
 // ===== 步长迭代器 =====
@@ -115,12 +115,12 @@ fn test_step_range_forward() {
     for (i in StepRange(0, 10, 2)) {
         values.push(i)
     }
-    assert_eq(len(values), 5)
-    assert_eq(values[0], 0)
-    assert_eq(values[1], 2)
-    assert_eq(values[2], 4)
-    assert_eq(values[3], 6)
-    assert_eq(values[4], 8)
+    assertEqual(len(values), 5)
+    assertEqual(values[0], 0)
+    assertEqual(values[1], 2)
+    assertEqual(values[2], 4)
+    assertEqual(values[3], 6)
+    assertEqual(values[4], 8)
 }
 
 @test
@@ -129,12 +129,12 @@ fn test_step_range_backward() {
     for (i in StepRange(10, 0, -2)) {
         values.push(i)
     }
-    assert_eq(len(values), 5)
-    assert_eq(values[0], 10)
-    assert_eq(values[1], 8)
-    assert_eq(values[2], 6)
-    assert_eq(values[3], 4)
-    assert_eq(values[4], 2)
+    assertEqual(len(values), 5)
+    assertEqual(values[0], 10)
+    assertEqual(values[1], 8)
+    assertEqual(values[2], 6)
+    assertEqual(values[3], 4)
+    assertEqual(values[4], 2)
 }
 
 // ===== 斐波那契迭代器 =====
@@ -184,15 +184,15 @@ fn test_fibonacci_iterator() {
     for (n in Fibonacci(8)) {
         values.push(n)
     }
-    assert_eq(len(values), 8)
-    assert_eq(values[0], 0)
-    assert_eq(values[1], 1)
-    assert_eq(values[2], 1)
-    assert_eq(values[3], 2)
-    assert_eq(values[4], 3)
-    assert_eq(values[5], 5)
-    assert_eq(values[6], 8)
-    assert_eq(values[7], 13)
+    assertEqual(len(values), 8)
+    assertEqual(values[0], 0)
+    assertEqual(values[1], 1)
+    assertEqual(values[2], 1)
+    assertEqual(values[3], 2)
+    assertEqual(values[4], 3)
+    assertEqual(values[5], 5)
+    assertEqual(values[6], 8)
+    assertEqual(values[7], 13)
 }
 
 // ===== 字符串字符迭代器 =====
@@ -235,12 +235,12 @@ fn test_char_iterator() {
     for (ch in Chars("hello")) {
         chars.push(ch)
     }
-    assert_eq(len(chars), 5)
-    assert_eq(chars[0], "h")
-    assert_eq(chars[1], "e")
-    assert_eq(chars[2], "l")
-    assert_eq(chars[3], "l")
-    assert_eq(chars[4], "o")
+    assertEqual(len(chars), 5)
+    assertEqual(chars[0], "h")
+    assertEqual(chars[1], "e")
+    assertEqual(chars[2], "l")
+    assertEqual(chars[3], "l")
+    assertEqual(chars[4], "o")
 }
 
 // ===== 嵌套迭代 =====
@@ -253,10 +253,10 @@ fn test_nested_iteration() {
             pairs.push("${i},${j}")
         }
     }
-    assert_eq(len(pairs), 9)
-    assert_eq(pairs[0], "1,1")
-    assert_eq(pairs[4], "2,2")
-    assert_eq(pairs[8], "3,3")
+    assertEqual(len(pairs), 9)
+    assertEqual(pairs[0], "1,1")
+    assertEqual(pairs[4], "2,2")
+    assertEqual(pairs[8], "3,3")
 }
 
 // ===== 迭代器与 break/continue =====
@@ -270,7 +270,7 @@ fn test_iterator_with_break() {
         }
         sum = sum + i
     }
-    assert_eq(sum, 15)  // 1+2+3+4+5
+    assertEqual(sum, 15)  // 1+2+3+4+5
 }
 
 @test
@@ -282,7 +282,7 @@ fn test_iterator_with_continue() {
         }
         sum = sum + i
     }
-    assert_eq(sum, 25)  // 1+3+5+7+9
+    assertEqual(sum, 25)  // 1+3+5+7+9
 }
 
 // ===== 迭代器变量作为表达式 =====
@@ -293,7 +293,7 @@ fn test_iterator_inline() {
     for (i in CustomRange(1, 6)) {
         sum = sum + i * i
     }
-    assert_eq(sum, 55)  // 1+4+9+16+25
+    assertEqual(sum, 55)  // 1+4+9+16+25
 }
 
 // ===== 迭代器与变量存储 =====
@@ -305,5 +305,5 @@ fn test_iterator_stored_in_variable() {
     for (i in r) {
         sum = sum + i
     }
-    assert_eq(sum, 6)  // 1+2+3
+    assertEqual(sum, 6)  // 1+2+3
 }

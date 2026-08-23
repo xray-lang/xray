@@ -13,8 +13,8 @@ fn test_select_after() {
         after 30 -> { print("timeout") }
     }
     var elapsed = time.monotonic() - start
-    assert_true(elapsed >= 20)
-    assert_true(elapsed < 500)
+    assert(elapsed >= 20)
+    assert(elapsed < 500)
     
     // 当有数据时，不执行 after
     ch.trySend(42)

@@ -120,10 +120,10 @@ fn assert_binary_response(framing: string) {
     })
 
     assert(resp.isSuccess())
-    assert_eq(len(resp.body), 3)
-    assert_eq(resp.body[0], 0xff)
-    assert_eq(resp.body[1], 0x00)
-    assert_eq(resp.body[2], 0x7f)
+    assertEqual(len(resp.body), 3)
+    assertEqual(resp.body[0], 0xff)
+    assertEqual(resp.body[1], 0x00)
+    assertEqual(resp.body[2], 0x7f)
 }
 
 @test
@@ -138,11 +138,11 @@ fn test_request_options_object() {
         body: "{\"key\": \"value\"}".copyBytes(),
         timeoutMs: 5000
     }
-    assert_eq(options.url, "http://127.0.0.1:19998/test")
-    assert_eq(options.method!.token, "POST")
-    assert_eq(options.headers!.get("Content-Type")!, "application/json")
-    assert_eq(string.fromUtf8(options.body![:])!, "{\"key\": \"value\"}")
-    assert_eq(options.timeoutMs!, 5000)
+    assertEqual(options.url, "http://127.0.0.1:19998/test")
+    assertEqual(options.method!.token, "POST")
+    assertEqual(options.headers!.get("Content-Type")!, "application/json")
+    assertEqual(string.fromUtf8(options.body![:])!, "{\"key\": \"value\"}")
+    assertEqual(options.timeoutMs!, 5000)
 }
 
 @test
@@ -190,7 +190,7 @@ fn test_request_preserves_custom_method_token() {
 
     var line = recv_line(lines)
     assert(resp.isSuccess())
-    assert_eq(line, "PROPFIND /custom HTTP/1.1")
+    assertEqual(line, "PROPFIND /custom HTTP/1.1")
 }
 
 @test
@@ -226,8 +226,8 @@ fn test_request_ignores_no_body_status_payload() {
     })
 
     assert(resp.isSuccess())
-    assert_eq(resp.status, 204)
-    assert_eq(len(resp.body), 0)
+    assertEqual(resp.status, 204)
+    assertEqual(len(resp.body), 0)
 }
 
 @test

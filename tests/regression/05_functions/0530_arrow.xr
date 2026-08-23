@@ -7,19 +7,19 @@
 @test
 fn test_arrow_basic() {
     var add = (a: i64, b: i64) -> a + b
-    assert_eq(add(3, 5), 8)
+    assertEqual(add(3, 5), 8)
 }
 
 @test
 fn test_arrow_single_param() {
     var double = (x: i64) -> x * 2
-    assert_eq(double(5), 10)
+    assertEqual(double(5), 10)
 }
 
 @test
 fn test_arrow_no_params() {
     var getHello = () -> "hello"
-    assert_eq(getHello(), "hello")
+    assertEqual(getHello(), "hello")
 }
 
 // ===== 带块的箭头函数 =====
@@ -30,7 +30,7 @@ fn test_arrow_block() {
         if (n <= 1) { return 1 }
         return n * factorial(n - 1)
     }
-    assert_eq(factorial(5), 120)
+    assertEqual(factorial(5), 120)
 }
 
 @test
@@ -40,7 +40,7 @@ fn test_arrow_block_multiple_statements() {
         var b = a + 10
         return b
     }
-    assert_eq(process(5), 20)
+    assertEqual(process(5), 20)
 }
 
 // ===== 作为回调 =====
@@ -50,8 +50,8 @@ fn test_arrow_map() {
     var arr = [1, 2, 3, 4, 5]
     var doubled = arr.map((x) -> x * 2)
     
-    assert_eq(doubled[0], 2)
-    assert_eq(doubled[4], 10)
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[4], 10)
 }
 
 @test
@@ -59,16 +59,16 @@ fn test_arrow_filter() {
     var arr = [1, 2, 3, 4, 5, 6]
     var evens = arr.filter((x) -> x % 2 == 0)
     
-    assert_eq(len(evens), 3)
-    assert_eq(evens[0], 2)
-    assert_eq(evens[2], 6)
+    assertEqual(len(evens), 3)
+    assertEqual(evens[0], 2)
+    assertEqual(evens[2], 6)
 }
 
 @test
 fn test_arrow_reduce() {
     var arr = [1, 2, 3, 4, 5]
     var sum = arr.reduce((acc, x) -> acc + x, 0)
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 }
 
 // ===== 链式调用 =====
@@ -81,7 +81,7 @@ fn test_arrow_chained() {
         .map((x) -> x * 2)            // [2, 6, 10]
         .reduce((a, b) -> a + b, 0)   // 18
     
-    assert_eq(result, 18)
+    assertEqual(result, 18)
 }
 
 // ===== 闭包捕获 =====
@@ -91,8 +91,8 @@ fn test_arrow_closure() {
     var multiplier = 3
     var times = (x: i64) -> x * multiplier
     
-    assert_eq(times(5), 15)
-    assert_eq(times(10), 30)
+    assertEqual(times(5), 15)
+    assertEqual(times(10), 30)
 }
 
 @test
@@ -104,8 +104,8 @@ fn test_arrow_capture_param() {
     var double = makeMultiplier(2)
     var triple = makeMultiplier(3)
     
-    assert_eq(double(5), 10)
-    assert_eq(triple(5), 15)
+    assertEqual(double(5), 10)
+    assertEqual(triple(5), 15)
 }
 
 // ===== 返回箭头函数 =====
@@ -117,15 +117,15 @@ fn test_arrow_return_arrow() {
     var add5 = copy(makeAdder(5))
     var add10 = copy(makeAdder(10))
     
-    assert_eq(add5(3), 8)
-    assert_eq(add10(3), 13)
+    assertEqual(add5(3), 8)
+    assertEqual(add10(3), 13)
 }
 
 @test
 fn test_arrow_curried() {
     var add = (a: i64) -> (b: i64) -> (c: i64) -> a + b + c
     
-    assert_eq(add(1)(2)(3), 6)
+    assertEqual(add(1)(2)(3), 6)
 }
 
 // ===== forEach =====
@@ -137,7 +137,7 @@ fn test_arrow_foreach() {
     arr.forEach((x) -> {
         sum += x
     })
-    assert_eq(sum, 6)
+    assertEqual(sum, 6)
 }
 
 // ===== 边界条件 =====
@@ -145,7 +145,7 @@ fn test_arrow_foreach() {
 @test
 fn test_arrow_immediate_call() {
     var result = ((x: i64) -> x * 2)(5)
-    assert_eq(result, 10)
+    assertEqual(result, 10)
 }
 
 @test
@@ -155,5 +155,5 @@ fn test_arrow_as_method_arg() {
     }
     
     var result = apply((x) -> x * 3, 5)
-    assert_eq(result, 15)
+    assertEqual(result, 15)
 }

@@ -5,11 +5,11 @@ fn test_json_object_for_in() {
     var obj: JSON.Object = JSON.parseObject("{\"a\":1,\"b\":2,\"c\":3}")
     var keys = ""
     for (key in obj) { keys += key }
-    assert_eq(keys, "abc")
+    assertEqual(keys, "abc")
 
     var total = 0
     for (_, value in obj) { total += (value as i64) }
-    assert_eq(total, 6)
+    assertEqual(total, 6)
 }
 
 @test
@@ -17,5 +17,5 @@ fn test_empty_json_object_for_in() {
     var obj: JSON.Object = JSON.parseObject("{}")
     var count = 0
     for (_ in obj) { count++ }
-    assert_eq(count, 0)
+    assertEqual(count, 0)
 }

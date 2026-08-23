@@ -2,12 +2,12 @@
 
 @test
 fn test_primitive_roundtrip() {
-    assert_eq(JSON.parseValue(JSON.stringify(42)), 42)
-    assert_eq(JSON.parseValue(JSON.stringify(3.14)), 3.14)
-    assert_eq(JSON.parseValue(JSON.stringify(true)), true)
+    assertEqual(JSON.require<i64>(JSON.parseValue(JSON.stringify(42)), []), 42)
+    assertEqual(JSON.require<f64>(JSON.parseValue(JSON.stringify(3.14)), []), 3.14)
+    assertEqual(JSON.require<bool>(JSON.parseValue(JSON.stringify(true)), []), true)
     var nothing: JSON.Value = null
     assert(JSON.isNull(JSON.parseValue(JSON.stringify(nothing))))
-    assert_eq(JSON.parseValue(JSON.stringify("hello")), "hello")
+    assertEqual(JSON.require<string>(JSON.parseValue(JSON.stringify("hello")), []), "hello")
 }
 
 @test
@@ -20,10 +20,10 @@ fn test_nested_roundtrip() {
         metadata: { version: 1, valid: true },
     }
     var parsed = JSON.parseValue(JSON.stringify(original))
-    assert_eq(JSON.require<string>(parsed, ["users", 0, "name"]), "Alice")
-    assert_eq(JSON.require<i64>(parsed, ["users", 1, "scores", 2]), 92)
-    assert_eq(JSON.require<i64>(parsed, ["metadata", "version"]), 1)
-    assert_eq(JSON.require<bool>(parsed, ["metadata", "valid"]), true)
+    assertEqual(JSON.require<string>(parsed, ["users", 0, "name"]), "Alice")
+    assertEqual(JSON.require<i64>(parsed, ["users", 1, "scores", 2]), 92)
+    assertEqual(JSON.require<i64>(parsed, ["metadata", "version"]), 1)
+    assertEqual(JSON.require<bool>(parsed, ["metadata", "valid"]), true)
 }
 
 @test
@@ -31,5 +31,5 @@ fn test_parsed_value_stability() {
     var source = "{\"a\":1,\"items\":[true,null,\"x\"]}"
     var once = JSON.parseValue(source)
     var twice = JSON.parseValue(JSON.stringify(once))
-    assert_eq(twice, once)
+    assertEqual(twice, once)
 }

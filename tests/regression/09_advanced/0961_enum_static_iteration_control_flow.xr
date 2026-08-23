@@ -34,7 +34,7 @@ fn test_enum_value_loop_break_and_continue() {
         }
         trace += color.name + ":"
     }
-    assert_eq(trace, "Red:Blue:")
+    assertEqual(trace, "Red:Blue:")
 }
 
 @test
@@ -51,19 +51,19 @@ fn test_enum_descriptor_labeled_control_flow() {
             trace += string(variant.ordinal) + string(i)
         }
     }
-    assert_eq(trace, "0001")
-    assert_eq(firstPayloadVariantOrdinal(), 1)
+    assertEqual(trace, "0001")
+    assertEqual(firstPayloadVariantOrdinal(), 1)
 }
 
 @test
 fn test_enum_descriptor_checked_indexing() {
-    assert_throws(fn() {
+    assertPanics(fn() {
         var value = Event.variants[-1]
     })
-    assert_throws(fn() {
+    assertPanics(fn() {
         var value = Event.variants[3]
     })
-    assert_throws(fn() {
+    assertPanics(fn() {
         var value = Event.variants[1].payloads[1]
     })
 }
@@ -78,10 +78,10 @@ fn test_enum_descriptor_closure_capture_keeps_iteration_value() {
         }
         readers.push(readOrdinal)
     }
-    assert_eq(len(readers), 3)
-    assert_eq(readers[0](), 0)
-    assert_eq(readers[1](), 1)
-    assert_eq(readers[2](), 2)
+    assertEqual(len(readers), 3)
+    assertEqual(readers[0](), 0)
+    assertEqual(readers[1](), 1)
+    assertEqual(readers[2](), 2)
 }
 
 @test

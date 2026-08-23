@@ -15,5 +15,5 @@ fn benchmark_server_lifecycle() {
     }
     net.close(conn)
     net.close(listener)
-    assert_eq(completed, 64)
+    assertEqual(completed, 64)
 }

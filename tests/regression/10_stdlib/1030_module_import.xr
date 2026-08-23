@@ -9,27 +9,27 @@ import time
 @test
 fn test_time_now() {
     var t = time.now()
-    assert_eq(t > 0, true)
+    assertEqual(t > 0, true)
 }
 
 @test
 fn test_time_clock() {
     var c = time.clock()
-    assert_eq(c >= 0, true)
+    assertEqual(c >= 0, true)
 }
 
 @test
 fn test_time_milliseconds() {
     // time.now() returns milliseconds since epoch
     var ms = time.now()
-    assert_eq(ms > 0, true)
+    assertEqual(ms > 0, true)
 }
 
 @test
 fn test_time_monotonic() {
     var m1 = time.monotonic()
     var m2 = time.monotonic()
-    assert_eq(m2 >= m1, true)
+    assertEqual(m2 >= m1, true)
 }
 
 // ===== 模块属性访问 =====
@@ -38,6 +38,6 @@ fn test_time_monotonic() {
 fn test_module_method_call() {
     var t1 = time.now()
     var t2 = time.now()
-    assert_eq(t2 >= t1, true)
+    assertEqual(t2 >= t1, true)
 }
 

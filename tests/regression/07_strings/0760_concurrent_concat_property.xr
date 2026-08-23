@@ -38,7 +38,7 @@ fn test_property_concurrent_concat_short() {
     // 验证每个结果独立且正确
     for (var i = 0; i < n; i++) {
         var expected = "prefix_" + string(i) + "_suffix"
-        assert_eq(results[i], expected)
+        assertEqual(results[i], expected)
     }
 }
 
@@ -67,9 +67,9 @@ fn test_property_concurrent_concat_long() {
     // 验证每个结果独立且正确
     for (var i = 0; i < n; i++) {
         var result = results[i]
-        assert_eq(result.startsWith("x".repeat(40)), true)
-        assert_eq(result.contains("_id" + string(i) + "_"), true)
-        assert_eq(result.endsWith("y".repeat(40)), true)
+        assertEqual(result.startsWith("x".repeat(40)), true)
+        assertEqual(result.contains("_id" + string(i) + "_"), true)
+        assertEqual(result.endsWith("y".repeat(40)), true)
     }
 }
 
@@ -100,9 +100,9 @@ fn test_property_concurrent_concat_mixed() {
     // 验证每个结果独立且正确
     for (var i = 0; i < n; i++) {
         if (i % 2 == 0) {
-            assert_eq(results[i], "short_" + string(i) + "_end")
+            assertEqual(results[i], "short_" + string(i) + "_end")
         } else {
-            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+            assertEqual(results[i].contains("_long_" + string(i) + "_"), true)
         }
     }
 }
@@ -138,11 +138,11 @@ fn test_property_concurrent_concat_isolation() {
         var result = results[i]
 
         // 验证前缀
-        assert_eq(result.startsWith(glyph.repeat(30)), true)
+        assertEqual(result.startsWith(glyph.repeat(30)), true)
         // 验证后缀
-        assert_eq(result.endsWith(glyph.repeat(30)), true)
+        assertEqual(result.endsWith(glyph.repeat(30)), true)
         // 验证中间包含 id
-        assert_eq(result.contains("_" + string(i) + "_"), true)
+        assertEqual(result.contains("_" + string(i) + "_"), true)
     }
 }
 
@@ -174,7 +174,7 @@ fn test_property_concurrent_concat_threshold_boundary() {
     for (var i = 0; i < n; i++) {
         var actual_len = results[i][0]
         var expected_len = results[i][1]
-        assert_eq(actual_len, expected_len)
+        assertEqual(actual_len, expected_len)
     }
 }
 
@@ -206,6 +206,6 @@ fn test_property_concurrent_concat_correctness() {
     
     // 验证并发结果与串行结果一致
     for (var i = 0; i < 30; i++) {
-        assert_eq(results[i], expected[i])
+        assertEqual(results[i], expected[i])
     }
 }

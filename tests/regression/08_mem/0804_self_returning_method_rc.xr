@@ -16,10 +16,10 @@ fn build_reversed() -> Array<i64> {
 @test
 fn test_reverse_escapes_receiver_death() {
     var r = build_reversed()
-    assert_eq(len(r), 3)
-    assert_eq(r[0], 3)
-    assert_eq(r[1], 2)
-    assert_eq(r[2], 1)
+    assertEqual(len(r), 3)
+    assertEqual(r[0], 3)
+    assertEqual(r[1], 2)
+    assertEqual(r[2], 1)
 }
 
 fn build_sorted() -> Array<i64> {
@@ -30,9 +30,9 @@ fn build_sorted() -> Array<i64> {
 @test
 fn test_sort_escapes_receiver_death() {
     var r = build_sorted()
-    assert_eq(len(r), 3)
-    assert_eq(r[0], 1)
-    assert_eq(r[2], 3)
+    assertEqual(len(r), 3)
+    assertEqual(r[0], 1)
+    assertEqual(r[2], 3)
 }
 
 fn build_filled() -> Array<i64> {
@@ -43,9 +43,9 @@ fn build_filled() -> Array<i64> {
 @test
 fn test_fill_escapes_receiver_death() {
     var r = build_filled()
-    assert_eq(len(r), 3)
-    assert_eq(r[0], 7)
-    assert_eq(r[2], 7)
+    assertEqual(len(r), 3)
+    assertEqual(r[0], 7)
+    assertEqual(r[2], 7)
 }
 
 fn build_reserved() -> Array<i64> {
@@ -56,9 +56,9 @@ fn build_reserved() -> Array<i64> {
 @test
 fn test_reserve_escapes_receiver_death() {
     var r = build_reserved()
-    assert_eq(len(r), 2)
-    assert_eq(r[0], 4)
-    assert_eq(r[1], 5)
+    assertEqual(len(r), 2)
+    assertEqual(r[0], 4)
+    assertEqual(r[1], 5)
 }
 
 fn build_resized() -> Array<i64> {
@@ -69,9 +69,9 @@ fn build_resized() -> Array<i64> {
 @test
 fn test_resize_escapes_receiver_death() {
     var r = build_resized()
-    assert_eq(len(r), 4)
-    assert_eq(r[0], 4)
-    assert_eq(r[3], 9)
+    assertEqual(len(r), 4)
+    assertEqual(r[0], 4)
+    assertEqual(r[3], 9)
 }
 
 fn build_appended() -> StringBuilder {
@@ -81,7 +81,7 @@ fn build_appended() -> StringBuilder {
 
 @test
 fn test_stringbuilder_append_escapes_receiver_death() {
-    assert_eq(build_appended().toString(), "xy")
+    assertEqual(build_appended().toString(), "xy")
 }
 
 fn build_cleared() -> StringBuilder {
@@ -92,7 +92,7 @@ fn build_cleared() -> StringBuilder {
 
 @test
 fn test_stringbuilder_clear_escapes_receiver_death() {
-    assert_eq(build_cleared().toString(), "")
+    assertEqual(build_cleared().toString(), "")
 }
 
 // ===== escaping through an optional-chain merge =====
@@ -103,15 +103,15 @@ fn test_stringbuilder_clear_escapes_receiver_death() {
 fn test_optional_chain_merge() {
     var a: Array<i64>? = [1, 2, 3]
     var r = a?.reverse()
-    assert_eq(len(r!), 3)
-    assert_eq(r![0], 3)
+    assertEqual(len(r!), 3)
+    assert(r![0] == 3)
 }
 
 @test
 fn test_optional_chain_null_receiver() {
     var a: Array<i64>? = null
     var r: Array<i64>? = a?.reverse()
-    assert_eq(r == null, true)
+    assertEqual(r == null, true)
 }
 
 // ===== chained self-returns =====
@@ -125,9 +125,9 @@ fn build_chained() -> Array<i64> {
 @test
 fn test_chained_self_returns() {
     var r = build_chained()
-    assert_eq(len(r), 3)
-    assert_eq(r[0], 3)
-    assert_eq(r[2], 1)
+    assertEqual(len(r), 3)
+    assertEqual(r[0], 3)
+    assertEqual(r[2], 1)
 }
 
 // ===== the result is still usable alongside the receiver =====
@@ -139,8 +139,8 @@ fn test_alias_shares_storage_with_receiver() {
     var a = [1, 2, 3]
     var r = a.reverse()
     a.push(4)
-    assert_eq(len(r), 4)
-    assert_eq(r[3], 4)
+    assertEqual(len(r), 4)
+    assertEqual(r[3], 4)
 }
 
 // ===== loop-carried: one alias per iteration, no leak, no early free =====
@@ -155,7 +155,7 @@ fn test_self_return_in_loop() {
         total = total + r[0]
         i = i + 1
     }
-    assert_eq(total, 60)
+    assertEqual(total, 60)
 }
 
 // ===== Set algebra returns a fresh set, never the receiver =====
@@ -170,6 +170,6 @@ fn test_set_union_result_is_independent() {
     other.add(2)
     var u = s.union(other)
     s.add(3)
-    assert_eq(len(u), 2)
-    assert_eq(u.contains(3), false)
+    assertEqual(len(u), 2)
+    assertEqual(u.contains(3), false)
 }

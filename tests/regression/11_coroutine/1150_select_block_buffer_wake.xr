@@ -25,6 +25,6 @@ fn test_select_wakes_after_buffer_refill() {
     }
 
     await task
-    assert_eq(received, 50)
-    assert_eq(sum, 1225)
+    assertEqual(received, 50)
+    assertEqual(sum, 1225)
 }

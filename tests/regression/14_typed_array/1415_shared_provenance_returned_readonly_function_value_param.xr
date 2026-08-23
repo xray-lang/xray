@@ -11,5 +11,5 @@ fn test_shared_provenance_returned_readonly_function_value_param() {
     const bytes = Array<u8>(2, 5)
     const view: Slice<u8> = bytes[:]
     const f = choose()
-    assert_eq(f(view), 7)
+    assertEqual(f(view), 7)
 }

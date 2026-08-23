@@ -6,60 +6,60 @@
 
 @test
 fn test_and_basic() {
-    assert_eq(0b1100 & 0b1010, 0b1000)
-    assert_eq(0xFF & 0x0F, 0x0F)
-    assert_eq(12 & 10, 8)
+    assertEqual(0b1100 & 0b1010, 0b1000)
+    assertEqual(0xFF & 0x0F, 0x0F)
+    assertEqual(12 & 10, 8)
 }
 
 @test
 fn test_and_zero() {
-    assert_eq(0xFF & 0, 0)
-    assert_eq(0 & 0xFF, 0)
+    assertEqual(0xFF & 0, 0)
+    assertEqual(0 & 0xFF, 0)
 }
 
 @test
 fn test_and_all_ones() {
-    assert_eq(0xFF & 0xFF, 0xFF)
+    assertEqual(0xFF & 0xFF, 0xFF)
 }
 
 // ===== OR (|) =====
 
 @test
 fn test_or_basic() {
-    assert_eq(0b1100 | 0b1010, 0b1110)
-    assert_eq(0xF0 | 0x0F, 0xFF)
-    assert_eq(12 | 10, 14)
+    assertEqual(0b1100 | 0b1010, 0b1110)
+    assertEqual(0xF0 | 0x0F, 0xFF)
+    assertEqual(12 | 10, 14)
 }
 
 @test
 fn test_or_zero() {
-    assert_eq(0xFF | 0, 0xFF)
-    assert_eq(0 | 0xFF, 0xFF)
+    assertEqual(0xFF | 0, 0xFF)
+    assertEqual(0 | 0xFF, 0xFF)
 }
 
 @test
 fn test_or_same() {
-    assert_eq(0xFF | 0xFF, 0xFF)
+    assertEqual(0xFF | 0xFF, 0xFF)
 }
 
 // ===== XOR (^) =====
 
 @test
 fn test_xor_basic() {
-    assert_eq(0b1100 ^ 0b1010, 0b0110)
-    assert_eq(0xFF ^ 0x0F, 0xF0)
-    assert_eq(12 ^ 10, 6)
+    assertEqual(0b1100 ^ 0b1010, 0b0110)
+    assertEqual(0xFF ^ 0x0F, 0xF0)
+    assertEqual(12 ^ 10, 6)
 }
 
 @test
 fn test_xor_zero() {
-    assert_eq(0xFF ^ 0, 0xFF)
-    assert_eq(0 ^ 0xFF, 0xFF)
+    assertEqual(0xFF ^ 0, 0xFF)
+    assertEqual(0 ^ 0xFF, 0xFF)
 }
 
 @test
 fn test_xor_same() {
-    assert_eq(0xFF ^ 0xFF, 0)  // 自身异或为 0
+    assertEqual(0xFF ^ 0xFF, 0)  // 自身异或为 0
 }
 
 @test
@@ -69,23 +69,23 @@ fn test_xor_swap() {
     a = a ^ b
     b = a ^ b
     a = a ^ b
-    assert_eq(a, 3)
-    assert_eq(b, 5)
+    assertEqual(a, 3)
+    assertEqual(b, 5)
 }
 
 // ===== NOT (~) =====
 
 @test
 fn test_not_basic() {
-    assert_eq(~0, -1)
-    assert_eq(~(-1), 0)
+    assertEqual(~0, -1)
+    assertEqual(~(-1), 0)
 }
 
 @test
 fn test_not_byte() {
     // ~0xFF 在 64 位上是很大的负数
     var x = ~0xFF
-    assert_eq(x < 0, true)
+    assertEqual(x < 0, true)
 }
 
 // ===== 移位运算 =====
@@ -95,7 +95,7 @@ fn test_shl_basic() {
     var x = 1
     var shift = 3
     var result = x << shift
-    assert_eq(result, 8)
+    assertEqual(result, 8)
 }
 
 @test
@@ -103,7 +103,7 @@ fn test_shr_basic() {
     var x = 16
     var shift = 2
     var result = x >> shift
-    assert_eq(result, 4)
+    assertEqual(result, 4)
 }
 
 // ===== 实际应用 =====
@@ -111,31 +111,31 @@ fn test_shr_basic() {
 @test
 fn test_check_bit() {
     var flags = 0b1010
-    assert_eq((flags & 0b0010) != 0, true)   // 第 1 位设置
-    assert_eq((flags & 0b0001) != 0, false)  // 第 0 位未设置
+    assertEqual((flags & 0b0010) != 0, true)   // 第 1 位设置
+    assertEqual((flags & 0b0001) != 0, false)  // 第 0 位未设置
 }
 
 @test
 fn test_set_bit() {
     var flags = 0b0000
     flags = flags | 0b0100  // 设置第 2 位
-    assert_eq(flags, 0b0100)
+    assertEqual(flags, 0b0100)
 }
 
 @test
 fn test_clear_bit() {
     var flags = 0b1111
     flags = flags & ~0b0100  // 清除第 2 位
-    assert_eq(flags, 0b1011)
+    assertEqual(flags, 0b1011)
 }
 
 @test
 fn test_toggle_bit() {
     var flags = 0b1010
     flags = flags ^ 0b0010  // 切换第 1 位
-    assert_eq(flags, 0b1000)
+    assertEqual(flags, 0b1000)
     flags = flags ^ 0b0010  // 再次切换
-    assert_eq(flags, 0b1010)
+    assertEqual(flags, 0b1010)
 }
 
 // ===== 边界条件 =====
@@ -145,6 +145,6 @@ fn test_shift_large() {
     var x = 1
     var shift = 20
     var result = x << shift
-    assert_eq(result > 0, true)
+    assertEqual(result > 0, true)
 }
 

@@ -42,7 +42,7 @@ while (i < ITERS) {
     while (task < TASKS) {
         var value = i * TASKS + task
         expected = expected + value
-        assert_true(queue.push(value, task % WORKERS))
+        assert(queue.push(value, task % WORKERS))
         task = task + 1
     }
     i = i + 1

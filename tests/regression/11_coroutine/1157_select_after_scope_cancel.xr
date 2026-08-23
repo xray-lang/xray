@@ -33,7 +33,7 @@ fn test_scope_cancel_wakes_blocked_select_after() {
     } catch (e) {
         caught = true
     }
-    assert_true(caught)
+    assert(caught)
 
     // Run a few rounds so the cancel/wake path is exercised repeatedly.
     var rounds = 0
@@ -53,7 +53,7 @@ fn test_scope_cancel_wakes_blocked_select_after() {
         }
         i = i + 1
     }
-    assert_eq(rounds, 20)
+    assertEqual(rounds, 20)
     print("scope-cancel-select-after ok")
 }
 

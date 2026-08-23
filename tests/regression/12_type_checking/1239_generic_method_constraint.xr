@@ -68,13 +68,13 @@ class Counter {
 fn test_hashable_bound_on_instance_method() {
     var c = Counter()
     var m: Map<string, i64> = #{"a": 1, "b": 2}
-    assert_eq(c.sumValues<string>(m), 3)
+    assertEqual(c.sumValues<string>(m), 3)
 }
 
 @test
 fn test_hashable_bound_on_static_method() {
     var m: Map<string, i64> = #{"a": 1, "b": 2, "c": 3}
-    assert_eq(Counter.countKeys<string>(m), 3)
+    assertEqual(Counter.countKeys<string>(m), 3)
 }
 
 // ===== Interface bound on a method's own type param =====
@@ -89,19 +89,19 @@ class Caller {
 @test
 fn test_interface_bound_explicit_type_arg() {
     var c = Caller()
-    assert_eq(c.callIt<En>(En()), "hello")
-    assert_eq(c.callIt<Fr>(Fr()), "bonjour")
+    assertEqual(c.callIt<En>(En()), "hello")
+    assertEqual(c.callIt<Fr>(Fr()), "bonjour")
 }
 
 @test
 fn test_interface_bound_inferred_type_arg() {
     var c = Caller()
-    assert_eq(c.callIt(En()), "hello")
+    assertEqual(c.callIt(En()), "hello")
 }
 
 @test
 fn test_interface_bound_static_method() {
-    assert_eq(Caller.callStatic<Fr>(Fr()), "bonjour")
+    assertEqual(Caller.callStatic<Fr>(Fr()), "bonjour")
 }
 
 // ===== Class upper bound on a method's own type param =====
@@ -114,8 +114,8 @@ class Kennel {
 @test
 fn test_class_upper_bound_accepts_subclass() {
     var k = Kennel()
-    assert_eq(k.nameOf<Dog>(Dog("Rex")), "Rex")
-    assert_eq(k.nameOf<Animal>(Animal("Generic")), "Generic")
+    assertEqual(k.nameOf<Dog>(Dog("Rex")), "Rex")
+    assertEqual(k.nameOf<Animal>(Animal("Generic")), "Generic")
 }
 
 // ===== Multi-constraint intersection on a method =====
@@ -131,15 +131,15 @@ class Passer {
 @test
 fn test_method_intersection_constraint() {
     var p = Passer()
-    assert_eq(p.passThrough<i64>(11), 11)
-    assert_eq(p.passThrough<string>("xy"), "xy")
+    assertEqual(p.passThrough<i64>(11), 11)
+    assertEqual(p.passThrough<string>("xy"), "xy")
 }
 
 @test
 fn test_method_mixed_constrained_and_unconstrained() {
     var p = Passer()
-    assert_eq(p.pick<i64, string>(1, "one"), "one")
-    assert_eq(p.pick<string, i64>("key", 42), 42)
+    assertEqual(p.pick<i64, string>(1, "one"), "one")
+    assertEqual(p.pick<string, i64>("key", 42), 42)
 }
 
 // ===== Method constraint inside a generic class =====
@@ -160,9 +160,9 @@ class Box<T> {
 @test
 fn test_method_constraint_in_generic_class() {
     var box: Box<i64> = Box<i64>(10)
-    assert_eq(box.get(), 10)
+    assertEqual(box.get(), 10)
     var m: Map<string, i64> = #{"x": 5, "y": 6}
-    assert_eq(box.tag<string>("x", m), 11)
+    assertEqual(box.tag<string>("x", m), 11)
 }
 
 print("All generic method constraint tests passed!")

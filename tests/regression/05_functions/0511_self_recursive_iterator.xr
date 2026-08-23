@@ -13,7 +13,7 @@ fn test_recursive_sum_with_forin() {
         return arr[idx] + sum_list(arr, idx + 1)
     }
     var arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-    assert_eq(sum_list(arr, 0), 55)
+    assertEqual(sum_list(arr, 0), 55)
 }
 
 @test
@@ -29,9 +29,9 @@ fn test_recursive_flatten() {
     }
     var nested = [[1, 2], [3, 4], [5, 6]]
     var flat = flatten(nested)
-    assert_eq(len(flat), 6)
-    assert_eq(flat[0], 1)
-    assert_eq(flat[5], 6)
+    assertEqual(len(flat), 6)
+    assertEqual(flat[0], 1)
+    assertEqual(flat[5], 6)
 }
 
 @test
@@ -40,10 +40,10 @@ fn test_recursive_fibonacci() {
         if (n <= 1) { return n }
         return fib(n - 1) + fib(n - 2)
     }
-    assert_eq(fib(0), 0)
-    assert_eq(fib(1), 1)
-    assert_eq(fib(10), 55)
-    assert_eq(fib(15), 610)
+    assertEqual(fib(0), 0)
+    assertEqual(fib(1), 1)
+    assertEqual(fib(10), 55)
+    assertEqual(fib(15), 610)
 }
 
 @test
@@ -59,8 +59,8 @@ fn test_recursive_with_array_iteration() {
         return total
     }
     var data = [1, 2, 3]
-    assert_eq(count_nested(data, 0), 3)
-    assert_eq(count_nested(data, 1), 9)
+    assertEqual(count_nested(data, 0), 3)
+    assertEqual(count_nested(data, 1), 9)
 }
 
 @test
@@ -79,5 +79,5 @@ fn test_mutual_recursion_with_loop() {
             even_count = even_count + 1
         }
     }
-    assert_eq(even_count, 5)
+    assertEqual(even_count, 5)
 }

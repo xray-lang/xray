@@ -7,9 +7,9 @@ import { LogFormat, LogLevel } from log
 
 @test
 fn test_log_level_ordering() {
-    assert_eq(log.isEnabled(LogLevel.Fatal), true)
-    assert_eq(LogLevel.Debug == LogLevel.Debug, true)
-    assert_eq(LogLevel.Debug == LogLevel.Info, false)
+    assertEqual(log.isEnabled(LogLevel.Fatal), true)
+    assertEqual(LogLevel.Debug == LogLevel.Debug, true)
+    assertEqual(LogLevel.Debug == LogLevel.Info, false)
 }
 
 // ===== isEnabled =====
@@ -17,18 +17,18 @@ fn test_log_level_ordering() {
 @test
 fn test_is_enabled_default() {
     // Default level is Info
-    assert_eq(log.isEnabled(LogLevel.Info), true)
-    assert_eq(log.isEnabled(LogLevel.Error), true)
-    assert_eq(log.isEnabled(LogLevel.Debug), false)
+    assertEqual(log.isEnabled(LogLevel.Info), true)
+    assertEqual(log.isEnabled(LogLevel.Error), true)
+    assertEqual(log.isEnabled(LogLevel.Debug), false)
 }
 
 @test
 fn test_set_level() {
     log.setLevel(LogLevel.Debug)
-    assert_eq(log.isEnabled(LogLevel.Debug), true)
+    assertEqual(log.isEnabled(LogLevel.Debug), true)
     // Restore default
     log.setLevel(LogLevel.Info)
-    assert_eq(log.isEnabled(LogLevel.Debug), false)
+    assertEqual(log.isEnabled(LogLevel.Debug), false)
 }
 
 // ===== Log output (should not crash) =====

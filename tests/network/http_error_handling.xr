@@ -26,6 +26,6 @@ fn test_invalid_domain() {
 
 fn test_status_500() {
     var resp = http.request({url: "http://httpbin.org/status/500"})
-    assert_eq(resp.status, 500)
-    assert_eq(resp.isSuccess(), false)
+    assertEqual(resp.status, 500)
+    assertEqual(resp.isSuccess(), false)
 }

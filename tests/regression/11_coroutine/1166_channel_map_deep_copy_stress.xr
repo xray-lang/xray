@@ -48,8 +48,8 @@ fn test_channel_map_deep_copy_stress() {
         completed = completed + recv_done_count()
     }
 
-    assert_eq(sum, total * 2)
-    assert_eq(completed, total)
+    assertEqual(sum, total * 2)
+    assertEqual(completed, total)
 
     maps.close()
     done.close()

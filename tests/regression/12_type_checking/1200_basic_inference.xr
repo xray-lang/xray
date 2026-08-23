@@ -4,82 +4,82 @@
 @test
 fn test_int_literal() {
     var x = 42
-    assert_eq(typeName(x), "i64")
+    assertEqual(typeName(x), "i64")
 }
 
 @test
 fn test_float_literal() {
     var x = 3.14
-    assert_eq(typeName(x), "f64")
+    assertEqual(typeName(x), "f64")
 }
 
 @test
 fn test_string_literal() {
     var x = "hello"
-    assert_eq(typeName(x), "string")
+    assertEqual(typeName(x), "string")
 }
 
 @test
 fn test_bool_literal() {
     var x = true
     var y = false
-    assert_eq(typeName(x), "bool")
-    assert_eq(typeName(y), "bool")
+    assertEqual(typeName(x), "bool")
+    assertEqual(typeName(y), "bool")
 }
 
 @test
 fn test_null_literal() {
     var x = null
-    assert_eq(typeName(x), "null")
+    assertEqual(typeName(x), "null")
 }
 
 // ===== Array Inference =====
 @test
 fn test_array_int() {
     var arr = [1, 2, 3]
-    assert_eq(typeName(arr), "Array")
-    assert_eq(len(arr), 3)
+    assertEqual(typeName(arr), "Array")
+    assertEqual(len(arr), 3)
 }
 
 @test
 fn test_array_string() {
     var arr = ["a", "b", "c"]
-    assert_eq(typeName(arr), "Array")
+    assertEqual(typeName(arr), "Array")
 }
 
 @test
 fn test_array_empty() {
     var arr: Array<i64> = []
-    assert_eq(typeName(arr), "Array")
+    assertEqual(typeName(arr), "Array")
 }
 
 @test
 fn test_array_nested() {
     var arr = [[1, 2], [3, 4]]
-    assert_eq(typeName(arr), "Array")
-    assert_eq(arr[0][0], 1)
+    assertEqual(typeName(arr), "Array")
+    assertEqual(arr[0][0], 1)
 }
 
 // ===== Map Inference =====
 @test
 fn test_map_basic() {
     var m = #{"a": 1, "b": 2}
-    assert_eq(typeName(m), "Map")
-    assert_eq(m.get("a"), 1)
+    assertEqual(typeName(m), "Map")
+    assertEqual(m.get("a"), 1)
 }
 
 @test
 fn test_map_empty() {
     var m: Map<string, i64> = #{}
-    assert_eq(typeName(m), "Map")
+    assertEqual(typeName(m), "Map")
 }
 
 // ===== Set Inference =====
 @test
 fn test_set_basic() {
     var s = #[1, 2, 3]
-    assert_eq(typeName(s), "Set")
-    assert_eq(len(s), 3)
+    assertEqual(typeName(s), "Set")
+    assertEqual(len(s), 3)
 }
 
 // ===== Binary Expression Inference =====
@@ -91,8 +91,8 @@ fn test_arithmetic_int() {
     var diff = a - b
     var prod = a * b
     var quot = a / b
-    assert_eq(typeName(sum), "i64")
-    assert_eq(sum, 13)
+    assertEqual(typeName(sum), "i64")
+    assertEqual(sum, 13)
 }
 
 @test
@@ -100,7 +100,7 @@ fn test_arithmetic_float() {
     var a = 10.0
     var b = 3.0
     var result = a / b
-    assert_eq(typeName(result), "f64")
+    assertEqual(typeName(result), "f64")
 }
 
 @test
@@ -109,7 +109,7 @@ fn test_arithmetic_mixed() {
     var b = 3.0
     var result = (a as f64) + b
     // Mixed numeric variables require an explicit direction choice.
-    assert_eq(typeName(result), "f64")
+    assertEqual(typeName(result), "f64")
 }
 
 @test
@@ -117,8 +117,8 @@ fn test_string_concat() {
     var a = "hello"
     var b = " world"
     var result = a + b
-    assert_eq(typeName(result), "string")
-    assert_eq(result, "hello world")
+    assertEqual(typeName(result), "string")
+    assertEqual(result, "hello world")
 }
 
 @test
@@ -126,8 +126,8 @@ fn test_comparison() {
     var a = 10
     var b = 20
     var result = a < b
-    assert_eq(typeName(result), "bool")
-    assert_eq(result, true)
+    assertEqual(typeName(result), "bool")
+    assertEqual(result, true)
 }
 
 @test
@@ -136,16 +136,16 @@ fn test_logical() {
     var b = false
     var and_result = a && b
     var or_result = a || b
-    assert_eq(typeName(and_result), "bool")
-    assert_eq(typeName(or_result), "bool")
+    assertEqual(typeName(and_result), "bool")
+    assertEqual(typeName(or_result), "bool")
 }
 
 // ===== Ternary Expression Inference =====
 @test
 fn test_ternary_same_type() {
     var x = true ? 1 : 2
-    assert_eq(typeName(x), "i64")
-    assert_eq(x, 1)
+    assertEqual(typeName(x), "i64")
+    assertEqual(x, 1)
 }
 
 @test
@@ -161,8 +161,8 @@ fn test_ternary_different_types() {
 @test
 fn test_reassignment() {
     var x = 10
-    assert_eq(typeName(x), "i64")
+    assertEqual(typeName(x), "i64")
     x = 20
-    assert_eq(typeName(x), "i64")
-    assert_eq(x, 20)
+    assertEqual(typeName(x), "i64")
+    assertEqual(x, 20)
 }

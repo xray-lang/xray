@@ -8,14 +8,14 @@
 fn test_optional_property_access() {
     var person = { name: "Alice", age: 25 }
     var name = person?.name
-    assert_eq(name, "Alice")
+    assertEqual(name, "Alice")
 }
 
 @test
 fn test_optional_on_null() {
     var person = null
     var name = person?.name
-    assert_eq(name, null)
+    assertEqual(name, null)
 }
 
 // ===== 嵌套可选链 =====
@@ -30,7 +30,7 @@ fn test_nested_optional_chain() {
         }
     }
     var name = data?.user?.profile?.name
-    assert_eq(name, "Bob")
+    assertEqual(name, "Bob")
 }
 
 @test
@@ -39,7 +39,7 @@ fn test_nested_null_in_chain() {
         user: null
     }
     var name = data?.user?.profile?.name
-    assert_eq(name, null)
+    assertEqual(name, null)
 }
 
 // ===== 可选链与索引访问 =====
@@ -50,7 +50,7 @@ fn test_optional_index_access() {
         items: [1, 2, 3]
     }
     var items = data?.items
-    assert_eq(items![0], 1)
+    assertEqual(items![0], 1)
 }
 
 @test
@@ -59,8 +59,8 @@ fn test_optional_array_chain() {
         values: [10, 20, 30]
     }
     var vals = data?.values
-    assert_eq(vals != null, true)
-    assert_eq(vals![1], 20)
+    assertEqual(vals != null, true)
+    assertEqual(vals![1], 20)
 }
 
 // ===== ?[ optional index access =====
@@ -69,14 +69,14 @@ fn test_optional_array_chain() {
 fn test_optional_index_on_array() {
     var arr = [10, 20, 30]
     var val = arr?[1]
-    assert_eq(val, 20)
+    assertEqual(val, 20)
 }
 
 @test
 fn test_optional_index_on_null() {
     var arr = null
     var val = arr?[0]
-    assert_eq(val, null)
+    assertEqual(val, null)
 }
 
 @test
@@ -85,7 +85,7 @@ fn test_optional_index_nested() {
         items: [100, 200, 300]
     }
     var val = data?.items?[2]
-    assert_eq(val, 300)
+    assertEqual(val, 300)
 }
 
 @test
@@ -94,14 +94,14 @@ fn test_optional_index_null_nested() {
         items: null
     }
     var val = data?.items?[0]
-    assert_eq(val, null)
+    assertEqual(val, null)
 }
 
 @test
 fn test_optional_index_with_nullish() {
     var arr = null
     var val = arr?[0] ?? "fallback"
-    assert_eq(val, "fallback")
+    assertEqual(val, "fallback")
 }
 
 // ===== 与空值合并组合 =====
@@ -112,7 +112,7 @@ fn test_optional_with_nullish() {
         settings: null
     }
     var theme = config?.settings?.theme ?? "default"
-    assert_eq(theme, "default")
+    assertEqual(theme, "default")
 }
 
 @test
@@ -123,7 +123,7 @@ fn test_optional_value_with_nullish() {
         }
     }
     var theme = config?.settings?.theme ?? "default"
-    assert_eq(theme, "dark")
+    assertEqual(theme, "dark")
 }
 
 // ===== Optional chain method calls =====
@@ -132,33 +132,33 @@ fn test_optional_value_with_nullish() {
 fn test_optional_method_on_value() {
     var s: string? = "42"
     var n = s == null ? null : i64.tryParse(s!)
-    assert_eq(n, 42)
+    assertEqual(n, 42)
 }
 
 @test
 fn test_optional_method_on_null() {
     var s: string? = null
     var n = s == null ? null : i64.tryParse(s!)
-    assert_eq(n, null)
+    assertEqual(n, null)
 }
 
 @test
 fn test_optional_method_substring() {
     var s: string? = "hello world"
     var sub = s?.slice(0, 5)
-    assert_eq(sub, "hello")
+    assertEqual(sub, "hello")
 }
 
 @test
 fn test_optional_method_on_array() {
     var arr: Array<i64>? = [1, 2, 3]
     var rev = arr?.reverse()
-    assert_eq(rev, [3, 2, 1])
+    assert(rev == [3, 2, 1])
 }
 
 @test
 fn test_optional_method_on_null_array() {
     var arr: Array<i64>? = null
     var rev = arr?.reverse()
-    assert_eq(rev, null)
+    assertEqual(rev, null)
 }

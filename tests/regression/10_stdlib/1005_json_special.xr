@@ -2,8 +2,8 @@
 
 @test
 fn test_string_escaping() {
-    assert_eq(JSON.stringify("a\nb\tc\"d\\e"), "\"a\\nb\\tc\\\"d\\\\e\"")
-    assert_eq(JSON.parseValue("\"\\u4F60\\u597D\""), "你好")
+    assertEqual(JSON.stringify("a\nb\tc\"d\\e"), "\"a\\nb\\tc\\\"d\\\\e\"")
+    assertEqual(JSON.require<string>(JSON.parseValue("\"\\u4F60\\u597D\""), []), "你好")
 }
 
 @test
@@ -11,14 +11,14 @@ fn test_object_keys_and_values() {
     var obj = JSON.parseObject("{\"a\":1,\"b\":2,\"c\":3}")
     var keys = obj.keys()
     var values = obj.values()
-    assert_eq(len(keys), 3)
-    assert_eq(len(values), 3)
+    assertEqual(len(keys), 3)
+    assertEqual(len(values), 3)
     assert(obj.containsKey("a"))
-    assert_eq(JSON.require<i64>(obj, ["c"]), 3)
+    assertEqual(JSON.require<i64>(obj, ["c"]), 3)
 }
 
 @test
 fn test_empty_collections() {
-    assert_eq(JSON.stringify(JSON.parseValue("[]")), "[]")
-    assert_eq(JSON.stringify(JSON.parseObject("{}")), "{}")
+    assertEqual(JSON.stringify(JSON.parseValue("[]")), "[]")
+    assertEqual(JSON.stringify(JSON.parseObject("{}")), "{}")
 }

@@ -7,15 +7,15 @@ const TYPE_BOOL_ID = comptime Type.bool
 @test
 fn test_comptime_bool_string_char_expr() {
     var flag = comptime (ALWAYS && (GREETING == "hi"))
-    assert_eq(flag, true)
-    assert_eq(GREETING, "hi")
-    assert_eq(LETTER, 'x')
+    assertEqual(flag, true)
+    assertEqual(GREETING, "hi")
+    assertEqual(LETTER, 'x')
 }
 
 @test
 fn test_comptime_typeid_constants() {
     var ids: [i64; TYPE_BOOL_ID] = [TYPE_INT_ID; TYPE_BOOL_ID]
-    assert_eq(len(ids), 1)
-    assert_eq(ids[0], TYPE_INT_ID)
-    assert_eq(TYPE_INT_ID == TYPE_BOOL_ID, false)
+    assertEqual(len(ids), 1)
+    assertEqual(ids[0], TYPE_INT_ID)
+    assertEqual(TYPE_INT_ID == TYPE_BOOL_ID, false)
 }

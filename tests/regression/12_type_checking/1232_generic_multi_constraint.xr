@@ -34,7 +34,7 @@ fn test_single_constraint_int() {
     fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
-    assert_eq(first(1, 2), 1)
+    assertEqual(first(1, 2), 1)
 }
 
 @test
@@ -42,7 +42,7 @@ fn test_single_constraint_string() {
     fn first<T: Comparable>(a: T, b: T) -> T {
         return a
     }
-    assert_eq(first("alpha", "beta"), "alpha")
+    assertEqual(first("alpha", "beta"), "alpha")
 }
 
 // ===== Two constraints =====
@@ -51,7 +51,7 @@ fn test_two_constraints_int() {
     fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
-    assert_eq(passThrough(42), 42)
+    assertEqual(passThrough(42), 42)
 }
 
 @test
@@ -59,7 +59,7 @@ fn test_two_constraints_string() {
     fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
-    assert_eq(passThrough("hello"), "hello")
+    assertEqual(passThrough("hello"), "hello")
 }
 
 @test
@@ -77,8 +77,8 @@ fn test_three_constraints() {
     fn passThrough<T: Comparable & Hashable & Stringable>(x: T) -> T {
         return x
     }
-    assert_eq(passThrough(7), 7)
-    assert_eq(passThrough("ok"), "ok")
+    assertEqual(passThrough(7), 7)
+    assertEqual(passThrough("ok"), "ok")
 }
 
 // ===== Mixed constraints across multiple type parameters =====
@@ -87,8 +87,8 @@ fn test_mixed_param_constraints() {
     fn pickValue<K: Hashable, V>(k: K, v: V) -> V {
         return v
     }
-    assert_eq(pickValue(1, "one"), "one")
-    assert_eq(pickValue("key", 42), 42)
+    assertEqual(pickValue(1, "one"), "one")
+    assertEqual(pickValue("key", 42), 42)
 }
 
 // ===== No constraint still works =====
@@ -100,7 +100,7 @@ fn test_unconstrained_after_constrained() {
     fn ord<T: Comparable>(x: T) -> T {
         return x
     }
-    assert_eq(id(ord(5)), 5)
+    assertEqual(id(ord(5)), 5)
 }
 
 // ===== Explicit type arguments =====
@@ -109,8 +109,8 @@ fn test_explicit_type_args_multi_constraint() {
     fn passThrough<T: Comparable & Hashable>(x: T) -> T {
         return x
     }
-    assert_eq(passThrough<i64>(11), 11)
-    assert_eq(passThrough<string>("xy"), "xy")
+    assertEqual(passThrough<i64>(11), 11)
+    assertEqual(passThrough<string>("xy"), "xy")
 }
 
 // ===== User class with explicit `implements` satisfies builtin interface =====
@@ -134,7 +134,7 @@ fn test_user_class_implements_comparable() {
     var p = CmpPoint(7)
     var q = CmpPoint(3)
     var r = first<CmpPoint>(p, q)
-    assert_eq(r.x, 7)
+    assertEqual(r.x, 7)
 }
 
 @test
@@ -145,7 +145,7 @@ fn test_user_class_implements_comparable_implicit() {
     var p = CmpPoint(11)
     var q = CmpPoint(2)
     var r = first(p, q)
-    assert_eq(r.x, 11)
+    assertEqual(r.x, 11)
 }
 
 print("All multi-constraint generic tests passed!")

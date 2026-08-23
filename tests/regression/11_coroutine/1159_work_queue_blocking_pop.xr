@@ -6,7 +6,7 @@ import time
 const q: WorkQueue<i64> = WorkQueue<i64>(2, 2)
 
 fn delayed_push(value: i64) -> i64 {
-    assert_true(q.push(value, 0))
+    assert(q.push(value, 0))
     return value
 }
 
@@ -18,9 +18,9 @@ fn test_work_queue_blocking_pop() {
     }()
     time.sleep(1)
     var producer = go delayed_push(42)
-    assert_eq(await producer, 42)
-    assert_eq(await consumer, 42)
+    assertEqual(await producer, 42)
+    assertEqual(await consumer, 42)
 
     q.close()
-    assert_eq(q.pop(0), null)
+    assertEqual(q.pop(0), null)
 }

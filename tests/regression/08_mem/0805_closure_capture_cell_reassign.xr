@@ -32,7 +32,7 @@ fn test_hoisted_closure_capture_survives_instance_def() {
         t.children.push(h)
     }
     attach()
-    assert_eq(h.tag, 0)
+    assertEqual(h.tag, 0)
 }
 
 // Two captured instances: each must reach its own cell, not one shared or
@@ -47,8 +47,8 @@ fn test_multiple_instance_captures_stay_distinct() {
         t.children.push(b)
     }
     pack()
-    assert_eq(a.tag, 1)
-    assert_eq(b.tag, 2)
+    assertEqual(a.tag, 1)
+    assertEqual(b.tag, 2)
 }
 
 // Reassigning the captured variable from a call after the closure exists must
@@ -60,10 +60,10 @@ fn test_reassign_after_capture_visible_in_closure() {
         return h.tag
     }
     h = Child(3)
-    assert_eq(read(), 3)
+    assertEqual(read(), 3)
     h = Child(4)
-    assert_eq(read(), 4)
-    assert_eq(h.tag, 4)
+    assertEqual(read(), 4)
+    assertEqual(h.tag, 4)
 }
 
 // The mirror direction: a write performed inside the closure must be visible
@@ -74,9 +74,9 @@ fn test_closure_write_visible_to_enclosing_frame() {
     fn swap() {
         h = Child(2)
     }
-    assert_eq(h.tag, 1)
+    assertEqual(h.tag, 1)
     swap()
-    assert_eq(h.tag, 2)
+    assertEqual(h.tag, 2)
 }
 
 // Repeated writes through the cell across a loop must not lose or alias the
@@ -90,10 +90,10 @@ fn test_repeated_closure_writes_through_cell() {
     var i = 1
     while (i <= 5) {
         step(i)
-        assert_eq(h.tag, i)
+        assertEqual(h.tag, i)
         i += 1
     }
-    assert_eq(h.tag, 5)
+    assertEqual(h.tag, 5)
 }
 
 // The captured instance stays alive and correct once the closure has stored it
@@ -106,9 +106,9 @@ fn test_captured_instance_retained_by_container() {
         p.children.push(h)
     }
     attach()
-    assert_eq(len(p.children), 1)
-    assert_eq(p.children[0].tag, 11)
-    assert_eq(h.tag, 11)
+    assertEqual(len(p.children), 1)
+    assertEqual(p.children[0].tag, 11)
+    assertEqual(h.tag, 11)
 }
 
 // Mirror direction, through the cell-creation path rather than the store path:
@@ -123,9 +123,9 @@ fn test_cell_created_at_capture_register() {
     fn f() {
         h = Child(3)
     }
-    assert_eq(h.tag, 2)
+    assertEqual(h.tag, 2)
     f()
-    assert_eq(h.tag, 3)
+    assertEqual(h.tag, 3)
 }
 
 // Non-RC captures shared the same emitter path; keep them covered so a future
@@ -137,5 +137,5 @@ fn test_int_capture_roundtrip() {
         n = 7
     }
     setn()
-    assert_eq(n, 7)
+    assertEqual(n, 7)
 }

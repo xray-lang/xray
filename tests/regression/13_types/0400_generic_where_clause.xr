@@ -36,13 +36,13 @@ enum Wrap<T> where T: Comparable {
 
 @test
 fn test_where_on_function() {
-    assert_eq(maxOf<i64>(3, 9), 9)
-    assert_eq(maxOf<string>("a", "b"), "b")
+    assertEqual(maxOf<i64>(3, 9), 9)
+    assertEqual(maxOf<string>("a", "b"), "b")
 }
 
 @test
 fn test_inline_and_where_intersect() {
-    assert_eq(bothForms<i64>(4, 2), 4)
+    assertEqual(bothForms<i64>(4, 2), 4)
 }
 
 @test
@@ -50,18 +50,18 @@ fn test_where_on_class() {
     var r = Registry<string, i64>()
     r.put("a", 1)
     r.put("b", 2)
-    assert_eq(r.count(), 2)
+    assertEqual(r.count(), 2)
 }
 
 @test
 fn test_where_on_struct() {
     var h = Holder<i64>{ v: 5 }
-    assert_eq(h.v, 5)
+    assertEqual(h.v, 5)
 }
 
 @test
 fn test_where_multiple_params() {
     var r = Registry<i64, string>()
     r.put(1, "x")
-    assert_eq(r.count(), 1)
+    assertEqual(r.count(), 1)
 }

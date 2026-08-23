@@ -5,53 +5,53 @@
 @test
 fn test_array_literal() {
     var arr = [1, 2, 3]
-    assert_eq(len(arr), 3)
-    assert_eq(arr[0], 1)
-    assert_eq(arr[1], 2)
-    assert_eq(arr[2], 3)
+    assertEqual(len(arr), 3)
+    assertEqual(arr[0], 1)
+    assertEqual(arr[1], 2)
+    assertEqual(arr[2], 3)
 }
 
 @test
 fn test_empty_array() {
     var arr: Array<i64> = []
-    assert_eq(len(arr), 0)
-    assert_eq(len(arr) == 0, true)
+    assertEqual(len(arr), 0)
+    assertEqual(len(arr) == 0, true)
 }
 
 @test
 fn test_single_element() {
     var arr = [42]
-    assert_eq(len(arr), 1)
-    assert_eq(arr[0], 42)
+    assertEqual(len(arr), 1)
+    assertEqual(arr[0], 42)
 }
 
 @test
 fn test_mixed_types() {
     var arr = [1, "hello", 3.14, true, null]
-    assert_eq(len(arr), 5)
-    assert_eq(arr[0], 1)
-    assert_eq(arr[1], "hello")
-    assert_eq(arr[2], 3.14)
-    assert_eq(arr[3], true)
-    assert_eq(arr[4], null)
+    assertEqual(len(arr), 5)
+    assert(arr[0] == 1)
+    assert(arr[1] == "hello")
+    assert(arr[2] == 3.14)
+    assert(arr[3] == true)
+    assert(arr[4] == null)
 }
 
 @test
 fn test_nested_array() {
     var matrix = [[1, 2], [3, 4], [5, 6]]
-    assert_eq(len(matrix), 3)
-    assert_eq(matrix[0][0], 1)
-    assert_eq(matrix[1][1], 4)
-    assert_eq(matrix[2][0], 5)
+    assertEqual(len(matrix), 3)
+    assertEqual(matrix[0][0], 1)
+    assertEqual(matrix[1][1], 4)
+    assertEqual(matrix[2][0], 5)
 }
 
 // ===== 访问 =====
 @test
 fn test_index_access() {
     var arr = [10, 20, 30, 40, 50]
-    assert_eq(arr[0], 10)
-    assert_eq(arr[2], 30)
-    assert_eq(arr[4], 50)
+    assertEqual(arr[0], 10)
+    assertEqual(arr[2], 30)
+    assertEqual(arr[4], 50)
 }
 
 @test
@@ -64,7 +64,7 @@ fn test_out_of_bounds() {
     } catch panic (p) {
         caught_high = true
     }
-    assert_eq(caught_high, true)
+    assertEqual(caught_high, true)
 
     var caught_negative = false
     try {
@@ -73,15 +73,15 @@ fn test_out_of_bounds() {
     } catch panic (p) {
         caught_negative = true
     }
-    assert_eq(caught_negative, true)
+    assertEqual(caught_negative, true)
 }
 
 @test
 fn test_dynamic_index() {
     var arr = [10, 20, 30]
     var i = 1
-    assert_eq(arr[i], 20)
-    assert_eq(arr[i + 1], 30)
+    assertEqual(arr[i], 20)
+    assertEqual(arr[i + 1], 30)
 }
 
 // ===== 修改 =====
@@ -90,9 +90,9 @@ fn test_index_assignment() {
     var arr = [1, 2, 3]
     arr[0] = 10
     arr[2] = 30
-    assert_eq(arr[0], 10)
-    assert_eq(arr[1], 2)
-    assert_eq(arr[2], 30)
+    assertEqual(arr[0], 10)
+    assertEqual(arr[1], 2)
+    assertEqual(arr[2], 30)
 }
 
 // ===== push/pop =====
@@ -102,28 +102,28 @@ fn test_push() {
     arr.push(1)
     arr.push(2)
     arr.push(3)
-    assert_eq(len(arr), 3)
-    assert_eq(arr[0], 1)
-    assert_eq(arr[2], 3)
+    assertEqual(len(arr), 3)
+    assertEqual(arr[0], 1)
+    assertEqual(arr[2], 3)
 }
 
 @test
 fn test_pop() {
     var arr = [1, 2, 3]
     var last = arr.pop()
-    assert_eq(last, 3)
-    assert_eq(len(arr), 2)
+    assertEqual(last, 3)
+    assertEqual(len(arr), 2)
     last = arr.pop()
-    assert_eq(last, 2)
-    assert_eq(len(arr), 1)
+    assertEqual(last, 2)
+    assertEqual(len(arr), 1)
 }
 
 @test
 fn test_pop_empty() {
     var arr: Array<i64> = []
     var result = arr.pop()
-    assert_eq(result, null)
-    assert_eq(len(arr), 0)
+    assertEqual(result, null)
+    assertEqual(len(arr), 0)
 }
 
 // ===== shift/unshift =====
@@ -131,66 +131,66 @@ fn test_pop_empty() {
 fn test_shift() {
     var arr = [1, 2, 3]
     var first = arr.shift()
-    assert_eq(first, 1)
-    assert_eq(len(arr), 2)
-    assert_eq(arr[0], 2)
+    assertEqual(first, 1)
+    assertEqual(len(arr), 2)
+    assertEqual(arr[0], 2)
 }
 
 @test
 fn test_unshift() {
     var arr = [2, 3]
     arr.unshift(1)
-    assert_eq(arr[0], 1)
-    assert_eq(len(arr), 3)
+    assertEqual(arr[0], 1)
+    assertEqual(len(arr), 3)
 }
 
 @test
 fn test_shift_empty() {
     var arr: Array<i64> = []
     var result = arr.shift()
-    assert_eq(result, null)
+    assertEqual(result, null)
 }
 
 // ===== 查找 =====
 @test
 fn test_indexOf() {
     var arr = ["a", "b", "c", "b"]
-    assert_eq(arr.indexOf("a"), 0)
-    assert_eq(arr.indexOf("b"), 1)
-    assert_eq(arr.indexOf("c"), 2)
-    assert_eq(arr.indexOf("d"), -1)
+    assertEqual(arr.indexOf("a"), 0)
+    assertEqual(arr.indexOf("b"), 1)
+    assertEqual(arr.indexOf("c"), 2)
+    assertEqual(arr.indexOf("d"), -1)
 }
 
 @test
 fn test_contains() {
     var arr = [1, 2, 3]
-    assert_eq(arr.contains(2), true)
-    assert_eq(arr.contains(5), false)
+    assertEqual(arr.contains(2), true)
+    assertEqual(arr.contains(5), false)
 }
 
 // ===== 转换 =====
 @test
 fn test_join() {
     var arr = ["a", "b", "c"]
-    assert_eq(arr.join(","), "a,b,c")
-    assert_eq(arr.join("-"), "a-b-c")
-    assert_eq(arr.join(""), "abc")
+    assertEqual(arr.join(","), "a,b,c")
+    assertEqual(arr.join("-"), "a-b-c")
+    assertEqual(arr.join(""), "abc")
 }
 
 @test
 fn test_reverse() {
     var arr = [1, 2, 3, 4, 5]
     arr.reverse()
-    assert_eq(arr[0], 5)
-    assert_eq(arr[4], 1)
+    assertEqual(arr[0], 5)
+    assertEqual(arr[4], 1)
 }
 
 @test
 fn test_clear() {
     var arr = [1, 2, 3]
     arr.clear()
-    assert_eq(len(arr), 0)
-    assert_eq(len(arr) == 0, true)
+    assertEqual(len(arr), 0)
+    assertEqual(len(arr) == 0, true)
 }
 
 // ===== 边界条件 =====
@@ -200,9 +200,9 @@ fn test_large_array() {
     for (var i = 0; i < 100; i++) {
         arr.push(i)
     }
-    assert_eq(len(arr), 100)
-    assert_eq(arr[0], 0)
-    assert_eq(arr[99], 99)
+    assertEqual(len(arr), 100)
+    assertEqual(arr[0], 0)
+    assertEqual(arr[99], 99)
 }
 
 @test
@@ -210,7 +210,7 @@ fn test_array_of_arrays() {
     var arr: Array<Array<i64>> = []
     arr.push([1, 2])
     arr.push([3, 4])
-    assert_eq(len(arr), 2)
-    assert_eq(arr[0][0], 1)
-    assert_eq(arr[1][1], 4)
+    assertEqual(len(arr), 2)
+    assertEqual(arr[0][0], 1)
+    assertEqual(arr[1][1], 4)
 }

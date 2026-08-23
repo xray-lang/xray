@@ -12,14 +12,14 @@ fn mkzero() -> i64 { return 0 }
 @test
 fn test_new_exception_stack_is_array() {
     var e = PanicInfo("hello")
-    assert_eq(typeName(e.stack), "Array")
+    assertEqual(typeName(e.stack), "Array")
 }
 
 @test
 fn test_new_exception_stack_initially_empty() {
     // 直接 new 不经过 unwind 控制流，stack 为空数组
     var e = PanicInfo("hello")
-    assert_eq(len(e.stack), 0)
+    assertEqual(len(e.stack), 0)
 }
 
 @test
@@ -34,7 +34,7 @@ fn test_panic_stack_is_array() {
     } catch panic (p) {
         stack_type = typeName(p.stack)
     }
-    assert_eq(stack_type, "Array")
+    assertEqual(stack_type, "Array")
 }
 
 @test
@@ -74,7 +74,7 @@ fn test_panic_stack_frames_are_strings() {
             idx = idx + 1
         }
     }
-    assert_eq(all_strings, true)
+    assertEqual(all_strings, true)
 }
 
 @test
@@ -83,8 +83,8 @@ fn test_subclass_exception_stack_is_array() {
         constructor(m: string) { super(m) }
     }
     var e = MyErr("hi")
-    assert_eq(typeName(e.stack), "Array")
-    assert_eq(len(e.stack), 0)
+    assertEqual(typeName(e.stack), "Array")
+    assertEqual(len(e.stack), 0)
 }
 
 // ===== code / data 字段（同步 spec §16.6 完整字段） =====
@@ -92,11 +92,11 @@ fn test_subclass_exception_stack_is_array() {
 @test
 fn test_exception_code_default_zero() {
     var e = PanicInfo("plain message")
-    assert_eq(e.code, 0)
+    assertEqual(e.code, 0)
 }
 
 @test
 fn test_exception_data_default_null() {
     var e = PanicInfo("plain message")
-    assert_eq(e.data, null)
+    assert(JSON.isNull(e.data))
 }

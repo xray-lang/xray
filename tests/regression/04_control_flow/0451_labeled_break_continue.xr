@@ -12,7 +12,7 @@ fn test_labeled_break_exits_named_for_in() {
             trace += string(i) + string(j) + ","
         }
     }
-    assert_eq(trace, "00,01,02,03,10,11,12,13,20,")
+    assertEqual(trace, "00,01,02,03,10,11,12,13,20,")
 }
 
 @test
@@ -27,7 +27,7 @@ fn test_labeled_continue_targets_named_for_in() {
         }
         trace += "unreachable,"
     }
-    assert_eq(trace, "00,10,20,")
+    assertEqual(trace, "00,10,20,")
 }
 
 @test
@@ -42,7 +42,7 @@ fn test_labeled_continue_targets_traditional_for_increment() {
         }
         total += 1000
     }
-    assert_eq(total, 8)
+    assertEqual(total, 8)
 }
 
 @test
@@ -63,5 +63,5 @@ fn test_labeled_while_break_and_continue() {
             count += 1
         }
     }
-    assert_eq(count, 2)
+    assertEqual(count, 2)
 }

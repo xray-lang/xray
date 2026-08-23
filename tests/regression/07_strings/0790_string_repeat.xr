@@ -8,33 +8,33 @@
 @test
 fn test_string_repeat() {
     var line = "=".repeat(50)
-    assert_eq(len(line), 50)
+    assertEqual(len(line), 50)
 
     var stars = "*".repeat(10)
-    assert_eq(stars, "**********")
+    assertEqual(stars, "**********")
 
     // 边界情况
     var empty = "x".repeat(0)
-    assert_eq(empty, "")
+    assertEqual(empty, "")
 
     var single = "abc".repeat(1)
-    assert_eq(single, "abc")
+    assertEqual(single, "abc")
 
     // 多字符重复
     var pattern = "ab".repeat(3)
-    assert_eq(pattern, "ababab")
+    assertEqual(pattern, "ababab")
 
     // 中文字符重复
     var chinese = "好".repeat(3)
-    assert_eq(chinese, "好好好")
+    assertEqual(chinese, "好好好")
 
     // 变量方式
     var s: string = "-"
     var n: i64 = 5
     var result = s.repeat(n)
-    assert_eq(result, "-----")
+    assertEqual(result, "-----")
 
     // 表达式中使用
     var header = "+" + "-".repeat(20) + "+"
-    assert_eq(len(header), 22)
+    assertEqual(len(header), 22)
 }

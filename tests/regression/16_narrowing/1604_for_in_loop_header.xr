@@ -16,7 +16,7 @@ fn test_for_in_readonly_body_keeps_pre_loop_narrowing() {
             total = total + len(conn)
         }
     }
-    assert_eq(total, 9)
+    assertEqual(total, 9)
 }
 
 @test
@@ -28,7 +28,7 @@ fn test_for_in_empty_collection_keeps_pre_loop_value() {
     }
     // Zero iterations: the body never ran, so `s` still holds its pre-loop
     // value. The header join keeps this entry-edge path alive.
-    assert_eq(s ?? "gone", "seed")
+    assertEqual(s ?? "gone", "seed")
 }
 
 @test
@@ -40,7 +40,7 @@ fn test_for_in_body_write_rejoins_at_header() {
     }
     // After the loop `s` is the join of null (zero iterations) and "x"
     // (one or more iterations), so it is still nullable and must be unwrapped.
-    assert_eq(s ?? "empty", "x")
+    assertEqual(s ?? "empty", "x")
 }
 
 @test
@@ -56,5 +56,5 @@ fn test_for_in_body_write_guarded_after_loop() {
     if (s != null) {
         out = s
     }
-    assert_eq(out, "empty")
+    assertEqual(out, "empty")
 }

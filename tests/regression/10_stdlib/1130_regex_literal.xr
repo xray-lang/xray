@@ -12,24 +12,24 @@ import regex
 @test
 fn test_basic_regex_literal() {
     var re = /hello/
-    assert_eq(regex.test(re, "hello world"), true)
-    assert_eq(regex.test(re, "goodbye"), false)
+    assertEqual(regex.test(re, "hello world"), true)
+    assertEqual(regex.test(re, "goodbye"), false)
 }
 
 // 测试数字匹配
 @test
 fn test_digit_pattern() {
     var re = /[0-9]+/
-    assert_eq(regex.test(re, "abc123"), true)
-    assert_eq(regex.test(re, "abcdef"), false)
+    assertEqual(regex.test(re, "abc123"), true)
+    assertEqual(regex.test(re, "abcdef"), false)
 }
 
 // 测试字母匹配
 @test
 fn test_letter_pattern() {
     var re = /[a-z]+/
-    assert_eq(regex.test(re, "hello"), true)
-    assert_eq(regex.test(re, "123"), false)
+    assertEqual(regex.test(re, "hello"), true)
+    assertEqual(regex.test(re, "123"), false)
 }
 
 // 测试捕获组
@@ -37,17 +37,17 @@ fn test_letter_pattern() {
 fn test_capture_groups() {
     var re = /([0-9]+)-([0-9]+)/
     var result = regex.find(re, "测试: 123-456 结果")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "123-456")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "123-456")
 }
 
 // 测试复杂模式（锚定全匹配）
 @test
 fn test_complex_pattern() {
     var re = /^[a-zA-Z][a-zA-Z0-9_]*$/
-    assert_eq(regex.test(re, "abc123"), true)
-    assert_eq(regex.test(re, "_abc"), false)
-    assert_eq(regex.test(re, "123abc"), false)
+    assertEqual(regex.test(re, "abc123"), true)
+    assertEqual(regex.test(re, "_abc"), false)
+    assertEqual(regex.test(re, "123abc"), false)
 }
 
 // 测试空 pattern
@@ -55,8 +55,8 @@ fn test_complex_pattern() {
 fn test_word_boundary() {
     var re = /world/
     var result = regex.find(re, "hello world!")
-    assert_eq(result != null, true)
-    assert_eq(result!.text, "world")
+    assertEqual(result != null, true)
+    assertEqual(result!.text, "world")
 }
 
 // 测试 replace
@@ -64,7 +64,7 @@ fn test_word_boundary() {
 fn test_replace() {
     var re = /[0-9]+/
     var result = regex.replace(re, "abc123def", "X")
-    assert_eq(result, "abcXdef")
+    assertEqual(result, "abcXdef")
 }
 
 // 测试 replaceAll
@@ -72,7 +72,7 @@ fn test_replace() {
 fn test_replace_all() {
     var re = /[0-9]+/
     var result = regex.replaceAll(re, "a1b2c3", "X")
-    assert_eq(result, "aXbXcX")
+    assertEqual(result, "aXbXcX")
 }
 
 // 测试 split
@@ -80,10 +80,10 @@ fn test_replace_all() {
 fn test_split() {
     var re = /[,;]/
     var parts = regex.split(re, "a,b;c")
-    assert_eq(len(parts), 3)
-    assert_eq(parts[0], "a")
-    assert_eq(parts[1], "b")
-    assert_eq(parts[2], "c")
+    assertEqual(len(parts), 3)
+    assertEqual(parts[0], "a")
+    assertEqual(parts[1], "b")
+    assertEqual(parts[2], "c")
 }
 
 print("所有正则字面量测试通过!")

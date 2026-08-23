@@ -69,7 +69,7 @@ fn worker(id: i64) -> i64 {
 
 fn submit_tasks(count: i64) -> i64 {
     for (var i = 0; i < count; i++) {
-        assert_true(work_queue.push(i, i))
+        assert(work_queue.push(i, i))
     }
     work_queue.close()
     return count

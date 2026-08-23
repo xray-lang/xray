@@ -20,19 +20,19 @@ fn test_index_set_strict() {
     var a = [1, 2, 3]
     a[0] = 10
     a[2] = 30
-    assert_eq(a[0], 10)
-    assert_eq(a[2], 30)
-    assert_eq(len(a), 3)
+    assertEqual(a[0], 10)
+    assertEqual(a[2], 30)
+    assertEqual(len(a), 3)
 
     // Assignment at exactly length is out of bounds (no append).
-    assert_eq(set_at(ref a, 3, 9), 430)
-    assert_eq(len(a), 3)
+    assertEqual(set_at(ref a, 3, 9), 430)
+    assertEqual(len(a), 3)
 
     // Beyond length is out of bounds (no sparse growth).
-    assert_eq(set_at(ref a, 10, 9), 430)
-    assert_eq(len(a), 3)
+    assertEqual(set_at(ref a, 10, 9), 430)
+    assertEqual(len(a), 3)
 
     // Negative index does not wrap from the end.
-    assert_eq(set_at(ref a, -1, 9), 430)
-    assert_eq(a[2], 30)
+    assertEqual(set_at(ref a, -1, 9), 430)
+    assertEqual(a[2], 30)
 }

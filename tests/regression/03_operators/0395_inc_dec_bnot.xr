@@ -8,7 +8,7 @@
 fn test_post_increment() {
     var x = 5
     x++
-    assert_eq(x, 6)
+    assertEqual(x, 6)
 }
 
 @test
@@ -17,7 +17,7 @@ fn test_multiple_increment() {
     x++
     x++
     x++
-    assert_eq(x, 3)
+    assertEqual(x, 3)
 }
 
 // ===== 自减 -- =====
@@ -26,7 +26,7 @@ fn test_multiple_increment() {
 fn test_post_decrement() {
     var x = 5
     x--
-    assert_eq(x, 4)
+    assertEqual(x, 4)
 }
 
 @test
@@ -35,7 +35,7 @@ fn test_multiple_decrement() {
     x--
     x--
     x--
-    assert_eq(x, 7)
+    assertEqual(x, 7)
 }
 
 // ===== 混合使用 =====
@@ -46,7 +46,7 @@ fn test_inc_dec_mixed() {
     x++
     x++
     x--
-    assert_eq(x, 6)
+    assertEqual(x, 6)
 }
 
 // ===== 在循环中使用 =====
@@ -59,7 +59,7 @@ fn test_inc_in_loop() {
         count++
         i++
     }
-    assert_eq(count, 5)
+    assertEqual(count, 5)
 }
 
 // ===== 浮点数自增自减 =====
@@ -68,37 +68,37 @@ fn test_inc_in_loop() {
 fn test_float_increment() {
     var x = 1.5
     x++
-    assert_eq(x, 2.5)
+    assertEqual(x, 2.5)
 }
 
 @test
 fn test_float_decrement() {
     var x = 3.5
     x--
-    assert_eq(x, 2.5)
+    assertEqual(x, 2.5)
 }
 
 // ===== 按位取反 ~ =====
 
 @test
 fn test_bitwise_not() {
-    assert_eq(~0, -1)
-    assert_eq(~1, -2)
-    assert_eq(~(-1), 0)
+    assertEqual(~0, -1)
+    assertEqual(~1, -2)
+    assertEqual(~(-1), 0)
 }
 
 @test
 fn test_bitwise_not_patterns() {
     // ~x = -(x+1)
-    assert_eq(~5, -6)
-    assert_eq(~10, -11)
-    assert_eq(~100, -101)
+    assertEqual(~5, -6)
+    assertEqual(~10, -11)
+    assertEqual(~100, -101)
 }
 
 @test
 fn test_double_bitwise_not() {
     var x = 42
-    assert_eq(~~x, x)
+    assertEqual(~~x, x)
 }
 
 // ===== 按位取反在表达式中 =====
@@ -107,6 +107,6 @@ fn test_double_bitwise_not() {
 fn test_bnot_in_expression() {
     var x = 5
     var y = ~x + 10
-    assert_eq(y, 4)  // -6 + 10 = 4
+    assertEqual(y, 4)  // -6 + 10 = 4
 }
 

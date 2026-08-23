@@ -17,20 +17,20 @@ fn test_semaphore_permits_and_close() {
     var t1 = go worker(7)
     var t2 = go worker(11)
 
-    assert_true(ready.wait())
+    assert(ready.wait())
     sem.release(2)
 
     var r1: i64 = await t1
     var r2: i64 = await t2
-    assert_eq(r1 + r2, 18)
-    assert_eq(counter.load(), 18)
-    assert_eq(sem.available, 0)
-    assert_false(sem.isClosed)
+    assertEqual(r1 + r2, 18)
+    assertEqual(counter.load(), 18)
+    assertEqual(sem.available, 0)
+    assert(!(sem.isClosed))
 
     sem.release()
-    assert_eq(sem.available, 1)
-    assert_true(sem.tryAcquire())
-    assert_eq(sem.available, 0)
+    assertEqual(sem.available, 1)
+    assert(sem.tryAcquire())
+    assertEqual(sem.available, 0)
 
     const closedSem = Semaphore(0)
     const closeReady = CountdownLatch(1)
@@ -39,9 +39,9 @@ fn test_semaphore_permits_and_close() {
         return closedSem.acquire() ? 1 : -1
     }()
 
-    assert_true(closeReady.wait())
+    assert(closeReady.wait())
     closedSem.close()
-    assert_true(closedSem.isClosed)
-    assert_eq(await closedTask, -1)
-    assert_false(closedSem.acquire())
+    assert(closedSem.isClosed)
+    assertEqual(await closedTask, -1)
+    assert(!(closedSem.acquire()))
 }

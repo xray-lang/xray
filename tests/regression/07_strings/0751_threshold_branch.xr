@@ -23,10 +23,10 @@ fn test_threshold_boundary_exact_63() {
     var b = "b".repeat(32)
     var result = a + b
     
-    assert_eq(len(result), 63)
-    assert_eq(result, a + b)
-    assert_eq(result.slice(0, 31), a)
-    assert_eq(result.slice(31, 63), b)
+    assertEqual(len(result), 63)
+    assertEqual(result, a + b)
+    assertEqual(result.slice(0, 31), a)
+    assertEqual(result.slice(31, 63), b)
 }
 
 @test
@@ -38,10 +38,10 @@ fn test_threshold_boundary_exact_64() {
     var b = "b".repeat(32)
     var result = a + b
     
-    assert_eq(len(result), 64)
-    assert_eq(result, a + b)
-    assert_eq(result.slice(0, 32), a)
-    assert_eq(result.slice(32, 64), b)
+    assertEqual(len(result), 64)
+    assertEqual(result, a + b)
+    assertEqual(result.slice(0, 32), a)
+    assertEqual(result.slice(32, 64), b)
 }
 
 @test
@@ -53,10 +53,10 @@ fn test_threshold_boundary_exact_65() {
     var b = "b".repeat(32)
     var result = a + b
     
-    assert_eq(len(result), 65)
-    assert_eq(result, a + b)
-    assert_eq(result.slice(0, 33), a)
-    assert_eq(result.slice(33, 65), b)
+    assertEqual(len(result), 65)
+    assertEqual(result, a + b)
+    assertEqual(result.slice(0, 33), a)
+    assertEqual(result.slice(33, 65), b)
 }
 
 // ===== 属性测试：阈值分支正确性 =====
@@ -93,17 +93,17 @@ fn test_property_threshold_branch_below() {
         var result = a + b
         
         // 验证总长度 < 64
-        assert_eq(len_a + len_b < 64, true)
+        assertEqual(len_a + len_b < 64, true)
         
         // 验证结果长度
-        assert_eq(len(result), len_a + len_b)
+        assertEqual(len(result), len_a + len_b)
         
         // 验证内容正确性
         if (len_a > 0) {
-            assert_eq(result.slice(0, len_a), a)
+            assertEqual(result.slice(0, len_a), a)
         }
         if (len_b > 0) {
-            assert_eq(result.slice(len_a, len_a + len_b), b)
+            assertEqual(result.slice(len_a, len_a + len_b), b)
         }
     }
 }
@@ -139,17 +139,17 @@ fn test_property_threshold_branch_at_and_above() {
         var result = a + b
         
         // 验证总长度 >= 64
-        assert_eq(len_a + len_b >= 64, true)
+        assertEqual(len_a + len_b >= 64, true)
         
         // 验证结果长度
-        assert_eq(len(result), len_a + len_b)
+        assertEqual(len(result), len_a + len_b)
         
         // 验证内容正确性
         if (len_a > 0) {
-            assert_eq(result.slice(0, len_a), a)
+            assertEqual(result.slice(0, len_a), a)
         }
         if (len_b > 0) {
-            assert_eq(result.slice(len_a, len_a + len_b), b)
+            assertEqual(result.slice(len_a, len_a + len_b), b)
         }
     }
 }
@@ -175,14 +175,14 @@ fn test_threshold_continuity() {
             var result = a + b
             
             // 验证结果长度
-            assert_eq(len(result), total_len)
+            assertEqual(len(result), total_len)
             
             // 验证内容
             if (len_a > 0) {
-                assert_eq(result.slice(0, len_a), a)
+                assertEqual(result.slice(0, len_a), a)
             }
             if (len_b > 0) {
-                assert_eq(result.slice(len_a, total_len), b)
+                assertEqual(result.slice(len_a, total_len), b)
             }
         }
     }
@@ -206,9 +206,9 @@ fn test_threshold_with_varied_content_below() {
             var result = a + b
             
             // 这些组合都 < 64
-            assert_eq(len(a) + len(b) < 64, true)
-            assert_eq(len(result), len(a) + len(b))
-            assert_eq(result, a + b)
+            assertEqual(len(a) + len(b) < 64, true)
+            assertEqual(len(result), len(a) + len(b))
+            assertEqual(result, a + b)
         }
     }
 }
@@ -228,10 +228,10 @@ fn test_threshold_with_varied_content_above() {
         var result = a + b
         
         // 这些组合都 >= 64
-        assert_eq(len(a) + len(b) >= 64, true)
-        assert_eq(len(result), len(a) + len(b))
-        assert_eq(result.startsWith(a), true)
-        assert_eq(result.endsWith(b), true)
+        assertEqual(len(a) + len(b) >= 64, true)
+        assertEqual(len(result), len(a) + len(b))
+        assertEqual(result.startsWith(a), true)
+        assertEqual(result.endsWith(b), true)
     }
 }
 
@@ -271,7 +271,7 @@ fn test_concurrent_threshold_boundary() {
     
     for (var i = 0; i < len(results); i++) {
         var expected_len = test_cases[i][0] + test_cases[i][1]
-        assert_eq(results[i], expected_len)
+        assertEqual(results[i], expected_len)
     }
 }
 
@@ -284,8 +284,8 @@ fn test_threshold_empty_strings() {
     // 空字符串拼接（总长度 = 0，< 64）
     
     var result = "" + ""
-    assert_eq(len(result), 0)
-    assert_eq(result, "")
+    assertEqual(len(result), 0)
+    assertEqual(result, "")
 }
 
 @test
@@ -296,13 +296,13 @@ fn test_threshold_one_empty() {
     
     // 短字符串 + 空
     var short_a = "hello"
-    assert_eq(short_a + "", short_a)
-    assert_eq("" + short_a, short_a)
+    assertEqual(short_a + "", short_a)
+    assertEqual("" + short_a, short_a)
     
     // 长字符串 + 空
     var long_a = "x".repeat(100)
-    assert_eq(long_a + "", long_a)
-    assert_eq("" + long_a, long_a)
+    assertEqual(long_a + "", long_a)
+    assertEqual("" + long_a, long_a)
 }
 
 @test
@@ -312,12 +312,12 @@ fn test_threshold_single_char() {
     // 单字符拼接
     
     // 两个单字符（总长度 = 2，< 64）
-    assert_eq("a" + "b", "ab")
+    assertEqual("a" + "b", "ab")
     
     // 单字符 + 长字符串（总长度 >= 64）
     var long_str = "x".repeat(63)
     var result = "a" + long_str
-    assert_eq(len(result), 64)
-    assert_eq(result.runes().nth(0), 'a')
-    assert_eq(result.slice(1, 64), long_str)
+    assertEqual(len(result), 64)
+    assertEqual(result.runes().nth(0), 'a')
+    assertEqual(result.slice(1, 64), long_str)
 }

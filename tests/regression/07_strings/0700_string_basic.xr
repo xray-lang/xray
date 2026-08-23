@@ -8,25 +8,25 @@ import text
 
 @test
 fn test_length() {
-    assert_eq(len("hello"), 5)
-    assert_eq(len(""), 0)
-    assert_eq(len("x"), 1)
-    assert_eq(len("中文"), 2)
+    assertEqual(len("hello"), 5)
+    assertEqual(len(""), 0)
+    assertEqual(len("x"), 1)
+    assertEqual(len("中文"), 2)
 }
 
 // ===== 拼接 =====
 
 @test
 fn test_concat() {
-    assert_eq("hello" + " " + "world", "hello world")
-    assert_eq("" + "test", "test")
-    assert_eq("a" + "b" + "c", "abc")
+    assertEqual("hello" + " " + "world", "hello world")
+    assertEqual("" + "test", "test")
+    assertEqual("a" + "b" + "c", "abc")
 }
 
 @test
 fn test_concat_with_numbers() {
-    assert_eq("value: " + string(42), "value: 42")
-    assert_eq(string(10) + " items", "10 items")
+    assertEqual("value: " + string(42), "value: 42")
+    assertEqual(string(10) + " items", "10 items")
 }
 
 // ===== rune nth =====
@@ -34,8 +34,8 @@ fn test_concat_with_numbers() {
 @test
 fn test_rune_nth() {
     var s = "hello"
-    assert_eq(s.runes().nth(0), 'h')
-    assert_eq(s.runes().nth(4), 'o')
+    assertEqual(s.runes().nth(0), 'h')
+    assertEqual(s.runes().nth(4), 'o')
 }
 
 // ===== rune slice =====
@@ -43,30 +43,30 @@ fn test_rune_nth() {
 @test
 fn test_substring() {
     var s = "hello world"
-    assert_eq(s.slice(0, 5), "hello")
-    assert_eq(s.slice(6, 11), "world")
-    assert_eq(s.slice(0, 1), "h")
+    assertEqual(s.slice(0, 5), "hello")
+    assertEqual(s.slice(6, 11), "world")
+    assertEqual(s.slice(0, 1), "h")
 }
 
 @test
 fn test_substring_full() {
     var s = "test"
-    assert_eq(s.slice(0, 4), "test")
+    assertEqual(s.slice(0, 4), "test")
 }
 
 @test
 fn test_substring_empty() {
     var s = "test"
-    assert_eq(s.slice(0, 0), "")
-    assert_eq(s.slice(2, 2), "")
+    assertEqual(s.slice(0, 0), "")
+    assertEqual(s.slice(2, 2), "")
 }
 
 @test
 fn test_substring_bounds() {
     var s = "abcdef"
-    assert_throws(fn() { s.slice(-1, 3) })
-    assert_throws(fn() { s.slice(2, 7) })
-    assert_throws(fn() { s.slice(4, 2) })
+    assertPanics(fn() { s.slice(-1, 3) })
+    assertPanics(fn() { s.slice(2, 7) })
+    assertPanics(fn() { s.slice(4, 2) })
 }
 
 // ===== indexOf =====
@@ -74,16 +74,16 @@ fn test_substring_bounds() {
 @test
 fn test_indexOf() {
     var s = "hello world"
-    assert_eq(s.indexOf("hello"), 0)
-    assert_eq(s.indexOf("world"), 6)
-    assert_eq(s.indexOf("o"), 4)
-    assert_eq(s.indexOf("xyz"), -1)
+    assertEqual(s.indexOf("hello"), 0)
+    assertEqual(s.indexOf("world"), 6)
+    assertEqual(s.indexOf("o"), 4)
+    assertEqual(s.indexOf("xyz"), -1)
 }
 
 @test
 fn test_indexOf_empty() {
     var s = "test"
-    assert_eq(s.indexOf(""), 0)
+    assertEqual(s.indexOf(""), 0)
 }
 
 // ===== contains =====
@@ -91,9 +91,9 @@ fn test_indexOf_empty() {
 @test
 fn test_contains() {
     var s = "hello world"
-    assert_eq(s.contains("hello"), true)
-    assert_eq(s.contains("world"), true)
-    assert_eq(s.contains("xyz"), false)
+    assertEqual(s.contains("hello"), true)
+    assertEqual(s.contains("world"), true)
+    assertEqual(s.contains("xyz"), false)
 }
 
 // ===== startsWith/endsWith =====
@@ -101,65 +101,65 @@ fn test_contains() {
 @test
 fn test_startsWith() {
     var s = "hello world"
-    assert_eq(s.startsWith("hello"), true)
-    assert_eq(s.startsWith("world"), false)
-    assert_eq(s.startsWith(""), true)
+    assertEqual(s.startsWith("hello"), true)
+    assertEqual(s.startsWith("world"), false)
+    assertEqual(s.startsWith(""), true)
 }
 
 @test
 fn test_endsWith() {
     var s = "hello world"
-    assert_eq(s.endsWith("world"), true)
-    assert_eq(s.endsWith("hello"), false)
-    assert_eq(s.endsWith(""), true)
+    assertEqual(s.endsWith("world"), true)
+    assertEqual(s.endsWith("hello"), false)
+    assertEqual(s.endsWith(""), true)
 }
 
 // ===== trim =====
 
 @test
 fn test_trim() {
-    assert_eq(text.trim("  hello  "), "hello")
-    assert_eq(text.trim("hello"), "hello")
-    assert_eq(text.trim("   "), "")
-    assert_eq(text.trim(""), "")
+    assertEqual(text.trim("  hello  "), "hello")
+    assertEqual(text.trim("hello"), "hello")
+    assertEqual(text.trim("   "), "")
+    assertEqual(text.trim(""), "")
 }
 
 @test
 fn test_trim_tabs_newlines() {
-    assert_eq(text.trim("\t hello \n"), "hello")
+    assertEqual(text.trim("\t hello \n"), "hello")
 }
 
 // ===== padStart/padEnd =====
 
 @test
 fn test_pad() {
-    assert_eq(text.padStart("42", 5, "0"), "00042")
-    assert_eq(text.padEnd("hi", 5, "!"), "hi!!!")
-    assert_eq(text.padStart("x", 3), "  x")
-    assert_eq(text.padEnd("x", 3), "x  ")
-    assert_eq(text.padStart("abc", 2, "0"), "abc")
-    assert_eq(text.padEnd("abc", 5, ""), "abc")
-    assert_eq(text.padStart("好", 6, "."), ".....好")
+    assertEqual(text.padStart("42", 5, "0"), "00042")
+    assertEqual(text.padEnd("hi", 5, "!"), "hi!!!")
+    assertEqual(text.padStart("x", 3), "  x")
+    assertEqual(text.padEnd("x", 3), "x  ")
+    assertEqual(text.padStart("abc", 2, "0"), "abc")
+    assertEqual(text.padEnd("abc", 5, ""), "abc")
+    assertEqual(text.padStart("好", 6, "."), ".....好")
 }
 
 // ===== conversion =====
 
 @test
 fn test_toInt() {
-    assert_eq(i64.tryParse("123"), 123)
-    assert_eq(i64.tryParse(" \t\r\n-17tail"), null)
-    assert_eq(i64.tryParse("+42"), 42)
-    assert_eq(i64.tryParse("abc"), null)
-    assert_eq(i64.tryParse("   "), null)
+    assertEqual(i64.tryParse("123"), 123)
+    assertEqual(i64.tryParse(" \t\r\n-17tail"), null)
+    assertEqual(i64.tryParse("+42"), 42)
+    assertEqual(i64.tryParse("abc"), null)
+    assertEqual(i64.tryParse("   "), null)
 }
 
 @test
 fn test_toFloat() {
-    assert_eq(f64.tryParse("3.5"), 3.5)
-    assert_eq(f64.tryParse(" \n-3.5e2tail"), null)
-    assert_eq(f64.tryParse("+0.25"), 0.25)
-    assert_eq(f64.tryParse("abc"), null)
-    assert_eq(f64.tryParse("\t"), null)
+    assertEqual(f64.tryParse("3.5"), 3.5)
+    assertEqual(f64.tryParse(" \n-3.5e2tail"), null)
+    assertEqual(f64.tryParse("+0.25"), 0.25)
+    assertEqual(f64.tryParse("abc"), null)
+    assertEqual(f64.tryParse("\t"), null)
 }
 
 // ===== split =====
@@ -168,57 +168,57 @@ fn test_toFloat() {
 fn test_split() {
     var s = "a,b,c,d"
     var parts = s.split(",")
-    assert_eq(len(parts), 4)
-    assert_eq(parts[0], "a")
-    assert_eq(parts[3], "d")
+    assertEqual(len(parts), 4)
+    assertEqual(parts[0], "a")
+    assertEqual(parts[3], "d")
 
     var edges = "a,,b,".split(",")
-    assert_eq(len(edges), 4)
-    assert_eq(edges[0], "a")
-    assert_eq(edges[1], "")
-    assert_eq(edges[2], "b")
-    assert_eq(edges[3], "")
+    assertEqual(len(edges), 4)
+    assertEqual(edges[0], "a")
+    assertEqual(edges[1], "")
+    assertEqual(edges[2], "b")
+    assertEqual(edges[3], "")
 
     var chars = "ab".split("")
-    assert_eq(len(chars), 2)
-    assert_eq(chars[0], "a")
-    assert_eq(chars[1], "b")
+    assertEqual(len(chars), 2)
+    assertEqual(chars[0], "a")
+    assertEqual(chars[1], "b")
 
     var empty = "".split("")
-    assert_eq(len(empty), 0)
+    assertEqual(len(empty), 0)
 }
 
 @test
 fn test_split_spaces() {
     var s = "hello world test"
     var words = s.split(" ")
-    assert_eq(len(words), 3)
+    assertEqual(len(words), 3)
 }
 
 @test
 fn test_split_no_delimiter() {
     var s = "hello"
     var parts = s.split(",")
-    assert_eq(len(parts), 1)
-    assert_eq(parts[0], "hello")
+    assertEqual(len(parts), 1)
+    assertEqual(parts[0], "hello")
 }
 
 // ===== toUpperCase/toLowerCase =====
 
 @test
 fn test_toUpperCase() {
-    assert_eq(text.upper("hello"), "HELLO")
-    assert_eq(text.upper("Hello World"), "HELLO WORLD")
-    assert_eq(text.upper("Hello 世界🌍"), "HELLO 世界🌍")
-    assert_eq(text.upper(""), "")
+    assertEqual(text.upper("hello"), "HELLO")
+    assertEqual(text.upper("Hello World"), "HELLO WORLD")
+    assertEqual(text.upper("Hello 世界🌍"), "HELLO 世界🌍")
+    assertEqual(text.upper(""), "")
 }
 
 @test
 fn test_toLowerCase() {
-    assert_eq(text.lower("HELLO"), "hello")
-    assert_eq(text.lower("Hello World"), "hello world")
-    assert_eq(text.lower("Hello 世界🌍"), "hello 世界🌍")
-    assert_eq(text.lower(""), "")
+    assertEqual(text.lower("HELLO"), "hello")
+    assertEqual(text.lower("Hello World"), "hello world")
+    assertEqual(text.lower("Hello 世界🌍"), "hello 世界🌍")
+    assertEqual(text.lower(""), "")
 }
 
 // ===== replace =====
@@ -226,44 +226,44 @@ fn test_toLowerCase() {
 @test
 fn test_replace() {
     var s = "hello world"
-    assert_eq(s.replace("world", "xray"), "hello xray")
-    assert_eq(s.replace("xyz", "abc"), "hello world")
-    assert_eq(s.replace("", "x"), "hello world")
-    assert_eq("hello".replace("l", "L"), "heLlo")
-    assert_eq("hello".replace("l", ""), "helo")
+    assertEqual(s.replace("world", "xray"), "hello xray")
+    assertEqual(s.replace("xyz", "abc"), "hello world")
+    assertEqual(s.replace("", "x"), "hello world")
+    assertEqual("hello".replace("l", "L"), "heLlo")
+    assertEqual("hello".replace("l", ""), "helo")
 }
 
 @test
 fn test_replace_all() {
     var s = "a-b-c-d"
-    assert_eq(s.replaceAll("-", "_"), "a_b_c_d")
-    assert_eq("aaaa".replaceAll("aa", "X"), "XX")
-    assert_eq("abc".replaceAll("b", ""), "ac")
-    assert_eq("abc".replaceAll("", "x"), "abc")
+    assertEqual(s.replaceAll("-", "_"), "a_b_c_d")
+    assertEqual("aaaa".replaceAll("aa", "X"), "XX")
+    assertEqual("abc".replaceAll("b", ""), "ac")
+    assertEqual("abc".replaceAll("", "x"), "abc")
 }
 
 // ===== repeat =====
 
 @test
 fn test_repeat() {
-    assert_eq("ab".repeat(3), "ababab")
-    assert_eq("x".repeat(5), "xxxxx")
-    assert_eq("test".repeat(0), "")
-    assert_eq("xy".repeat(-2), "")
-    assert_eq("".repeat(10), "")
-    assert_eq("好".repeat(2), "好好")
-    assert_eq("a".repeat(1), "a")
+    assertEqual("ab".repeat(3), "ababab")
+    assertEqual("x".repeat(5), "xxxxx")
+    assertEqual("test".repeat(0), "")
+    assertEqual("xy".repeat(-2), "")
+    assertEqual("".repeat(10), "")
+    assertEqual("好".repeat(2), "好好")
+    assertEqual("a".repeat(1), "a")
 }
 
 // ===== 比较 =====
 
 @test
 fn test_comparison() {
-    assert_eq("abc" == "abc", true)
-    assert_eq("abc" != "def", true)
-    assert_eq("abc" < "abd", true)
-    assert_eq("abc" > "abb", true)
-    assert_eq("a" < "b", true)
+    assertEqual("abc" == "abc", true)
+    assertEqual("abc" != "def", true)
+    assertEqual("abc" < "abd", true)
+    assertEqual("abc" > "abb", true)
+    assertEqual("a" < "b", true)
 }
 
 // ===== 边界条件 =====
@@ -271,15 +271,15 @@ fn test_comparison() {
 @test
 fn test_empty_string_operations() {
     var s = ""
-    assert_eq(len(s), 0)
-    assert_eq(text.trim(s), "")
-    assert_eq(text.upper(s), "")
-    assert_eq(s.contains(""), true)
+    assertEqual(len(s), 0)
+    assertEqual(text.trim(s), "")
+    assertEqual(text.upper(s), "")
+    assertEqual(s.contains(""), true)
 }
 
 @test
 fn test_long_string() {
     var s = "a".repeat(1000)
-    assert_eq(len(s), 1000)
-    assert_eq(s.runes().nth(500), 'a')
+    assertEqual(len(s), 1000)
+    assertEqual(s.runes().nth(500), 'a')
 }

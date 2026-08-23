@@ -28,14 +28,14 @@ fn test_coro_status_query() {
     var t = go task()
     // 启动后，未完成
     print("启动后 done:", t.done)
-    assert_eq(t.done, false)
-    assert_eq(t.status == TaskStatus.Pending || t.status == TaskStatus.Running, true)
+    assertEqual(t.done, false)
+    assertEqual(t.status == TaskStatus.Pending || t.status == TaskStatus.Running, true)
     // 发送信号让任务完成
     ch.send(1)
     await t
     // 完成后
     print("完成后 done:", t.done)
-    assert_eq(t.done, true)
+    assertEqual(t.done, true)
     print("✓ 协程状态查询测试通过")
 }
 
@@ -61,7 +61,7 @@ fn test_coro_cancel_status() {
         _ -> false
     }
     print("取消状态:", cancelled)
-    assert_eq(cancelled, true)
+    assertEqual(cancelled, true)
     print("✓ 协程取消状态测试通过")
 }
 
@@ -80,9 +80,9 @@ fn test_coro_naming() {
     print("Worker 1 结果:", r1)
     print("Worker 2 结果:", r2)
     print("Data Processor 结果:", r3)
-    assert_eq(r1, "Hello from Alice")
-    assert_eq(r2, "Hello from Bob")
-    assert_eq(r3, "Hello from Charlie")
+    assertEqual(r1, "Hello from Alice")
+    assertEqual(r2, "Hello from Bob")
+    assertEqual(r3, "Hello from Charlie")
     print("✓ 协程命名测试通过")
 }
 
@@ -107,12 +107,12 @@ fn test_batch_status_query() {
     var all_done = t0.done && t1.done && t2.done && t3.done && t4.done
     print("所有协程完成:", all_done)
     print("结果:", r0, r1, r2, r3, r4)
-    assert_eq(all_done, true)
-    assert_eq(r0, 0)
-    assert_eq(r1, 10)
-    assert_eq(r2, 20)
-    assert_eq(r3, 30)
-    assert_eq(r4, 40)
+    assertEqual(all_done, true)
+    assertEqual(r0, 0)
+    assertEqual(r1, 10)
+    assertEqual(r2, 20)
+    assertEqual(r3, 30)
+    assertEqual(r4, 40)
     print("✓ 批量状态查询测试通过")
 }
 
@@ -132,8 +132,8 @@ fn test_coro_error_capture() {
     print("失败任务 done:", fail.done)
     print("安全任务 result:", safe_result)
     // 失败任务应该标记为完成
-    assert_eq(fail.done, true)
-    assert_eq(safe_result, "success")
+    assertEqual(fail.done, true)
+    assertEqual(safe_result, "success")
     print("✓ 协程错误捕获测试通过")
 }
 
@@ -163,7 +163,7 @@ fn test_coro_named_batch() {
         }
     }
     print("完成顺序:", order)
-    assert_eq(len(order), 3)
+    assertEqual(len(order), 3)
     print("✓ 命名协程批量完成测试通过")
 }
 
@@ -187,7 +187,7 @@ fn test_coro_chain() {
     var r3 = await t3
     // (10 + 1) * 2 - 3 = 19
     print("链式结果:", r3)
-    assert_eq(r3, 19)
+    assertEqual(r3, 19)
     print("✓ 协程链式调用测试通过")
 }
 
@@ -230,8 +230,8 @@ fn test_execution_trace() {
     }
     print("开始事件:", starts)
     print("结束事件:", ends)
-    assert_eq(starts, 3)
-    assert_eq(ends, 3)
+    assertEqual(starts, 3)
+    assertEqual(ends, 3)
     print("✓ 执行追踪测试通过")
 }
 

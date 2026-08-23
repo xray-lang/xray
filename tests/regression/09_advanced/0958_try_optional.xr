@@ -35,7 +35,7 @@ fn parseConfigOK() -> Config {
 fn test_catch_with_default_basic() {
     print("1. success returns value")
     var a = maybeFailInt(false)
-    assert_eq(a, 42)
+    assertEqual(a, 42)
     print("   PASS")
 
     print("2. failure caught with default")
@@ -45,7 +45,7 @@ fn test_catch_with_default_basic() {
     } catch (e) {
         b = 0
     }
-    assert_eq(b, 0)
+    assertEqual(b, 0)
     print("   PASS")
 
     print("3. catch with default value")
@@ -55,7 +55,7 @@ fn test_catch_with_default_basic() {
     } catch (e) {
         c = -1
     }
-    assert_eq(c, -1)
+    assertEqual(c, -1)
     print("   PASS")
 
     print("4. success keeps original value")
@@ -65,7 +65,7 @@ fn test_catch_with_default_basic() {
     } catch (e) {
         d = -1
     }
-    assert_eq(d, 42)
+    assertEqual(d, 42)
     print("   PASS")
 }
 
@@ -79,7 +79,7 @@ fn test_catch_chain() {
     } catch (e) {
         host = "localhost"
     }
-    assert_eq(host, "localhost")
+    assertEqual(host, "localhost")
     print("   PASS")
 
     print("6. chain on success keeps original")
@@ -90,7 +90,7 @@ fn test_catch_chain() {
     } catch (e) {
         host2 = "localhost"
     }
-    assert_eq(host2, "prod.example.com")
+    assertEqual(host2, "prod.example.com")
     print("   PASS")
 }
 
@@ -103,8 +103,8 @@ fn test_catch_object_default() {
     } catch (e) {
         cfg = { port: 8080, host: "localhost" }
     }
-    assert_eq(cfg.host, "localhost")
-    assert_eq(cfg.port, 8080)
+    assertEqual(cfg.host, "localhost")
+    assertEqual(cfg.port, 8080)
     print("   PASS")
 }
 
@@ -120,12 +120,12 @@ fn findUser(id: i64) -> User? {
 fn test_catch_function_return() {
     print("8. function with optional object return type using try-catch in body")
     var u = findUser(1)
-    assert_ne(u, null)
-    assert_eq(u!.name, "Alice")
+    assert(!(u == null))
+    assertEqual(u!.name, "Alice")
     print("   PASS")
 
     var v = findUser(-1)
-    assert_eq(v, null)
+    assertEqual(v, null)
     print("   PASS")
 }
 
@@ -145,8 +145,8 @@ fn test_catch_batch() {
     var email = ""
     try { email = fetchEmail() } catch (e) { email = "" }
 
-    assert_eq(name, "unknown")
-    assert_eq(age, 27)
-    assert_eq(email, "")
+    assertEqual(name, "unknown")
+    assertEqual(age, 27)
+    assertEqual(email, "")
     print("   PASS")
 }

@@ -20,16 +20,16 @@ fn test_anchor_alias() {
     // Basic anchor/alias: scalar value (resolved inline)
     var data = "anchor: &val hello\nalias: *val"
     var obj = yaml.parse(data)
-    assert_eq(getStr(obj, "anchor"), "hello")
-    assert_eq(getStr(obj, "alias"), "hello")
+    assertEqual(getStr(obj, "anchor"), "hello")
+    assertEqual(getStr(obj, "alias"), "hello")
 }
 
 @test
 fn test_anchor_alias_number() {
     var data = "port: &p 8080\nbackup_port: *p"
     var obj = yaml.parse(data)
-    assert_eq(getInt(obj, "port"), 8080)
-    assert_eq(getInt(obj, "backup_port"), 8080)
+    assertEqual(getInt(obj, "port"), 8080)
+    assertEqual(getInt(obj, "backup_port"), 8080)
 }
 
 // ===== Literal Block Scalar =====
@@ -92,7 +92,7 @@ fn test_parse_all() {
     var data = "first: 1\n...\nsecond: 2\n...\nthird: 3"
     var docs = yaml.parseAll(data)
     assert(len(docs) >= 1)
-    assert_eq(getInt(docs[0], "first"), 1)
+    assertEqual(getInt(docs[0], "first"), 1)
 }
 
 @test
@@ -101,8 +101,8 @@ fn test_parse_all_single() {
     var data = "---\na: 1\nb: 2"
     var docs = yaml.parseAll(data)
     assert(len(docs) >= 1)
-    assert_eq(getInt(docs[0], "a"), 1)
-    assert_eq(getInt(docs[0], "b"), 2)
+    assertEqual(getInt(docs[0], "a"), 1)
+    assertEqual(getInt(docs[0], "b"), 2)
 }
 
 // ===== Hex and Octal Numbers =====
@@ -111,21 +111,21 @@ fn test_parse_all_single() {
 fn test_hex_numbers() {
     var data = "hex: 0xFF"
     var obj = yaml.parse(data)
-    assert_eq(getInt(obj, "hex"), 255)
+    assertEqual(getInt(obj, "hex"), 255)
 }
 
 @test
 fn test_hex_number_upper() {
     var data = "val: 0x1A"
     var obj = yaml.parse(data)
-    assert_eq(getInt(obj, "val"), 26)
+    assertEqual(getInt(obj, "val"), 26)
 }
 
 @test
 fn test_octal_numbers() {
     var data = "oct: 0o77"
     var obj = yaml.parse(data)
-    assert_eq(getInt(obj, "oct"), 63)
+    assertEqual(getInt(obj, "oct"), 63)
 }
 
 // ===== String that looks like hex but is not =====
@@ -135,14 +135,14 @@ fn test_string_not_hex() {
     var data = "word: cafe"
     var obj = yaml.parse(data)
     // "cafe" should be a string, not parsed as hex number
-    assert_eq(getStr(obj, "word"), "cafe")
+    assertEqual(getStr(obj, "word"), "cafe")
 }
 
 @test
 fn test_string_abcdef() {
     var data = "word: abcdef"
     var obj = yaml.parse(data)
-    assert_eq(getStr(obj, "word"), "abcdef")
+    assertEqual(getStr(obj, "word"), "abcdef")
 }
 
 // ===== Special Float Values =====
@@ -188,7 +188,7 @@ fn test_empty_value() {
 fn test_unicode_escape() {
     var data = "rune: \"\\u0041\""
     var obj = yaml.parse(data)
-    assert_eq(getStr(obj, "rune"), "A")
+    assertEqual(getStr(obj, "rune"), "A")
 }
 
 @test
@@ -221,9 +221,9 @@ fn test_stringify_value() {
     assert(len(result) > 0)
     // Roundtrip: parse the stringified result
     var parsed = yaml.parse(result)
-    assert_eq(getStr(parsed, "name"), "xray")
-    assert_eq(getInt(parsed, "version"), 1)
-    assert_eq(getBool(parsed, "debug"), false)
+    assertEqual(getStr(parsed, "name"), "xray")
+    assertEqual(getInt(parsed, "version"), 1)
+    assertEqual(getBool(parsed, "debug"), false)
 }
 
 @test
@@ -250,9 +250,9 @@ fn test_stringify_value_roundtrip() {
     yaml.mappingSet(ref original, "d", yaml.nullValue())
     var yaml_str = yaml.stringify(yaml.mappingValue(original))
     var parsed = yaml.parse(yaml_str)
-    assert_eq(getInt(parsed, "a"), 1)
-    assert_eq(getStr(parsed, "b"), "hello")
-    assert_eq(getBool(parsed, "c"), true)
+    assertEqual(getInt(parsed, "a"), 1)
+    assertEqual(getStr(parsed, "b"), "hello")
+    assertEqual(getBool(parsed, "c"), true)
     assert(yaml.isNull(getV(parsed, "d")))
 }
 
@@ -295,8 +295,8 @@ fn test_comment_only() {
 fn test_inline_comments() {
     var data = "name: Alice # user name\nage: 30 # years"
     var obj = yaml.parse(data)
-    assert_eq(getStr(obj, "name"), "Alice")
-    assert_eq(getInt(obj, "age"), 30)
+    assertEqual(getStr(obj, "name"), "Alice")
+    assertEqual(getInt(obj, "age"), 30)
 }
 
 // ===== Negative numbers =====
@@ -305,8 +305,8 @@ fn test_inline_comments() {
 fn test_negative_numbers() {
     var data = "neg_int: -42\nneg_float: -3.14"
     var obj = yaml.parse(data)
-    assert_eq(getInt(obj, "neg_int"), -42)
-    assert_eq(getFloat(obj, "neg_float"), -3.14)
+    assertEqual(getInt(obj, "neg_int"), -42)
+    assertEqual(getFloat(obj, "neg_float"), -3.14)
 }
 
 // ===== Quoted keys =====
@@ -317,6 +317,6 @@ fn test_flow_quoted_keys() {
     var data = "data: {\"key one\": 1, 'key two': 2}"
     var obj = yaml.parse(data)
     var d = getV(obj, "data")
-    assert_eq(getInt(d, "key one"), 1)
-    assert_eq(getInt(d, "key two"), 2)
+    assertEqual(getInt(d, "key one"), 1)
+    assertEqual(getInt(d, "key two"), 2)
 }

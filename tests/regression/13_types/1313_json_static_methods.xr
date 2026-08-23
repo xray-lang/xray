@@ -5,17 +5,17 @@ type User = { name: string, age: i64 }
 @test
 fn test_parse_and_stringify() {
     var value = JSON.parseValue("{\"name\":\"Ada\",\"age\":37}")
-    assert_eq(JSON.require<string>(value, ["name"]), "Ada")
-    assert_eq(JSON.stringify(value), "{\"name\":\"Ada\",\"age\":37}")
+    assertEqual(JSON.require<string>(value, ["name"]), "Ada")
+    assertEqual(JSON.stringify(value), "{\"name\":\"Ada\",\"age\":37}")
 }
 
 @test
 fn test_typed_parse_and_value() {
     var user = JSON.parse<User>("{\"name\":\"Bob\",\"age\":42}")
-    assert_eq(user.name, "Bob")
+    assertEqual(user.name, "Bob")
     var encoded = JSON.value(user)
-    assert_eq(typeName(encoded), "Map")
-    assert_eq(JSON.require<i64>(encoded, ["age"]), 42)
+    assertEqual(typeName(encoded), "Map")
+    assertEqual(JSON.require<i64>(encoded, ["age"]), 42)
 }
 
 @test

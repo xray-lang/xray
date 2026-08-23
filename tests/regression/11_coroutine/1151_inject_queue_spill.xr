@@ -17,5 +17,5 @@ fn spill_child(depth: i64) -> i64 {
 fn test_inject_queue_spill_chain() {
     var depth = 2048
     var result = await go spill_child(depth)
-    assert_eq(result, depth)
+    assertEqual(result, depth)
 }

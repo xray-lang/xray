@@ -26,11 +26,11 @@ fn test_channel_send_copy_preserves_source() {
     var got = recv_array(ch)
     got.push(99)
 
-    assert_eq(len(xs), 3)
-    assert_eq(len(got), 3)
-    assert_eq(got[0], 1)
-    assert_eq(got[1], 2)
-    assert_eq(got[2], 99)
+    assertEqual(len(xs), 3)
+    assertEqual(len(got), 3)
+    assertEqual(got[0], 1)
+    assertEqual(got[1], 2)
+    assertEqual(got[2], 99)
     ch.close()
 }
 
@@ -42,10 +42,10 @@ fn test_channel_try_send_copy_preserves_source() {
     xs.push(6)
 
     var got = recv_array(ch)
-    assert_eq(len(xs), 3)
-    assert_eq(len(got), 2)
-    assert_eq(got[0], 4)
-    assert_eq(got[1], 5)
+    assertEqual(len(xs), 3)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 4)
+    assertEqual(got[1], 5)
     ch.close()
 }
 
@@ -57,10 +57,10 @@ fn test_channel_send_timeout_copy_preserves_source() {
     xs.push(9)
 
     var got = recv_array(ch)
-    assert_eq(len(xs), 3)
-    assert_eq(len(got), 2)
-    assert_eq(got[0], 7)
-    assert_eq(got[1], 8)
+    assertEqual(len(xs), 3)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 7)
+    assertEqual(got[1], 8)
     ch.close()
 }
 
@@ -73,9 +73,9 @@ fn test_channel_send_move_transfers_source() {
     ch.send(move xs)
 
     var got = recv_array(ch)
-    assert_eq(len(got), 2)
-    assert_eq(got[0], 10)
-    assert_eq(got[1], 11)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 10)
+    assertEqual(got[1], 11)
     ch.close()
 }
 
@@ -88,8 +88,8 @@ fn test_channel_send_helper_move_transfers_owned_param() {
     forward_array(ch, move xs)
 
     var got = recv_array(ch)
-    assert_eq(len(got), 2)
-    assert_eq(got[0], 12)
-    assert_eq(got[1], 13)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 12)
+    assertEqual(got[1], 13)
     ch.close()
 }

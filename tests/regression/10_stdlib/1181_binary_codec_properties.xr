@@ -67,13 +67,13 @@ fn utf16DecodeOptions(order: Endian, consumeBom: bool = true) -> Utf16DecodeOpti
 
 @test
 fn test_base64_full_rfc4648_vectors() {
-    assert_eq(encodeText(""), "")
-    assert_eq(encodeText("f"), "Zg==")
-    assert_eq(encodeText("fo"), "Zm8=")
-    assert_eq(encodeText("foo"), "Zm9v")
-    assert_eq(encodeText("foob"), "Zm9vYg==")
-    assert_eq(encodeText("fooba"), "Zm9vYmE=")
-    assert_eq(encodeText("foobar"), "Zm9vYmFy")
+    assertEqual(encodeText(""), "")
+    assertEqual(encodeText("f"), "Zg==")
+    assertEqual(encodeText("fo"), "Zm8=")
+    assertEqual(encodeText("foo"), "Zm9v")
+    assertEqual(encodeText("foob"), "Zm9vYg==")
+    assertEqual(encodeText("fooba"), "Zm9vYmE=")
+    assertEqual(encodeText("foobar"), "Zm9vYmFy")
 }
 
 @test
@@ -90,7 +90,7 @@ fn test_base64_independent_all_byte_aggregate() {
         }
     }
     // Python base64.b64encode reference over byte values 0...255.
-    assert_eq(aggregate, 544432900)
+    assertEqual(aggregate, 544432900)
 }
 
 @test
@@ -110,7 +110,7 @@ fn test_base64_deterministic_roundtrip_fuzz() {
 fn test_hex_full_byte_kat() {
     var allBytes = Array<u8>(256)
     for (var i = 0; i < 256; i++) { allBytes[i] = i as u8 }
-    assert_eq(encoding.hexEncode(allBytes[:]), ALL_BYTES_HEX)
+    assertEqual(encoding.hexEncode(allBytes[:]), ALL_BYTES_HEX)
     assert(sameBytes(encoding.hexDecode(ALL_BYTES_HEX), allBytes))
 }
 
@@ -128,7 +128,7 @@ fn test_utf8_exhaustive_single_and_two_byte_space() {
     var one = Array<u8>(1)
     for (var value = 0; value < 256; value++) {
         one[0] = value as u8
-        assert_eq(encoding.utf8Valid(one[:]), value < 128)
+        assertEqual(encoding.utf8Valid(one[:]), value < 128)
     }
 
     var pair = Array<u8>(2)
@@ -149,13 +149,13 @@ fn test_utf8_scalar_boundaries() {
     minimumThree[2] = 0x80
     assert(encoding.utf8Valid(minimumThree[:]))
     minimumThree[1] = 0x9F
-    assert_eq(encoding.utf8Valid(minimumThree[:]), false)
+    assertEqual(encoding.utf8Valid(minimumThree[:]), false)
 
     var surrogate = Array<u8>(3)
     surrogate[0] = 0xED
     surrogate[1] = 0xA0
     surrogate[2] = 0x80
-    assert_eq(encoding.utf8Valid(surrogate[:]), false)
+    assertEqual(encoding.utf8Valid(surrogate[:]), false)
 
     var maximum = Array<u8>(4)
     maximum[0] = 0xF4
@@ -164,30 +164,30 @@ fn test_utf8_scalar_boundaries() {
     maximum[3] = 0xBF
     assert(encoding.utf8Valid(maximum[:]))
     maximum[1] = 0x90
-    assert_eq(encoding.utf8Valid(maximum[:]), false)
+    assertEqual(encoding.utf8Valid(maximum[:]), false)
 }
 
 @test
 fn test_utf16_supplementary_kat_and_roundtrip() {
     var text = "A😀𝄞"
     var le = encoding.utf16Encode(text)
-    assert_eq(len(le), 10)
-    assert_eq(le[0], 0x41)
-    assert_eq(le[1], 0x00)
-    assert_eq(le[2], 0x3D)
-    assert_eq(le[3], 0xD8)
-    assert_eq(le[4], 0x00)
-    assert_eq(le[5], 0xDE)
-    assert_eq(le[6], 0x34)
-    assert_eq(le[7], 0xD8)
-    assert_eq(le[8], 0x1E)
-    assert_eq(le[9], 0xDD)
-    assert_eq(encoding.utf16Decode(le[:]), text)
+    assertEqual(len(le), 10)
+    assertEqual(le[0], 0x41)
+    assertEqual(le[1], 0x00)
+    assertEqual(le[2], 0x3D)
+    assertEqual(le[3], 0xD8)
+    assertEqual(le[4], 0x00)
+    assertEqual(le[5], 0xDE)
+    assertEqual(le[6], 0x34)
+    assertEqual(le[7], 0xD8)
+    assertEqual(le[8], 0x1E)
+    assertEqual(le[9], 0xDD)
+    assertEqual(encoding.utf16Decode(le[:]), text)
 
     var be = encoding.utf16Encode(text, utf16EncodeOptions(Endian.BE))
-    assert_eq(be[0], 0x00)
-    assert_eq(be[1], 0x41)
-    assert_eq(be[2], 0xD8)
-    assert_eq(be[3], 0x3D)
-    assert_eq(encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)), text)
+    assertEqual(be[0], 0x00)
+    assertEqual(be[1], 0x41)
+    assertEqual(be[2], 0xD8)
+    assertEqual(be[3], 0x3D)
+    assertEqual(encoding.utf16Decode(be[:], utf16DecodeOptions(Endian.BE)), text)
 }

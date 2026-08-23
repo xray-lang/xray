@@ -5,98 +5,98 @@
 @test
 fn test_atomic_int_load_store() {
     const a = Atomic(0)
-    assert_eq(a.load(), 0)
+    assertEqual(a.load(), 0)
     a.store(42)
-    assert_eq(a.load(), 42)
+    assertEqual(a.load(), 42)
 }
 
 @test
 fn test_atomic_int_add_sub() {
     const a = Atomic(10)
     a.add(5)
-    assert_eq(a.load(), 15)
+    assertEqual(a.load(), 15)
     a.sub(3)
-    assert_eq(a.load(), 12)
+    assertEqual(a.load(), 12)
 }
 
 @test
 fn test_atomic_int_fetch_add_sub() {
     const a = Atomic(10)
     var old1 = a.fetchAdd(5)
-    assert_eq(old1, 10)
-    assert_eq(a.load(), 15)
+    assertEqual(old1, 10)
+    assertEqual(a.load(), 15)
     var old2 = a.fetchSub(3)
-    assert_eq(old2, 15)
-    assert_eq(a.load(), 12)
+    assertEqual(old2, 15)
+    assertEqual(a.load(), 12)
 }
 
 @test
 fn test_atomic_int_swap() {
     const a = Atomic(1)
     var old = a.swap(99)
-    assert_eq(old, 1)
-    assert_eq(a.load(), 99)
+    assertEqual(old, 1)
+    assertEqual(a.load(), 99)
 }
 
 @test
 fn test_atomic_int_compare_exchange_success() {
     const a = Atomic(0)
     var (prev, ok) = a.compareExchange(0, 1)
-    assert_eq(prev, 0)
-    assert_eq(ok, true)
-    assert_eq(a.load(), 1)
+    assertEqual(prev, 0)
+    assertEqual(ok, true)
+    assertEqual(a.load(), 1)
 }
 
 @test
 fn test_atomic_int_compare_exchange_failure() {
     const a = Atomic(5)
     var (prev, ok) = a.compareExchange(0, 1)
-    assert_eq(ok, false)
-    assert_eq(prev, 5)
-    assert_eq(a.load(), 5)
+    assertEqual(ok, false)
+    assertEqual(prev, 5)
+    assertEqual(a.load(), 5)
 }
 
 @test
 fn test_atomic_bool_load_store() {
     const flag = Atomic(false)
-    assert_eq(flag.load(), false)
+    assertEqual(flag.load(), false)
     flag.store(true)
-    assert_eq(flag.load(), true)
+    assertEqual(flag.load(), true)
 }
 
 @test
 fn test_atomic_bool_toggle() {
     const flag = Atomic(false)
     var was = flag.toggle()
-    assert_eq(was, false)
-    assert_eq(flag.load(), true)
+    assertEqual(was, false)
+    assertEqual(flag.load(), true)
     var was2 = flag.toggle()
-    assert_eq(was2, true)
-    assert_eq(flag.load(), false)
+    assertEqual(was2, true)
+    assertEqual(flag.load(), false)
 }
 
 @test
 fn test_atomic_float_load_store() {
     const rate = Atomic(0.0)
-    assert_eq(rate.load(), 0.0)
+    assertEqual(rate.load(), 0.0)
     rate.store(3.14)
-    assert_eq(rate.load(), 3.14)
+    assertEqual(rate.load(), 3.14)
 }
 
 @test
 fn test_atomic_float_add_sub() {
     const rate = Atomic(1.0)
     rate.add(0.5)
-    assert_eq(rate.load(), 1.5)
+    assertEqual(rate.load(), 1.5)
     rate.sub(0.25)
-    assert_eq(rate.load(), 1.25)
+    assertEqual(rate.load(), 1.25)
 }
 
 @test
 fn test_atomic_to_string() {
     const a = Atomic(42)
     var s = a.toString()
-    assert_eq(s, "42")
+    assertEqual(s, "42")
 }
 
 @test
@@ -104,7 +104,7 @@ fn test_atomic_ordering_enum() {
     const a = Atomic(0)
     a.store(1, Ordering.Relaxed)
     var v = a.load(Ordering.Relaxed)
-    assert_eq(v, 1)
+    assertEqual(v, 1)
     a.store(2, Ordering.SeqCst)
-    assert_eq(a.load(Ordering.SeqCst), 2)
+    assertEqual(a.load(Ordering.SeqCst), 2)
 }

@@ -13,18 +13,18 @@ import { Box, makeBox, BOX_VERSION } from "./modules/sel_lib"
 fn test_selective_class_top_level() {
     // baseline：顶层使用，旧实现也工作
     var b = Box(4, 5)
-    assert_eq(b.area(), 20)
+    assertEqual(b.area(), 20)
 }
 
 @test
 fn test_selective_fn_top_level() {
     var b = makeBox(2, 3)
-    assert_eq(b.area(), 6)
+    assertEqual(b.area(), 6)
 }
 
 @test
 fn test_selective_const_top_level() {
-    assert_eq(BOX_VERSION, "1.0")
+    assertEqual(BOX_VERSION, "1.0")
 }
 
 @test
@@ -36,7 +36,7 @@ fn test_selective_class_nested() {
         var b = Box(7, 6)
         return b.area()
     }
-    assert_eq(make(), 42)
+    assertEqual(make(), 42)
 }
 
 @test
@@ -45,7 +45,7 @@ fn test_selective_fn_nested() {
         var b = makeBox(8, 9)
         return b.area()
     }
-    assert_eq(build(), 72)
+    assertEqual(build(), 72)
 }
 
 @test
@@ -53,7 +53,7 @@ fn test_selective_const_nested() {
     fn version() -> string {
         return BOX_VERSION
     }
-    assert_eq(version(), "1.0")
+    assertEqual(version(), "1.0")
 }
 
 @test
@@ -65,5 +65,5 @@ fn test_selective_typeof_nested() {
     var t = check()
     // 修复前：t == "null" — slot 永远为 null
     // 修复后：t 是 class 的 typeof（"function" / "class" 等），不是 "null"
-    assert_eq(t != "null", true)
+    assertEqual(t != "null", true)
 }

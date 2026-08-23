@@ -176,5 +176,5 @@ comptime {
 @test
 fn test_comptime_block_erased() {
     var x = 3
-    assert_eq(x, 3)
+    assertEqual(x, 3)
 }

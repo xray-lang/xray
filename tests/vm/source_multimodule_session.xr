@@ -2,5 +2,5 @@ import { sourceSessionIncrement } from "./modules/source_multimodule_session_lib
 
 @test
 fn dependency_compiles_in_the_file_transaction() {
-    assert_eq(sourceSessionIncrement(41), 42)
+    assertEqual(sourceSessionIncrement(41), 42)
 }

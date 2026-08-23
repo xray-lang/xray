@@ -1,23 +1,23 @@
 // Unified Map literal syntax tests
 // Empty Map
 let empty = #{}
-assert_eq(empty.size, 0)
+assertEqual(empty.size, 0)
 // Non-empty Map with new syntax
 let m1 = { "a" => 1, "b" => 2, "c" => 3 }
-assert_eq(m1.size, 3)
-assert_eq(m1["a"], 1)
+assertEqual(m1.size, 3)
+assertEqual(m1["a"], 1)
 // Trailing comma
 let m2 = { "name" => "Alice", "age" => 30 }
-assert_eq(m2.size, 2)
+assertEqual(m2.size, 2)
 // Nested Map
 let m3 = { "outer" => { "inner" => "value" } }
-assert_eq(m3["outer"]["inner"], "value")
+assertEqual(m3["outer"]["inner"], "value")
 // Old syntax still works
 let old = { "x" => 10 }
-assert_eq(old["x"], 10)
+assertEqual(old["x"], 10)
 // Mix old and new
 let mixed = { "new" => { "old" => 1 } }
-assert_eq(mixed["new"]["old"], 1)
+assertEqual(mixed["new"]["old"], 1)
 // Empty map in conditions (now falsy)
 if (#{}) {
     assert(false)

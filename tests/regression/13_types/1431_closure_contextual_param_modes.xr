@@ -11,6 +11,6 @@ fn test_closure_contextual_ref_out_modes() {
     }
 
     var value = 1
-    assert_eq(bump(ref value), 2)
-    assert_eq(fill(ref value), 7)
+    assertEqual(bump(ref value), 2)
+    assertEqual(fill(ref value), 7)
 }

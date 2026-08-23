@@ -11,44 +11,44 @@
 fn test_int64_add() {
     var a: i64 = 100
     var b: i64 = 200
-    assert_eq(a + b, 300)
+    assertEqual(a + b, 300)
 }
 
 @test
 fn test_int64_sub() {
     var a: i64 = 100
     var b: i64 = 200
-    assert_eq(a - b, -100)
+    assertEqual(a - b, -100)
 }
 
 @test
 fn test_int64_mul() {
     var a: i64 = 1000000
     var b: i64 = 1000000
-    assert_eq(a * b, 1000000000000)
+    assertEqual(a * b, 1000000000000)
 }
 
 @test
 fn test_int64_div() {
     var a: i64 = 100
     var b: i64 = 3
-    assert_eq(a / b, 33)
+    assertEqual(a / b, 33)
 }
 
 @test
 fn test_int64_mod() {
     var a: i64 = 100
     var b: i64 = 3
-    assert_eq(a % b, 1)
+    assertEqual(a % b, 1)
 }
 
 @test
 fn test_int64_neg() {
     var a: i64 = 42
-    assert_eq(-a, -42)
+    assertEqual(-a, -42)
 }
 
-// ===== Beyond 48-bit: assert_eq with both I64 operands =====
+// ===== Beyond 48-bit: assertEqual with both I64 operands =====
 
 @test
 fn test_int64_beyond_48bit_add() {
@@ -56,7 +56,7 @@ fn test_int64_beyond_48bit_add() {
     var b: i64 = 1
     var result: i64 = a + b
     // Both sides are I64 — should use OP_EQ_I64, no boxing
-    assert_eq(result - b, a)
+    assertEqual(result - b, a)
 }
 
 @test
@@ -65,7 +65,7 @@ fn test_int64_large_multiply_verify() {
     var b: i64 = 1000000000
     var result: i64 = a * b
     // Both sides are I64 — should use OP_EQ_I64
-    assert_eq(result / a, b)
+    assertEqual(result / a, b)
 }
 
 @test
@@ -73,20 +73,20 @@ fn test_int64_negative_large() {
     var a: i64 = -140737488355328
     var b: i64 = -1
     var result: i64 = a + b
-    assert_eq(result + 1, a)
+    assertEqual(result + 1, a)
 }
 
-// ===== Beyond 48-bit: assert_eq with >48-bit literal =====
-// This tests whether assert_eq(I64_var, literal) correctly avoids boxing
+// ===== Beyond 48-bit: assertEqual with >48-bit literal =====
+// This tests whether assertEqual(I64_var, literal) correctly avoids boxing
 // when the literal exceeds 48-bit range.
 
 @test
-fn test_int64_assert_eq_large_literal() {
+fn test_int64_large_literal_equality() {
     var a: i64 = 140737488355327
     var b: i64 = a + 1
-    // b = 140737488355328 (>48-bit), assert_eq second arg is I64 expr
+    // b = 140737488355328 (>48-bit), assertEqual second arg is I64 expr
     var expected: i64 = 140737488355328
-    assert_eq(b, expected)
+    assertEqual(b, expected)
 }
 
 // ===== Beyond 48-bit: comparison in expression context =====
@@ -121,14 +121,14 @@ fn test_int64_comparison_eq_expr() {
 fn test_int64_div_by_zero() {
     var a: i64 = 42
     var zero: i64 = 0
-    assert_throws(fn() { var r = a / zero })
+    assertPanics(fn() { var r = a / zero })
 }
 
 @test
 fn test_int64_mod_by_zero() {
     var a: i64 = 42
     var zero: i64 = 0
-    assert_throws(fn() { var r = a % zero })
+    assertPanics(fn() { var r = a % zero })
 }
 
 // ===== Bitwise operations =====
@@ -137,9 +137,9 @@ fn test_int64_mod_by_zero() {
 fn test_int64_bitwise() {
     var a: i64 = 0xFF00
     var b: i64 = 0x0FF0
-    assert_eq(a & b, 0x0F00)
-    assert_eq(a | b, 0xFFF0)
-    assert_eq(a ^ b, 0xF0F0)
+    assertEqual(a & b, 0x0F00)
+    assertEqual(a | b, 0xFFF0)
+    assertEqual(a ^ b, 0xF0F0)
 }
 
 // ===== Shift operations beyond 48-bit =====
@@ -149,14 +149,14 @@ fn test_int64_shift_large() {
     var a: i64 = 1
     var r47: i64 = a << 47
     // 2^47 = 140737488355328, verify via shift back
-    assert_eq(r47 >> 47, 1)
+    assertEqual(r47 >> 47, 1)
 }
 
 @test
 fn test_int64_shift_62() {
     var a: i64 = 1
     var r62: i64 = a << 62
-    assert_eq(r62 >> 62, 1)
+    assertEqual(r62 >> 62, 1)
 }
 
 // ===== Compound assignment beyond 48-bit =====
@@ -165,14 +165,14 @@ fn test_int64_shift_62() {
 fn test_int64_compound_add_large() {
     var x: i64 = 140737488355327
     x += 1000
-    assert_eq(x - 1000, 140737488355327)
+    assertEqual(x - 1000, 140737488355327)
 }
 
 @test
 fn test_int64_compound_mul_large() {
     var x: i64 = 1000000000
     x *= 1000000000
-    assert_eq(x / 1000000000, 1000000000)
+    assertEqual(x / 1000000000, 1000000000)
 }
 
 // ===== typeof =====
@@ -180,11 +180,11 @@ fn test_int64_compound_mul_large() {
 @test
 fn test_typeof_int64() {
     var a: i64 = 42
-    assert_eq(typeName(a), "i64")
+    assertEqual(typeName(a), "i64")
 }
 
 @test
 fn test_typeof_float64() {
     var a: f64 = 3.14
-    assert_eq(typeName(a), "f64")
+    assertEqual(typeName(a), "f64")
 }

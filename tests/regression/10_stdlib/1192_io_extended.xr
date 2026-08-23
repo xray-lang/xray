@@ -9,10 +9,10 @@ fn test_basic_file_ops() {
     var tmp = io.tempFile()!
     assert(io.exists(tmp))
     io.writeFile(tmp, "hello\nworld\ntest")
-    assert_eq(io.readFile(tmp) ?? "", "hello\nworld\ntest")
+    assertEqual(io.readFile(tmp) ?? "", "hello\nworld\ntest")
     var lines = io.readLines(tmp)
-    assert_eq(lines[0], "hello")
-    assert_eq(lines[1], "world")
+    assertEqual(lines[0], "hello")
+    assertEqual(lines[1], "world")
     io.remove(tmp)
 }
 
@@ -22,8 +22,8 @@ fn test_file_info() {
     io.writeFile(tmp, "test content")
     var st = io.stat(tmp)
     assert(st != null)
-    assert_eq(st!.size, 12)
-    assert_eq(st!.isFile, true)
+    assertEqual(st!.size, 12)
+    assertEqual(st!.isFile, true)
     assert(io.isFile(tmp))
     assert(!io.isDir(tmp))
     io.remove(tmp)
@@ -52,7 +52,7 @@ fn test_copy_and_move() {
     var dst = path.from(src.toString() + ".copy")
     io.copyFile(src, dst)
     assert(io.exists(dst))
-    assert_eq(io.readFile(dst) ?? "", "copy test")
+    assertEqual(io.readFile(dst) ?? "", "copy test")
     var moved = path.from(src.toString() + ".moved")
     io.rename(dst, moved)
     assert(!io.exists(dst))
@@ -67,12 +67,12 @@ fn test_touch_and_chmod() {
     io.remove(tmp)
     io.touch(tmp)
     assert(io.exists(tmp))
-    assert_eq(io.fileSize(tmp), 0)
+    assertEqual(io.fileSize(tmp), 0)
     io.chmod(tmp, 420)
     var st = io.stat(tmp)
     // Windows does not support Unix file permissions; skip mode check
     if (os.platform != "windows") {
-        assert_eq(st!.mode, 420)
+        assertEqual(st!.mode, 420)
     }
     io.remove(tmp)
 }
@@ -81,7 +81,7 @@ fn test_touch_and_chmod() {
 fn test_realpath() {
     var cwd = io.cwd()
     var resolved = io.realpath(path.from("."))!
-    assert_eq(resolved.toString(), cwd.toString())
+    assertEqual(resolved.toString(), cwd.toString())
 }
 
 @test
@@ -90,7 +90,7 @@ fn test_chdir() {
     var tmpDir = io.tempDir()!
     var tmpDirReal = io.realpath(tmpDir)!
     io.chdir(tmpDir)
-    assert_eq(io.cwd().toString(), tmpDirReal.toString())
+    assertEqual(io.cwd().toString(), tmpDirReal.toString())
     io.chdir(original)
     io.removeAll(tmpDir)
 }

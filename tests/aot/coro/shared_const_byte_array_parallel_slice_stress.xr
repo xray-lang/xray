@@ -104,7 +104,7 @@ var i = 0
 while (i < ITERS) {
     var b = 0
     while (b < blocks) {
-        assert_true(queue.push(b, b % WORKERS))
+        assert(queue.push(b, b % WORKERS))
         expectedCount = expectedCount + 1
         b = b + 1
     }

@@ -10,7 +10,7 @@ fn test_basic_range() {
     for (i in 0..5) {
         sum = sum + i
     }
-    assert_eq(sum, 10)  // 0+1+2+3+4
+    assertEqual(sum, 10)  // 0+1+2+3+4
 }
 
 @test
@@ -19,7 +19,7 @@ fn test_range_start_one() {
     for (i in 1..5) {
         sum = sum + i
     }
-    assert_eq(sum, 10)  // 1+2+3+4
+    assertEqual(sum, 10)  // 1+2+3+4
 }
 
 // ===== 范围边界 =====
@@ -30,7 +30,7 @@ fn test_range_single() {
     for (i in 0..1) {
         count = count + 1
     }
-    assert_eq(count, 1)
+    assertEqual(count, 1)
 }
 
 @test
@@ -39,7 +39,7 @@ fn test_range_empty() {
     for (i in 5..5) {
         count = count + 1
     }
-    assert_eq(count, 0)
+    assertEqual(count, 0)
 }
 
 // ===== 范围与变量 =====
@@ -51,7 +51,7 @@ fn test_range_variable_end() {
     for (i in 0..n) {
         sum = sum + i
     }
-    assert_eq(sum, 10)
+    assertEqual(sum, 10)
 }
 
 @test
@@ -62,7 +62,7 @@ fn test_range_both_variables() {
     for (i in start..end) {
         sum = sum + i
     }
-    assert_eq(sum, 14)  // 2+3+4+5
+    assertEqual(sum, 14)  // 2+3+4+5
 }
 
 // ===== 范围嵌套 =====
@@ -75,7 +75,7 @@ fn test_nested_ranges() {
             count = count + 1
         }
     }
-    assert_eq(count, 9)
+    assertEqual(count, 9)
 }
 
 // ===== 范围与数组 =====
@@ -87,7 +87,7 @@ fn test_range_array_index() {
     for (i in 0..len(arr)) {
         sum = sum + arr[i]
     }
-    assert_eq(sum, 150)
+    assertEqual(sum, 150)
 }
 
 // ===== 范围计算 =====
@@ -99,7 +99,7 @@ fn test_range_expression_end() {
     for (i in 0..(n * 2)) {
         sum = sum + i
     }
-    assert_eq(sum, 15)  // 0+1+2+3+4+5
+    assertEqual(sum, 15)  // 0+1+2+3+4+5
 }
 
 // Range endpoints are additive expressions, so the parentheses above are
@@ -113,25 +113,25 @@ fn test_range_end_takes_arithmetic_without_parens() {
     for (i in 0..n * 2) {
         sum = sum + i
     }
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 
     var sum2 = 0
     for (i in 0..n + 1) {
         sum2 = sum2 + i
     }
-    assert_eq(sum2, 6)  // 0+1+2+3
+    assertEqual(sum2, 6)  // 0+1+2+3
 
     var sum3 = 0
     for (i in 0..n - 1) {
         sum3 = sum3 + i
     }
-    assert_eq(sum3, 1)  // 0+1
+    assertEqual(sum3, 1)  // 0+1
 
     var sum4 = 0
     for (i in 1..=n + 1) {
         sum4 = sum4 + i
     }
-    assert_eq(sum4, 10)  // 1+2+3+4
+    assertEqual(sum4, 10)  // 1+2+3+4
 }
 
 @test
@@ -141,7 +141,7 @@ fn test_range_start_takes_arithmetic_without_parens() {
     for (i in n - 1..n * 3) {
         sum = sum + i
     }
-    assert_eq(sum, 15)  // 1+2+3+4+5
+    assertEqual(sum, 15)  // 1+2+3+4+5
 }
 
 @test
@@ -151,7 +151,7 @@ fn test_range_endpoints_use_len_and_calls() {
     for (i in 0..len(a) - 1) {
         sum = sum + a[i]
     }
-    assert_eq(sum, 60)  // a[0]+a[1]+a[2]
+    assertEqual(sum, 60)  // a[0]+a[1]+a[2]
 }
 
 // Range binds looser than `+ -` but tighter than shifts, comparisons and the

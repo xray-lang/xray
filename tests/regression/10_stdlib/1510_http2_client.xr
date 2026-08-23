@@ -21,11 +21,11 @@ fn test_h2_options_object() {
         version: HttpVersion.Http2,
         timeoutMs: 2500
     }
-    assert_eq(opts.method!.token, "POST")
-    assert_eq(opts.headers!.get("Content-Type"), "application/json")
-    assert_eq(opts.body![0], 123)
+    assertEqual(opts.method!.token, "POST")
+    assertEqual(opts.headers!.get("Content-Type"), "application/json")
+    assertEqual(opts.body![0], 123)
     assert(opts.version == HttpVersion.Http2)
-    assert_eq(opts.timeoutMs, 2500)
+    assertEqual(opts.timeoutMs, 2500)
 }
 
 fn h2_rejects_headers(headers: Headers) -> bool {

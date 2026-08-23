@@ -46,9 +46,9 @@ fn test_work_queue_generic_class() {
     q.push(20, 1)
     q.push(30, 2)
 
-    assert_eq(q.tryPop(0), 10)
-    assert_eq(q.tryPop(1), 20)
-    assert_eq(q.tryPop(2), 30)
-    assert_eq(q.tryPop(3), null)
+    assertEqual(q.tryPop(0), 10)
+    assertEqual(q.tryPop(1), 20)
+    assertEqual(q.tryPop(2), 30)
+    assertEqual(q.tryPop(3), null)
     q.close()
 }

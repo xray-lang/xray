@@ -75,38 +75,38 @@ class Box<T> {
 @test
 fn test_instance_method_bound() {
     var s = Summer()
-    assert_eq(s.total([1, 2, 3]), 6)
+    assertEqual(s.total([1, 2, 3]), 6)
 }
 
 @test
 fn test_static_method_bound() {
-    assert_eq(Summer.totalStatic([10, 20]), 30)
+    assertEqual(Summer.totalStatic([10, 20]), 30)
 }
 
 @test
 fn test_element_type_follows_bound() {
     var s = Summer()
-    assert_eq(s.joinAll(["a", "b", "c"]), "abc")
+    assertEqual(s.joinAll(["a", "b", "c"]), "abc")
 }
 
 @test
 fn test_bound_with_unconstrained_second_param() {
     var s = Summer()
-    assert_eq(s.tagAll([1, 2], "label"), 3)
-    assert_eq(s.tagAll([3, 4], 99), 7)
+    assertEqual(s.tagAll([1, 2], "label"), 3)
+    assertEqual(s.tagAll([3, 4], 99), 7)
 }
 
 @test
 fn test_method_bound_in_generic_class() {
     var box: Box<i64> = Box<i64>(10)
-    assert_eq(box.get(), 10)
-    assert_eq(box.sumOf([5, 6]), 11)
+    assertEqual(box.get(), 10)
+    assertEqual(box.sumOf([5, 6]), 11)
 }
 
 @test
 fn test_dispatch_through_interface_declaring_the_bound() {
     var s: Summing = Summer()
-    assert_eq(s.total([7, 8]), 15)
+    assertEqual(s.total([7, 8]), 15)
 }
 
 print("All method type-parameter for-in tests passed!")

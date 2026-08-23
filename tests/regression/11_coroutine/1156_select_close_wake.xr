@@ -20,7 +20,7 @@ fn test_select_wakes_on_channel_close() {
     const done = Channel<i64>(1)
 
     go wait_select_close(ch, ready, done)
-    assert_eq(recv_int(ready), 1)
+    assertEqual(recv_int(ready), 1)
 
     for (var i = 0; i < 16; i++) {
         Coro.yield()
@@ -36,8 +36,8 @@ fn test_select_wakes_on_channel_close() {
         Recv.Value(v) -> v
         _ -> -1
     }
-    assert_eq(ok, true)
-    assert_eq(value, 1)
+    assertEqual(ok, true)
+    assertEqual(value, 1)
     ready.close()
     done.close()
 }

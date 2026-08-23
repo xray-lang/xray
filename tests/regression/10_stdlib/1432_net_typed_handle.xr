@@ -27,18 +27,18 @@ fn test_listener_methods() {
 
     // method-style accessors
     const fd = listener!.fd()
-    assert_true(fd >= 0)
-    assert_true(listener!.port() > 0)
-    assert_true(!listener!.isClosed())
+    assert(fd >= 0)
+    assert(listener!.port() > 0)
+    assert(!listener!.isClosed())
 
     // close() is idempotent
     listener!.close()
-    assert_true(listener!.isClosed())
-    assert_true(listener!.fd() == -1)
+    assert(listener!.isClosed())
+    assert(listener!.fd() == -1)
 
     // Calling close again is a no-op
     listener!.close()
-    assert_true(listener!.isClosed())
+    assert(listener!.isClosed())
 }
 
 @test
@@ -48,12 +48,12 @@ fn test_module_and_method_interop() {
     var listener = tryListen(1)
     if (listener == null) { return }
 
-    assert_true(net.fd(listener!) == listener!.fd())
+    assert(net.fd(listener!) == listener!.fd())
 
     net.close(listener!)
-    assert_true(listener!.isClosed())
-    assert_true(listener!.fd() == -1)
-    assert_true(net.fd(listener!) == -1)
+    assert(listener!.isClosed())
+    assert(listener!.fd() == -1)
+    assert(net.fd(listener!) == -1)
 }
 
 // ============================================================
@@ -66,11 +66,11 @@ fn test_method_dispatch_via_inference() {
     if (listener == null) { return }
 
     var l = listener!
-    assert_true(l.fd() >= 0)
-    assert_true(l.port() > 0)
+    assert(l.fd() >= 0)
+    assert(l.port() > 0)
 
     l.close()
-    assert_true(l.isClosed())
+    assert(l.isClosed())
 }
 
 // ============================================================
@@ -88,10 +88,10 @@ fn test_explicit_typed_listener() {
     if (listener == null) { return }
 
     var l: NetListener = listener!
-    assert_true(l.fd() >= 0)
-    assert_true(l.port() > 0)
-    assert_true(!l.isClosed())
+    assert(l.fd() >= 0)
+    assert(l.port() > 0)
+    assert(!l.isClosed())
 
     l.close()
-    assert_true(l.isClosed())
+    assert(l.isClosed())
 }

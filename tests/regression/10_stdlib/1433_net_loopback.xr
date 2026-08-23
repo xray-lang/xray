@@ -47,27 +47,27 @@ fn test_loopback_echo() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
-    assert_true(port > 0)
+    assert(port > 0)
 
     // dial / accept are yieldable; their results must be delivered to the
     // caller's registers. The accepted conn is then moved into its coroutine.
     var c = net.dial("127.0.0.1", port)
-    assert_true(net.fd(c) >= 0)
+    assert(net.fd(c) >= 0)
     var served = net.accept(lst)!
     go serveEcho(move served)
 
     // "hello"
     var n = net.writeBytes(c, Array<u8>([104, 101, 108, 108, 111]))
-    assert_eq(n, 5)
+    assertEqual(n, 5)
 
     var resp = Array<u8>(16)
     var got = net.readInto(c, ref resp)
-    assert_eq(got, 5)
-    assert_eq(resp[0], 104)
-    assert_eq(resp[1], 101)
-    assert_eq(resp[2], 108)
-    assert_eq(resp[3], 108)
-    assert_eq(resp[4], 111)
+    assertEqual(got, 5)
+    assertEqual(resp[0], 104)
+    assertEqual(resp[1], 101)
+    assertEqual(resp[2], 108)
+    assertEqual(resp[3], 108)
+    assertEqual(resp[4], 111)
 
     net.close(c)
     net.close(lst)
@@ -79,7 +79,7 @@ fn test_loopback_binary_high_bytes() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
-    assert_true(port > 0)
+    assert(port > 0)
 
     var c = net.dial("127.0.0.1", port)
     var served = net.accept(lst)!
@@ -87,16 +87,16 @@ fn test_loopback_binary_high_bytes() {
 
     // UTF-8 bytes of "é€": 0xC3 0xA9 0xE2 0x82 0xAC — every octet >= 0x80.
     var payload = Array<u8>([195, 169, 226, 130, 172])
-    assert_eq(net.writeBytes(c, payload), 5)
+    assertEqual(net.writeBytes(c, payload), 5)
 
     var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
-    assert_eq(n, 5)
-    assert_eq(resp[0], 195)
-    assert_eq(resp[1], 169)
-    assert_eq(resp[2], 226)
-    assert_eq(resp[3], 130)
-    assert_eq(resp[4], 172)
+    assertEqual(n, 5)
+    assertEqual(resp[0], 195)
+    assertEqual(resp[1], 169)
+    assertEqual(resp[2], 226)
+    assertEqual(resp[3], 130)
+    assertEqual(resp[4], 172)
 
     net.close(c)
     net.close(lst)
@@ -108,20 +108,20 @@ fn test_native_copy_self_loopback() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
-    assert_true(port > 0)
+    assert(port > 0)
 
     var c = net.dial("127.0.0.1", port)
     var served = net.accept(lst)!
     go serveNativeCopyEcho(move served)
 
     // "native"
-    assert_eq(net.writeBytes(c, Array<u8>([110, 97, 116, 105, 118, 101])), 6)
+    assertEqual(net.writeBytes(c, Array<u8>([110, 97, 116, 105, 118, 101])), 6)
 
     var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
-    assert_eq(n, 6)
-    assert_eq(resp[0], 110)
-    assert_eq(resp[5], 101)
+    assertEqual(n, 6)
+    assertEqual(resp[0], 110)
+    assertEqual(resp[5], 101)
 
     net.close(c)
     net.close(lst)
@@ -133,7 +133,7 @@ fn test_native_copy_loopback() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
-    assert_true(port > 0)
+    assert(port > 0)
 
     var src = net.dial("127.0.0.1", port)
     var acceptedSrc = net.accept(lst)!
@@ -142,12 +142,12 @@ fn test_native_copy_loopback() {
     go relayOnce(move acceptedSrc, move acceptedDst)
 
     // "relay"
-    assert_eq(net.writeBytes(src, Array<u8>([114, 101, 108, 97, 121])), 5)
+    assertEqual(net.writeBytes(src, Array<u8>([114, 101, 108, 97, 121])), 5)
     var resp = Array<u8>(16)
     var n = net.readInto(dst, ref resp)
-    assert_eq(n, 5)
-    assert_eq(resp[0], 114)
-    assert_eq(resp[4], 121)
+    assertEqual(n, 5)
+    assertEqual(resp[0], 114)
+    assertEqual(resp[4], 121)
 
     net.close(src)
     net.close(dst)

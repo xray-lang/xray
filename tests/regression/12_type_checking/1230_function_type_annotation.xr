@@ -10,7 +10,7 @@ fn test_fn_type_basic() {
     }
     
     var result = apply(5, (n) -> n * 2)
-    assert_eq(result, 10)
+    assertEqual(result, 10)
 }
 
 // ===== Function type with void return =====
@@ -28,7 +28,7 @@ fn test_fn_type_void() {
     forEach([1, 2, 3], (x) -> {
         count = count + x
     })
-    assert_eq(count, 6)
+    assertEqual(count, 6)
 }
 
 // ===== Function type with no parameters =====
@@ -40,7 +40,7 @@ fn test_fn_type_no_params() {
     }
     
     var result = callIt(() -> 42)
-    assert_eq(result, 42)
+    assertEqual(result, 42)
 }
 
 // ===== Function type with multiple parameters =====
@@ -51,8 +51,8 @@ fn test_fn_type_multi_params() {
         return f(a, b)
     }
     
-    assert_eq(combine(3, 4, (a, b) -> a + b), 7)
-    assert_eq(combine(3, 4, (a, b) -> a * b), 12)
+    assertEqual(combine(3, 4, (a, b) -> a + b), 7)
+    assertEqual(combine(3, 4, (a, b) -> a * b), 12)
 }
 
 // ===== Function type with string return =====
@@ -64,7 +64,7 @@ fn test_fn_type_string_return() {
     }
     
     var result = transform(42, (n) -> "value: " + string(n))
-    assert_eq(result, "value: 42")
+    assertEqual(result, "value: 42")
 }
 
 // ===== Higher-order: function returning function =====
@@ -76,8 +76,8 @@ fn test_fn_type_higher_order() {
     }
     
     var add5 = makeAdder(5)
-    assert_eq(add5(10), 15)
-    assert_eq(add5(0), 5)
+    assertEqual(add5(10), 15)
+    assertEqual(add5(0), 5)
 }
 
 // ===== Nested function types: fn(fn(int): int): int =====
@@ -88,8 +88,8 @@ fn test_fn_type_nested() {
         return f(f(x))
     }
     
-    assert_eq(applyTwice(3, (n) -> n * 2), 12)
-    assert_eq(applyTwice(1, (n) -> n + 10), 21)
+    assertEqual(applyTwice(3, (n) -> n * 2), 12)
+    assertEqual(applyTwice(1, (n) -> n + 10), 21)
 }
 
 // ===== Function type in variable declaration =====
@@ -97,7 +97,7 @@ fn test_fn_type_nested() {
 @test
 fn test_fn_type_variable() {
     var f: fn(i64) -> i64 = (x) -> x * 3
-    assert_eq(f(5), 15)
+    assertEqual(f(5), 15)
 }
 
 // ===== Optional function type =====
@@ -108,7 +108,7 @@ fn test_fn_type_optional() {
         return f(x)
     }
     
-    assert_eq(maybeApply(5, (n) -> n + 1), 6)
+    assertEqual(maybeApply(5, (n) -> n + 1), 6)
 }
 
 // ===== Tuple type still works: (int, bool) =====
@@ -123,10 +123,10 @@ fn test_tuple_type_unchanged() {
     }
     
     var (result, ok) = divide(10, 3)
-    assert_eq(result, 3)
-    assert_eq(ok, true)
+    assertEqual(result, 3)
+    assertEqual(ok, true)
     
     var (result2, ok2) = divide(10, 0)
-    assert_eq(result2, 0)
-    assert_eq(ok2, false)
+    assertEqual(result2, 0)
+    assertEqual(ok2, false)
 }

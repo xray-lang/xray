@@ -39,7 +39,7 @@ fn test_scope_waits_for_success_and_failure() {
         go fail_report(ch, 10)
         go ok_report(ch, 100)
     }
-    assert_eq(recv_sum(ch, 3), 111)
+    assertEqual(recv_sum(ch, 3), 111)
     ch.close()
 }
 
@@ -53,7 +53,7 @@ fn test_explicit_task_handle_observes_failure() {
             _ -> { assert(false, "failed task should be observed through TaskResult") }
         }
     }
-    assert_eq(recv_sum(ch, 1), 5)
+    assertEqual(recv_sum(ch, 1), 5)
     ch.close()
 }
 

@@ -9,7 +9,7 @@ fn test_json_parse_value_catches_malformed_input() {
     } catch panic (e) {
         caught = true
     }
-    assert_eq(caught, true)
+    assertEqual(caught, true)
 }
 
 @test
@@ -22,14 +22,14 @@ fn test_json_parse_object_catches_non_object_root() {
         caught = true
         msg = string(e)
     }
-    assert_eq(caught, true)
-    assert_eq(len(msg) > 0, true)
+    assertEqual(caught, true)
+    assertEqual(len(msg) > 0, true)
 }
 
 @test
 fn test_json_stringify_succeeds() {
     var result = JSON.stringify({a: 1, b: "hello"})
-    assert_eq(len(result) > 0, true)
+    assertEqual(len(result) > 0, true)
 }
 
 @test
@@ -42,8 +42,8 @@ fn test_exception_after_catch_continues() {
         step1 = true
     }
     step2 = true
-    assert_eq(step1, true)
-    assert_eq(step2, true)
+    assertEqual(step1, true)
+    assertEqual(step2, true)
 }
 
 @test
@@ -56,5 +56,5 @@ fn test_multiple_catch_blocks() {
             count = count + 1
         }
     }
-    assert_eq(count, 3)
+    assertEqual(count, 3)
 }

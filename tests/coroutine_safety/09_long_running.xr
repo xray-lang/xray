@@ -54,7 +54,7 @@ fn test_cpu_intensive_fairness() {
         }
     }
     print("完成的任务数:", len(completed))
-    assert_eq(len(completed), 4)
+    assertEqual(len(completed), 4)
     print("✓ CPU 密集型公平调度测试通过")
 }
 
@@ -120,7 +120,7 @@ fn test_multiple_long_running() {
         }
     }
     print("完成顺序:", order)
-    assert_eq(len(order), 5)
+    assertEqual(len(order), 5)
     print("✓ 多协程公平调度测试通过")
 }
 
@@ -146,7 +146,7 @@ fn test_yield_behavior() {
         }
     }
     print("日志条目数:", len(entries))
-    assert_eq(len(entries), 10)
+    assertEqual(len(entries), 10)
     print("✓ 协程让出测试通过")
 }
 
@@ -168,8 +168,8 @@ fn test_nested_loops() {
     var r2 = await t2
     var r3 = await t3
     // 所有结果应该相同
-    assert_eq(r1, r2)
-    assert_eq(r2, r3)
+    assertEqual(r1, r2)
+    assertEqual(r2, r3)
     print("嵌套循环结果:", r1)
     print("✓ 嵌套循环协程测试通过")
 }

@@ -11,7 +11,7 @@ fn test_match_literal_int() {
         3 -> "three"
         _ -> "other"
     }
-    assert_eq(result, "two")
+    assertEqual(result, "two")
 }
 
 @test
@@ -23,7 +23,7 @@ fn test_match_literal_string() {
         "pause" -> 3
         _ -> 0
     }
-    assert_eq(result, 1)
+    assertEqual(result, 1)
 }
 
 @test
@@ -34,7 +34,7 @@ fn test_match_default() {
         2 -> "two"
         _ -> "default"
     }
-    assert_eq(result, "default")
+    assertEqual(result, "default")
 }
 
 // ===== 范围匹配 =====
@@ -48,7 +48,7 @@ fn test_match_range() {
         60..70 -> "D"
         _ -> "F"
     }
-    assert_eq(grade, "B")
+    assertEqual(grade, "B")
 }
 
 @test
@@ -59,7 +59,7 @@ fn test_match_range_boundary() {
         10..20 -> "10 to 19"
         _ -> "20 or more"
     }
-    assert_eq(result, "10 to 19")
+    assertEqual(result, "10 to 19")
 }
 
 // ===== 多值匹配 =====
@@ -71,7 +71,7 @@ fn test_match_multi_value() {
         "Sat", "Sun" -> "weekend"
         _ -> "unknown"
     }
-    assert_eq(result, "weekend")
+    assertEqual(result, "weekend")
 }
 
 @test
@@ -82,7 +82,7 @@ fn test_match_multi_number() {
         2, 4, 6, 8, 10 -> "even"
         _ -> "other"
     }
-    assert_eq(result, "odd")
+    assertEqual(result, "odd")
 }
 
 // ===== 守卫条件 =====
@@ -96,7 +96,7 @@ fn test_match_guard() {
         n if (n < 100) -> "medium"
         _ -> "large"
     }
-    assert_eq(result, "medium")
+    assertEqual(result, "medium")
 }
 
 @test
@@ -108,7 +108,7 @@ fn test_match_guard_complex() {
         n if (n > 40) -> "odd and big"
         _ -> "odd and small"
     }
-    assert_eq(result, "even and big")
+    assertEqual(result, "even and big")
 }
 
 // ===== 枚举匹配 =====
@@ -125,7 +125,7 @@ fn test_match_enum() {
         Color.Green -> "green"
         Color.Blue -> "blue"
     }
-    assert_eq(result, "green")
+    assertEqual(result, "green")
 }
 
 // ===== 嵌套 match =====
@@ -140,7 +140,7 @@ fn test_match_nested() {
         }
         _ -> "x<=0"
     }
-    assert_eq(result, "x>0, y>5")
+    assertEqual(result, "x>0, y>5")
 }
 
 // ===== match 表达式求值 =====
@@ -154,7 +154,7 @@ fn test_match_expression_result() {
         _ -> 0
     } * 2
     // 注意：这里测试 match 结果可以参与表达式
-    assert_eq(doubled, 12)
+    assertEqual(doubled, 12)
 }
 
 @test
@@ -166,9 +166,9 @@ fn test_match_in_function() {
             _ -> "negative"
         }
     }
-    assert_eq(classify(0), "zero")
-    assert_eq(classify(5), "positive")
-    assert_eq(classify(-3), "negative")
+    assertEqual(classify(0), "zero")
+    assertEqual(classify(5), "positive")
+    assertEqual(classify(-3), "negative")
 }
 
 // ===== 边界条件 =====
@@ -180,7 +180,7 @@ fn test_match_first_wins() {
         5 -> "five"
         _ -> "default"
     }
-    assert_eq(result, "first")
+    assertEqual(result, "first")
 }
 
 @test
@@ -191,7 +191,7 @@ fn test_match_all_guards_fail() {
         n if (n < -10) -> "small"
         _ -> "middle"
     }
-    assert_eq(result, "middle")
+    assertEqual(result, "middle")
 }
 
 @test
@@ -202,15 +202,15 @@ fn test_match_no_branch_throws() {
             1 -> "one"
             2 -> "two"
         }
-        assert_eq(result, "unreachable")
+        assertEqual(result, "unreachable")
     } catch panic (p) {
         caught = true
         // p.code is 442; the message states the fault itself. See the note in
         // 0413_null_unwrap on why the "E0xxx: " prefix is not in the message.
         assert(p.message.contains("non-exhaustive"))
-        assert_eq(p.code, 442)
+        assertEqual(p.code, 442)
     }
-    assert_eq(caught, true)
+    assertEqual(caught, true)
 }
 
 @test
@@ -227,6 +227,6 @@ fn test_match_block_arm_return() {
         return "unreachable"
     }
 
-    assert_eq(classify(1), "one")
-    assert_eq(classify(2), "other")
+    assertEqual(classify(1), "one")
+    assertEqual(classify(2), "other")
 }

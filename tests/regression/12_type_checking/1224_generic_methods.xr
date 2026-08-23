@@ -54,42 +54,42 @@ fn test_generic_methods() {
     c.add(42)
     c.add(100)
     c.add(7)
-    assert_eq(len(c.items), 3)
-    assert_eq(c.items[0], 42)
-    assert_eq(c.items[1], 100)
-    assert_eq(c.items[2], 7)
+    assertEqual(len(c.items), 3)
+    assertEqual(c.items[0], 42)
+    assertEqual(c.items[1], 100)
+    assertEqual(c.items[2], 7)
     // Test 2: Typed wrap method
     var wrapped = c.wrap(100)
-    assert_eq(wrapped[0], 100)
+    assertEqual(wrapped[0], 100)
     var sc = Container<string>()
     var strWrapped = sc.wrap("test")
-    assert_eq(strWrapped[0], "test")
+    assertEqual(strWrapped[0], "test")
     // Test 3: Pair method (multi-value return)
     var (x, y) = c.pair(10, 20)
-    assert_eq(x, 10)
-    assert_eq(y, 20)
+    assertEqual(x, 10)
+    assertEqual(y, 20)
 
     // Class with static generic method
 
     // Test 4: Static generic method
-    assert_eq(Util.identity(42), 42)
-    assert_eq(Util.identity("hello"), "hello")
+    assertEqual(Util.identity(42), 42)
+    assertEqual(Util.identity("hello"), "hello")
     var swapped = Util.swap([1, 2])
-    assert_eq(swapped[0], 2)
-    assert_eq(swapped[1], 1)
+    assertEqual(swapped[0], 2)
+    assertEqual(swapped[1], 1)
 
     // Generic class with generic method
 
     // Test 5: Generic class with generic method
     var box: Box<i64> = Box<i64>(10)
-    assert_eq(box.get(), 10)
+    assertEqual(box.get(), 10)
     var str = box.transform(fn(n) {
         return "value: " + string(n)
     })
-    assert_eq(str, "value: 10")
+    assertEqual(str, "value: 10")
     var doubled = box.transform(fn(n) {
         return n * 2
     })
-    assert_eq(doubled, 20)
+    assertEqual(doubled, 20)
 }
 

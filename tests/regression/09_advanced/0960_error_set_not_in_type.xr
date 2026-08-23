@@ -29,10 +29,10 @@ fn test_error_set_not_in_function_type() {
     // [fa, fb] only type-checks as Array<fn(int) -> int> if fa and fb share the
     // same function type despite throwing different enum errors.
     var fns: Array<fn(i64) -> i64> = [fa, fb]
-    assert_eq(len(fns), 2)
-    assert_eq(fns[0](10), 11)
-    assert_eq(fns[1](10), 12)
-    assert_eq(call_first(fns, 5), 6)
+    assertEqual(len(fns), 2)
+    assertEqual(fns[0](10), 11)
+    assertEqual(fns[1](10), 12)
+    assertEqual(call_first(fns, 5), 6)
 }
 
 test_error_set_not_in_function_type()

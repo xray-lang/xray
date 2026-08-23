@@ -1,31 +1,31 @@
 // Function attributes / decorators
 fn test_addition() {
-    assert_eq(1 + 1, 2)
+    assertEqual(1 + 1, 2)
 }
 
 fn test_subtraction() {
-    assert_eq(5 - 3, 2)
+    assertEqual(5 - 3, 2)
 }
 
 // Multiple test functions
 fn test_array_operations() {
     let arr = [1, 2, 3]
-    assert_eq(len(arr), 3)
+    assertEqual(len(arr), 3)
     arr.push(4)
-    assert_eq(len(arr), 4)
+    assertEqual(len(arr), 4)
 }
 
 fn test_map_operations() {
     let m = { "a" => 1 }
-    assert_eq(m.get("a"), 1)
+    assertEqual(m.get("a"), 1)
     m.set("b", 2)
-    assert_eq(m.size, 2)
+    assertEqual(m.size, 2)
 }
 
 fn test_string_methods() {
     let s = "hello"
-    assert_eq(s.toUpperCase(), "HELLO")
-    assert_eq(len(s), 5)
+    assertEqual(s.toUpperCase(), "HELLO")
+    assertEqual(len(s), 5)
 }
 
 // Regular function without attribute
@@ -34,5 +34,5 @@ fn helper() {
 }
 
 fn test_using_helper() {
-    assert_eq(helper(), 42)
+    assertEqual(helper(), 42)
 }

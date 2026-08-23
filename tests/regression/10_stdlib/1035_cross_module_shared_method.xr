@@ -28,21 +28,21 @@ fn call_stats_nested() -> CombinedStats {
 @test
 fn test_shared_method_from_nested_closure() {
     var result = call_stats_nested()
-    assert_eq(result.first.label, "counter")
-    assert_eq(result.second.label, "counter")
-    assert_eq(result.first.count, 0)
+    assertEqual(result.first.label, "counter")
+    assertEqual(result.second.label, "counter")
+    assertEqual(result.first.count, 0)
 }
 
 @test
 fn test_shared_method_direct() {
     var s = counter1.stats()
-    assert_eq(s.label, "counter")
-    assert_eq(s.count, 0)
+    assertEqual(s.label, "counter")
+    assertEqual(s.count, 0)
 }
 
 @test
 fn test_shared_method_after_mutation() {
     counter1.increment()
     var s = counter1.stats()
-    assert_eq(s.count, 1)
+    assertEqual(s.count, 1)
 }

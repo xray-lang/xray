@@ -170,5 +170,5 @@ fn test_many_reference_instantiations() {
     total = total + tag<C37>(C37(37))
     total = total + tag<C38>(C38(38))
     total = total + tag<C39>(C39(39))
-    assert_eq(total, 40)
+    assertEqual(total, 40)
 }

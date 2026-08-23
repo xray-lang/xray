@@ -10,7 +10,7 @@ import "./modules/error_source" as src
     } catch (e) {
         result = -1
     }
-    assert_eq(result, -1)
+    assertEqual(result, -1)
 }
 
 @test fn success_from_imported_module() {
@@ -20,7 +20,7 @@ import "./modules/error_source" as src
     } catch (e) {
         result = -1
     }
-    assert_eq(result, 5)
+    assertEqual(result, 5)
 }
 
 @test fn catch_cross_module_with_match() {
@@ -30,7 +30,7 @@ import "./modules/error_source" as src
     } catch (e) {
         msg = "validation error"
     }
-    assert_eq(msg, "validation error")
+    assertEqual(msg, "validation error")
 }
 
 @test fn auto_propagation_cross_module() {
@@ -44,7 +44,7 @@ import "./modules/error_source" as src
     } catch (e) {
         result = -99
     }
-    assert_eq(result, -99)
+    assertEqual(result, -99)
 }
 
 @test fn multiple_cross_module_calls() {
@@ -56,5 +56,5 @@ import "./modules/error_source" as src
     } catch (e) {
         sum = -1
     }
-    assert_eq(sum, 10)
+    assertEqual(sum, 10)
 }

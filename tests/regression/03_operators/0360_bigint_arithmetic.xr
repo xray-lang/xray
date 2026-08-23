@@ -8,14 +8,14 @@
 fn test_add_small() {
     var a = 100n
     var b = 200n
-    assert_eq((a + b).toString(), "300")
+    assertEqual((a + b).toString(), "300")
 }
 
 @test
 fn test_add_large() {
     var a = 999999999999999999999999999999n
     var b = 1n
-    assert_eq((a + b).toString(), "1000000000000000000000000000000")
+    assertEqual((a + b).toString(), "1000000000000000000000000000000")
 }
 
 // ===== 减法 =====
@@ -24,14 +24,14 @@ fn test_add_large() {
 fn test_sub_basic() {
     var a = 200n
     var b = 100n
-    assert_eq((a - b).toString(), "100")
+    assertEqual((a - b).toString(), "100")
 }
 
 @test
 fn test_sub_negative_result() {
     var a = 100n
     var b = 200n
-    assert_eq((a - b).toString(), "-100")
+    assertEqual((a - b).toString(), "-100")
 }
 
 // ===== 乘法 =====
@@ -40,14 +40,14 @@ fn test_sub_negative_result() {
 fn test_mul_basic() {
     var a = 100n
     var b = 200n
-    assert_eq((a * b).toString(), "20000")
+    assertEqual((a * b).toString(), "20000")
 }
 
 @test
 fn test_mul_large() {
     var a = 12345678901234567890n
     var b = 2n
-    assert_eq((a * b).toString(), "24691357802469135780")
+    assertEqual((a * b).toString(), "24691357802469135780")
 }
 
 // ===== 除法 =====
@@ -56,14 +56,14 @@ fn test_mul_large() {
 fn test_div_basic() {
     var a = 100n
     var b = 3n
-    assert_eq((a / b).toString(), "33")
+    assertEqual((a / b).toString(), "33")
 }
 
 @test
 fn test_div_exact() {
     var a = 100n
     var b = 10n
-    assert_eq((a / b).toString(), "10")
+    assertEqual((a / b).toString(), "10")
 }
 
 // ===== 取模 =====
@@ -72,14 +72,14 @@ fn test_div_exact() {
 fn test_mod_basic() {
     var a = 100n
     var b = 3n
-    assert_eq((a % b).toString(), "1")
+    assertEqual((a % b).toString(), "1")
 }
 
 @test
 fn test_mod_no_remainder() {
     var a = 100n
     var b = 10n
-    assert_eq((a % b).toString(), "0")
+    assertEqual((a % b).toString(), "0")
 }
 
 // ===== 取负 =====
@@ -87,11 +87,11 @@ fn test_mod_no_remainder() {
 @test
 fn test_negate_positive() {
     var a = 999n
-    assert_eq((-a).toString(), "-999")
+    assertEqual((-a).toString(), "-999")
 }
 
 @test
 fn test_negate_negative() {
     var a = -999n
-    assert_eq((-a).toString(), "999")
+    assertEqual((-a).toString(), "999")
 }

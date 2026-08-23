@@ -12,11 +12,11 @@ fn test_typed_start_and_info() {
     assert(cluster.start(config))
 
     var info: ClusterInfo = cluster.info()!
-    assert_eq(info.self, "typed-control-test")
-    assert_eq(info.port, 0)
+    assertEqual(info.self, "typed-control-test")
+    assertEqual(info.port, 0)
     assert(info.running)
-    assert_eq(len(info.nodes), 0)
-    assert_eq(info.listeners, 0)
+    assertEqual(len(info.nodes), 0)
+    assertEqual(info.listeners, 0)
     assert(!info.tls.enabled)
     assert(!info.tls.clientReady)
     assert(!info.tls.serverReady)

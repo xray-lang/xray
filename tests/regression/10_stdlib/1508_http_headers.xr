@@ -8,9 +8,9 @@ fn test_request_headers() {
         "Accept": "*/*",
         "User-Agent": "xray-http/1.0",
         "Authorization": "Bearer token123"}
-    assert_eq(h.get("Content-Type"), "application/json")
-    assert_eq(h.get("Accept"), "*/*")
-    assert_eq(h.get("Authorization"), "Bearer token123")
+    assertEqual(h.get("Content-Type"), "application/json")
+    assertEqual(h.get("Accept"), "*/*")
+    assertEqual(h.get("Authorization"), "Bearer token123")
 }
 
 @test
@@ -19,22 +19,22 @@ fn test_common_headers() {
         "Cache-Control": "no-cache",
         "Connection": "keep-alive"}
     assert(h.get("Content-Type")!.indexOf("text/html") >= 0)
-    assert_eq(h.get("Cache-Control"), "no-cache")
+    assertEqual(h.get("Cache-Control"), "no-cache")
 }
 
 @test
 fn test_empty_headers() {
     var h: Map<string, string> = #{}
-    assert_eq(h.get("X-Not-Exist"), null)
+    assertEqual(h.get("X-Not-Exist"), null)
 }
 
 @test
 fn test_multi_value_header_split() {
     var header = "text/html, application/json, text/plain"
     var values = header.split(", ")
-    assert_eq(len(values), 3)
-    assert_eq(values[0], "text/html")
-    assert_eq(values[2], "text/plain")
+    assertEqual(len(values), 3)
+    assertEqual(values[0], "text/html")
+    assertEqual(values[2], "text/plain")
 }
 
 print("All http headers tests passed")

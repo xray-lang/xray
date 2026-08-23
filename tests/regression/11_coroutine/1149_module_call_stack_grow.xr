@@ -44,7 +44,7 @@ fn test_invoke_grows_combined_slab() {
     // Linearity: differences should be equal due to the additive seed.
     var d12 = r2 - r1
     var d23 = r3 - r2
-    assert_eq(d12, d23)
+    assertEqual(d12, d23)
     assert(r1 > 0)
     assert(r2 > r1)
 }

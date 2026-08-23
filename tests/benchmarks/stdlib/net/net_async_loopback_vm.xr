@@ -14,5 +14,5 @@ fn benchmark_async_loopback() {
         if (n == 4 && string.fromUtf8(buf[:])! == "ping") { completed = completed + 1 }
     }
     net.close(conn)
-    assert_eq(completed, 64)
+    assertEqual(completed, 64)
 }

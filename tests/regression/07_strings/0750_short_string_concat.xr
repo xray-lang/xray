@@ -22,23 +22,23 @@ fn test_short_concat_basic() {
     var a = "hello"
     var b = " world"
     var result = a + b
-    assert_eq(result, "hello world")
-    assert_eq(len(result), 11)
+    assertEqual(result, "hello world")
+    assertEqual(len(result), 11)
 }
 
 @test
 fn test_short_concat_empty() {
     // 空字符串拼接
-    assert_eq("" + "", "")
-    assert_eq("" + "test", "test")
-    assert_eq("test" + "", "test")
+    assertEqual("" + "", "")
+    assertEqual("" + "test", "test")
+    assertEqual("test" + "", "test")
 }
 
 @test
 fn test_short_concat_single_char() {
     // 单字符拼接
-    assert_eq("a" + "b", "ab")
-    assert_eq("x" + "y" + "z", "xyz")
+    assertEqual("a" + "b", "ab")
+    assertEqual("x" + "y" + "z", "xyz")
 }
 
 @test
@@ -47,9 +47,9 @@ fn test_short_concat_boundary_62() {
     var a = "a".repeat(31)
     var b = "b".repeat(31)
     var result = a + b
-    assert_eq(len(result), 62)
-    assert_eq(result.startsWith("a".repeat(31)), true)
-    assert_eq(result.endsWith("b".repeat(31)), true)
+    assertEqual(len(result), 62)
+    assertEqual(result.startsWith("a".repeat(31)), true)
+    assertEqual(result.endsWith("b".repeat(31)), true)
 }
 
 @test
@@ -58,9 +58,9 @@ fn test_short_concat_boundary_63() {
     var a = "a".repeat(32)
     var b = "b".repeat(31)
     var result = a + b
-    assert_eq(len(result), 63)
-    assert_eq(result.startsWith("a".repeat(32)), true)
-    assert_eq(result.endsWith("b".repeat(31)), true)
+    assertEqual(len(result), 63)
+    assertEqual(result.startsWith("a".repeat(32)), true)
+    assertEqual(result.endsWith("b".repeat(31)), true)
 }
 
 // ===== 长字符串拼接测试（XrStrBuf 路径）=====
@@ -71,9 +71,9 @@ fn test_long_concat_boundary_64() {
     var a = "a".repeat(32)
     var b = "b".repeat(32)
     var result = a + b
-    assert_eq(len(result), 64)
-    assert_eq(result.startsWith("a".repeat(32)), true)
-    assert_eq(result.endsWith("b".repeat(32)), true)
+    assertEqual(len(result), 64)
+    assertEqual(result.startsWith("a".repeat(32)), true)
+    assertEqual(result.endsWith("b".repeat(32)), true)
 }
 
 @test
@@ -82,9 +82,9 @@ fn test_long_concat_boundary_65() {
     var a = "a".repeat(33)
     var b = "b".repeat(32)
     var result = a + b
-    assert_eq(len(result), 65)
-    assert_eq(result.startsWith("a".repeat(33)), true)
-    assert_eq(result.endsWith("b".repeat(32)), true)
+    assertEqual(len(result), 65)
+    assertEqual(result.startsWith("a".repeat(33)), true)
+    assertEqual(result.endsWith("b".repeat(32)), true)
 }
 
 @test
@@ -93,11 +93,11 @@ fn test_long_concat_large() {
     var a = "x".repeat(100)
     var b = "y".repeat(100)
     var result = a + b
-    assert_eq(len(result), 200)
-    assert_eq(result.runes().nth(0), 'x')
-    assert_eq(result.runes().nth(99), 'x')
-    assert_eq(result.runes().nth(100), 'y')
-    assert_eq(result.runes().nth(199), 'y')
+    assertEqual(len(result), 200)
+    assertEqual(result.runes().nth(0), 'x')
+    assertEqual(result.runes().nth(99), 'x')
+    assertEqual(result.runes().nth(100), 'y')
+    assertEqual(result.runes().nth(199), 'y')
 }
 
 // ===== 属性测试：拼接正确性 =====
@@ -125,14 +125,14 @@ fn test_property_concat_correctness_short() {
         var result = a + b
         
         // 验证长度
-        assert_eq(len(result), len(a) + len(b))
+        assertEqual(len(result), len(a) + len(b))
         
         // 验证内容：前半部分是 a，后半部分是 b
         if (len(a) > 0) {
-            assert_eq(result.slice(0, len(a)), a)
+            assertEqual(result.slice(0, len(a)), a)
         }
         if (len(b) > 0) {
-            assert_eq(result.slice(len(a), len(a) + len(b)), b)
+            assertEqual(result.slice(len(a), len(a) + len(b)), b)
         }
     }
 }
@@ -155,11 +155,11 @@ fn test_property_concat_correctness_long() {
         var result = a + b
         
         // 验证长度
-        assert_eq(len(result), len(a) + len(b))
+        assertEqual(len(result), len(a) + len(b))
         
         // 验证内容
-        assert_eq(result.slice(0, len(a)), a)
-        assert_eq(result.slice(len(a), len(a) + len(b)), b)
+        assertEqual(result.slice(0, len(a)), a)
+        assertEqual(result.slice(len(a), len(a) + len(b)), b)
     }
 }
 
@@ -179,14 +179,14 @@ fn test_property_concat_consistency() {
     var long_result = long_a + long_b
     
     // 验证两种路径都产生正确结果
-    assert_eq(len(short_result), 63)
-    assert_eq(len(long_result), 64)
+    assertEqual(len(short_result), 63)
+    assertEqual(len(long_result), 64)
     
     // 验证内容正确性
-    assert_eq(short_result.startsWith(short_a), true)
-    assert_eq(short_result.endsWith(short_b), true)
-    assert_eq(long_result.startsWith(long_a), true)
-    assert_eq(long_result.endsWith(long_b), true)
+    assertEqual(short_result.startsWith(short_a), true)
+    assertEqual(short_result.endsWith(short_b), true)
+    assertEqual(long_result.startsWith(long_a), true)
+    assertEqual(long_result.endsWith(long_b), true)
 }
 
 // ===== 链式拼接测试 =====
@@ -195,7 +195,7 @@ fn test_property_concat_consistency() {
 fn test_chained_concat_short() {
     // 链式短字符串拼接
     var result = "a" + "b" + "c" + "d" + "e"
-    assert_eq(result, "abcde")
+    assertEqual(result, "abcde")
 }
 
 @test
@@ -205,9 +205,9 @@ fn test_chained_concat_mixed() {
     for (var i = 0; i < 10; i++) {
         result = result + "y".repeat(10)
     }
-    assert_eq(len(result), 101)
-    assert_eq(result.runes().nth(0), 'x')
-    assert_eq(result.runes().nth(100), 'y')
+    assertEqual(len(result), 101)
+    assertEqual(result.runes().nth(0), 'x')
+    assertEqual(result.runes().nth(100), 'y')
 }
 
 // ===== 特殊字符测试 =====
@@ -218,7 +218,7 @@ fn test_concat_with_special_chars() {
     var a = "hello\n"
     var b = "world\t"
     var result = a + b
-    assert_eq(result, "hello\nworld\t")
+    assertEqual(result, "hello\nworld\t")
 }
 
 @test
@@ -227,7 +227,7 @@ fn test_concat_with_unicode() {
     var a = "你好"
     var b = "世界"
     var result = a + b
-    assert_eq(result, "你好世界")
+    assertEqual(result, "你好世界")
 }
 
 // ===== 循环拼接测试 =====
@@ -239,8 +239,8 @@ fn test_loop_concat_short() {
     for (var i = 0; i < 10; i++) {
         result = result + "x"
     }
-    assert_eq(result, "xxxxxxxxxx")
-    assert_eq(len(result), 10)
+    assertEqual(result, "xxxxxxxxxx")
+    assertEqual(len(result), 10)
 }
 
 @test
@@ -250,8 +250,8 @@ fn test_loop_concat_crossing_threshold() {
     for (var i = 0; i < 100; i++) {
         result = result + "a"
     }
-    assert_eq(len(result), 100)
-    assert_eq(result, "a".repeat(100))
+    assertEqual(len(result), 100)
+    assertEqual(result, "a".repeat(100))
 }
 
 // ===== 并发拼接测试 =====
@@ -274,7 +274,7 @@ fn test_concurrent_short_concat() {
     var results = await all tasks
     
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], "task" + string(i) + "_done")
+        assertEqual(results[i], "task" + string(i) + "_done")
     }
 }
 
@@ -297,9 +297,9 @@ fn test_concurrent_long_concat() {
     
     for (var i = 0; i < n; i++) {
         var result = results[i]
-        assert_eq(result.startsWith("x".repeat(50)), true)
-        assert_eq(result.contains("_id" + string(i) + "_"), true)
-        assert_eq(result.endsWith("y".repeat(50)), true)
+        assertEqual(result.startsWith("x".repeat(50)), true)
+        assertEqual(result.contains("_id" + string(i) + "_"), true)
+        assertEqual(result.endsWith("y".repeat(50)), true)
     }
 }
 
@@ -325,9 +325,9 @@ fn test_concurrent_mixed_concat() {
     
     for (var i = 0; i < n; i++) {
         if (i % 2 == 0) {
-            assert_eq(results[i], "short_" + string(i))
+            assertEqual(results[i], "short_" + string(i))
         } else {
-            assert_eq(results[i].contains("_long_" + string(i) + "_"), true)
+            assertEqual(results[i].contains("_long_" + string(i) + "_"), true)
         }
     }
 }

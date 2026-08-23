@@ -6,16 +6,16 @@
 
 @test
 fn test_and_truth_table() {
-    assert_eq(true && true, true)
-    assert_eq(true && false, false)
-    assert_eq(false && true, false)
-    assert_eq(false && false, false)
+    assertEqual(true && true, true)
+    assertEqual(true && false, false)
+    assertEqual(false && true, false)
+    assertEqual(false && false, false)
 }
 
 @test
 fn test_and_with_expressions() {
-    assert_eq((5 > 3) && (2 < 4), true)
-    assert_eq((5 > 3) && (2 > 4), false)
+    assertEqual((5 > 3) && (2 < 4), true)
+    assertEqual((5 > 3) && (2 > 4), false)
 }
 
 @test
@@ -28,31 +28,31 @@ fn test_and_short_circuit() {
     
     // false && ... 不会执行右侧
     var result = false && sideEffect()
-    assert_eq(result, false)
-    assert_eq(called, false)
+    assertEqual(result, false)
+    assertEqual(called, false)
 }
 
 @test
 fn test_and_chain() {
-    assert_eq(true && true && true, true)
-    assert_eq(true && true && false, false)
-    assert_eq(true && false && true, false)
+    assertEqual(true && true && true, true)
+    assertEqual(true && true && false, false)
+    assertEqual(true && false && true, false)
 }
 
 // ===== OR (||) =====
 
 @test
 fn test_or_truth_table() {
-    assert_eq(true || true, true)
-    assert_eq(true || false, true)
-    assert_eq(false || true, true)
-    assert_eq(false || false, false)
+    assertEqual(true || true, true)
+    assertEqual(true || false, true)
+    assertEqual(false || true, true)
+    assertEqual(false || false, false)
 }
 
 @test
 fn test_or_with_expressions() {
-    assert_eq((5 > 10) || (2 < 4), true)
-    assert_eq((5 > 10) || (2 > 4), false)
+    assertEqual((5 > 10) || (2 < 4), true)
+    assertEqual((5 > 10) || (2 > 4), false)
 }
 
 @test
@@ -65,67 +65,67 @@ fn test_or_short_circuit() {
     
     // true || ... 不会执行右侧
     var result = true || sideEffect()
-    assert_eq(result, true)
-    assert_eq(called, false)
+    assertEqual(result, true)
+    assertEqual(called, false)
 }
 
 @test
 fn test_or_chain() {
-    assert_eq(false || false || true, true)
-    assert_eq(false || false || false, false)
+    assertEqual(false || false || true, true)
+    assertEqual(false || false || false, false)
 }
 
 // ===== NOT (!) =====
 
 @test
 fn test_not_basic() {
-    assert_eq(!true, false)
-    assert_eq(!false, true)
+    assertEqual(!true, false)
+    assertEqual(!false, true)
 }
 
 @test
 fn test_not_double() {
-    assert_eq(!!true, true)
-    assert_eq(!!false, false)
+    assertEqual(!!true, true)
+    assertEqual(!!false, false)
 }
 
 @test
 fn test_not_expression() {
-    assert_eq(!(5 > 3), false)
-    assert_eq(!(5 < 3), true)
+    assertEqual(!(5 > 3), false)
+    assertEqual(!(5 < 3), true)
 }
 
 @test
 fn test_not_explicit() {
     // ! requires an explicit bool operand (no truthy/falsy)
-    assert_eq(!(0 != 0), true)         // 0 == 0
-    assert_eq(!(1 != 0), false)        // 1 != 0
-    assert_eq(!(len("") == 0), false)  // empty string
-    assert_eq(!(len("hi") == 0), true) // non-empty
+    assertEqual(!(0 != 0), true)         // 0 == 0
+    assertEqual(!(1 != 0), false)        // 1 != 0
+    assertEqual(!(len("") == 0), false)  // empty string
+    assertEqual(!(len("hi") == 0), true) // non-empty
     var n: i64? = null
-    assert_eq(!(n != null), true)      // null presence
+    assertEqual(!(n != null), true)      // null presence
 }
 
 // ===== 组合 =====
 
 @test
 fn test_and_or_combined() {
-    assert_eq(true && true || false, true)
-    assert_eq(false || true && true, true)
-    assert_eq((true || false) && true, true)
+    assertEqual(true && true || false, true)
+    assertEqual(false || true && true, true)
+    assertEqual((true || false) && true, true)
 }
 
 @test
 fn test_not_and() {
-    assert_eq(!(true && false), true)
-    assert_eq(!true && false, false)
+    assertEqual(!(true && false), true)
+    assertEqual(!true && false, false)
 }
 
 @test
 fn test_not_or() {
-    assert_eq(!(true || false), false)
-    assert_eq(!true || false, false)
-    assert_eq(!false || true, true)
+    assertEqual(!(true || false), false)
+    assertEqual(!true || false, false)
+    assertEqual(!false || true, true)
 }
 
 // ===== 优先级 =====
@@ -133,15 +133,15 @@ fn test_not_or() {
 @test
 fn test_precedence_not_highest() {
     // ! 优先级最高
-    assert_eq(!true && true, false)
-    assert_eq(!false && true, true)
+    assertEqual(!true && true, false)
+    assertEqual(!false && true, true)
 }
 
 @test
 fn test_precedence_and_before_or() {
     // && 优先级高于 ||
-    assert_eq(true || false && false, true)   // true || (false && false)
-    assert_eq(false || true && true, true)    // false || (true && true)
+    assertEqual(true || false && false, true)   // true || (false && false)
+    assertEqual(false || true && true, true)    // false || (true && true)
 }
 
 // ===== 边界条件 =====
@@ -151,15 +151,15 @@ fn test_with_nullable_presence() {
     // Logical operators require bool operands; use explicit presence checks
     var a: string? = null
     var b: string? = "value"
-    assert_eq((a != null) || (b != null), true)
-    assert_eq((b != null) || (a != null), true)
-    assert_eq((a != null) && (b != null), false)
+    assertEqual((a != null) || (b != null), true)
+    assertEqual((b != null) || (a != null), true)
+    assertEqual((a != null) && (b != null), false)
 }
 
 @test
 fn test_complex_condition() {
     var x = 5
     var y = 10
-    assert_eq(x > 0 && y > 0 && x < y, true)
-    assert_eq(x < 0 || y < 0 || x > y, false)
+    assertEqual(x > 0 && y > 0 && x < y, true)
+    assertEqual(x < 0 || y < 0 || x > y, false)
 }

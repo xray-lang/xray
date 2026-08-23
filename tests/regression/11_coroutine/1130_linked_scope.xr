@@ -31,7 +31,7 @@ fn test_linked_scope_error() {
         }
     }
     assert(caught, "linked scope should have thrown child error")
-    assert_eq(code, 1)
+    assertEqual(code, 1)
 }
 fn test_normal_scope_no_error() {
     var caught = false

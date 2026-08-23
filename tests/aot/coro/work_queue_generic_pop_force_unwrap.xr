@@ -11,6 +11,6 @@ fn worker() -> i64 {
 }
 
 var task = go worker()
-assert_true(queue.push(21, 0))
+assert(queue.push(21, 0))
 
 print(await task)

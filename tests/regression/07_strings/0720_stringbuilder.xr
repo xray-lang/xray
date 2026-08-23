@@ -10,14 +10,14 @@ fn test_basic_append() {
     sb.append("Hello")
     sb.append(" ")
     sb.append("World")
-    assert_eq(sb.toString(), "Hello World")
+    assertEqual(sb.toString(), "Hello World")
 }
 
 @test
 fn test_chain_append() {
     var sb = StringBuilder()
     sb.append("a").append("b").append("c")
-    assert_eq(sb.toString(), "abc")
+    assertEqual(sb.toString(), "abc")
 }
 
 // ===== 不同类型 =====
@@ -27,7 +27,7 @@ fn test_append_int() {
     var sb = StringBuilder()
     sb.append("num: ")
     sb.append(42)
-    assert_eq(sb.toString(), "num: 42")
+    assertEqual(sb.toString(), "num: 42")
 }
 
 @test
@@ -36,7 +36,7 @@ fn test_append_float() {
     sb.append("pi: ")
     sb.append(3.14)
     var result = sb.toString()
-    assert_eq(result.startsWith("pi: 3.14"), true)
+    assertEqual(result.startsWith("pi: 3.14"), true)
 }
 
 @test
@@ -47,7 +47,7 @@ fn test_mixed_types() {
     sb.append(", ok=")
     sb.append(true)
     var result = sb.toString()
-    assert_eq(result.contains("100"), true)
+    assertEqual(result.contains("100"), true)
 }
 
 @test
@@ -57,7 +57,7 @@ fn test_append_char() {
     sb.append("0123456789abcdef".runes().nth(10))
     sb.append(", unicode=")
     sb.append("你好".runes().nth(1))
-    assert_eq(sb.toString(), "hex=a, unicode=好")
+    assertEqual(sb.toString(), "hex=a, unicode=好")
 }
 
 // ===== 循环中使用 =====
@@ -68,7 +68,7 @@ fn test_loop_append() {
     for (i in 0..5) {
         sb.append("x")
     }
-    assert_eq(sb.toString(), "xxxxx")
+    assertEqual(sb.toString(), "xxxxx")
 }
 
 @test
@@ -80,7 +80,7 @@ fn test_loop_numbers() {
         }
         sb.append(i)
     }
-    assert_eq(sb.toString(), "1,2,3")
+    assertEqual(sb.toString(), "1,2,3")
 }
 
 // ===== clear 方法 =====
@@ -91,17 +91,17 @@ fn test_clear() {
     sb.append("test")
     sb.clear()
     sb.append("new")
-    assert_eq(sb.toString(), "new")
+    assertEqual(sb.toString(), "new")
 }
 
 @test
 fn test_clear_then_reuse() {
     var sb = StringBuilder()
     sb.append("first")
-    assert_eq(sb.toString(), "first")
+    assertEqual(sb.toString(), "first")
     sb.clear()
     sb.append("second")
-    assert_eq(sb.toString(), "second")
+    assertEqual(sb.toString(), "second")
 }
 
 // ===== 空 StringBuilder =====
@@ -109,7 +109,7 @@ fn test_clear_then_reuse() {
 @test
 fn test_empty() {
     var sb = StringBuilder()
-    assert_eq(sb.toString(), "")
+    assertEqual(sb.toString(), "")
 }
 
 // ===== 大量数据 =====
@@ -120,5 +120,5 @@ fn test_large_append() {
     for (i in 0..100) {
         sb.append("a")
     }
-    assert_eq(len(sb.toString()), 100)
+    assertEqual(len(sb.toString()), 100)
 }

@@ -50,97 +50,97 @@ fn secondDataField() -> EnumPayloadField<WireEvent> {
 fn test_unit_enum_value_iteration() {
     var ordinal = 0
     for (color in Color) {
-        assert_eq(color.ordinal, ordinal)
+        assertEqual(color.ordinal, ordinal)
         if (ordinal == 0) {
-            assert_eq(color, Color.Red)
+            assertEqual(color, Color.Red)
         }
         if (ordinal == 1) {
-            assert_eq(color, Color.Green)
+            assertEqual(color, Color.Green)
         }
         if (ordinal == 2) {
-            assert_eq(color, Color.Blue)
+            assertEqual(color, Color.Blue)
         }
         ordinal += 1
     }
-    assert_eq(ordinal, 3)
+    assertEqual(ordinal, 3)
 }
 
 @test
 fn test_unit_enum_variant_descriptors() {
-    assert_eq(Color.variants.length, 3)
-    assert_eq(Color.variants[0].ordinal, 0)
-    assert_eq(Color.variants[1].name, "Green")
-    assert_eq(Color.variants[2].payloadCount, 0)
-    assert_eq(Color.variants[2].isUnit, true)
-    assert_eq(Color.variants[2].payloads.length, 0)
-    assert_eq(variantOrdinal(firstColorVariant()), 0)
+    assertEqual(Color.variants.length, 3)
+    assertEqual(Color.variants[0].ordinal, 0)
+    assertEqual(Color.variants[1].name, "Green")
+    assertEqual(Color.variants[2].payloadCount, 0)
+    assertEqual(Color.variants[2].isUnit, true)
+    assertEqual(Color.variants[2].payloads.length, 0)
+    assertEqual(variantOrdinal(firstColorVariant()), 0)
     var count = 0
     for (variant in Color.variants) {
-        assert_eq(variant.ordinal, count)
-        assert_eq(variant.payloadCount, 0)
-        assert_eq(variant.isUnit, true)
-        assert_eq(colorVariantName(variant), variant.name)
+        assertEqual(variant.ordinal, count)
+        assertEqual(variant.payloadCount, 0)
+        assertEqual(variant.isUnit, true)
+        assertEqual(colorVariantName(variant), variant.name)
         count += 1
     }
-    assert_eq(count, 3)
+    assertEqual(count, 3)
 }
 
 @test
 fn test_payload_enum_variant_descriptors() {
-    assert_eq(WireEvent.variants.length, 3)
-    assert_eq(WireEvent.variants[0].name, "Ready")
-    assert_eq(WireEvent.variants[0].isUnit, true)
-    assert_eq(WireEvent.variants[1].name, "Data")
-    assert_eq(WireEvent.variants[1].payloadCount, 2)
-    assert_eq(WireEvent.variants[1].isUnit, false)
-    assert_eq(WireEvent.variants[2].payloadCount, 1)
+    assertEqual(WireEvent.variants.length, 3)
+    assertEqual(WireEvent.variants[0].name, "Ready")
+    assertEqual(WireEvent.variants[0].isUnit, true)
+    assertEqual(WireEvent.variants[1].name, "Data")
+    assertEqual(WireEvent.variants[1].payloadCount, 2)
+    assertEqual(WireEvent.variants[1].isUnit, false)
+    assertEqual(WireEvent.variants[2].payloadCount, 1)
     var variants = 0
     var fields = 0
     for (variant in WireEvent.variants) {
         variants += 1
         for (field in variant.payloads) {
-            assert_eq(field.index, fields)
-            assert_eq(field.type > 0, true)
-            assert_eq(payloadFieldName(field), field.name)
+            assertEqual(field.index, fields)
+            assertEqual(field.type > 0, true)
+            assertEqual(payloadFieldName(field), field.name)
             fields += 1
         }
         fields = 0
     }
-    assert_eq(variants, 3)
+    assertEqual(variants, 3)
     var data = WireEvent.variants[1]
-    assert_eq(data.payloads.length, 2)
-    assert_eq(data.payloads[0].index, 0)
-    assert_eq(data.payloads[0].name, "bytes")
-    assert_eq(data.payloads[1].index, 1)
-    assert_eq(data.payloads[1].name, "code")
-    assert_eq(WireEvent.variants[2].payloads[0].name, "message")
-    assert_eq(payloadFieldName(secondDataField()), "code")
+    assertEqual(data.payloads.length, 2)
+    assertEqual(data.payloads[0].index, 0)
+    assertEqual(data.payloads[0].name, "bytes")
+    assertEqual(data.payloads[1].index, 1)
+    assertEqual(data.payloads[1].name, "code")
+    assertEqual(WireEvent.variants[2].payloads[0].name, "message")
+    assertEqual(payloadFieldName(secondDataField()), "code")
 }
 
 @test
 fn test_concrete_generic_enum_variant_descriptors() {
-    assert_eq(GenericResult<i64>.variants.length, 3)
-    assert_eq(GenericResult<i64>.variants[0].name, "Ok")
-    assert_eq(GenericResult<i64>.variants[0].payloadCount, 1)
-    assert_eq(GenericResult<i64>.variants[0].payloads[0].name, "value")
-    assert_eq(GenericResult<i64>.variants[0].payloads[0].type > 0, true)
+    assertEqual(GenericResult<i64>.variants.length, 3)
+    assertEqual(GenericResult<i64>.variants[0].name, "Ok")
+    assertEqual(GenericResult<i64>.variants[0].payloadCount, 1)
+    assertEqual(GenericResult<i64>.variants[0].payloads[0].name, "value")
+    assertEqual(GenericResult<i64>.variants[0].payloads[0].type > 0, true)
 }
 
 @test
 fn test_positional_payload_descriptor_names_are_empty() {
-    assert_eq(PositionalPayload.variants[0].payloads.length, 2)
-    assert_eq(PositionalPayload.variants[0].payloads[0].name, "")
-    assert_eq(PositionalPayload.variants[0].payloads[1].name, "")
+    assertEqual(PositionalPayload.variants[0].payloads.length, 2)
+    assertEqual(PositionalPayload.variants[0].payloads[0].name, "")
+    assertEqual(PositionalPayload.variants[0].payloads[1].name, "")
 }
 
 @test
 fn test_enum_alias_static_domains() {
     var valueCount = 0
     for (color in PaletteColor) {
-        assert_eq(color.ordinal, valueCount)
+        assertEqual(color.ordinal, valueCount)
         valueCount += 1
     }
-    assert_eq(valueCount, 3)
-    assert_eq(PaletteColor.variants.length, 3)
-    assert_eq(PaletteColor.variants[1].name, "Green")
+    assertEqual(valueCount, 3)
+    assertEqual(PaletteColor.variants.length, 3)
+    assertEqual(PaletteColor.variants[1].name, "Green")
 }

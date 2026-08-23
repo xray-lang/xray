@@ -11,7 +11,7 @@
 fn test_dump_int() {
     var x = 42
     dump(x)
-    assert_eq(x, 42)
+    assertEqual(x, 42)
 }
 
 @test
@@ -25,32 +25,32 @@ fn test_dump_float() {
 fn test_dump_string() {
     var s = "hello"
     dump(s)
-    assert_eq(s, "hello")
-    assert_eq(len(s), 5)
+    assertEqual(s, "hello")
+    assertEqual(len(s), 5)
 }
 
 @test
 fn test_dump_bool() {
     var b = true
     dump(b)
-    assert_eq(b, true)
+    assertEqual(b, true)
 }
 
 @test
 fn test_dump_null() {
     var n: i64? = null
     dump(n)
-    assert_eq(n == null, true)
+    assertEqual(n == null, true)
 }
 
 @test
 fn test_dump_array() {
     var a = [1, 2, 3]
     dump(a)
-    assert_eq(len(a), 3)
-    assert_eq(a[0], 1)
-    assert_eq(a[1], 2)
-    assert_eq(a[2], 3)
+    assertEqual(len(a), 3)
+    assertEqual(a[0], 1)
+    assertEqual(a[1], 2)
+    assertEqual(a[2], 3)
 }
 
 @test
@@ -61,17 +61,17 @@ fn test_dump_map() {
     // map is intact after dump().
     var scores = #{"alice": 95, "bob": 87, "charlie": 92}
     dump(scores)
-    assert_eq(scores["alice"], 95)
-    assert_eq(scores["bob"], 87)
-    assert_eq(scores["charlie"], 92)
+    assertEqual(scores["alice"], 95)
+    assertEqual(scores["bob"], 87)
+    assertEqual(scores["charlie"], 92)
 }
 
 @test
 fn test_dump_set() {
     var s = #[1, 2, 3]
     dump(s)
-    assert_eq(len(s), 3)
-    assert_eq(s.contains(2), true)
+    assertEqual(len(s), 3)
+    assertEqual(s.contains(2), true)
 }
 
 @test
@@ -82,8 +82,8 @@ fn test_dump_with_indent() {
     dump(data, 0)
     // After three dump() calls with different indents, the map must
     // still be intact — covers OP_DUMP B-field literal handling.
-    assert_eq(data["name"], "alice")
-    assert_eq(data["score"], 95)
+    assert(data["name"] == "alice")
+    assert(data["score"] == 95)
 }
 
 @test
@@ -95,8 +95,8 @@ fn test_dump_inside_function() {
         dump(doubled)
         return doubled + 1
     }
-    assert_eq(helper(10), 21)
-    assert_eq(helper(0), 1)
+    assertEqual(helper(10), 21)
+    assertEqual(helper(0), 1)
 }
 
 @test
@@ -104,9 +104,9 @@ fn test_dump_nested_expr() {
     var arr = [10, 20, 30]
     var idx = 1
     dump(arr[idx])
-    assert_eq(arr[idx], 20)
-    assert_eq(idx, 1)
-    assert_eq(len(arr), 3)
+    assertEqual(arr[idx], 20)
+    assertEqual(idx, 1)
+    assertEqual(len(arr), 3)
 }
 
 @test
@@ -116,12 +116,12 @@ fn test_dump_in_loop() {
         dump(i)
         total = total + i
     }
-    assert_eq(total, 10)
+    assertEqual(total, 10)
 }
 
 @test
 fn test_dump_return_is_null() {
     // dump() is statically unit-valued; the runtime sentinel remains null.
     var r = dump(42)
-    assert_eq(typeName(r), "null")
+    assertEqual(typeName(r), "null")
 }

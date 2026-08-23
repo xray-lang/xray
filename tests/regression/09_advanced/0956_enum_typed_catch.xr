@@ -28,17 +28,17 @@ fn classify(kind: i64) -> string {
 
 @test
 fn test_typed_enum_catch_first() {
-    assert_eq(classify(0), "net")
+    assertEqual(classify(0), "net")
 }
 
 @test
 fn test_typed_enum_catch_second() {
-    assert_eq(classify(1), "disk")
+    assertEqual(classify(1), "disk")
 }
 
 @test
 fn test_typed_enum_no_throw() {
-    assert_eq(classify(2), "none")
+    assertEqual(classify(2), "none")
 }
 
 // Typed enum catch followed by a catch-all: a non-matching enum must fall
@@ -57,11 +57,11 @@ fn classify_with_default(kind: i64) -> string {
 
 @test
 fn test_typed_enum_then_catchall_match() {
-    assert_eq(classify_with_default(0), "net")
+    assertEqual(classify_with_default(0), "net")
 }
 
 @test
 fn test_typed_enum_then_catchall_fallthrough() {
     // DiskErr.Full does not match `catch (e: NetErr)` → catch-all "other".
-    assert_eq(classify_with_default(1), "other")
+    assertEqual(classify_with_default(1), "other")
 }

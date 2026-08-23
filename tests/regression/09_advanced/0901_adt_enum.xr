@@ -41,24 +41,24 @@ fn radius_or(s: Shape) -> i64 {
 @test
 fn test_adt_enum() {
     // Payload and non-payload variants describe correctly.
-    assert_eq(describe(Shape.Circle(3)), "circle:3")
-    assert_eq(describe(Shape.Square(4)), "square:4")
-    assert_eq(describe(Shape.Point), "point")
-    assert_eq(describe(Shape.Unknown), "unknown")
+    assertEqual(describe(Shape.Circle(3)), "circle:3")
+    assertEqual(describe(Shape.Square(4)), "square:4")
+    assertEqual(describe(Shape.Point), "point")
+    assertEqual(describe(Shape.Unknown), "unknown")
 
     // Cold enum metadata still works for ADT aggregates.
-    assert_eq(Shape.Circle(3).name, "Circle")
-    assert_eq(Shape.Circle(3).ordinal, 0)
-    assert_eq(Shape.Circle(3).toString(), "Shape.Circle(3)")
-    assert_eq(Shape.Point.name, "Point")
-    assert_eq(Shape.Point.ordinal, 2)
-    assert_eq(Shape.Point.toString(), "Shape.Point")
+    assertEqual(Shape.Circle(3).name, "Circle")
+    assertEqual(Shape.Circle(3).ordinal, 0)
+    assertEqual(Shape.Circle(3).toString(), "Shape.Circle(3)")
+    assertEqual(Shape.Point.name, "Point")
+    assertEqual(Shape.Point.ordinal, 2)
+    assertEqual(Shape.Point.toString(), "Shape.Point")
 
     // Non-payload variant matched alongside a payload arm, then wildcard.
-    assert_eq(radius_or(Shape.Circle(9)), 9)
-    assert_eq(radius_or(Shape.Point), -1)
-    assert_eq(radius_or(Shape.Square(2)), -2)
-    assert_eq(radius_or(Shape.Unknown), -2)
+    assertEqual(radius_or(Shape.Circle(9)), 9)
+    assertEqual(radius_or(Shape.Point), -1)
+    assertEqual(radius_or(Shape.Square(2)), -2)
+    assertEqual(radius_or(Shape.Unknown), -2)
 
     // Bare non-payload variant bound to a local, then matched.
     var p = Shape.Point
@@ -66,7 +66,7 @@ fn test_adt_enum() {
         Shape.Point -> true
         _ -> false
     }
-    assert_eq(is_point, true)
+    assertEqual(is_point, true)
 
     // Non-payload variant must NOT match a payload arm of the same ordinal
     // family — Circle(0) is ordinal 0, Point is ordinal 2.
@@ -75,14 +75,14 @@ fn test_adt_enum() {
         Shape.Circle(_) -> true
         _ -> false
     }
-    assert_eq(matched_circle, true)
+    assertEqual(matched_circle, true)
 
     // ADT variants inside an array keep their instance representation.
     var shapes = [Shape.Circle(1), Shape.Point, Shape.Square(5), Shape.Unknown]
-    assert_eq(describe(shapes[0]), "circle:1")
-    assert_eq(describe(shapes[1]), "point")
-    assert_eq(describe(shapes[2]), "square:5")
-    assert_eq(describe(shapes[3]), "unknown")
+    assertEqual(describe(shapes[0]), "circle:1")
+    assertEqual(describe(shapes[1]), "point")
+    assertEqual(describe(shapes[2]), "square:5")
+    assertEqual(describe(shapes[3]), "unknown")
 
     // A second ADT enum with a leading non-payload arm.
     var t = Tree.Empty
@@ -91,12 +91,12 @@ fn test_adt_enum() {
         Tree.Leaf(v) -> v
         Tree.Branch(v) -> v * 10
     }
-    assert_eq(td, 0)
+    assertEqual(td, 0)
     var leaf = Tree.Leaf(7)
     var ld = match (leaf) {
         Tree.Empty -> 0
         Tree.Leaf(v) -> v
         Tree.Branch(v) -> v * 10
     }
-    assert_eq(ld, 7)
+    assertEqual(ld, 7)
 }

@@ -15,7 +15,7 @@ fn test_single_catch() {
     } catch (e) {
         match (e) { CatchErr.Msg(s) -> { msg = s } }
     }
-    assert_eq(msg, "single")
+    assertEqual(msg, "single")
 }
 
 // 2. Typed catch — catch (e: CatchErr)
@@ -27,7 +27,7 @@ fn test_typed_catch_exception() {
     } catch (e: CatchErr) {
         match (e) { CatchErr.Msg(s) -> { msg = s } }
     }
-    assert_eq(msg, "typed")
+    assertEqual(msg, "typed")
 }
 
 // 3. Typed catch + defer cleanup (defer runs at function exit, after catch)
@@ -44,8 +44,8 @@ fn test_typed_catch_defer() {
         }
     }
     work()
-    assert_eq(msg, "tcf")
-    assert_eq(fin, true)
+    assertEqual(msg, "tcf")
+    assertEqual(fin, true)
 }
 
 // 4. Multi-catch: typed then catch-all
@@ -59,7 +59,7 @@ fn test_multi_catch_typed_then_catchall() {
     } catch (e) {
         result = "catchall"
     }
-    assert_eq(result, "typed:multi")
+    assertEqual(result, "typed:multi")
 }
 
 // 5. Multi-catch: all typed (CatchErr matches first)
@@ -71,7 +71,7 @@ fn test_multi_catch_all_typed() {
     } catch (e: CatchErr) {
         result = "match"
     }
-    assert_eq(result, "match")
+    assertEqual(result, "match")
 }
 
 // 6. Multi-catch with defer cleanup
@@ -90,8 +90,8 @@ fn test_multi_catch_defer() {
         }
     }
     work()
-    assert_eq(result, "mf")
-    assert_eq(fin, true)
+    assertEqual(result, "mf")
+    assertEqual(fin, true)
 }
 
 // 7. Nested multi-catch with rethrow
@@ -107,11 +107,11 @@ fn test_nested_multi_catch_rethrow() {
         }
     } catch (e: CatchErr) {
         log.push("outer-catch")
-        match (e) { CatchErr.Msg(s) -> { assert_eq(s, "rethrown") } }
+        match (e) { CatchErr.Msg(s) -> { assertEqual(s, "rethrown") } }
     }
-    assert_eq(len(log), 2)
-    assert_eq(log[0], "inner-catch")
-    assert_eq(log[1], "outer-catch")
+    assertEqual(len(log), 2)
+    assertEqual(log[0], "inner-catch")
+    assertEqual(log[1], "outer-catch")
 }
 
 // 8. Sequential multi-catch blocks
@@ -129,8 +129,8 @@ fn test_sequential_multi_catch() {
     } catch (e: CatchErr) {
         match (e) { CatchErr.Msg(s) -> { b = s } }
     }
-    assert_eq(a, "first")
-    assert_eq(b, "second")
+    assertEqual(a, "first")
+    assertEqual(b, "second")
 }
 
 // 9. Catch-all only (untyped)
@@ -142,7 +142,7 @@ fn test_catchall_only() {
     } catch (e) {
         match (e) { CatchErr.Msg(s) -> { msg = s } }
     }
-    assert_eq(msg, "any")
+    assertEqual(msg, "any")
 }
 
 // 10. Multi-catch: catch-all catches when typed enum doesn't match
@@ -156,5 +156,5 @@ fn test_multi_catch_fallthrough_to_catchall() {
     } catch (e) {
         match (e) { CatchErr.Msg(s) -> { result = "catchall:" + s } }
     }
-    assert_eq(result, "catchall:fall")
+    assertEqual(result, "catchall:fall")
 }

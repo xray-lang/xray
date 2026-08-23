@@ -9,25 +9,25 @@ import "./modules/typed_lib" as typed_lib
 @test
 fn test_namespace_fn_call() {
     var r = typed_lib.double_it(21)
-    assert_eq(r, 42)
+    assertEqual(r, 42)
 }
 
 @test
 fn test_namespace_string_fn() {
     var s = typed_lib.greet("world")
-    assert_eq(s, "Hello, world")
+    assertEqual(s, "Hello, world")
 }
 
 @test
 fn test_namespace_const() {
-    assert_eq(typed_lib.MAGIC, 42)
+    assertEqual(typed_lib.MAGIC, 42)
 }
 
 @test
 fn test_namespace_class() {
     var p = typed_lib.Point(3, 4)
-    assert_eq(p.x, 3)
-    assert_eq(p.y, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
 }
 
 @test
@@ -35,7 +35,7 @@ fn test_namespace_in_nested() {
     fn inner() -> i64 {
         return typed_lib.double_it(5)
     }
-    assert_eq(inner(), 10)
+    assertEqual(inner(), 10)
 }
 
 @test
@@ -44,9 +44,9 @@ fn test_namespace_byte_u8_canonical_identity() {
     var uint8Array: Array<u8> = [4, 5, 6]
     var fromModule: Array<u8> = typed_lib.make_uint8_bytes()
 
-    assert_eq(typed_lib.first_byte(uint8Array), 4)
-    assert_eq(typed_lib.second_uint8(byteArray), 2)
-    assert_eq(fromModule[0], 7)
+    assertEqual(typed_lib.first_byte(uint8Array), 4)
+    assertEqual(typed_lib.second_uint8(byteArray), 2)
+    assertEqual(fromModule[0], 7)
 }
 
 @test
@@ -54,6 +54,6 @@ fn test_namespace_byte_u8_slice_identity() {
     var byteArray: Array<u8> = [10, 20, 30]
     var uint8Array: Array<u8> = [40, 50, 60]
 
-    assert_eq(typed_lib.sum_byte_slice(uint8Array[:]), 90)
-    assert_eq(typed_lib.sum_uint8_slice(byteArray[:]), 30)
+    assertEqual(typed_lib.sum_byte_slice(uint8Array[:]), 90)
+    assertEqual(typed_lib.sum_uint8_slice(byteArray[:]), 30)
 }

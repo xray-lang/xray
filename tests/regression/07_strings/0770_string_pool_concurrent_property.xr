@@ -45,7 +45,7 @@ fn test_property_concurrent_intern_safety() {
     
     // 验证所有协程的结果都正确
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -72,7 +72,7 @@ fn test_property_concurrent_global_pool_readonly() {
     
     // 验证所有协程都能正确访问全局池
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -104,7 +104,7 @@ fn test_property_concurrent_local_pool_isolation() {
     
     // 验证所有协程的本地池独立且正确
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -138,7 +138,7 @@ fn test_property_concurrent_long_string_no_intern() {
     
     // 验证所有协程的长字符串都正确
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -174,7 +174,7 @@ fn test_property_concurrent_mixed_operations() {
     
     // 验证所有协程的混合操作都正确
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -209,7 +209,7 @@ fn test_property_concurrent_string_compare() {
     
     // 验证所有协程的比较结果都正确
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -239,7 +239,7 @@ fn test_property_concurrent_intern_consistency() {
     
     // 验证所有协程的驻留一致性
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }
 
@@ -272,6 +272,6 @@ fn test_property_concurrent_stress_200() {
     
     // 验证所有协程都正确完成
     for (var i = 0; i < n; i++) {
-        assert_eq(results[i], true)
+        assertEqual(results[i], true)
     }
 }

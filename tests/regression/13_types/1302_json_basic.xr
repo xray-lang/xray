@@ -6,17 +6,17 @@ fn test_json_scalar_widening() {
     var n: JSON.Value = 42
     var b: JSON.Value = true
     var z: JSON.Value = null
-    assert_eq(JSON.kindOf(s), "string")
-    assert_eq(JSON.kindOf(n), "int")
-    assert_eq(JSON.kindOf(b), "bool")
+    assertEqual(JSON.kindOf(s), "string")
+    assertEqual(JSON.kindOf(n), "int")
+    assertEqual(JSON.kindOf(b), "bool")
     assert(JSON.isNull(z))
 }
 
 @test
 fn test_json_parse_object_and_array() {
     var root = JSON.parseValue("{\"user\":{\"name\":\"Ada\"},\"items\":[1,2,3]}")
-    assert_eq(JSON.require<string>(root, ["user", "name"]), "Ada")
-    assert_eq(JSON.require<i64>(root, ["items", 1]), 2)
+    assertEqual(JSON.require<string>(root, ["user", "name"]), "Ada")
+    assertEqual(JSON.require<i64>(root, ["items", 1]), 2)
     assert(JSON.isObject(root))
 }
 
@@ -24,6 +24,6 @@ fn test_json_parse_object_and_array() {
 fn test_json_object_alias_is_map() {
     var obj: JSON.Object = JSON.parseObject("{\"port\":8080}")
     obj.set("host", "localhost")
-    assert_eq(typeName(obj), "Map")
-    assert_eq(JSON.require<string>(obj, ["host"]), "localhost")
+    assertEqual(typeName(obj), "Map")
+    assertEqual(JSON.require<string>(obj, ["host"]), "localhost")
 }

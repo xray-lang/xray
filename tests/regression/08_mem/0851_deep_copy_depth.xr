@@ -37,8 +37,8 @@ fn test_deep_chain_within_limit() {
         probe = probe.next!
         depth += 1
     }
-    assert_eq(depth, 900)
-    assert_eq(probe.tag, "leaf")
+    assertEqual(depth, 900)
+    assertEqual(probe.tag, "leaf")
 }
 
 // ===== 环结构依旧安全（seen 表路径不受深度改动影响）=====
@@ -51,7 +51,7 @@ fn test_cycle_still_safe() {
     var c = copy(a)
     // 环被保留：c.next.next 指回 c。
     c.next!.next!.tag = "cycle-copy"
-    assert_eq(c.tag, "cycle-copy")
+    assertEqual(c.tag, "cycle-copy")
 
     // 纯 RC 不回收强环；测试在验证后显式断开原图和副本图。
     b.next = null
@@ -72,8 +72,8 @@ fn test_wide_shallow() {
         i += 1
     }
     var c = copy(arr)
-    assert_eq(len(c), 5000)
-    assert_eq(c[4999].value, 4999)
+    assertEqual(len(c), 5000)
+    assertEqual(c[4999].value, 4999)
 }
 
 print("=== deep_copy depth tests completed ===")

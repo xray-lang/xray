@@ -28,38 +28,38 @@ fn test_generic_class_basic() {
 
     // Test 1: Box<int>
     var intBox: Box<i64> = Box<i64>(42)
-    assert_eq(intBox.value, 42)
-    assert_eq(intBox.get(), 42)
+    assertEqual(intBox.value, 42)
+    assertEqual(intBox.get(), 42)
     // Test 2: Box<string>
     var strBox: Box<string> = Box<string>("hello")
-    assert_eq(strBox.value, "hello")
-    assert_eq(strBox.get(), "hello")
+    assertEqual(strBox.value, "hello")
+    assertEqual(strBox.get(), "hello")
     // Test 3: Box<bool>
     var boolBox: Box<bool> = Box<bool>(true)
-    assert_eq(boolBox.value, true)
+    assertEqual(boolBox.value, true)
 
     // Generic class with two type parameters
 
     // Test 4: Pair<string, int>
     var p1: Pair<string, i64> = Pair<string, i64>("age", 30)
-    assert_eq(p1.key, "age")
-    assert_eq(p1.value, 30)
+    assertEqual(p1.key, "age")
+    assertEqual(p1.value, 30)
     // Test 5: Pair<int, string>
     var p2: Pair<i64, string> = Pair<i64, string>(1, "one")
-    assert_eq(p2.key, 1)
-    assert_eq(p2.value, "one")
+    assertEqual(p2.key, 1)
+    assertEqual(p2.value, "one")
     // Test 6: Nested generic - Box<Box<int>>
     var innerBox: Box<i64> = Box<i64>(100)
     var outerBox: Box<Box<i64>> = Box<Box<i64>>(innerBox)
-    assert_eq(outerBox.get().get(), 100)
+    assertEqual(outerBox.get().get(), 100)
     // Test 7: Array of generic class
     var boxes: Array<Box<i64>> = [Box<i64>(1), Box<i64>(2), Box<i64>(3)]
-    assert_eq(boxes[0].get(), 1)
-    assert_eq(boxes[1].get(), 2)
-    assert_eq(boxes[2].get(), 3)
+    assertEqual(boxes[0].get(), 1)
+    assertEqual(boxes[1].get(), 2)
+    assertEqual(boxes[2].get(), 3)
     // Test 8: Box containing Pair
     var boxPair: Box<Pair<string, i64>> = Box<Pair<string, i64>>(Pair<string, i64>("x", 99))
-    assert_eq(boxPair.get().key, "x")
-    assert_eq(boxPair.get().value, 99)
+    assertEqual(boxPair.get().key, "x")
+    assertEqual(boxPair.get().value, 99)
 }
 

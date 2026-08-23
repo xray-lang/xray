@@ -5,7 +5,7 @@ type User = { name: string, age: i64 }
 
 @test
 fn test_sanity() {
-    assert_eq(1 + 1, 2)
+    assertEqual(1 + 1, 2)
 }
 
 @test
@@ -13,22 +13,22 @@ fn test_decode_basic() {
     var json = JSON.parseValue("{\"name\": \"Alice\", \"age\": 30}")
     var user = JSON.decode<User>(json)
     assert(user != null)
-    assert_eq(user!.name, "Alice")
-    assert_eq(user!.age, 30)
+    assertEqual(user!.name, "Alice")
+    assertEqual(user!.age, 30)
 }
 
 @test
 fn test_decode_missing_field() {
     var partial = JSON.parseValue("{\"name\": \"Bob\"}")
     var bad = JSON.decode<User>(partial)
-    assert_eq(bad, null)
+    assertEqual(bad, null)
 }
 
 @test
 fn test_decode_wrong_type() {
     var wrong = JSON.parseValue("{\"name\": 123, \"age\": 30}")
     var result = JSON.decode<User>(wrong)
-    assert_eq(result, null)
+    assertEqual(result, null)
 }
 
 @test
@@ -36,15 +36,15 @@ fn test_decode_extra_fields() {
     var extra = JSON.parseValue("{\"name\": \"Carol\", \"age\": 25, \"email\": \"c@test.com\"}")
     var user = JSON.decode<User>(extra, JSON.UnknownFields.Ignore)
     assert(user != null)
-    assert_eq(user!.name, "Carol")
-    assert_eq(user!.age, 25)
+    assertEqual(user!.name, "Carol")
+    assertEqual(user!.age, 25)
 }
 
 @test
 fn test_decode_non_object() {
     var arr = JSON.parseValue("[1, 2, 3]")
     var bad = JSON.decode<User>(arr)
-    assert_eq(bad, null)
+    assertEqual(bad, null)
 }
 
 // Optional fields and more types
@@ -55,9 +55,9 @@ fn test_decode_bool_field() {
     var json = JSON.parseValue("{\"host\": \"localhost\", \"port\": 8080, \"debug\": true}")
     var cfg = JSON.decode<Config>(json)
     assert(cfg != null)
-    assert_eq(cfg!.host, "localhost")
-    assert_eq(cfg!.port, 8080)
-    assert_eq(cfg!.debug, true)
+    assertEqual(cfg!.host, "localhost")
+    assertEqual(cfg!.port, 8080)
+    assertEqual(cfg!.debug, true)
 }
 
 type Point = { x: f64, y: f64 }
@@ -67,8 +67,8 @@ fn test_decode_float_fields() {
     var json = JSON.parseValue("{\"x\": 1.5, \"y\": 2.7}")
     var pt = JSON.decode<Point>(json)
     assert(pt != null)
-    assert_eq(pt!.x, 1.5)
-    assert_eq(pt!.y, 2.7)
+    assertEqual(pt!.x, 1.5)
+    assertEqual(pt!.y, 2.7)
 }
 
 type Address = { city: string, zip: i64 }
@@ -79,23 +79,23 @@ fn test_decode_nested_object_field() {
     var json = JSON.parseValue("{\"name\": \"Dana\", \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}}")
     var profile = JSON.decode<Profile>(json)
     assert(profile != null)
-    assert_eq(profile!.name, "Dana")
-    assert_eq(profile!.address.city, "Hangzhou")
-    assert_eq(profile!.address.zip, 310000)
+    assertEqual(profile!.name, "Dana")
+    assertEqual(profile!.address.city, "Hangzhou")
+    assertEqual(profile!.address.zip, 310000)
 }
 
 @test
 fn test_decode_nested_object_wrong_type() {
     var wrong = JSON.parseValue("{\"name\": \"Dana\", \"address\": {\"city\": \"Hangzhou\", \"zip\": \"bad\"}}")
     var profile = JSON.decode<Profile>(wrong)
-    assert_eq(profile, null)
+    assertEqual(profile, null)
 }
 
 @test
 fn test_decode_nested_object_wrong_kind() {
     var wrong = JSON.parseValue("{\"name\": \"Dana\", \"address\": \"Hangzhou\"}")
     var profile = JSON.decode<Profile>(wrong)
-    assert_eq(profile, null)
+    assertEqual(profile, null)
 }
 
 type JsonBag = { items: Array<JSON.Value> }
@@ -105,14 +105,14 @@ fn test_decode_array_json_field() {
     var json = JSON.parseValue("{\"items\": [1, true, null, {\"x\": 2}]}")
     var bag = JSON.decode<JsonBag>(json)
     assert(bag != null)
-    assert_eq(len(bag!.items), 4)
+    assertEqual(len(bag!.items), 4)
 }
 
 @test
 fn test_decode_array_json_field_rejects_non_array() {
     var json = JSON.parseValue("{\"items\": 1}")
     var bag = JSON.decode<JsonBag>(json)
-    assert_eq(bag, null)
+    assertEqual(bag, null)
 }
 
 type MixedProfile = { name: string, tags: Array<JSON.Value>, address: Address, active: bool }
@@ -122,30 +122,30 @@ fn test_decode_mixed_nested_object_and_array_json_fields() {
     var json = JSON.parseValue("{\"name\": \"Dana\", \"tags\": [\"ops\", 3, null], \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}, \"active\": true}")
     var profile = JSON.decode<MixedProfile>(json)
     assert(profile != null)
-    assert_eq(profile!.name, "Dana")
-    assert_eq(len(profile!.tags), 3)
-    assert_eq(profile!.address.city, "Hangzhou")
-    assert_eq(profile!.address.zip, 310000)
-    assert_eq(profile!.active, true)
+    assertEqual(profile!.name, "Dana")
+    assertEqual(len(profile!.tags), 3)
+    assertEqual(profile!.address.city, "Hangzhou")
+    assertEqual(profile!.address.zip, 310000)
+    assertEqual(profile!.active, true)
 }
 
 @test
 fn test_decode_mixed_rejects_nested_object_wrong_field() {
     var json = JSON.parseValue("{\"name\": \"Dana\", \"tags\": [\"ops\"], \"address\": {\"city\": \"Hangzhou\", \"zip\": \"bad\"}, \"active\": true}")
     var profile = JSON.decode<MixedProfile>(json)
-    assert_eq(profile, null)
+    assertEqual(profile, null)
 }
 
 @test
 fn test_decode_mixed_rejects_array_json_wrong_kind() {
     var json = JSON.parseValue("{\"name\": \"Dana\", \"tags\": {\"0\": \"ops\"}, \"address\": {\"city\": \"Hangzhou\", \"zip\": 310000}, \"active\": true}")
     var profile = JSON.decode<MixedProfile>(json)
-    assert_eq(profile, null)
+    assertEqual(profile, null)
 }
 
 @test
 fn test_decode_null_input() {
     var n = JSON.parseValue("null")
     var bad = JSON.decode<User>(n)
-    assert_eq(bad, null)
+    assertEqual(bad, null)
 }

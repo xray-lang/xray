@@ -12,64 +12,64 @@ import { UrlError } from url
 @test
 fn test_parse_full_url() {
     var r = url.parse("https://example.com:8080/path/to/page?foo=bar#section")
-    assert_eq(r.protocol, "https:")
-    assert_eq(r.hostname, "example.com")
-    assert_eq(r.port, "8080")
-    assert_eq(r.pathname, "/path/to/page")
-    assert_eq(r.search, "?foo=bar")
-    assert_eq(r.hash, "#section")
-    assert_eq(r.host, "example.com:8080")
-    assert_eq(r.origin, "https://example.com:8080")
+    assertEqual(r.protocol, "https:")
+    assertEqual(r.hostname, "example.com")
+    assertEqual(r.port, "8080")
+    assertEqual(r.pathname, "/path/to/page")
+    assertEqual(r.search, "?foo=bar")
+    assertEqual(r.hash, "#section")
+    assertEqual(r.host, "example.com:8080")
+    assertEqual(r.origin, "https://example.com:8080")
 }
 
 @test
 fn test_parse_http_url() {
     var r = url.parse("http://www.example.org/index.html")
-    assert_eq(r.protocol, "http:")
-    assert_eq(r.hostname, "www.example.org")
-    assert_eq(r.pathname, "/index.html")
-    assert_eq(r.port, "")
+    assertEqual(r.protocol, "http:")
+    assertEqual(r.hostname, "www.example.org")
+    assertEqual(r.pathname, "/index.html")
+    assertEqual(r.port, "")
 }
 
 @test
 fn test_parse_with_query() {
     var r = url.parse("https://api.example.com/search?q=hello&limit=10")
-    assert_eq(r.hostname, "api.example.com")
-    assert_eq(r.search, "?q=hello&limit=10")
+    assertEqual(r.hostname, "api.example.com")
+    assertEqual(r.search, "?q=hello&limit=10")
 }
 
 @test
 fn test_parse_localhost() {
     var r = url.parse("https://localhost")
-    assert_eq(r.hostname, "localhost")
-    assert_eq(r.pathname, "/")
+    assertEqual(r.hostname, "localhost")
+    assertEqual(r.pathname, "/")
 }
 
 @test
 fn test_parse_ip_with_port() {
     var r = url.parse("http://127.0.0.1:3000/api/v1/users")
-    assert_eq(r.hostname, "127.0.0.1")
-    assert_eq(r.port, "3000")
-    assert_eq(r.pathname, "/api/v1/users")
+    assertEqual(r.hostname, "127.0.0.1")
+    assertEqual(r.port, "3000")
+    assertEqual(r.pathname, "/api/v1/users")
 }
 
 @test
 fn test_parse_no_path() {
     var r = url.parse("https://example.com")
-    assert_eq(r.hostname, "example.com")
-    assert_eq(r.pathname, "/")
+    assertEqual(r.hostname, "example.com")
+    assertEqual(r.pathname, "/")
 }
 
 @test
 fn test_parse_hash_only() {
     var r = url.parse("https://example.com#top")
-    assert_eq(r.hash, "#top")
+    assertEqual(r.hash, "#top")
 }
 
 @test
 fn test_parse_query_only() {
     var r = url.parse("https://example.com?key=value")
-    assert_eq(r.search, "?key=value")
+    assertEqual(r.search, "?key=value")
 }
 
 // ============================================================
@@ -79,19 +79,19 @@ fn test_parse_query_only() {
 @test
 fn test_parse_userinfo() {
     var r = url.parse("http://user:pass@example.com:8080/path")
-    assert_eq(r.username, "user")
-    assert_eq(r.password, "pass")
-    assert_eq(r.hostname, "example.com")
-    assert_eq(r.port, "8080")
-    assert_eq(r.pathname, "/path")
+    assertEqual(r.username, "user")
+    assertEqual(r.password, "pass")
+    assertEqual(r.hostname, "example.com")
+    assertEqual(r.port, "8080")
+    assertEqual(r.pathname, "/path")
 }
 
 @test
 fn test_parse_username_only() {
     var r = url.parse("http://admin@example.com/")
-    assert_eq(r.username, "admin")
-    assert_eq(r.password, "")
-    assert_eq(r.hostname, "example.com")
+    assertEqual(r.username, "admin")
+    assertEqual(r.password, "")
+    assertEqual(r.hostname, "example.com")
 }
 
 // ============================================================
@@ -101,16 +101,16 @@ fn test_parse_username_only() {
 @test
 fn test_parse_ipv6() {
     var r = url.parse("http://[::1]:8080/path")
-    assert_eq(r.hostname, "[::1]")
-    assert_eq(r.port, "8080")
-    assert_eq(r.pathname, "/path")
+    assertEqual(r.hostname, "[::1]")
+    assertEqual(r.port, "8080")
+    assertEqual(r.pathname, "/path")
 }
 
 @test
 fn test_parse_ipv6_no_port() {
     var r = url.parse("http://[2001:db8::1]/")
-    assert_eq(r.hostname, "[2001:db8::1]")
-    assert_eq(r.port, "")
+    assertEqual(r.hostname, "[2001:db8::1]")
+    assertEqual(r.port, "")
 }
 
 // ============================================================
@@ -122,7 +122,7 @@ fn test_format_roundtrip() {
     var orig = "https://example.com:8080/path?q=1#top"
     var r = url.parse(orig)
     var rebuilt = url.format(r)
-    assert_eq(rebuilt, orig)
+    assertEqual(rebuilt, orig)
 }
 
 @test
@@ -130,7 +130,7 @@ fn test_format_with_userinfo() {
     var orig = "http://user:pass@example.com/path"
     var r = url.parse(orig)
     var rebuilt = url.format(r)
-    assert_eq(rebuilt, orig)
+    assertEqual(rebuilt, orig)
 }
 
 // ============================================================
@@ -140,59 +140,59 @@ fn test_format_with_userinfo() {
 @test
 fn test_parse_query() {
     var q = url.parseQuery("foo=bar&baz=qux")
-    assert_eq(q.get("foo")!, "bar")
-    assert_eq(q.get("baz")!, "qux")
+    assertEqual(q.get("foo")!, "bar")
+    assertEqual(q.get("baz")!, "qux")
 }
 
 @test
 fn test_parse_query_with_leading_question() {
     var q = url.parseQuery("?name=hello&count=10")
-    assert_eq(q.get("name")!, "hello")
-    assert_eq(q.get("count")!, "10")
+    assertEqual(q.get("name")!, "hello")
+    assertEqual(q.get("count")!, "10")
 }
 
 @test
 fn test_parse_query_encoded() {
     var q = url.parseQuery("msg=hello+world&key=a%26b")
-    assert_eq(q.get("msg")!, "hello world")
-    assert_eq(q.get("key")!, "a&b")
+    assertEqual(q.get("msg")!, "hello world")
+    assertEqual(q.get("key")!, "a&b")
 }
 
 @test
 fn test_parse_query_empty_flag_and_empty_pairs() {
     var q = url.parseQuery("?empty=&flag&msg=hello+world&&=skip")
-    assert_eq(q.get("empty")!, "")
-    assert_eq(q.get("flag")!, "")
-    assert_eq(q.get("msg")!, "hello world")
-    assert_eq(q.get("")!, "skip")
+    assertEqual(q.get("empty")!, "")
+    assertEqual(q.get("flag")!, "")
+    assertEqual(q.get("msg")!, "hello world")
+    assertEqual(q.get("")!, "skip")
 }
 
 @test
 fn test_query_encode() {
     var q = url.parseQuery("a=1&b=2")
-    assert_eq(q.encode(), "a=1&b=2")
+    assertEqual(q.encode(), "a=1&b=2")
 }
 
 @test
 fn test_query_encode_form_values() {
     var q = url.parseQuery("msg=hello+world&key=a%26b&flag")
-    assert_eq(q.encode(), "msg=hello+world&key=a%26b&flag=")
+    assertEqual(q.encode(), "msg=hello+world&key=a%26b&flag=")
 }
 
 @test
 fn test_query_preserves_duplicates_and_set_position() {
     var q = url.parseQuery("a=1&b=2&a=3")
-    assert_eq(q.getAll("a"), ["1", "3"])
+    assertEqual(q.getAll("a"), ["1", "3"])
     var before = q.entries()
-    assert_eq(len(before), 3)
-    assert_eq(before[0].0 + "=" + before[0].1, "a=1")
-    assert_eq(before[1].0 + "=" + before[1].1, "b=2")
-    assert_eq(before[2].0 + "=" + before[2].1, "a=3")
+    assertEqual(len(before), 3)
+    assertEqual(before[0].0 + "=" + before[0].1, "a=1")
+    assertEqual(before[1].0 + "=" + before[1].1, "b=2")
+    assertEqual(before[2].0 + "=" + before[2].1, "a=3")
     q.set("a", "9")
     var after = q.entries()
-    assert_eq(len(after), 2)
-    assert_eq(after[0].0 + "=" + after[0].1, "a=9")
-    assert_eq(after[1].0 + "=" + after[1].1, "b=2")
+    assertEqual(len(after), 2)
+    assertEqual(after[0].0 + "=" + after[0].1, "a=9")
+    assertEqual(after[1].0 + "=" + after[1].1, "b=2")
 }
 
 @test
@@ -205,7 +205,7 @@ fn test_query_invalid_percent_is_typed_error() {
             UrlError.InvalidPercentEncoding(at) -> at
         }
     }
-    assert_eq(offset, 9)
+    assertEqual(offset, 9)
 }
 
 // ============================================================
@@ -214,20 +214,20 @@ fn test_query_invalid_percent_is_typed_error() {
 
 @test
 fn test_encode_form_space() {
-    assert_eq(url.encodeForm("hello world"), "hello+world")
+    assertEqual(url.encodeForm("hello world"), "hello+world")
 }
 
 @test
 fn test_decode_form_plus() {
-    assert_eq(url.decodeForm("hello+world"), "hello world")
+    assertEqual(url.decodeForm("hello+world"), "hello world")
 }
 
 @test
 fn test_encode_decode_consistency() {
     // RFC 3986: encode uses %20 for space, decode does NOT treat + as space
-    assert_eq(url.encode("a b"), "a%20b")
-    assert_eq(url.decode("a+b"), "a+b")  // + stays as +
-    assert_eq(url.decode("a%20b"), "a b")
+    assertEqual(url.encode("a b"), "a%20b")
+    assertEqual(url.decode("a+b"), "a+b")  // + stays as +
+    assertEqual(url.decode("a%20b"), "a b")
 }
 
 // ============================================================
@@ -237,43 +237,43 @@ fn test_encode_decode_consistency() {
 @test
 fn test_resolve_absolute_path() {
     var result = url.resolve("https://example.com/a/b/c", "/new/path")
-    assert_eq(result, "https://example.com/new/path")
+    assertEqual(result, "https://example.com/new/path")
 }
 
 @test
 fn test_resolve_relative_path() {
     var result = url.resolve("https://example.com/a/b/c", "d.html")
-    assert_eq(result, "https://example.com/a/b/d.html")
+    assertEqual(result, "https://example.com/a/b/d.html")
 }
 
 @test
 fn test_resolve_absolute_url() {
     var result = url.resolve("https://example.com/a", "http://other.com/b")
-    assert_eq(result, "http://other.com/b")
+    assertEqual(result, "http://other.com/b")
 }
 
 @test
 fn test_resolve_query_only_replaces_base_query() {
     var result = url.resolve("https://example.com/a/b/c?old=1#top", "?new=2")
-    assert_eq(result, "https://example.com/a/b/c?new=2")
+    assertEqual(result, "https://example.com/a/b/c?new=2")
 }
 
 @test
 fn test_resolve_fragment_only_preserves_base_query() {
     var result = url.resolve("https://example.com/a/b/c?old=1", "#frag")
-    assert_eq(result, "https://example.com/a/b/c?old=1#frag")
+    assertEqual(result, "https://example.com/a/b/c?old=1#frag")
 }
 
 @test
 fn test_resolve_network_path_keeps_base_scheme() {
     var result = url.resolve("https://example.com/a/b/c", "//cdn.example.com/lib.js")
-    assert_eq(result, "https://cdn.example.com/lib.js")
+    assertEqual(result, "https://cdn.example.com/lib.js")
 }
 
 @test
 fn test_resolve_dot_segments() {
     var result = url.resolve("https://example.com/a/b/c", "../d/./e")
-    assert_eq(result, "https://example.com/a/d/e")
+    assertEqual(result, "https://example.com/a/d/e")
 }
 
 // ============================================================
@@ -283,23 +283,23 @@ fn test_resolve_dot_segments() {
 @test
 fn test_join_paths() {
     var result = url.join("/api", "v1", "users")
-    assert_eq(result, "/api/v1/users")
+    assertEqual(result, "/api/v1/users")
 }
 
 @test
 fn test_join_trailing_slash() {
     var result = url.join("/api/", "/v1/", "/users")
-    assert_eq(result, "/api/v1/users")
+    assertEqual(result, "/api/v1/users")
 }
 
 @test
 fn test_join_skips_empty_segments() {
     var result = url.join("", "/api/", "", "v1", "/users")
-    assert_eq(result, "/api/v1/users")
+    assertEqual(result, "/api/v1/users")
 }
 
 @test
 fn test_join_single() {
     var result = url.join("/path")
-    assert_eq(result, "/path")
+    assertEqual(result, "/path")
 }

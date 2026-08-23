@@ -41,12 +41,12 @@ fn test_accept_deadline_timeout() {
     if (maybeLst == null) { return }
     const lst = maybeLst!
     var deadline = time.monotonic() + 20
-    assert_true(net.setAcceptDeadline(lst, deadline))
+    assert(net.setAcceptDeadline(lst, deadline))
 
     var conn = net.accept(lst)
-    assert_true(conn == null)
-    assert_eq(net.lastError(lst), NetError.Timeout)
-    assert_eq(net.lastErrno(lst), 0)
+    assert(conn == null)
+    assertEqual(net.lastError(lst), NetError.Timeout)
+    assertEqual(net.lastErrno(lst), 0)
 
     net.close(lst)
 }
@@ -61,8 +61,8 @@ fn test_accept_closed_reports_closed() {
     net.close(lst)
 
     var conn = net.accept(lst)
-    assert_true(conn == null)
-    assert_eq(net.lastError(lst), NetError.Closed)
+    assert(conn == null)
+    assertEqual(net.lastError(lst), NetError.Closed)
 }
 
 @test
@@ -74,14 +74,14 @@ fn test_read_deadline_timeout() {
     go acceptSlowWrite(lst)
 
     var c = net.dial("127.0.0.1", port)
-    assert_true(net.setReadDeadline(c, time.monotonic() + 20))
+    assert(net.setReadDeadline(c, time.monotonic() + 20))
 
     // readBytes returns null for both EOF and error; a deadline elapse is
     // the error case, so lastError must say Timeout.
     var data = net.readBytes(c)
-    assert_true(data == null)
-    assert_eq(net.lastError(c), NetError.Timeout)
-    assert_eq(net.lastErrno(c), 0)
+    assert(data == null)
+    assertEqual(net.lastError(c), NetError.Timeout)
+    assertEqual(net.lastErrno(c), 0)
 
     net.close(c)
     net.close(lst)
@@ -98,8 +98,8 @@ fn test_closed_handle_error() {
     var c = net.dial("127.0.0.1", port)
     net.close(c)
 
-    assert_eq(net.writeBytes(c, Array<u8>([120])), -1)
-    assert_eq(net.lastError(c), NetError.Closed)
+    assertEqual(net.writeBytes(c, Array<u8>([120])), -1)
+    assertEqual(net.lastError(c), NetError.Closed)
 
     net.close(lst)
 }

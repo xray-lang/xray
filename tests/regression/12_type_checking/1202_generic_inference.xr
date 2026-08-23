@@ -12,9 +12,9 @@ fn recvInt(ch: Channel<i64>) -> i64 {
 @test
 fn test_array_type_annotation() {
     var arr: Array<i64> = [1, 2, 3]
-    assert_eq(len(arr), 3)
+    assertEqual(len(arr), 3)
     arr.push(4)
-    assert_eq(len(arr), 4)
+    assertEqual(len(arr), 4)
 }
 
 @test
@@ -22,7 +22,7 @@ fn test_array_infer_from_elements() {
     // Type should be inferred as Array<int>
     var arr = [1, 2, 3]
     arr.push(4)
-    assert_eq(arr[3], 4)
+    assertEqual(arr[3], 4)
 }
 
 @test
@@ -30,7 +30,7 @@ fn test_array_empty_with_annotation() {
     var arr: Array<string> = []
     arr.push("hello")
     arr.push("world")
-    assert_eq(len(arr), 2)
+    assertEqual(len(arr), 2)
 }
 
 // ===== Map Generic Inference =====
@@ -39,14 +39,14 @@ fn test_map_type_annotation() {
     var m: Map<string, i64> = #{}
     m.set("a", 1)
     m.set("b", 2)
-    assert_eq(m.get("a"), 1)
-    assert_eq(len(m), 2)
+    assertEqual(m.get("a"), 1)
+    assertEqual(len(m), 2)
 }
 
 @test
 fn test_map_infer_from_literal() {
     var m = #{"name": "Alice", "city": "Beijing"}
-    assert_eq(m.get("name"), "Alice")
+    assertEqual(m.get("name"), "Alice")
 }
 
 // ===== Set Generic Inference =====
@@ -57,7 +57,7 @@ fn test_set_type_annotation() {
     s.add(2)
     s.add(1)
     // duplicate
-    assert_eq(len(s), 2)
+    assertEqual(len(s), 2)
 }
 
 @test
@@ -73,7 +73,7 @@ fn test_channel_basic() {
     const ch = Channel<i64>(1)
     ch.send(42)
     var val = recvInt(ch)
-    assert_eq(val, 42)
+    assertEqual(val, 42)
 }
 
 // ===== Container Method Return Types =====
@@ -84,8 +84,8 @@ fn test_array_map_return_type() {
         return x * 2
     })
     // doubled should be Array<int>
-    assert_eq(typeName(doubled), "Array")
-    assert_eq(doubled[0], 2)
+    assertEqual(typeName(doubled), "Array")
+    assertEqual(doubled[0], 2)
 }
 
 @test
@@ -95,45 +95,45 @@ fn test_array_filter_return_type() {
         return len(s) > 5
     })
     // filtered should be Array<string>
-    assert_eq(typeName(filtered), "Array")
-    assert_eq(len(filtered), 2)
+    assertEqual(typeName(filtered), "Array")
+    assertEqual(len(filtered), 2)
 }
 
 @test
 fn test_array_slice_return_type() {
     var arr = [1, 2, 3, 4, 5]
     var sliced: Slice<i64> = arr[1:4]
-    assert_eq(typeName(sliced), "Slice")
-    assert_eq(len(sliced), 3)
+    assertEqual(typeName(sliced), "Slice")
+    assertEqual(len(sliced), 3)
 }
 
 @test
 fn test_map_keys_return_type() {
     var m = #{"a": 1, "b": 2}
     var keys = m.keys()
-    assert_eq(typeName(keys), "Array")
+    assertEqual(typeName(keys), "Array")
 }
 
 @test
 fn test_map_values_return_type() {
     var m = #{"a": 1, "b": 2}
     var values = m.values()
-    assert_eq(typeName(values), "Array")
+    assertEqual(typeName(values), "Array")
 }
 
 // ===== Nested Generic Types =====
 @test
 fn test_array_of_arrays() {
     var matrix: Array<Array<i64>> = [[1, 2], [3, 4]]
-    assert_eq(matrix[0][0], 1)
-    assert_eq(matrix[1][1], 4)
+    assertEqual(matrix[0][0], 1)
+    assertEqual(matrix[1][1], 4)
 }
 
 @test
 fn test_map_of_arrays() {
     var groups = #{"odd": [1, 3, 5], "even": [2, 4, 6]}
-    assert_eq(groups.get("odd")![0], 1)
-    assert_eq(groups.get("even")![2], 6)
+    assertEqual(groups.get("odd")![0], 1)
+    assertEqual(groups.get("even")![2], 6)
 }
 
 // ===== Generic Function Calls =====
@@ -142,15 +142,15 @@ fn test_array_concat() {
     var a = [1, 2]
     var b = [3, 4]
     var c = a.concat(b)
-    assert_eq(len(c), 4)
-    assert_eq(c[2], 3)
+    assertEqual(len(c), 4)
+    assertEqual(c[2], 3)
 }
 
 @test
 fn test_array_indexOf() {
     var arr = ["a", "b", "c"]
-    assert_eq(arr.indexOf("b"), 1)
-    assert_eq(arr.indexOf("z"), -1)
+    assertEqual(arr.indexOf("b"), 1)
+    assertEqual(arr.indexOf("z"), -1)
 }
 
 @test

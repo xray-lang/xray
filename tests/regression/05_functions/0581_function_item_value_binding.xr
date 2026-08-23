@@ -1,6 +1,6 @@
 @test
 fn test_function_item_hoists_before_definition() {
-    assert_eq(item_later(41), 42)
+    assertEqual(item_later(41), 42)
 }
 
 fn item_later(x: i64) -> i64 {
@@ -12,7 +12,7 @@ fn test_const_function_value_call_after_binding() {
     const f = fn(x: i64) -> i64 {
         return x + 3
     }
-    assert_eq(f(39), 42)
+    assertEqual(f(39), 42)
 }
 
 @test
@@ -20,12 +20,12 @@ fn test_var_function_value_can_rebind() {
     var op = fn(x: i64) -> i64 {
         return x + 1
     }
-    assert_eq(op(10), 11)
+    assertEqual(op(10), 11)
 
     op = fn(x: i64) -> i64 {
         return x * 2
     }
-    assert_eq(op(21), 42)
+    assertEqual(op(21), 42)
 }
 
 fn fact_item(n: i64) -> i64 {
@@ -35,5 +35,5 @@ fn fact_item(n: i64) -> i64 {
 
 @test
 fn test_function_item_recursion() {
-    assert_eq(fact_item(5), 120)
+    assertEqual(fact_item(5), 120)
 }

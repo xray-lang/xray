@@ -38,7 +38,7 @@ fn test_class_hashable_map_set_key() {
     var values: Map<Token, i64> = #{}
     values.set(token, 99)
     assert(values.containsKey(token))
-    assert_eq(values.get(token), 99)
+    assertEqual(values.get(token), 99)
 
     var seen: Set<Token> = #[]
     seen.add(token)
@@ -48,8 +48,8 @@ fn test_class_hashable_map_set_key() {
 @test
 fn test_user_hashable_generic_constraint() {
     var token = Token(3)
-    assert_eq(passHashable(token).value, 3)
+    assertEqual(passHashable(token).value, 3)
 
     var cell = Cell{value: 5}
-    assert_eq(passHashable(cell).value, 5)
+    assertEqual(passHashable(cell).value, 5)
 }

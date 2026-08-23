@@ -45,7 +45,7 @@ fn test_channel_timeout_prevention() {
     // 100ms 超时
     // 接收应该返回 null（超时，因为没有发送者）
     print("接收结果（应为 null）:", received)
-    assert_eq(received, null)
+    assertEqual(received, null)
     print("✓ Channel 超时预防死锁测试通过")
 }
 
@@ -58,16 +58,16 @@ fn test_non_blocking_operations() {
     // 应该失败，缓冲区满
     print("第一次发送:", sent1)
     print("第二次发送:", sent2)
-    assert_eq(isSent(sent1), true)
-    assert_eq(isSent(sent2), false)
+    assertEqual(isSent(sent1), true)
+    assertEqual(isSent(sent2), false)
     // 非阻塞接收
     var val1 = tryRecvValue(ch)
     var val2 = tryRecvValue(ch)
     // 应该返回 null
     print("第一次接收:", val1)
     print("第二次接收:", val2)
-    assert_eq(val1, 1)
-    assert_eq(val2, null)
+    assertEqual(val1, 1)
+    assertEqual(val2, null)
     print("✓ 非阻塞操作测试通过")
 }
 
@@ -129,7 +129,7 @@ fn test_balanced_producer_consumer() {
     await [p, c]
     var consumed = recvValue(done)
     print("消费数量:", consumed)
-    assert_eq(consumed, 20)
+    assertEqual(consumed, 20)
     print("✓ 生产者-消费者平衡测试通过")
 }
 
@@ -173,7 +173,7 @@ fn test_semaphore_pattern() {
         }
     }
     print("完成的 worker 数:", completed)
-    assert_eq(completed, 5)
+    assertEqual(completed, 5)
     print("✓ 信号量模式测试通过")
 }
 
@@ -239,7 +239,7 @@ fn test_bidirectional_communication() {
     await s
     var result = await c
     print("客户端收到响应:", result)
-    assert_eq(result, 42)
+    assertEqual(result, 42)
     print("✓ 双向通信测试通过")
 }
 

@@ -7,18 +7,23 @@ fn test_map_destructure() {
     var data = #{"name": "Alice", "age": 30, "city": "Beijing"}
     var n = data["name"]
     var a = data["age"]
-    assert_eq(n, "Alice")
-    assert_eq(a, 30)
+    assert(n is string)
+    assertEqual(n as string, "Alice")
+    assert(a is i64)
+    assertEqual(a as i64, 30)
 
     var c = data["city"]
-    assert_eq(c, "Beijing")
+    assert(c is string)
+    assertEqual(c as string, "Beijing")
 
     var person = #{"first": "John", "last": "Doe", "id": 123}
     var firstName = person["first"]
     var lastName = person["last"]
     var userId = person["id"]
-    assert_eq(firstName, "John")
-    assert_eq(lastName, "Doe")
-    assert_eq(userId, 123)
+    assert(firstName is string)
+    assertEqual(firstName as string, "John")
+    assert(lastName is string)
+    assertEqual(lastName as string, "Doe")
+    assert(userId is i64)
+    assertEqual(userId as i64, 123)
 }
-

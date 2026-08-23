@@ -9,13 +9,13 @@ enum Color { Red, Green, Blue }
 fn test_stringify_enum() {
     var obj = { color: Color.Red }
     var s = JSON.stringify(obj)
-    assert_eq(s, "{\"color\":\"Red\"}")
+    assertEqual(s, "{\"color\":\"Red\"}")
 }
 
 @test
 fn test_stringify_enum_value_direct() {
     var s = JSON.stringify(Color.Blue)
-    assert_eq(s, "\"Blue\"")
+    assertEqual(s, "\"Blue\"")
 }
 
 @test

@@ -7,13 +7,13 @@
 @test
 fn test_toString_large() {
     var a = 12345678901234567890n
-    assert_eq(a.toString(), "12345678901234567890")
+    assertEqual(a.toString(), "12345678901234567890")
 }
 
 @test
 fn test_toString_negative() {
     var a = -123n
-    assert_eq(a.toString(), "-123")
+    assertEqual(a.toString(), "-123")
 }
 
 // ===== abs() =====
@@ -21,19 +21,19 @@ fn test_toString_negative() {
 @test
 fn test_abs_negative() {
     var a = -999n
-    assert_eq(a.abs().toString(), "999")
+    assertEqual(a.abs().toString(), "999")
 }
 
 @test
 fn test_abs_positive() {
     var a = 123n
-    assert_eq(a.abs().toString(), "123")
+    assertEqual(a.abs().toString(), "123")
 }
 
 @test
 fn test_abs_zero() {
     var a = 0n
-    assert_eq(a.abs().toString(), "0")
+    assertEqual(a.abs().toString(), "0")
 }
 
 // ===== sign() =====
@@ -41,19 +41,19 @@ fn test_abs_zero() {
 @test
 fn test_sign_positive() {
     var a = 100n
-    assert_eq(a.sign(), 1)
+    assertEqual(a.sign(), 1)
 }
 
 @test
 fn test_sign_negative() {
     var a = -50n
-    assert_eq(a.sign(), -1)
+    assertEqual(a.sign(), -1)
 }
 
 @test
 fn test_sign_zero() {
     var a = 0n
-    assert_eq(a.sign(), 0)
+    assertEqual(a.sign(), 0)
 }
 
 // ===== isZero() =====
@@ -61,13 +61,13 @@ fn test_sign_zero() {
 @test
 fn test_isZero_true() {
     var a = 0n
-    assert_eq(a.isZero(), true)
+    assertEqual(a.isZero(), true)
 }
 
 @test
 fn test_isZero_false() {
     var a = 100n
-    assert_eq(a.isZero(), false)
+    assertEqual(a.isZero(), false)
 }
 
 // ===== isNegative() =====
@@ -75,19 +75,19 @@ fn test_isZero_false() {
 @test
 fn test_isNegative_true() {
     var a = -50n
-    assert_eq(a.isNegative(), true)
+    assertEqual(a.isNegative(), true)
 }
 
 @test
 fn test_isNegative_false() {
     var a = 100n
-    assert_eq(a.isNegative(), false)
+    assertEqual(a.isNegative(), false)
 }
 
 @test
 fn test_isNegative_zero() {
     var a = 0n
-    assert_eq(a.isNegative(), false)
+    assertEqual(a.isNegative(), false)
 }
 
 // ===== isPositive() =====
@@ -95,19 +95,19 @@ fn test_isNegative_zero() {
 @test
 fn test_isPositive_true() {
     var a = 100n
-    assert_eq(a.isPositive(), true)
+    assertEqual(a.isPositive(), true)
 }
 
 @test
 fn test_isPositive_false() {
     var a = -50n
-    assert_eq(a.isPositive(), false)
+    assertEqual(a.isPositive(), false)
 }
 
 @test
 fn test_isPositive_zero() {
     var a = 0n
-    assert_eq(a.isPositive(), false)
+    assertEqual(a.isPositive(), false)
 }
 
 // ===== toI64() =====
@@ -115,11 +115,11 @@ fn test_isPositive_zero() {
 @test
 fn test_toI64_int64_min() {
     var a = -9223372036854775808n
-    assert_eq(a.toI64(), -9223372036854775808)
+    assertEqual(a.toI64(), -9223372036854775808)
 }
 
 @test
 fn test_toI64_below_int64_min_overflows() {
     var a = -9223372036854775809n
-    assert_eq(a.toI64(), null)
+    assertEqual(a.toI64(), null)
 }

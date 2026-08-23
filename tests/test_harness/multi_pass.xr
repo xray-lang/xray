@@ -3,16 +3,16 @@
 
 @test
 fn test_addition() {
-    assert_eq(2 + 3, 5)
+    assertEqual(2 + 3, 5)
 }
 
 @test
 fn test_string() {
-    assert_eq(len("hello"), 5)
+    assertEqual(len("hello"), 5)
 }
 
 @test
 fn test_array() {
     const arr = [1, 2, 3]
-    assert_eq(len(arr), 3)
+    assertEqual(len(arr), 3)
 }

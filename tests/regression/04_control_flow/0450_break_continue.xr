@@ -15,8 +15,8 @@ fn test_while_break() {
         sum = sum + i
         i = i + 1
     }
-    assert_eq(sum, 10)  // 0+1+2+3+4
-    assert_eq(i, 5)
+    assertEqual(sum, 10)  // 0+1+2+3+4
+    assertEqual(i, 5)
 }
 
 // ===== while 中的 continue =====
@@ -32,7 +32,7 @@ fn test_while_continue() {
         }
         sum = sum + i
     }
-    assert_eq(sum, 25)  // 1+3+5+7+9
+    assertEqual(sum, 25)  // 1+3+5+7+9
 }
 
 // ===== for 中的 break =====
@@ -46,7 +46,7 @@ fn test_for_break() {
         }
         sum = sum + i
     }
-    assert_eq(sum, 10)
+    assertEqual(sum, 10)
 }
 
 // ===== for 中的 continue =====
@@ -60,7 +60,7 @@ fn test_for_continue() {
         }
         sum = sum + i
     }
-    assert_eq(sum, 25)  // 1+3+5+7+9
+    assertEqual(sum, 25)  // 1+3+5+7+9
 }
 
 // ===== 嵌套循环 break =====
@@ -76,7 +76,7 @@ fn test_nested_break() {
             count = count + 1
         }
     }
-    assert_eq(count, 10)  // 5 * 2
+    assertEqual(count, 10)  // 5 * 2
 }
 
 // ===== 条件 break =====
@@ -91,7 +91,7 @@ fn test_conditional_break() {
         }
         sum = sum + x
     }
-    assert_eq(sum, 6)  // 1+2+3
+    assertEqual(sum, 6)  // 1+2+3
 }
 
 // ===== 条件 continue =====
@@ -106,7 +106,7 @@ fn test_conditional_continue() {
         }
         sum = sum + x
     }
-    assert_eq(sum, 9)  // 1+3+5
+    assertEqual(sum, 9)  // 1+3+5
 }
 
 // ===== break 后代码不执行 =====
@@ -118,7 +118,7 @@ fn test_code_after_break() {
         break
         executed = true
     }
-    assert_eq(executed, false)
+    assertEqual(executed, false)
 }
 
 // ===== 空循环体中的 break =====
@@ -130,6 +130,6 @@ fn test_immediate_break() {
         count = count + 1
         break
     }
-    assert_eq(count, 1)
+    assertEqual(count, 1)
 }
 

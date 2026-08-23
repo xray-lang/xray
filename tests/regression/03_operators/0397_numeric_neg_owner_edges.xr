@@ -1,9 +1,9 @@
 @test
 fn test_numeric_neg_owner_integer_edges() {
     var min: i64 = -9223372036854775807 - 1
-    assert_eq(-min, min)
-    assert_eq(-(-42), 42)
-    assert_eq(-0, 0)
+    assertEqual(-min, min)
+    assertEqual(-(-42), 42)
+    assertEqual(-0, 0)
 }
 
 @test
@@ -11,7 +11,7 @@ fn test_numeric_neg_owner_bigint_sign_and_zero() {
     var positive = 4294967296.toBigInt()
     var negative = (-4294967296).toBigInt()
     var zero = 0.toBigInt()
-    assert_eq((-positive).toString(), "-4294967296")
-    assert_eq((-negative).toString(), "4294967296")
-    assert_eq((-zero).toString(), "0")
+    assertEqual((-positive).toString(), "-4294967296")
+    assertEqual((-negative).toString(), "4294967296")
+    assertEqual((-zero).toString(), "0")
 }

@@ -19,26 +19,26 @@ fn nodeKind(node: XmlNode) -> string {
 @test
 fn test_entity_decode_named() {
     var doc = xml.parse("<root>&lt;hello&gt; &amp; &quot;world&quot; &apos;!</root>")
-    assert_eq(xml.textContent(doc), "<hello> & \"world\" '!")
+    assertEqual(xml.textContent(doc), "<hello> & \"world\" '!")
 }
 
 @test
 fn test_entity_decode_numeric_decimal() {
     var doc = xml.parse("<root>&#65;&#66;&#67;</root>")
-    assert_eq(xml.textContent(doc), "ABC")
+    assertEqual(xml.textContent(doc), "ABC")
 }
 
 @test
 fn test_entity_decode_numeric_hex() {
     var doc = xml.parse("<root>&#x41;&#x42;&#x43;</root>")
-    assert_eq(xml.textContent(doc), "ABC")
+    assertEqual(xml.textContent(doc), "ABC")
 }
 
 @test
 fn test_entity_decode_unicode() {
     // &#x4e2d; = 中, &#x6587; = 文
     var doc = xml.parse("<root>&#x4e2d;&#x6587;</root>")
-    assert_eq(xml.textContent(doc), "中文")
+    assertEqual(xml.textContent(doc), "中文")
 }
 
 // ===== Attribute entity decoding =====
@@ -46,7 +46,7 @@ fn test_entity_decode_unicode() {
 @test
 fn test_attr_entity_decode() {
     var doc = xml.parse("<a href=\"a&amp;b\"/>")
-    assert_eq(xml.attr(doc, "href") ?? "", "a&b")
+    assertEqual(xml.attr(doc, "href") ?? "", "a&b")
 }
 
 // ===== CDATA =====
@@ -55,8 +55,8 @@ fn test_attr_entity_decode() {
 fn test_cdata_preserve() {
     var doc = xml.parse("<root><![CDATA[<not-xml>&]]></root>")
     var child = xml.children(doc)[0]
-    assert_eq(nodeKind(child), "cdata")
-    assert_eq(xml.nodeText(child) ?? "", "<not-xml>&")
+    assertEqual(nodeKind(child), "cdata")
+    assertEqual(xml.nodeText(child) ?? "", "<not-xml>&")
 }
 
 @test
@@ -64,8 +64,8 @@ fn test_cdata_as_text() {
     var doc = xml.parse("<root><![CDATA[content]]></root>",
         { preserveWhitespace: false, preserveComments: false, preserveCData: false, validateEntities: true })
     var child = xml.children(doc)[0]
-    assert_eq(nodeKind(child), "text")
-    assert_eq(xml.nodeText(child) ?? "", "content")
+    assertEqual(nodeKind(child), "text")
+    assertEqual(xml.nodeText(child) ?? "", "content")
 }
 
 // ===== Self-closing with attributes =====
@@ -74,10 +74,10 @@ fn test_cdata_as_text() {
 fn test_self_closing_with_attrs() {
     var doc = xml.parse("<root><img src=\"a.png\" alt=\"pic\"/></root>")
     var img = xml.children(doc)[0]
-    assert_eq(xml.tag(img) ?? "", "img")
-    assert_eq(xml.attr(img, "src") ?? "", "a.png")
-    assert_eq(xml.attr(img, "alt") ?? "", "pic")
-    assert_eq(len(xml.children(img)), 0)
+    assertEqual(xml.tag(img) ?? "", "img")
+    assertEqual(xml.attr(img, "src") ?? "", "a.png")
+    assertEqual(xml.attr(img, "alt") ?? "", "pic")
+    assertEqual(len(xml.children(img)), 0)
 }
 
 // ===== Processing instruction =====
@@ -85,7 +85,7 @@ fn test_self_closing_with_attrs() {
 @test
 fn test_skip_processing_instruction() {
     var doc = xml.parse("<?xml version=\"1.0\"?><root>OK</root>")
-    assert_eq(xml.tag(doc) ?? "", "root")
+    assertEqual(xml.tag(doc) ?? "", "root")
 }
 
 // ===== Create element with attrs =====
@@ -97,10 +97,10 @@ fn test_create_element_with_attrs() {
         XmlAttribute(XmlName("", "id"), "main")
     ]
     var elem = xml.element("div", attrs)
-    assert_eq(xml.tag(elem) ?? "", "div")
-    assert_eq(xml.attr(elem, "class") ?? "", "container")
-    assert_eq(xml.attr(elem, "id") ?? "", "main")
-    assert_eq(len(xml.children(elem)), 0)
+    assertEqual(xml.tag(elem) ?? "", "div")
+    assertEqual(xml.attr(elem, "class") ?? "", "container")
+    assertEqual(xml.attr(elem, "id") ?? "", "main")
+    assertEqual(len(xml.children(elem)), 0)
 }
 
 // ===== Create text/comment/cdata nodes =====
@@ -108,22 +108,22 @@ fn test_create_element_with_attrs() {
 @test
 fn test_create_text_node() {
     var node = xml.text("hello")
-    assert_eq(nodeKind(node), "text")
-    assert_eq(xml.nodeText(node) ?? "", "hello")
+    assertEqual(nodeKind(node), "text")
+    assertEqual(xml.nodeText(node) ?? "", "hello")
 }
 
 @test
 fn test_create_comment_node() {
     var node = xml.comment(" a comment ")
-    assert_eq(nodeKind(node), "comment")
-    assert_eq(xml.nodeText(node) ?? "", " a comment ")
+    assertEqual(nodeKind(node), "comment")
+    assertEqual(xml.nodeText(node) ?? "", " a comment ")
 }
 
 @test
 fn test_create_cdata_node() {
     var node = xml.cdata("<raw>&data")
-    assert_eq(nodeKind(node), "cdata")
-    assert_eq(xml.nodeText(node) ?? "", "<raw>&data")
+    assertEqual(nodeKind(node), "cdata")
+    assertEqual(xml.nodeText(node) ?? "", "<raw>&data")
 }
 
 // ===== Create document =====
@@ -131,7 +131,7 @@ fn test_create_cdata_node() {
 @test
 fn test_create_document() {
     var doc = xml.document()
-    assert_eq(nodeKind(doc), "document")
+    assertEqual(nodeKind(doc), "document")
 }
 
 // ===== Stringify roundtrip =====
@@ -141,11 +141,11 @@ fn test_stringify_roundtrip() {
     var doc = xml.parse("<root><item id=\"1\">Hello</item><item id=\"2\">World</item></root>")
     var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
     var doc2 = xml.parse(str)
-    assert_eq(xml.tag(doc2) ?? "", "root")
+    assertEqual(xml.tag(doc2) ?? "", "root")
     var kids = xml.children(doc2)
-    assert_eq(len(kids), 2)
-    assert_eq(xml.attr(kids[0], "id") ?? "", "1")
-    assert_eq(xml.textContent(kids[1]), "World")
+    assertEqual(len(kids), 2)
+    assertEqual(xml.attr(kids[0], "id") ?? "", "1")
+    assertEqual(xml.textContent(kids[1]), "World")
 }
 
 // ===== ParseReport with diagnostics =====
@@ -154,16 +154,16 @@ fn test_stringify_roundtrip() {
 fn test_parse_report_valid() {
     var report = xml.parseReport("<ok/>")
     assert(report.doc != null)
-    assert_eq(xml.tag(report.doc!) ?? "", "ok")
-    assert_eq(len(report.diagnostics), 0)
+    assertEqual(xml.tag(report.doc!) ?? "", "ok")
+    assertEqual(len(report.diagnostics), 0)
 }
 
 @test
 fn test_parse_report_unknown_entity() {
     var report = xml.parseReport("<root>&nope;</root>")
     assert(report.doc != null)
-    assert_eq(len(report.diagnostics), 1)
-    assert_eq(report.diagnostics[0].kind == XmlErrorKind.InvalidEntity, true)
+    assertEqual(len(report.diagnostics), 1)
+    assertEqual(report.diagnostics[0].kind == XmlErrorKind.InvalidEntity, true)
 }
 
 // ===== parse throws on malformed input =====
@@ -176,7 +176,7 @@ fn test_parse_throws_on_no_root() {
     } catch (e: XmlError) {
         threw = true
     }
-    assert_eq(threw, true)
+    assertEqual(threw, true)
 }
 
 // ===== Whitespace handling =====
@@ -184,8 +184,8 @@ fn test_parse_throws_on_no_root() {
 @test
 fn test_whitespace_stripped_by_default() {
     var doc = xml.parse("<root>  \n  <item/>\n  </root>")
-    assert_eq(len(xml.children(doc)), 1)
-    assert_eq(xml.tag(xml.children(doc)[0]) ?? "", "item")
+    assertEqual(len(xml.children(doc)), 1)
+    assertEqual(xml.tag(xml.children(doc)[0]) ?? "", "item")
 }
 
 @test
@@ -193,7 +193,7 @@ fn test_whitespace_preserved() {
     var doc = xml.parse("<root> text </root>",
         { preserveWhitespace: true, preserveComments: false, preserveCData: true, validateEntities: true })
     // Should preserve whitespace-only text nodes
-    assert_eq(len(xml.children(doc)), 1)
+    assertEqual(len(xml.children(doc)), 1)
 }
 
 // ===== DOCTYPE handling =====
@@ -201,14 +201,14 @@ fn test_whitespace_preserved() {
 @test
 fn test_skip_doctype() {
     var doc = xml.parse("<!DOCTYPE html><root>OK</root>")
-    assert_eq(xml.tag(doc) ?? "", "root")
+    assertEqual(xml.tag(doc) ?? "", "root")
 }
 
 @test
 fn test_skip_doctype_with_internal_subset() {
     var doc = xml.parse("<!DOCTYPE root [ <!ELEMENT root (#PCDATA)> ]><root>OK</root>")
-    assert_eq(xml.tag(doc) ?? "", "root")
-    assert_eq(xml.textContent(doc), "OK")
+    assertEqual(xml.tag(doc) ?? "", "root")
+    assertEqual(xml.textContent(doc), "OK")
 }
 
 // ===== Escape in stringify =====
@@ -217,7 +217,7 @@ fn test_skip_doctype_with_internal_subset() {
 fn test_stringify_escapes_text() {
     var doc = xml.parse("<p>&lt;script&gt;</p>")
     var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
-    assert_eq(str, "<p>&lt;script&gt;</p>")
+    assertEqual(str, "<p>&lt;script&gt;</p>")
 }
 
 // ===== Mixed content =====
@@ -226,10 +226,10 @@ fn test_stringify_escapes_text() {
 fn test_mixed_content() {
     var doc = xml.parse("<root>Hello<b>World</b>!</root>")
     var kids = xml.children(doc)
-    assert_eq(len(kids), 3)
-    assert_eq(nodeKind(kids[0]), "text")
-    assert_eq(xml.nodeText(kids[0]) ?? "", "Hello")
-    assert_eq(xml.tag(kids[1]) ?? "", "b")
-    assert_eq(nodeKind(kids[2]), "text")
-    assert_eq(xml.nodeText(kids[2]) ?? "", "!")
+    assertEqual(len(kids), 3)
+    assertEqual(nodeKind(kids[0]), "text")
+    assertEqual(xml.nodeText(kids[0]) ?? "", "Hello")
+    assertEqual(xml.tag(kids[1]) ?? "", "b")
+    assertEqual(nodeKind(kids[2]), "text")
+    assertEqual(xml.nodeText(kids[2]) ?? "", "!")
 }

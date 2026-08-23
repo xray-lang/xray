@@ -17,10 +17,10 @@ fn test_channel_tuple_send_recv() {
     }
     var (n1, s1) = t1
     var (n2, s2) = t2
-    assert_eq(n1, 1)
-    assert_eq(s1, "hello")
-    assert_eq(n2, 2)
-    assert_eq(s2, "world")
+    assertEqual(n1, 1)
+    assertEqual(s1, "hello")
+    assertEqual(n2, 2)
+    assertEqual(s2, "world")
     ch.close()
 }
 
@@ -28,13 +28,13 @@ fn test_channel_tuple_send_recv() {
 @test
 fn test_array_of_tuples() {
     var pairs: Array<(string, i64)> = [("a", 1), ("b", 2), ("c", 3)]
-    assert_eq(len(pairs), 3)
-    assert_eq(pairs[0].0, "a")
-    assert_eq(pairs[1].1, 2)
+    assertEqual(len(pairs), 3)
+    assertEqual(pairs[0].0, "a")
+    assertEqual(pairs[1].1, 2)
 
     var (k, v) = pairs[2]
-    assert_eq(k, "c")
-    assert_eq(v, 3)
+    assertEqual(k, "c")
+    assertEqual(v, 3)
 }
 
 // ===== Array<(K, V)> in for-in destructure =====
@@ -47,8 +47,8 @@ fn test_for_in_array_tuple() {
         total = total + v
         concat = concat + k
     }
-    assert_eq(total, 3)
-    assert_eq(concat, "ab")
+    assertEqual(total, 3)
+    assertEqual(concat, "ab")
 }
 
 // ===== User generic fn: (A, B) param + return =====
@@ -67,12 +67,12 @@ fn pair<A, B>(a: A, b: B) -> (A, B) {
 @test
 fn test_user_generic_tuple_fn() {
     var p = pair(42, "answer")
-    assert_eq(first(p), 42)
-    assert_eq(second(p), "answer")
+    assertEqual(first(p), 42)
+    assertEqual(second(p), "answer")
 
     var q = pair(true, 3.14)
-    assert_eq(first(q), true)
-    assert_eq(second(q), 3.14)
+    assertEqual(first(q), true)
+    assertEqual(second(q), 3.14)
 }
 
 // ===== Map<K, (V1, V2)>: value is a tuple =====
@@ -81,12 +81,12 @@ fn test_map_with_tuple_values() {
     var m: Map<string, (i64, bool)> = Map()
     m.set("a", (1, true))
     m.set("b", (2, false))
-    assert_eq(len(m), 2)
+    assertEqual(len(m), 2)
 
     var va = m.get("a")
     if (va != null) {
-        assert_eq(va.0, 1)
-        assert_eq(va.1, true)
+        assertEqual(va.0, 1)
+        assertEqual(va.1, true)
     }
 }
 
@@ -98,11 +98,11 @@ fn test_nested_tuple_generic() {
     triples.push(((3, 4), "second"))
 
     var first = triples[0]
-    assert_eq(first.0.0, 1)
-    assert_eq(first.0.1, 2)
-    assert_eq(first.1, "first")
+    assertEqual(first.0.0, 1)
+    assertEqual(first.0.1, 2)
+    assertEqual(first.1, "first")
 
     var second = triples[1]
-    assert_eq(second.0.0, 3)
-    assert_eq(second.1, "second")
+    assertEqual(second.0.0, 3)
+    assertEqual(second.1, "second")
 }

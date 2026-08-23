@@ -6,31 +6,31 @@
 @test
 fn test_typeof_int() {
     var x = 42
-    assert_eq(typeName(x), "i64")
+    assertEqual(typeName(x), "i64")
 }
 
 @test
 fn test_typeof_float() {
     var x = 3.14
-    assert_eq(typeName(x), "f64")
+    assertEqual(typeName(x), "f64")
 }
 
 @test
 fn test_typeof_string() {
     var x = "hello"
-    assert_eq(typeName(x), "string")
+    assertEqual(typeName(x), "string")
 }
 
 @test
 fn test_typeof_bool() {
-    assert_eq(typeName(true), "bool")
-    assert_eq(typeName(false), "bool")
+    assertEqual(typeName(true), "bool")
+    assertEqual(typeName(false), "bool")
 }
 
 @test
 fn test_typeof_null() {
     var x = null
-    assert_eq(typeName(x), "null")
+    assertEqual(typeName(x), "null")
 }
 
 // ===== Container Types =====
@@ -38,19 +38,19 @@ fn test_typeof_null() {
 @test
 fn test_typeof_array() {
     var arr = [1, 2, 3]
-    assert_eq(typeName(arr), "Array")
+    assertEqual(typeName(arr), "Array")
 }
 
 @test
 fn test_typeof_map() {
     var m = #{"a": 1}
-    assert_eq(typeName(m), "Map")
+    assertEqual(typeName(m), "Map")
 }
 
 @test
 fn test_typeof_set() {
     var s = #[1, 2, 3]
-    assert_eq(typeName(s), "Set")
+    assertEqual(typeName(s), "Set")
 }
 
 // ===== Function Types =====
@@ -58,20 +58,20 @@ fn test_typeof_set() {
 @test
 fn test_typeof_function() {
     fn add(a: i64, b: i64) -> i64 { return a + b }
-    assert_eq(typeName(add), "function")
+    assertEqual(typeName(add), "function")
 }
 
 @test
 fn test_typeof_arrow() {
     var f = (x: i64) -> x * 2
-    assert_eq(typeName(f), "function")
+    assertEqual(typeName(f), "function")
 }
 
 @test
 fn test_typeof_closure() {
     var x = 10
     var f = () -> x
-    assert_eq(typeName(f), "function")
+    assertEqual(typeName(f), "function")
 }
 
 // ===== Class Types =====
@@ -94,13 +94,13 @@ class Student extends Person {
 @test
 fn test_typeof_class_instance() {
     var p = Person("Alice")
-    assert_eq(typeName(p), "Person")
+    assertEqual(typeName(p), "Person")
 }
 
 @test
 fn test_typeof_subclass_instance() {
     var s = Student("Bob", 10)
-    assert_eq(typeName(s), "Student")
+    assertEqual(typeName(s), "Student")
 }
 
 // ===== Type Checking in Conditionals =====
@@ -117,9 +117,9 @@ fn test_typeof_conditional() {
         }
     }
 
-    assert_eq(describe(42), "an integer")
-    assert_eq(describe("hello"), "a string")
-    assert_eq(describe([1,2,3]), "something else")
+    assertEqual(describe(42), "an integer")
+    assertEqual(describe("hello"), "a string")
+    assertEqual(describe([1,2,3]), "something else")
 }
 
 @test
@@ -135,11 +135,11 @@ fn test_typeof_switch() {
         }
     }
 
-    assert_eq(typeLabel(42), "integer")
-    assert_eq(typeLabel(3.14), "decimal")
-    assert_eq(typeLabel("hi"), "text")
-    assert_eq(typeLabel(true), "boolean")
-    assert_eq(typeLabel([1,2]), "list")
+    assertEqual(typeLabel(42), "integer")
+    assertEqual(typeLabel(3.14), "decimal")
+    assertEqual(typeLabel("hi"), "text")
+    assertEqual(typeLabel(true), "boolean")
+    assertEqual(typeLabel([1,2]), "list")
 }
 
 // ===== Dynamic Type Operations =====
@@ -147,19 +147,19 @@ fn test_typeof_switch() {
 @test
 fn test_typeof_after_assignment() {
     var x = 42
-    assert_eq(typeName(x), "i64")
+    assertEqual(typeName(x), "i64")
 
     // Variable can't change type in xray, but we can test with any
     var y: i64 = 42
-    assert_eq(typeName(y), "i64")
+    assertEqual(typeName(y), "i64")
 }
 
 @test
 fn test_typeof_expression_result() {
-    assert_eq(typeName(1 + 2), "i64")
-    assert_eq(typeName(1.0 + 2.0), "f64")
-    assert_eq(typeName("a" + "b"), "string")
-    assert_eq(typeName(1 < 2), "bool")
+    assertEqual(typeName(1 + 2), "i64")
+    assertEqual(typeName(1.0 + 2.0), "f64")
+    assertEqual(typeName("a" + "b"), "string")
+    assertEqual(typeName(1 < 2), "bool")
 }
 
 // ===== Special Cases =====
@@ -167,31 +167,31 @@ fn test_typeof_expression_result() {
 @test
 fn test_typeof_empty_array() {
     var arr: Array<i64> = []
-    assert_eq(typeName(arr), "Array")
+    assertEqual(typeName(arr), "Array")
 }
 
 @test
 fn test_typeof_empty_map() {
     var m: Map<string, i64> = #{}
-    assert_eq(typeName(m), "Map")
+    assertEqual(typeName(m), "Map")
 }
 
 @test
 fn test_typeof_empty_set() {
     var s: Set<i64> = #[]
-    assert_eq(typeName(s), "Set")
+    assertEqual(typeName(s), "Set")
 }
 
 @test
 fn test_typeof_bytes() {
     var b = Array<u8>(10)
-    assert_eq(typeName(b), "Array")
+    assertEqual(typeName(b), "Array")
 }
 
 @test
 fn test_typeof_regex() {
     var r = /\d+/
-    assert_eq(typeName(r), "Regex")
+    assertEqual(typeName(r), "Regex")
 }
 
 // ===== Structural Object Type =====
@@ -199,7 +199,7 @@ fn test_typeof_regex() {
 @test
 fn test_typeof_json_object() {
     var obj = { name: "Alice", age: 30 }
-    assert_eq(typeName(obj), "object")
+    assertEqual(typeName(obj), "object")
 }
 
 @test
@@ -210,8 +210,8 @@ fn test_typeof_nested_json() {
             scores: [90, 85, 95]
         }
     }
-    assert_eq(typeName(obj), "object")
-    assert_eq(typeName(obj.user.scores), "Array")
+    assertEqual(typeName(obj), "object")
+    assertEqual(typeName(obj.user.scores), "Array")
 }
 
 // ===== Tuple Types =====
@@ -220,14 +220,14 @@ fn test_typeof_nested_json() {
 fn test_typeof_tuple2() {
     fn pair() -> (i64, string) { return (42, "hello") }
     var t = pair()
-    assert_eq(typeName(t), "Tuple2")
+    assertEqual(typeName(t), "Tuple2")
 }
 
 @test
 fn test_typeof_tuple3() {
     fn triple() -> (i64, f64, string) { return (1, 2.0, "x") }
     var t = triple()
-    assert_eq(typeName(t), "Tuple3")
+    assertEqual(typeName(t), "Tuple3")
 }
 
 @test
@@ -245,5 +245,5 @@ enum Color { Red, Green, Blue }
 @test
 fn test_typeof_enum() {
     var c = Color.Red
-    assert_eq(typeName(c), "Color")
+    assertEqual(typeName(c), "Color")
 }

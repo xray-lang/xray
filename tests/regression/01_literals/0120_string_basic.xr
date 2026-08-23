@@ -9,28 +9,28 @@ import text
 @test
 fn test_simple_string() {
     var s = "hello"
-    assert_eq(s, "hello")
+    assertEqual(s, "hello")
 }
 
 @test
 fn test_empty_string() {
     var s = ""
-    assert_eq(s, "")
-    assert_eq(len(s), 0)
+    assertEqual(s, "")
+    assertEqual(len(s), 0)
 }
 
 @test
 fn test_single_char() {
     var s = "x"
-    assert_eq(s, "x")
-    assert_eq(len(s), 1)
+    assertEqual(s, "x")
+    assertEqual(len(s), 1)
 }
 
 @test
 fn test_spaces() {
     var s = "hello world"
-    assert_eq(s, "hello world")
-    assert_eq(len(s), 11)
+    assertEqual(s, "hello world")
+    assertEqual(len(s), 11)
 }
 
 // ===== 转义序列 =====
@@ -38,25 +38,25 @@ fn test_spaces() {
 @test
 fn test_escape_newline() {
     var s = "line1\nline2"
-    assert_eq(s.contains("\n"), true)
+    assertEqual(s.contains("\n"), true)
 }
 
 @test
 fn test_escape_tab() {
     var s = "col1\tcol2"
-    assert_eq(s.contains("\t"), true)
+    assertEqual(s.contains("\t"), true)
 }
 
 @test
 fn test_escape_quote() {
     var s = "say \"hello\""
-    assert_eq(s.contains("\""), true)
+    assertEqual(s.contains("\""), true)
 }
 
 @test
 fn test_escape_backslash() {
     var s = "path\\to\\file"
-    assert_eq(s.contains("\\"), true)
+    assertEqual(s.contains("\\"), true)
 }
 
 // ===== Unicode =====
@@ -64,20 +64,20 @@ fn test_escape_backslash() {
 @test
 fn test_unicode_chinese() {
     var s = "你好世界"
-    assert_eq(s, "你好世界")
-    assert_eq(len(s), 4)
+    assertEqual(s, "你好世界")
+    assertEqual(len(s), 4)
 }
 
 @test
 fn test_unicode_emoji() {
     var s = "hello 🌍"
-    assert_eq(s.contains("🌍"), true)
+    assertEqual(s.contains("🌍"), true)
 }
 
 @test
 fn test_unicode_mixed() {
     var s = "Hello 世界 🎉"
-    assert_eq(len(s) > 5, true)
+    assertEqual(len(s) > 5, true)
 }
 
 // ===== 模板字符串 =====
@@ -86,7 +86,7 @@ fn test_unicode_mixed() {
 fn test_template_basic() {
     var name = "Alice"
     var s = "Hello, ${name}!"
-    assert_eq(s, "Hello, Alice!")
+    assertEqual(s, "Hello, Alice!")
 }
 
 @test
@@ -94,14 +94,14 @@ fn test_template_expression() {
     var a = 10
     var b = 20
     var s = "Sum: ${a + b}"
-    assert_eq(s, "Sum: 30")
+    assertEqual(s, "Sum: 30")
 }
 
 @test
 fn test_template_nested() {
     var x = 5
     var s = "Value: ${x * 2} (doubled)"
-    assert_eq(s.contains("10"), true)
+    assertEqual(s.contains("10"), true)
 }
 
 // ===== 边界条件 =====
@@ -109,13 +109,13 @@ fn test_template_nested() {
 @test
 fn test_long_string() {
     var s = "a".repeat(1000)
-    assert_eq(len(s), 1000)
+    assertEqual(len(s), 1000)
 }
 
 @test
 fn test_whitespace_only() {
     var s = "   "
-    assert_eq(len(s), 3)
-    assert_eq(text.trim(s), "")
+    assertEqual(len(s), 3)
+    assertEqual(text.trim(s), "")
 }
 

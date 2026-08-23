@@ -11,16 +11,16 @@ fn test_coro_local() {
     var countLocal = Coro.Local<i64>()
     nameLocal.set("main")
     countLocal.set(42)
-    assert_eq(nameLocal.get(), "main")
-    assert_eq(countLocal.get(), 42)
+    assertEqual(nameLocal.get(), "main")
+    assertEqual(countLocal.get(), 42)
 
     var idLocal = Coro.Local<i64>()
     var idTask = go fn(slot: CoroLocal<i64>) -> i64 {
         slot.set(1)
         return slot.get() ?? -1
     }(copy(idLocal))
-    assert_eq(await idTask, 1)
-    assert_eq(idLocal.get(), null)
+    assertEqual(await idTask, 1)
+    assertEqual(idLocal.get(), null)
 
     var valueLocal = Coro.Local<string>()
     var taskA = go fn(slot: CoroLocal<string>) -> string {
@@ -31,10 +31,10 @@ fn test_coro_local() {
         slot.set("B")
         return slot.get() ?? "missing"
     }(copy(valueLocal))
-    assert_eq(await taskA, "A")
-    assert_eq(await taskB, "B")
+    assertEqual(await taskA, "A")
+    assertEqual(await taskB, "B")
 
-    assert_eq(nameLocal.get(), "main")
-    assert_eq(countLocal.get(), 42)
-    assert_eq(Coro.Local<i64>().get(), null)
+    assertEqual(nameLocal.get(), "main")
+    assertEqual(countLocal.get(), 42)
+    assertEqual(Coro.Local<i64>().get(), null)
 }

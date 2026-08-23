@@ -53,7 +53,7 @@ fn test_basic_catch() {
     try { throw AppErr.Msg("e1") } catch (e) {
         match (e) { AppErr.Msg(s) -> { got = s } }
     }
-    assert_eq(got, "e1")
+    assertEqual(got, "e1")
     print("   PASS")
 }
 
@@ -74,9 +74,9 @@ fn test_nested_rethrow() {
         o6 = true
         match (e) { AppErr.Msg(s) -> { outer_msg = s } }
     }
-    assert_eq(i6, true)
-    assert_eq(o6, true)
-    assert_eq(outer_msg, "outer")
+    assertEqual(i6, true)
+    assertEqual(o6, true)
+    assertEqual(outer_msg, "outer")
     print("   PASS")
 }
 
@@ -87,7 +87,7 @@ fn test_cross_function() {
     try { thr7() } catch (e) {
         match (e) { AppErr.Msg(s) -> { captured = s } }
     }
-    assert_eq(captured, "from_fn")
+    assertEqual(captured, "from_fn")
     print("   PASS")
 }
 
@@ -102,8 +102,8 @@ fn test_constructed_message() {
     try { throw AppErr.Msg("ans=" + string(42)) } catch (e) {
         match (e) { AppErr.Msg(s) -> { m2 = s } }
     }
-    assert_eq(m1, "str")
-    assert_eq(m2, "ans=42")
+    assertEqual(m1, "str")
+    assertEqual(m2, "ans=42")
     print("   PASS")
 }
 
@@ -114,7 +114,7 @@ fn test_deep_call_stack() {
     try { d1() } catch (e) {
         match (e) { AppErr.Msg(s) -> { captured = s } }
     }
-    assert_eq(captured, "deep")
+    assertEqual(captured, "deep")
     print("   PASS")
 }
 
@@ -139,22 +139,22 @@ fn test_rethrow_chain() {
         n11 = n11 + 1
         match (e) { AppErr.Msg(s) -> { final_msg = s } }
     }
-    assert_eq(n11, 3)
-    assert_eq(final_msg, "abc")
+    assertEqual(n11, 3)
+    assertEqual(final_msg, "abc")
     print("   PASS")
 }
 
 @test
 fn test_return_in_try() {
     print("7. return in try")
-    assert_eq(r12(), "ret")
+    assertEqual(r12(), "ret")
     print("   PASS")
 }
 
 @test
 fn test_return_in_catch() {
     print("8. return in catch")
-    assert_eq(r13(), "caught")
+    assertEqual(r13(), "caught")
     print("   PASS")
 }
 
@@ -164,11 +164,11 @@ fn test_sequential() {
     var s14: Array<string> = []
     try { s14.push("a"); throw AppErr.Msg("x") } catch (e) { s14.push("b") }
     try { s14.push("c"); throw AppErr.Msg("y") } catch (e) { s14.push("d") }
-    assert_eq(len(s14), 4)
-    assert_eq(s14[0], "a")
-    assert_eq(s14[1], "b")
-    assert_eq(s14[2], "c")
-    assert_eq(s14[3], "d")
+    assertEqual(len(s14), 4)
+    assertEqual(s14[0], "a")
+    assertEqual(s14[1], "b")
+    assertEqual(s14[2], "c")
+    assertEqual(s14[3], "d")
     print("   PASS")
 }
 
@@ -188,10 +188,10 @@ fn test_catch_rethrow_propagates() {
         a20.push("outer-catch")
         match (e) { AppErr.Msg(s) -> { outer_msg = s } }
     }
-    assert_eq(len(a20), 2)
-    assert_eq(a20[0], "inner-catch")
-    assert_eq(a20[1], "outer-catch")
-    assert_eq(outer_msg, "b")
+    assertEqual(len(a20), 2)
+    assertEqual(a20[0], "inner-catch")
+    assertEqual(a20[1], "outer-catch")
+    assertEqual(outer_msg, "b")
     print("   PASS")
 }
 
@@ -200,7 +200,7 @@ fn test_defer_runs_on_throw() {
     print("11. defer cleanup runs on throw")
     g8 = false
     try { fn8() } catch (e) { }
-    assert_eq(g8, true)
+    assertEqual(g8, true)
     print("   PASS")
 }
 
@@ -215,10 +215,10 @@ fn test_defer_lifo_cleanup() {
         throw AppErr.Msg("boom")
     }
     try { body() } catch (e) { order.push("handled") }
-    assert_eq(len(order), 4)
-    assert_eq(order[0], "work")
-    assert_eq(order[1], "close-2")
-    assert_eq(order[2], "close-1")
-    assert_eq(order[3], "handled")
+    assertEqual(len(order), 4)
+    assertEqual(order[0], "work")
+    assertEqual(order[1], "close-2")
+    assertEqual(order[2], "close-1")
+    assertEqual(order[3], "handled")
     print("   PASS")
 }

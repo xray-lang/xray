@@ -7,8 +7,8 @@ fn test_implicit_return_int() {
         return a + b
     }
     var result = add(2, 3)
-    assert_eq(result, 5)
-    assert_eq(typeName(result), "i64")
+    assertEqual(result, 5)
+    assertEqual(typeName(result), "i64")
 }
 
 @test
@@ -17,8 +17,8 @@ fn test_implicit_return_string() {
         return "Hello, " + name
     }
     var result = greet("World")
-    assert_eq(result, "Hello, World")
-    assert_eq(typeName(result), "string")
+    assertEqual(result, "Hello, World")
+    assertEqual(typeName(result), "string")
 }
 
 @test
@@ -27,8 +27,8 @@ fn test_explicit_return_type() {
         return x * 2
     }
     var result = double(5)
-    assert_eq(result, 10)
-    assert_eq(typeName(result), "i64")
+    assertEqual(result, 10)
+    assertEqual(typeName(result), "i64")
 }
 
 @test
@@ -38,7 +38,7 @@ fn test_void_return() {
         called = true
     }
     doSomething()
-    assert_eq(called, true)
+    assertEqual(called, true)
 }
 
 // ===== Parameter Type Inference =====
@@ -47,7 +47,7 @@ fn test_typed_params() {
     fn multiply(a: i64, b: i64) -> i64 {
         return a * b
     }
-    assert_eq(multiply(3, 4), 12)
+    assertEqual(multiply(3, 4), 12)
 }
 
 @test
@@ -55,7 +55,7 @@ fn test_mixed_typed_params() {
     fn format(name: string, age: i64) -> string {
         return name + " is " + string(age)
     }
-    assert_eq(format("Alice", 30), "Alice is 30")
+    assertEqual(format("Alice", 30), "Alice is 30")
 }
 
 // ===== Multi-value Return =====
@@ -65,8 +65,8 @@ fn test_multi_return() {
         return (a / b, a % b)
     }
     var (q, r) = divmod(17, 5)
-    assert_eq(q, 3)
-    assert_eq(r, 2)
+    assertEqual(q, 3)
+    assertEqual(r, 2)
 }
 
 @test
@@ -78,8 +78,8 @@ fn test_multi_return_typed() {
         return (b, a)
     }
     var (min, max) = minmax(10, 5)
-    assert_eq(min, 5)
-    assert_eq(max, 10)
+    assertEqual(min, 5)
+    assertEqual(max, 10)
 }
 
 // ===== Closure Type Inference =====
@@ -89,7 +89,7 @@ fn test_closure_captures() {
     fn triple(x: i64) -> i64 {
         return x * multiplier
     }
-    assert_eq(triple(4), 12)
+    assertEqual(triple(4), 12)
 }
 
 @test
@@ -102,9 +102,9 @@ fn test_counter_closure() {
         }
     }
     var counter = makeCounter()
-    assert_eq(counter(), 1)
-    assert_eq(counter(), 2)
-    assert_eq(counter(), 3)
+    assertEqual(counter(), 1)
+    assertEqual(counter(), 2)
+    assertEqual(counter(), 3)
 }
 
 // ===== Arrow Function Inference =====
@@ -113,7 +113,7 @@ fn test_arrow_single_expr() {
     var double = fn(x: i64) {
         return x * 2
     }
-    assert_eq(double(5), 10)
+    assertEqual(double(5), 10)
 }
 
 @test
@@ -124,7 +124,7 @@ fn test_arrow_with_block() {
         }
         return n * factorial(n - 1)
     }
-    assert_eq(factorial(5), 120)
+    assertEqual(factorial(5), 120)
 }
 
 @test
@@ -132,7 +132,7 @@ fn test_arrow_multi_param() {
     var add = fn(a: i64, b: i64) {
         return a + b
     }
-    assert_eq(add(3, 4), 7)
+    assertEqual(add(3, 4), 7)
 }
 
 // ===== Higher Order Functions =====
@@ -142,8 +142,8 @@ fn test_callback_inference() {
     var doubled = arr.map(fn(x) {
         return x * 2
     })
-    assert_eq(doubled[0], 2)
-    assert_eq(doubled[4], 10)
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[4], 10)
 }
 
 @test
@@ -152,9 +152,9 @@ fn test_filter_inference() {
     var evens = arr.filter(fn(x) {
         return x % 2 == 0
     })
-    assert_eq(len(evens), 2)
-    assert_eq(evens[0], 2)
-    assert_eq(evens[1], 4)
+    assertEqual(len(evens), 2)
+    assertEqual(evens[0], 2)
+    assertEqual(evens[1], 4)
 }
 
 @test
@@ -163,7 +163,7 @@ fn test_reduce_inference() {
     var sum = arr.reduce(fn(acc, x) {
         return acc + x
     }, 0)
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 }
 
 // ===== Recursive Function Inference =====
@@ -175,7 +175,7 @@ fn test_recursive_fibonacci() {
         }
         return fib(n - 1) + fib(n - 2)
     }
-    assert_eq(fib(10), 55)
+    assertEqual(fib(10), 55)
 }
 
 // Mutual recursion - now supported via function hoisting
@@ -193,6 +193,6 @@ fn test_mutual_recursion() {
         }
         return isEven(n - 1)
     }
-    assert_eq(isEven(10), true)
-    assert_eq(isOdd(10), false)
+    assertEqual(isEven(10), true)
+    assertEqual(isOdd(10), false)
 }

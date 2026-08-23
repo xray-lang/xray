@@ -6,33 +6,33 @@ import regex
 @test
 fn test_compile_and_test() {
     var re = regex.compile("\\d+")
-    assert_eq(regex.test(re, "abc123"), true)
-    assert_eq(regex.test(re, "no digits"), false)
+    assertEqual(regex.test(re, "abc123"), true)
+    assertEqual(regex.test(re, "no digits"), false)
 }
 
 // @test instance methods
 @test
 fn test_instance_methods() {
     var re = regex.compile("([a-z]+)(\\d+)")
-    assert_eq(re.test("abc123"), true)
+    assertEqual(re.test("abc123"), true)
 
     var found = re.find("abc123 xyz456")
     assert(found != null)
-    assert_eq(found!.text, "abc123")
+    assertEqual(found!.text, "abc123")
 
-    assert_eq(re.findText("abc123 xyz456"), "abc123")
-    assert_eq(re.findGroup("abc123 xyz456", 1), "abc")
-    assert_eq(re.findGroup("abc123 xyz456", 2), "123")
+    assertEqual(re.findText("abc123 xyz456"), "abc123")
+    assertEqual(re.findGroup("abc123 xyz456", 1), "abc")
+    assertEqual(re.findGroup("abc123 xyz456", 2), "123")
 
     var all = re.findAll("abc123 xyz456")
-    assert_eq(len(all), 2)
+    assertEqual(len(all), 2)
 
-    assert_eq(re.replace("abc123 xyz456", "N"), "N xyz456")
+    assertEqual(re.replace("abc123 xyz456", "N"), "N xyz456")
 
     var comma = regex.compile(",\\s*")
     var parts = comma.split("a, b, c")
-    assert_eq(len(parts), 3)
-    assert_eq(parts[2], "c")
+    assertEqual(len(parts), 3)
+    assertEqual(parts[2], "c")
 }
 
 // @test find with positions
@@ -41,9 +41,9 @@ fn test_find() {
     var re = regex.compile("\\d+")
     var result = regex.find(re, "abc123def")
     assert(result != null)
-    assert_eq(result!.start, 3)
-    assert_eq(result!.end, 6)
-    assert_eq(result!.groups[0], "123")
+    assertEqual(result!.start, 3)
+    assertEqual(result!.end, 6)
+    assertEqual(result!.groups[0], "123")
 }
 
 // @test capture groups
@@ -53,9 +53,9 @@ fn test_capture_groups() {
     var result = regex.find(re, "contact: user@host.com")
     assert(result != null)
     var groups = result!.groups
-    assert_eq(groups[0], "user@host")
-    assert_eq(groups[1], "user")
-    assert_eq(groups[2], "host")
+    assertEqual(groups[0], "user@host")
+    assertEqual(groups[1], "user")
+    assertEqual(groups[2], "host")
 }
 
 // @test fullFind (entire string must match)
@@ -63,21 +63,21 @@ fn test_capture_groups() {
 fn test_full_find() {
     var re = regex.compile("[a-z]+")
     assert(regex.fullFind(re, "hello") != null)
-    assert_eq(regex.fullFind(re, "hello123"), null)
+    assertEqual(regex.fullFind(re, "hello123"), null)
 }
 
 // @test replace (first occurrence)
 @test
 fn test_replace() {
     var re = regex.compile("\\s+")
-    assert_eq(regex.replace(re, "hello   world", "_"), "hello_world")
+    assertEqual(regex.replace(re, "hello   world", "_"), "hello_world")
 }
 
 // @test replaceAll
 @test
 fn test_replace_all() {
     var re = regex.compile("\\s+")
-    assert_eq(regex.replaceAll(re, "a   b   c", "-"), "a-b-c")
+    assertEqual(regex.replaceAll(re, "a   b   c", "-"), "a-b-c")
 }
 
 // @test split
@@ -85,10 +85,10 @@ fn test_replace_all() {
 fn test_split() {
     var re = regex.compile(",\\s*")
     var parts = regex.split(re, "a, b, c, d")
-    assert_eq(len(parts), 4)
-    assert_eq(parts[0], "a")
-    assert_eq(parts[1], "b")
-    assert_eq(parts[3], "d")
+    assertEqual(len(parts), 4)
+    assertEqual(parts[0], "a")
+    assertEqual(parts[1], "b")
+    assertEqual(parts[3], "d")
 }
 
 // @test escape
@@ -102,8 +102,8 @@ fn test_escape() {
 // @test isValid
 @test
 fn test_is_valid() {
-    assert_eq(regex.isValid("\\d+"), true)
-    assert_eq(regex.isValid("["), false)
+    assertEqual(regex.isValid("\\d+"), true)
+    assertEqual(regex.isValid("["), false)
 }
 
 print("All regex tests passed")

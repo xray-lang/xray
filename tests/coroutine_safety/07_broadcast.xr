@@ -47,7 +47,7 @@ fn test_simple_broadcast() {
         success = success + 1
     }
     print("成功接收广播:", success, "/", count)
-    assert_eq(success, count)
+    assertEqual(success, count)
     print("✓ 简单广播测试通过")
 }
 
@@ -71,7 +71,7 @@ fn test_config_broadcast() {
     // 验证所有 worker 使用相同配置
     for (var i = 0; i < 4; i++) {
         var port = recvValue(results)
-        assert_eq(port, 8080)
+        assertEqual(port, 8080)
     }
     print("✓ 配置广播测试通过")
 }
@@ -110,7 +110,7 @@ fn test_large_data_broadcast() {
         }
     }
     print("大数据广播正确数:", correct, "/ 4")
-    assert_eq(correct, 4)
+    assertEqual(correct, 4)
     print("✓ 大数据广播测试通过")
 }
 

@@ -57,44 +57,44 @@ fn test_enum() {
 
     // Test: enum identity comparison
     var c = Color.Red
-    assert_eq(c == Color.Red, true)
-    assert_eq(c == Color.Green, false)
-    assert_eq(Color.Red == Color.Red, true)
-    assert_eq(Color.Red != Color.Blue, true)
+    assertEqual(c == Color.Red, true)
+    assertEqual(c == Color.Green, false)
+    assertEqual(Color.Red == Color.Red, true)
+    assertEqual(Color.Red != Color.Blue, true)
 
     // ===== Protocol values via explicit methods =====
 
 
-    assert_eq(HttpStatus.OK.code(), 200)
-    assert_eq(HttpStatus.NotFound.code(), 404)
-    assert_eq(HttpStatus.ServerError.code(), 500)
+    assertEqual(HttpStatus.OK.code(), 200)
+    assertEqual(HttpStatus.NotFound.code(), 404)
+    assertEqual(HttpStatus.ServerError.code(), 500)
 
     // ===== String protocol symbols via explicit methods =====
 
 
-    assert_eq(Direction.North.symbol(), "N")
-    assert_eq(Direction.East.symbol(), "E")
-    assert_eq(Direction.West.symbol(), "W")
+    assertEqual(Direction.North.symbol(), "N")
+    assertEqual(Direction.East.symbol(), "E")
+    assertEqual(Direction.West.symbol(), "W")
 
     // ===== Enum properties: name, ordinal =====
 
-    assert_eq(Color.Red.name, "Red")
-    assert_eq(Color.Green.name, "Green")
-    assert_eq(Color.Blue.name, "Blue")
+    assertEqual(Color.Red.name, "Red")
+    assertEqual(Color.Green.name, "Green")
+    assertEqual(Color.Blue.name, "Blue")
 
-    assert_eq(Color.Red.ordinal, 0)
-    assert_eq(Color.Green.ordinal, 1)
-    assert_eq(Color.Blue.ordinal, 2)
+    assertEqual(Color.Red.ordinal, 0)
+    assertEqual(Color.Green.ordinal, 1)
+    assertEqual(Color.Blue.ordinal, 2)
 
-    assert_eq(HttpStatus.OK.name, "OK")
-    assert_eq(HttpStatus.OK.ordinal, 0)
-    assert_eq(HttpStatus.NotFound.ordinal, 1)
+    assertEqual(HttpStatus.OK.name, "OK")
+    assertEqual(HttpStatus.OK.ordinal, 0)
+    assertEqual(HttpStatus.NotFound.ordinal, 1)
 
     // ===== Enum toString =====
 
-    assert_eq(Color.Red.toString(), "Color.Red")
-    assert_eq(Color.Green.toString(), "Color.Green")
-    assert_eq(Direction.North.toString(), "Direction.North")
+    assertEqual(Color.Red.toString(), "Color.Red")
+    assertEqual(Color.Green.toString(), "Color.Green")
+    assertEqual(Direction.North.toString(), "Direction.North")
 
     // ===== Enum in match =====
 
@@ -104,7 +104,7 @@ fn test_enum() {
         Color.Green -> "green",
         Color.Blue -> "blue"
     }
-    assert_eq(name, "green")
+    assertEqual(name, "green")
 
     var status = HttpStatus.NotFound
     var message = match (status) {
@@ -112,19 +112,19 @@ fn test_enum() {
         HttpStatus.NotFound -> "Not Found",
         HttpStatus.ServerError -> "Server Error"
     }
-    assert_eq(message, "Not Found")
+    assertEqual(message, "Not Found")
 
     // ===== Enum as function parameter =====
 
 
-    assert_eq(getColorCode(Color.Red), "#FF0000")
-    assert_eq(getColorCode(Color.Green), "#00FF00")
-    assert_eq(getColorCode(Color.Blue), "#0000FF")
+    assertEqual(getColorCode(Color.Red), "#FF0000")
+    assertEqual(getColorCode(Color.Green), "#00FF00")
+    assertEqual(getColorCode(Color.Blue), "#0000FF")
 
     // ===== Enum in array =====
 
     var colors = [Color.Red, Color.Green, Color.Blue]
-    assert_eq(len(colors), 3)
-    assert_eq(colors[0] == Color.Red, true)
-    assert_eq(colors[2] == Color.Blue, true)
+    assertEqual(len(colors), 3)
+    assertEqual(colors[0] == Color.Red, true)
+    assertEqual(colors[2] == Color.Blue, true)
 }

@@ -16,7 +16,7 @@ fn test_narrowed_array_iterates() {
             sum = sum + i
         }
     }
-    assert_eq(sum, 6)
+    assertEqual(sum, 6)
 }
 
 @test
@@ -26,7 +26,7 @@ fn test_narrowed_array_len() {
     if (a != null) {
         n = len(a)
     }
-    assert_eq(n, 3)
+    assertEqual(n, 3)
 }
 
 @test
@@ -38,7 +38,7 @@ fn test_narrowed_null_skips_body() {
             count = count + 1
         }
     }
-    assert_eq(count, 0)
+    assertEqual(count, 0)
 }
 
 // ===== 非空断言 =====
@@ -50,13 +50,13 @@ fn test_asserted_array_iterates() {
     for (i in a!) {
         sum = sum + i
     }
-    assert_eq(sum, 15)
+    assertEqual(sum, 15)
 }
 
 @test
 fn test_asserted_array_len() {
     var a: Array<i64>? = [4, 5, 6]
-    assert_eq(len(a!), 3)
+    assertEqual(len(a!), 3)
 }
 
 // ===== 可空 Range =====
@@ -70,7 +70,7 @@ fn test_narrowed_range_iterates() {
             sum = sum + i
         }
     }
-    assert_eq(sum, 10)
+    assertEqual(sum, 10)
 }
 
 @test
@@ -80,7 +80,7 @@ fn test_asserted_range_iterates() {
     for (i in r!) {
         sum = sum + i
     }
-    assert_eq(sum, 10)
+    assertEqual(sum, 10)
 }
 
 @test
@@ -90,7 +90,7 @@ fn test_narrowed_range_len() {
     if (r != null) {
         n = len(r)
     }
-    assert_eq(n, 6)
+    assertEqual(n, 6)
 }
 
 // ===== 非可空值不受影响 =====
@@ -102,8 +102,8 @@ fn test_plain_collections_unaffected() {
     for (i in a) {
         sum = sum + i
     }
-    assert_eq(sum, 6)
-    assert_eq(len(a), 3)
-    assert_eq(len("abc"), 3)
-    assert_eq(len(1..5), 4)
+    assertEqual(sum, 6)
+    assertEqual(len(a), 3)
+    assertEqual(len("abc"), 3)
+    assertEqual(len(1..5), 4)
 }

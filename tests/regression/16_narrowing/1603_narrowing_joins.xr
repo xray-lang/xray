@@ -15,7 +15,7 @@ fn test_n9_join_of_two_assigned_paths() {
         a = "de"
     }
     // Both predecessors are non-null, so the join is non-null.
-    assert_eq(len(a), 3)
+    assertEqual(len(a), 3)
 }
 
 @test
@@ -25,7 +25,7 @@ fn test_n9_join_keeps_null_when_one_path_may_be_null() {
     if (flag) {
         a = "abc"
     }
-    assert_eq(a ?? "fallback", "fallback")
+    assertEqual(a ?? "fallback", "fallback")
 }
 
 @test
@@ -36,7 +36,7 @@ fn test_n9_unreachable_path_is_absorbed() {
     }
     // The then-path is unreachable past the return, so only the
     // false-condition path reaches here.
-    assert_eq(len(a), 3)
+    assertEqual(len(a), 3)
 }
 
 fn n9_pick(flag: bool, x: string?, y: string?) -> i64 {
@@ -50,10 +50,10 @@ fn n9_pick(flag: bool, x: string?, y: string?) -> i64 {
 
 @test
 fn test_n9_nested_joins() {
-    assert_eq(n9_pick(true, "abcd", null), 4)
-    assert_eq(n9_pick(true, null, "abcd"), -1)
-    assert_eq(n9_pick(false, null, "ab"), 2)
-    assert_eq(n9_pick(false, "ab", null), -2)
+    assertEqual(n9_pick(true, "abcd", null), 4)
+    assertEqual(n9_pick(true, null, "abcd"), -1)
+    assertEqual(n9_pick(false, null, "ab"), 2)
+    assertEqual(n9_pick(false, "ab", null), -2)
 }
 
 // ===== N-10: loop header joins entry and back edges =====
@@ -68,7 +68,7 @@ fn test_n10_narrowing_holds_each_iteration() {
             cur = null
         }
     }
-    assert_eq(rounds, 3)
+    assertEqual(rounds, 3)
 }
 
 @test
@@ -83,7 +83,7 @@ fn test_n10_reassignment_in_body_rejoins() {
         }
         cur = "xyz"
     }
-    assert_eq(total, 8)
+    assertEqual(total, 8)
 }
 
 @test
@@ -97,7 +97,7 @@ fn test_n10_narrowing_before_loop_survives_read_only_body() {
             total = total + len(conn)
         }
     }
-    assert_eq(total, 9)
+    assertEqual(total, 9)
 }
 
 @test
@@ -111,7 +111,7 @@ fn test_n10_narrowing_before_while_survives_read_only_body() {
             i = i + 1
         }
     }
-    assert_eq(seen, 4)
+    assertEqual(seen, 4)
 }
 
 @test
@@ -121,5 +121,5 @@ fn test_n10_condition_false_fact_after_loop() {
         cur = null
     }
     // After the loop the condition is false, so cur is null here.
-    assert_eq(cur, null)
+    assertEqual(cur, null)
 }

@@ -11,12 +11,12 @@ fn withHeader(name: string, value: string) -> Headers {
 
 @test
 fn test_url_encode_namespace() {
-    assert_eq(http.urlEncode("a b+张"), "a%20b%2B%E5%BC%A0")
+    assertEqual(http.urlEncode("a b+张"), "a%20b%2B%E5%BC%A0")
 }
 
 @test
 fn test_url_decode_named_import() {
-    assert_eq(urlDecode("a+b%2Bc%ZZ%"), "a b+c%ZZ%")
+    assertEqual(urlDecode("a+b%2Bc%ZZ%"), "a b+c%ZZ%")
 }
 
 @test

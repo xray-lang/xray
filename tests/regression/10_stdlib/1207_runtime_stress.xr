@@ -31,7 +31,7 @@ fn test_string_pool_survival() {
 
     // All original strings must survive
     for (var i = 0; i < 500; i++) {
-        assert_eq(strings[i], "interned_str_" + string(i))
+        assertEqual(strings[i], "interned_str_" + string(i))
     }
 }
 
@@ -54,8 +54,8 @@ fn test_nested_string_key_survival() {
 
 
     for (var i = 0; i < 200; i++) {
-        assert_eq(data[i].val, i * 3)
-        assert_eq(data[i].name, "field_" + string(i))
+        assertEqual(data[i].val, i * 3)
+        assertEqual(data[i].name, "field_" + string(i))
     }
 }
 
@@ -80,7 +80,7 @@ fn test_closure_upvalue_gc() {
 
 
     for (var i = 0; i < 100; i++) {
-        assert_eq(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
+        assertEqual(closures[i](), "captured_" + string(i) + "_" + string(i * 2))
     }
 }
 
@@ -106,8 +106,8 @@ fn test_rapid_alloc_collect() {
         var batch = survivors[si]
         var expected_cycle = 15 + si
         for (var i = 0; i < 50; i++) {
-            assert_eq(batch[i].c, expected_cycle)
-            assert_eq(batch[i].i, i)
+            assertEqual(batch[i].c, expected_cycle)
+            assertEqual(batch[i].i, i)
         }
     }
 }
@@ -136,10 +136,10 @@ fn test_mixed_container_gc() {
 
     // Verify all containers intact
     for (var i = 0; i < 100; i++) {
-        assert_eq(arr[i][0], i)
-        assert_eq(arr[i][1], "a" + string(i))
-        assert_eq(map["k" + string(i)].nested, i)
-        assert_eq(data[i].arr[0], i)
+        assert(arr[i][0] == i)
+        assert(arr[i][1] == "a" + string(i))
+        assertEqual(map["k" + string(i)].nested, i)
+        assert(data[i].arr[0] == i)
     }
 }
 
@@ -170,9 +170,9 @@ fn test_generational_cross_reference() {
 
     // Verify all children survived
     for (var i = 0; i < 50; i++) {
-        assert_eq(len(long_lived[i].children), 10)
-        assert_eq(long_lived[i].children[0], "round_0")
-        assert_eq(long_lived[i].children[9], "round_9")
+        assertEqual(len(long_lived[i].children), 10)
+        assertEqual(long_lived[i].children[0], "round_0")
+        assertEqual(long_lived[i].children[9], "round_9")
     }
 }
 
@@ -194,7 +194,7 @@ fn test_string_concat_churn() {
 
     var expected = "0123456789"
     for (var i = 0; i < 100; i++) {
-        assert_eq(results[i], expected)
+        assertEqual(results[i], expected)
     }
 }
 
@@ -232,11 +232,11 @@ fn test_instance_field_gc() {
 
     // Verify
     for (var i = 0; i < 100; i++) {
-        assert_eq(nodes[i].value, i)
-        assert_eq(nodes[i].label, "node_" + string(i))
+        assertEqual(nodes[i].value, i)
+        assertEqual(nodes[i].label, "node_" + string(i))
     }
-    assert_eq(len(nodes[0].children), 1)
-    assert_eq(nodes[0].children[0].value, 1)
+    assertEqual(len(nodes[0].children), 1)
+    assertEqual(nodes[0].children[0].value, 1)
 }
 
 print("All memory stress tests passed")

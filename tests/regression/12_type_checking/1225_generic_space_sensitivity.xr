@@ -47,9 +47,9 @@ fn test_generic_space_sensitivity() {
     // Test 1: Generic call without space (should work)
     // =============================================================================
     var n1 = identity<i64>(42)
-    assert_eq(n1, 42)
+    assertEqual(n1, 42)
     var s1 = identity<string>("hello")
-    assert_eq(s1, "hello")
+    assertEqual(s1, "hello")
     // =============================================================================
     // Test 2: Comparison with space (should NOT be parsed as generic)
     // =============================================================================
@@ -63,9 +63,9 @@ fn test_generic_space_sensitivity() {
     // true
     var cmp3 = a < b && c < a
     // true && true = true
-    assert_eq(cmp1, true)
-    assert_eq(cmp2, true)
-    assert_eq(cmp3, true)
+    assertEqual(cmp1, true)
+    assertEqual(cmp2, true)
+    assertEqual(cmp3, true)
 
     // =============================================================================
     // Test 3: Multi-value return with comparison (the critical case)
@@ -74,8 +74,8 @@ fn test_generic_space_sensitivity() {
 
     var r1 = getFirstComparison()
     var r2 = getSecondComparison()
-    assert_eq(r1, true)
-    assert_eq(r2, true)
+    assertEqual(r1, true)
+    assertEqual(r2, true)
 
     // =============================================================================
     // Test 4: Function call with multiple comparison arguments
@@ -83,7 +83,7 @@ fn test_generic_space_sensitivity() {
 
     var result = bothTrue(3 < 5, 10 > 7)
     // bothTrue(true, true)
-    assert_eq(result, true)
+    assertEqual(result, true)
 
     // =============================================================================
     // Test 5: Nested generic types (>> handling)
@@ -91,10 +91,10 @@ fn test_generic_space_sensitivity() {
 
     // Nested generic - tests >> split handling
     var nested = Box<Array<i64>>([1, 2, 3])
-    assert_eq(nested.get()[0], 1)
+    assertEqual(nested.get()[0], 1)
     // Double nested
     var deep = Box<Box<i64>>(Box<i64>(42))
-    assert_eq(deep.get().get(), 42)
+    assertEqual(deep.get().get(), 42)
 
     // =============================================================================
     // Test 6: Generic method call
@@ -102,23 +102,23 @@ fn test_generic_space_sensitivity() {
 
     var u = Utils()
     var arr = u.wrap<i64>(100)
-    assert_eq(arr[0], 100)
+    assertEqual(arr[0], 100)
     // =============================================================================
     // Test 7: Type inference (no explicit type args needed)
     // =============================================================================
     var inferred = identity(999)
     // Should infer int
-    assert_eq(inferred, 999)
+    assertEqual(inferred, 999)
     var box = Box(123)
     // Should infer Box<int>
-    assert_eq(box.get(), 123)
+    assertEqual(box.get(), 123)
     // =============================================================================
     // Test 8: Array literals with comparisons
     // =============================================================================
     var comparisons = [1 < 2, 3 > 2, 5 < 10]
     // [true, true, true]
-    assert_eq(comparisons[0], true)
-    assert_eq(comparisons[1], true)
-    assert_eq(comparisons[2], true)
+    assertEqual(comparisons[0], true)
+    assertEqual(comparisons[1], true)
+    assertEqual(comparisons[2], true)
 }
 

@@ -7,7 +7,7 @@
 @test
 fn test_call_before_definition() {
     var result = add(10, 20)
-    assert_eq(result, 30)
+    assertEqual(result, 30)
 }
 
 fn add(a: i64, b: i64) -> i64 {
@@ -18,10 +18,10 @@ fn add(a: i64, b: i64) -> i64 {
 
 @test
 fn test_mutual_recursion() {
-    assert_eq(isEven(4), true)
-    assert_eq(isEven(3), false)
-    assert_eq(isOdd(3), true)
-    assert_eq(isOdd(4), false)
+    assertEqual(isEven(4), true)
+    assertEqual(isEven(3), false)
+    assertEqual(isOdd(3), true)
+    assertEqual(isOdd(4), false)
 }
 
 fn isEven(n: i64) -> bool {
@@ -50,7 +50,7 @@ class Dog {
 @test
 fn test_fn_before_class() {
     var d = createDog("Rex")
-    assert_eq(d.name, "Rex")
+    assertEqual(d.name, "Rex")
 }
 
 // ===== Class method calls function defined after it =====
@@ -68,7 +68,7 @@ fn addBrackets(s: string) -> string {
 @test
 fn test_class_method_uses_later_fn() {
     var f = Formatter()
-    assert_eq(f.format("hello"), "[hello]")
+    assertEqual(f.format("hello"), "[hello]")
 }
 
 // ===== Definition before call still works =====
@@ -79,7 +79,7 @@ fn multiply(x: i64, y: i64) -> i64 {
 
 @test
 fn test_definition_before_call() {
-    assert_eq(multiply(3, 4), 12)
+    assertEqual(multiply(3, 4), 12)
 }
 
 // ===== Function uses variable defined before it (upvalue) =====
@@ -92,7 +92,7 @@ fn scaled(x: i64) -> i64 {
 
 @test
 fn test_fn_captures_variable() {
-    assert_eq(scaled(5), 50)
+    assertEqual(scaled(5), 50)
 }
 
 // ===== Block-level hoisting =====
@@ -100,7 +100,7 @@ fn test_fn_captures_variable() {
 @test
 fn test_block_call_before_definition() {
     var r = greetBlock("world")
-    assert_eq(r, "hello world")
+    assertEqual(r, "hello world")
     
     fn greetBlock(name: string) -> string {
         return "hello " + name
@@ -111,7 +111,7 @@ fn test_block_call_before_definition() {
 fn test_block_closure_capture_with_hoisting() {
     var x = 10
     var result = getDoubled()
-    assert_eq(result, 20)
+    assertEqual(result, 20)
     
     fn getDoubled() -> i64 {
         return x * 2
@@ -120,8 +120,8 @@ fn test_block_closure_capture_with_hoisting() {
 
 @test
 fn test_block_mutual_recursion() {
-    assert_eq(blockEven(4), true)
-    assert_eq(blockEven(3), false)
+    assertEqual(blockEven(4), true)
+    assertEqual(blockEven(3), false)
     
     fn blockEven(n: i64) -> bool {
         if (n == 0) { return true }

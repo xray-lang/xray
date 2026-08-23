@@ -19,7 +19,7 @@ comptime {
 @test
 fn test_comptime_fixed_byte_blob_materialization() {
     var copied: [u8; 3] = copy(comptime BYTE_BLOB)
-    assert_eq(copied[0], 0)
-    assert_eq(copied[1], 65)
-    assert_eq(copied[2], 255)
+    assertEqual(copied[0], 0)
+    assertEqual(copied[1], 65)
+    assertEqual(copied[2], 255)
 }

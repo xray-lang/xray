@@ -19,7 +19,7 @@ fn test_const_string() {
     var received = recvValue(ch)
     print("发送:", msg)
     print("接收:", received)
-    assert_eq(received, "Hello, World!")
+    assertEqual(received, "Hello, World!")
     print("✓ const 字符串测试通过")
 }
 
@@ -31,9 +31,9 @@ fn test_const_array() {
     var received = recvValue(ch)
     print("发送长度:", len(data))
     print("接收长度:", len(received))
-    assert_eq(len(received), 5)
-    assert_eq(received[0], 1)
-    assert_eq(received[4], 5)
+    assertEqual(len(received), 5)
+    assertEqual(received[0], 1)
+    assertEqual(received[4], 5)
     print("✓ const 数组测试通过")
 }
 
@@ -45,8 +45,8 @@ fn test_const_map() {
     var received = recvValue(ch)
     print("发送 host:", config.get("host"))
     print("接收 host:", received.get("host"))
-    assert_eq(received.get("host"), "localhost")
-    assert_eq(received.get("port"), 8080)
+    assertEqual(received.get("host"), "localhost")
+    assertEqual(received.get("port"), 8080)
     print("✓ const Map 测试通过")
 }
 
@@ -61,11 +61,11 @@ fn test_primitive_types() {
     ch.send(flag)
     ch.send(null)
     ch.send("literal string")
-    assert_eq(recvValue(ch), 42)
-    assert_eq(recvValue(ch), 3.14159)
-    assert_eq(recvValue(ch), true)
-    assert_eq(recvValue(ch), null)
-    assert_eq(recvValue(ch), "literal string")
+    assertEqual(recvValue(ch), 42)
+    assertEqual(recvValue(ch), 3.14159)
+    assertEqual(recvValue(ch), true)
+    assertEqual(recvValue(ch), null)
+    assertEqual(recvValue(ch), "literal string")
     print("✓ 基本类型测试通过")
 }
 

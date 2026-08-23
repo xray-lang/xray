@@ -27,9 +27,9 @@ var first = recv_int(ch)
 var second = recv_int(ch)
 var third = recv_int(ch)
 
-assert_eq(first, 2)
-assert_eq(second, 3)
-assert_eq(third, 1)
+assertEqual(first, 2)
+assertEqual(second, 3)
+assertEqual(third, 1)
 
 print(first)
 print(second)

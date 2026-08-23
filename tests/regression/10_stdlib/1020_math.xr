@@ -8,74 +8,74 @@ import math
 
 @test
 fn test_abs_positive() {
-    assert_eq(math.abs(5), 5)
-    assert_eq(math.abs(100), 100)
+    assertEqual(math.abs(5), 5)
+    assertEqual(math.abs(100), 100)
 }
 
 @test
 fn test_abs_negative() {
-    assert_eq(math.abs(-5), 5)
-    assert_eq(math.abs(-100), 100)
+    assertEqual(math.abs(-5), 5)
+    assertEqual(math.abs(-100), 100)
 }
 
 @test
 fn test_abs_zero() {
-    assert_eq(math.abs(0), 0)
+    assertEqual(math.abs(0), 0)
 }
 
 // ===== 最大最小值 =====
 
 @test
 fn test_max() {
-    assert_eq(math.max(3, 7), 7)
-    assert_eq(math.max(-5, -2), -2)
-    assert_eq(math.max(10, 10), 10)
+    assertEqual(math.max(3, 7), 7)
+    assertEqual(math.max(-5, -2), -2)
+    assertEqual(math.max(10, 10), 10)
 }
 
 @test
 fn test_min() {
-    assert_eq(math.min(3, 7), 3)
-    assert_eq(math.min(-5, -2), -5)
-    assert_eq(math.min(10, 10), 10)
+    assertEqual(math.min(3, 7), 3)
+    assertEqual(math.min(-5, -2), -5)
+    assertEqual(math.min(10, 10), 10)
 }
 
 // ===== 取整函数 =====
 
 @test
 fn test_floor() {
-    assert_eq(math.floor(3.7), 3)
-    assert_eq(math.floor(3.2), 3)
-    assert_eq(math.floor(-3.2), -4)
+    assertEqual(math.floor(3.7), 3)
+    assertEqual(math.floor(3.2), 3)
+    assertEqual(math.floor(-3.2), -4)
 }
 
 @test
 fn test_ceil() {
-    assert_eq(math.ceil(3.2), 4)
-    assert_eq(math.ceil(3.7), 4)
-    assert_eq(math.ceil(-3.7), -3)
+    assertEqual(math.ceil(3.2), 4)
+    assertEqual(math.ceil(3.7), 4)
+    assertEqual(math.ceil(-3.7), -3)
 }
 
 @test
 fn test_round() {
-    assert_eq(math.round(3.4), 3)
-    assert_eq(math.round(3.5), 4)
-    assert_eq(math.round(3.6), 4)
+    assertEqual(math.round(3.4), 3)
+    assertEqual(math.round(3.5), 4)
+    assertEqual(math.round(3.6), 4)
 }
 
 // ===== 幂运算 =====
 
 @test
 fn test_pow() {
-    assert_eq(math.pow(2, 3), 8)
-    assert_eq(math.pow(3, 2), 9)
-    assert_eq(math.pow(10, 0), 1)
+    assertEqual(math.pow(2, 3), 8)
+    assertEqual(math.pow(3, 2), 9)
+    assertEqual(math.pow(10, 0), 1)
 }
 
 @test
 fn test_sqrt() {
-    assert_eq(math.sqrt(4), 2)
-    assert_eq(math.sqrt(9), 3)
-    assert_eq(math.sqrt(1), 1)
+    assertEqual(math.sqrt(4), 2)
+    assertEqual(math.sqrt(9), 3)
+    assertEqual(math.sqrt(1), 1)
 }
 
 // ===== 常量 =====
@@ -83,15 +83,15 @@ fn test_sqrt() {
 @test
 fn test_pi() {
     var pi = math.PI
-    assert_eq(pi > 3.14, true)
-    assert_eq(pi < 3.15, true)
+    assertEqual(pi > 3.14, true)
+    assertEqual(pi < 3.15, true)
 }
 
 @test
 fn test_e() {
     var e = math.E
-    assert_eq(e > 2.71, true)
-    assert_eq(e < 2.72, true)
+    assertEqual(e > 2.71, true)
+    assertEqual(e < 2.72, true)
 }
 
 // ===== 三角函数 =====
@@ -99,15 +99,15 @@ fn test_e() {
 @test
 fn test_sin_zero() {
     var s = math.sin(0)
-    assert_eq(s > -0.01, true)
-    assert_eq(s < 0.01, true)
+    assertEqual(s > -0.01, true)
+    assertEqual(s < 0.01, true)
 }
 
 @test
 fn test_cos_zero() {
     var c = math.cos(0)
-    assert_eq(c > 0.99, true)
-    assert_eq(c < 1.01, true)
+    assertEqual(c > 0.99, true)
+    assertEqual(c < 1.01, true)
 }
 
 // ===== 随机数 =====
@@ -115,7 +115,7 @@ fn test_cos_zero() {
 @test
 fn test_random_range() {
     var r = math.random()
-    assert_eq(r >= 0, true)
-    assert_eq(r < 1, true)
+    assertEqual(r >= 0, true)
+    assertEqual(r < 1, true)
 }
 

@@ -4,5 +4,5 @@
 @test
 fn test_public_identifier_name() {
     var public = 11
-    assert_eq(public, 11)
+    assertEqual(public, 11)
 }

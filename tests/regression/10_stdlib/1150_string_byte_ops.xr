@@ -7,17 +7,17 @@ import text
 @test
 fn test_byte_at() {
     var s = "ACGT"
-    assert_eq(s.bytes()[0], 65)
-    assert_eq(s.bytes()[1], 67)
-    assert_eq(s.bytes()[2], 71)
-    assert_eq(s.bytes()[3], 84)
+    assertEqual(s.bytes()[0], 65)
+    assertEqual(s.bytes()[1], 67)
+    assertEqual(s.bytes()[2], 71)
+    assertEqual(s.bytes()[3], 84)
 }
 
 @test
 fn test_byte_at_out_of_bounds() {
     var s = "ACGT"
-    assert_throws(fn() { assert_eq(s.bytes()[4], 0) })
-    assert_throws(fn() { assert_eq(s.bytes()[-1], 0) })
+    assertPanics(fn() { assertEqual(s.bytes()[4], 0) })
+    assertPanics(fn() { assertEqual(s.bytes()[-1], 0) })
 }
 
 // ===== raw octets (binary I/O) =====
@@ -27,29 +27,29 @@ fn test_byte_at_out_of_bounds() {
 fn test_byte_at_ord_high_bytes() {
     // "é" = 0xC3 0xA9, "€" = 0xE2 0x82 0xAC in UTF-8
     var s = "é€"
-    assert_eq(len(s.bytes()), 5)
-    assert_eq(s.bytes()[0], 195)  // 0xC3
-    assert_eq(s.bytes()[1], 169)  // 0xA9
-    assert_eq(s.bytes()[2], 226)  // 0xE2
-    assert_eq(s.bytes()[3], 130)  // 0x82
-    assert_eq(s.bytes()[4], 172)  // 0xAC
+    assertEqual(len(s.bytes()), 5)
+    assertEqual(s.bytes()[0], 195)  // 0xC3
+    assertEqual(s.bytes()[1], 169)  // 0xA9
+    assertEqual(s.bytes()[2], 226)  // 0xE2
+    assertEqual(s.bytes()[3], 130)  // 0x82
+    assertEqual(s.bytes()[4], 172)  // 0xAC
 }
 
 @test
 fn test_byte_at_ord_ascii_matches_octet() {
     var s = "ACGT"
-    assert_eq(s.bytes()[0], 65)
-    assert_eq(s.bytes()[3], 84)
+    assertEqual(s.bytes()[0], 65)
+    assertEqual(s.bytes()[3], 84)
 }
 
 // ===== reverse (ASCII data only — Unicode reverse is rune-aware) =====
 
 @test
 fn test_reverse_ascii() {
-    assert_eq(text.reverseRunes("ACGT"), "TGCA")
-    assert_eq(text.reverseRunes("Hello"), "olleH")
-    assert_eq(text.reverseRunes(""), "")
-    assert_eq(text.reverseRunes("A"), "A")
+    assertEqual(text.reverseRunes("ACGT"), "TGCA")
+    assertEqual(text.reverseRunes("Hello"), "olleH")
+    assertEqual(text.reverseRunes(""), "")
+    assertEqual(text.reverseRunes("A"), "A")
 }
 
 // ===== byte vs rune consistency for ASCII =====
@@ -59,7 +59,7 @@ fn test_byte_at_equals_char_at_ascii() {
     var dna = "ACGTACGTACGT"
     var i = 0
     while (i < len(dna.bytes())) {
-        assert_eq((dna.runes().nth(i).toUInt32() as i64), (dna.bytes()[i] as i64))
+        assertEqual((dna.runes().nth(i).toUInt32() as i64), (dna.bytes()[i] as i64))
         i = i + 1
     }
 }
@@ -90,8 +90,8 @@ fn reverseComplement(seq: string) -> string {
 
 @test
 fn test_reverse_complement() {
-    assert_eq(reverseComplement("ACGT"), "ACGT")
-    assert_eq(reverseComplement("AAAA"), "TTTT")
-    assert_eq(reverseComplement("CCCC"), "GGGG")
-    assert_eq(reverseComplement("AACG"), "CGTT")
+    assertEqual(reverseComplement("ACGT"), "ACGT")
+    assertEqual(reverseComplement("AAAA"), "TTTT")
+    assertEqual(reverseComplement("CCCC"), "GGGG")
+    assertEqual(reverseComplement("AACG"), "CGTT")
 }

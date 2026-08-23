@@ -28,7 +28,7 @@ fn test_many_short_lived_coros() {
         }
     }
     print("成功协程数:", success, "/", count)
-    assert_eq(success, count)
+    assertEqual(success, count)
     print("✓ 短期协程压力测试通过")
 }
 
@@ -66,7 +66,7 @@ fn test_nested_allocations() {
     var total = r1 + r2 + r3 + r4 + r5
     total = total + r6 + r7 + r8 + r9 + r10
     print("嵌套分配总数:", total)
-    assert_eq(total, 10 * 50)
+    assertEqual(total, 10 * 50)
     // 500
     print("✓ 嵌套分配测试通过")
 }

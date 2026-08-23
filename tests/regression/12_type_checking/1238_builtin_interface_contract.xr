@@ -15,15 +15,15 @@ class Bag implements Lengthable {
 @test
 fn test_builtin_lengthable_contract_still_enforced() {
     var b = Bag(5)
-    assert_eq(len(b), 5)
-    assert_eq(len(Bag(0)), 0)
+    assertEqual(len(b), 5)
+    assertEqual(len(Bag(0)), 0)
 }
 
 @test
 fn test_builtin_lengthable_via_generic_constraint() {
-    assert_eq(measure(Bag(7)), 7)
-    assert_eq(measure([1, 2, 3]), 3)
-    assert_eq(measure("abcd"), 4)
+    assertEqual(measure(Bag(7)), 7)
+    assertEqual(measure([1, 2, 3]), 3)
+    assertEqual(measure("abcd"), 4)
 }
 
 fn measure<T: Lengthable>(value: T) -> i64 {

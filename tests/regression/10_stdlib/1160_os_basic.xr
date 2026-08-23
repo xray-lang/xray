@@ -42,28 +42,28 @@ fn test_getenv_path() {
 @test
 fn test_getenv_nonexistent() {
     var val = os.getenv("XRAY_TEST_NONEXISTENT_VAR_12345")
-    assert_eq(val, null)
+    assertEqual(val, null)
 }
 
 @test
 fn test_setenv_getenv() {
     os.setenv("XRAY_TEST_VAR", "hello_xray")
     var val = os.getenv("XRAY_TEST_VAR")
-    assert_eq(val, "hello_xray")
+    assertEqual(val, "hello_xray")
 
     // cleanup
     os.unsetenv("XRAY_TEST_VAR")
     var val2 = os.getenv("XRAY_TEST_VAR")
-    assert_eq(val2, null)
+    assertEqual(val2, null)
 }
 
 @test
 fn test_setenv_overwrite() {
     os.setenv("XRAY_TEST_OW", "first")
-    assert_eq(os.getenv("XRAY_TEST_OW"), "first")
+    assertEqual(os.getenv("XRAY_TEST_OW"), "first")
 
     os.setenv("XRAY_TEST_OW", "second")
-    assert_eq(os.getenv("XRAY_TEST_OW"), "second")
+    assertEqual(os.getenv("XRAY_TEST_OW"), "second")
 
     os.unsetenv("XRAY_TEST_OW")
 }
@@ -78,7 +78,7 @@ fn test_environ() {
         path = env.get("Path")
     }
     assert(path != null)
-    assert_eq(env.get("XRAY_TEST_ENV_EMPTY"), "")
+    assertEqual(env.get("XRAY_TEST_ENV_EMPTY"), "")
     os.unsetenv("XRAY_TEST_ENV_EMPTY")
 }
 
@@ -118,7 +118,7 @@ fn test_tmpdir_skips_empty_env_candidate() {
     os.setenv("TMP", "/tmp/xray_tmpdir_fallback")
     os.setenv("TEMP", "/tmp/xray_tmpdir_wrong")
 
-    assert_eq(os.tmpdir(), "/tmp/xray_tmpdir_fallback")
+    assertEqual(os.tmpdir(), "/tmp/xray_tmpdir_fallback")
 
     if (oldTmpdir != null) {
         os.setenv("TMPDIR", oldTmpdir ?? "")
@@ -151,5 +151,5 @@ fn test_chdir() {
 
     // Restore
     io.chdir(path.from(original))
-    assert_eq(os.getcwd(), original)
+    assertEqual(os.getcwd(), original)
 }

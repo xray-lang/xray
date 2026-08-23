@@ -5,14 +5,14 @@
 @test
 fn test_var_declaration() {
     var x = 10
-    assert_eq(x, 10)
+    assertEqual(x, 10)
 }
 
 @test
 fn test_var_reassign() {
     var x = 10
     x = 20
-    assert_eq(x, 20)
+    assertEqual(x, 20)
 }
 
 @test
@@ -20,7 +20,7 @@ fn test_var_multiple() {
     var a = 1
     var b = 2
     var c = 3
-    assert_eq(a + b + c, 6)
+    assertEqual(a + b + c, 6)
 }
 
 @test
@@ -30,46 +30,46 @@ fn test_var_different_types() {
     var s = "hello"
     var b = true
     var n = null
-    assert_eq(i, 42)
-    assert_eq(f, 3.14)
-    assert_eq(s, "hello")
-    assert_eq(b, true)
-    assert_eq(n, null)
+    assertEqual(i, 42)
+    assertEqual(f, 3.14)
+    assertEqual(s, "hello")
+    assertEqual(b, true)
+    assertEqual(n, null)
 }
 
 // ===== const 基础 =====
 @test
 fn test_const_declaration() {
     const PI = 3.14159
-    assert_eq(PI, 3.14159)
+    assertEqual(PI, 3.14159)
 }
 
 @test
 fn test_const_string() {
     const NAME = "xray"
-    assert_eq(NAME, "xray")
+    assertEqual(NAME, "xray")
 }
 
 @test
 fn test_const_expression() {
     const BASE = 10
     const MULTIPLIED = BASE * 2
-    assert_eq(MULTIPLIED, 20)
+    assertEqual(MULTIPLIED, 20)
 }
 
 @test
 fn test_const_destructure() {
     const (a, b) = (1, 2)
-    assert_eq(a + b, 3)
+    assertEqual(a + b, 3)
 }
 
 // ===== 初始化 =====
 @test
 fn test_expression_init() {
     var x = 5 + 3
-    assert_eq(x, 8)
+    assertEqual(x, 8)
     var y = x * 2
-    assert_eq(y, 16)
+    assertEqual(y, 16)
 }
 
 @test
@@ -78,26 +78,26 @@ fn test_function_call_init() {
         return 42
     }
     var x = getValue()
-    assert_eq(x, 42)
+    assertEqual(x, 42)
 }
 
 // ===== 类型注解 =====
 @test
 fn test_type_annotation_int() {
     var x: i64 = 100
-    assert_eq(x, 100)
+    assertEqual(x, 100)
 }
 
 @test
 fn test_type_annotation_float() {
     var f: f64 = 2.5
-    assert_eq(f, 2.5)
+    assertEqual(f, 2.5)
 }
 
 @test
 fn test_type_annotation_string() {
     var s: string = "typed"
-    assert_eq(s, "typed")
+    assertEqual(s, "typed")
 }
 
 // ===== 边界条件 =====
@@ -106,9 +106,9 @@ fn test_same_name_different_scope() {
     var x = 10
 {
         var x = 20
-        assert_eq(x, 20)
+        assertEqual(x, 20)
     }
-    assert_eq(x, 10)
+    assertEqual(x, 10)
 }
 
 @test
@@ -116,5 +116,5 @@ fn test_reassign_different_type() {
     var x = 10
     x = 20
     // 同类型
-    assert_eq(x, 20)
+    assertEqual(x, 20)
 }

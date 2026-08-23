@@ -5,40 +5,40 @@
 @test
 fn test_map_literal() {
     var m = #{"a": 1, "b": 2, "c": 3}
-    assert_eq(len(m), 3)
+    assertEqual(len(m), 3)
 }
 
 @test
 fn test_empty_map() {
     var m: Map<string, i64> = #{}
-    assert_eq(len(m), 0)
+    assertEqual(len(m), 0)
 }
 
 @test
 fn test_single_entry() {
     var m = #{"key": "value"}
-    assert_eq(len(m), 1)
+    assertEqual(len(m), 1)
 }
 
 // ===== 获取 =====
 @test
 fn test_get_basic() {
     var m = #{"name": "Alice", "age": 30}
-    assert_eq(m.get("name"), "Alice")
-    assert_eq(m.get("age"), 30)
+    assert(m.get("name") == "Alice")
+    assert(m.get("age") == 30)
 }
 
 @test
 fn test_get_missing() {
     var m = #{"a": 1}
-    assert_eq(m.get("b"), null)
+    assertEqual(m.get("b"), null)
 }
 
 @test
 fn test_bracket_access() {
     var m = #{"x": 10, "y": 20}
-    assert_eq(m["x"], 10)
-    assert_eq(m["y"], 20)
+    assertEqual(m["x"], 10)
+    assertEqual(m["y"], 20)
 }
 
 // ===== 设置 =====
@@ -46,31 +46,31 @@ fn test_bracket_access() {
 fn test_set_new() {
     var m: Map<string, string> = #{}
     m.set("key", "value")
-    assert_eq(m.get("key"), "value")
-    assert_eq(len(m), 1)
+    assertEqual(m.get("key"), "value")
+    assertEqual(len(m), 1)
 }
 
 @test
 fn test_set_overwrite() {
     var m = #{"key": "old"}
     m.set("key", "new")
-    assert_eq(m.get("key"), "new")
-    assert_eq(len(m), 1)
+    assertEqual(m.get("key"), "new")
+    assertEqual(len(m), 1)
 }
 
 @test
 fn test_bracket_assign() {
     var m: Map<string, i64> = #{}
     m["x"] = 100
-    assert_eq(m["x"], 100)
+    assertEqual(m["x"], 100)
 }
 
 // ===== 检查 =====
 @test
 fn test_has_key() {
     var m = #{"a": 1, "b": 2}
-    assert_eq(m.containsKey("a"), true)
-    assert_eq(m.containsKey("c"), false)
+    assertEqual(m.containsKey("a"), true)
+    assertEqual(m.containsKey("c"), false)
 }
 
 // ===== 删除 =====
@@ -78,10 +78,10 @@ fn test_has_key() {
 fn test_delete() {
     var m = #{"a": 1, "b": 2, "c": 3}
     m.delete("b")
-    assert_eq(len(m), 2)
-    assert_eq(m.containsKey("b"), false)
-    assert_eq(m.containsKey("a"), true)
-    assert_eq(m.containsKey("c"), true)
+    assertEqual(len(m), 2)
+    assertEqual(m.containsKey("b"), false)
+    assertEqual(m.containsKey("a"), true)
+    assertEqual(m.containsKey("c"), true)
 }
 
 @test
@@ -89,7 +89,7 @@ fn test_delete_missing() {
     var m = #{"a": 1}
     m.delete("b")
     // 不存在的键
-    assert_eq(len(m), 1)
+    assertEqual(len(m), 1)
 }
 
 // ===== 遍历 =====
@@ -100,7 +100,7 @@ fn test_iterate_values() {
     for (k, v in m) {
         sum += v
     }
-    assert_eq(sum, 6)
+    assertEqual(sum, 6)
 }
 
 @test
@@ -110,7 +110,7 @@ fn test_collect_keys() {
     for (k, v in m) {
         keys.push(k)
     }
-    assert_eq(len(keys), 3)
+    assertEqual(len(keys), 3)
 }
 
 // ===== keys/values =====
@@ -118,14 +118,14 @@ fn test_collect_keys() {
 fn test_keys() {
     var m = #{"a": 1, "b": 2}
     var keys = m.keys()
-    assert_eq(len(keys), 2)
+    assertEqual(len(keys), 2)
 }
 
 @test
 fn test_values() {
     var m = #{"a": 1, "b": 2}
     var values = m.values()
-    assert_eq(len(values), 2)
+    assertEqual(len(values), 2)
 }
 
 // ===== 清空 =====
@@ -133,23 +133,23 @@ fn test_values() {
 fn test_clear() {
     var m = #{"a": 1, "b": 2, "c": 3}
     m.clear()
-    assert_eq(len(m), 0)
+    assertEqual(len(m), 0)
 }
 
 // ===== 不同类型的键值 =====
 @test
 fn test_string_keys() {
     var m = #{"hello": 1, "world": 2}
-    assert_eq(m.get("hello"), 1)
+    assertEqual(m.get("hello"), 1)
 }
 
 @test
 fn test_mixed_value_types() {
     var m = #{"int": 42, "str": "hello", "bool": true, "null": null}
-    assert_eq(m.get("int"), 42)
-    assert_eq(m.get("str"), "hello")
-    assert_eq(m.get("bool"), true)
-    assert_eq(m.get("null"), null)
+    assert(m.get("int") == 42)
+    assert(m.get("str") == "hello")
+    assert(m.get("bool") == true)
+    assertEqual(m.get("null"), null)
 }
 
 // ===== 边界条件 =====
@@ -159,8 +159,8 @@ fn test_many_entries() {
     for (var i = 0; i < 100; i++) {
         m.set("key" + i.toString(), i)
     }
-    assert_eq(len(m), 100)
-    assert_eq(m.get("key50"), 50)
+    assertEqual(len(m), 100)
+    assertEqual(m.get("key50"), 50)
 }
 
 @test
@@ -169,6 +169,6 @@ fn test_overwrite_many_times() {
     for (var i = 0; i < 10; i++) {
         m.set("x", i)
     }
-    assert_eq(m.get("x"), 9)
-    assert_eq(len(m), 1)
+    assertEqual(m.get("x"), 9)
+    assertEqual(len(m), 1)
 }

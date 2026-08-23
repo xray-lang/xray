@@ -1,0 +1,43 @@
+// anchor: core-assertion-channel-parity
+
+enum AssertionProbeError { Expected }
+
+var actionCount = 0
+var messageCount = 0
+
+fn assertionMessage() -> string {
+    messageCount = messageCount + 1
+    return "evaluated"
+}
+
+assert(true, assertionMessage())
+assertEqual(7, 7, assertionMessage())
+assertThrows(() -> {
+    actionCount = actionCount + 1
+    throw AssertionProbeError.Expected
+}, assertionMessage())
+assertPanics(() -> {
+    actionCount = actionCount + 1
+    var zero = 0
+    var ignored = 1 / zero
+}, assertionMessage())
+
+// Wrong-channel and normal-return outcomes must become assertion failures,
+// which the outer panic assertion observes without accepting the wrong input.
+assertPanics(() -> {
+    assertThrows(() -> {
+        var zero = 0
+        var ignored = 1 / zero
+    })
+})
+assertPanics(() -> {
+    assertPanics(() -> {
+        throw AssertionProbeError.Expected
+    })
+})
+assertPanics(() -> { assertThrows(() -> {}) })
+assertPanics(() -> { assertPanics(() -> {}) })
+
+assertEqual(actionCount, 2)
+assertEqual(messageCount, 4)
+print("assertion-channels-ok")

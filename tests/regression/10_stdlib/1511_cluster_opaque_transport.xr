@@ -41,8 +41,8 @@ fn test_cluster_transports_only_opaque_envelopes() {
     var erased_delivery = erase_delivery(invalid_topic_delivery)
     assert(erased_delivery is ClusterDelivery)
     var restored_delivery = erased_delivery as ClusterDelivery
-    assert_eq(restored_delivery.name, "InvalidTopic")
-    assert_eq(restored_delivery.ordinal, 1)
+    assertEqual(restored_delivery.name, "InvalidTopic")
+    assertEqual(restored_delivery.ordinal, 1)
 
     var invalid_envelope = mem.allocZeroed(63)
     assert(cluster.send("service.echo", move invalid_envelope) == ClusterDelivery.InvalidEnvelope)
@@ -57,9 +57,9 @@ fn test_cluster_transports_only_opaque_envelopes() {
     assert(cluster.send("service.echo", move payload) == ClusterDelivery.Accepted)
     var received = receive_buffer(inbox)
     var bytes: Slice<u8> = received.asBytes()
-    assert_eq(len(bytes), 64)
-    assert_eq(bytes[0], 41)
-    assert_eq(bytes[63], 42)
+    assertEqual(len(bytes), 64)
+    assertEqual(bytes[0], 41)
+    assertEqual(bytes[63], 42)
 
     var queued = 0
     while (queued < 64) {

@@ -1,8 +1,10 @@
 fn xray_assert_hook_shape(x: i64) -> i64 {
     assert(x >= 0)
-    assert_eq(x, x)
-    assert_ne(x, x + 1)
-    assert_true(true)
-    assert_false(false)
+    assertEqual(x, x)
+    assert(!(x == x + 1))
+    assert(true)
+    assert(!(false))
     return x
 }
+
+xray_assert_hook_shape(7)

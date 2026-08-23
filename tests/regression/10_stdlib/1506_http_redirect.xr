@@ -29,7 +29,7 @@ fn test_permanent_vs_temporary() {
 @test
 fn test_location_header() {
     var resp = { status: 302, headers: #{"Location": "https://example.com/new"} }
-    assert_eq(resp.headers.get("Location"), "https://example.com/new")
+    assertEqual(resp.headers.get("Location"), "https://example.com/new")
 }
 
 @test
@@ -38,8 +38,8 @@ fn test_resolve_redirect() {
         if (loc.indexOf("http://") == 0 || loc.indexOf("https://") == 0) { return loc }
         return base + loc
     }
-    assert_eq(resolve("http://example.com", "/new"), "http://example.com/new")
-    assert_eq(resolve("http://example.com", "https://other.com"), "https://other.com")
+    assertEqual(resolve("http://example.com", "/new"), "http://example.com/new")
+    assertEqual(resolve("http://example.com", "https://other.com"), "https://other.com")
 }
 
 print("All http redirect tests passed")

@@ -13,7 +13,7 @@ fn test_shared_atomic_for_go() {
             }()
         }
     }
-    assert_eq(counter.load(), 3)
+    assertEqual(counter.load(), 3)
 }
 
 @test
@@ -29,7 +29,7 @@ fn test_shared_typeof_for_go() {
             }()
         }
     }
-    assert_eq(ok_count.load(), 3)
+    assertEqual(ok_count.load(), 3)
 }
 
 @test
@@ -49,7 +49,7 @@ fn test_shared_channel_for_go() {
             _ -> 0
         }
     }
-    assert_eq(sum, 3)
+    assertEqual(sum, 3)
 }
 
 @test
@@ -60,5 +60,5 @@ fn test_shared_no_for_baseline() {
         go fn() { counter.add(1) }()
         go fn() { counter.add(1) }()
     }
-    assert_eq(counter.load(), 3)
+    assertEqual(counter.load(), 3)
 }

@@ -8,22 +8,22 @@ import { XmlNode, XmlName, XmlAttribute } from xml
 @test
 fn test_parse_basic() {
     var doc = xml.parse("<root><item>Hello</item></root>")
-    assert_eq(xml.tag(doc) ?? "", "root")
+    assertEqual(xml.tag(doc) ?? "", "root")
 }
 
 @test
 fn test_parse_children() {
     var doc = xml.parse("<root><item>Hello</item></root>")
     var children = xml.children(doc)
-    assert_eq(len(children), 1)
-    assert_eq(xml.tag(children[0]) ?? "", "item")
+    assertEqual(len(children), 1)
+    assertEqual(xml.tag(children[0]) ?? "", "item")
 }
 
 @test
 fn test_parse_text() {
     var doc = xml.parse("<root><item>Hello</item></root>")
     var item = xml.children(doc)[0]
-    assert_eq(xml.textContent(item), "Hello")
+    assertEqual(xml.textContent(item), "Hello")
 }
 
 // ===== Attributes =====
@@ -31,8 +31,8 @@ fn test_parse_text() {
 @test
 fn test_parse_attrs() {
     var doc = xml.parse("<user id=\"123\" name=\"Alice\"/>")
-    assert_eq(xml.attr(doc, "id") ?? "", "123")
-    assert_eq(xml.attr(doc, "name") ?? "", "Alice")
+    assertEqual(xml.attr(doc, "id") ?? "", "123")
+    assertEqual(xml.attr(doc, "name") ?? "", "Alice")
 }
 
 // ===== Nested elements =====
@@ -43,8 +43,8 @@ fn test_parse_deep_nesting() {
     var a = xml.children(doc)[0]
     var b = xml.children(a)[0]
     var c = xml.children(b)[0]
-    assert_eq(xml.tag(c) ?? "", "c")
-    assert_eq(xml.textContent(c), "deep")
+    assertEqual(xml.tag(c) ?? "", "c")
+    assertEqual(xml.textContent(c), "deep")
 }
 
 // ===== Multiple children =====
@@ -52,7 +52,7 @@ fn test_parse_deep_nesting() {
 @test
 fn test_parse_multiple_children() {
     var doc = xml.parse("<list><item>1</item><item>2</item><item>3</item></list>")
-    assert_eq(len(xml.children(doc)), 3)
+    assertEqual(len(xml.children(doc)), 3)
 }
 
 // ===== Create element =====
@@ -60,7 +60,7 @@ fn test_parse_multiple_children() {
 @test
 fn test_create_element() {
     var elem = xml.element("div")
-    assert_eq(xml.tag(elem) ?? "", "div")
+    assertEqual(xml.tag(elem) ?? "", "div")
 }
 
 // ===== Empty element =====
@@ -68,8 +68,8 @@ fn test_create_element() {
 @test
 fn test_parse_empty_element() {
     var doc = xml.parse("<empty/>")
-    assert_eq(xml.tag(doc) ?? "", "empty")
-    assert_eq(len(xml.children(doc)), 0)
+    assertEqual(xml.tag(doc) ?? "", "empty")
+    assertEqual(len(xml.children(doc)), 0)
 }
 
 // ===== Comments =====
@@ -78,7 +78,7 @@ fn test_parse_empty_element() {
 fn test_parse_preserve_comments() {
     var doc = xml.parse("<root><!-- comment --><item/></root>",
         { preserveWhitespace: false, preserveComments: true, preserveCData: true, validateEntities: true })
-    assert_eq(len(xml.children(doc)), 2)
+    assertEqual(len(xml.children(doc)), 2)
 }
 
 // ===== Stringify =====
@@ -87,5 +87,5 @@ fn test_parse_preserve_comments() {
 fn test_stringify_compact() {
     var doc = xml.parse("<msg>Hi</msg>")
     var str = xml.stringify(doc, { indent: 0, declaration: false, encoding: "UTF-8" })
-    assert_eq(str, "<msg>Hi</msg>")
+    assertEqual(str, "<msg>Hi</msg>")
 }

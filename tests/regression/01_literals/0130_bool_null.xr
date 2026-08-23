@@ -4,72 +4,72 @@
 // ===== 布尔值基础 =====
 @test
 fn test_bool_true() {
-    assert_eq(true, true)
+    assertEqual(true, true)
     var b = true
-    assert_eq(b, true)
+    assertEqual(b, true)
 }
 
 @test
 fn test_bool_false() {
-    assert_eq(false, false)
+    assertEqual(false, false)
     var b = false
-    assert_eq(b, false)
+    assertEqual(b, false)
 }
 
 @test
 fn test_bool_equality() {
-    assert_eq(true == true, true)
-    assert_eq(false == false, true)
-    assert_eq(true == false, false)
-    assert_eq(true != false, true)
+    assertEqual(true == true, true)
+    assertEqual(false == false, true)
+    assertEqual(true == false, false)
+    assertEqual(true != false, true)
 }
 
 // ===== 布尔运算 =====
 @test
 fn test_bool_and() {
-    assert_eq(true && true, true)
-    assert_eq(true && false, false)
-    assert_eq(false && true, false)
-    assert_eq(false && false, false)
+    assertEqual(true && true, true)
+    assertEqual(true && false, false)
+    assertEqual(false && true, false)
+    assertEqual(false && false, false)
 }
 
 @test
 fn test_bool_or() {
-    assert_eq(true || true, true)
-    assert_eq(true || false, true)
-    assert_eq(false || true, true)
-    assert_eq(false || false, false)
+    assertEqual(true || true, true)
+    assertEqual(true || false, true)
+    assertEqual(false || true, true)
+    assertEqual(false || false, false)
 }
 
 @test
 fn test_bool_not() {
-    assert_eq(!true, false)
-    assert_eq(!false, true)
-    assert_eq(!!true, true)
+    assertEqual(!true, false)
+    assertEqual(!false, true)
+    assertEqual(!!true, true)
 }
 
 // ===== null 基础 =====
 @test
 fn test_null_basic() {
     var x = null
-    assert_eq(x, null)
-    assert_eq(x == null, true)
+    assertEqual(x, null)
+    assertEqual(x == null, true)
 }
 
 @test
 fn test_null_comparison() {
     var x = null
     var y = null
-    assert_eq(x == y, true)
-    assert_eq(x != null, false)
+    assertEqual(x == y, true)
+    assertEqual(x != null, false)
 }
 
 @test
 fn test_null_vs_value() {
     var x = null
     var y: i64? = 0
-    assert_eq(x == y, false)
-    assert_eq(x != y, true)
+    assertEqual(x == y, false)
+    assertEqual(x != y, true)
 }
 
 // ===== 显式条件 =====
@@ -113,18 +113,18 @@ fn test_nullable_presence_condition() {
 @test
 fn test_nullish_coalesce() {
     var x = null
-    assert_eq(x ?? "default", "default")
+    assertEqual(x ?? "default", "default")
     var y = "value"
-    assert_eq(y ?? "default", "value")
+    assertEqual(y ?? "default", "value")
     var z = 0
-    assert_eq(z ?? 100, 0)
+    assertEqual(z ?? 100, 0)
 }
 
 // ===== 可选链 =====
 @test
 fn test_optional_chain() {
     var obj = null
-    assert_eq(obj?.property, null)
+    assertEqual(obj?.property, null)
     var data = { "name": "test" }
-    assert_eq(data?.name, "test")
+    assertEqual(data?.name, "test")
 }

@@ -46,8 +46,8 @@ fn serveProxyOnce(lst: NetListener, upstreamPort: i64) {
     var client = net.accept(lst)!
     var upstream = net.dial("127.0.0.1", upstreamPort)
     var stats = net.copyBidirectional(client, upstream)
-    assert_true(stats.aToB >= 4)
-    assert_true(stats.bToA >= 4)
+    assert(stats.aToB >= 4)
+    assert(stats.bToA >= 4)
     net.close(client)
     net.close(upstream)
 }
@@ -62,17 +62,17 @@ fn test_shutdown_write_allows_response() {
 
     var c = net.dial("127.0.0.1", port)
     // "body"
-    assert_eq(net.writeBytes(c, Array<u8>([98, 111, 100, 121])), 4)
-    assert_true(net.shutdownWrite(c))
+    assertEqual(net.writeBytes(c, Array<u8>([98, 111, 100, 121])), 4)
+    assert(net.shutdownWrite(c))
 
     var resp = Array<u8>(8)
     var n = net.readInto(c, ref resp)
-    assert_eq(n, 4)
+    assertEqual(n, 4)
     // "done"
-    assert_eq(resp[0], 100)
-    assert_eq(resp[1], 111)
-    assert_eq(resp[2], 110)
-    assert_eq(resp[3], 101)
+    assertEqual(resp[0], 100)
+    assertEqual(resp[1], 111)
+    assertEqual(resp[2], 110)
+    assertEqual(resp[3], 101)
 
     net.close(c)
     net.close(lst)
@@ -97,21 +97,21 @@ fn test_copy_bidirectional_proxy_echo() {
 
     var c = net.dial("127.0.0.1", proxyPort)
     // "ping"
-    assert_eq(net.writeBytes(c, Array<u8>([112, 105, 110, 103])), 4)
+    assertEqual(net.writeBytes(c, Array<u8>([112, 105, 110, 103])), 4)
     var resp = Array<u8>(8)
     var n = net.readInto(c, ref resp)
-    assert_eq(n, 4)
-    assert_eq(resp[0], 112)
-    assert_eq(resp[1], 105)
-    assert_eq(resp[2], 110)
-    assert_eq(resp[3], 103)
-    assert_true(net.shutdownWrite(c))
+    assertEqual(n, 4)
+    assertEqual(resp[0], 112)
+    assertEqual(resp[1], 105)
+    assertEqual(resp[2], 110)
+    assertEqual(resp[3], 103)
+    assert(net.shutdownWrite(c))
 
     // Clean EOF after the proxy drains: readBytes returns null and
     // lastError stays null, so EOF is distinguishable from an error.
     var eof = net.readBytes(c)
-    assert_true(eof == null)
-    assert_true(net.lastError(c) == null)
+    assert(eof == null)
+    assert(net.lastError(c) == null)
 
     net.close(c)
     net.close(proxyLst)

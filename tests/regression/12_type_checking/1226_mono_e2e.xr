@@ -22,43 +22,43 @@ fn wrap<T>(x: T) -> Array<T> {
 fn test_mono_e2e() {
 
     // Explicit type args trigger monomorphization
-    assert_eq(id<i64>(42), 42)
-    assert_eq(id<f64>(3.14), 3.14)
-    assert_eq(id<string>("hello"), "hello")
+    assertEqual(id<i64>(42), 42)
+    assertEqual(id<f64>(3.14), 3.14)
+    assertEqual(id<string>("hello"), "hello")
 
     // bool shares I64 rep with int (rep-dedup)
-    assert_eq(id<bool>(true), true)
+    assertEqual(id<bool>(true), true)
 
     // === Multi-type-parameter monomorphization ===
 
     var (p1a, p1b) = pair<i64, f64>(10, 2.5)
-    assert_eq(p1a, 10)
-    assert_eq(p1b, 2.5)
+    assertEqual(p1a, 10)
+    assertEqual(p1b, 2.5)
 
     var (p2a, p2b) = pair<string, i64>("age", 30)
-    assert_eq(p2a, "age")
-    assert_eq(p2b, 30)
+    assertEqual(p2a, "age")
+    assertEqual(p2b, 30)
 
     // === Generic with computation ===
 
-    assert_eq(add_one<i64>(9), 10)
-    assert_eq(add_one<f64>(1.5), 2.5)
+    assertEqual(add_one<i64>(9), 10)
+    assertEqual(add_one<f64>(1.5), 2.5)
 
     // === Generic returning array ===
 
     var wi = wrap<i64>(77)
-    assert_eq(wi[0], 77)
-    assert_eq(len(wi), 1)
+    assertEqual(wi[0], 77)
+    assertEqual(len(wi), 1)
 
     var ws = wrap<string>("mono")
-    assert_eq(ws[0], "mono")
+    assertEqual(ws[0], "mono")
 
     // === Nested generic calls ===
-    assert_eq(id<i64>(add_one<i64>(99)), 100)
+    assertEqual(id<i64>(add_one<i64>(99)), 100)
 
     // === Multiple calls to same monomorphized version ===
-    assert_eq(id<i64>(1), 1)
-    assert_eq(id<i64>(2), 2)
-    assert_eq(id<i64>(3), 3)
+    assertEqual(id<i64>(1), 1)
+    assertEqual(id<i64>(2), 2)
+    assertEqual(id<i64>(3), 3)
 }
 

@@ -41,9 +41,9 @@ fn test_triple_nested_for_in() {
             }
         }
     }
-    assert_eq(count, 27)
+    assertEqual(count, 27)
     // 111+112+113+121+...+333
-    assert_eq(sum, 5994)
+    assertEqual(sum, 5994)
 }
 
 // ===== Nested for-in with method calls in body =====
@@ -63,7 +63,7 @@ fn test_nested_for_in_with_method_calls() {
         }
     }
     // sum of i*j for i=1..4, j=1..4 = (1+2+3+4)^2 = 100
-    assert_eq(acc.get(), 100)
+    assertEqual(acc.get(), 100)
 }
 
 // ===== Nested for-in with break in inner loop =====
@@ -78,10 +78,10 @@ fn test_nested_for_in_inner_break() {
         }
     }
     // Lower triangle: (1,1), (2,1),(2,2), (3,1),(3,2),(3,3), ...
-    assert_eq(len(pairs), 15)
-    assert_eq(pairs[0], "1,1")
-    assert_eq(pairs[1], "2,1")
-    assert_eq(pairs[2], "2,2")
+    assertEqual(len(pairs), 15)
+    assertEqual(pairs[0], "1,1")
+    assertEqual(pairs[1], "2,1")
+    assertEqual(pairs[2], "2,2")
 }
 
 // ===== Nested for-in with continue in outer loop =====
@@ -98,10 +98,10 @@ fn test_nested_for_in_outer_continue() {
         results.push(i * sum)
     }
     // i=1,3,5; sum=1+2+3=6; results=[6, 18, 30]
-    assert_eq(len(results), 3)
-    assert_eq(results[0], 6)
-    assert_eq(results[1], 18)
-    assert_eq(results[2], 30)
+    assertEqual(len(results), 3)
+    assertEqual(results[0], 6)
+    assertEqual(results[1], 18)
+    assertEqual(results[2], 30)
 }
 
 // ===== Different iterator types nested =====
@@ -138,10 +138,10 @@ fn test_mixed_iterator_types_nested() {
             results.push("${i}:${j}")
         }
     }
-    assert_eq(len(results), 9)
-    assert_eq(results[0], "0:10")
-    assert_eq(results[3], "1:10")
-    assert_eq(results[8], "2:30")
+    assertEqual(len(results), 9)
+    assertEqual(results[0], "0:10")
+    assertEqual(results[3], "1:10")
+    assertEqual(results[8], "2:30")
 }
 
 // ===== For-in with array operations inside =====
@@ -155,10 +155,10 @@ fn test_for_in_with_array_map() {
         results.push(mapped.reduce(fn(a, b) { return a + b }, 0))
     }
     // i=1: sum([1,2,3])=6, i=2: sum([2,4,6])=12, i=3: sum([3,6,9])=18
-    assert_eq(len(results), 3)
-    assert_eq(results[0], 6)
-    assert_eq(results[1], 12)
-    assert_eq(results[2], 18)
+    assertEqual(len(results), 3)
+    assertEqual(results[0], 6)
+    assertEqual(results[1], 12)
+    assertEqual(results[2], 18)
 }
 
 // ===== Nested for-in collecting into shared structure =====
@@ -173,11 +173,11 @@ fn test_nested_for_in_matrix_build() {
         }
         matrix.push(row)
     }
-    assert_eq(len(matrix), 3)
-    assert_eq(len(matrix[0]), 4)
-    assert_eq(matrix[0][0], 0)
-    assert_eq(matrix[1][2], 6)
-    assert_eq(matrix[2][3], 11)
+    assertEqual(len(matrix), 3)
+    assertEqual(len(matrix[0]), 4)
+    assertEqual(matrix[0][0], 0)
+    assertEqual(matrix[1][2], 6)
+    assertEqual(matrix[2][3], 11)
 }
 
 // ===== Iterator reuse across multiple loops =====
@@ -190,8 +190,8 @@ fn test_iterable_reuse() {
     var sum2 = 0
     for (i in r) { sum2 = sum2 + i }
     // Each for-in creates a fresh iterator via iterator()
-    assert_eq(sum1, 6)
-    assert_eq(sum2, 6)
+    assertEqual(sum1, 6)
+    assertEqual(sum2, 6)
 }
 
 // ===== Nested for-in with early return from function =====
@@ -209,8 +209,8 @@ fn find_pair(target: i64) -> string {
 
 @test
 fn test_nested_for_in_early_return() {
-    assert_eq(find_pair(12), "2,6")
-    assert_eq(find_pair(35), "5,7")
+    assertEqual(find_pair(12), "2,6")
+    assertEqual(find_pair(35), "5,7")
 }
 
 // ===== Stress: many iterations =====
@@ -223,7 +223,7 @@ fn test_nested_stress_100x100() {
             count = count + 1
         }
     }
-    assert_eq(count, 10000)
+    assertEqual(count, 10000)
 }
 
 // ===== Iterator creating iterator inside next() =====
@@ -267,10 +267,10 @@ fn test_flatten_iterator() {
     for (v in FlattenIterable(data)) {
         result.push(v)
     }
-    assert_eq(len(result), 6)
-    assert_eq(result[0], 1)
-    assert_eq(result[2], 3)
-    assert_eq(result[5], 6)
+    assertEqual(len(result), 6)
+    assertEqual(result[0], 1)
+    assertEqual(result[2], 3)
+    assertEqual(result[5], 6)
 }
 
 @test
@@ -284,10 +284,10 @@ fn test_nested_flatten_iterators() {
         }
     }
     // 1*10,1*20,1*30,2*10,2*20,2*30,3*10,3*20,3*30,4*10,4*20,4*30
-    assert_eq(len(products), 12)
-    assert_eq(products[0], 10)
-    assert_eq(products[2], 30)
-    assert_eq(products[11], 120)
+    assertEqual(len(products), 12)
+    assertEqual(products[0], 10)
+    assertEqual(products[2], 30)
+    assertEqual(products[11], 120)
 }
 
 // ===== Iterator with complex state mutation =====
@@ -334,10 +334,10 @@ fn test_nested_filtered_ranges() {
         }
     }
     // a: 3,6,9,12,15,18 (6 values); b: 5,10,15,20,25 (5 values)
-    assert_eq(len(pairs), 30)
-    assert_eq(pairs[0], "3x5")
-    assert_eq(pairs[5], "6x5")
-    assert_eq(pairs[29], "18x25")
+    assertEqual(len(pairs), 30)
+    assertEqual(pairs[0], "3x5")
+    assertEqual(pairs[5], "6x5")
+    assertEqual(pairs[29], "18x25")
 }
 
 // ===== for-in with higher-order + method calls on iterator result =====
@@ -356,10 +356,10 @@ fn test_for_in_with_chained_operations() {
     // i=2: [20,40,60]->filter>25->[40,60]->sum=100
     // i=3: [30,60,90]->filter>25->[30,60,90]->sum=180
     // i=4: [40,80,120]->filter>25->[40,80,120]->sum=240
-    assert_eq(results[0], "i=1:sum=30")
-    assert_eq(results[1], "i=2:sum=100")
-    assert_eq(results[2], "i=3:sum=180")
-    assert_eq(results[3], "i=4:sum=240")
+    assertEqual(results[0], "i=1:sum=30")
+    assertEqual(results[1], "i=2:sum=100")
+    assertEqual(results[2], "i=3:sum=180")
+    assertEqual(results[3], "i=4:sum=240")
 }
 
 // ===== Interleaved iterator and findIndex (tests the call_status bug fix) =====
@@ -376,9 +376,9 @@ fn test_iterator_then_findIndex() {
     // i=1: [1,2,3,4,5]->findIndex(>6)=-1
     // i=2: [2,4,6,8,10]->findIndex(>6)=3
     // i=3: [3,6,9,12,15]->findIndex(>6)=2
-    assert_eq(sums[0], -1)
-    assert_eq(sums[1], 3)
-    assert_eq(sums[2], 2)
+    assertEqual(sums[0], -1)
+    assertEqual(sums[1], 3)
+    assertEqual(sums[2], 2)
 }
 
 // ===== Recursive function with iterator =====
@@ -403,9 +403,9 @@ fn test_recursive_with_iterator() {
     var result = collect_custom_range_recursive(0, 2)
     // depth 0: 3 branches, each depth 1: 3 branches, each depth 2: leaf
     // Total: 3 * 3 = 9
-    assert_eq(len(result), 9)
-    assert_eq(result[0], "d0i0:d1i0:leaf:2")
-    assert_eq(result[8], "d0i2:d1i2:leaf:2")
+    assertEqual(len(result), 9)
+    assertEqual(result[0], "d0i0:d1i0:leaf:2")
+    assertEqual(result[8], "d0i2:d1i2:leaf:2")
 }
 
 // ===== 4-deep nested for-in with mixed break/continue =====
@@ -429,5 +429,5 @@ fn test_4deep_nested_break_continue() {
     // a=2: b=0,1,2, each 6 -> 18
     // a=3: skipped
     // a=4: b=0,1,2,3,4, each 6 -> 30
-    assert_eq(count, 66)
+    assertEqual(count, 66)
 }

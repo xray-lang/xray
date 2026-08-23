@@ -8,151 +8,151 @@ import math
 
 @test
 fn test_eq_integers() {
-    assert_eq(5 == 5, true)
-    assert_eq(5 == 6, false)
-    assert_eq(0 == 0, true)
-    assert_eq(-1 == -1, true)
+    assertEqual(5 == 5, true)
+    assertEqual(5 == 6, false)
+    assertEqual(0 == 0, true)
+    assertEqual(-1 == -1, true)
 }
 
 @test
 fn test_eq_floats() {
-    assert_eq(3.14 == 3.14, true)
-    assert_eq(3.14 == 3.15, false)
+    assertEqual(3.14 == 3.14, true)
+    assertEqual(3.14 == 3.15, false)
 }
 
 @test
 fn test_eq_strings() {
-    assert_eq("hello" == "hello", true)
-    assert_eq("hello" == "world", false)
-    assert_eq("" == "", true)
+    assertEqual("hello" == "hello", true)
+    assertEqual("hello" == "world", false)
+    assertEqual("" == "", true)
 }
 
 @test
 fn test_eq_bool() {
-    assert_eq(true == true, true)
-    assert_eq(false == false, true)
-    assert_eq(true == false, false)
+    assertEqual(true == true, true)
+    assertEqual(false == false, true)
+    assertEqual(true == false, false)
 }
 
 @test
 fn test_eq_null() {
-    assert_eq(null == null, true)
+    assertEqual(null == null, true)
     var x = null
-    assert_eq(x == null, true)
+    assertEqual(x == null, true)
 }
 
 // ===== 不等于 =====
 
 @test
 fn test_ne_integers() {
-    assert_eq(5 != 6, true)
-    assert_eq(5 != 5, false)
+    assertEqual(5 != 6, true)
+    assertEqual(5 != 5, false)
 }
 
 @test
 fn test_ne_strings() {
-    assert_eq("a" != "b", true)
-    assert_eq("a" != "a", false)
+    assertEqual("a" != "b", true)
+    assertEqual("a" != "a", false)
 }
 
 @test
 fn test_ne_mixed() {
     var one: i64? = 1
     var text: string? = ""
-    assert_eq(one != null, true)
-    assert_eq(text != null, true)
+    assertEqual(one != null, true)
+    assertEqual(text != null, true)
 }
 
 // ===== 小于 =====
 
 @test
 fn test_lt_integers() {
-    assert_eq(3 < 5, true)
-    assert_eq(5 < 5, false)
-    assert_eq(5 < 3, false)
-    assert_eq(-5 < 0, true)
+    assertEqual(3 < 5, true)
+    assertEqual(5 < 5, false)
+    assertEqual(5 < 3, false)
+    assertEqual(-5 < 0, true)
 }
 
 @test
 fn test_lt_floats() {
-    assert_eq(3.14 < 3.15, true)
-    assert_eq(3.14 < 3.14, false)
+    assertEqual(3.14 < 3.15, true)
+    assertEqual(3.14 < 3.14, false)
 }
 
 @test
 fn test_lt_strings() {
-    assert_eq("a" < "b", true)
-    assert_eq("abc" < "abd", true)
-    assert_eq("b" < "a", false)
+    assertEqual("a" < "b", true)
+    assertEqual("abc" < "abd", true)
+    assertEqual("b" < "a", false)
 }
 
 // ===== 小于等于 =====
 
 @test
 fn test_le_integers() {
-    assert_eq(3 <= 5, true)
-    assert_eq(5 <= 5, true)
-    assert_eq(6 <= 5, false)
+    assertEqual(3 <= 5, true)
+    assertEqual(5 <= 5, true)
+    assertEqual(6 <= 5, false)
 }
 
 @test
 fn test_le_floats() {
-    assert_eq(3.14 <= 3.14, true)
-    assert_eq(3.14 <= 3.15, true)
+    assertEqual(3.14 <= 3.14, true)
+    assertEqual(3.14 <= 3.15, true)
 }
 
 // ===== 大于 =====
 
 @test
 fn test_gt_integers() {
-    assert_eq(5 > 3, true)
-    assert_eq(5 > 5, false)
-    assert_eq(3 > 5, false)
-    assert_eq(0 > -5, true)
+    assertEqual(5 > 3, true)
+    assertEqual(5 > 5, false)
+    assertEqual(3 > 5, false)
+    assertEqual(0 > -5, true)
 }
 
 @test
 fn test_gt_floats() {
-    assert_eq(3.15 > 3.14, true)
-    assert_eq(3.14 > 3.14, false)
+    assertEqual(3.15 > 3.14, true)
+    assertEqual(3.14 > 3.14, false)
 }
 
 @test
 fn test_gt_strings() {
-    assert_eq("b" > "a", true)
-    assert_eq("a" > "b", false)
+    assertEqual("b" > "a", true)
+    assertEqual("a" > "b", false)
 }
 
 // ===== 大于等于 =====
 
 @test
 fn test_ge_integers() {
-    assert_eq(5 >= 3, true)
-    assert_eq(5 >= 5, true)
-    assert_eq(3 >= 5, false)
+    assertEqual(5 >= 3, true)
+    assertEqual(5 >= 5, true)
+    assertEqual(3 >= 5, false)
 }
 
 @test
 fn test_ge_floats() {
-    assert_eq(3.14 >= 3.14, true)
-    assert_eq(3.15 >= 3.14, true)
+    assertEqual(3.14 >= 3.14, true)
+    assertEqual(3.15 >= 3.14, true)
 }
 
 // ===== 边界条件 =====
 
 @test
 fn test_compare_with_zero() {
-    assert_eq(0 == 0, true)
-    assert_eq(0 < 1, true)
-    assert_eq(0 > -1, true)
-    assert_eq(-0.0 == 0.0, true)
+    assertEqual(0 == 0, true)
+    assertEqual(0 < 1, true)
+    assertEqual(0 > -1, true)
+    assertEqual(-0.0 == 0.0, true)
 }
 
 @test
 fn test_chain_comparison() {
     var x = 5
-    assert_eq(3 < x && x < 10, true)
-    assert_eq(0 <= x && x <= 10, true)
+    assertEqual(3 < x && x < 10, true)
+    assertEqual(0 <= x && x <= 10, true)
 }
 
 fn rt_numeric_lt(a: i64 | f64, b: i64 | f64) -> bool {
@@ -170,25 +170,25 @@ fn rt_numeric_eq(a: i64 | f64, b: i64 | f64) -> bool {
 @test
 fn test_runtime_float_comparison_jit() {
     for (var i = 0; i < 260; i++) {
-        assert_eq(rt_numeric_lt(1.25, 2.5), true)
-        assert_eq(rt_numeric_lt(2.5, 1.25), false)
-        assert_eq(rt_numeric_le(2.5, 2.5), true)
-        assert_eq(rt_numeric_le(3.5, 2.5), false)
-        assert_eq(rt_numeric_eq(2.5, 2.5), true)
-        assert_eq(rt_numeric_eq(2.5, 2.75), false)
+        assertEqual(rt_numeric_lt(1.25, 2.5), true)
+        assertEqual(rt_numeric_lt(2.5, 1.25), false)
+        assertEqual(rt_numeric_le(2.5, 2.5), true)
+        assertEqual(rt_numeric_le(3.5, 2.5), false)
+        assertEqual(rt_numeric_eq(2.5, 2.5), true)
+        assertEqual(rt_numeric_eq(2.5, 2.75), false)
     }
 }
 
 @test
 fn test_float_nan_comparison() {
-    assert_eq(math.NAN == math.NAN, false)
-    assert_eq(math.NAN != math.NAN, true)
-    assert_eq(math.NAN < 1.0, false)
-    assert_eq(math.NAN <= 1.0, false)
+    assertEqual(math.NAN == math.NAN, false)
+    assertEqual(math.NAN != math.NAN, true)
+    assertEqual(math.NAN < 1.0, false)
+    assertEqual(math.NAN <= 1.0, false)
 
     for (var i = 0; i < 260; i++) {
-        assert_eq(rt_numeric_eq(math.NAN, math.NAN), false)
-        assert_eq(rt_numeric_lt(math.NAN, 1.0), false)
-        assert_eq(rt_numeric_le(math.NAN, 1.0), false)
+        assertEqual(rt_numeric_eq(math.NAN, math.NAN), false)
+        assertEqual(rt_numeric_lt(math.NAN, 1.0), false)
+        assertEqual(rt_numeric_le(math.NAN, 1.0), false)
     }
 }

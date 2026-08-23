@@ -68,8 +68,8 @@ fn test_monomorphic_dispatch() {
     for (var i = 0; i < 10; i++) {
         total += dog.legs()
     }
-    assert_eq(total, 40)
-    assert_eq(dog.speak(), "Rex says woof")
+    assertEqual(total, 40)
+    assertEqual(dog.speak(), "Rex says woof")
 }
 
 // Polymorphic call site: Dog and Cat
@@ -80,9 +80,9 @@ fn test_polymorphic_dispatch() {
     for (var i = 0; i < len(animals); i++) {
         results.push(animals[i].speak())
     }
-    assert_eq(results[0], "Rex says woof")
-    assert_eq(results[1], "Whiskers says meow")
-    assert_eq(results[2], "Buddy says woof")
+    assertEqual(results[0], "Rex says woof")
+    assertEqual(results[1], "Whiskers says meow")
+    assertEqual(results[2], "Buddy says woof")
 }
 
 // Megamorphic: Dog, Cat, Bird
@@ -93,7 +93,7 @@ fn test_megamorphic_dispatch() {
     for (var i = 0; i < len(animals); i++) {
         total_legs += animals[i].legs()
     }
-    assert_eq(total_legs, 10)  // 4 + 4 + 2
+    assertEqual(total_legs, 10)  // 4 + 4 + 2
 }
 
 // Method with side effects through virtual dispatch
@@ -104,9 +104,9 @@ fn test_virtual_dispatch_with_state() {
     for (var i = 0; i < 5; i++) {
         results.push(dog.speak())
     }
-    assert_eq(len(results), 5)
+    assertEqual(len(results), 5)
     for (var i = 0; i < 5; i++) {
-        assert_eq(results[i], "Max says woof")
+        assertEqual(results[i], "Max says woof")
     }
 }
 
@@ -115,8 +115,8 @@ fn test_virtual_dispatch_with_state() {
 fn test_base_and_derived() {
     var base = Animal("Generic")
     var derived = Dog("Specific")
-    assert_eq(base.speak(), "Generic says ...")
-    assert_eq(derived.speak(), "Specific says woof")
-    assert_eq(base.legs(), 0)
-    assert_eq(derived.legs(), 4)
+    assertEqual(base.speak(), "Generic says ...")
+    assertEqual(derived.speak(), "Specific says woof")
+    assertEqual(base.legs(), 0)
+    assertEqual(derived.legs(), 4)
 }

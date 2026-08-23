@@ -42,7 +42,7 @@ fn test_simple_pipeline() {
     var result = recvValue(ch3)
     // (0+1+2+...+9) * 2 = 45 * 2 = 90
     print("流水线结果:", result)
-    assert_eq(result, 90)
+    assertEqual(result, 90)
     print("✓ 简单流水线测试通过")
 }
 
@@ -92,7 +92,7 @@ fn test_transform_pipeline() {
     // 平方: 0,4,16,36,64,100,144,196,256,324
     // 总和: 1140
     print("转换流水线结果:", total)
-    assert_eq(total, 1140)
+    assertEqual(total, 1140)
     print("✓ 转换流水线测试通过")
 }
 
@@ -125,7 +125,7 @@ fn test_parallel_pipeline() {
         results.push(recvValue(output))
     }
     print("并行流水线结果数:", len(results))
-    assert_eq(len(results), 20)
+    assertEqual(len(results), 20)
     print("✓ 并行流水线测试通过")
 }
 

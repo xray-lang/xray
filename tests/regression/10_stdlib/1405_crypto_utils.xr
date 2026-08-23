@@ -13,22 +13,22 @@ import crypto
 
 @test
 fn test_timing_safe_equal_same() {
-    assert_true(crypto.timingSafeEqual("hello", "hello"))
+    assert(crypto.timingSafeEqual("hello", "hello"))
 }
 
 @test
 fn test_timing_safe_equal_different() {
-    assert_true(!crypto.timingSafeEqual("hello", "world"))
+    assert(!crypto.timingSafeEqual("hello", "world"))
 }
 
 @test
 fn test_timing_safe_equal_different_length() {
-    assert_true(!crypto.timingSafeEqual("short", "longer string"))
+    assert(!crypto.timingSafeEqual("short", "longer string"))
 }
 
 @test
 fn test_timing_safe_equal_empty() {
-    assert_true(crypto.timingSafeEqual("", ""))
+    assert(crypto.timingSafeEqual("", ""))
 }
 
 @test
@@ -36,14 +36,14 @@ fn test_timing_safe_equal_hmac_verify() {
     // Typical usage: verify HMAC
     var expected = crypto.hmac("sha256", "secret", "data")!
     var actual = crypto.hmac("sha256", "secret", "data")!
-    assert_true(crypto.timingSafeEqual(expected, actual))
+    assert(crypto.timingSafeEqual(expected, actual))
 }
 
 @test
 fn test_timing_safe_equal_hmac_mismatch() {
     var expected = crypto.hmac("sha256", "secret", "data")!
     var tampered = crypto.hmac("sha256", "secret", "tampered")!
-    assert_true(!crypto.timingSafeEqual(expected, tampered))
+    assert(!crypto.timingSafeEqual(expected, tampered))
 }
 
 // ============================================================
@@ -52,16 +52,16 @@ fn test_timing_safe_equal_hmac_mismatch() {
 
 @test
 fn test_all_hash_lengths() {
-    assert_eq(len(crypto.md5("x")), 32)
-    assert_eq(len(crypto.sha1("x")), 40)
-    assert_eq(len(crypto.sha256("x")), 64)
-    assert_eq(len(crypto.sha512("x")), 128)
+    assertEqual(len(crypto.md5("x")), 32)
+    assertEqual(len(crypto.sha1("x")), 40)
+    assertEqual(len(crypto.sha256("x")), 64)
+    assertEqual(len(crypto.sha512("x")), 128)
 }
 
 @test
 fn test_all_hmac_lengths() {
-    assert_eq(len(crypto.hmac("md5", "k", "d")!), 32)
-    assert_eq(len(crypto.hmac("sha1", "k", "d")!), 40)
-    assert_eq(len(crypto.hmac("sha256", "k", "d")!), 64)
-    assert_eq(len(crypto.hmac("sha512", "k", "d")!), 128)
+    assertEqual(len(crypto.hmac("md5", "k", "d")!), 32)
+    assertEqual(len(crypto.hmac("sha1", "k", "d")!), 40)
+    assertEqual(len(crypto.hmac("sha256", "k", "d")!), 64)
+    assertEqual(len(crypto.hmac("sha512", "k", "d")!), 128)
 }

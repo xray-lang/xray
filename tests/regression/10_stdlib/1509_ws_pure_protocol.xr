@@ -69,7 +69,7 @@ fn startRejectingUpgradeServer(port: i64, running: Atomic<bool>) {
 @test
 fn test_accept_key_and_upgrade_response() {
     var key = "dGhlIHNhbXBsZSBub25jZQ=="
-    assert_eq(ws.acceptKey(key), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+    assertEqual(ws.acceptKey(key), "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
 
     var response = ws.upgradeResponse(key)
     assert(response.contains("HTTP/1.1 101 Switching Protocols\r\n"))
@@ -90,9 +90,9 @@ fn test_upgrade_request_and_protocol_pick() {
         "Sec-WebSocket-Protocol: superchat, chat\r\n\r\n"
 
     var parsed = ws.parseUpgradeRequest(headers, ["chat", "superchat"])!
-    assert_eq(parsed.protocol!, "chat")
+    assertEqual(parsed.protocol!, "chat")
     var fallback = ws.parseUpgradeRequest(headers, ["missing", "superchat"])!
-    assert_eq(fallback.protocol!, "superchat")
+    assertEqual(fallback.protocol!, "superchat")
     assert(ws.parseUpgradeRequest(headers.replace("Connection: keep-alive, Upgrade", "Connection: keep-alive"), ["chat"]) == null)
     assert(ws.parseUpgradeRequest(headers.replace(key, "bad"), ["chat"]) == null)
 }
@@ -103,22 +103,22 @@ fn test_connect_rejects_invalid_urls_before_network() {
     // error is set, before any socket is touched.
     var options = WsConnectOptions(25, 0, 40, 4096)
     var zeroPort = ws.connect("ws://example.com:0/", options)
-    assert_eq(zeroPort.error, "URL parse error")
+    assertEqual(zeroPort.error, "URL parse error")
 
     var badPort = ws.connect("ws://example.com:abc/", null)
-    assert_eq(badPort.error, "URL parse error")
+    assertEqual(badPort.error, "URL parse error")
 
     var tooLargePort = ws.connect("ws://example.com:99999/", null)
-    assert_eq(tooLargePort.error, "URL parse error")
+    assertEqual(tooLargePort.error, "URL parse error")
 
     var emptyHost = ws.connect("ws://:80/", null)
-    assert_eq(emptyHost.error, "URL parse error")
+    assertEqual(emptyHost.error, "URL parse error")
 
     var fragment = ws.connect("ws://example.com/#frag", null)
-    assert_eq(fragment.error, "URL parse error")
+    assertEqual(fragment.error, "URL parse error")
 
     var badIpv6 = ws.connect("ws://[::1]x/", null)
-    assert_eq(badIpv6.error, "URL parse error")
+    assertEqual(badIpv6.error, "URL parse error")
 }
 
 @test
@@ -131,7 +131,7 @@ fn test_connect_rejects_missing_upgrade_response_header() {
     go serveMissingUpgradeResponse(lst)
 
     var conn = ws.connect("ws://127.0.0.1:" + port.toString() + "/", null)
-    assert_eq(conn.error, "Handshake failed")
+    assertEqual(conn.error, "Handshake failed")
 }
 
 @test
@@ -167,35 +167,35 @@ fn test_serve_rejects_missing_connection_upgrade_header() {
 @test
 fn test_mask_payload_and_unmasked_frame() {
     var masked = ws.maskPayload(Array<u8>([1, 2, 3, 4, 5]), Array<u8>([1, 1, 1, 1]))
-    assert_eq(masked[0], 0)
-    assert_eq(masked[1], 3)
-    assert_eq(masked[2], 2)
-    assert_eq(masked[3], 5)
-    assert_eq(masked[4], 4)
+    assertEqual(masked[0], 0)
+    assertEqual(masked[1], 3)
+    assertEqual(masked[2], 2)
+    assertEqual(masked[3], 5)
+    assertEqual(masked[4], 4)
 
     var f = ws.frame("Hi".copyBytes(), 1, false)
-    assert_eq(len(f), 4)
-    assert_eq(f[0], 129)
-    assert_eq(f[1], 2)
-    assert_eq(f[2], 72)
-    assert_eq(f[3], 105)
+    assertEqual(len(f), 4)
+    assertEqual(f[0], 129)
+    assertEqual(f[1], 2)
+    assertEqual(f[2], 72)
+    assertEqual(f[3], 105)
 
     var payload = Array<u8>(126)
     var ext = ws.frame(payload, 2, false)
-    assert_eq(ext[0], 130)
-    assert_eq(ext[1], 126)
-    assert_eq(ext[2], 0)
-    assert_eq(ext[3], 126)
+    assertEqual(ext[0], 130)
+    assertEqual(ext[1], 126)
+    assertEqual(ext[2], 0)
+    assertEqual(ext[3], 126)
 }
 
 @test
 fn test_close_payload_decodes_utf8_reason() {
     var close = ws.parseClosePayload(Array<u8>([3, 232, 79, 75]))!
-    assert_eq(close.code, 1000)
-    assert_eq(close.reason, "OK")
+    assertEqual(close.code, 1000)
+    assertEqual(close.reason, "OK")
 
     var unicode = ws.parseClosePayload(Array<u8>([3, 232, 195, 169]))!
-    assert_eq(unicode.reason, "é")
+    assertEqual(unicode.reason, "é")
     assert(ws.parseClosePayload(Array<u8>([3, 232, 192, 175])) == null)
 }
 

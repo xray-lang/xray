@@ -78,12 +78,12 @@ fn test_cbrt_negative() {
 
 @test
 fn test_trunc_positive_float() {
-    assert_eq(math.trunc(3.9), 3)
+    assertEqual(math.trunc(3.9), 3)
 }
 
 @test
 fn test_trunc_negative_float() {
-    assert_eq(math.trunc(-3.9), -3)
+    assertEqual(math.trunc(-3.9), -3)
 }
 
 // ===== fmod =====
@@ -208,13 +208,13 @@ fn test_epsilon() {
 @test
 fn test_max_int() {
     assert(math.MAX_I64 > 0)
-    assert_eq(typeName(math.MAX_I64) == "i64", true)
+    assertEqual(typeName(math.MAX_I64) == "i64", true)
 }
 
 @test
 fn test_min_int() {
     assert(math.MIN_I64 < 0)
-    assert_eq(typeName(math.MIN_I64) == "i64", true)
+    assertEqual(typeName(math.MIN_I64) == "i64", true)
 }
 
 @test

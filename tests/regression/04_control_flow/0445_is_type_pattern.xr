@@ -8,8 +8,8 @@ fn test_is_pattern_no_binding() {
             is string -> "text",
         }
     }
-    assert_eq(classify(1), "integer")
-    assert_eq(classify("foo"), "text")
+    assertEqual(classify(1), "integer")
+    assertEqual(classify("foo"), "text")
 }
 
 @test
@@ -20,8 +20,8 @@ fn test_is_pattern_with_binding() {
             is string s -> "str:" + s,
         }
     }
-    assert_eq(describe(42), "int:42")
-    assert_eq(describe("hi"), "str:hi")
+    assertEqual(describe(42), "int:42")
+    assertEqual(describe("hi"), "str:hi")
 }
 
 @test
@@ -33,9 +33,9 @@ fn test_is_pattern_three_arms() {
             is bool -> 3,
         }
     }
-    assert_eq(tag(1), 1)
-    assert_eq(tag("a"), 2)
-    assert_eq(tag(true), 3)
+    assertEqual(tag(1), 1)
+    assertEqual(tag("a"), 2)
+    assertEqual(tag(true), 3)
 }
 
 @test
@@ -46,7 +46,7 @@ fn test_is_pattern_with_wildcard_fallback() {
             _ -> "other",
         }
     }
-    assert_eq(check(1), "i")
-    assert_eq(check("x"), "other")
-    assert_eq(check(1.5), "other")
+    assertEqual(check(1), "i")
+    assertEqual(check("x"), "other")
+    assertEqual(check(1.5), "other")
 }

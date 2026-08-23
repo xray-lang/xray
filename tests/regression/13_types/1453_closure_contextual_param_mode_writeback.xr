@@ -10,8 +10,8 @@ fn test_contextual_read_closure_reads_value() {
         return x + 100
     }
     var v = 5
-    assert_eq(reader(v), 105)
-    assert_eq(v, 5)
+    assertEqual(reader(v), 105)
+    assertEqual(v, 5)
 }
 
 @test
@@ -21,8 +21,8 @@ fn test_contextual_ref_closure_writes_back() {
         return x
     }
     var v = 1
-    assert_eq(bump(ref v), 2)
-    assert_eq(v, 2)
+    assertEqual(bump(ref v), 2)
+    assertEqual(v, 2)
 }
 
 @test
@@ -31,5 +31,5 @@ fn test_contextual_move_closure_consumes_owner() {
         return len(x)
     }
     var values = [1, 2, 3]
-    assert_eq(take(move values), 3)
+    assertEqual(take(move values), 3)
 }

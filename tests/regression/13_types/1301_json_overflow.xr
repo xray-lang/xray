@@ -6,9 +6,9 @@ fn test_json_object_growth() {
     for (i in 0..32) {
         obj.set("f" + string(i), i)
     }
-    assert_eq(len(obj), 32)
-    assert_eq(JSON.require<i64>(obj, ["f0"]), 0)
-    assert_eq(JSON.require<i64>(obj, ["f31"]), 31)
+    assertEqual(len(obj), 32)
+    assertEqual(JSON.require<i64>(obj, ["f0"]), 0)
+    assertEqual(JSON.require<i64>(obj, ["f31"]), 31)
 }
 
 @test
@@ -16,6 +16,6 @@ fn test_json_object_update_after_growth() {
     var obj: JSON.Object = JSON.parseObject("{}")
     for (i in 0..20) { obj.set("k" + string(i), i) }
     obj.set("k7", 700)
-    assert_eq(len(obj), 20)
-    assert_eq(JSON.require<i64>(obj, ["k7"]), 700)
+    assertEqual(len(obj), 20)
+    assertEqual(JSON.require<i64>(obj, ["k7"]), 700)
 }

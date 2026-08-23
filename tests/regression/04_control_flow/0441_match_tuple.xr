@@ -11,7 +11,7 @@ fn test_match_tuple_all_literal() {
         (1, 1) -> "one-one"
         _ -> "other"
     }
-    assert_eq(result, "origin")
+    assertEqual(result, "origin")
 }
 
 // ===== tuple 中混合通配符 =====
@@ -25,10 +25,10 @@ fn test_match_tuple_wildcard_slot() {
             _ -> "general"
         }
     }
-    assert_eq(axis((0, 0)), "origin")
-    assert_eq(axis((0, 5)), "y-axis")
-    assert_eq(axis((7, 0)), "x-axis")
-    assert_eq(axis((3, 4)), "general")
+    assertEqual(axis((0, 0)), "origin")
+    assertEqual(axis((0, 5)), "y-axis")
+    assertEqual(axis((7, 0)), "x-axis")
+    assertEqual(axis((3, 4)), "general")
 }
 
 // ===== tuple 中绑定捕获 =====
@@ -40,8 +40,8 @@ fn test_match_tuple_binding() {
             (x, _) -> x
         }
     }
-    assert_eq(first_or_zero((0, 99)), 0)
-    assert_eq(first_or_zero((42, 99)), 42)
+    assertEqual(first_or_zero((0, 99)), 0)
+    assertEqual(first_or_zero((42, 99)), 42)
 }
 
 // ===== tuple binding + guard =====
@@ -54,9 +54,9 @@ fn test_match_tuple_binding_with_guard() {
             _ -> "general"
         }
     }
-    assert_eq(classify((4, 4)), "diagonal")
-    assert_eq(classify((3, -3)), "anti-diagonal")
-    assert_eq(classify((1, 2)), "general")
+    assertEqual(classify((4, 4)), "diagonal")
+    assertEqual(classify((3, -3)), "anti-diagonal")
+    assertEqual(classify((1, 2)), "general")
 }
 
 // ===== 嵌套 tuple pattern =====
@@ -68,8 +68,8 @@ fn test_match_tuple_nested() {
             ((a, _), _) -> a
         }
     }
-    assert_eq(extract(((0, 9), 7)), -1)
-    assert_eq(extract(((42, 9), 7)), 42)
+    assertEqual(extract(((0, 9), 7)), -1)
+    assertEqual(extract(((42, 9), 7)), 42)
 }
 
 // ===== tuple-of-tuple 完整解构 =====
@@ -80,7 +80,7 @@ fn test_match_tuple_full_destructure() {
             ((a, b), c) -> a + b + c
         }
     }
-    assert_eq(flatten(((1, 2), 3)), 6)
+    assertEqual(flatten(((1, 2), 3)), 6)
 }
 
 // ===== 异构元素类型 =====
@@ -94,9 +94,9 @@ fn test_match_tuple_heterogeneous() {
             _ -> "fallback"
         }
     }
-    assert_eq(describe((0, "abc")), "zero with anything")
+    assertEqual(describe((0, "abc")), "zero with anything")
     // Top-down match: `(_, "key")` matches before the guarded arm.
-    assert_eq(describe((5, "key")), "anything with key")
-    assert_eq(describe((7, "x")), "positive number")
-    assert_eq(describe((-1, "x")), "fallback")
+    assertEqual(describe((5, "key")), "anything with key")
+    assertEqual(describe((7, "x")), "positive number")
+    assertEqual(describe((-1, "x")), "fallback")
 }

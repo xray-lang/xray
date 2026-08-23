@@ -22,7 +22,7 @@ fn test_closure_capture() {
     // 1
     print("主协程 increment:", increment())
     // 2
-    assert_eq(counter, 2)
+    assertEqual(counter, 2)
     print("✓ 闭包捕获测试通过")
 }
 
@@ -44,7 +44,7 @@ fn test_closure_in_go() {
     await task
     var result = recvValue(result_ch)
     print("闭包协程结果:", result)
-    assert_eq(result, 15)
+    assertEqual(result, 15)
     print("✓ 协程中闭包测试通过")
 }
 
@@ -77,7 +77,7 @@ fn test_multiple_closures() {
     print("结果:", r1, r2, r3)
     // 结果顺序可能不同，检查总和
     var sum = r1 + r2 + r3
-    assert_eq(sum, 20 + 30 + 40)
+    assertEqual(sum, 20 + 30 + 40)
     // 90
     print("✓ 多闭包测试通过")
 }
@@ -102,7 +102,7 @@ fn test_nested_closure() {
     await task
     var result = recvValue(ch)
     print("嵌套闭包结果:", result)
-    assert_eq(result, 6)
+    assertEqual(result, 6)
     print("✓ 嵌套闭包测试通过")
 }
 

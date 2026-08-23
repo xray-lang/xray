@@ -7,11 +7,11 @@ fn test_block_scope_basic() {
     var x = 1
 {
         var y = 2
-        assert_eq(x, 1)
+        assertEqual(x, 1)
         // 外层可见
-        assert_eq(y, 2)
+        assertEqual(y, 2)
     }
-    assert_eq(x, 1)
+    assertEqual(x, 1)
 }
 
 @test
@@ -21,11 +21,11 @@ fn test_nested_blocks() {
         var b = 2
 {
             var c = 3
-            assert_eq(a + b + c, 6)
+            assertEqual(a + b + c, 6)
         }
-        assert_eq(a + b, 3)
+        assertEqual(a + b, 3)
     }
-    assert_eq(a, 1)
+    assertEqual(a, 1)
 }
 
 // ===== 变量遮蔽 =====
@@ -35,15 +35,16 @@ fn test_shadow_same_scope_different_block() {
 {
         var x = 20
         // 遮蔽外层 x
-        assert_eq(x, 20)
+        assertEqual(x, 20)
 {
             var x = 30
             // 再次遮蔽
-            assert_eq(x, 30)
+            assertEqual(x, 30)
         }
-        assert_eq(x, 20)
+        assertEqual(x, 20)
     }
-    assert_eq(x, 10)
+    assertEqual(typeName(x), "i64")
+    assertEqual(string(x), "10")
 }
 
 @test
@@ -53,9 +54,10 @@ fn test_shadow_with_different_type() {
 {
         var x = "hello"
         // string（遮蔽）
-        assert_eq(x, "hello")
+        assertEqual(x, "hello")
     }
-    assert_eq(x, 10)
+    assertEqual(typeName(x), "i64")
+    assertEqual(string(x), "10")
 }
 
 // ===== 函数作用域 =====
@@ -66,8 +68,8 @@ fn test_function_scope() {
         var x = 200
         return x
     }
-    assert_eq(inner(), 200)
-    assert_eq(x, 100)
+    assertEqual(inner(), 200)
+    assertEqual(x, 100)
 }
 
 @test
@@ -76,7 +78,7 @@ fn test_closure_captures_outer() {
     fn inner() -> i64 {
         return x
     }
-    assert_eq(inner(), 10)
+    assertEqual(inner(), 10)
 }
 
 @test
@@ -86,7 +88,7 @@ fn test_closure_modifies_outer() {
         x = 20
     }
     modify()
-    assert_eq(x, 20)
+    assertEqual(x, 20)
 }
 
 // ===== 循环作用域 =====
@@ -96,7 +98,7 @@ fn test_for_loop_scope() {
     for (var i = 0; i < 3; i++) {
         sum += i
     }
-    assert_eq(sum, 3)
+    assertEqual(sum, 3)
 }
 
 @test
@@ -108,7 +110,7 @@ fn test_while_loop_scope() {
         sum += temp
         i++
     }
-    assert_eq(sum, 6)
+    assertEqual(sum, 6)
 }
 
 // ===== if 作用域 =====
@@ -119,7 +121,7 @@ fn test_if_scope() {
         var x = 10
         result = x
     }
-    assert_eq(result, 10)
+    assertEqual(result, 10)
 }
 
 @test
@@ -133,7 +135,7 @@ fn test_if_else_scope() {
         var y = 20
         result = y
     }
-    assert_eq(result, 20)
+    assertEqual(result, 20)
 }
 
 // ===== 边界条件 =====
@@ -148,7 +150,7 @@ fn test_deeply_nested() {
                 var d = 4
 {
                     var e = 5
-                    assert_eq(a + b + c + d + e, 15)
+                    assertEqual(a + b + c + d + e, 15)
                 }
             }
         }

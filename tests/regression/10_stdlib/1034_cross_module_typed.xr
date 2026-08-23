@@ -19,25 +19,25 @@ import {
 @test
 fn test_imported_fn_int() {
     var r = double_it(21)
-    assert_eq(r, 42)
+    assertEqual(r, 42)
 }
 
 @test
 fn test_imported_fn_string() {
     var s = greet("xray")
-    assert_eq(s, "Hello, xray")
+    assertEqual(s, "Hello, xray")
 }
 
 @test
 fn test_imported_const() {
-    assert_eq(MAGIC, 42)
+    assertEqual(MAGIC, 42)
 }
 
 @test
 fn test_imported_class() {
     var p = Point(3, 4)
-    assert_eq(p.x, 3)
-    assert_eq(p.y, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
 }
 
 @test
@@ -45,8 +45,8 @@ fn test_imported_class_with_new() {
     // Regression: previously threw "method 'constructor' called on unsupported type"
     // when constructing an imported class with the `new` keyword.
     var p = Point(7, 24)
-    assert_eq(p.x, 7)
-    assert_eq(p.y, 24)
+    assertEqual(p.x, 7)
+    assertEqual(p.y, 24)
 }
 
 @test
@@ -54,7 +54,7 @@ fn test_imported_in_nested_fn() {
     fn inner() -> i64 {
         return double_it(10)
     }
-    assert_eq(inner(), 20)
+    assertEqual(inner(), 20)
 }
 
 @test
@@ -62,7 +62,7 @@ fn test_imported_const_nested() {
     fn get_magic() -> i64 {
         return MAGIC
     }
-    assert_eq(get_magic(), 42)
+    assertEqual(get_magic(), 42)
 }
 
 @test
@@ -71,9 +71,9 @@ fn test_imported_byte_u8_canonical_identity() {
     var uint8Array: Array<u8> = [4, 5, 6]
     var fromModule: Array<u8> = make_uint8_bytes()
 
-    assert_eq(first_byte(uint8Array), 4)
-    assert_eq(second_uint8(byteArray), 2)
-    assert_eq(fromModule[2], 9)
+    assertEqual(first_byte(uint8Array), 4)
+    assertEqual(second_uint8(byteArray), 2)
+    assertEqual(fromModule[2], 9)
 }
 
 @test
@@ -81,16 +81,16 @@ fn test_imported_byte_u8_slice_and_method_identity() {
     var byteArray: Array<u8> = [10, 20, 30]
     var uint8Array: Array<u8> = [40, 50, 60]
 
-    assert_eq(sum_byte_slice(uint8Array[:]), 90)
-    assert_eq(sum_uint8_slice(byteArray[:]), 30)
+    assertEqual(sum_byte_slice(uint8Array[:]), 90)
+    assertEqual(sum_uint8_slice(byteArray[:]), 30)
 
     var appendToByte: Array<u8> = [1]
     appendToByte.appendFrom(uint8Array[0:2])
-    assert_eq(len(appendToByte), 3)
-    assert_eq(appendToByte[2], 50)
+    assertEqual(len(appendToByte), 3)
+    assertEqual(appendToByte[2], 50)
 
     var appendToUint8: Array<u8> = [2]
     appendToUint8.appendFrom(byteArray[1:3])
-    assert_eq(len(appendToUint8), 3)
-    assert_eq(appendToUint8[1], 20)
+    assertEqual(len(appendToUint8), 3)
+    assertEqual(appendToUint8[1], 20)
 }

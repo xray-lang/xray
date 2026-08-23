@@ -11,9 +11,9 @@ fn test_selective_import_consumes_owned_param_summary() {
     forwardImportedArray(ch, move xs)
 
     var got = recvImportedArray(ch)
-    assert_eq(len(got), 2)
-    assert_eq(got[0], 21)
-    assert_eq(got[1], 22)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 21)
+    assertEqual(got[1], 22)
     ch.close()
 }
 
@@ -27,8 +27,8 @@ fn test_namespace_import_consumes_owned_param_summary() {
     transfer.forwardImportedArray(ch, move xs)
 
     var got = transfer.recvImportedArray(ch)
-    assert_eq(len(got), 2)
-    assert_eq(got[0], 31)
-    assert_eq(got[1], 32)
+    assertEqual(len(got), 2)
+    assertEqual(got[0], 31)
+    assertEqual(got[1], 32)
     ch.close()
 }

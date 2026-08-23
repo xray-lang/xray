@@ -12,20 +12,20 @@ fn test_recv_match_keeps_payload_status() {
         Recv.Value(v) -> v
         _ -> -1
     }
-    assert_eq(zero, 0)
+    assertEqual(zero, 0)
 
     var nil = match (ch.recv()) {
         Recv.Value(v) -> v
         _ -> 7
     }
-    assert_eq(nil, null)
+    assertEqual(nil, null)
 
     ch.close()
     var closed = match (ch.recv()) {
         Recv.Value(_) -> false
         _ -> true
     }
-    assert_eq(closed, true)
+    assertEqual(closed, true)
 }
 
 @test
@@ -37,7 +37,7 @@ fn test_select_keeps_null_payload_ready() {
     select {
         msg from ch -> { saw_null = (msg == null) }
     }
-    assert_eq(saw_null, true)
+    assertEqual(saw_null, true)
     ch.close()
 }
 

@@ -5,15 +5,15 @@ import http
 @test
 fn test_text_response() {
     var resp = { status: 200, body: "Hello World", contentType: "text/plain" }
-    assert_eq(resp.body, "Hello World")
-    assert_eq(resp.contentType, "text/plain")
+    assertEqual(resp.body, "Hello World")
+    assertEqual(resp.contentType, "text/plain")
 }
 
 @test
 fn test_json_response() {
     var resp = { status: 200, body: "{\"name\": \"test\"}", contentType: "application/json" }
     assert(resp.body.indexOf("name") >= 0)
-    assert_eq(resp.contentType, "application/json")
+    assertEqual(resp.contentType, "application/json")
 }
 
 @test
@@ -25,15 +25,15 @@ fn test_html_response() {
 @test
 fn test_empty_response() {
     var resp = { status: 204, body: "" }
-    assert_eq(resp.body, "")
-    assert_eq(resp.status, 204)
+    assertEqual(resp.body, "")
+    assertEqual(resp.status, 204)
 }
 
 @test
 fn test_large_body() {
     var body = ""
     for (var i = 0; i < 1000; i++) { body = body + "x" }
-    assert_eq(len(body), 1000)
+    assertEqual(len(body), 1000)
 }
 
 print("All http response body tests passed")

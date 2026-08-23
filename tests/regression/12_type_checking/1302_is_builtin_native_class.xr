@@ -29,48 +29,48 @@ fn describeBig(x: BigInt | i64) -> string {
 
 @test
 fn test_native_class_negative_members() {
-    assert_eq(isConn(1), false)
-    assert_eq(isListener(2), false)
-    assert_eq(isBig(3), false)
-    assert_eq(isSb(4), false)
-    assert_eq(describeConn(5), "int")
-    assert_eq(describeBig(6), "int")
+    assertEqual(isConn(1), false)
+    assertEqual(isListener(2), false)
+    assertEqual(isBig(3), false)
+    assertEqual(isSb(4), false)
+    assertEqual(describeConn(5), "int")
+    assertEqual(describeBig(6), "int")
 }
 
 @test
 fn test_bigint_and_stringbuilder_positive() {
-    assert_eq(isBig(123n), true)
-    assert_eq(describeBig(45n), "big")
+    assertEqual(isBig(123n), true)
+    assertEqual(describeBig(45n), "big")
     var sb = StringBuilder()
-    assert_eq(isSb(sb), true)
+    assertEqual(isSb(sb), true)
 }
 
 @test
 fn test_safe_cast_rejects_wrong_member() {
     var x: NetConn | i64 = 42
     var c = x as NetConn?
-    assert_eq(c == null, true)
+    assertEqual(c == null, true)
     var y: BigInt | i64 = 7
     var b = y as BigInt?
-    assert_eq(b == null, true)
+    assertEqual(b == null, true)
 }
 
 @test
 fn test_fixed_width_targets() {
     var small: i64 = 42
     var wide: i64 = 70000
-    assert_eq(small is i16, true)
-    assert_eq(wide is i16, false)
-    assert_eq(small is i32, true)
-    assert_eq(small is u64, true)
+    assertEqual(small is i16, true)
+    assertEqual(wide is i16, false)
+    assertEqual(small is i32, true)
+    assertEqual(small is u64, true)
     // Erasure keeps only the 64-bit payload, so every integer pattern is a
     // u64 value; signedness only gates the sub-64 widths.
-    assert_eq((-1) is u64, true)
-    assert_eq((-1) is u16, false)
+    assertEqual((-1) is u64, true)
+    assertEqual((-1) is u16, false)
     var fits = wide as i16?
-    assert_eq(fits == null, true)
+    assertEqual(fits == null, true)
     var kept = small as i16?
-    assert_eq(kept == null, false)
+    assertEqual(kept == null, false)
 }
 
 // Loopback pair: `net.dial` yields until the listener side accepts, so the
@@ -85,14 +85,14 @@ fn test_net_handles_positive() {
     var maybeLst = net.listen(0, 8)
     if (maybeLst == null) { return }
     var lst = maybeLst!
-    assert_eq(isListener(lst), true)
+    assertEqual(isListener(lst), true)
     var port = lst.port()
     go acceptOne(lst)
     var c = net.dial("127.0.0.1", port)!
-    assert_eq(isConn(c), true)
-    assert_eq(describeConn(c), "conn")
+    assertEqual(isConn(c), true)
+    assertEqual(describeConn(c), "conn")
     var back = c as NetConn?
-    assert_eq(back == null, false)
+    assertEqual(back == null, false)
     net.close(c)
     net.close(lst)
 }

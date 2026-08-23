@@ -3,19 +3,19 @@
 @test
 fn test_object_collection_methods() {
     var obj: JSON.Object = JSON.parseObject("{\"name\":\"Alice\",\"age\":30}")
-    assert_eq(len(obj), 2)
+    assertEqual(len(obj), 2)
     assert(obj.containsKey("name"))
     assert(!obj.containsKey("email"))
-    assert_eq(len(obj.keys()), 2)
-    assert_eq(len(obj.values()), 2)
-    assert_eq(len(obj.entries()), 2)
+    assertEqual(len(obj.keys()), 2)
+    assertEqual(len(obj.values()), 2)
+    assertEqual(len(obj.entries()), 2)
 }
 
 @test
 fn test_object_delete_and_clear() {
     var obj: JSON.Object = JSON.parseObject("{\"a\":1,\"b\":2}")
     assert(obj.delete("a"))
-    assert_eq(len(obj), 1)
+    assertEqual(len(obj), 1)
     obj.clear()
-    assert_eq(len(obj), 0)
+    assertEqual(len(obj), 0)
 }

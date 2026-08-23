@@ -10,7 +10,7 @@ fn test_match_object_shorthand() {
         { x, y } -> x + y
         _ -> 0
     }
-    assert_eq(r, 7)
+    assertEqual(r, 7)
 }
 
 // ===== 对象字段重命名 + 簡寫混用 =====
@@ -21,7 +21,7 @@ fn test_match_object_rename() {
         { name: n, age } -> n + ":" + string(age)
         _ -> "none"
     }
-    assert_eq(r, "Bob:5")
+    assertEqual(r, "Bob:5")
 }
 
 // ===== 对象可反驳字段子模式 =====
@@ -33,7 +33,7 @@ fn test_match_object_refutable_field() {
         { mode: 2, label } -> "two:" + label
         _ -> "other"
     }
-    assert_eq(r, "two:go")
+    assertEqual(r, "two:go")
 }
 
 // ===== 数组解构 + ..rest =====
@@ -42,10 +42,10 @@ fn test_match_array_rest() {
     var a = [10, 20, 30]
     match (a) {
         [first, ..rest] -> {
-            assert_eq(first, 10)
-            assert_eq(len(rest), 2)
-            assert_eq(rest[0], 20)
-            assert_eq(rest[1], 30)
+            assertEqual(first, 10)
+            assertEqual(len(rest), 2)
+            assertEqual(rest[0], 20)
+            assertEqual(rest[1], 30)
         }
         _ -> { assert(false) }
     }
@@ -60,7 +60,7 @@ fn test_match_array_length_select() {
         [x, y] -> x * 10 + y
         _ -> 0
     }
-    assert_eq(r, 12)
+    assertEqual(r, 12)
 }
 
 // ===== 空 rest =====
@@ -69,8 +69,8 @@ fn test_match_array_empty_rest() {
     var single = [99]
     match (single) {
         [head, ..tail] -> {
-            assert_eq(head, 99)
-            assert_eq(len(tail), 0)
+            assertEqual(head, 99)
+            assertEqual(len(tail), 0)
         }
         _ -> { assert(false) }
     }
@@ -84,7 +84,7 @@ fn test_match_array_wildcards() {
         [_, mid, _] -> mid
         _ -> 0
     }
-    assert_eq(r, 8)
+    assertEqual(r, 8)
 }
 
 // ===== 数组元素 guard（按值判断走守卫） =====
@@ -96,5 +96,5 @@ fn test_match_array_guard() {
         [x, y] -> "small:" + string(x + y)
         _ -> "none"
     }
-    assert_eq(r, "small:11")
+    assertEqual(r, "small:11")
 }

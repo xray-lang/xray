@@ -13,8 +13,8 @@ fn test_function_as_param() {
     fn double(x: i64) -> i64 { return x * 2 }
     fn square(x: i64) -> i64 { return x * x }
     
-    assert_eq(apply(double, 5), 10)
-    assert_eq(apply(square, 5), 25)
+    assertEqual(apply(double, 5), 10)
+    assertEqual(apply(square, 5), 25)
 }
 
 @test
@@ -26,8 +26,8 @@ fn test_binary_function_param() {
     fn add(x: i64, y: i64) -> i64 { return x + y }
     fn mul(x: i64, y: i64) -> i64 { return x * y }
     
-    assert_eq(combine(add, 3, 5), 8)
-    assert_eq(combine(mul, 3, 5), 15)
+    assertEqual(combine(add, 3, 5), 8)
+    assertEqual(combine(mul, 3, 5), 15)
 }
 
 // ===== 函数作为返回值 =====
@@ -44,8 +44,8 @@ fn test_function_factory() {
     var hello = createGreeter("Hello")
     var hi = createGreeter("Hi")
     
-    assert_eq(hello("Alice"), "Hello, Alice!")
-    assert_eq(hi("Bob"), "Hi, Bob!")
+    assertEqual(hello("Alice"), "Hello, Alice!")
+    assertEqual(hi("Bob"), "Hi, Bob!")
 }
 
 // ===== 函数组合 =====
@@ -65,8 +65,8 @@ fn test_compose() {
     var doubleThenAdd = compose(addOne, double)
     var addThenDouble = compose(double, addOne)
     
-    assert_eq(doubleThenAdd(5), 11)  // (5*2)+1
-    assert_eq(addThenDouble(5), 12)  // (5+1)*2
+    assertEqual(doubleThenAdd(5), 11)  // (5*2)+1
+    assertEqual(addThenDouble(5), 12)  // (5+1)*2
 }
 
 // ===== 部分应用 =====
@@ -85,8 +85,8 @@ fn test_partial() {
     }
     
     var add5 = partial(add, 5)
-    assert_eq(add5(3), 8)
-    assert_eq(add5(10), 15)
+    assertEqual(add5(3), 8)
+    assertEqual(add5(10), 15)
 }
 
 // ===== 回调模式 =====
@@ -105,7 +105,7 @@ fn test_callback() {
     }
     
     processAsync(handler)
-    assert_eq(received, 42)
+    assertEqual(received, 42)
 }
 
 // ===== 自定义迭代器 =====
@@ -125,9 +125,9 @@ fn test_custom_map() {
     var arr = [1, 2, 3]
     var doubled = myMap(arr, double)
     
-    assert_eq(doubled[0], 2)
-    assert_eq(doubled[1], 4)
-    assert_eq(doubled[2], 6)
+    assertEqual(doubled[0], 2)
+    assertEqual(doubled[1], 4)
+    assertEqual(doubled[2], 6)
 }
 
 @test
@@ -147,8 +147,8 @@ fn test_custom_filter() {
     var arr = [1, 2, 3, 4, 5, 6]
     var evens = myFilter(arr, isEven)
     
-    assert_eq(len(evens), 3)
-    assert_eq(evens[0], 2)
+    assertEqual(len(evens), 3)
+    assertEqual(evens[0], 2)
 }
 
 @test
@@ -165,8 +165,8 @@ fn test_custom_reduce() {
     fn mulFn(a: i64, b: i64) -> i64 { return a * b }
     
     var arr = [1, 2, 3, 4]
-    assert_eq(myReduce(arr, addFn, 0), 10)
-    assert_eq(myReduce(arr, mulFn, 1), 24)
+    assertEqual(myReduce(arr, addFn, 0), 10)
+    assertEqual(myReduce(arr, mulFn, 1), 24)
 }
 
 // ===== 管道 =====
@@ -182,7 +182,7 @@ fn test_pipe() {
     x = double(x)   // 10
     x = addTen(x)   // 20
     x = square(x)   // 400
-    assert_eq(x, 400)
+    assertEqual(x, 400)
 }
 
 // ===== 边界条件 =====
@@ -191,8 +191,8 @@ fn test_pipe() {
 fn test_identity_function() {
     fn identity<T>(x: T) -> T { return x }
     
-    assert_eq(identity(42), 42)
-    assert_eq(identity("hello"), "hello")
+    assertEqual(identity(42), 42)
+    assertEqual(identity("hello"), "hello")
     // null requires nullable type parameter, skip this test
 }
 
@@ -206,7 +206,7 @@ fn test_constant_function() {
     }
     
     var always42 = makeConstant(42)
-    assert_eq(always42(), 42)
-    assert_eq(always42(), 42)
+    assertEqual(always42(), 42)
+    assertEqual(always42(), 42)
 }
 

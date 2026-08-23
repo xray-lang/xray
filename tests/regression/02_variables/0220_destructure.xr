@@ -6,22 +6,22 @@
 @test
 fn test_array_basic() {
     var [a, b, c] = [1, 2, 3]
-    assert_eq(a, 1)
-    assert_eq(b, 2)
-    assert_eq(c, 3)
+    assertEqual(a, 1)
+    assertEqual(b, 2)
+    assertEqual(c, 3)
 }
 
 @test
 fn test_array_partial() {
     var [first, second] = [1, 2, 3, 4, 5]
-    assert_eq(first, 1)
-    assert_eq(second, 2)
+    assertEqual(first, 1)
+    assertEqual(second, 2)
 }
 
 @test
 fn test_array_single() {
     var [x] = [42]
-    assert_eq(x, 42)
+    assertEqual(x, 42)
 }
 
 // ===== Skip elements =====
@@ -29,15 +29,15 @@ fn test_array_single() {
 @test
 fn test_skip_elements() {
     var [first, , third] = [10, 20, 30]
-    assert_eq(first, 10)
-    assert_eq(third, 30)
+    assertEqual(first, 10)
+    assertEqual(third, 30)
 }
 
 @test
 fn test_skip_multiple() {
     var [a, , , d] = [1, 2, 3, 4]
-    assert_eq(a, 1)
-    assert_eq(d, 4)
+    assertEqual(a, 1)
+    assertEqual(d, 4)
 }
 
 // ===== Flat array: nested values are kept as-is =====
@@ -45,12 +45,14 @@ fn test_skip_multiple() {
 @test
 fn test_flat_nested_value() {
     var [a, b, c] = [10, [11, 12], 13]
-    assert_eq(a, 10)
+    assert(a is i64)
+    assertEqual(a as i64, 10)
     assert(b is Array<i64>)
     var nested = b as Array<i64>
-    assert_eq(nested[0], 11)
-    assert_eq(nested[1], 12)
-    assert_eq(c, 13)
+    assertEqual(nested[0], 11)
+    assertEqual(nested[1], 12)
+    assert(c is i64)
+    assertEqual(c as i64, 13)
 }
 
 // ===== Object destructuring =====
@@ -58,27 +60,27 @@ fn test_flat_nested_value() {
 @test
 fn test_object_basic() {
     var { name, age } = { name: "Alice", age: 30 }
-    assert_eq(name, "Alice")
-    assert_eq(age, 30)
+    assertEqual(name, "Alice")
+    assertEqual(age, 30)
 }
 
 @test
 fn test_object_flat_nested_value() {
     var { d, e, f } = { d: 100, e: 200, f: { f1: 300, f2: 400 } }
-    assert_eq(d, 100)
-    assert_eq(e, 200)
-    assert_eq(f.f1, 300)
-    assert_eq(f.f2, 400)
+    assertEqual(d, 100)
+    assertEqual(e, 200)
+    assertEqual(f.f1, 300)
+    assertEqual(f.f2, 400)
 }
 
 @test
 fn test_object_rename() {
     var user = { name: "Alice", age: 30 }
     var { name: localName, age } = user
-    assert_eq(localName, "Alice")
-    assert_eq(age, 30)
+    assertEqual(localName, "Alice")
+    assertEqual(age, 30)
 
     var otherName = ""
     { name: otherName } = user
-    assert_eq(otherName, "Alice")
+    assertEqual(otherName, "Alice")
 }

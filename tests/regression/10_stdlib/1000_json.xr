@@ -2,28 +2,28 @@
 
 @test
 fn test_parse_primitives() {
-    assert_eq(JSON.parseValue("42"), 42)
-    assert_eq(JSON.parseValue("3.14"), 3.14)
-    assert_eq(JSON.parseValue("true"), true)
-    assert_eq(JSON.parseValue("\"hello\""), "hello")
+    assertEqual(JSON.require<i64>(JSON.parseValue("42"), []), 42)
+    assertEqual(JSON.require<f64>(JSON.parseValue("3.14"), []), 3.14)
+    assertEqual(JSON.require<bool>(JSON.parseValue("true"), []), true)
+    assertEqual(JSON.require<string>(JSON.parseValue("\"hello\""), []), "hello")
     assert(JSON.isNull(JSON.parseValue("null")))
 }
 
 @test
 fn test_parse_collections() {
     var root = JSON.parseValue("{\"name\":\"Ada\",\"items\":[1,2,3]}")
-    assert_eq(typeName(root), "Map")
-    assert_eq(JSON.require<string>(root, ["name"]), "Ada")
-    assert_eq(JSON.require<i64>(root, ["items", 2]), 3)
+    assertEqual(typeName(root), "Map")
+    assertEqual(JSON.require<string>(root, ["name"]), "Ada")
+    assertEqual(JSON.require<i64>(root, ["items", 2]), 3)
     var items = JSON.asArray(JSON.require<JSON.Value>(root, ["items"]))
     assert(items != null)
-    assert_eq(len(items!), 3)
+    assertEqual(len(items!), 3)
 }
 
 @test
 fn test_stringify_structural_object() {
     var user = { name: "Ada", age: 37 }
-    assert_eq(JSON.stringify(user), "{\"name\":\"Ada\",\"age\":37}")
+    assertEqual(JSON.stringify(user), "{\"name\":\"Ada\",\"age\":37}")
 }
 
 @test

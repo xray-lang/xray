@@ -46,13 +46,13 @@ fn configSample() -> TomlValue {
 @test
 fn test_multiline_basic_string() {
     var obj = toml.parse("desc = \"\"\"\nHello\nWorld\"\"\"")
-    assert_eq(asString(field(obj, "desc")), "Hello\nWorld")
+    assertEqual(asString(field(obj, "desc")), "Hello\nWorld")
 }
 
 @test
 fn test_literal_strings() {
     var obj = toml.parse("path = 'C:\\Users\\Alice'\ntext = '''\nno escapes \\n here\n'''")
-    assert_eq(asString(field(obj, "path")), "C:\\Users\\Alice")
+    assertEqual(asString(field(obj, "path")), "C:\\Users\\Alice")
     assert(len(asString(field(obj, "text"))) > 0)
 }
 
@@ -60,9 +60,9 @@ fn test_literal_strings() {
 fn test_array_of_tables() {
     var data = "[[products]]\nname = \"Hammer\"\nsku = 738594937\n\n[[products]]\nname = \"Nail\"\nsku = 284758393"
     var products = field(toml.parse(data), "products")
-    assert_eq(asString(field(item(products, 0), "name")), "Hammer")
-    assert_eq(asString(field(item(products, 1), "name")), "Nail")
-    assert_eq(asInt(field(item(products, 0), "sku")), 738594937)
+    assertEqual(asString(field(item(products, 0), "name")), "Hammer")
+    assertEqual(asString(field(item(products, 1), "name")), "Nail")
+    assertEqual(asInt(field(item(products, 0), "sku")), 738594937)
 }
 
 @test
@@ -76,16 +76,16 @@ fn test_escape_and_unicode_sequences() {
 fn test_dotted_keys() {
     var obj = toml.parse("fruit.name = \"apple\"\nfruit.color = \"red\"")
     var fruit = field(obj, "fruit")
-    assert_eq(asString(field(fruit, "name")), "apple")
-    assert_eq(asString(field(fruit, "color")), "red")
+    assertEqual(asString(field(fruit, "name")), "apple")
+    assertEqual(asString(field(fruit, "color")), "red")
 }
 
 @test
 fn test_inline_table_dotted_keys() {
     var obj = toml.parse("point = { position.x = 1, position.y = 2 }")
     var position = field(field(obj, "point"), "position")
-    assert_eq(asInt(field(position, "x")), 1)
-    assert_eq(asInt(field(position, "y")), 2)
+    assertEqual(asInt(field(position, "x")), 1)
+    assertEqual(asInt(field(position, "y")), 2)
 }
 
 @test
@@ -93,8 +93,8 @@ fn test_special_floats_and_negative_numbers() {
     var obj = toml.parse("pos_inf = inf\nneg_inf = -inf\nnot_a_num = nan\ntemp = -17\noffset = -0.5")
     assert(asFloat(field(obj, "pos_inf")) > 0.0)
     assert(asFloat(field(obj, "neg_inf")) < 0.0)
-    assert_eq(asInt(field(obj, "temp")), -17)
-    assert_eq(asFloat(field(obj, "offset")), -0.5)
+    assertEqual(asInt(field(obj, "temp")), -17)
+    assertEqual(asFloat(field(obj, "offset")), -0.5)
 }
 
 @test
@@ -104,16 +104,16 @@ fn test_float_decimal_point() {
     var result = toml.stringify(toml.tableValue(table))
     assert(result.contains("value = 1.0"))
     var reparsed = toml.parse(result)
-    assert_eq(asFloat(field(reparsed, "value")), 1.0)
+    assertEqual(asFloat(field(reparsed, "value")), 1.0)
 }
 
 @test
 fn test_stringify_roundtrip() {
     var tomlText = toml.stringify(configSample())
     var parsed = toml.parse(tomlText)
-    assert_eq(asString(field(parsed, "name")), "xray")
-    assert_eq(asInt(field(parsed, "version")), 2)
-    assert_eq(asBool(field(parsed, "enabled")), true)
+    assertEqual(asString(field(parsed, "name")), "xray")
+    assertEqual(asInt(field(parsed, "version")), 2)
+    assertEqual(asBool(field(parsed, "enabled")), true)
 }
 
 @test
@@ -121,14 +121,14 @@ fn test_stringify_nested_roundtrip() {
     var obj = toml.parse("[server]\nhost = \"localhost\"\nport = 8080")
     var tomlText = toml.stringify(obj)
     var server = field(toml.parse(tomlText), "server")
-    assert_eq(asString(field(server, "host")), "localhost")
-    assert_eq(asInt(field(server, "port")), 8080)
+    assertEqual(asString(field(server, "host")), "localhost")
+    assertEqual(asInt(field(server, "port")), 8080)
 }
 
 @test
 fn test_parse_report() {
     var report = toml.parseReport("name = \"Alice\"\nage = 30")
-    assert_eq(asString(field(report.data, "name")), "Alice")
+    assertEqual(asString(field(report.data, "name")), "Alice")
     assert(len(report.errors) == 0)
     assert(report.lines > 0)
     assert(report.keys > 0)
@@ -139,7 +139,7 @@ fn test_duplicate_key_report() {
     var report = toml.parseReport("name = \"Alice\"\nname = \"Bob\"")
     assert(len(report.errors) > 0)
     var diag: TomlDiagnostic = report.errors[0]
-    assert_eq(typeName(diag), "TomlDiagnostic")
+    assertEqual(typeName(diag), "TomlDiagnostic")
     assert(diag.kind == TomlErrorKind.DuplicateKey)
     assert(diag.line > 0)
     assert(len(diag.message) > 0)
@@ -161,25 +161,25 @@ fn test_empty_input() {
 @test
 fn test_comments_and_bool_end() {
     var obj = toml.parse("# This is a comment\nkey = \"value\" # inline comment\nflag = false")
-    assert_eq(asString(field(obj, "key")), "value")
-    assert_eq(asBool(field(obj, "flag")), false)
+    assertEqual(asString(field(obj, "key")), "value")
+    assertEqual(asBool(field(obj, "flag")), false)
 }
 
 @test
 fn test_datetime() {
     var obj = toml.parse("created = 2024-01-15T10:30:00Z")
-    assert_eq(asDateTime(field(obj, "created")).toString(), "2024-01-15 10:30:00")
+    assertEqual(asDateTime(field(obj, "created")).toString(), "2024-01-15 10:30:00")
 }
 
 @test
 fn test_datetime_space() {
     var obj = toml.parse("created = 1979-05-27 07:32:00")
-    assert_eq(asDateTime(field(obj, "created")).toString(), "1979-05-27 07:32:00")
+    assertEqual(asDateTime(field(obj, "created")).toString(), "1979-05-27 07:32:00")
 }
 
 @test
 fn test_underscore_numbers() {
     var obj = toml.parse("big = 1_000_000\nhex = 0xFF_FF")
-    assert_eq(asInt(field(obj, "big")), 1000000)
-    assert_eq(asInt(field(obj, "hex")), 65535)
+    assertEqual(asInt(field(obj, "big")), 1000000)
+    assertEqual(asInt(field(obj, "hex")), 65535)
 }

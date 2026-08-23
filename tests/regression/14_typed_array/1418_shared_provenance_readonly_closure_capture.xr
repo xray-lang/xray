@@ -9,5 +9,5 @@ fn test_shared_provenance_readonly_closure_capture() {
     const read = fn() -> i64 {
         return items[0] + len(items)
     }
-    assert_eq(read(), 7)
+    assertEqual(read(), 7)
 }

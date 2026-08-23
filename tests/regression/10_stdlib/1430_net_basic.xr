@@ -15,10 +15,10 @@ import net
 @test
 fn test_lookup_localhost() {
     var addrs = net.lookup("localhost")
-    assert_true(len(addrs) > 0)
+    assert(len(addrs) > 0)
     // localhost resolves to 127.0.0.1 or ::1 depending on stack order.
     var first = addrs[0].toString()
-    assert_true(first == "127.0.0.1" || first.startsWith("::"))
+    assert(first == "127.0.0.1" || first.startsWith("::"))
 }
 
 @test
@@ -27,17 +27,17 @@ fn test_lookup_invalid_host() {
     // unless a hijacking resolver still hands back addresses.
     var addrs = net.lookup("this-host-does-not-exist-12345.invalid")
     for (var i = 0; i < len(addrs); i++) {
-        assert_true(len(addrs[i].toString()) > 0)
+        assert(len(addrs[i].toString()) > 0)
     }
 }
 
 @test
 fn test_resolve_matches_lookup_head() {
     var first = net.resolve("localhost")
-    assert_true(first != null)
+    assert(first != null)
     var addrs = net.lookup("localhost")
-    assert_true(len(addrs) > 0)
-    assert_eq(first!.toString(), addrs[0].toString())
+    assert(len(addrs) > 0)
+    assertEqual(first!.toString(), addrs[0].toString())
 }
 
 // ============================================================
@@ -46,17 +46,17 @@ fn test_resolve_matches_lookup_head() {
 
 @test
 fn test_net_module_exists() {
-    assert_true(typeName(net.lookup) == "function")
+    assert(typeName(net.lookup) == "function")
 }
 
 @test
 fn test_net_dial_exists() {
-    assert_true(typeName(net.dial) == "function")
+    assert(typeName(net.dial) == "function")
 }
 
 @test
 fn test_net_resolve_exists() {
-    assert_true(typeName(net.resolve) == "function")
+    assert(typeName(net.resolve) == "function")
 }
 
 // ============================================================
@@ -68,7 +68,7 @@ fn test_lookup_ipv6_localhost() {
     // The result set may contain IPv4, IPv6, or both, depending on the
     // system configuration.
     var addrs = net.lookup("localhost")
-    assert_true(len(addrs) > 0)
+    assert(len(addrs) > 0)
 }
 
 @test
@@ -76,7 +76,7 @@ fn test_lookup_returns_valid_addresses() {
     var addrs = net.lookup("localhost")
     for (var i = 0; i < len(addrs); i++) {
         var value = addrs[i].toString()
-        assert_true(len(value) > 0)
-        assert_true(value.contains(".") || value.contains(":"))
+        assert(len(value) > 0)
+        assert(value.contains(".") || value.contains(":"))
     }
 }

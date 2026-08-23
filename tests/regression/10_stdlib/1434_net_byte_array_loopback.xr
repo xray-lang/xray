@@ -43,7 +43,7 @@ fn acceptBytesMaxLen(lst: NetListener) {
 fn serveExactEof(c: NetConn) -> i64 {
     var buf = Array<u8>(8)
     var n = net.readExactInto(c, ref buf, 5)
-    assert_eq(len(buf), n)
+    assertEqual(len(buf), n)
     net.close(c)
     return n
 }
@@ -59,21 +59,21 @@ fn test_byte_array_echo_roundtrip() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
-    assert_true(port > 0)
+    assert(port > 0)
 
     go acceptBytesEcho(lst)
 
     var c = net.dial("127.0.0.1", port)
     var payload = Array<u8>([65, 0, 255, 66])
-    assert_eq(net.writeBytes(c, payload), 4)
+    assertEqual(net.writeBytes(c, payload), 4)
 
     var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
-    assert_eq(n, 4)
-    assert_eq(resp[0], 65)
-    assert_eq(resp[1], 0)
-    assert_eq(resp[2], 255)
-    assert_eq(resp[3], 66)
+    assertEqual(n, 4)
+    assertEqual(resp[0], 65)
+    assertEqual(resp[1], 0)
+    assertEqual(resp[2], 255)
+    assertEqual(resp[3], 66)
 
     net.close(c)
     net.close(lst)
@@ -85,20 +85,20 @@ fn test_read_into_maxlen_controls_length() {
     if (maybeLst == null) { return }
     var lst = maybeLst!
     var port = lst.port()
-    assert_true(port > 0)
+    assert(port > 0)
 
     go acceptBytesMaxLen(lst)
 
     var c = net.dial("127.0.0.1", port)
     var payload = Array<u8>([80, 81, 82, 83, 84])
-    assert_eq(net.writeBytes(c, payload), 5)
+    assertEqual(net.writeBytes(c, payload), 5)
 
     var resp = Array<u8>(16)
     var n = net.readInto(c, ref resp)
-    assert_eq(n, 3)
-    assert_eq(resp[0], 80)
-    assert_eq(resp[1], 81)
-    assert_eq(resp[2], 82)
+    assertEqual(n, 3)
+    assertEqual(resp[0], 80)
+    assertEqual(resp[1], 81)
+    assertEqual(resp[2], 82)
 
     net.close(c)
     net.close(lst)
@@ -114,10 +114,10 @@ fn test_read_exact_into_returns_partial_bytes_at_eof() {
     var c = net.dial("127.0.0.1", lst.port())!
     var first = Array<u8>([1, 2])
     var second = Array<u8>([3])
-    assert_eq(net.writeBytes(c, first), 2)
-    assert_eq(net.writeBytes(c, second), 1)
-    assert_true(net.shutdownWrite(c))
-    assert_eq(await server, 3)
+    assertEqual(net.writeBytes(c, first), 2)
+    assertEqual(net.writeBytes(c, second), 1)
+    assert(net.shutdownWrite(c))
+    assertEqual(await server, 3)
 
     net.close(c)
     net.close(lst)

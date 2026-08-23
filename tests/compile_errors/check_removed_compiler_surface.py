@@ -42,6 +42,24 @@ CASES = (
         ("undefined type 'int'", "undefined type 'byte'", "undefined type 'float'"),
     ),
     Case(
+        "tests/compile_errors/type/retired_assertion_builtins_removed.xr",
+        (
+            "Undeclared variable 'assert_true'",
+            "Undeclared variable 'assert_false'",
+            "Undeclared variable 'assert_eq'",
+            "Undeclared variable 'assert_ne'",
+            "Undeclared variable 'assert_throws'",
+        ),
+    ),
+    Case(
+        "tests/compile_errors/type/assert_equal_same_type_required.xr",
+        (
+            "assertEqual requires both values to have the same type, got 'i64' and 'f64'",
+            "assertEqual requires both values to have the same type, got 'i64' and 'f64'",
+            "assertEqual requires both values to have the same type, got 'f64' and 'i64'",
+        ),
+    ),
+    Case(
         "tests/fixtures/removed_compiler_surface/strconv_module_removed.xr",
         ("module 'strconv' not found in stdlib",),
     ),

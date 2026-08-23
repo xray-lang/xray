@@ -79,7 +79,7 @@ fn test_uptime() {
 @test
 fn test_loadavg() {
     var avg = os.loadavg()
-    assert_eq(len(avg), 3)
+    assertEqual(len(avg), 3)
     // Load averages should be non-negative
     assert(avg[0] >= 0.0)
     assert(avg[1] >= 0.0)
@@ -106,8 +106,8 @@ fn test_clock() {
 fn test_exec_echo() {
     var result = os.exec("echo hello")
     assert(result != null)
-    assert_eq(result!.stdout, "hello\n")
-    assert_eq(result!.exitCode, 0)
+    assertEqual(result!.stdout, "hello\n")
+    assertEqual(result!.exitCode, 0)
 }
 
 @test
@@ -118,15 +118,15 @@ fn test_exec_stderr() {
     }
     var result = os.exec("echo error_msg >&2")
     assert(result != null)
-    assert_eq(result!.stderr, "error_msg\n")
-    assert_eq(result!.exitCode, 0)
+    assertEqual(result!.stderr, "error_msg\n")
+    assertEqual(result!.exitCode, 0)
 }
 
 @test
 fn test_exec_exit_code() {
     var result = os.exec("exit 42")
     assert(result != null)
-    assert_eq(result!.exitCode, 42)
+    assertEqual(result!.exitCode, 42)
 }
 
 @test
@@ -139,7 +139,7 @@ fn test_exec_command_output() {
     } else {
         var result = os.exec("printf 'abc'")
         assert(result != null)
-        assert_eq(result!.stdout, "abc")
+        assertEqual(result!.stdout, "abc")
     }
 }
 
@@ -148,7 +148,7 @@ fn test_exec_command_output() {
 @test
 fn test_setenv_return_value() {
     var ok = os.setenv("XRAY_TEST_RET", "val")
-    assert_eq(ok, true)
+    assertEqual(ok, true)
     os.unsetenv("XRAY_TEST_RET")
 }
 
@@ -156,11 +156,11 @@ fn test_setenv_return_value() {
 fn test_unsetenv_return_value() {
     os.setenv("XRAY_TEST_UNSET", "val")
     var ok = os.unsetenv("XRAY_TEST_UNSET")
-    assert_eq(ok, true)
+    assertEqual(ok, true)
 }
 
 @test
 fn test_chdir_invalid_path() {
     var ok = io.chdir(path.from("/nonexistent_xray_test_path_12345"))
-    assert_eq(ok, false)
+    assertEqual(ok, false)
 }

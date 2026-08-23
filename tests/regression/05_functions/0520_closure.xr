@@ -16,9 +16,9 @@ fn test_closure_basic() {
     }
     
     var counter = makeCounter()
-    assert_eq(counter(), 1)
-    assert_eq(counter(), 2)
-    assert_eq(counter(), 3)
+    assertEqual(counter(), 1)
+    assertEqual(counter(), 2)
+    assertEqual(counter(), 3)
 }
 
 @test
@@ -35,11 +35,11 @@ fn test_closure_multiple_instances() {
     var c1 = makeCounter()
     var c2 = makeCounter()
     
-    assert_eq(c1(), 1)
-    assert_eq(c1(), 2)
-    assert_eq(c2(), 1)  // 独立计数器
-    assert_eq(c1(), 3)
-    assert_eq(c2(), 2)
+    assertEqual(c1(), 1)
+    assertEqual(c1(), 2)
+    assertEqual(c2(), 1)  // 独立计数器
+    assertEqual(c1(), 3)
+    assertEqual(c2(), 2)
 }
 
 // ===== 参数捕获 =====
@@ -56,9 +56,9 @@ fn test_capture_param() {
     var add5 = makeAdder(5)
     var add10 = makeAdder(10)
     
-    assert_eq(add5(3), 8)
-    assert_eq(add10(3), 13)
-    assert_eq(add5(add10(1)), 16)
+    assertEqual(add5(3), 8)
+    assertEqual(add10(3), 13)
+    assertEqual(add5(add10(1)), 16)
 }
 
 @test
@@ -71,11 +71,11 @@ fn test_capture_multiple_params() {
     }
     
     var inRange = makeRange(5, 10)
-    assert_eq(inRange(3), false)
-    assert_eq(inRange(5), true)
-    assert_eq(inRange(7), true)
-    assert_eq(inRange(10), true)
-    assert_eq(inRange(12), false)
+    assertEqual(inRange(3), false)
+    assertEqual(inRange(5), true)
+    assertEqual(inRange(7), true)
+    assertEqual(inRange(10), true)
+    assertEqual(inRange(12), false)
 }
 
 // ===== 修改外层变量 =====
@@ -88,9 +88,9 @@ fn test_modify_outer() {
         x = 20
     }
     
-    assert_eq(x, 10)
+    assertEqual(x, 10)
     modify()
-    assert_eq(x, 20)
+    assertEqual(x, 20)
 }
 
 @test
@@ -105,9 +105,9 @@ fn test_accumulator() {
     }
     
     var acc = makeAccumulator()
-    assert_eq(acc(5), 5)
-    assert_eq(acc(10), 15)
-    assert_eq(acc(3), 18)
+    assertEqual(acc(5), 5)
+    assertEqual(acc(10), 15)
+    assertEqual(acc(3), 18)
 }
 
 // ===== 嵌套闭包 =====
@@ -125,7 +125,7 @@ fn test_nested_closure() {
     }
     
     var f = outer(1)(2)
-    assert_eq(f(3), 6)
+    assertEqual(f(3), 6)
 }
 
 @test
@@ -144,7 +144,7 @@ fn test_deeply_nested() {
     }
     
     var result = level1(1)(2)(3)(4)
-    assert_eq(result, 10)
+    assertEqual(result, 10)
 }
 
 // ===== 闭包工厂 =====
@@ -161,8 +161,8 @@ fn test_multiplier_factory() {
     var double = createMultiplier(2)
     var triple = createMultiplier(3)
     
-    assert_eq(double(5), 10)
-    assert_eq(triple(5), 15)
+    assertEqual(double(5), 10)
+    assertEqual(triple(5), 15)
 }
 
 @test
@@ -177,8 +177,8 @@ fn test_greeting_factory() {
     var hello = createGreeter("Hello")
     var hi = createGreeter("Hi")
     
-    assert_eq(hello("Alice"), "Hello, Alice!")
-    assert_eq(hi("Bob"), "Hi, Bob!")
+    assertEqual(hello("Alice"), "Hello, Alice!")
+    assertEqual(hi("Bob"), "Hi, Bob!")
 }
 
 // ===== 闭包与循环 =====
@@ -194,9 +194,9 @@ fn test_closure_captures_value() {
         funcs.push(capture)
     }
     
-    assert_eq(funcs[0](), 0)
-    assert_eq(funcs[1](), 1)
-    assert_eq(funcs[2](), 2)
+    assertEqual(funcs[0](), 0)
+    assertEqual(funcs[1](), 1)
+    assertEqual(funcs[2](), 2)
 }
 
 // ===== 边界条件 =====
@@ -211,7 +211,7 @@ fn test_closure_no_capture() {
     }
     
     var f = outer()
-    assert_eq(f(), 42)
+    assertEqual(f(), 42)
 }
 
 @test
@@ -226,6 +226,6 @@ fn test_closure_capture_const() {
     }
     
     var f = getClosure()
-    assert_eq(f(), 100)
+    assertEqual(f(), 100)
 }
 

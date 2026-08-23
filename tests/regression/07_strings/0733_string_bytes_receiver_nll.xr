@@ -6,6 +6,6 @@ fn test_string_bytes_receiver_borrow_ends_after_last_use() {
 
     text = "bye"
 
-    assert_eq(byteCount, 5)
-    assert_eq(len(text), 3)
+    assertEqual(byteCount, 5)
+    assertEqual(len(text), 3)
 }

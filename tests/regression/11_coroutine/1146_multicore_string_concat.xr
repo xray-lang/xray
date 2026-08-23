@@ -45,7 +45,7 @@ fn test_concurrent_short_concat() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }
 
 // ===== 测试2: 多协程并发长字符串拼接 =====
@@ -90,7 +90,7 @@ fn test_concurrent_long_concat() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }
 
 // ===== 测试3: 多协程混合短长字符串拼接 =====
@@ -137,7 +137,7 @@ fn test_concurrent_mixed_concat() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }
 
 // ===== 测试4: 高并发循环拼接 =====
@@ -178,7 +178,7 @@ fn test_concurrent_loop_concat() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }
 
 // ===== 测试5: 并发阈值边界拼接 =====
@@ -221,7 +221,7 @@ fn test_concurrent_threshold_boundary() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }
 
 // ===== 测试6: 并发数据隔离性验证 =====
@@ -283,7 +283,7 @@ fn test_concurrent_data_isolation() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }
 
 // ===== 测试7: 大规模并发压力测试 =====
@@ -334,5 +334,5 @@ fn test_stress_concurrent_concat() {
         }
     }
     
-    assert_eq(correct, n)
+    assertEqual(correct, n)
 }

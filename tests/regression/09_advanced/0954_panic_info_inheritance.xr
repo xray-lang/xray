@@ -27,8 +27,8 @@ class DbError extends PanicInfo {
 fn test_subclass_var_binding() {
     // F036 核心：var 绑定 PanicInfo 子类不应崩溃
     var err = HttpError("not found", 404)
-    assert_eq(err.message, "not found")
-    assert_eq(err.statusCode, 404)
+    assertEqual(err.message, "not found")
+    assertEqual(err.statusCode, 404)
 }
 
 @test
@@ -40,8 +40,8 @@ fn test_subclass_as_expression() {
 @test
 fn test_subclass_multiple_fields() {
     var err = DbError("query failed", "users")
-    assert_eq(err.message, "query failed")
-    assert_eq(err.table, "users")
+    assertEqual(err.message, "query failed")
+    assertEqual(err.table, "users")
 }
 
 // ===== 普通使用 =====
@@ -52,7 +52,7 @@ fn test_subclass_passed_to_function() {
         return e.message
     }
     var err = HttpError("bad request", 400)
-    assert_eq(handle(err), "bad request")
+    assertEqual(handle(err), "bad request")
 }
 
 @test
@@ -60,9 +60,9 @@ fn test_subclass_stored_in_array() {
     var errors: Array<PanicInfo> = []
     errors.push(HttpError("err1", 500))
     errors.push(DbError("err2", "logs"))
-    assert_eq(len(errors), 2)
-    assert_eq(errors[0].message, "err1")
-    assert_eq(errors[1].message, "err2")
+    assertEqual(len(errors), 2)
+    assertEqual(errors[0].message, "err1")
+    assertEqual(errors[1].message, "err2")
 }
 
 // ===== 子类字段访问 =====
@@ -70,13 +70,13 @@ fn test_subclass_stored_in_array() {
 @test
 fn test_subclass_message_access() {
     var err = HttpError("server error", 503)
-    assert_eq(err.message, "server error")
+    assertEqual(err.message, "server error")
 }
 
 @test
 fn test_subclass_status_code_access() {
     var err = HttpError("not found", 404)
-    assert_eq(err.statusCode, 404)
+    assertEqual(err.statusCode, 404)
 }
 
 // ===== 父类直接构造不受影响 =====
@@ -84,7 +84,7 @@ fn test_subclass_status_code_access() {
 @test
 fn test_base_exception_direct() {
     var e = PanicInfo("hello")
-    assert_eq(e.message, "hello")
+    assertEqual(e.message, "hello")
 }
 
 // ===== 空子类（无自定义 ctor）仍然工作 =====
@@ -94,5 +94,5 @@ class EmptyError extends PanicInfo {}
 @test
 fn test_empty_subclass() {
     var e = EmptyError("empty")
-    assert_eq(e.message, "empty")
+    assertEqual(e.message, "empty")
 }

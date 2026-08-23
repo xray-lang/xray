@@ -11,9 +11,9 @@ import time
 @test
 fn test_time_now() {
     var t = time.now()
-    assert_eq(t > 0, true)
+    assertEqual(t > 0, true)
     // 时间戳应该是一个很大的数（毫秒级）
-    assert_eq(t > 1000000000000, true)  // 大于 2001 年的时间戳
+    assertEqual(t > 1000000000000, true)  // 大于 2001 年的时间戳
 }
 
 // ===== time.clock =====
@@ -28,7 +28,7 @@ fn test_time_clock() {
         sum = sum + i
     }
     var end = time.clock()
-    assert_eq(end >= start, true)
+    assertEqual(end >= start, true)
 }
 
 // ===== time.monotonic =====
@@ -38,7 +38,7 @@ fn test_time_clock() {
 fn test_time_monotonic() {
     var t1 = time.monotonic()
     var t2 = time.monotonic()
-    assert_eq(t2 >= t1, true)
+    assertEqual(t2 >= t1, true)
 }
 
 // ===== time.sleep =====
@@ -49,6 +49,6 @@ fn test_time_sleep() {
     var start = time.monotonic()
     time.sleep(10)  // 睡眠 10 毫秒
     var end = time.monotonic()
-    assert_eq(end >= start, true)
+    assertEqual(end >= start, true)
 }
 

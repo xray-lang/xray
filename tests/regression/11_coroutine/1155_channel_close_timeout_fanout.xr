@@ -25,7 +25,7 @@ fn test_channel_close_wakes_timed_recv_fanout() {
     }
 
     for (var i = 0; i < waiter_count; i++) {
-        assert_eq(recv_int(ready), 1)
+        assertEqual(recv_int(ready), 1)
     }
 
     for (var i = 0; i < 16; i++) {
@@ -41,7 +41,7 @@ fn test_channel_close_wakes_timed_recv_fanout() {
         }
     }
 
-    assert_eq(closed_waiters, waiter_count)
+    assertEqual(closed_waiters, waiter_count)
     ready.close()
     done.close()
 }

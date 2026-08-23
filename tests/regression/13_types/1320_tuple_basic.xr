@@ -5,25 +5,25 @@
 @test
 fn test_tuple_literal_and_field() {
     var t = (1, 2, 3)
-    assert_eq(t.0, 1)
-    assert_eq(t.1, 2)
-    assert_eq(t.2, 3)
+    assertEqual(t.0, 1)
+    assertEqual(t.1, 2)
+    assertEqual(t.2, 3)
 }
 
 @test
 fn test_tuple_heterogeneous() {
     var t = (10, "hi", true)
-    assert_eq(t.0, 10)
-    assert_eq(t.1, "hi")
-    assert_eq(t.2, true)
+    assertEqual(t.0, 10)
+    assertEqual(t.1, "hi")
+    assertEqual(t.2, true)
 }
 
 @test
 fn test_tuple_destructure() {
     var pair = (42, "hello")
     var (a, b) = pair
-    assert_eq(a, 42)
-    assert_eq(b, "hello")
+    assertEqual(a, 42)
+    assertEqual(b, "hello")
 }
 
 fn make_pair() -> (i64, string) {
@@ -33,30 +33,30 @@ fn make_pair() -> (i64, string) {
 @test
 fn test_tuple_function_return_field_access() {
     var r = make_pair()
-    assert_eq(r.0, 7)
-    assert_eq(r.1, "ok")
+    assertEqual(r.0, 7)
+    assertEqual(r.1, "ok")
 }
 
 @test
 fn test_tuple_function_return_destructure() {
     var (n, s) = make_pair()
-    assert_eq(n, 7)
-    assert_eq(s, "ok")
+    assertEqual(n, 7)
+    assertEqual(s, "ok")
 }
 
 @test
 fn test_tuple_nested_field_access() {
     // Tuples can contain tuples; .N is still constant-time per level.
     var t = ((1, 2), (3, 4))
-    assert_eq(t.0.0, 1)
-    assert_eq(t.0.1, 2)
-    assert_eq(t.1.0, 3)
-    assert_eq(t.1.1, 4)
+    assertEqual(t.0.0, 1)
+    assertEqual(t.0.1, 2)
+    assertEqual(t.1.0, 3)
+    assertEqual(t.1.1, 4)
 }
 
 @test
 fn test_tuple_unary() {
     // Single-element tuple is structurally distinct from a scalar.
     var t = (99,)
-    assert_eq(t.0, 99)
+    assertEqual(t.0, 99)
 }

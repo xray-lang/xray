@@ -6,7 +6,7 @@ fn test_shared_provenance_reexported_readonly_function_value_param() {
     const bytes = Array<u8>(2, 5)
     const view: Slice<u8> = bytes[:]
     const f = readFirst
-    assert_eq(f(view), 7)
+    assertEqual(f(view), 7)
 }
 
 @test
@@ -14,5 +14,5 @@ fn test_shared_provenance_star_reexported_readonly_function_value_param() {
     const bytes = Array<u8>(3, 6)
     const view: Slice<u8> = bytes[:]
     const f = mut.readFirst
-    assert_eq(f(view), 9)
+    assertEqual(f(view), 9)
 }

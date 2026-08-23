@@ -14,8 +14,8 @@ fn test_optional_call_on_value() {
 
     var f: IntFn? = bump
     var value = f?.(41)
-    assert_eq(value, 42)
-    assert_eq(hits, 1)
+    assertEqual(value, 42)
+    assertEqual(hits, 1)
 }
 
 @test
@@ -29,12 +29,12 @@ fn test_optional_call_on_null_short_circuits() {
 
     var f: IntFn? = null
     var value = f?.(arg_side_effect())
-    assert_eq(value, null)
-    assert_eq(hits, 0)
+    assertEqual(value, null)
+    assertEqual(hits, 0)
 }
 
 @test
 fn test_optional_call_with_nullish_default() {
     var f: IntFn? = null
-    assert_eq(f?.(10) ?? 99, 99)
+    assertEqual(f?.(10) ?? 99, 99)
 }

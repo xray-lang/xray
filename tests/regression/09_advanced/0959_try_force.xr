@@ -25,7 +25,7 @@ fn maybeFailJson(should_throw: bool) -> User {
 fn test_propagation_success_int() {
     print("1. success returns the value unchanged")
     var a = maybeFailInt(false)
-    assert_eq(a, 42)
+    assertEqual(a, 42)
     print("   PASS")
 }
 
@@ -33,8 +33,8 @@ fn test_propagation_success_int() {
 fn test_propagation_success_json() {
     print("2. success — composite type")
     var obj = maybeFailJson(false)
-    assert_eq(obj.id, 99)
-    assert_eq(obj.name, "Bob")
+    assertEqual(obj.id, 99)
+    assertEqual(obj.name, "Bob")
     print("   PASS")
 }
 
@@ -47,9 +47,9 @@ fn test_propagation_throw_caught() {
         print("should not reach:", x)
     } catch (e) {
         saw_catch = true
-        match (e) { ForceErr.Msg(s) -> { assert_eq(s, "force-try violation") } }
+        match (e) { ForceErr.Msg(s) -> { assertEqual(s, "force-try violation") } }
     }
-    assert_eq(saw_catch, true)
+    assertEqual(saw_catch, true)
     print("   PASS")
 }
 
@@ -65,9 +65,9 @@ fn test_propagation_nested_throw() {
         print("should not reach:", result)
     } catch (e) {
         saw_catch = true
-        match (e) { ForceErr.Msg(s) -> { assert_eq(s, "deeper failure") } }
+        match (e) { ForceErr.Msg(s) -> { assertEqual(s, "deeper failure") } }
     }
-    assert_eq(saw_catch, true)
+    assertEqual(saw_catch, true)
     print("   PASS")
 }
 
@@ -76,6 +76,6 @@ fn test_propagation_keeps_value_type() {
     print("5. value type is preserved (no widening)")
     var v = maybeFailInt(false)
     var next = v + 1
-    assert_eq(next, 43)
+    assertEqual(next, 43)
     print("   PASS")
 }

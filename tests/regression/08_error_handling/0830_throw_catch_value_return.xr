@@ -19,7 +19,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e) {
         result = -1
     }
-    assert_eq(result, 5)
+    assertEqual(result, 5)
 }
 
 @test fn catch_on_error() {
@@ -29,7 +29,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e) {
         result = -1
     }
-    assert_eq(result, -1)
+    assertEqual(result, -1)
 }
 
 @test fn typed_catch() {
@@ -39,7 +39,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e: MathErr) {
         msg = "math error"
     }
-    assert_eq(msg, "math error")
+    assertEqual(msg, "math error")
 }
 
 @test fn auto_propagation() {
@@ -53,7 +53,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e) {
         result = -99
     }
-    assert_eq(result, -99)
+    assertEqual(result, -99)
 }
 
 @test fn nested_try_catch() {
@@ -69,7 +69,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e) {
         outer = -1
     }
-    assert_eq(outer, 44)
+    assertEqual(outer, 44)
 }
 
 @test fn catch_preserves_error_value() {
@@ -88,7 +88,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
             AppErr.Timeout -> "timeout",
         }
     }
-    assert_eq(msg, "not found: empty key")
+    assertEqual(msg, "not found: empty key")
 }
 
 @test fn defer_runs_on_throw() {
@@ -104,8 +104,8 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e) {
         caught = true
     }
-    assert_eq(caught, true)
-    assert_eq(cleaned, true)
+    assertEqual(caught, true)
+    assertEqual(cleaned, true)
 }
 
 @test fn multi_catch_typed() {
@@ -123,7 +123,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e: ParseErr) {
         r1 = -2
     }
-    assert_eq(r1, -1)
+    assertEqual(r1, -1)
 
     var r2 = 0
     try {
@@ -133,7 +133,7 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e: ParseErr) {
         r2 = -2
     }
-    assert_eq(r2, -2)
+    assertEqual(r2, -2)
 
     var r3 = 0
     try {
@@ -143,5 +143,5 @@ fn safe_div(a: i64, b: i64) -> i64 {
     } catch (e: ParseErr) {
         r3 = -2
     }
-    assert_eq(r3, 5)
+    assertEqual(r3, 5)
 }

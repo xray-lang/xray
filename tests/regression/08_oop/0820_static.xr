@@ -18,18 +18,18 @@ class Counter {
 
 @test
 fn test_static_field() {
-    assert_eq(Counter.count, 0)
+    assertEqual(Counter.count, 0)
     Counter.count = 5
-    assert_eq(Counter.count, 5)
+    assertEqual(Counter.count, 5)
 }
 
 @test
 fn test_static_method() {
     Counter.count = 0
     Counter.increment()
-    assert_eq(Counter.getCount(), 1)
+    assertEqual(Counter.getCount(), 1)
     Counter.increment()
-    assert_eq(Counter.getCount(), 2)
+    assertEqual(Counter.getCount(), 2)
 }
 
 // ===== 静态常量 =====
@@ -41,8 +41,8 @@ class MathConstants {
 
 @test
 fn test_static_constants() {
-    assert_eq(MathConstants.PI > 3.14, true)
-    assert_eq(MathConstants.E > 2.71, true)
+    assertEqual(MathConstants.PI > 3.14, true)
+    assertEqual(MathConstants.E > 2.71, true)
 }
 
 // ===== 工厂模式 =====
@@ -69,8 +69,8 @@ class Point {
 @test
 fn test_factory_method() {
     var p = Point.origin()
-    assert_eq(p.x, 0)
-    assert_eq(p.y, 0)
+    assertEqual(p.x, 0)
+    assertEqual(p.y, 0)
 }
 
 // ===== 混合静态和实例 =====
@@ -97,9 +97,9 @@ fn test_mixed_static_instance() {
     var a = Item("Apple")
     var b = Item("Banana")
     
-    assert_eq(a.id, 1)
-    assert_eq(b.id, 2)
-    assert_eq(Item.nextId, 3)
+    assertEqual(a.id, 1)
+    assertEqual(b.id, 2)
+    assertEqual(Item.nextId, 3)
 }
 
 // ===== 静态方法调用静态方法 =====
@@ -116,7 +116,7 @@ class Calculator {
 
 @test
 fn test_static_call_static() {
-    assert_eq(Calculator.add(2, 3), 5)
-    assert_eq(Calculator.addThree(1, 2, 3), 6)
+    assertEqual(Calculator.add(2, 3), 5)
+    assertEqual(Calculator.addThree(1, 2, 3), 6)
 }
 

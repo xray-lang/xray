@@ -31,12 +31,12 @@ fn outerC<T: Comparable>(x: T) -> T {
 
 @test
 fn test_forward_inferred_int() {
-    assert_eq(outerC(3), 3)
+    assertEqual(outerC(3), 3)
 }
 
 @test
 fn test_forward_inferred_string() {
-    assert_eq(outerC("hi"), "hi")
+    assertEqual(outerC("hi"), "hi")
 }
 
 // ===== Explicit type argument =====
@@ -46,8 +46,8 @@ fn outerCExplicit<T: Comparable>(x: T) -> T {
 
 @test
 fn test_forward_explicit_type_arg() {
-    assert_eq(outerCExplicit(7), 7)
-    assert_eq(outerCExplicit("ok"), "ok")
+    assertEqual(outerCExplicit(7), 7)
+    assertEqual(outerCExplicit("ok"), "ok")
 }
 
 // ===== Constraint-agnostic: Hashable and Iterable behave the same =====
@@ -61,7 +61,7 @@ fn outerH<T: Hashable>(x: T) -> T {
 
 @test
 fn test_forward_hashable() {
-    assert_eq(outerH(5), 5)
+    assertEqual(outerH(5), 5)
 }
 
 // Returns a derived value rather than the parameter itself: an Array argument
@@ -77,7 +77,7 @@ fn outerIt<T: Iterable<i64>>(x: T) -> i64 {
 
 @test
 fn test_forward_iterable() {
-    assert_eq(outerIt([1, 2, 3]), 3)
+    assertEqual(outerIt([1, 2, 3]), 3)
 }
 
 // ===== Wider source constraint satisfies a narrower target =====
@@ -88,8 +88,8 @@ fn outerCH<T: Comparable & Hashable>(x: T) -> T {
 
 @test
 fn test_forward_subset_of_constraints() {
-    assert_eq(outerCH(9), 9)
-    assert_eq(outerCH("z"), "z")
+    assertEqual(outerCH(9), 9)
+    assertEqual(outerCH("z"), "z")
 }
 
 // ===== Universally-satisfied target constraint =====
@@ -103,7 +103,7 @@ fn outerCtoS<T: Comparable>(x: T) -> T {
 
 @test
 fn test_forward_to_universal_constraint() {
-    assert_eq(outerCtoS(4), 4)
+    assertEqual(outerCtoS(4), 4)
 }
 
 // ===== Class upper bound: a subclass bound satisfies a superclass bound =====
@@ -131,7 +131,7 @@ fn outerDog<T: Dog>(x: T) -> string {
 
 @test
 fn test_forward_class_bound_to_superclass() {
-    assert_eq(outerDog(Dog("rex")), "rex")
+    assertEqual(outerDog(Dog("rex")), "rex")
 }
 
 // ===== User-defined interface constraint =====
@@ -184,8 +184,8 @@ class Holder<T: Comparable> {
 
 @test
 fn test_forward_class_type_param() {
-    assert_eq(Holder<i64>(11).forwarded(), 11)
-    assert_eq(Holder<string>("cls").forwarded(), "cls")
+    assertEqual(Holder<i64>(11).forwarded(), 11)
+    assertEqual(Holder<string>("cls").forwarded(), "cls")
 }
 
 // ===== Forwarding into a method's own generic constraint =====
@@ -213,13 +213,13 @@ fn outerToStaticMethod<T: Comparable>(x: T) -> T {
 
 @test
 fn test_forward_into_instance_method() {
-    assert_eq(outerToMethod(15), 15)
-    assert_eq(outerToMethod("m"), "m")
+    assertEqual(outerToMethod(15), 15)
+    assertEqual(outerToMethod("m"), "m")
 }
 
 @test
 fn test_forward_into_static_method() {
-    assert_eq(outerToStaticMethod(16), 16)
+    assertEqual(outerToStaticMethod(16), 16)
 }
 
 // ===== Multi-hop forwarding: T -> U -> V =====
@@ -237,8 +237,8 @@ fn hop1<T: Comparable>(x: T) -> T {
 
 @test
 fn test_forward_multi_hop() {
-    assert_eq(hop1(21), 21)
-    assert_eq(hop1("hop"), "hop")
+    assertEqual(hop1(21), 21)
+    assertEqual(hop1("hop"), "hop")
 }
 
 // ===== An unconstrained target still accepts a constrained parameter =====
@@ -252,7 +252,7 @@ fn outerToFree<T: Comparable>(x: T) -> T {
 
 @test
 fn test_forward_to_unconstrained() {
-    assert_eq(outerToFree(6), 6)
+    assertEqual(outerToFree(6), 6)
 }
 
 // ===== Shadowing: an inner unconstrained T must not borrow the outer bound =====
@@ -269,7 +269,7 @@ fn shadowOuter<T: Comparable>(x: T) -> T {
 
 @test
 fn test_shadowed_type_param_resolves_to_inner_binder() {
-    assert_eq(shadowOuter(13), 13)
+    assertEqual(shadowOuter(13), 13)
 }
 
 print("All generic constraint forwarding tests passed!")

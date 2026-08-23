@@ -13,9 +13,9 @@ fn test_triple_chain_map() {
         return x * x
     })
     // [9, 25, 49, 81, 121]
-    assert_eq(len(result), 5)
-    assert_eq(result[0], 9)
-    assert_eq(result[4], 121)
+    assertEqual(len(result), 5)
+    assertEqual(result[0], 9)
+    assertEqual(result[4], 121)
 }
 
 @test
@@ -31,9 +31,9 @@ fn test_quad_chain_mixed() {
         return x / 6
     })
     // [2, 3, 4, 5]
-    assert_eq(len(result), 4)
-    assert_eq(result[0], 2)
-    assert_eq(result[3], 5)
+    assertEqual(len(result), 4)
+    assertEqual(result[0], 2)
+    assertEqual(result[3], 5)
 }
 
 @test
@@ -51,7 +51,7 @@ fn test_five_level_chain() {
         return a + b
     }, 0)
     // 12
-    assert_eq(result, 12)
+    assertEqual(result, 12)
 }
 
 // ===== Nested Array Operations =====
@@ -63,10 +63,10 @@ fn test_map_over_nested_array() {
             return x * 2
         })
     })
-    assert_eq(len(doubled), 3)
-    assert_eq(doubled[0][0], 2)
-    assert_eq(doubled[0][1], 4)
-    assert_eq(doubled[2][1], 12)
+    assertEqual(len(doubled), 3)
+    assertEqual(doubled[0][0], 2)
+    assertEqual(doubled[0][1], 4)
+    assertEqual(doubled[2][1], 12)
 }
 
 @test
@@ -80,10 +80,10 @@ fn test_filter_then_map_nested() {
         })
     })
     // [[4,6], [8]]
-    assert_eq(len(result), 2)
-    assert_eq(len(result[0]), 2)
-    assert_eq(result[0][0], 4)
-    assert_eq(result[1][0], 8)
+    assertEqual(len(result), 2)
+    assertEqual(len(result[0]), 2)
+    assertEqual(result[0][0], 4)
+    assertEqual(result[1][0], 8)
 }
 
 @test
@@ -96,9 +96,9 @@ fn test_triple_nested_map() {
             })
         })
     })
-    assert_eq(result[0][0][0], 10)
-    assert_eq(result[0][1][1], 40)
-    assert_eq(result[1][1][1], 80)
+    assertEqual(result[0][0][0], 10)
+    assertEqual(result[0][1][1], 40)
+    assertEqual(result[1][1][1], 80)
 }
 
 @test
@@ -109,14 +109,14 @@ fn test_nested_reduce() {
             return a + b
         }, 0)
     })
-    assert_eq(len(rowSums), 3)
-    assert_eq(rowSums[0], 6)
-    assert_eq(rowSums[1], 15)
-    assert_eq(rowSums[2], 24)
+    assertEqual(len(rowSums), 3)
+    assertEqual(rowSums[0], 6)
+    assertEqual(rowSums[1], 15)
+    assertEqual(rowSums[2], 24)
     var total = rowSums.reduce(fn(a, b) {
         return a + b
     }, 0)
-    assert_eq(total, 45)
+    assertEqual(total, 45)
 }
 
 @test
@@ -126,9 +126,9 @@ fn test_flatten_with_reduce() {
     var flat = nested.reduce(fn(acc, arr) {
         return acc.concat(arr)
     }, seed)
-    assert_eq(len(flat), 6)
-    assert_eq(flat[0], 1)
-    assert_eq(flat[5], 6)
+    assertEqual(len(flat), 6)
+    assertEqual(flat[0], 1)
+    assertEqual(flat[5], 6)
 }
 
 // ===== Complex Type Transformations =====
@@ -141,9 +141,9 @@ fn test_map_to_objects_then_filter() {
     var filtered = objects.filter(fn(obj) {
         return obj.doubled > 4
     })
-    assert_eq(len(filtered), 3)
-    assert_eq(filtered[0].value, 3)
-    assert_eq(filtered[0].doubled, 6)
+    assertEqual(len(filtered), 3)
+    assertEqual(filtered[0].value, 3)
+    assertEqual(filtered[0].doubled, 6)
 }
 
 @test
@@ -157,9 +157,9 @@ fn test_chain_with_type_change() {
         return len.toString()
     })
     // ["5", "6", "6"]
-    assert_eq(len(result), 3)
-    assert_eq(result[0], "5")
-    assert_eq(result[1], "6")
+    assertEqual(len(result), 3)
+    assertEqual(result[0], "5")
+    assertEqual(result[1], "6")
 }
 
 @test
@@ -171,9 +171,9 @@ fn test_reduce_to_map() {
         next.set(pair.0, pair.1)
         return next
     }, seed)
-    assert_eq(obj.get("a"), 1)
-    assert_eq(obj.get("b"), 2)
-    assert_eq(obj.get("c"), 3)
+    assertEqual(obj.get("a"), 1)
+    assertEqual(obj.get("b"), 2)
+    assertEqual(obj.get("c"), 3)
 }
 
 // ===== Higher-Order Functions with Closures =====
@@ -184,8 +184,8 @@ fn test_map_with_closure_capture() {
     var result = arr.map(fn(x) {
         return x * multiplier
     })
-    assert_eq(result[0], 10)
-    assert_eq(result[4], 50)
+    assertEqual(result[0], 10)
+    assertEqual(result[4], 50)
 }
 
 @test
@@ -198,8 +198,8 @@ fn test_nested_closure_capture() {
             return base + offset + x
         })
     })
-    assert_eq(result[0][0], 111)
-    assert_eq(result[1][1], 114)
+    assertEqual(result[0][0], 111)
+    assertEqual(result[1][1], 114)
 }
 
 @test
@@ -210,8 +210,8 @@ fn test_filter_with_external_predicate() {
         return x > threshold
     }
     var result = arr.filter(isAboveThreshold)
-    assert_eq(len(result), 2)
-    assert_eq(result[0], 7)
+    assertEqual(len(result), 2)
+    assertEqual(result[0], 7)
 }
 
 // ===== Combining Multiple Array Operations =====
@@ -228,9 +228,9 @@ fn test_parallel_operations_then_combine() {
     for (var i = 0; i < len(arr); i++) {
         combined.push(doubled[i] + tripled[i])
     }
-    assert_eq(combined[0], 5)
+    assertEqual(combined[0], 5)
     // 2 + 3
-    assert_eq(combined[4], 25)
+    assertEqual(combined[4], 25)
 }
 
 @test
@@ -241,7 +241,7 @@ fn test_zip_with_reduce() {
     var dotProduct = indices.reduce(fn(sum, i) {
         return sum + a[i] * b[i]
     }, 0)
-    assert_eq(dotProduct, 32)
+    assertEqual(dotProduct, 32)
 }
 
 // ===== every/some with Complex Predicates =====
@@ -253,13 +253,13 @@ fn test_every_with_nested_check() {
             return x > 0
         })
     })
-    assert_eq(allPositive, true)
+    assertEqual(allPositive, true)
     var allEven = matrix.every(fn(row) {
         return row.every(fn(x) {
             return x % 2 == 0
         })
     })
-    assert_eq(allEven, false)
+    assertEqual(allEven, false)
 }
 
 @test
@@ -270,7 +270,7 @@ fn test_some_with_nested_check() {
             return x % 2 == 0
         })
     })
-    assert_eq(hasEvenRow, true)
+    assertEqual(hasEvenRow, true)
 }
 
 @test
@@ -281,7 +281,7 @@ fn test_find_with_complex_predicate() {
             return s >= 90
         })
     })
-    assert_eq(highAchiever!.name, "Carol")
+    assertEqual(highAchiever!.name, "Carol")
 }
 
 // ===== Function Composition with Higher-Order Functions =====
@@ -307,9 +307,9 @@ fn test_compose_transformations() {
     // double: [2, 4, 6]
     // addOne: [3, 5, 7]
     // square: [9, 25, 49]
-    assert_eq(result[0], 9)
-    assert_eq(result[1], 25)
-    assert_eq(result[2], 49)
+    assertEqual(result[0], 9)
+    assertEqual(result[1], 25)
+    assertEqual(result[2], 49)
 }
 
 @test
@@ -332,9 +332,9 @@ fn test_pipeline_of_operations() {
     for (op in operations) {
         result = op(result)
     }
-    assert_eq(len(result), 2)
-    assert_eq(result[0], 30)
-    assert_eq(result[1], 40)
+    assertEqual(len(result), 2)
+    assertEqual(result[0], 30)
+    assertEqual(result[1], 40)
 }
 
 // ===== Edge Cases with Empty and Single Element =====
@@ -348,7 +348,7 @@ fn test_chain_with_empty_intermediate() {
     }).reduce(fn(a, b) {
         return a + b
     }, 0)
-    assert_eq(result, 0)
+    assertEqual(result, 0)
 }
 
 @test
@@ -361,8 +361,8 @@ fn test_chain_with_single_element() {
     }).map(fn(x) {
         return x.toString()
     })
-    assert_eq(len(result), 1)
-    assert_eq(result[0], "84")
+    assertEqual(len(result), 1)
+    assertEqual(result[0], "84")
 }
 
 // ===== forEach with Side Effects =====
@@ -375,7 +375,7 @@ fn test_nested_foreach() {
             sum += x
         })
     })
-    assert_eq(sum, 21)
+    assertEqual(sum, 21)
 }
 
 @test
@@ -387,9 +387,9 @@ fn test_foreach_with_index_simulation() {
         indexed.push({ "index": idx, "value": item })
         idx++
     })
-    assert_eq(indexed[0].index, 0)
-    assert_eq(indexed[0].value, "a")
-    assert_eq(indexed[2].index, 2)
+    assertEqual(indexed[0].index, 0)
+    assertEqual(indexed[0].value, "a")
+    assertEqual(indexed[2].index, 2)
 }
 
 // ===== Complex Data Transformations =====
@@ -402,9 +402,9 @@ fn test_group_by_simulation() {
     var vegetables = items.filter(fn(item) {
         return item.category == "vegetable"
     })
-    assert_eq(len(fruits), 2)
-    assert_eq(len(vegetables), 2)
-    assert_eq(fruits[0].name, "apple")
+    assertEqual(len(fruits), 2)
+    assertEqual(len(vegetables), 2)
+    assertEqual(fruits[0].name, "apple")
 }
 
 @test
@@ -418,9 +418,9 @@ fn test_unique_via_reduce() {
         seen.add(x)
         return true
     })
-    assert_eq(len(unique), 4)
-    assert_eq(unique[0], 1)
-    assert_eq(unique[3], 4)
+    assertEqual(len(unique), 4)
+    assertEqual(unique[0], 1)
+    assertEqual(unique[3], 4)
 }
 
 @test
@@ -432,9 +432,9 @@ fn test_count_by_reduce() {
         next.set(word, (next.get(word) ?? 0) + 1)
         return next
     }, seed)
-    assert_eq(counts.get("apple"), 3)
-    assert_eq(counts.get("banana"), 2)
-    assert_eq(counts.get("cherry"), 1)
+    assertEqual(counts.get("apple"), 3)
+    assertEqual(counts.get("banana"), 2)
+    assertEqual(counts.get("cherry"), 1)
 }
 
 // ===== Return Type Inference Through Chains =====
@@ -448,8 +448,8 @@ fn test_mixed_return_types() {
         return len(s)
     })
     // [1, 2, 3]
-    assert_eq(lengths[0], 1)
-    assert_eq(lengths[2], 3)
+    assertEqual(lengths[0], 1)
+    assertEqual(lengths[2], 3)
 }
 
 @test
@@ -461,8 +461,8 @@ fn test_boolean_chain() {
         return b
     })
     // [true, true]
-    assert_eq(len(bools), 2)
-    assert_eq(bools[0], true)
+    assertEqual(len(bools), 2)
+    assertEqual(bools[0], true)
 }
 
 // ===== Deeply Nested with Multiple Types =====
@@ -480,9 +480,9 @@ fn test_complex_data_pipeline() {
     }).map(fn(user) {
         return user.name
     })
-    assert_eq(len(highSpenders), 2)
-    assert_eq(highSpenders[0], "Alice")
-    assert_eq(highSpenders[1], "Carol")
+    assertEqual(len(highSpenders), 2)
+    assertEqual(highSpenders[0], "Alice")
+    assertEqual(highSpenders[1], "Carol")
 }
 
 @test
@@ -494,11 +494,11 @@ fn test_matrix_operations() {
             return sum + row[col]
         }, 0)
     })
-    assert_eq(colSums[0], 12)
+    assertEqual(colSums[0], 12)
     // 1+4+7
-    assert_eq(colSums[1], 15)
+    assertEqual(colSums[1], 15)
     // 2+5+8
-    assert_eq(colSums[2], 18)
+    assertEqual(colSums[2], 18)
 }
 
 @test
@@ -510,5 +510,5 @@ fn test_findIndex_chain() {
             return a + b
         }, 0) > 10
     })
-    assert_eq(idx, 2)
+    assertEqual(idx, 2)
 }

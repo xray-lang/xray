@@ -15,13 +15,13 @@ fn test_fib_tail() {
         return fib_acc(n, 0, 1)
     }
 
-    assert_eq(fib(0), 0)
-    assert_eq(fib(1), 1)
-    assert_eq(fib(2), 1)
-    assert_eq(fib(5), 5)
-    assert_eq(fib(10), 55)
-    assert_eq(fib(20), 6765)
-    assert_eq(fib(46), 1836311903)
+    assertEqual(fib(0), 0)
+    assertEqual(fib(1), 1)
+    assertEqual(fib(2), 1)
+    assertEqual(fib(5), 5)
+    assertEqual(fib(10), 55)
+    assertEqual(fib(20), 6765)
+    assertEqual(fib(46), 1836311903)
 }
 
 // ===== Parameter swap correctness =====
@@ -32,11 +32,11 @@ fn test_swap_params() {
         return swap_count(b, a, n - 1)
     }
 
-    assert_eq(swap_count(1, 2, 0), 1)
-    assert_eq(swap_count(1, 2, 1), 2)
-    assert_eq(swap_count(1, 2, 2), 1)
-    assert_eq(swap_count(1, 2, 100), 1)
-    assert_eq(swap_count(1, 2, 101), 2)
+    assertEqual(swap_count(1, 2, 0), 1)
+    assertEqual(swap_count(1, 2, 1), 2)
+    assertEqual(swap_count(1, 2, 2), 1)
+    assertEqual(swap_count(1, 2, 100), 1)
+    assertEqual(swap_count(1, 2, 101), 2)
 }
 
 // ===== Tail-recursive GCD =====
@@ -47,11 +47,11 @@ fn test_gcd_tail() {
         return gcd(b, a % b)
     }
 
-    assert_eq(gcd(48, 18), 6)
-    assert_eq(gcd(100, 25), 25)
-    assert_eq(gcd(17, 13), 1)
-    assert_eq(gcd(0, 5), 5)
-    assert_eq(gcd(12, 12), 12)
+    assertEqual(gcd(48, 18), 6)
+    assertEqual(gcd(100, 25), 25)
+    assertEqual(gcd(17, 13), 1)
+    assertEqual(gcd(0, 5), 5)
+    assertEqual(gcd(12, 12), 12)
 }
 
 // ===== Tail-recursive factorial =====
@@ -62,10 +62,10 @@ fn test_factorial_tail() {
         return fact(n - 1, n * acc)
     }
 
-    assert_eq(fact(0, 1), 1)
-    assert_eq(fact(1, 1), 1)
-    assert_eq(fact(5, 1), 120)
-    assert_eq(fact(10, 1), 3628800)
+    assertEqual(fact(0, 1), 1)
+    assertEqual(fact(1, 1), 1)
+    assertEqual(fact(5, 1), 120)
+    assertEqual(fact(10, 1), 3628800)
 }
 
 // ===== Deep tail recursion (no stack overflow) =====
@@ -78,7 +78,7 @@ fn test_deep_tail_recursion() {
 
     // With tail recursion optimization, this should NOT stack overflow.
     // Without optimization, 100000 levels would overflow.
-    assert_eq(count_down(100000), 0)
+    assertEqual(count_down(100000), 0)
 }
 
 // ===== Tail-recursive sum =====
@@ -89,10 +89,10 @@ fn test_sum_tail() {
         return sum_acc(n - 1, acc + n)
     }
 
-    assert_eq(sum_acc(0, 0), 0)
-    assert_eq(sum_acc(10, 0), 55)
-    assert_eq(sum_acc(100, 0), 5050)
-    assert_eq(sum_acc(1000, 0), 500500)
+    assertEqual(sum_acc(0, 0), 0)
+    assertEqual(sum_acc(10, 0), 55)
+    assertEqual(sum_acc(100, 0), 5050)
+    assertEqual(sum_acc(1000, 0), 500500)
 }
 
 // ===== Non-tail recursion still works =====
@@ -103,10 +103,10 @@ fn test_non_tail_recursion() {
         return fib_naive(n - 1) + fib_naive(n - 2)
     }
 
-    assert_eq(fib_naive(0), 0)
-    assert_eq(fib_naive(1), 1)
-    assert_eq(fib_naive(10), 55)
-    assert_eq(fib_naive(20), 6765)
+    assertEqual(fib_naive(0), 0)
+    assertEqual(fib_naive(1), 1)
+    assertEqual(fib_naive(10), 55)
+    assertEqual(fib_naive(20), 6765)
 }
 
 // ===== Single param tail recursion =====
@@ -122,9 +122,9 @@ fn test_single_param() {
 
     // Note: this is NOT tail-recursive (1 + recursive_call),
     // so it tests that non-tail recursive calls are unaffected.
-    assert_eq(collatz_steps(1), 0)
-    assert_eq(collatz_steps(2), 1)
-    assert_eq(collatz_steps(6), 8)
+    assertEqual(collatz_steps(1), 0)
+    assertEqual(collatz_steps(2), 1)
+    assertEqual(collatz_steps(6), 8)
 }
 
 // ===== Tail-recursive with boolean result =====
@@ -136,11 +136,11 @@ fn test_is_even_tail() {
         return is_even(n - 2)
     }
 
-    assert_eq(is_even(0), true)
-    assert_eq(is_even(1), false)
-    assert_eq(is_even(100), true)
-    assert_eq(is_even(99), false)
-    assert_eq(is_even(10000), true)
+    assertEqual(is_even(0), true)
+    assertEqual(is_even(1), false)
+    assertEqual(is_even(100), true)
+    assertEqual(is_even(99), false)
+    assertEqual(is_even(10000), true)
 }
 
 // ===== Non-recursive tail call (OP_TAILCALL for variable calls) =====
@@ -155,9 +155,9 @@ fn test_non_recursive_tailcall() {
         return 0
     }
 
-    assert_eq(compute("add", 3, 4), 7)
-    assert_eq(compute("mul", 3, 4), 12)
-    assert_eq(compute("sub", 3, 4), 0)
+    assertEqual(compute("add", 3, 4), 7)
+    assertEqual(compute("mul", 3, 4), 12)
+    assertEqual(compute("sub", 3, 4), 0)
 }
 
 // ===== Mutual recursion with tail calls =====
@@ -172,11 +172,11 @@ fn test_mutual_tail_recursion() {
         return is_even(n - 1)
     }
 
-    assert_eq(is_even(0), true)
-    assert_eq(is_even(1), false)
-    assert_eq(is_even(10), true)
-    assert_eq(is_odd(11), true)
-    assert_eq(is_odd(12), false)
+    assertEqual(is_even(0), true)
+    assertEqual(is_even(1), false)
+    assertEqual(is_even(10), true)
+    assertEqual(is_odd(11), true)
+    assertEqual(is_odd(12), false)
 }
 
 // ===== Non-tail position: ensure regular calls still work =====
@@ -188,8 +188,8 @@ fn test_non_tail_regular_call() {
         return double(sum)
     }
 
-    assert_eq(add_then_double(3, 4), 14)
-    assert_eq(add_then_double(0, 0), 0)
+    assertEqual(add_then_double(3, 4), 14)
+    assertEqual(add_then_double(0, 0), 0)
 }
 
 // ===== Instance method tail recursion (OP_INVOKE_TAIL) =====
@@ -207,8 +207,8 @@ fn test_method_tail_recursion() {
     }
 
     var acc = Accumulator()
-    assert_eq(acc.add(10), 55)
-    assert_eq(acc.add(0), 55)
+    assertEqual(acc.add(10), 55)
+    assertEqual(acc.add(0), 55)
 }
 
 // ===== Cross-method tail call on same instance =====
@@ -238,11 +238,11 @@ fn test_method_cross_tail() {
     }
 
     var t = Toggler()
-    assert_eq(t.toggleOn(0), false)
-    assert_eq(t.toggleOn(1), true)
-    assert_eq(t.toggleOn(2), false)
-    assert_eq(t.toggleOn(3), true)
-    assert_eq(t.steps, 6)
+    assertEqual(t.toggleOn(0), false)
+    assertEqual(t.toggleOn(1), true)
+    assertEqual(t.toggleOn(2), false)
+    assertEqual(t.toggleOn(3), true)
+    assertEqual(t.steps, 6)
 }
 
 // ===== Static method tail recursion (top-level class) =====
@@ -259,9 +259,9 @@ class MathUtil {
 
 @test
 fn test_static_tail_recursion() {
-    assert_eq(MathUtil.factorial(10, 1), 3628800.0)
-    assert_eq(MathUtil.factorial(1, 1), 1.0)
-    assert_eq(MathUtil.countdown(100), "done")
+    assertEqual(MathUtil.factorial(10, 1), 3628800.0)
+    assertEqual(MathUtil.factorial(1, 1), 1.0)
+    assertEqual(MathUtil.countdown(100), "done")
 }
 
 // ===== Deep method tail recursion (stack overflow without TCO) =====
@@ -278,7 +278,7 @@ fn test_deep_method_tail_recursion() {
     }
 
     var c = DeepCounter()
-    assert_eq(c.count(100000), 100000)
+    assertEqual(c.count(100000), 100000)
 }
 
 print("tail_recursion: all tests passed")

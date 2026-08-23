@@ -27,10 +27,10 @@ fn test_map_lookup_by_value() {
     m[Key(1, "x")] = 10
     m[Key(2, "yy")] = 20
     // A different instance with equal fields must find the stored entry.
-    assert_eq(m[Key(1, "x")], 10)
-    assert_eq(m[Key(2, "yy")], 20)
-    assert_true(m.containsKey(Key(1, "x")))
-    assert_true(!m.containsKey(Key(9, "z")))
+    assertEqual(m[Key(1, "x")], 10)
+    assertEqual(m[Key(2, "yy")], 20)
+    assert(m.containsKey(Key(1, "x")))
+    assert(!m.containsKey(Key(9, "z")))
 }
 
 @test
@@ -39,9 +39,9 @@ fn test_map_overwrite_and_distinct_keys() {
     m[Key(1, "x")] = 10
     m[Key(1, "y")] = 20  // same a, different b -> distinct key
     m[Key(1, "x")] = 11  // overwrite the first
-    assert_eq(len(m), 2)
-    assert_eq(m[Key(1, "x")], 11)
-    assert_eq(m[Key(1, "y")], 20)
+    assertEqual(len(m), 2)
+    assertEqual(m[Key(1, "x")], 11)
+    assertEqual(m[Key(1, "y")], 20)
 }
 
 @test
@@ -49,10 +49,10 @@ fn test_map_delete_by_value() {
     var m = Map<Key, i64>()
     m[Key(5, "p")] = 1
     m[Key(6, "q")] = 2
-    assert_true(m.delete(Key(5, "p")))
-    assert_eq(len(m), 1)
-    assert_true(!m.containsKey(Key(5, "p")))
-    assert_true(m.containsKey(Key(6, "q")))
+    assert(m.delete(Key(5, "p")))
+    assertEqual(len(m), 1)
+    assert(!m.containsKey(Key(5, "p")))
+    assert(m.containsKey(Key(6, "q")))
 }
 
 @test
@@ -61,9 +61,9 @@ fn test_set_dedup_by_value() {
     s.add(Key(2, "p"))
     s.add(Key(2, "p"))  // duplicate by value -> collapses
     s.add(Key(3, "q"))
-    assert_eq(len(s), 2)
-    assert_true(s.contains(Key(2, "p")))
-    assert_true(!s.contains(Key(4, "r")))
+    assertEqual(len(s), 2)
+    assert(s.contains(Key(2, "p")))
+    assert(!s.contains(Key(4, "r")))
 }
 
 @test
@@ -72,6 +72,6 @@ fn test_primitive_keys_unaffected() {
     var m = Map<string, i64>()
     m["a"] = 1
     m["b"] = 2
-    assert_eq(m["a"], 1)
-    assert_eq(len(m), 2)
+    assertEqual(m["a"], 1)
+    assertEqual(len(m), 2)
 }

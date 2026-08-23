@@ -47,8 +47,8 @@ fn test_dial_tls_handshake_timeout() {
     }
     var elapsed = time.monotonic() - start
 
-    assert_eq(caught, NetError.Timeout)
-    assert_true(elapsed < 1000)
+    assertEqual(caught, NetError.Timeout)
+    assert(elapsed < 1000)
 
     net.close(lst)
 }
@@ -76,11 +76,11 @@ fn test_upgrade_tls_handshake_timeout() {
     }
     var elapsed = time.monotonic() - start
 
-    assert_eq(caught, NetError.Timeout)
-    assert_true(elapsed < 1000)
+    assertEqual(caught, NetError.Timeout)
+    assert(elapsed < 1000)
 
     // upgradeTLS leaves the connection closed on failure.
-    assert_eq(net.fd(conn), -1)
+    assertEqual(net.fd(conn), -1)
 
     net.close(conn)
     net.close(lst)

@@ -3,31 +3,31 @@ const COUNT = comptime 4
 @test
 fn test_comptime_fixed_array_repeat_value() {
     var repeated: [i64; COUNT] = comptime [7; COUNT]
-    assert_eq(len(repeated), 4)
-    assert_eq(repeated[0], 7)
-    assert_eq(repeated[3], 7)
+    assertEqual(len(repeated), 4)
+    assertEqual(repeated[0], 7)
+    assertEqual(repeated[3], 7)
 }
 
 @test
 fn test_comptime_fixed_array_list_value() {
     var listed: [i64; 3] = comptime [1, COUNT - 2, COUNT]
-    assert_eq(len(listed), 3)
-    assert_eq(listed[0], 1)
-    assert_eq(listed[1], 2)
-    assert_eq(listed[2], 4)
+    assertEqual(len(listed), 3)
+    assertEqual(listed[0], 1)
+    assertEqual(listed[1], 2)
+    assertEqual(listed[2], 4)
 }
 
 @test
 fn test_comptime_fixed_array_const_cache() {
     const local = comptime [5; COUNT]
     var cached: [i64; COUNT] = copy(comptime local)
-    assert_eq(cached[0], 5)
-    assert_eq(cached[3], 5)
+    assertEqual(cached[0], 5)
+    assertEqual(cached[3], 5)
 }
 
 @test
 fn test_comptime_fixed_array_index_access() {
     const table: [i64; 3] = comptime [1, COUNT, 9]
     var picked = comptime (table[0] + table[1] + table[2])
-    assert_eq(picked, 14)
+    assertEqual(picked, 14)
 }

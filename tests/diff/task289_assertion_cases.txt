@@ -1,0 +1,1 @@
+tests/diff/cases/semantics/exception/core_assertion_channels.xr

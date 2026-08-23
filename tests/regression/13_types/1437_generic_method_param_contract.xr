@@ -6,7 +6,7 @@ class Box<T> {
     }
 
     touch(value: ref T) {
-        assert_eq(value, this.value)
+        assertEqual(value, this.value)
     }
 }
 

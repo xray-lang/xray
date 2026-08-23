@@ -11,7 +11,7 @@ enum TestErr {
 fn test_enum_basic_construct() {
     var e = TestErr.Msg("hi")
     match (e) {
-        TestErr.Msg(s) -> { assert_eq(s, "hi") }
+        TestErr.Msg(s) -> { assertEqual(s, "hi") }
         _ -> { assert(false) }
     }
 }
@@ -21,8 +21,8 @@ fn test_enum_multi_field() {
     var e = TestErr.Wrapped("outer", "inner")
     match (e) {
         TestErr.Wrapped(msg, cause) -> {
-            assert_eq(msg, "outer")
-            assert_eq(cause, "inner")
+            assertEqual(msg, "outer")
+            assertEqual(cause, "inner")
         }
         _ -> { assert(false) }
     }
@@ -34,9 +34,9 @@ fn test_enum_cause_chain() {
     var outer = TestErr.Wrapped("outer", "inner")
     match (outer) {
         TestErr.Wrapped(msg, cause) -> {
-            assert_eq(msg, "outer")
+            assertEqual(msg, "outer")
             match (inner) {
-                TestErr.Msg(s) -> { assert_eq(s, cause) }
+                TestErr.Msg(s) -> { assertEqual(s, cause) }
                 _ -> { assert(false) }
             }
         }
@@ -59,7 +59,7 @@ fn test_enum_throw_and_catch() {
     } catch (e) {
         match (e) { TestErr.Msg(s) -> { caught_msg = s } }
     }
-    assert_eq(caught_msg, "oops")
+    assertEqual(caught_msg, "oops")
 }
 
 @test
@@ -76,8 +76,8 @@ fn test_enum_throw_with_wrapped() {
             }
         }
     }
-    assert_eq(primary_msg, "wrapped")
-    assert_eq(cause_msg, "primary")
+    assertEqual(primary_msg, "wrapped")
+    assertEqual(cause_msg, "primary")
 }
 
 @test
@@ -88,7 +88,7 @@ fn test_enum_typed_catch() {
     } catch (e: TestErr) {
         caught = true
     }
-    assert_eq(caught, true)
+    assertEqual(caught, true)
 }
 
 fn make_failure(msg: string) -> TestErr {
@@ -99,7 +99,7 @@ fn make_failure(msg: string) -> TestErr {
 fn test_enum_function_return() {
     var e = make_failure("via fn")
     match (e) {
-        TestErr.Msg(s) -> { assert_eq(s, "via fn") }
+        TestErr.Msg(s) -> { assertEqual(s, "via fn") }
         _ -> { assert(false) }
     }
 }

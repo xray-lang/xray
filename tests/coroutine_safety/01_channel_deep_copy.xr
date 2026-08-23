@@ -26,8 +26,8 @@ fn test_array_isolation() {
     // 应该是 5
     print("接收数组长度:", len(received))
     // 应该是 3
-    assert_eq(len(original), 5)
-    assert_eq(len(received), 3)
+    assertEqual(len(original), 5)
+    assertEqual(len(received), 3)
     print("✓ 数组隔离测试通过")
 }
 
@@ -46,8 +46,8 @@ fn test_map_isolation() {
     // 应该是 4
     print("接收 Map 大小:", len(received))
     // 应该是 2
-    assert_eq(len(original), 4)
-    assert_eq(len(received), 2)
+    assertEqual(len(original), 4)
+    assertEqual(len(received), 2)
     print("✓ Map 隔离测试通过")
 }
 
@@ -67,8 +67,8 @@ fn test_nested_isolation() {
     // 应该是 4
     print("接收嵌套数组长度:", len(recv_items))
     // 应该是 3
-    assert_eq(len(orig_items), 4)
-    assert_eq(len(recv_items), 3)
+    assertEqual(len(orig_items), 4)
+    assertEqual(len(recv_items), 3)
     print("✓ 嵌套结构隔离测试通过")
 }
 

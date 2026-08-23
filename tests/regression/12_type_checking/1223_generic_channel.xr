@@ -46,23 +46,23 @@ fn test_generic_channel() {
     intCh.send(100)
     var v1 = recv_int(intCh)
     var v2 = recv_int(intCh)
-    assert_eq(v1, 42)
-    assert_eq(v2, 100)
+    assertEqual(v1, 42)
+    assertEqual(v2, 100)
     // Send and receive string
     strCh.send("hello")
     strCh.send("world")
     var s1 = recv_string(strCh)
     var s2 = recv_string(strCh)
-    assert_eq(s1, "hello")
-    assert_eq(s2, "world")
+    assertEqual(s1, "hello")
+    assertEqual(s2, "world")
     // Channel with Array
     const arrCh: Channel<Array<i64>> = Channel(2)
     arrCh.send(copy([1, 2, 3]))
     arrCh.send(copy([4, 5, 6]))
     var arr1 = recv_array(arrCh)
     var arr2 = recv_array(arrCh)
-    assert_eq(arr1[0], 1)
-    assert_eq(arr2[2], 6)
+    assertEqual(arr1[0], 1)
+    assertEqual(arr2[2], 6)
     // tryRecv with generic channel
     const tryCh: Channel<i64> = Channel(1)
     // Empty channel
@@ -84,7 +84,7 @@ fn test_generic_channel() {
         _ -> -1
     }
     assert(ok2)
-    assert_eq(val2, 999)
+    assertEqual(val2, 999)
     // trySend with generic channel
     const smallCh: Channel<string> = Channel(1)
     var sent1 = smallCh.trySend("first")
@@ -94,7 +94,7 @@ fn test_generic_channel() {
     assert(!sent(sent2))
     // Receive and try again
     var recv = recv_string(smallCh)
-    assert_eq(recv, "first")
+    assertEqual(recv, "first")
     // Optional value in channel
     const optCh: Channel<i64?> = Channel(3)
     optCh.send(42)
@@ -103,7 +103,7 @@ fn test_generic_channel() {
     var o1 = recv_opt_int(optCh)
     var o2 = recv_opt_int(optCh)
     var o3 = recv_opt_int(optCh)
-    assert_eq(o1, 42)
-    assert_eq(o2, null)
-    assert_eq(o3, 100)
+    assertEqual(o1, 42)
+    assertEqual(o2, null)
+    assertEqual(o3, 100)
 }

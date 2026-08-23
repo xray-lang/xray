@@ -16,9 +16,9 @@ fn test_cell_counter_basic() {
         return inc
     }
     var f = make()
-    assert_eq(f(), 1)
-    assert_eq(f(), 2)
-    assert_eq(f(), 3)
+    assertEqual(f(), 1)
+    assertEqual(f(), 2)
+    assertEqual(f(), 3)
 }
 
 // ===== Two independent cells in one function =====
@@ -40,10 +40,10 @@ fn test_two_cells() {
         return step
     }
     var f = make()
-    assert_eq(f(true), 1)
-    assert_eq(f(false), 99)
-    assert_eq(f(true), 2)
-    assert_eq(f(false), 98)
+    assertEqual(f(true), 1)
+    assertEqual(f(false), 99)
+    assertEqual(f(true), 2)
+    assertEqual(f(false), 98)
 }
 
 // ===== Transitive capture (UPVAL_SRC_UPVAL) =====
@@ -62,8 +62,8 @@ fn test_transitive_capture() {
         return middle()
     }
     var f = outer()
-    assert_eq(f(), 15)
-    assert_eq(f(), 20)
+    assertEqual(f(), 15)
+    assertEqual(f(), 20)
 }
 
 // ===== Const capture (no cell needed) =====
@@ -78,8 +78,8 @@ fn test_const_capture() {
         return calc
     }
     var f = make(100)
-    assert_eq(f(1), 103)
-    assert_eq(f(10), 130)
+    assertEqual(f(1), 103)
+    assertEqual(f(10), 130)
 }
 
 // ===== Cell in loop — multiple closures sharing same cell =====
@@ -94,9 +94,9 @@ fn test_cell_shared_by_closures() {
     inc()
     inc()
     inc()
-    assert_eq(get(), 3)
+    assertEqual(get(), 3)
     dec()
-    assert_eq(get(), 2)
+    assertEqual(get(), 2)
 }
 
 // ===== Hot loop with cell get/set (JIT inline path) =====
@@ -116,7 +116,7 @@ fn test_cell_hot_loop() {
     for (var i = 1; i <= 100; i++) {
         sum = acc(i)
     }
-    assert_eq(sum, 5050)
+    assertEqual(sum, 5050)
 }
 
 // ===== Cell with different value types =====
@@ -132,9 +132,9 @@ fn test_cell_string_value() {
         return append
     }
     var f = make()
-    assert_eq(f("a"), "a")
-    assert_eq(f("b"), "ab")
-    assert_eq(f("c"), "abc")
+    assertEqual(f("a"), "a")
+    assertEqual(f("b"), "ab")
+    assertEqual(f("c"), "abc")
 }
 
 @test
@@ -148,8 +148,8 @@ fn test_cell_float_value() {
         return add
     }
     var f = make()
-    assert_eq(f(1.5), 1.5)
-    assert_eq(f(2.5), 4.0)
+    assertEqual(f(1.5), 1.5)
+    assertEqual(f(2.5), 4.0)
 }
 
 // ===== Multiple independent closure instances =====
@@ -170,11 +170,11 @@ fn test_many_instances() {
     }
     // Each counter is independent
     for (var i = 0; i < 10; i++) {
-        assert_eq(counters[i](), 1)
+        assertEqual(counters[i](), 1)
     }
     // Call first counter more times
-    assert_eq(counters[0](), 2)
-    assert_eq(counters[0](), 3)
+    assertEqual(counters[0](), 2)
+    assertEqual(counters[0](), 3)
     // Others still at 1
-    assert_eq(counters[5](), 2)
+    assertEqual(counters[5](), 2)
 }

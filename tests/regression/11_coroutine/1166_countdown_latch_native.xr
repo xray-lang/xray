@@ -13,23 +13,23 @@ fn test_countdown_latch_wait_reset_and_close() {
         latch.done()
     }()
 
-    assert_true(latch.wait())
-    assert_eq(counter.load(), 3)
-    assert_eq(latch.remaining, 0)
-    assert_true(latch.tryWait())
+    assert(latch.wait())
+    assertEqual(counter.load(), 3)
+    assertEqual(latch.remaining, 0)
+    assert(latch.tryWait())
 
-    assert_true(latch.reset(1))
-    assert_eq(latch.remaining, 1)
+    assert(latch.reset(1))
+    assertEqual(latch.remaining, 1)
 
     go fn() {
         counter.add(4)
         latch.done()
     }()
 
-    assert_true(latch.wait())
-    assert_eq(counter.load(), 7)
+    assert(latch.wait())
+    assertEqual(counter.load(), 7)
 
     latch.close()
-    assert_true(latch.isClosed)
-    assert_false(latch.wait())
+    assert(latch.isClosed)
+    assert(!(latch.wait()))
 }

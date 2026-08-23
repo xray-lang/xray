@@ -7,10 +7,10 @@ fn empty() { }
 fn run() {
     fn local_empty() { }
     var result = empty()
-    assert_eq(result, null)
+    assert(typeName(result) == "null")
     print(result)
     var nested = local_empty()
-    assert_eq(nested, null)
+    assert(typeName(nested) == "null")
     print(nested)
 }
 

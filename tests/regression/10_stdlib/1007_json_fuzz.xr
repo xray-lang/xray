@@ -10,24 +10,24 @@
 fn test_deep_nested_arrays() {
     var s = "[[[[[[[[[[42]]]]]]]]]]"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(obj, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 42)
+    assertEqual(JSON.require<i64>(obj, [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]), 42)
 }
 
 @test
 fn test_deep_nested_objects() {
     var s = "{\"a\":{\"b\":{\"c\":{\"d\":{\"e\":{\"f\":99}}}}}}"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(obj, ["a", "b", "c", "d", "e", "f"]), 99)
+    assertEqual(JSON.require<i64>(obj, ["a", "b", "c", "d", "e", "f"]), 99)
 }
 
 @test
 fn test_alternating_array_object_nesting() {
     var s = "[{\"a\":[{\"b\":[1,2]},{\"c\":[3,4]}]}]"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(obj, [0, "a", 0, "b", 0]), 1)
-    assert_eq(JSON.require<i64>(obj, [0, "a", 0, "b", 1]), 2)
-    assert_eq(JSON.require<i64>(obj, [0, "a", 1, "c", 0]), 3)
-    assert_eq(JSON.require<i64>(obj, [0, "a", 1, "c", 1]), 4)
+    assertEqual(JSON.require<i64>(obj, [0, "a", 0, "b", 0]), 1)
+    assertEqual(JSON.require<i64>(obj, [0, "a", 0, "b", 1]), 2)
+    assertEqual(JSON.require<i64>(obj, [0, "a", 1, "c", 0]), 3)
+    assertEqual(JSON.require<i64>(obj, [0, "a", 1, "c", 1]), 4)
 }
 
 // ===== Empty structures =====
@@ -41,16 +41,16 @@ fn test_empty_object() {
 @test
 fn test_empty_array() {
     var arr = JSON.parseValue("[]")
-    assert_eq(len(JSON.asArray(arr)!), 0)
+    assertEqual(len(JSON.asArray(arr)!), 0)
 }
 
 @test
 fn test_nested_empties() {
     var s = "{\"a\":[],\"b\":{},\"c\":[{},[]],\"d\":{\"e\":[]}}"
     var obj = JSON.parseValue(s)
-    assert_eq(len(JSON.require<Array<JSON.Value>>(obj, ["a"])), 0)
-    assert_eq(len(JSON.require<Array<JSON.Value>>(obj, ["c"])), 2)
-    assert_eq(len(JSON.require<Array<JSON.Value>>(obj, ["d", "e"])), 0)
+    assertEqual(len(JSON.require<Array<JSON.Value>>(obj, ["a"])), 0)
+    assertEqual(len(JSON.require<Array<JSON.Value>>(obj, ["c"])), 2)
+    assertEqual(len(JSON.require<Array<JSON.Value>>(obj, ["d", "e"])), 0)
 }
 
 // ===== String edge cases =====
@@ -66,14 +66,14 @@ fn test_escaped_characters() {
 fn test_empty_string_value() {
     var s = "{\"key\":\"\"}"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<string>(obj, ["key"]), "")
+    assertEqual(JSON.require<string>(obj, ["key"]), "")
 }
 
 @test
 fn test_string_with_special_chars() {
     var s = "{\"data\":\"a/b:c@d#e\"}"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<string>(obj, ["data"]), "a/b:c@d#e")
+    assertEqual(JSON.require<string>(obj, ["data"]), "a/b:c@d#e")
 }
 
 // ===== Number edge cases =====
@@ -82,34 +82,34 @@ fn test_string_with_special_chars() {
 fn test_zero_values() {
     var s = "[0, 0.0, -0]"
     var arr = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(arr, [0]), 0)
-    assert_eq(JSON.require<f64>(arr, [1]), 0.0)
+    assertEqual(JSON.require<i64>(arr, [0]), 0)
+    assertEqual(JSON.require<f64>(arr, [1]), 0.0)
 }
 
 @test
 fn test_large_integers() {
     var s = "[999999999, -999999999]"
     var arr = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(arr, [0]), 999999999)
-    assert_eq(JSON.require<i64>(arr, [1]), -999999999)
+    assertEqual(JSON.require<i64>(arr, [0]), 999999999)
+    assertEqual(JSON.require<i64>(arr, [1]), -999999999)
 }
 
 @test
 fn test_float_precision() {
     var s = "[1.5, -2.5, 0.125, 100.001]"
     var arr = JSON.parseValue(s)
-    assert_eq(JSON.require<f64>(arr, [0]), 1.5)
-    assert_eq(JSON.require<f64>(arr, [1]), -2.5)
-    assert_eq(JSON.require<f64>(arr, [2]), 0.125)
+    assertEqual(JSON.require<f64>(arr, [0]), 1.5)
+    assertEqual(JSON.require<f64>(arr, [1]), -2.5)
+    assertEqual(JSON.require<f64>(arr, [2]), 0.125)
 }
 
 @test
 fn test_scientific_notation() {
     var s = "[1e2, 1.5e3, 2.5E-1]"
     var arr = JSON.parseValue(s)
-    assert_eq(JSON.require<f64>(arr, [0]), 100.0)
-    assert_eq(JSON.require<f64>(arr, [1]), 1500.0)
-    assert_eq(JSON.require<f64>(arr, [2]), 0.25)
+    assertEqual(JSON.require<f64>(arr, [0]), 100.0)
+    assertEqual(JSON.require<f64>(arr, [1]), 1500.0)
+    assertEqual(JSON.require<f64>(arr, [2]), 0.25)
 }
 
 // ===== Boolean and null =====
@@ -118,13 +118,13 @@ fn test_scientific_notation() {
 fn test_boolean_and_null_array() {
     var s = "[true, false, null, true, null, false]"
     var arr = JSON.parseValue(s)
-    assert_eq(len(JSON.asArray(arr)!), 6)
-    assert_eq(JSON.require<bool>(arr, [0]), true)
-    assert_eq(JSON.require<bool>(arr, [1]), false)
+    assertEqual(len(JSON.asArray(arr)!), 6)
+    assertEqual(JSON.require<bool>(arr, [0]), true)
+    assertEqual(JSON.require<bool>(arr, [1]), false)
     assert(JSON.isNull(JSON.require<JSON.Value>(arr, [2])))
-    assert_eq(JSON.require<bool>(arr, [3]), true)
+    assertEqual(JSON.require<bool>(arr, [3]), true)
     assert(JSON.isNull(JSON.require<JSON.Value>(arr, [4])))
-    assert_eq(JSON.require<bool>(arr, [5]), false)
+    assertEqual(JSON.require<bool>(arr, [5]), false)
 }
 
 // ===== Whitespace handling =====
@@ -133,17 +133,17 @@ fn test_boolean_and_null_array() {
 fn test_extra_whitespace() {
     var s = "  {  \"a\"  :  1  ,  \"b\"  :  [  2  ,  3  ]  }  "
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(obj, ["a"]), 1)
-    assert_eq(JSON.require<i64>(obj, ["b", 0]), 2)
-    assert_eq(JSON.require<i64>(obj, ["b", 1]), 3)
+    assertEqual(JSON.require<i64>(obj, ["a"]), 1)
+    assertEqual(JSON.require<i64>(obj, ["b", 0]), 2)
+    assertEqual(JSON.require<i64>(obj, ["b", 1]), 3)
 }
 
 @test
 fn test_newlines_in_json() {
     var s = "{\n\"a\": 1,\n\"b\": 2\n}"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(obj, ["a"]), 1)
-    assert_eq(JSON.require<i64>(obj, ["b"]), 2)
+    assertEqual(JSON.require<i64>(obj, ["a"]), 1)
+    assertEqual(JSON.require<i64>(obj, ["b"]), 2)
 }
 
 // ===== Large array stress =====
@@ -156,10 +156,10 @@ fn test_large_array_200() {
     }
     var s = "[" + parts.join(",") + "]"
     var arr = JSON.parseValue(s)
-    assert_eq(len(JSON.asArray(arr)!), 200)
-    assert_eq(JSON.require<i64>(arr, [0]), 0)
-    assert_eq(JSON.require<i64>(arr, [99]), 99)
-    assert_eq(JSON.require<i64>(arr, [199]), 199)
+    assertEqual(len(JSON.asArray(arr)!), 200)
+    assertEqual(JSON.require<i64>(arr, [0]), 0)
+    assertEqual(JSON.require<i64>(arr, [99]), 99)
+    assertEqual(JSON.require<i64>(arr, [199]), 199)
 }
 
 // ===== Many keys object =====
@@ -172,9 +172,9 @@ fn test_many_keys_object() {
     }
     var s = "{" + parts.join(",") + "}"
     var obj = JSON.parseValue(s)
-    assert_eq(JSON.require<i64>(obj, ["k0"]), 0)
-    assert_eq(JSON.require<i64>(obj, ["k25"]), 25)
-    assert_eq(JSON.require<i64>(obj, ["k49"]), 49)
+    assertEqual(JSON.require<i64>(obj, ["k0"]), 0)
+    assertEqual(JSON.require<i64>(obj, ["k25"]), 25)
+    assertEqual(JSON.require<i64>(obj, ["k49"]), 49)
 }
 
 // ===== Roundtrip fuzz: parse -> stringify -> parse =====
@@ -188,12 +188,12 @@ fn test_roundtrip_nested() {
     }
     var s = JSON.stringify(original)
     var parsed = JSON.parseValue(s)
-    assert_eq(JSON.require<string>(parsed, ["name"]), "test")
-    assert_eq(JSON.require<i64>(parsed, ["values", 0]), 1)
-    assert_eq(JSON.require<i64>(parsed, ["values", 2]), 3)
-    assert_eq(JSON.require<bool>(parsed, ["nested", "a"]), true)
+    assertEqual(JSON.require<string>(parsed, ["name"]), "test")
+    assertEqual(JSON.require<i64>(parsed, ["values", 0]), 1)
+    assertEqual(JSON.require<i64>(parsed, ["values", 2]), 3)
+    assertEqual(JSON.require<bool>(parsed, ["nested", "a"]), true)
     assert(JSON.isNull(JSON.require<JSON.Value>(parsed, ["nested", "b"])))
-    assert_eq(JSON.require<string>(parsed, ["nested", "c"]), "hello")
+    assertEqual(JSON.require<string>(parsed, ["nested", "c"]), "hello")
 }
 
 @test
@@ -205,10 +205,10 @@ fn test_roundtrip_array_of_objects() {
     ]
     var s = JSON.stringify(original)
     var parsed = JSON.parseValue(s)
-    assert_eq(len(JSON.asArray(parsed)!), 3)
-    assert_eq(JSON.require<i64>(parsed, [0, "id"]), 1)
-    assert_eq(JSON.require<bool>(parsed, [1, "active"]), false)
-    assert_eq(JSON.require<i64>(parsed, [2, "id"]), 3)
+    assertEqual(len(JSON.asArray(parsed)!), 3)
+    assertEqual(JSON.require<i64>(parsed, [0, "id"]), 1)
+    assertEqual(JSON.require<bool>(parsed, [1, "active"]), false)
+    assertEqual(JSON.require<i64>(parsed, [2, "id"]), 3)
 }
 
 // ===== Mixed type arrays =====
@@ -217,14 +217,14 @@ fn test_roundtrip_array_of_objects() {
 fn test_heterogeneous_array() {
     var s = "[1, \"two\", true, null, 3.14, [\"nested\"], {\"key\": \"val\"}]"
     var arr = JSON.parseValue(s)
-    assert_eq(len(JSON.asArray(arr)!), 7)
-    assert_eq(JSON.require<i64>(arr, [0]), 1)
-    assert_eq(JSON.require<string>(arr, [1]), "two")
-    assert_eq(JSON.require<bool>(arr, [2]), true)
+    assertEqual(len(JSON.asArray(arr)!), 7)
+    assertEqual(JSON.require<i64>(arr, [0]), 1)
+    assertEqual(JSON.require<string>(arr, [1]), "two")
+    assertEqual(JSON.require<bool>(arr, [2]), true)
     assert(JSON.isNull(JSON.require<JSON.Value>(arr, [3])))
-    assert_eq(JSON.require<f64>(arr, [4]), 3.14)
-    assert_eq(JSON.require<string>(arr, [5, 0]), "nested")
-    assert_eq(JSON.require<string>(arr, [6, "key"]), "val")
+    assertEqual(JSON.require<f64>(arr, [4]), 3.14)
+    assertEqual(JSON.require<string>(arr, [5, 0]), "nested")
+    assertEqual(JSON.require<string>(arr, [6, "key"]), "val")
 }
 
 // ===== Single values (not wrapped) =====
@@ -233,19 +233,19 @@ fn test_heterogeneous_array() {
 fn test_parse_single_string() {
     var s = "\"hello world\""
     var result = JSON.parse<string>(s)
-    assert_eq(result, "hello world")
+    assertEqual(result, "hello world")
 }
 
 @test
 fn test_parse_single_number() {
-    assert_eq(JSON.parse<i64>("42"), 42)
-    assert_eq(JSON.parse<f64>("3.14"), 3.14)
+    assertEqual(JSON.parse<i64>("42"), 42)
+    assertEqual(JSON.parse<f64>("3.14"), 3.14)
 }
 
 @test
 fn test_parse_single_boolean() {
-    assert_eq(JSON.parse<bool>("true"), true)
-    assert_eq(JSON.parse<bool>("false"), false)
+    assertEqual(JSON.parse<bool>("true"), true)
+    assertEqual(JSON.parse<bool>("false"), false)
 }
 
 @test

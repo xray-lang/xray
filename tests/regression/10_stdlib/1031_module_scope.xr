@@ -11,13 +11,13 @@ import "./modules/mod_b" as b
 @test
 fn test_mod_a_works() {
     var result = a.publicFn()
-    assert_eq(result, "A-helper-1.0")
+    assertEqual(result, "A-helper-1.0")
 }
 
 @test
 fn test_mod_b_works() {
     var result = b.publicFn()
-    assert_eq(result, "B-helper-2.0")
+    assertEqual(result, "B-helper-2.0")
 }
 
 @test
@@ -25,14 +25,14 @@ fn test_modules_independent() {
     // 两个模块的内部状态互不干扰
     var resultA = a.publicFn()
     var resultB = b.publicFn()
-    assert_eq(resultA != resultB, true)
+    assertEqual(resultA != resultB, true)
 }
 
 @test
 fn test_repeated_calls() {
     // 多次调用确保状态正确
-    assert_eq(a.publicFn(), "A-helper-1.0")
-    assert_eq(b.publicFn(), "B-helper-2.0")
-    assert_eq(a.publicFn(), "A-helper-1.0")
-    assert_eq(b.publicFn(), "B-helper-2.0")
+    assertEqual(a.publicFn(), "A-helper-1.0")
+    assertEqual(b.publicFn(), "B-helper-2.0")
+    assertEqual(a.publicFn(), "A-helper-1.0")
+    assertEqual(b.publicFn(), "B-helper-2.0")
 }

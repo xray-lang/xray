@@ -9,7 +9,7 @@ fn test_simple_function() {
     fn greet() -> string {
         return "hello"
     }
-    assert_eq(greet(), "hello")
+    assertEqual(greet(), "hello")
 }
 
 @test
@@ -19,7 +19,7 @@ fn test_function_no_return() {
         result = 42
     }
     setResult()
-    assert_eq(result, 42)
+    assertEqual(result, 42)
 }
 
 // ===== 参数 =====
@@ -29,7 +29,7 @@ fn test_single_param() {
     fn double(x: i64) -> i64 {
         return x * 2
     }
-    assert_eq(double(5), 10)
+    assertEqual(double(5), 10)
 }
 
 @test
@@ -37,7 +37,7 @@ fn test_multiple_params() {
     fn add(a: i64, b: i64) -> i64 {
         return a + b
     }
-    assert_eq(add(3, 5), 8)
+    assertEqual(add(3, 5), 8)
 }
 
 @test
@@ -45,7 +45,7 @@ fn test_many_params() {
     fn sum(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
         return a + b + c + d + e
     }
-    assert_eq(sum(1, 2, 3, 4, 5), 15)
+    assertEqual(sum(1, 2, 3, 4, 5), 15)
 }
 
 // ===== 返回值 =====
@@ -53,38 +53,38 @@ fn test_many_params() {
 @test
 fn test_return_int() {
     fn getInt() -> i64 { return 42 }
-    assert_eq(getInt(), 42)
+    assertEqual(getInt(), 42)
 }
 
 @test
 fn test_return_float() {
     fn getFloat() -> f64 { return 3.14 }
-    assert_eq(getFloat(), 3.14)
+    assertEqual(getFloat(), 3.14)
 }
 
 @test
 fn test_return_string() {
     fn getString() -> string { return "hello" }
-    assert_eq(getString(), "hello")
+    assertEqual(getString(), "hello")
 }
 
 @test
 fn test_return_bool() {
     fn getBool() -> bool { return true }
-    assert_eq(getBool(), true)
+    assertEqual(getBool(), true)
 }
 
 @test
 fn test_return_null() {
     fn getNull() -> i64? { return null }
-    assert_eq(getNull(), null)
+    assertEqual(getNull(), null)
 }
 
 @test
 fn test_return_array() {
     fn getArray() -> Array<i64> { return [1, 2, 3] }
     var arr = getArray()
-    assert_eq(len(arr), 3)
+    assertEqual(len(arr), 3)
 }
 
 // ===== 提前返回 =====
@@ -97,8 +97,8 @@ fn test_early_return() {
         }
         return "small"
     }
-    assert_eq(check(15), "big")
-    assert_eq(check(5), "small")
+    assertEqual(check(15), "big")
+    assertEqual(check(5), "small")
 }
 
 @test
@@ -108,9 +108,9 @@ fn test_multiple_returns() {
         if (x == 0) { return "zero" }
         return "positive"
     }
-    assert_eq(classify(-5), "negative")
-    assert_eq(classify(0), "zero")
-    assert_eq(classify(5), "positive")
+    assertEqual(classify(-5), "negative")
+    assertEqual(classify(0), "zero")
+    assertEqual(classify(5), "positive")
 }
 
 // ===== 局部变量 =====
@@ -122,7 +122,7 @@ fn test_local_variables() {
         var b = a + 10
         return b
     }
-    assert_eq(compute(5), 20)
+    assertEqual(compute(5), 20)
 }
 
 @test
@@ -132,8 +132,8 @@ fn test_shadow_outer() {
         var x = 10
         return x
     }
-    assert_eq(inner(), 10)
-    assert_eq(x, 100)  // 外层不变
+    assertEqual(inner(), 10)
+    assertEqual(x, 100)  // 外层不变
 }
 
 // ===== 函数调用表达式 =====
@@ -143,7 +143,7 @@ fn test_call_in_expression() {
     fn double(x: i64) -> i64 { return x * 2 }
     
     var result = double(5) + double(3)
-    assert_eq(result, 16)
+    assertEqual(result, 16)
 }
 
 @test
@@ -151,7 +151,7 @@ fn test_nested_call() {
     fn double(x: i64) -> i64 { return x * 2 }
     
     var result = double(double(3))
-    assert_eq(result, 12)
+    assertEqual(result, 12)
 }
 
 @test
@@ -160,7 +160,7 @@ fn test_call_as_argument() {
     fn double(x: i64) -> i64 { return x * 2 }
     
     var result = add(double(2), double(3))
-    assert_eq(result, 10)  // 4 + 6
+    assertEqual(result, 10)  // 4 + 6
 }
 
 // ===== 函数作为条件 =====
@@ -175,7 +175,7 @@ fn test_function_as_condition() {
     } else {
         result = "no"
     }
-    assert_eq(result, "yes")
+    assertEqual(result, "yes")
 }
 
 // ===== 边界条件 =====
@@ -184,13 +184,12 @@ fn test_function_as_condition() {
 fn test_empty_function() {
     fn empty() { }
     var result = empty()
-    assert_eq(result, null)
+    assert(typeName(result) == "null")
 }
 
 @test
 fn test_return_only() {
     fn returnOnly() { return }
     var result = returnOnly()
-    assert_eq(result, null)
+    assert(typeName(result) == "null")
 }
-

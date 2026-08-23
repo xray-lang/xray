@@ -21,7 +21,7 @@ scope {
 
 var total = counter.load()
 print("Counter:", total, "expected: 10")
-assert_eq(total, 10)
+assertEqual(total, 10)
 print("✓ Concurrent counter test passed")
 
 // --- Test 2: CAS claim (exactly one winner) ---

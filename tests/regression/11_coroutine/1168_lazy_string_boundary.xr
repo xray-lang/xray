@@ -28,19 +28,19 @@ fn test_lazy_string_map_set_content_keys() {
     m.set(key, 7)
     m.set(make_key(1), 11)
 
-    assert_eq(len(m), 1)
-    assert_eq(m.get("k1"), 11)
-    assert_eq(m.containsKey(make_key(1)), true)
-    assert_eq(m.delete("k1"), true)
-    assert_eq(m.containsKey(make_key(1)), false)
+    assertEqual(len(m), 1)
+    assertEqual(m.get("k1"), 11)
+    assertEqual(m.containsKey(make_key(1)), true)
+    assertEqual(m.delete("k1"), true)
+    assertEqual(m.containsKey(make_key(1)), false)
 
     var s: Set<string> = #[]
     s.add(make_key(2))
     s.add("k2")
-    assert_eq(len(s), 1)
-    assert_eq(s.contains(make_key(2)), true)
-    assert_eq(s.delete("k2"), true)
-    assert_eq(s.contains(make_key(2)), false)
+    assertEqual(len(s), 1)
+    assertEqual(s.contains(make_key(2)), true)
+    assertEqual(s.delete("k2"), true)
+    assertEqual(s.contains(make_key(2)), false)
 }
 
 @test
@@ -48,17 +48,17 @@ fn test_lazy_string_channel_and_task_publish() {
     const ch: Channel<string> = Channel(1)
     var msg = build_message("msg", 4)
     ch.send(msg)
-    assert_eq(recv_string(ch), "msg_4")
+    assertEqual(recv_string(ch), "msg_4")
     ch.close()
 
     var task = go build_message("task", 5)
-    assert_eq(await task, "task_5")
+    assertEqual(await task, "task_5")
 }
 
 @test
 fn test_lazy_string_nested_container_task_result() {
     var task = go map_worker(build_message("seed", 6))
     var out = await task
-    assert_eq(out.get(make_key(3)), "seed_6_value")
-    assert_eq(out.get("k3"), "seed_6_value")
+    assertEqual(out.get(make_key(3)), "seed_6_value")
+    assertEqual(out.get("k3"), "seed_6_value")
 }

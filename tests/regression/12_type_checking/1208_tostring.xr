@@ -17,35 +17,35 @@ enum Color { Red, Green, Blue }
 
 @test
 fn test_tostring() {
-    assert_eq(42.toString(), "42")
-    assert_eq(3.14.toString(), "3.14")
-    assert_eq(true.toString(), "true")
-    assert_eq(false.toString(), "false")
+    assertEqual(42.toString(), "42")
+    assertEqual(3.14.toString(), "3.14")
+    assertEqual(true.toString(), "true")
+    assertEqual(false.toString(), "false")
     // `null.toString()` is a member access on an always-null value, which
     // spec §2.13 N-12 rejects. `string(null)` is the supported spelling and is
     // asserted below.
-    assert_eq("hello".toString(), "hello")
+    assertEqual("hello".toString(), "hello")
 
     // === 2. string() conversion function ===
-    assert_eq(string(42), "42")
-    assert_eq(string(3.14), "3.14")
-    assert_eq(string(true), "true")
-    assert_eq(string(null), "null")
-    assert_eq(string([1, 2, 3]), "[1, 2, 3]")
+    assertEqual(string(42), "42")
+    assertEqual(string(3.14), "3.14")
+    assertEqual(string(true), "true")
+    assertEqual(string(null), "null")
+    assertEqual(string([1, 2, 3]), "[1, 2, 3]")
 
     // === 3. String + explicit conversion (B+ rule: no implicit conversion) ===
-    assert_eq("count: " + string(42), "count: 42")
-    assert_eq("pi: " + string(3.14), "pi: 3.14")
-    assert_eq("flag: " + string(true), "flag: true")
-    assert_eq("val: " + string(null), "val: null")
-    assert_eq(string(42) + " items", "42 items")
+    assertEqual("count: " + string(42), "count: 42")
+    assertEqual("pi: " + string(3.14), "pi: 3.14")
+    assertEqual("flag: " + string(true), "flag: true")
+    assertEqual("val: " + string(null), "val: null")
+    assertEqual(string(42) + " items", "42 items")
 
     // === 4. Array toString ===
     var arr = [1, 2, 3]
-    assert_eq(string(arr), "[1, 2, 3]")
-    assert_eq("arr: " + string(arr), "arr: [1, 2, 3]")
+    assertEqual(string(arr), "[1, 2, 3]")
+    assertEqual("arr: " + string(arr), "arr: [1, 2, 3]")
     var nested = [[1, 2], [3, 4]]
-    assert_eq(string(nested), "[[1, 2], [3, 4]]")
+    assertEqual(string(nested), "[[1, 2], [3, 4]]")
 
     // === 5. Map toString ===
     var m = #{"a": 1}
@@ -65,13 +65,13 @@ fn test_tostring() {
 
     // === 8. Array<byte> toString (Array<byte> is Array<byte>) ===
     var buf = Array<u8>(3, 0)
-    assert_eq(string(buf), "[0, 0, 0]")
+    assertEqual(string(buf), "[0, 0, 0]")
     var binary = Array<u8>(4, 0)
     binary[0] = 65
     binary[1] = 66
     binary[3] = 255
-    assert_eq(binary.toString(), "[65, 66, 0, 255]")
-    assert_eq(string(binary), "[65, 66, 0, 255]")
+    assertEqual(binary.toString(), "[65, 66, 0, 255]")
+    assertEqual(string(binary), "[65, 66, 0, 255]")
 
     // === 9. Channel toString ===
     const ch = Channel(5)
@@ -82,7 +82,7 @@ fn test_tostring() {
     // A function value renders without its source name (commit 781de7ef8):
     // the name is debug detail, not part of the value.
     var fs = string(myFunc)
-    assert_eq(fs, "<fn>")
+    assertEqual(fs, "<fn>")
 
     // === 11. Class and Instance toString ===
     assert(string(Dog).indexOf("class") == 0)
@@ -91,15 +91,15 @@ fn test_tostring() {
 
     // === 12. Custom toString on Instance ===
     var p = Point(3, 4)
-    assert_eq(p.toString(), "(3, 4)")
+    assertEqual(p.toString(), "(3, 4)")
 
     // === 13. Enum toString ===
-    assert_eq(Color.Red.toString(), "Color.Red")
-    assert_eq("color: " + string(Color.Green), "color: Color.Green")
+    assertEqual(Color.Red.toString(), "Color.Red")
+    assertEqual("color: " + string(Color.Green), "color: Color.Green")
 
     // === 14. Template string auto conversion ===
     var x = 42
     var arr2 = [1, 2]
-    assert_eq("x=${x}", "x=42")
-    assert_eq("arr=${arr2}", "arr=[1, 2]")
+    assertEqual("x=${x}", "x=42")
+    assertEqual("arr=${arr2}", "arr=[1, 2]")
 }

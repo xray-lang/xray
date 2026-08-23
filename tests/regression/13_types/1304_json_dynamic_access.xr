@@ -5,9 +5,9 @@ fn test_path_get_and_require() {
     var root = JSON.parseValue("{\"user\":{\"name\":\"Alice\",\"age\":30}}")
     var key = "name"
     var path: JSON.Path = ["user", key]
-    assert_eq(JSON.get<string>(root, path), "Alice")
-    assert_eq(JSON.require<i64>(root, ["user", "age"]), 30)
-    assert_eq(JSON.get<string>(root, ["user", "missing"]), null)
+    assertEqual(JSON.get<string>(root, path), "Alice")
+    assertEqual(JSON.require<i64>(root, ["user", "age"]), 30)
+    assertEqual(JSON.get<string>(root, ["user", "missing"]), null)
 }
 
 @test
@@ -16,7 +16,7 @@ fn test_path_set_and_remove() {
     JSON.set(root, ["config", "host"], "localhost")
     JSON.set(root, ["config", "port"], 8080)
     assert(JSON.containsPath(root, ["config", "host"]))
-    assert_eq(JSON.require<i64>(root, ["config", "port"]), 8080)
+    assertEqual(JSON.require<i64>(root, ["config", "port"]), 8080)
     assert(JSON.remove(root, ["config", "host"]))
     assert(!JSON.containsPath(root, ["config", "host"]))
 }
@@ -25,5 +25,5 @@ fn test_path_set_and_remove() {
 fn test_path_create_parents() {
     var root = JSON.parseValue("{}")
     JSON.set(root, ["service", "limits", "retries"], 3, true)
-    assert_eq(JSON.require<i64>(root, ["service", "limits", "retries"]), 3)
+    assertEqual(JSON.require<i64>(root, ["service", "limits", "retries"]), 3)
 }

@@ -3,12 +3,12 @@ import { Semaphore, CountdownLatch, EventCount, WorkQueue, ResultGroup } from sy
 fn test_event_count_epoch_wait_and_close() {
     const event = EventCount(0)
 
-    assert_eq(event.epoch, 0)
-    assert_false(event.isClosed)
+    assertEqual(event.epoch, 0)
+    assert(!(event.isClosed))
 
-    assert_eq(event.advance(), 1)
-    assert_eq(event.epoch, 1)
-    assert_eq(event.wait(0), 1)
+    assertEqual(event.advance(), 1)
+    assertEqual(event.epoch, 1)
+    assertEqual(event.wait(0), 1)
 
     const ready = CountdownLatch(1)
     var t = go fn() -> i64 {
@@ -16,9 +16,9 @@ fn test_event_count_epoch_wait_and_close() {
         return event.wait(1, 0)
     }()
 
-    assert_true(ready.wait())
-    assert_eq(event.advance(), 2)
-    assert_eq(await t, 2)
+    assert(ready.wait())
+    assertEqual(event.advance(), 2)
+    assertEqual(await t, 2)
 
     const closed = EventCount(7)
     const closeReady = CountdownLatch(1)
@@ -27,10 +27,10 @@ fn test_event_count_epoch_wait_and_close() {
         return closed.wait(7)
     }()
 
-    assert_true(closeReady.wait())
+    assert(closeReady.wait())
     closed.close()
-    assert_true(closed.isClosed)
-    assert_eq(await closeTask, -1)
-    assert_eq(closed.advance(), -1)
-    assert_eq(closed.wait(7), -1)
+    assert(closed.isClosed)
+    assertEqual(await closeTask, -1)
+    assertEqual(closed.advance(), -1)
+    assertEqual(closed.wait(7), -1)
 }

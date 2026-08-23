@@ -24,7 +24,7 @@ fn drain_one(ch: Channel<i64>) {
 const data: Channel<i64> = Channel(1)
 const out: Channel<i64> = Channel(1)
 
-assert_eq(sent(data.trySend(7)), true)
+assertEqual(sent(data.trySend(7)), true)
 
 go spin_until_sent(data, out)
 go drain_one(data)
@@ -41,7 +41,7 @@ var value = match (data.recvTimeout(1000)) {
 data.close()
 out.close()
 
-assert_eq(done, 1)
-assert_eq(value, 42)
+assertEqual(done, 1)
+assertEqual(value, 42)
 print(done)
 print(value)

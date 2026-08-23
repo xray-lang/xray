@@ -8,47 +8,47 @@
 fn test_add_assign() {
     var x = 10
     x += 5
-    assert_eq(x, 15)
+    assertEqual(x, 15)
     
     x += -3
-    assert_eq(x, 12)
+    assertEqual(x, 12)
 }
 
 @test
 fn test_sub_assign() {
     var x = 10
     x -= 3
-    assert_eq(x, 7)
+    assertEqual(x, 7)
     
     x -= -2
-    assert_eq(x, 9)
+    assertEqual(x, 9)
 }
 
 @test
 fn test_mul_assign() {
     var x = 5
     x *= 3
-    assert_eq(x, 15)
+    assertEqual(x, 15)
     
     x *= 2
-    assert_eq(x, 30)
+    assertEqual(x, 30)
 }
 
 @test
 fn test_div_assign() {
     var x = 20
     x /= 4
-    assert_eq(x, 5)
+    assertEqual(x, 5)
     
     x /= 2
-    assert_eq(x, 2)
+    assertEqual(x, 2)
 }
 
 @test
 fn test_mod_assign() {
     var x = 17
     x %= 5
-    assert_eq(x, 2)
+    assertEqual(x, 2)
 }
 
 @test
@@ -72,8 +72,8 @@ fn test_member_mod_assign_ignores_same_named_const() {
     const value = 99
     var c = Counter()
     c.reduce()
-    assert_eq(c.get(), 2)
-    assert_eq(value, 99)
+    assertEqual(c.get(), 2)
+    assertEqual(value, 99)
 }
 
 // ===== 位运算复合赋值 =====
@@ -82,35 +82,35 @@ fn test_member_mod_assign_ignores_same_named_const() {
 fn test_and_assign() {
     var x = 0b1111
     x &= 0b1010
-    assert_eq(x, 0b1010)
+    assertEqual(x, 0b1010)
 }
 
 @test
 fn test_or_assign() {
     var x = 0b1010
     x |= 0b0101
-    assert_eq(x, 0b1111)
+    assertEqual(x, 0b1111)
 }
 
 @test
 fn test_xor_assign() {
     var x = 0b1111
     x ^= 0b1010
-    assert_eq(x, 0b0101)
+    assertEqual(x, 0b0101)
 }
 
 @test
 fn test_shl_assign() {
     var x = 1
     x <<= 3
-    assert_eq(x, 8)
+    assertEqual(x, 8)
 }
 
 @test
 fn test_shr_assign() {
     var x = 16
     x >>= 2
-    assert_eq(x, 4)
+    assertEqual(x, 4)
 }
 
 // ===== 自增自减 =====
@@ -121,14 +121,14 @@ fn test_shr_assign() {
 fn test_increment_postfix() {
     var x = 5
     x++
-    assert_eq(x, 6)
+    assertEqual(x, 6)
 }
 
 @test
 fn test_decrement_postfix() {
     var x = 5
     x--
-    assert_eq(x, 4)
+    assertEqual(x, 4)
 }
 
 // ===== 链式操作 =====
@@ -139,7 +139,7 @@ fn test_chain_increment() {
     x++
     x++
     x++
-    assert_eq(x, 3)
+    assertEqual(x, 3)
 }
 
 // ===== 浮点数 =====
@@ -148,10 +148,10 @@ fn test_chain_increment() {
 fn test_float_compound() {
     var x = 1.5
     x += 2.5
-    assert_eq(x, 4.0)
+    assertEqual(x, 4.0)
     
     x *= 2.0
-    assert_eq(x, 8.0)
+    assertEqual(x, 8.0)
 }
 
 // ===== 边界条件 =====
@@ -160,15 +160,15 @@ fn test_float_compound() {
 fn test_assign_zero() {
     var x = 10
     x += 0
-    assert_eq(x, 10)
+    assertEqual(x, 10)
     
     x *= 0
-    assert_eq(x, 0)
+    assertEqual(x, 0)
 }
 
 @test
 fn test_negative_increment() {
     var x = 0
     x--
-    assert_eq(x, -1)
+    assertEqual(x, -1)
 }

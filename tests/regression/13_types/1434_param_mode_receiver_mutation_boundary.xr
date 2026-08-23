@@ -18,10 +18,10 @@ class Counter {
 fn test_receiver_mutation_does_not_need_ref_marker() {
     var counter = Counter(1)
     counter.bump()
-    assert_eq(counter.current(), 2)
+    assertEqual(counter.current(), 2)
 
     var values: Array<i64> = [1, 2]
     values.push(3)
-    assert_eq(len(values), 3)
-    assert_eq(values[2], 3)
+    assertEqual(len(values), 3)
+    assertEqual(values[2], 3)
 }

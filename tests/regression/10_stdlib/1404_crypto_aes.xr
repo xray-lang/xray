@@ -19,7 +19,7 @@ fn test_encrypt_decrypt_basic() {
     var plaintext = "Hello World"
     var encrypted = crypto.encrypt(key, plaintext)
     var decrypted = crypto.decrypt(key, encrypted)
-    assert_eq(decrypted, plaintext)
+    assertEqual(decrypted, plaintext)
 }
 
 @test
@@ -28,7 +28,7 @@ fn test_encrypt_decrypt_empty() {
     var plaintext = ""
     var encrypted = crypto.encrypt(key, plaintext)
     var decrypted = crypto.decrypt(key, encrypted)
-    assert_eq(decrypted, plaintext)
+    assertEqual(decrypted, plaintext)
 }
 
 @test
@@ -37,16 +37,16 @@ fn test_encrypt_decrypt_long_text() {
     var plaintext = "The quick brown fox jumps over the lazy dog. This is a longer text to test multi-block encryption."
     var encrypted = crypto.encrypt(key, plaintext)
     var decrypted = crypto.decrypt(key, encrypted)
-    assert_eq(decrypted, plaintext)
+    assertEqual(decrypted, plaintext)
 }
 
 @test
 fn test_encrypt_output_is_hex() {
     var encrypted = crypto.encrypt("key", "test")
     // Output should be hex string (IV 32 chars + at least 32 chars ciphertext)
-    assert_true(len(encrypted) >= 64)
+    assert(len(encrypted) >= 64)
     // Length should be even
-    assert_eq(len(encrypted) % 2, 0)
+    assertEqual(len(encrypted) % 2, 0)
 }
 
 @test
@@ -54,7 +54,7 @@ fn test_encrypt_different_each_time() {
     // Due to random IV, same input should produce different output
     var e1 = crypto.encrypt("key", "test")
     var e2 = crypto.encrypt("key", "test")
-    assert_true(e1 != e2)
+    assert(e1 != e2)
 }
 
 @test
@@ -62,7 +62,7 @@ fn test_decrypt_wrong_key() {
     var encrypted = crypto.encrypt("correct-key", "secret data")
     // Decrypt with wrong key should return null (padding validation fails)
     var result = crypto.decrypt("wrong-key", encrypted)
-    assert_eq(result, null)
+    assertEqual(result, null)
 }
 
 @test
@@ -72,7 +72,7 @@ fn test_encrypt_decrypt_exactly_16_bytes() {
     var plaintext = "1234567890123456"
     var encrypted = crypto.encrypt(key, plaintext)
     var decrypted = crypto.decrypt(key, encrypted)
-    assert_eq(decrypted, plaintext)
+    assertEqual(decrypted, plaintext)
 }
 
 @test
@@ -81,5 +81,5 @@ fn test_encrypt_decrypt_unicode() {
     var plaintext = "Hello World!"
     var encrypted = crypto.encrypt(key, plaintext)
     var decrypted = crypto.decrypt(key, encrypted)
-    assert_eq(decrypted, plaintext)
+    assertEqual(decrypted, plaintext)
 }

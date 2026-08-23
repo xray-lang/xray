@@ -3,32 +3,32 @@
 @test
 fn test_int_zero_value() {
     var a: i64
-    assert_eq(a, 0)
+    assertEqual(a, 0)
 }
 
 @test
 fn test_float_zero_value() {
     var b: f64
-    assert_eq(b, 0.0)
+    assertEqual(b, 0.0)
 }
 
 @test
 fn test_bool_zero_value() {
     var c: bool
-    assert_eq(c, false)
+    assertEqual(c, false)
 }
 
 @test
 fn test_nullable_defaults_to_null() {
     var e: i64?
-    assert_eq(e, null)
+    assertEqual(e, null)
 }
 
 @test
 fn test_string_requires_initializer() {
     // string is not default-initializable; must use explicit initializer
     var d: string = ""
-    assert_eq(d, "")
+    assertEqual(d, "")
 }
 
 struct DefaultPoint {
@@ -44,16 +44,16 @@ struct DefaultBox {
 @test
 fn test_struct_zero_value_init() {
     var p: DefaultPoint
-    assert_eq(p.x, 0)
-    assert_eq(p.y, 0)
+    assertEqual(p.x, 0)
+    assertEqual(p.y, 0)
 
     p.x = 7
-    assert_eq(p.x, 7)
+    assertEqual(p.x, 7)
 
     var box: DefaultBox
-    assert_eq(box.p.x, 0)
-    assert_eq(box.p.y, 0)
-    assert_eq(box.ok, false)
+    assertEqual(box.p.x, 0)
+    assertEqual(box.p.y, 0)
+    assertEqual(box.ok, false)
 }
 
 class BranchInitializedName {
@@ -72,6 +72,6 @@ class BranchInitializedName {
 fn test_class_field_initialized_in_both_branches() {
     var yes = BranchInitializedName(true)
     var no = BranchInitializedName(false)
-    assert_eq(yes.name, "yes")
-    assert_eq(no.name, "no")
+    assertEqual(yes.name, "yes")
+    assertEqual(no.name, "no")
 }

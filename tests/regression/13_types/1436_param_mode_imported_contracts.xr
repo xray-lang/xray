@@ -9,40 +9,40 @@ import "../../fixtures/param_mode_import_lib" as param_mode
 @test
 fn test_selective_import_ref_out_contracts() {
     var value = 1
-    assert_eq(bumpRef(ref value), 2)
-    assert_eq(value, 2)
+    assertEqual(bumpRef(ref value), 2)
+    assertEqual(value, 2)
 
     var slot = 0
-    assert_eq(fillOut(ref slot), 9)
-    assert_eq(slot, 9)
+    assertEqual(fillOut(ref slot), 9)
+    assertEqual(slot, 9)
 }
 
 @test
 fn test_namespace_import_ref_out_contracts() {
     var value = 3
-    assert_eq(param_mode.bumpRef(ref value), 4)
-    assert_eq(value, 4)
+    assertEqual(param_mode.bumpRef(ref value), 4)
+    assertEqual(value, 4)
 
     var slot = 0
-    assert_eq(param_mode.fillOut(ref slot), 9)
-    assert_eq(slot, 9)
+    assertEqual(param_mode.fillOut(ref slot), 9)
+    assertEqual(slot, 9)
 }
 
 @test
 fn test_exported_const_function_value_ref_out_contracts() {
     var value = 5
-    assert_eq(bumpRefValue(ref value), 6)
-    assert_eq(value, 6)
+    assertEqual(bumpRefValue(ref value), 6)
+    assertEqual(value, 6)
 
     var slot = 0
-    assert_eq(param_mode.fillOutValue(ref slot), 11)
-    assert_eq(slot, 11)
+    assertEqual(param_mode.fillOutValue(ref slot), 11)
+    assertEqual(slot, 11)
 
     const bump = bumpRefValue
-    assert_eq(bump(ref value), 7)
-    assert_eq(value, 7)
+    assertEqual(bump(ref value), 7)
+    assertEqual(value, 7)
 
     const fill = fillOutValue
-    assert_eq(fill(ref slot), 11)
-    assert_eq(slot, 11)
+    assertEqual(fill(ref slot), 11)
+    assertEqual(slot, 11)
 }

@@ -66,7 +66,7 @@ fn test_construction_result_moved_out_by_return() {
     var before = runtime.liveObjects()
     for (var i = 0; i < 20000; i++) {
         var n = make(i)
-        assert_eq(n.v, i)
+        assertEqual(n.v, i)
     }
     // 每一轮的 Node 都在轮末死亡：转移不能变成双份所有权，也不能没人释放
     assert(runtime.liveObjects() - before < 100)
@@ -79,7 +79,7 @@ fn test_construction_result_stored_into_container() {
     for (var i = 0; i < 20000; i++) {
         var a: Array<Node> = []
         a.push(Node(i))
-        assert_eq(a[0].v, i)
+        assertEqual(a[0].v, i)
     }
     assert(runtime.liveObjects() - before < 100)
 }
@@ -92,7 +92,7 @@ fn test_borrowed_parameter_result_remains_an_alias() {
     for (var i = 0; i < 5000; i++) {
         var owner = Node(i)
         var alias = borrow_node(owner)
-        assert_eq(alias.v, owner.v)
+        assertEqual(alias.v, owner.v)
     }
     assert(runtime.liveObjects() - before < 100)
 }
@@ -103,7 +103,7 @@ fn test_borrowed_parameter_result_remains_an_alias() {
 fn test_move_parameter_result_transfers_ownership() {
     var before = runtime.liveObjects()
     for (var i = 0; i < 5000; i++) {
-        assert_eq(move_roundtrip_once(i), i)
+        assertEqual(move_roundtrip_once(i), i)
     }
     assert(runtime.liveObjects() - before < 100)
 }
@@ -125,7 +125,7 @@ fn test_recursive_owned_summary_converges() {
     var before = runtime.liveObjects()
     for (var i = 0; i < 5000; i++) {
         var result = recursive_factory(3, i)
-        assert_eq(result.v, i)
+        assertEqual(result.v, i)
     }
     assert(runtime.liveObjects() - before < 100)
 }

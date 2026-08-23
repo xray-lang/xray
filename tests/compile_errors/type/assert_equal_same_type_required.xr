@@ -1,0 +1,5 @@
+var actual: i64 = 1
+var expected: f64 = 1.0
+assertEqual(actual, expected)
+assertEqual(1, 1.0)
+assertEqual(1.0, 1)

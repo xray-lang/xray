@@ -132,6 +132,6 @@ fn test_ws_self_connect() {
 
     // If the counters were clobbered by the register-coalescing bug, either
     // these assertions fail or the client already threw mid-loop.
-    assert_eq(failed, 0)
-    assert_eq(passed, 3)
+    assertEqual(failed, 0)
+    assertEqual(passed, 3)
 }

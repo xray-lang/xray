@@ -17,7 +17,7 @@ fn test_write_read_file() {
     var tmp = io.tempFile()!
     io.writeFile(tmp, "hello\nworld\ntest")
     var content = io.readFile(tmp)
-    assert_eq(content, "hello\nworld\ntest")
+    assertEqual(content, "hello\nworld\ntest")
     io.remove(tmp)
 }
 
@@ -26,9 +26,9 @@ fn test_read_lines() {
     var tmp = io.tempFile()!
     io.writeFile(tmp, "line1\nline2\nline3")
     var lines = io.readLines(tmp)
-    assert_eq(lines[0], "line1")
-    assert_eq(lines[1], "line2")
-    assert_eq(lines[2], "line3")
+    assertEqual(lines[0], "line1")
+    assertEqual(lines[1], "line2")
+    assertEqual(lines[2], "line3")
     io.remove(tmp)
 }
 
@@ -38,7 +38,7 @@ fn test_append_file() {
     io.writeFile(tmp, "hello")
     io.appendFile(tmp, " world")
     var content = io.readFile(tmp)
-    assert_eq(content, "hello world")
+    assertEqual(content, "hello world")
     io.remove(tmp)
 }
 
@@ -50,8 +50,8 @@ fn test_file_stat() {
     io.writeFile(tmp, "test content")
     var st = io.stat(tmp)
     assert(st != null)
-    assert_eq(st!.size, 12)
-    assert_eq(st!.isFile, true)
+    assertEqual(st!.size, 12)
+    assertEqual(st!.isFile, true)
     io.remove(tmp)
 }
 
@@ -59,8 +59,8 @@ fn test_file_stat() {
 fn test_is_file() {
     var tmp = io.tempFile()!
     io.writeFile(tmp, "x")
-    assert_eq(io.isFile(tmp), true)
-    assert_eq(io.isDir(tmp), false)
+    assertEqual(io.isFile(tmp), true)
+    assertEqual(io.isDir(tmp), false)
     io.remove(tmp)
 }
 
@@ -68,7 +68,7 @@ fn test_is_file() {
 fn test_file_size() {
     var tmp = io.tempFile()!
     io.writeFile(tmp, "12345")
-    assert_eq(io.fileSize(tmp), 5)
+    assertEqual(io.fileSize(tmp), 5)
     io.remove(tmp)
 }
 
@@ -77,7 +77,7 @@ fn test_file_size() {
 @test
 fn test_mkdir_and_isdir() {
     var tmpDir = io.tempDir()!
-    assert_eq(io.isDir(tmpDir), true)
+    assertEqual(io.isDir(tmpDir), true)
     io.removeAll(tmpDir)
 }
 
@@ -86,7 +86,7 @@ fn test_mkdirp() {
     var tmpDir = io.tempDir()!
     var nested = path.join(tmpDir, path.from("a/b/c"))
     io.mkdirp(nested)
-    assert_eq(io.isDir(nested), true)
+    assertEqual(io.isDir(nested), true)
     io.removeAll(tmpDir)
 }
 
@@ -108,8 +108,8 @@ fn test_copy_file() {
     io.writeFile(src, "copy test")
     var dst = path.from(src.toString() + ".copy")
     io.copyFile(src, dst)
-    assert_eq(io.exists(dst), true)
-    assert_eq(io.readFile(dst), "copy test")
+    assertEqual(io.exists(dst), true)
+    assertEqual(io.readFile(dst), "copy test")
     io.remove(src)
     io.remove(dst)
 }
@@ -120,9 +120,9 @@ fn test_rename() {
     io.writeFile(src, "rename test")
     var dst = path.from(src.toString() + ".renamed")
     io.rename(src, dst)
-    assert_eq(io.exists(src), false)
-    assert_eq(io.exists(dst), true)
-    assert_eq(io.readFile(dst), "rename test")
+    assertEqual(io.exists(src), false)
+    assertEqual(io.exists(dst), true)
+    assertEqual(io.readFile(dst), "rename test")
     io.remove(dst)
 }
 
@@ -133,8 +133,8 @@ fn test_touch() {
     var tmp = io.tempFile()!
     io.remove(tmp)
     io.touch(tmp)
-    assert_eq(io.exists(tmp), true)
-    assert_eq(io.fileSize(tmp), 0)
+    assertEqual(io.exists(tmp), true)
+    assertEqual(io.fileSize(tmp), 0)
     io.remove(tmp)
 }
 
@@ -150,7 +150,7 @@ fn test_cwd() {
 fn test_realpath() {
     var cwd = io.cwd()
     var resolved = io.realpath(path.from("."))!
-    assert_eq(resolved.toString(), cwd.toString())
+    assertEqual(resolved.toString(), cwd.toString())
 }
 
 // ===== removeAll =====
@@ -161,5 +161,5 @@ fn test_remove_all() {
     io.mkdirp(path.join(tmpDir, path.from("sub/dir")))
     io.writeFile(path.join(tmpDir, path.from("sub/file.txt")), "data")
     io.removeAll(tmpDir)
-    assert_eq(io.exists(tmpDir), false)
+    assertEqual(io.exists(tmpDir), false)
 }

@@ -5,14 +5,14 @@ fn test_as_object_map_surface() {
     var value = JSON.parseValue("{\"x\":1,\"y\":2}")
     var obj = JSON.asObject(value)
     assert(obj != null)
-    assert_eq(len(obj!.keys()), 2)
+    assertEqual(len(obj!.keys()), 2)
     assert(obj!.containsKey("x"))
     obj!.set("z", 3)
-    assert_eq(JSON.require<i64>(value, ["z"]), 3)
+    assertEqual(JSON.require<i64>(value, ["z"]), 3)
 }
 
 @test
 fn test_as_object_rejects_non_object() {
     var scalar: JSON.Value = 1
-    assert_eq(JSON.asObject(scalar), null)
+    assertEqual(JSON.asObject(scalar), null)
 }

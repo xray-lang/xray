@@ -28,22 +28,22 @@ class Account {
 @test
 fn test_private_field_access() {
     var acc = Account(100)
-    assert_eq(acc.getBalance(), 100)
+    assertEqual(acc.getBalance(), 100)
 }
 
 @test
 fn test_private_field_modify() {
     var acc = Account(100)
     acc.deposit(50)
-    assert_eq(acc.getBalance(), 150)
+    assertEqual(acc.getBalance(), 150)
 }
 
 @test
 fn test_private_field_withdraw() {
     var acc = Account(100)
     var success = acc.withdraw(30)
-    assert_eq(success, true)
-    assert_eq(acc.getBalance(), 70)
+    assertEqual(success, true)
+    assertEqual(acc.getBalance(), 70)
 }
 
 // ===== 多私有字段 =====
@@ -69,9 +69,9 @@ class User {
 @test
 fn test_multiple_private_fields() {
     var user = User("Alice", "alice@test.com", "secret123")
-    assert_eq(user.name, "Alice")
-    assert_eq(user.checkPassword("secret123"), true)
-    assert_eq(user.checkPassword("wrong"), false)
+    assertEqual(user.name, "Alice")
+    assertEqual(user.checkPassword("secret123"), true)
+    assertEqual(user.checkPassword("wrong"), false)
 }
 
 // ===== 私有字段与继承 =====
@@ -106,7 +106,7 @@ class SavingsAccount extends BankAccount {
 @test
 fn test_private_with_inheritance() {
     var savings = SavingsAccount(1000, 0.1)
-    assert_eq(savings.getBalance(), 1000)
+    assertEqual(savings.getBalance(), 1000)
     savings.applyInterest()
-    assert_eq(savings.getBalance(), 1100)
+    assertEqual(savings.getBalance(), 1100)
 }

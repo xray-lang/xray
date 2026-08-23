@@ -51,7 +51,7 @@ fn test_direct_subclass() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
     var dog = Dog("Rex", "Labrador")
-    assert_eq(nameOf<Dog>(dog), "Rex")
+    assertEqual(nameOf<Dog>(dog), "Rex")
 }
 
 @test
@@ -59,7 +59,7 @@ fn test_sibling_subclass() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
     var cat = Cat("Whiskers")
-    assert_eq(nameOf<Cat>(cat), "Whiskers")
+    assertEqual(nameOf<Cat>(cat), "Whiskers")
 }
 
 // ===== Transitive (grand-child) subclass also satisfies =====
@@ -68,7 +68,7 @@ fn test_grandchild_subclass() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
     var puppy = Puppy("Buddy")
-    assert_eq(nameOf<Puppy>(puppy), "Buddy")
+    assertEqual(nameOf<Puppy>(puppy), "Buddy")
 }
 
 // ===== Base class itself satisfies (reflexive) =====
@@ -77,7 +77,7 @@ fn test_base_class_self() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
     var animal = Animal("Generic")
-    assert_eq(nameOf<Animal>(animal), "Generic")
+    assertEqual(nameOf<Animal>(animal), "Generic")
 }
 
 // ===== Type parameter inferred without explicit type arg =====
@@ -86,7 +86,7 @@ fn test_inferred_type_arg() {
     fn nameOf<T: Animal>(a: T) -> string { return a.name }
 
     var dog = Dog("Spot", "Beagle")
-    assert_eq(nameOf(dog), "Spot")
+    assertEqual(nameOf(dog), "Spot")
 }
 
 // ===== Class upper bound combined with second unconstrained param =====
@@ -95,8 +95,8 @@ fn test_class_bound_with_second_param() {
     fn pair<T: Animal, U>(a: T, tag: U) -> U { return tag }
 
     var cat = Cat("Mittens")
-    assert_eq(pair<Cat, i64>(cat, 7), 7)
-    assert_eq(pair<Cat, string>(cat, "ok"), "ok")
+    assertEqual(pair<Cat, i64>(cat, 7), 7)
+    assertEqual(pair<Cat, string>(cat, "ok"), "ok")
 }
 
 print("All class-bound generic tests passed!")

@@ -8,36 +8,36 @@
 fn test_int_to_string() {
     var x = 42
     var s = string(x)
-    assert_eq(s, "42")
-    assert_eq(typeName(s), "string")
+    assertEqual(s, "42")
+    assertEqual(typeName(s), "string")
 }
 
 @test
 fn test_float_to_string() {
     var x = 3.14
     var s = string(x)
-    assert_eq(s.startsWith("3.14"), true)
+    assertEqual(s.startsWith("3.14"), true)
 }
 
 @test
 fn test_bool_to_string() {
-    assert_eq(string(true), "true")
-    assert_eq(string(false), "false")
+    assertEqual(string(true), "true")
+    assertEqual(string(false), "false")
 }
 
 // ===== 转为整数 =====
 
 @test
 fn test_string_to_int() {
-    assert_eq(i64.parse("42"), 42)
-    assert_eq(i64.parse("-100"), -100)
-    assert_eq(i64.parse("0"), 0)
+    assertEqual(i64.parse("42"), 42)
+    assertEqual(i64.parse("-100"), -100)
+    assertEqual(i64.parse("0"), 0)
 }
 
 @test
 fn test_float_to_int() {
-    assert_eq((3.7 as i64), 3)
-    assert_eq((-2.9 as i64), -2)
+    assertEqual((3.7 as i64), 3)
+    assertEqual((-2.9 as i64), -2)
 }
 
 // ===== 转为浮点数 =====
@@ -45,34 +45,34 @@ fn test_float_to_int() {
 @test
 fn test_string_to_float() {
     var f = f64.parse("3.14")
-    assert_eq(f > 3.13, true)
-    assert_eq(f < 3.15, true)
+    assertEqual(f > 3.13, true)
+    assertEqual(f < 3.15, true)
 }
 
 @test
 fn test_int_to_float() {
     var f = (42 as f64)
-    assert_eq(f, 42.0)
+    assertEqual(f, 42.0)
 }
 
 // ===== 转为布尔值 =====
 
 @test
 fn test_int_to_bool() {
-    assert_eq(bool(0), false)
-    assert_eq(bool(1), true)
-    assert_eq(bool(-1), true)
+    assertEqual(bool(0), false)
+    assertEqual(bool(1), true)
+    assertEqual(bool(-1), true)
 }
 
 @test
 fn test_string_to_bool() {
-    assert_eq(bool(""), false)
-    assert_eq(bool("hello"), true)
+    assertEqual(bool(""), false)
+    assertEqual(bool("hello"), true)
 }
 
 @test
 fn test_null_to_bool() {
-    assert_eq(bool(null), false)
+    assertEqual(bool(null), false)
 }
 
 // ===== 数组转换 =====
@@ -81,9 +81,9 @@ fn test_null_to_bool() {
 fn test_array_unique() {
     var arr = [1, 2, 2, 3, 3, 3]
     var s = #[1, 2, 3]  // 手动去重
-    assert_eq(len(s), 3)
-    assert_eq(s.contains(1), true)
-    assert_eq(s.contains(2), true)
-    assert_eq(s.contains(3), true)
+    assertEqual(len(s), 3)
+    assertEqual(s.contains(1), true)
+    assertEqual(s.contains(2), true)
+    assertEqual(s.contains(3), true)
 }
 

@@ -34,7 +34,7 @@ fn test_construction_result_stored_into_field() {
         h.n = Node(i)
         var got = h.n
         assert(got != null)
-        assert_eq(got.v, i)
+        assertEqual(got.v, i)
     }
     assert(runtime.liveObjects() - before < 100)
 }

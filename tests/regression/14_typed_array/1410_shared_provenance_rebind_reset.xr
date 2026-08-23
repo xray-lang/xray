@@ -8,5 +8,5 @@ fn test_shared_provenance_rebind_reset() {
     var items = box.items
     items = Array<i64>(1, 0)
     items[0] = 7
-    assert_eq(items[0], 7)
+    assertEqual(items[0], 7)
 }

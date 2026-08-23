@@ -25,21 +25,21 @@ class Point {
 @test
 fn test_class_instance_type() {
     var p = Point(3, 4)
-    assert_eq(typeName(p), "Point")
+    assertEqual(typeName(p), "Point")
 }
 
 @test
 fn test_class_field_access() {
     var p = Point(3, 4)
-    assert_eq(p.x, 3)
-    assert_eq(p.y, 4)
+    assertEqual(p.x, 3)
+    assertEqual(p.y, 4)
 }
 
 @test
 fn test_class_method_call() {
     var p = Point(3, 4)
     var d = p.distance()
-    assert_eq(typeName(d), "f64")
+    assertEqual(typeName(d), "f64")
     assert(d > 4.9 && d < 5.1)
 }
 
@@ -47,8 +47,8 @@ fn test_class_method_call() {
 fn test_class_method_return_type() {
     var p = Point(0, 0)
     var s = p.toString()
-    assert_eq(typeName(s), "string")
-    assert_eq(s, "Point(0, 0)")
+    assertEqual(typeName(s), "string")
+    assertEqual(s, "Point(0, 0)")
 }
 
 // ===== Class Inheritance =====
@@ -84,38 +84,38 @@ class Dog extends Animal {
 @test
 fn test_inheritance_type() {
     var d = Dog("Rex", "Labrador")
-    assert_eq(typeName(d), "Dog")
+    assertEqual(typeName(d), "Dog")
 }
 
 @test
 fn test_inheritance_field() {
     var d = Dog("Rex", "Labrador")
-    assert_eq(d.name, "Rex")
+    assertEqual(d.name, "Rex")
     // Inherited field
-    assert_eq(d.breed, "Labrador")
+    assertEqual(d.breed, "Labrador")
 }
 
 @test
 fn test_inheritance_method() {
     var d = Dog("Rex", "Labrador")
-    assert_eq(d.speak(), "Rex barks")
+    assertEqual(d.speak(), "Rex barks")
     // Overridden
-    assert_eq(d.fetch(), "Rex fetches the ball")
+    assertEqual(d.fetch(), "Rex fetches the ball")
 }
 
 @test
 fn test_polymorphism() {
     var animals = [Animal("Generic"), Dog("Rex", "Lab")]
-    assert_eq(animals[0].speak(), "Generic makes a sound")
-    assert_eq(animals[1].speak(), "Rex barks")
+    assertEqual(animals[0].speak(), "Generic makes a sound")
+    assertEqual(animals[1].speak(), "Rex barks")
 }
 
 @test
 fn test_array_literal_contextual_supertype() {
     var animals: Array<Animal> = [Animal("Generic"), Dog("Rex", "Lab")]
-    assert_eq(len(animals), 2)
-    assert_eq(animals[0].speak(), "Generic makes a sound")
-    assert_eq(animals[1].speak(), "Rex barks")
+    assertEqual(len(animals), 2)
+    assertEqual(animals[0].speak(), "Generic makes a sound")
+    assertEqual(animals[1].speak(), "Rex barks")
 }
 
 // ===== Static Members =====
@@ -135,9 +135,9 @@ class Counter {
 fn test_static_field() {
     Counter.count = 0
     // Reset
-    assert_eq(Counter.count, 0)
+    assertEqual(Counter.count, 0)
     Counter.count = 5
-    assert_eq(Counter.count, 5)
+    assertEqual(Counter.count, 5)
 }
 
 @test
@@ -146,7 +146,7 @@ fn test_static_method() {
     // Reset
     Counter.increment()
     Counter.increment()
-    assert_eq(Counter.getCount(), 2)
+    assertEqual(Counter.getCount(), 2)
 }
 
 // ===== Class with Generic-like Patterns =====
@@ -168,20 +168,20 @@ class Box {
 @test
 fn test_box_int() {
     var b = Box(42)
-    assert_eq(b.get(), 42)
+    assertEqual(b.get(), 42)
 }
 
 @test
 fn test_box_second_instance() {
     var b = Box(7)
-    assert_eq(b.get(), 7)
+    assertEqual(b.get(), 7)
 }
 
 @test
 fn test_box_mutation() {
     var b = Box(1)
     b.set(2)
-    assert_eq(b.get(), 2)
+    assertEqual(b.get(), 2)
 }
 
 // ===== is Operator =====
@@ -233,8 +233,8 @@ class Circle {
 fn test_different_classes() {
     var rect = Rectangle(4, 5)
     var circ = Circle(3)
-    assert_eq(typeName(rect), "Rectangle")
-    assert_eq(typeName(circ), "Circle")
-    assert_eq(rect.area(), 20)
+    assertEqual(typeName(rect), "Rectangle")
+    assertEqual(typeName(circ), "Circle")
+    assertEqual(rect.area(), 20)
     assert(circ.area() > 28 && circ.area() < 29)
 }
