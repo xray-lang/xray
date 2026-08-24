@@ -2,8 +2,6 @@ args=--dump-global-evidence
 regex=json-codec [0-9]+ .*kind=encode .*input_type=[1-9][0-9]* .*flags=0x8
 regex=json-codec [0-9]+ .*kind=stringify .*input_type=[1-9][0-9]* .*flags=0x8
 contains=xaot-plan v0
-regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=encode action=encode_derive_sidecar input_type=[1-9][0-9]* target_type=0 input_shape=0 output_shape=0 fields=0 evidence=0x101 reason=none
-regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=stringify action=stringify_dynamic_walk input_type=[1-9][0-9]* target_type=0 input_shape=0 output_shape=0 fields=0 evidence=0x101 reason=none
 c_regex=static const XrtInspectField xrt_native_json_derive_encode_stringify_plan_[0-9a-f]+_Point_inspect_fields\[\]
 c_regex=\{"x", \(uint32_t\)offsetof\([^,]+, f0\), 0, 3, 0, NULL\}
 c_regex=\{"y", \(uint32_t\)offsetof\([^,]+, f1\), 0, 3, 0, NULL\}

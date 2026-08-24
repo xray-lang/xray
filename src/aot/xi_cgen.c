@@ -14500,53 +14500,63 @@ static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *t
     return memo && memo->reachable;
 }
 
-static void cg_report_mandatory_plan_contract_failure(XiCgenCtx *ctx, const XiFunc *func,
-                                                      const XiValue *value, const char *plan_kind,
-                                                      uint32_t stable_id,
-                                                      XaotBackendContractIssue issue) {
+static void cg_report_mandatory_contract_failure(XiCgenCtx *ctx, const XiFunc *func,
+                                                 const XiValue *value, const char *contract_kind,
+                                                 uint32_t stable_id,
+                                                 XaotBackendContractIssue issue) {
     cg_ctx_set_error(ctx);
     fprintf(stderr,
-            "[xi_cgen] ERROR: %s plan contract failed in function '%s' for Xi value v%u "
+            "[xi_cgen] ERROR: %s contract failed in function '%s' for Xi value v%u "
             "(stable_id=%u span=%u issue=%s)\n",
-            plan_kind, func && func->name ? func->name : "?", value ? value->id : 0, stable_id,
-            value ? value->line : 0, xaot_backend_contract_issue_name(issue));
+            contract_kind, func && func->name ? func->name : "?", value ? value->id : 0,
+            stable_id, value ? value->line : 0, xaot_backend_contract_issue_name(issue));
 }
 
-static bool cg_json_codec_site_contract(const XiValue *value, uint8_t *out_kind,
-                                        uint32_t *out_allowed_actions) {
+static bool cg_json_codec_site_kind(const XiValue *value, uint8_t *out_kind) {
     uint8_t kind = 0;
-    uint32_t actions = 0;
-    if (!value || !out_kind || !out_allowed_actions)
+    if (!value || !out_kind)
         return false;
     if (value->op == XI_JSON_DECODE) {
-        if ((value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0) {
+        if ((value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0)
             kind = XG_JSON_CODEC_PARSE;
-            actions =
-                xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED);
-        } else {
+        else
             kind = XG_JSON_CODEC_DECODE;
-            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
-        }
     } else if (value->op == XI_CALL_METHOD && value->nargs >= 1 && value->aux &&
                xicgen_receiver_is_builtin_global(value->args[0], XR_GLOBAL_VAR_JSON)) {
         const char *method = (const char *) value->aux;
         if (strcmp(method, "parse") == 0 || strcmp(method, "parseValue") == 0 ||
-            strcmp(method, "parseObject") == 0) {
+            strcmp(method, "parseObject") == 0)
             kind = XG_JSON_CODEC_PARSE;
-            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
-        } else if (strcmp(method, "value") == 0) {
+        else if (strcmp(method, "value") == 0)
             kind = XG_JSON_CODEC_ENCODE;
-            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_ENCODE_FIELD_TABLE) |
-                      xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR);
-        } else if (strcmp(method, "stringify") == 0) {
+        else if (strcmp(method, "stringify") == 0)
             kind = XG_JSON_CODEC_STRINGIFY;
-            actions = xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
-        }
     }
-    if (kind == 0 || actions == 0)
+    if (kind == 0)
         return false;
     *out_kind = kind;
-    *out_allowed_actions = actions;
+    return true;
+}
+
+static bool cg_json_codec_summary_matches_site(const XiValue *value,
+                                               const XgJsonCodecSummary *summary,
+                                               uint8_t expected_kind) {
+    if (!value || !summary || summary->source_node_id == 0 ||
+        summary->codec_kind != expected_kind)
+        return false;
+    if (expected_kind == XG_JSON_CODEC_PARSE) {
+        const bool typed_parse =
+            value->op == XI_JSON_DECODE &&
+            (value->lowering_flags & XI_LOWERING_FLAG_JSON_TYPED_PARSE) != 0;
+        if (typed_parse)
+            return (summary->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 &&
+                   summary->target_type_key != 0;
+        return (summary->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) == 0 &&
+               summary->target_type_key == 0;
+    }
+    if (expected_kind == XG_JSON_CODEC_DECODE)
+        return (summary->flags & XG_JSON_CODEC_HAS_TARGET_TYPE) != 0 &&
+               summary->target_type_key != 0;
     return true;
 }
 
@@ -14573,27 +14583,43 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
     bool valid = true;
 
     uint8_t expected_kind = 0;
-    uint32_t allowed_actions = 0;
-    bool json_codec_site = cg_json_codec_site_contract(value, &expected_kind, &allowed_actions);
+    bool json_codec_site = cg_json_codec_site_kind(value, &expected_kind);
     if (json_codec_site) {
         if (value->xg_json_codec_id == XG_NO_ID) {
             issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "json-codec", XG_NO_ID,
-                                                      issue);
+            cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence",
+                                                 XG_NO_ID, issue);
             return false;
         }
-        const XaotJsonCodecPlan *plan =
-            xaot_bundle_find_json_codec_plan(bundle, value->xg_json_codec_id);
-        if (!xaot_backend_contract_json_codec_plan_allowed(plan, expected_kind, allowed_actions,
-                                                           &issue)) {
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "json-codec",
-                                                      value->xg_json_codec_id, issue);
+        const XgGlobalEvidence *evidence =
+            bundle ? bundle->global_evidence_plan.evidence : NULL;
+        if (!evidence ||
+            bundle->global_evidence_plan.evidence_hash != xg_global_evidence_hash(evidence)) {
+            issue = evidence ? XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH
+                             : XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
+            cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence",
+                                                 value->xg_json_codec_id, issue);
+            return false;
+        }
+        const XgJsonCodecSummary *summary =
+            xg_global_evidence_find_json_codec(evidence, value->xg_json_codec_id);
+        if (!summary) {
+            issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
+            cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence",
+                                                 value->xg_json_codec_id, issue);
+            valid = false;
+        } else if (!func || func->xg_body_func_id == XG_NO_ID ||
+                   summary->owner_func_id != func->xg_body_func_id ||
+                   !cg_json_codec_summary_matches_site(value, summary, expected_kind)) {
+            issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
+            cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence",
+                                                 value->xg_json_codec_id, issue);
             valid = false;
         }
     } else if (value->xg_json_codec_id != XG_NO_ID) {
         issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
-        cg_report_mandatory_plan_contract_failure(ctx, func, value, "json-codec",
-                                                  value->xg_json_codec_id, issue);
+        cg_report_mandatory_contract_failure(ctx, func, value, "json-codec evidence",
+                                             value->xg_json_codec_id, issue);
         valid = false;
     }
 
@@ -14606,21 +14632,21 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
     if (object_merge_site) {
         if (value->xg_object_merge_id == XG_NO_ID) {
             issue = XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN;
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge", XG_NO_ID,
-                                                      issue);
+            cg_report_mandatory_contract_failure(ctx, func, value, "object-merge plan", XG_NO_ID,
+                                                 issue);
             return false;
         }
         const XaotObjectMergePlan *plan =
             xaot_bundle_find_object_merge_plan(bundle, value->xg_object_merge_id);
         if (!xaot_backend_contract_object_merge_plan_allowed(plan, object_merge_actions, &issue)) {
-            cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge",
-                                                      value->xg_object_merge_id, issue);
+            cg_report_mandatory_contract_failure(ctx, func, value, "object-merge plan",
+                                                 value->xg_object_merge_id, issue);
             valid = false;
         }
     } else if (value->xg_object_merge_id != XG_NO_ID) {
         issue = XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH;
-        cg_report_mandatory_plan_contract_failure(ctx, func, value, "object-merge",
-                                                  value->xg_object_merge_id, issue);
+        cg_report_mandatory_contract_failure(ctx, func, value, "object-merge plan",
+                                             value->xg_object_merge_id, issue);
         valid = false;
     }
     return valid;

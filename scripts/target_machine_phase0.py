@@ -241,7 +241,7 @@ def struct_body(text: str, type_name: str) -> str:
 def aot_destination(type_name: str) -> tuple[str, str, int]:
     name = type_name.removeprefix("Xaot").removesuffix("Plan").lower()
     if "json" in name:
-        return "obsolete", "delete-without-replacement", 272
+        return "obsolete", "delete-private-plan-consume-semantic-evidence-directly", 272
     if any(word in name for word in ("staticdata", "linkdependency", "metadatareachability")):
         return "emission-link", "XrEmissionLinkPlan", 272
     if any(word in name for word in ("alias", "bounds", "cache", "specialization", "codesize")):
@@ -300,7 +300,12 @@ def aot_plan_inventory(root: Path) -> dict[str, Any]:
         })
     result = meta(root, inputs)
     result.update({
-        "policy": {"unclassified_row": "error", "unresolved_destination": "error"},
+        "policy": {
+            "unclassified_row": "error",
+            "unresolved_destination": "error",
+            "obsolete_row_handling":
+                "delete-private-plan-consume-semantic-evidence-directly",
+        },
         "row_count": len(rows),
         "rows": rows,
         "mixed_representation_types": {

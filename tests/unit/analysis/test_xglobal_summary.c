@@ -9770,7 +9770,6 @@ TEST(global_evidence_producer_records_derive_rows) {
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
     ASSERT_EQ_UINT(bundle.nderived_eq_hash_plans, 0);
     ASSERT_EQ_UINT(bundle.nderived_clone_plans, 0);
-    ASSERT_EQ_UINT(bundle.njson_codec_plans, 0);
     xaot_bundle_free(&bundle);
 
     xg_global_evidence_free(&ev);
@@ -11488,17 +11487,10 @@ TEST(global_evidence_producer_records_json_codec_calls) {
     XaotBundle bundle;
     memset(&bundle, 0, sizeof(bundle));
     ASSERT_TRUE(xaot_bundle_set_global_evidence(&bundle, &ev, XG_BUILD_NATIVE_RELEASE));
-    ASSERT_EQ_UINT(bundle.njson_codec_plans, 4);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[0].action, XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[1].action, XAOT_JSON_CODEC_DECODE_VALIDATE_COPY);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[2].action, XAOT_JSON_CODEC_ENCODE_FIELD_TABLE);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[3].action, XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK);
+    ASSERT_TRUE(bundle.global_evidence_plan.evidence == &ev);
     const XaotObjectShapePlan *object_plan =
         xaot_bundle_find_object_shape_plan(&bundle, struct_shape->object_shape_id);
     ASSERT_NOT_NULL(object_plan);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[1].output_shape_id, struct_shape->object_shape_id);
-    ASSERT_EQ_UINT(bundle.json_codec_plans[2].input_shape_id, struct_shape->object_shape_id);
-    ASSERT_TRUE((bundle.json_codec_plans[1].evidence & XAOT_JSON_EV_OBJECT_SHAPE) != 0);
 
     xaot_bundle_free(&bundle);
     xg_global_evidence_free(&ev);

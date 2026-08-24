@@ -1,5 +1,5 @@
 args=--dump-global-evidence
-regex=json-codec-plan [0-9]+ id=[0-9]+ module=[0-9]+ func=[0-9]+ node=[1-9][0-9]* span=[0-9]+ kind=parse action=parse_runtime_direct_typed input_type=[1-9][0-9]* target_type=[1-9][0-9]* input_shape=0 output_shape=[1-9][0-9]* fields=3 evidence=0xd1 reason=none
+regex=json-codec [0-9]+ .*kind=parse .*target_type=[1-9][0-9]* .*output_shape=[1-9][0-9]* .*fields=3
 c_contains=xrt_json_parse_typed_object_or_throw_consume(
 c_contains=static const XrtObjectShape _xobj_shape_
 c_contains=(const XrJsonDecodeFieldSpec[])

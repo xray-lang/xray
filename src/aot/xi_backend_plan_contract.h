@@ -40,8 +40,6 @@ typedef enum XaotBackendContractIssue {
     XAOT_BACKEND_CONTRACT_GENERIC_BODY_IDENTITY_MISMATCH,
     XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED,
     XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH,
-    XAOT_BACKEND_CONTRACT_JSON_CODEC_KIND_MISMATCH,
-    XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED,
     XAOT_BACKEND_CONTRACT_OBJECT_MERGE_ACTION_REJECTED,
 } XaotBackendContractIssue;
 
@@ -75,10 +73,6 @@ static inline const char *xaot_backend_contract_issue_name(XaotBackendContractIs
             return "generic_body_action_rejected";
         case XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH:
             return "mandatory_plan_identity_mismatch";
-        case XAOT_BACKEND_CONTRACT_JSON_CODEC_KIND_MISMATCH:
-            return "json_codec_kind_mismatch";
-        case XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED:
-            return "json_codec_action_rejected";
         case XAOT_BACKEND_CONTRACT_OBJECT_MERGE_ACTION_REJECTED:
             return "object_merge_action_rejected";
     }
@@ -321,37 +315,6 @@ static inline bool xaot_backend_contract_generic_body_call_allowed(
 
     xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_GENERIC_BODY_ACTION_REJECTED);
     return false;
-}
-
-static inline uint32_t xaot_backend_json_codec_action_bit(uint8_t action) {
-    return action < 32 ? UINT32_C(1) << action : 0;
-}
-
-static inline bool
-xaot_backend_contract_json_codec_plan_allowed(const XaotJsonCodecPlan *plan, uint8_t expected_kind,
-                                              uint32_t allowed_actions,
-                                              XaotBackendContractIssue *out_issue) {
-    if (!plan) {
-        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
-        return false;
-    }
-    if (plan->owner_func_id == XG_NO_ID || plan->source_node_id == 0 ||
-        (plan->evidence & XAOT_JSON_EV_GLOBAL_ROW) == 0) {
-        xaot_backend_contract_set_issue(out_issue,
-                                        XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH);
-        return false;
-    }
-    if (plan->codec_kind != expected_kind) {
-        xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_JSON_CODEC_KIND_MISMATCH);
-        return false;
-    }
-    if ((allowed_actions & xaot_backend_json_codec_action_bit(plan->action)) == 0) {
-        xaot_backend_contract_set_issue(out_issue,
-                                        XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED);
-        return false;
-    }
-    xaot_backend_contract_set_issue(out_issue, XAOT_BACKEND_CONTRACT_OK);
-    return true;
 }
 
 static inline uint32_t xaot_backend_object_merge_action_bit(uint8_t action) {

@@ -101,6 +101,10 @@ C. Decoding a derived value struct writes its existing native aggregate layout;
 heap materialization uses the registered type destructor and storage promoter.
 This adds no public field, tag, calling-convention change, or per-instance
 metadata to the target ABI.
+The AOT backend consumes each verified `XgJsonCodecSummary` directly by stable
+codec and owner identity. It does not materialize a second private codec plan;
+schema-less parse, typed parse, and decode remain distinct through the semantic
+row's kind and target-type evidence without changing the public JSON ABI.
 Task 275 requires a current frozen coroutine plan before AOT may lower an
 uncaptured closure to a direct C symbol. A missing, stale, incomplete, or
 suspendable plan keeps the runtime closure representation; AOT must not
@@ -643,8 +647,8 @@ anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de0
 anchor-sha256: src/aot/xaot_callable.c 13d17addb6fe4492d78a2b010bc8329c2bc2bc912a9cd7e7cd8be59269c56d6a
 anchor-sha256: src/aot/xaot_prepare.c b025cbd2f99f6069b8ef142d840f09a1c2c1f996d456e0659feeaf8883374641
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
-anchor-sha256: src/aot/xaot_bundle.c 67a6e9c6bedc2d2a74d20a56ac163aada41c5a178da7f72db1ea0dbd9fd6f880
-anchor-sha256: src/aot/xaot_verify.c ca5082d7d43a163ea6ac966d373a4eb0152faa76b14f1e0fc93c2af209d6d8e4
+anchor-sha256: src/aot/xaot_bundle.c 787a6bef6b2498164b08005832d5299ab8f54f2b62e15b5802d1c2bc1bf50992
+anchor-sha256: src/aot/xaot_verify.c b02e1be0c00c291d36de9f7eb62bcf2f00a7851a3e0aaf65f09edf76c769b154
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 9d62cbead4303fbffabc1d5f046f29e16bc7ea6706fc9efa21df013305d3d026
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
@@ -670,7 +674,7 @@ anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 57366eba28c2390e447b8f6c337c5
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c fc913b9219a6e584898a38f306faceaf02ceeaa923f9aa1b94a725b5525177a5
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 4a875d43bbae8475a318d3d6153cf67aae484dcec86fb18c3d0e11562ff89e32
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c 9ea6ac1e4e4afc494618bc7e50110f8c028ec3338aedce4503ffc80a5da40754
-anchor-sha256: src/aot/xi_cgen.c e9b28a9f8442c661a24f92f4971696731356c1da3966e000e610349ef84cd138
+anchor-sha256: src/aot/xi_cgen.c b4edbe1d00b1f6bf00f7fa7812f7ca4c27bf557345a868099a1a80f3e11c4983
 anchor-sha256: src/ir/xi_opt.c 6689fa926579a40007ca5b772a9bcfac0307ddb2f7de7eac15bd5b07c9f6ae23
 anchor-sha256: src/aot/xrt_coll.h 6c653d90dfdea6a5d2d03c64966c0594f9a262f902eecf7c5e96e31bb1efea16
 anchor-sha256: src/aot/xrt_core_freestanding.h 7f163f58a8a38a569716bae2b1f02f62f90a25562800b0d933b660de6a05c54c

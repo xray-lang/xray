@@ -198,63 +198,6 @@ static void test_generic_body_contract(void) {
     passed++;
 }
 
-static void test_json_codec_plan_contracts(void) {
-    XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
-    uint32_t parse_actions =
-        xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT);
-    XaotJsonCodecPlan plan = {.codec_id = 1,
-                              .owner_func_id = 7,
-                              .source_node_id = 99,
-                              .codec_kind = XG_JSON_CODEC_PARSE,
-                              .action = XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
-                              .evidence = XAOT_JSON_EV_GLOBAL_ROW};
-
-    ASSERT_TRUE(!xaot_backend_contract_json_codec_plan_allowed(NULL, XG_JSON_CODEC_PARSE,
-                                                               parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MISSING_MANDATORY_PLAN);
-
-    ASSERT_TRUE(xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                              parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
-
-    plan.source_node_id = 0;
-    ASSERT_TRUE(!xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                               parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH);
-    plan.source_node_id = 99;
-
-    plan.owner_func_id = XG_NO_ID;
-    ASSERT_TRUE(!xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                               parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_MANDATORY_PLAN_IDENTITY_MISMATCH);
-    plan.owner_func_id = 7;
-
-    plan.codec_kind = XG_JSON_CODEC_DECODE;
-    ASSERT_TRUE(!xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                               parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_JSON_CODEC_KIND_MISMATCH);
-    plan.codec_kind = XG_JSON_CODEC_PARSE;
-
-    plan.action = XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
-    ASSERT_TRUE(!xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                               parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED);
-
-    plan.action = XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED;
-    uint32_t typed_parse_actions =
-        xaot_backend_json_codec_action_bit(XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED);
-    ASSERT_TRUE(xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                              typed_parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_OK);
-
-    plan.action = XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT;
-    ASSERT_TRUE(!xaot_backend_contract_json_codec_plan_allowed(&plan, XG_JSON_CODEC_PARSE,
-                                                               typed_parse_actions, &issue));
-    ASSERT_EQ(issue, XAOT_BACKEND_CONTRACT_JSON_CODEC_ACTION_REJECTED);
-
-    passed++;
-}
-
 static void test_object_merge_plan_contracts(void) {
     XaotBackendContractIssue issue = XAOT_BACKEND_CONTRACT_OK;
     uint32_t copy_actions =
@@ -296,7 +239,6 @@ int main(void) {
     test_itable_requires_interface_abi_plan();
     test_profile_contracts();
     test_generic_body_contract();
-    test_json_codec_plan_contracts();
     test_object_merge_plan_contracts();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;

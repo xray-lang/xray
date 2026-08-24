@@ -1034,57 +1034,6 @@ typedef struct XaotDerivedClonePlan {
     uint8_t unproven_reason;
 } XaotDerivedClonePlan;
 
-typedef enum XaotJsonCodecAction {
-    XAOT_JSON_CODEC_PARSE_DOM_BRIDGE = 1,
-    XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
-    XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT_TYPED,
-    XAOT_JSON_CODEC_DECODE_VALIDATE_COPY,
-    XAOT_JSON_CODEC_ENCODE_FIELD_TABLE,
-    XAOT_JSON_CODEC_ENCODE_DERIVE_SIDECAR,
-    XAOT_JSON_CODEC_STRINGIFY_DYNAMIC_WALK,
-    XAOT_JSON_CODEC_REJECT,
-} XaotJsonCodecAction;
-
-enum {
-    XAOT_JSON_EV_GLOBAL_ROW = 1u << 0,
-    XAOT_JSON_EV_STATIC_KEY = 1u << 1,
-    XAOT_JSON_EV_RECEIVER_SHAPE = 1u << 2,
-    XAOT_JSON_EV_FIELD_INDEX = 1u << 3,
-    XAOT_JSON_EV_OBJECT_SHAPE = 1u << 4,
-    XAOT_JSON_EV_INPUT_SHAPE = 1u << 5,
-    XAOT_JSON_EV_OUTPUT_SHAPE = 1u << 6,
-    XAOT_JSON_EV_TARGET_TYPE = 1u << 7,
-    XAOT_JSON_EV_DERIVE = 1u << 8,
-};
-
-enum {
-    XAOT_JSON_UNPROVEN_NONE = 0,
-    XAOT_JSON_UNPROVEN_COMPUTED_KEY = 1,
-    XAOT_JSON_UNPROVEN_RECEIVER_SHAPE_UNKNOWN = 2,
-    XAOT_JSON_UNPROVEN_STALE_SHAPE = 3,
-    XAOT_JSON_UNPROVEN_INVALID_KIND = 4,
-    XAOT_JSON_UNPROVEN_OPEN_SHAPE = 5,
-    XAOT_JSON_UNPROVEN_MISSING_TARGET_TYPE = 6,
-    XAOT_JSON_UNPROVEN_UNSUPPORTED_CODEC = 7,
-};
-
-typedef struct XaotJsonCodecPlan {
-    XgJsonCodecId codec_id;
-    XgModuleId module_id;
-    XgFuncId owner_func_id;
-    uint32_t source_node_id;
-    uint32_t source_span_id;
-    uint8_t codec_kind;
-    uint8_t action;
-    uint32_t input_type_key;
-    uint32_t target_type_key;
-    XgObjectShapeId input_shape_id;
-    XgObjectShapeId output_shape_id;
-    uint16_t field_count;
-    uint32_t evidence;
-    uint8_t unproven_reason;
-} XaotJsonCodecPlan;
-
 typedef enum XaotObjectShapeAction {
     XAOT_OBJECT_SHAPE_EXACT = 1,
     XAOT_OBJECT_SHAPE_OPTIONS_BAG,
@@ -1730,9 +1679,6 @@ typedef struct XaotBundle {
     XaotDerivedClonePlan *derived_clone_plans;
     uint32_t nderived_clone_plans;
     uint32_t derived_clone_plan_cap;
-    XaotJsonCodecPlan *json_codec_plans;
-    uint32_t njson_codec_plans;
-    uint32_t json_codec_plan_cap;
     XaotObjectShapePlan *object_shape_plans;
     uint32_t nobject_shape_plans;
     uint32_t object_shape_plan_cap;
@@ -1872,8 +1818,6 @@ XR_FUNC const XaotDerivedEqHashPlan *xaot_bundle_find_derived_eq_hash_plan(const
                                                                            uint32_t type_key);
 XR_FUNC const XaotDerivedClonePlan *xaot_bundle_find_derived_clone_plan(const XaotBundle *bundle,
                                                                         uint32_t type_key);
-XR_FUNC const XaotJsonCodecPlan *xaot_bundle_find_json_codec_plan(const XaotBundle *bundle,
-                                                                  XgJsonCodecId codec_id);
 XR_FUNC const XaotObjectShapePlan *
 xaot_bundle_find_object_shape_plan(const XaotBundle *bundle, XgObjectShapeId object_shape_id);
 XR_FUNC const XaotObjectAccessPlan *

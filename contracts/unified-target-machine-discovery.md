@@ -14,6 +14,12 @@ field and a dynamic-shape or Json plan family are forbidden.  Diagnostic codes,
 entity identifiers, table ordering, fingerprints, integer encodings, and
 endianness are stable inputs to later executable schemas.
 
+An obsolete private AOT plan is deleted rather than renamed or copied.  Json
+code generation consumes the verified `XgJsonCodecSummary` semantic evidence
+directly; the destination inventory therefore records
+`delete-private-plan-consume-semantic-evidence-directly` as the obsolete-row
+policy instead of implying that the semantic evidence gate is removed.
+
 The support matrix distinguishes supported, CI-only, unqualified, and
 unsupported configurations.  A failed row cannot be relabelled as a skipped
 configuration.
@@ -47,18 +53,18 @@ the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 101eae2cee322a6a9252b5cdc20f069063832d35a968837f48edc7e3c7263819
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 81248afac3e1a614cbf6872056e5f68c7adaa83dfc7819400a7fe85842ac97f8
-anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 6a3a166c995995fcf56d9bb9a0693a3a7428f28c87d50d410641c9f7cb310d07
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 08dc7792a77febeac5007c4dda7b7be7ab7b0279b29d3c6df1de56eb680eb8d9
+anchor-sha256: contracts/target-machine/legacy-vm-inventory.json 9f154e29ab9f961c884bb0dc671fbb09fb30da28608707edf17c11a8936b6dbf
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: contracts/target-machine/migration-source-classification.json e0adb045a60f4b5d4c5a5f243b6a43cb217236190a4d2163eab2368f8663cacc
 anchor-sha256: scripts/check_target_machine_migration_classification.py 415a579c63f3a8bdd2ba15be9583e4ef4ac914891710eda3d0ca3cd48433fe2c
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: contracts/target-machine/object-extent-inventory.json 6e38c6eef7295f27026e58d4ad4b4fc5165ef4a7f3c86ba1e9200397e4e86cc8
-anchor-sha256: contracts/target-machine/validation-matrix.json 3dc4e72f21eea5fe0f76efbe4bde8c6022540b077a2f5625764f6102cab97300
+anchor-sha256: contracts/target-machine/object-extent-inventory.json 09b5643b8af658abe7ee879dce5125ec4d357deb1283d3cfb9a95771e4820315
+anchor-sha256: contracts/target-machine/validation-matrix.json 59aecfae7bc68f95ea469593c668b0ad548a57f52df305e9193f83b2773e6d95
 anchor-sha256: contracts/target-machine/baseline-manifest.json db89eb653fd5e47fd28bbbded0842ce859fdf58e14bf8140ce3872df9b8d1474
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
 anchor-sha256: contracts/target-machine/id-and-fingerprint-policy.toml df51b24d5ff63004c388dfd7621037d44c20b45ccff29a195680f715b5b7c5e2
-anchor-sha256: scripts/target_machine_phase0.py 16c143459d0486a2d25f802a2f1906071d62a5046c52eaf544de6c0d53c0678c
+anchor-sha256: scripts/target_machine_phase0.py 5830e55cd5a6dc6fda06d20af95b1679c91466f38ac282d2ea9edc20df567e09
 anchor-sha256: scripts/run_target_machine_matrix_row.py d0bc4d973e9d6276079f92d3bcddb0aacd5e7a09c4bdfe043b89e0700027ce36
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
 anchor-sha256: scripts/check_runtime_header_dependencies.py 917a82b6ecff974005edfad476b18ed5653be50ccc75952451de5ec2ae9afdd2

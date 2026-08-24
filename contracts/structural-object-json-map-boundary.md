@@ -74,6 +74,8 @@ Status: frozen after exact-object convergence and the removal of the public
     object domain, and path semantics. Missing or stale required evidence is an
     error; neither backend may silently fall back to name lookup, open-row
     dispatch, a second object store, or decode through an intermediate DOM.
+    AOT consumes the verified `XgJsonCodecSummary` row directly; it must not
+    copy that row into a private codec action, evidence, or rejection plan.
 17. AOT structural-object shapes are process-lifetime file-scope descriptors.
     Each instance borrows one descriptor; its header contains no extension-map
     pointer, owned field-name array, or other dynamic-key metadata. Equal
@@ -109,4 +111,4 @@ anchor-sha256: src/module/xproto_codec.h 109ec696fedec4c86fafe43632f8551441f8f1e
 anchor-sha256: src/runtime/object/xjson_serde.c 5fa5d9147857c3e210414ee14b8e591463a6c8df8cbc7849cfc8a500ccb91157
 anchor-sha256: stdlib/types/json.xr 9b4904f85a13bea98b04c616185183f921ed09761bde1cb48d751784fef48161
 anchor-sha256: src/module/xproto_codec.c fd0259678a73d79bd9703d4c736f2fb3ef9f9b67c3b8a172416f0e6bbce85688
-anchor-sha256: src/aot/xaot_verify.c ca5082d7d43a163ea6ac966d373a4eb0152faa76b14f1e0fc93c2af209d6d8e4
+anchor-sha256: src/aot/xaot_verify.c b02e1be0c00c291d36de9f7eb62bcf2f00a7851a3e0aaf65f09edf76c769b154

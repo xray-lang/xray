@@ -18,10 +18,7 @@ function_attr_callee_effect|covered|fn-attr .*evidence=0x7|tests/aot/filetests/c
 static_data_materialization|covered|static-data .*action=materialize|tests/aot/filetests/cgen|Static-data plans expose materialization actions.
 metadata_derive_reachability|covered|derive-plan|tests/aot/filetests/cgen|Derive metadata reachability has plan coverage.
 derived_eq_hash|covered|kind=hash|tests/aot/filetests/link|Derived Eq/Hash evidence has global evidence coverage.
-json_parse_runtime_direct_plan|covered|action=parse_runtime_direct|tests/aot/filetests|Json.parse uses an explicit verified runtime-direct parse plan instead of the old DOM bridge.
-json_decode_plan|covered|json-codec-plan .*kind=decode action=decode_validate_copy|tests/aot/filetests/cgen|Json.decode<T> for an exact object consumes a verified codec plan instead of assembling shape checks ad hoc.
-json_decode_mixed_object_array_plan|covered|jsonDecodeMixedObjectArrayPlan|tests/aot/filetests/cgen|Json.decode<T> mixed primitive, nested object, and Array<Json> fields share one verified decode plan and generated field-spec table.
-json_encode_field_table|covered|json-codec-plan .*kind=encode action=encode_field_table|tests/aot/filetests/cgen|Json.encode consumes verified field-table codec evidence.
+json_decode_mixed_object_array|covered|jsonDecodeMixedObjectArrayPlan|tests/aot/filetests/cgen|Json.decode<T> mixed primitive, nested object, and Array<Json> fields consume source-backed codec evidence and one generated field-spec table.
 object_json_bridge|covered|XG_OBJECT_SHAPE_JSON_ENCODABLE|tests/unit/analysis|Exact object aliases produce Json bridge shape and codec evidence.
 object_access_direct|covered|object-access-plan .*action=direct_ordinal|tests/aot/filetests/cgen|Object field access consumes a verified direct-field plan.
 object_closure_capture_shape|covered|objectClosureCapturePlan|tests/aot/filetests/cgen|Object receivers captured by closures keep child-body shape evidence and direct-field generated C helpers.

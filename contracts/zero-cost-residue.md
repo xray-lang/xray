@@ -19,6 +19,9 @@ Residue verification constructs AOT evidence only after installing the exact
 canonical TargetProfile selected for the numeric target. Target identity may
 restrict which evidence can be produced, but it never enables a shape request
 or changes any residue category or allowance.
+JSON C emission consumes verified semantic codec evidence directly. Removing
+the former private codec-plan copy changes no residue category or allowance;
+missing, stale, or site-incompatible evidence fails before C is emitted.
 
 Backend shape requirements in a `xray verify --contract` asset inspect emitted
 function bodies after optimization and CGen. They do not rewrite code. Residue
@@ -119,6 +122,6 @@ failure is a null result with no error allocation or pending-error traffic.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c e9b28a9f8442c661a24f92f4971696731356c1da3966e000e610349ef84cd138
+anchor-sha256: src/aot/xi_cgen.c b4edbe1d00b1f6bf00f7fa7812f7ca4c27bf557345a868099a1a80f3e11c4983
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c ddf3b8d501ef8beb8999c06970d6ac2b178e11f6ff38ac28cb4c8570a7d4182c
 anchor-sha256: src/app/cli/xcmd_verify.c 89c0d0d5f397d9acdb3098f9f5a04403004d6cf61a7f3a514e4ebf706b967ce9

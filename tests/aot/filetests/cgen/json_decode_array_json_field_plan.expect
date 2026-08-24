@@ -1,6 +1,5 @@
 args=--dump-global-evidence
 regex=json-codec [0-9]+ .*kind=decode .*fields=1
 contains=xaot-plan v0
-regex=json-codec-plan [0-9]+ .*kind=decode action=decode_validate_copy .*fields=1 .*reason=none
 c_contains=xrt_json_decode_struct_object
 c_contains={"items", 8, (const XrJsonDecodeFieldSpec[]){{NULL, 6, NULL, 0, NULL}}, 1

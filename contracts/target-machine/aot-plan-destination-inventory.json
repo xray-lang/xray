@@ -30,10 +30,11 @@
     }
   },
   "policy": {
+    "obsolete_row_handling": "delete-private-plan-consume-semantic-evidence-directly",
     "unclassified_row": "error",
     "unresolved_destination": "error"
   },
-  "row_count": 46,
+  "row_count": 45,
   "rows": [
     {
       "c_coupling_fields": [],
@@ -720,27 +721,6 @@
     },
     {
       "c_coupling_fields": [],
-      "category": "obsolete",
-      "consumers": [
-        "src/aot/xi_cgen.c"
-      ],
-      "current_fallback": "none-declared",
-      "current_type": "XaotJsonCodecPlan",
-      "deletion_task": 272,
-      "destination": "delete-without-replacement",
-      "pointer_lifetime_fields": [],
-      "producer": "src/aot/xaot_bundle.c",
-      "reference_files": [
-        "src/aot/xaot_bundle.c",
-        "src/aot/xaot_bundle.h",
-        "src/aot/xaot_verify.c",
-        "src/aot/xi_backend_plan_contract.h",
-        "src/aot/xi_cgen.c"
-      ],
-      "verifier": "src/aot/xaot_verify.c"
-    },
-    {
-      "c_coupling_fields": [],
       "category": "target",
       "consumers": [
         "src/aot/xi_cgen.c",
@@ -1122,5 +1102,5 @@
     }
   ],
   "schema": 1,
-  "source_tree_fingerprint": "0370a5877f4142a04728cfe36553124f0d5cc8738386abf4c57b651a6c51ad7c"
+  "source_tree_fingerprint": "8011fbfc42c1dc9fdaf0fd117255668631c4d70719759aa979c89b537beef5e4"
 }

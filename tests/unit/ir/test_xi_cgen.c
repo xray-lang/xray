@@ -10851,11 +10851,11 @@ TEST(cgen_unknown_method_symbol_fails_fast) {
     xi_func_free(ir);
 }
 
-static XiFunc *make_marked_json_parse_ir(void) {
-    static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 108, .frozen = true};
+static XiFunc *make_json_codec_preflight_ir(void) {
+    static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 107, .frozen = true};
+    static XrType stub_json = {.kind = XR_KIND_JSON, .id = 108, .frozen = true};
     static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 109, .frozen = true};
     static XrType stub_string = {.kind = XR_KIND_STRING, .id = 110, .frozen = true};
-    static XrType stub_json = {.kind = XR_KIND_JSON, .id = 111, .frozen = true};
     XiFunc *ir = xi_func_new("main", &stub_unit);
     if (!ir)
         return NULL;
@@ -10866,53 +10866,97 @@ static XiFunc *make_marked_json_parse_ir(void) {
     }
     XiValue *json_ns = xi_value_new(ir, entry, XI_GET_BUILTIN, &stub_any, 0);
     XiValue *text = xi_const_str(ir, entry, "{}", &stub_string);
-    XiValue *parse = xi_value_new(ir, entry, XI_CALL_METHOD, &stub_json, 2);
-    if (!json_ns || !text || !parse) {
+    XiValue *site = xi_value_new(ir, entry, XI_CALL_METHOD, &stub_string, 2);
+    if (!json_ns || !text || !site) {
         xi_func_free(ir);
         return NULL;
     }
     json_ns->aux_int = XR_GLOBAL_VAR_JSON;
-    parse->args[0] = json_ns;
-    parse->args[1] = text;
-    parse->aux = (void *) "parse";
-    parse->flags |= XI_FLAG_SIDE_EFFECT;
-    parse->line = 17;
-    parse->xg_json_codec_id = 1;
+    site->args[0] = json_ns;
+    site->args[1] = text;
+    site->op = XI_CONST;
+    site->nargs = 0;
+    site->flags = XI_FLAG_SIDE_EFFECT;
+    site->line = 17;
+    site->xg_json_codec_id = 1;
+    site->json_decode_target_type = &stub_json;
     xi_block_set_return(entry, NULL);
     return ir;
 }
 
-static char *generate_c_with_injected_json_codec_plan(XiFunc *ir,
-                                                      const XaotJsonCodecPlan *codec_plan,
-                                                      bool *had_error) {
+static XiValue *find_marked_json_codec_site(XiFunc *func) {
+    if (!func)
+        return NULL;
+    for (uint32_t bi = 0; bi < func->nblocks; bi++) {
+        XiBlock *block = func->blocks[bi];
+        if (!block)
+            continue;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            XiValue *value = block->values[vi];
+            if (value && value->xg_json_codec_id == 1)
+                return value;
+        }
+    }
+    for (uint16_t ci = 0; ci < func->nchildren; ci++) {
+        XiValue *site = find_marked_json_codec_site(func->children[ci]);
+        if (site)
+            return site;
+    }
+    return NULL;
+}
+
+static char *generate_c_with_injected_json_codec_summary(XiFunc *ir,
+                                                         const XgJsonCodecSummary *codec_summary,
+                                                         bool typed_site, bool refresh_hash,
+                                                         bool verify_bundle, bool make_decode_site,
+                                                         bool make_non_site,
+                                                         bool *had_error) {
     if (!test_prepare_backend_ir(ir))
         return test_failed_codegen_result(had_error);
+    XiValue *site = find_marked_json_codec_site(ir);
+    TEST_REQUIRE(site != NULL, "Json codec evidence site should survive Backend preparation");
     XiModule *mod = xi_module_new("test.xr", "test", ir);
-    TEST_REQUIRE(mod != NULL, "Json codec preflight module allocation failed");
+    TEST_REQUIRE(mod != NULL, "Json codec evidence preflight module allocation failed");
     XiModule *modules[] = {mod};
     TestAotPlan plan;
     test_aot_plan_prepare(&plan, modules, 1, 0);
-    if (codec_plan) {
-        TEST_REQUIRE(plan.bundle.njson_codec_plans == 0,
-                     "fixture bundle should start without Json codec plans");
-        plan.bundle.json_codec_plans = xr_malloc(sizeof(*plan.bundle.json_codec_plans));
-        TEST_REQUIRE(plan.bundle.json_codec_plans != NULL,
-                     "Json codec preflight plan allocation failed");
-        plan.bundle.json_codec_plans[0] = *codec_plan;
-        plan.bundle.njson_codec_plans = 1;
-        plan.bundle.json_codec_plan_cap = 1;
+    if (codec_summary)
+        TEST_REQUIRE(xg_global_evidence_add_json_codec(&plan.evidence, codec_summary) != NULL,
+                     "Json codec evidence allocation failed");
+    if (refresh_hash)
+        plan.bundle.global_evidence_plan.evidence_hash =
+            xg_global_evidence_hash(&plan.evidence);
+    if (verify_bundle) {
+        char verify_error[256] = {0};
+        TEST_REQUIRE(xaot_verify_bundle(&plan.bundle, verify_error, sizeof(verify_error)),
+                     verify_error[0] ? verify_error
+                                     : "Json codec evidence bundle verification failed");
+    }
+    if (!make_non_site) {
+        site->flags = XI_FLAG_SIDE_EFFECT;
+        site->type = site->json_decode_target_type;
+        if (typed_site) {
+            site->op = XI_JSON_DECODE;
+            site->nargs = 1;
+            site->lowering_flags = make_decode_site ? 0 : XI_LOWERING_FLAG_JSON_TYPED_PARSE;
+        } else {
+            site->op = XI_CALL_METHOD;
+            site->nargs = 2;
+            site->aux = (void *) "parseValue";
+            site->lowering_flags = 0;
+        }
     }
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
-    TEST_REQUIRE(ctx != NULL, "Json codec preflight CGen context allocation failed");
+    TEST_REQUIRE(ctx != NULL, "Json codec evidence preflight CGen context allocation failed");
     xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
     char *buf = NULL;
     size_t bufsz = 0;
     FILE *mem = xr_open_memstream(&buf, &bufsz);
-    TEST_REQUIRE(mem != NULL, "Json codec preflight memstream allocation failed");
+    TEST_REQUIRE(mem != NULL, "Json codec evidence preflight memstream allocation failed");
     xi_cgen_program(ctx, mem, mod);
     int rc = xr_close_memstream(mem, &buf, &bufsz);
-    TEST_REQUIRE(rc == 0, "Json codec preflight memstream close failed");
+    TEST_REQUIRE(rc == 0, "Json codec evidence preflight memstream close failed");
     if (had_error)
         *had_error = xi_cgen_has_error(ctx);
 
@@ -10923,30 +10967,116 @@ static char *generate_c_with_injected_json_codec_plan(XiFunc *ir,
     return buf;
 }
 
-TEST(cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action) {
-    XaotJsonCodecPlan stale = {.codec_id = 1,
-                               .owner_func_id = 7,
-                               .source_node_id = 0,
-                               .codec_kind = XG_JSON_CODEC_PARSE,
-                               .action = XAOT_JSON_CODEC_PARSE_RUNTIME_DIRECT,
-                               .evidence = XAOT_JSON_EV_GLOBAL_ROW};
-    XaotJsonCodecPlan wrong_kind = stale;
-    wrong_kind.source_node_id = 99;
+TEST(cgen_json_codec_summary_preflight_is_exact_and_fail_closed) {
+    XgJsonCodecSummary direct = {.codec_id = 1,
+                                 .module_id = 1,
+                                 .owner_func_id = 1,
+                                 .source_node_id = 99,
+                                 .source_span_id = 1,
+                                 .codec_kind = XG_JSON_CODEC_PARSE,
+                                 .input_type_key = 1};
+    XgJsonCodecSummary typed = direct;
+    typed.flags = XG_JSON_CODEC_HAS_TARGET_TYPE;
+    typed.target_type_key = 2;
+    XgJsonCodecSummary stale_owner = direct;
+    stale_owner.owner_func_id = 7;
+    XgJsonCodecSummary stale_source = direct;
+    stale_source.source_node_id = 0;
+    XgJsonCodecSummary wrong_kind = typed;
     wrong_kind.codec_kind = XG_JSON_CODEC_DECODE;
-    wrong_kind.action = XAOT_JSON_CODEC_DECODE_VALIDATE_COPY;
-    XaotJsonCodecPlan wrong_action = stale;
-    wrong_action.source_node_id = 99;
-    wrong_action.action = XAOT_JSON_CODEC_PARSE_DOM_BRIDGE;
-    const XaotJsonCodecPlan *cases[] = {NULL, &stale, &wrong_kind, &wrong_action};
+    XgJsonCodecSummary decode_without_target = direct;
+    decode_without_target.codec_kind = XG_JSON_CODEC_DECODE;
+    const XgJsonCodecSummary *invalid_direct_cases[] = {
+        NULL, &stale_owner, &stale_source, &wrong_kind, &typed,
+    };
 
-    for (uint32_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
-        XiFunc *ir = make_marked_json_parse_ir();
-        TEST_REQUIRE(ir != NULL, "marked Json.parse fixture should build");
+    {
+        XiFunc *ir = make_json_codec_preflight_ir();
+        TEST_REQUIRE(ir != NULL && test_prepare_backend_ir(ir),
+                     "exact Json codec evidence fixture reached Backend");
+        XiModule *mod = xi_module_new("test.xr", "test", ir);
+        TEST_REQUIRE(mod != NULL, "exact Json codec evidence module allocation failed");
+        XiModule *modules[] = {mod};
+        TestAotPlan plan;
+        test_aot_plan_prepare(&plan, modules, 1, 0);
+        TEST_REQUIRE(xg_global_evidence_add_json_codec(&plan.evidence, &direct) != NULL,
+                     "exact Json codec evidence allocation failed");
+        plan.bundle.global_evidence_plan.evidence_hash = xg_global_evidence_hash(&plan.evidence);
+        char verify_error[256] = {0};
+        TEST_REQUIRE(xaot_verify_bundle(&plan.bundle, verify_error, sizeof(verify_error)),
+                     verify_error[0] ? verify_error
+                                     : "exact Json codec evidence bundle verification failed");
+        test_aot_plan_free(&plan);
+        mod->init = NULL;
+        xi_module_free(mod);
+        xi_func_free(ir);
+    }
+
+    for (uint32_t i = 0;
+         i < sizeof(invalid_direct_cases) / sizeof(invalid_direct_cases[0]); i++) {
+        XiFunc *ir = make_json_codec_preflight_ir();
+        TEST_REQUIRE(ir != NULL, "direct Json.parse negative fixture should build");
         bool had_error = false;
-        char *code = generate_c_with_injected_json_codec_plan(ir, cases[i], &had_error);
-        TEST_REQUIRE(code != NULL, "Json codec preflight should return a C buffer");
-        TEST_REQUIRE(had_error, "invalid marked Json codec plan must fail C generation");
-        TEST_REQUIRE(code[0] == '\0', "Json codec preflight must fail before emitting C");
+        bool summary_is_globally_valid = i >= 3;
+        char *code = generate_c_with_injected_json_codec_summary(
+            ir, invalid_direct_cases[i], false, true, summary_is_globally_valid, false, false,
+            &had_error);
+        TEST_REQUIRE(code != NULL, "Json codec evidence preflight should return a C buffer");
+        TEST_REQUIRE(had_error, "invalid Json codec evidence must fail C generation");
+        TEST_REQUIRE(code[0] == '\0',
+                     "Json codec evidence preflight must fail before emitting C");
+        xr_free(code);
+        xi_func_free(ir);
+    }
+
+    {
+        XiFunc *ir = make_json_codec_preflight_ir();
+        TEST_REQUIRE(ir != NULL, "typed/direct mismatch fixture should build");
+        bool had_error = false;
+        char *code = generate_c_with_injected_json_codec_summary(
+            ir, &direct, true, true, true, false, false, &had_error);
+        TEST_REQUIRE(code != NULL, "typed/direct mismatch should return a C buffer");
+        TEST_REQUIRE(had_error, "typed parse must reject schema-less direct parse evidence");
+        TEST_REQUIRE(code[0] == '\0', "typed/direct mismatch must fail before emitting C");
+        xr_free(code);
+        xi_func_free(ir);
+    }
+
+    {
+        XiFunc *ir = make_json_codec_preflight_ir();
+        TEST_REQUIRE(ir != NULL, "decode target-evidence fixture should build");
+        bool had_error = false;
+        char *code = generate_c_with_injected_json_codec_summary(
+            ir, &decode_without_target, true, true, false, true, false, &had_error);
+        TEST_REQUIRE(code != NULL, "decode target-evidence mismatch should return a C buffer");
+        TEST_REQUIRE(had_error, "Json decode must require exact target-type evidence");
+        TEST_REQUIRE(code[0] == '\0', "decode target mismatch must fail before emitting C");
+        xr_free(code);
+        xi_func_free(ir);
+    }
+
+    {
+        XiFunc *ir = make_json_codec_preflight_ir();
+        TEST_REQUIRE(ir != NULL, "stale Json evidence hash fixture should build");
+        bool had_error = false;
+        char *code = generate_c_with_injected_json_codec_summary(
+            ir, &direct, false, false, false, false, false, &had_error);
+        TEST_REQUIRE(code != NULL, "stale Json evidence hash should return a C buffer");
+        TEST_REQUIRE(had_error, "stale Json evidence hash must fail C generation");
+        TEST_REQUIRE(code[0] == '\0', "stale Json evidence hash must fail before emitting C");
+        xr_free(code);
+        xi_func_free(ir);
+    }
+
+    {
+        XiFunc *ir = make_json_codec_preflight_ir();
+        TEST_REQUIRE(ir != NULL, "non-Json evidence fixture should build");
+        bool had_error = false;
+        char *code = generate_c_with_injected_json_codec_summary(
+            ir, &direct, false, true, true, false, true, &had_error);
+        TEST_REQUIRE(code != NULL, "non-Json evidence preflight should return a C buffer");
+        TEST_REQUIRE(had_error, "a non-Json site carrying a codec id must fail C generation");
+        TEST_REQUIRE(code[0] == '\0', "non-Json codec identity must fail before emitting C");
         xr_free(code);
         xi_func_free(ir);
     }
@@ -14449,7 +14579,7 @@ int main(int argc, char **argv) {
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
     run_aot_semantic_snapshot_survives_analyzer_pool_churn();
     run_target_plan_owned_string_lifecycle_from_source();
-    run_cgen_json_codec_plan_preflight_rejects_missing_stale_kind_and_action();
+    run_cgen_json_codec_summary_preflight_is_exact_and_fail_closed();
     run_cgen_restricted_c90_header_is_explicit_and_minimal();
     run_cgen_simple_arith();
     run_cgen_target_layout_queries_emit_source_backed_constants();
