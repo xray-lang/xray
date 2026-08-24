@@ -3036,7 +3036,7 @@ static bool cg_array_elem_info_from_emission_recipe(XiCgenCtx *ctx, const XiFunc
         value->type->kind != XR_KIND_ARRAY || !value->type->container.element_type)
         return false;
     bool direct_ref =
-        emission->materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER &&
+        emission->materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_TAGGED_REF_PARAMETER &&
         emission->rep == XR_C_VALUE_REP_RAW_PTR &&
         emission->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
         emission->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
@@ -3190,7 +3190,7 @@ static bool cg_array_value_storage_info(XiCgenCtx *ctx, const XiFunc *f, const X
     if (emission_status == CG_VALUE_EMISSION_FOUND &&
         (emission.materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_NEW ||
          emission.rep == XR_C_VALUE_REP_RAW_PTR ||
-         emission.materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER))
+         emission.materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_TAGGED_REF_PARAMETER))
         return cg_array_elem_info_from_emission_recipe(ctx, f, v, &emission, out);
     if (emission_status == CG_VALUE_EMISSION_FOUND && v && v->op == XI_ARRAY_NEW)
         return false;
@@ -3219,7 +3219,7 @@ static bool cg_array_value_u8_unchecked_info(XiCgenCtx *ctx, const XiFunc *f,
         v ? cg_value_emission_view(ctx, f, v, &emission) : CG_VALUE_EMISSION_NOT_COVERED;
     if (emission_status == CG_VALUE_EMISSION_FOUND &&
         (v->op == XI_ARRAY_NEW ||
-         emission.materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER))
+         emission.materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_TAGGED_REF_PARAMETER))
         return false;
     if (v && cg_array_elem_info_from_type_ctx(ctx, v->type, &info) &&
         cg_array_elem_info_is_u8(&info)) {

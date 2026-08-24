@@ -1377,12 +1377,12 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
 
     slot = &target_plan->abi.params[arg_index];
     slot_rep = xaot_abi_slot_value_rep(slot);
-    XrCCallArgumentEmissionView direct_array_ref_argument = {0};
-    if (cg_direct_local_array_ref_argument_emission(ctx, f, call, arg_index, arg,
-                                                    &direct_array_ref_argument)) {
+    XrCCallArgumentEmissionView direct_tagged_ref_argument = {0};
+    if (cg_direct_local_tagged_ref_argument_emission(ctx, f, call, arg_index, arg,
+                                                     &direct_tagged_ref_argument)) {
         const char *slot_c_type = cg_func_param_abi_c_type(ctx, target, arg_index);
         if (xaot_value_storage_rep(slot_rep) != XR_REP_RAWPTR || !slot_c_type ||
-            strcmp(slot_c_type, direct_array_ref_argument.c_type) != 0) {
+            strcmp(slot_c_type, direct_tagged_ref_argument.c_type) != 0) {
             fprintf(stderr,
                     "[xi_cgen] ERROR: direct-local Array ref emission row "
                     "disagrees with callee ABI at v%u arg %u\n",
@@ -1391,7 +1391,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
             emit_codegen_abort_expr(out);
             return;
         }
-        fprintf(out, "(%s)(", direct_array_ref_argument.c_type);
+        fprintf(out, "(%s)(", direct_tagged_ref_argument.c_type);
         emit_vref(out, arg);
         fprintf(out, ")");
         return;

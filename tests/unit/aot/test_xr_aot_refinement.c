@@ -185,7 +185,7 @@ typedef struct DirectLocalCalleeStorageFixture {
     XrTargetPlan *target_plan;
 } DirectLocalCalleeStorageFixture;
 
-typedef struct DirectLocalArrayRefFixture {
+typedef struct DirectLocalTaggedRefFixture {
     XiFunc *function;
     XiFunc *child;
     XiValue *parameter;
@@ -195,7 +195,7 @@ typedef struct DirectLocalArrayRefFixture {
     XiValue *writeback;
     XrTargetProfile *target_profile;
     XrTargetPlan *target_plan;
-} DirectLocalArrayRefFixture;
+} DirectLocalTaggedRefFixture;
 
 typedef struct DirectLocalGoCalleeStorageFixture {
     XiFunc *function;
@@ -786,12 +786,12 @@ static void direct_local_callee_storage_fixture_free(
     memset(fixture, 0, sizeof(*fixture));
 }
 
-static DirectLocalArrayRefFixture direct_local_array_ref_fixture_create(void) {
-    DirectLocalArrayRefFixture fixture = {0};
+static DirectLocalTaggedRefFixture direct_local_tagged_ref_fixture_create(void) {
+    DirectLocalTaggedRefFixture fixture = {0};
     fixture.function =
-        xi_func_new("direct_local_array_ref_root", &scalar_int);
+        xi_func_new("direct_local_tagged_ref_root", &scalar_int);
     fixture.child =
-        xi_func_new("direct_local_array_ref_target", &scalar_int);
+        xi_func_new("direct_local_tagged_ref_target", &scalar_int);
     REQUIRE(fixture.function && fixture.child);
     XiBlock *root_entry = xi_block_new(fixture.function);
     XiBlock *child_entry = xi_block_new(fixture.child);
@@ -905,12 +905,18 @@ static DirectLocalArrayRefFixture direct_local_array_ref_fixture_create(void) {
     fixture.function->shared_slot_funcs[0] = fixture.child;
     fixture.function->shared_slot_func_count = 1;
     fixture.function->stage = fixture.child->stage = XI_STAGE_OPTIMIZED;
+    XiModule *module = xi_module_new("fixtures/direct_local_tagged_ref.xr",
+                                    "direct_local_tagged_ref", fixture.function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=34:direct-local-tagged-ref-fixture-v1"));
+    fixture.function->module = module;
 
     char error[512] = {0};
     bool built = build_fixture_semantic_plan_and_attach(
         fixture.function, error, sizeof(error));
     if (!built)
-        fprintf(stderr, "direct-local Array ref SemanticPlan failed: %s\n",
+        fprintf(stderr, "direct-local tagged ref SemanticPlan failed: %s\n",
                 error);
     REQUIRE(built && fixture.function->semantic_plan != NULL);
     fixture.target_profile = build_target_profile();
@@ -918,14 +924,14 @@ static DirectLocalArrayRefFixture direct_local_array_ref_fixture_create(void) {
                                  fixture.target_profile,
                                  &fixture.target_plan, error, sizeof(error));
     if (!built)
-        fprintf(stderr, "direct-local Array ref TargetPlan failed: %s\n",
+        fprintf(stderr, "direct-local tagged ref TargetPlan failed: %s\n",
                 error);
     REQUIRE(built && fixture.target_plan != NULL);
     return fixture;
 }
 
-static void direct_local_array_ref_fixture_free(
-    DirectLocalArrayRefFixture *fixture) {
+static void direct_local_tagged_ref_fixture_free(
+    DirectLocalTaggedRefFixture *fixture) {
     xr_target_plan_free(fixture->target_plan);
     xr_target_profile_free(fixture->target_profile);
     xi_func_free(fixture->function);
@@ -1355,6 +1361,20 @@ static void direct_local_go_callee_storage_fixture_free(
 static bool fingerprint_is_zero_bytes(const XrFingerprint *fingerprint) {
     static const XrFingerprint zero = {{0}};
     return xr_fingerprint_equal(*fingerprint, zero);
+}
+
+static bool test_pair_identity(const char *domain, XrStableId first, XrStableId second,
+                               uint32_t ordinal, XrStableId *out) {
+    char first_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char second_hex[XR_STABLE_ID_BYTES * 2 + 1];
+    char key[192];
+    XrFingerprint digest;
+    xr_stable_id_hex(first, first_hex);
+    xr_stable_id_hex(second, second_hex);
+    int written = snprintf(key, sizeof(key), "%s:first=%s:second=%s:ordinal=%u", domain,
+                           first_hex, second_hex, ordinal);
+    return out && written > 0 && (size_t) written < sizeof(key) &&
+           xr_stable_id_from_key(key, out, &digest);
 }
 
 /* An exported namespace callee is a real call row that the direct-call
@@ -2253,14 +2273,14 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
     direct_local_callee_storage_fixture_free(&extra_use);
 }
 
-static void test_direct_local_array_ref_argument_authority_is_exact(void) {
-    DirectLocalArrayRefFixture fixture =
-        direct_local_array_ref_fixture_create();
+static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
+    DirectLocalTaggedRefFixture fixture =
+        direct_local_tagged_ref_fixture_create();
     XrSemanticPlan *semantic = fixture.function->semantic_plan;
     XrTargetPlan *target = fixture.target_plan;
     char error[512] = {0};
     REQUIRE((target->completed_family_mask &
-             XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE) != 0);
+             XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE) != 0);
     REQUIRE(target->calls_count == 1 && target->call_arguments_count == 1);
     const XrTargetCallRecord *call = &target->calls[0];
     XrTargetCallArgumentRecord *argument = &target->call_arguments[0];
@@ -2268,6 +2288,8 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
         xr_semantic_plan_operation(semantic, call->semantic_operation);
     const XrSemanticParameterRecord *parameter =
         xr_semantic_plan_parameter(semantic, argument->callee_parameter);
+    const XrSemanticCallTargetRecord *semantic_target =
+        xr_semantic_plan_call_target(semantic, call->semantic_call_target);
     uint32_t place_value = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < xr_semantic_plan_operation_count(semantic); i++) {
         const XrSemanticOperationRecord *operation =
@@ -2278,7 +2300,7 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
         REQUIRE(place_value == XR_SEMANTIC_INDEX_NONE);
         place_value = operation->result_value;
     }
-    REQUIRE(call_operation && parameter &&
+    REQUIRE(call_operation && parameter && semantic_target &&
             call_operation->result_value != XR_SEMANTIC_INDEX_NONE &&
             place_value != XR_SEMANTIC_INDEX_NONE);
     REQUIRE(argument->call == call->id && argument->ordinal == 0 &&
@@ -2308,9 +2330,34 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
             target->machine_reps[parameter_binding->register_rep].ownership ==
                 XR_TARGET_OWNERSHIP_BORROWED);
 
+    XrStableId expected_v2_identity = {{0}};
+    XrStableId legacy_v1_identity = {{0}};
+    REQUIRE(test_pair_identity("xray-target-direct-tagged-ref-argument-v2",
+                               semantic_target->id, parameter->id, argument->ordinal,
+                               &expected_v2_identity));
+    REQUIRE(test_pair_identity("xray-target-direct-array-ref-argument-" "v1",
+                               semantic_target->id, parameter->id, argument->ordinal,
+                               &legacy_v1_identity));
+    REQUIRE(xr_stable_id_equal(argument->identity, expected_v2_identity));
+    REQUIRE(!xr_stable_id_equal(argument->identity, legacy_v1_identity));
+
     XrTargetCallArgumentRecord saved_argument = *argument;
     XrTargetCallRecord saved_call = target->calls[0];
     XrFingerprint saved_target_fingerprint = target->fingerprint;
+    argument->identity = legacy_v1_identity;
+    xr_target_call_compute_fingerprint(target, 0, &target->calls[0].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
+    XrCEmissionPlan *legacy_rejected = NULL;
+    REQUIRE(!xr_c_emission_plan_build(
+        target, xr_target_profile_fingerprint(fixture.target_profile), &legacy_rejected, error,
+        sizeof(error)));
+    REQUIRE(legacy_rejected == NULL && strstr(error, "tagged ref argument") != NULL);
+    *argument = saved_argument;
+    target->calls[0] = saved_call;
+    target->fingerprint = saved_target_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
     for (uint32_t mutation = 0; mutation < 14; mutation++) {
         *argument = saved_argument;
         switch (mutation) {
@@ -2342,7 +2389,7 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
                 target, xr_target_profile_fingerprint(fixture.target_profile),
                 &rejected, error, sizeof(error)));
             REQUIRE(rejected == NULL &&
-                    strstr(error, "direct-local Array ref argument") != NULL);
+                    strstr(error, "direct-local tagged ref argument") != NULL);
         }
         REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
     }
@@ -2398,7 +2445,7 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
         emission, parameter->value, &parameter_view, error, sizeof(error)));
     REQUIRE(parameter_view.rep == XR_C_VALUE_REP_RAW_PTR &&
             parameter_view.materialization ==
-                XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER &&
+                XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_TAGGED_REF_PARAMETER &&
             parameter_view.recipe_discriminant ==
                 XR_TARGET_ARRAY_STORAGE_U8 &&
             strcmp(parameter_view.c_type, "XrValue *") == 0);
@@ -2460,7 +2507,7 @@ static void test_direct_local_array_ref_argument_authority_is_exact(void) {
         sizeof(error)));
     xr_c_emission_plan_free(emission);
 
-    direct_local_array_ref_fixture_free(&fixture);
+    direct_local_tagged_ref_fixture_free(&fixture);
 }
 
 static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
@@ -3714,8 +3761,8 @@ static void test_scalar_addressable_alias_recipe_is_exact_and_fail_closed(void) 
     xi_func_free(function);
 }
 
-static void test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed(void) {
-    XiFunc *function = xi_func_new("direct_local_array_ref_parameter_index",
+static void test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("direct_local_tagged_ref_parameter_index",
                                    &scalar_unit);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
@@ -3745,6 +3792,13 @@ static void test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed
     write->args[1] = index;
     write->args[2] = element;
     xi_block_set_return(entry, NULL);
+    XiModule *module = xi_module_new(
+        "fixtures/direct_local_tagged_ref_parameter.xr",
+        "direct_local_tagged_ref_parameter", function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=23:tagged-ref-parameter-v1"));
+    function->module = module;
 
     XrTargetProfile *profile = NULL;
     XrTargetPlan *target = build_attached_target_plan(function, &profile);
@@ -4662,6 +4716,16 @@ int main(int argc, char **argv) {
         puts("Tagged String Array copy AOT refinement tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "tagged-ref") == 0) {
+        test_direct_local_tagged_ref_argument_authority_is_exact();
+        test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_closed();
+        printf("TargetPlan tagged-ref AOT refinement tests passed\n");
+        return 0;
+    }
+    if (argc != 1) {
+        fprintf(stderr, "unknown focused test selector\n");
+        return 2;
+    }
     test_open_target_direct_call_refuses_without_baseline_change();
     test_direct_call_authority_applies_closed_local_binding();
     test_tail_call_backend_conformance_is_exact();
@@ -4673,7 +4737,7 @@ int main(int argc, char **argv) {
     test_scalar_shared_boundary_is_exact_and_fail_closed();
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
     test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
-    test_direct_local_array_ref_argument_authority_is_exact();
+    test_direct_local_tagged_ref_argument_authority_is_exact();
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_source_namespace_storage_is_exact_and_fail_closed();
     test_standalone_source_namespace_storage_is_exact_and_fail_closed();
@@ -4686,7 +4750,7 @@ int main(int argc, char **argv) {
     test_fixed_array_backing_projection_is_exact_and_fail_closed();
     test_named_aggregate_emission_is_exact_and_fail_closed();
     test_scalar_addressable_alias_recipe_is_exact_and_fail_closed();
-    test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed();
+    test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_closed();
     test_tagged_string_array_copy_refinement_is_exact();
     test_scalar_array_allocation_storage_is_exact_and_fail_closed();
     test_array_intrinsic_index_storage_is_exact_and_fail_closed();

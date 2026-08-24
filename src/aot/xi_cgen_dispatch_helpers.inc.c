@@ -15755,8 +15755,8 @@ static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         fprintf(out, "), %u, %u)", (unsigned) fixed.native_type, (unsigned) fixed.count);
         return;
     }
-    XrCCallArgumentEmissionView array_ref_place = {0};
-    if (cg_direct_local_array_ref_place_emission(ctx, f, v->args[0], &array_ref_place)) {
+    XrCCallArgumentEmissionView tagged_ref_place = {0};
+    if (cg_direct_local_tagged_ref_place_emission(ctx, f, v->args[0], &tagged_ref_place)) {
         fprintf(out, "(*(XrValue *)(");
         emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
         fprintf(out, "))");

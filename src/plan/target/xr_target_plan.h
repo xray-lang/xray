@@ -63,7 +63,7 @@ typedef enum XrTargetPlanFamily {
  * family closure. Keep the next family as an explicitly unsigned mask. */
 #define XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE (UINT64_C(1) << 31)
 #define XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE (UINT64_C(1) << 32)
-#define XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE (UINT64_C(1) << 33)
+#define XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE (UINT64_C(1) << 33)
 #define XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE (UINT64_C(1) << 34)
 #define XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION (UINT64_C(1) << 35)
 #define XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE (UINT64_C(1) << 36)
@@ -150,7 +150,7 @@ typedef enum XrTargetExecutionFamily {
                  XR_TARGET_FAMILY_PANIC_CATCH_STORAGE | XR_TARGET_FAMILY_ADT_ENUM_STORAGE |        \
                  XR_TARGET_FAMILY_ARRAY_INTRINSIC_STORAGE |                                        \
                  XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |                                    \
-                 XR_TARGET_FAMILY_DIRECT_LOCAL_ARRAY_REF_ARGUMENT_STORAGE |                        \
+                 XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE |                       \
                  XR_TARGET_FAMILY_STRING_SLICE_RANGE_RESULT_STORAGE |                              \
                  XR_TARGET_FAMILY_DYNAMIC_ENTRY_EXPECTATION |                                      \
                  XR_TARGET_FAMILY_ARRAY_HOF_RESULT_STORAGE |                                       \

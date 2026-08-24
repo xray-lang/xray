@@ -12,7 +12,7 @@ from collections import defaultdict
 from pathlib import Path
 
 
-SCHEMA = 2
+SCHEMA = 3
 INVENTORY = Path("contracts/target-machine/legacy-product-residue.json")
 SELF_PATH = Path("scripts/check_legacy_product_residue.py")
 TEXT_SUFFIXES = {".c", ".h", ".in", ".py", ".sh", ".ps1", ".cmake", ".toml"}
@@ -49,8 +49,41 @@ CANDIDATE_RE = re.compile(
     r"(?P<payload>\bbytecodeVersion\b)|"
     r"(?P<embed_owner>\b(?:stdlib_embedded_bytecodes|generate_stdlib_embedded)\b)|"
     r"(?P<cli_alias>\"(?:bytecode|bc|source|header|c|h)\")",
-    re.IGNORECASE,
 )
+
+# These exact namespaces belong to the typed TargetPlan runtime.  They retain
+# the historical file prefix only; treating them as legacy aliases makes the
+# residue ratchet count its replacement as residue.  Keep this list narrow so
+# every other xr_vm_* spelling remains fail closed.
+SURVIVOR_INTERNAL_VM_NAMESPACES = (
+    "xr_vm_debug_control",
+    "xr_vm_decoded_cache",
+    "xr_vm_dynamic_entry",
+    "xr_vm_entry_adapter",
+    "xr_vm_materialize",
+    "xr_vm_ops",
+    "xr_vm_profile",
+    "xr_vm_trace",
+)
+
+
+def is_survivor_internal_vm_token(token: str) -> bool:
+    return any(
+        token == namespace or token.startswith(namespace + "_")
+        for namespace in SURVIVOR_INTERNAL_VM_NAMESPACES
+    )
+
+
+def inventory_policy() -> dict[str, object]:
+    return {
+        "candidate_spelling": "case-sensitive",
+        "survivor_internal_vm_namespaces": list(SURVIVOR_INTERNAL_VM_NAMESPACES),
+        "new_or_changed_residue": "error",
+        "unclassified_residue": "error",
+        "compatibility_loader_or_alias_after_cutover": "forbidden",
+        "terminal_zero_residue": "valid",
+        "removal": "replace-complete-owner-family-and-delete-old-owner-atomically",
+    }
 
 
 def digest_text(parts: list[str]) -> str:
@@ -159,6 +192,9 @@ def collect(root: Path) -> dict[str, object]:
                 if match.lastgroup == "cli_alias" and not is_cli_alias_owner(relative):
                     continue
                 token = match.group(0)
+                if (match.lastgroup == "internal_vm_alias"
+                        and is_survivor_internal_vm_token(token)):
+                    continue
                 family = family_for(match.lastgroup or "", token)
                 surface = surface_for(relative, line)
                 item = groups[(surface, family, relative)]
@@ -196,13 +232,7 @@ def collect(root: Path) -> dict[str, object]:
     return {
         "schema": SCHEMA,
         "generator": SELF_PATH.as_posix(),
-        "policy": {
-            "new_or_changed_residue": "error",
-            "unclassified_residue": "error",
-            "compatibility_loader_or_alias_after_cutover": "forbidden",
-            "terminal_zero_residue": "valid",
-            "removal": "replace-complete-owner-family-and-delete-old-owner-atomically",
-        },
+        "policy": inventory_policy(),
         "counts": counts,
         "total": sum(counts.values()),
         "owner_count": len(owners),
@@ -226,6 +256,8 @@ def validate(data: dict[str, object]) -> list[str]:
     surfaces = {"source", "build", "install", "api", "cli"}
     if data.get("schema") != SCHEMA:
         errors.append("inventory schema is not exact")
+    if data.get("policy") != inventory_policy():
+        errors.append("inventory classification policy is not exact")
     counts = data.get("counts")
     if not isinstance(counts, dict) or set(counts) != surfaces:
         errors.append("inventory does not cover the five required product surfaces")
@@ -306,9 +338,32 @@ def self_test() -> int:
         bcgen_format_owner.write_text('const char *format = "bytecode";\n', encoding="utf-8")
         staging_owner = root / "scripts/generate_stdlib_embedded.py"
         staging_owner.write_text("# canonical extensionless staging\n", encoding="utf-8")
+        typed_vm_owner = root / "src/typed_target_vm.c"
+        typed_vm_owner.write_text(
+            "XrVmDecodedCache *cache;\n"
+            "int status = XR_VM_DECODED_CACHE_OK;\n"
+            "void *a = xr_vm_decoded_cache_create;\n"
+            "void *b = xr_vm_trace_emit;\n",
+            encoding="utf-8",
+        )
+        survivor_spelling_safe = collect(root)["total"] == 3
         inventory = root / INVENTORY
         inventory.write_text(render(collect(root)), encoding="utf-8")
         clean, _ = check(root, collect(root))
+        typed_vm_owner.write_text(
+            "XrVmDecodedCache *cache;\n"
+            "int status = XR_VM_DECODED_CACHE_OK;\n"
+            "void *legacy = xr_vm_call_closure;\n",
+            encoding="utf-8",
+        )
+        legacy_internal_spelling_drifted, _ = check(root, collect(root))
+        typed_vm_owner.write_text(
+            "XrVmDecodedCache *cache;\n"
+            "int status = XR_VM_DECODED_CACHE_OK;\n"
+            "void *a = xr_vm_decoded_cache_create;\n"
+            "void *b = xr_vm_trace_emit;\n",
+            encoding="utf-8",
+        )
         compile_format_owner.write_text(
             'const char *format = "c";\nconst char *alias = "source";\n',
             encoding="utf-8",
@@ -694,11 +749,13 @@ def self_test() -> int:
         compile_format_owner.unlink()
         bcgen_format_owner.unlink()
         staging_owner.unlink()
+        typed_vm_owner.unlink()
         (root / "src/new_loader.c").unlink()
         (root / "src/new_codec.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if (not clean or compile_format_alias_drifted or compile_xrc_compatibility_drifted
+    if (not survivor_spelling_safe or not clean or legacy_internal_spelling_drifted
+            or compile_format_alias_drifted or compile_xrc_compatibility_drifted
             or bcgen_format_alias_drifted
             or staging_suffix_drifted or staging_variable_drifted
             or backend_drifted or debug_setters_drifted or stats_drifted

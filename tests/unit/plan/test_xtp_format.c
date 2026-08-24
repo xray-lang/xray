@@ -903,7 +903,7 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
 
     const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13), UINT32_C(14),
                                          UINT32_C(28), UINT32_C(41), UINT32_C(42),
-                                         UINT32_C(43)};
+                                         UINT32_C(43), UINT32_C(44), UINT32_C(45)};
     for (size_t i = 0;
          i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
         uint8_t *old_schema = copy_artifact(&fixture);
@@ -2244,9 +2244,9 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-45-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-46-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 45 cutover tests passed");
+        puts("XTP schema 46 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

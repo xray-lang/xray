@@ -1305,9 +1305,9 @@ static bool aot_array_parameter_is_exact(const XrSemanticPlan *semantic,
            aot_array_type_is_exact(semantic, parameter->type, mode == XR_PARAM_REF, storage);
 }
 
-static bool aot_array_ref_parameter_is_exact(const XrSemanticPlan *semantic,
-                                             const XrSemanticParameterRecord *parameter,
-                                             uint8_t *storage) {
+static bool aot_tagged_ref_parameter_is_exact(const XrSemanticPlan *semantic,
+                                              const XrSemanticParameterRecord *parameter,
+                                              uint8_t *storage) {
     if (!semantic || !parameter ||
         parameter->function >= xr_semantic_plan_function_count(semantic) ||
         parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_REF ||
@@ -5765,10 +5765,9 @@ static bool oracle_u8_slice_element_read_is_exact(const VerifyAuthority *ctx,
 static bool oracle_dynamic_array_ref_storage(const VerifyAuthority *ctx, uint32_t semantic_value,
                                              XrRep *out_storage, uint16_t *out_machine_kind);
 
-static bool oracle_direct_local_array_ref_parameter_place_storage(const VerifyAuthority *ctx,
-                                                                  uint32_t semantic_value,
-                                                                  XrRep *out_storage,
-                                                                  uint16_t *out_machine_kind);
+static bool oracle_direct_local_tagged_ref_parameter_place_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value, XrRep *out_storage,
+    uint16_t *out_machine_kind);
 
 /* An element read or write is admitted only against a container this authority
  * already proved to be an exact array allocation. The index is an exact signed
@@ -5816,7 +5815,7 @@ static bool oracle_array_element_access_is_exact(const VerifyAuthority *ctx,
     bool owned_array = oracle_array_produced_tagged_carrier_storage(
         ctx, container->value, &container_storage, &container_kind);
     bool borrowed_array =
-        !owned_array && (oracle_direct_local_array_ref_parameter_place_storage(
+        !owned_array && (oracle_direct_local_tagged_ref_parameter_place_storage(
                              ctx, container->value, &container_storage, &container_kind) ||
                          oracle_array_borrowed_tagged_carrier_storage(
                              ctx, container->value, &container_storage, &container_kind));
@@ -6572,14 +6571,14 @@ static bool oracle_dynamic_array_intrinsic_storage(const VerifyAuthority *ctx,
     return true;
 }
 
-static bool oracle_direct_local_array_ref_place_storage(const VerifyAuthority *ctx,
-                                                        uint32_t semantic_value, XrRep *out_storage,
-                                                        uint16_t *out_machine_kind);
+static bool oracle_direct_local_tagged_ref_place_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind);
 
-static bool oracle_direct_local_array_ref_parameter_place_storage(const VerifyAuthority *ctx,
-                                                                  uint32_t semantic_value,
-                                                                  XrRep *out_storage,
-                                                                  uint16_t *out_machine_kind) {
+static bool oracle_direct_local_tagged_ref_parameter_place_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value, XrRep *out_storage,
+    uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
         return false;
     uint32_t parameter_index = ctx->parameter_by_value[semantic_value];
@@ -6599,7 +6598,7 @@ static bool oracle_direct_local_array_ref_parameter_place_storage(const VerifyAu
     const XrTargetSlotRecord *slot =
         binding && binding->slot < slot_count ? &slots[binding->slot] : NULL;
     if (!parameter || !binding || !register_rep || !memory_rep || !slot ||
-        !aot_array_ref_parameter_is_exact(ctx->semantic, parameter, &storage) ||
+        !aot_tagged_ref_parameter_is_exact(ctx->semantic, parameter, &storage) ||
         parameter->value != semantic_value || register_rep->kind != XR_MACHINE_REP_RAW_PTR ||
         memory_rep->kind != XR_MACHINE_REP_RAW_PTR ||
         register_rep->root_kind != XR_TARGET_ROOT_NONE ||
@@ -6804,10 +6803,10 @@ static bool oracle_dynamic_array_ref_storage(const VerifyAuthority *ctx, uint32_
         place->lifetime == XI_PLACE_LIFETIME_NONE && place->escape == XI_PLACE_ESCAPE_NONE &&
         place->flags == 0 && place->ownership_action == XR_SEM_OPERAND_BORROW &&
         aot_direct_ref_subject_type_is_exact(ctx->semantic, operation->result_type, &storage) &&
-        (oracle_direct_local_array_ref_place_storage(ctx, place->value, &place_storage,
-                                                     &place_kind) ||
-         oracle_direct_local_array_ref_parameter_place_storage(ctx, place->value, &place_storage,
-                                                               &place_kind)) &&
+        (oracle_direct_local_tagged_ref_place_storage(ctx, place->value, &place_storage,
+                                                      &place_kind) ||
+         oracle_direct_local_tagged_ref_parameter_place_storage(
+             ctx, place->value, &place_storage, &place_kind)) &&
         place_storage == XR_REP_RAWPTR && place_kind == XR_MACHINE_REP_RAW_PTR;
     if (!shared_value && !place_load_value)
         return false;
@@ -7541,8 +7540,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
         /* A class instance bound on entry is a tagged instance, which has no
          * scalar machine storage to report; every other parameter keeps its
          * own. */
-        if (oracle_direct_local_array_ref_parameter_place_storage(ctx, semantic_value, out_storage,
-                                                                  out_machine_kind))
+        if (oracle_direct_local_tagged_ref_parameter_place_storage(
+                ctx, semantic_value, out_storage, out_machine_kind))
             return true;
         if (oracle_direct_local_array_value_parameter_storage(ctx, semantic_value, out_storage,
                                                               out_machine_kind))
@@ -7670,8 +7669,8 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             break;
         case XI_LOCAL_ADDR:
-            if (oracle_direct_local_array_ref_place_storage(ctx, semantic_value, out_storage,
-                                                            out_machine_kind))
+            if (oracle_direct_local_tagged_ref_place_storage(ctx, semantic_value, out_storage,
+                                                             out_machine_kind))
                 return true;
             break;
         case XI_PLACE_LOAD:
@@ -7895,9 +7894,9 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
     return oracle_machine_storage(ctx, semantic_value, out_storage, out_machine_kind);
 }
 
-static bool oracle_direct_local_array_ref_place_use(const VerifyAuthority *ctx,
-                                                    uint32_t operation_index,
-                                                    uint32_t source_value) {
+static bool oracle_direct_local_tagged_ref_place_use(const VerifyAuthority *ctx,
+                                                     uint32_t operation_index,
+                                                     uint32_t source_value) {
     const XrSemanticOperationRecord *place =
         xr_semantic_plan_operation(ctx->semantic, operation_index);
     uint32_t operand_count = 0;
@@ -7969,10 +7968,10 @@ static bool oracle_direct_local_array_ref_place_use(const VerifyAuthority *ctx,
         !call_operand || !callee ||
         !oracle_definition_storage(ctx, source_value, &caller_storage, &caller_kind) ||
         caller_storage != XR_REP_TAGGED || caller_kind != XR_MACHINE_REP_DYN_VALUE ||
-        !oracle_direct_local_array_ref_parameter_place_storage(
+        !oracle_direct_local_tagged_ref_parameter_place_storage(
             ctx, parameter->value, &callee_storage, &callee_kind) ||
         callee_storage != XR_REP_RAWPTR || callee_kind != XR_MACHINE_REP_RAW_PTR ||
-        !aot_array_ref_parameter_is_exact(ctx->semantic, parameter, &storage) ||
+        !aot_tagged_ref_parameter_is_exact(ctx->semantic, parameter, &storage) ||
         target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
         target->operation != call->semantic_operation ||
         target->function != call->callee_function ||
@@ -7991,7 +7990,7 @@ static bool oracle_direct_local_array_ref_place_use(const VerifyAuthority *ctx,
         call_operand->ownership_action != XR_SEM_OPERAND_BORROW ||
         call_operand->transfer_mode != XR_TRANSFER_SHARE ||
         call_operand->flags != (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) ||
-        !aot_pair_identity("xray-target-direct-array-ref-argument-v1", target->id, parameter->id,
+        !aot_pair_identity("xray-target-direct-tagged-ref-argument-v2", target->id, parameter->id,
                            argument->ordinal, &expected_identity) ||
         !xr_stable_id_equal(argument->identity, expected_identity) ||
         argument->caller_slot != caller->slot || argument->callee_slot != callee->slot ||
@@ -8009,9 +8008,10 @@ static bool oracle_direct_local_array_ref_place_use(const VerifyAuthority *ctx,
     return true;
 }
 
-static bool oracle_direct_local_array_ref_place_storage(const VerifyAuthority *ctx,
-                                                        uint32_t semantic_value, XrRep *out_storage,
-                                                        uint16_t *out_machine_kind) {
+static bool oracle_direct_local_tagged_ref_place_storage(const VerifyAuthority *ctx,
+                                                         uint32_t semantic_value,
+                                                         XrRep *out_storage,
+                                                         uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
         return false;
     uint32_t operation_index = ctx->operation_by_value[semantic_value];
@@ -8025,8 +8025,8 @@ static bool oracle_direct_local_array_ref_place_storage(const VerifyAuthority *c
     if (!operation || !operands || operation->opcode != XI_LOCAL_ADDR ||
         operation->result_value != semantic_value || operation->operand_count != 1 ||
         operation->operand_begin >= operand_count ||
-        !oracle_direct_local_array_ref_place_use(ctx, operation_index,
-                                                 operands[operation->operand_begin].value))
+        !oracle_direct_local_tagged_ref_place_use(ctx, operation_index,
+                                                  operands[operation->operand_begin].value))
         return false;
     *out_storage = XR_REP_RAWPTR;
     *out_machine_kind = XR_MACHINE_REP_RAW_PTR;
@@ -8195,10 +8195,10 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_PLACE_LOAD:
             if (operand_index != 0 || source_value >= ctx->value_count)
                 return false;
-            if (oracle_direct_local_array_ref_place_storage(ctx, source_value, out_storage,
-                                                            &ignored_kind) ||
-                oracle_direct_local_array_ref_parameter_place_storage(ctx, source_value,
-                                                                      out_storage, &ignored_kind)) {
+            if (oracle_direct_local_tagged_ref_place_storage(ctx, source_value, out_storage,
+                                                             &ignored_kind) ||
+                oracle_direct_local_tagged_ref_parameter_place_storage(
+                    ctx, source_value, out_storage, &ignored_kind)) {
                 *out_storage = XR_REP_RAWPTR;
                 return true;
             }
@@ -8217,7 +8217,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_LOCAL_ADDR:
             if (operand_index != 0)
                 return false;
-            if (oracle_direct_local_array_ref_place_use(ctx, operation_index, source_value)) {
+            if (oracle_direct_local_tagged_ref_place_use(ctx, operation_index, source_value)) {
                 *out_storage = XR_REP_TAGGED;
                 return true;
             }
@@ -8418,7 +8418,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return false;
             return oracle_machine_storage(ctx, operation->result_value, out_storage, &ignored_kind);
         case XI_CALL:
-            if (operand_index != 0 && oracle_direct_local_array_ref_place_storage(
+            if (operand_index != 0 && oracle_direct_local_tagged_ref_place_storage(
                                           ctx, source_value, out_storage, &ignored_kind))
                 return true;
             if (operand_index == 0 || !ctx->policy->prefer_call_args_native) {
@@ -8860,7 +8860,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (operand_index == 0)
                 return oracle_array_tagged_carrier_storage(ctx, source_value, out_storage,
                                                            &ignored_kind) ||
-                       oracle_direct_local_array_ref_parameter_place_storage(
+                       oracle_direct_local_tagged_ref_parameter_place_storage(
                            ctx, source_value, out_storage, &ignored_kind);
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
         case XI_LOAD_FIELD:

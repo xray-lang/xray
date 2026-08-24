@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 45 may carry a canonical per-function instruction table and
+TargetPlan schema 46 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -224,7 +224,7 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 45 is a hard cutover from v44 and every earlier TargetPlan
+TargetPlan schema 46 is a hard cutover from v45 and every earlier TargetPlan
 schema. It requires SemanticPlan schema 38 and its compact 225-row Xi operation registry.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
@@ -525,13 +525,13 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 7218d132d5bac54d7bcc8d8af64daa43d707f26ae45f3a364989b9d728cea9fb
+anchor-sha256: src/plan/target/xr_target_plan.h 29137aa30e3c01a593dd466a1dfbdbc5300dace1c16f88a91e2bd9ec7be1717f
 anchor-sha256: src/plan/target/xr_target_plan.c 40070d0d76f43f39e11339a00a6d5cc98f07bc3527dfe7ae3048e4759d40fbcf
-anchor-sha256: src/plan/target/xr_target_builder.c d464802d736ad203036795b213b4d0b399dbdc560f9fa2511ceecd481f600beb
+anchor-sha256: src/plan/target/xr_target_builder.c 6a90dd6e4a00e559361de5ca595f951ef642aee0b46f28a90f0e401e97dca074
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
-anchor-sha256: src/plan/target/xr_target_verify.c 2b69b8a8b21fdfd20ae51444cf91d6df238b47e1a89035fefc2092bba5c0d61d
-anchor-sha256: src/plan/format/xr_xtp_schema.h 02105777f2b15c5fd54c5b1b7f8a5471e4794b9f9e686d50f3634170a271aa0e
+anchor-sha256: src/plan/target/xr_target_verify.c e87a9deb5699da06d2cfe1be48bf9f8977de23a03befc45734770b2918fa961a
+anchor-sha256: src/plan/format/xr_xtp_schema.h 536d47688befcdf9340632a4bcaa98edb115dae99dce289d7df40deca589e07c
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29
 anchor-sha256: src/plan/format/xr_xtp_rows.c 7e2c7c25d880a3f0d38abf7a48e63f9918c78eaf68e2734b9d0d68bb575abbcd
@@ -549,10 +549,10 @@ anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9
 anchor-sha256: src/vm/xr_typed_frame.c 397f46fa8647614c06745dc365676989abdc9e079f25a89994b96d9d34fbd405
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0b03b534fe198f74ac4736ca848ee0f9d80a35b44ad3548c52b2ce52f62bfda1
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
-anchor-sha256: tests/unit/plan/test_xtp_format.c e97600b91e9b03262c460a57d9729123e38bb399ffc7274f917a6b4612efb2c9
+anchor-sha256: tests/unit/plan/test_xtp_format.c 6d32b43ddbac5d1bef3976afa6bb10e06665e19ddcfec8b207f7d160df828cc0
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
-anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c e401b8988945d0ef8ac19e7d410df78a814c1b9d6bf42b26859ed2048f1af710
+anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3c55e2389843763e611214482e237c151ea0bf1b9bfee5a3b7468cb8f8e4e5c6
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: tests/unit/ir/test_xi_cgen.c 70253f323843a9ac56d36bd18a344013cd641bc38fa0af2b0e103432546fbc55
 anchor-sha256: tests/unit/ir/test_xi_opt.c 96b1ceb9789cd6b7742bcf29757087e2a27c144cf1107eaa70c0547295086beb

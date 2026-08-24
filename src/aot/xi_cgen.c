@@ -2942,10 +2942,9 @@ static const XrCEmissionPlan *cg_function_c_emission_plan(XiCgenCtx *ctx, const 
     return match;
 }
 
-static bool cg_direct_local_array_ref_argument_emission(XiCgenCtx *ctx, const XiFunc *function,
-                                                        const XiValue *call, uint16_t ordinal,
-                                                        const XiValue *argument,
-                                                        XrCCallArgumentEmissionView *out) {
+static bool cg_direct_local_tagged_ref_argument_emission(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call, uint16_t ordinal,
+    const XiValue *argument, XrCCallArgumentEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     uint32_t semantic_call = XR_SEMANTIC_INDEX_NONE;
@@ -2977,7 +2976,7 @@ static bool cg_direct_local_array_ref_argument_emission(XiCgenCtx *ctx, const Xi
 static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
     if (!view || !view->c_type)
         return false;
-    if (view->materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER)
+    if (view->materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_TAGGED_REF_PARAMETER)
         return view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
                view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
                view->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
@@ -2998,9 +2997,9 @@ static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
  * The PLACE_LOAD after the call must dereference an XrValue slot; consulting
  * Xi's Array type or the legacy raw-pointer plan would instead read the tag
  * word as a pointer. */
-static bool cg_direct_local_array_ref_place_emission(XiCgenCtx *ctx, const XiFunc *function,
-                                                     const XiValue *place,
-                                                     XrCCallArgumentEmissionView *out) {
+static bool cg_direct_local_tagged_ref_place_emission(XiCgenCtx *ctx, const XiFunc *function,
+                                                      const XiValue *place,
+                                                      XrCCallArgumentEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!ctx || !function || !place || !out)
@@ -3021,7 +3020,7 @@ static bool cg_direct_local_array_ref_place_emission(XiCgenCtx *ctx, const XiFun
                 if (ordinal == 0)
                     continue;
                 XrCCallArgumentEmissionView candidate = {0};
-                if (!cg_direct_local_array_ref_argument_emission(
+                if (!cg_direct_local_tagged_ref_argument_emission(
                         ctx, function, user, (uint16_t) (ordinal - 1u), place, &candidate))
                     continue;
                 if (have) {
