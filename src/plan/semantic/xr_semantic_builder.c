@@ -3341,12 +3341,11 @@ static bool semantic_string_builder_append_string_exact(const XrSemanticBuildCon
  * authority: its receiver record carries the instance kind and its own class
  * authority.
  *
- * The authority is deliberately limited to an element type that is not
- * reference capable.  Every member here either consumes an element argument or
- * moves elements inside the container, and for a reference capable element that
- * traffic is a reference-count transfer the backend would have to honour; for a
- * scalar element it is a copy and there is no ownership obligation left for
- * anyone to discharge.
+ * Each row states reference access, ownership action, and eventual drop
+ * lifecycle. Existing-element readers and movers preserve ownership. The one
+ * reference-capable store consumes an exact local source-class instance into
+ * tagged Array storage, whose canonical lifecycle releases it on erase or
+ * container destruction.
  *
  * Each row states the whole shape one selector may present: the operand count
  * range, which operand carries the element (0 means the member takes none,
@@ -3633,6 +3632,37 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
  * reference handed straight back, which the operation records as an alias of
  * operand 0 with a complete owned return provenance. */
 
+static bool semantic_array_member_reference_contract_exact(
+    const XrSemanticBuildContext *ctx, const XrArrayMemberShape *shape,
+    const XrSemanticOperationRecord *record, uint32_t element_type_index,
+    const XrSemanticTypeRecord *element_type) {
+    if (!ctx || !shape || !record || !element_type)
+        return false;
+    if ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
+        return true;
+    if (shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_PRESERVE)
+        return shape->element_operand == 0 &&
+               (shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ ||
+                shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE) &&
+               shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
+    if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
+        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
+        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
+        shape->element_operand == 0 || shape->element_operand >= record->operand_count ||
+        xr_semantic_class_instance_type_source_class(ctx->plan, element_type) ==
+            XR_SEMANTIC_INDEX_NONE)
+        return false;
+    uint32_t semantic_operand = record->operand_begin + shape->element_operand;
+    if (semantic_operand >= ctx->plan->operand_count)
+        return false;
+    const XrSemanticOperandRecord *element = &ctx->plan->operands[semantic_operand];
+    return element->type == element_type_index &&
+           element->role == XR_SEM_OPERAND_ARGUMENT &&
+           element->parameter == (int16_t) (shape->element_operand - 1u) &&
+           element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx,
                                                const XrSemanticOperationRecord *record) {
     if (!ctx || !record || record->operand_begin > ctx->plan->operand_count ||
@@ -3653,8 +3683,8 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
     const XrSemanticTypeRecord *element_type =
         element_type_index < ctx->plan->type_count ? &ctx->plan->types[element_type_index] : NULL;
     if (!element_type ||
-        ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) != 0 &&
-         !shape->permits_reference_elements) ||
+        !semantic_array_member_reference_contract_exact(ctx, shape, record, element_type_index,
+                                                        element_type) ||
         !xr_semantic_array_member_result_is_exact(record, shape, result_type, receiver->type) ||
         record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||

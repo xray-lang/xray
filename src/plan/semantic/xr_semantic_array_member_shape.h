@@ -42,18 +42,37 @@ typedef enum XrArrayMemberResultShape {
     XR_ARRAY_MEMBER_RESULT_STRING,
 } XrArrayMemberResultShape;
 
+typedef enum XrArrayMemberElementAccess {
+    XR_ARRAY_MEMBER_ELEMENT_ACCESS_NONE = 0,
+    XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ,
+    XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE,
+    XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE,
+} XrArrayMemberElementAccess;
+
+typedef enum XrArrayMemberReferenceAction {
+    XR_ARRAY_MEMBER_REFERENCE_UNSUPPORTED = 0,
+    XR_ARRAY_MEMBER_REFERENCE_PRESERVE,
+    XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE,
+} XrArrayMemberReferenceAction;
+
+typedef enum XrArrayMemberReferenceDrop {
+    XR_ARRAY_MEMBER_REFERENCE_DROP_NONE = 0,
+    XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY,
+} XrArrayMemberReferenceDrop;
+
 typedef struct XrArrayMemberShape {
     const char *selector;
     uint16_t min_operands;
     uint16_t max_operands;
     uint8_t result_shape;
     uint16_t element_operand;
-    /* Whether the member may operate on a container of reference-capable
-     * elements. A member that only permutes what is already there neither
-     * retains nor releases anything, so the element's ownership contract is
-     * untouched. One that stores an element into the container does change it,
-     * and those stay restricted to elements that own nothing. */
-    uint8_t permits_reference_elements;
+    /* Reference-capable elements need a complete lifecycle rather than a
+     * permission bit. Access says whether the member reads, moves, or stores an
+     * element; action says who owns a reference after the member; drop says how
+     * that ownership eventually ends. Unsupported rows remain fail-closed. */
+    uint8_t element_access;
+    uint8_t reference_action;
+    uint8_t reference_drop;
     /* Which operand, if any, is a plain string rather than the i64 bound every
      * other non-element argument is. Zero means none, since operand 0 is always
      * the receiver. */
@@ -63,17 +82,26 @@ typedef struct XrArrayMemberShape {
 /* Operand 0 is always the receiver, so element_operand 0 means the member
  * takes no element of its own. */
 static const XrArrayMemberShape xr_array_member_shapes[] = {
-    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0, 0},
-    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, 0, 0},
-    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1, 0, 0},
-    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1, 0, 0},
-    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1, 0, 0},
-    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1, 0},
-    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, 1, 0},
+    {"push", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE,
+     XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE,
+     XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY, 0},
+    {"unshift", 2, 2, XR_ARRAY_MEMBER_RESULT_UNIT, 1, XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE,
+     XR_ARRAY_MEMBER_REFERENCE_UNSUPPORTED, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
+    {"indexOf", 2, 2, XR_ARRAY_MEMBER_RESULT_INT, 1, XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ,
+     XR_ARRAY_MEMBER_REFERENCE_UNSUPPORTED, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
+    {"contains", 2, 2, XR_ARRAY_MEMBER_RESULT_BOOL, 1, XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ,
+     XR_ARRAY_MEMBER_REFERENCE_UNSUPPORTED, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
+    {"fill", 2, 4, XR_ARRAY_MEMBER_RESULT_RECEIVER, 1, XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE,
+     XR_ARRAY_MEMBER_REFERENCE_UNSUPPORTED, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
+    {"reverse", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE,
+     XR_ARRAY_MEMBER_REFERENCE_PRESERVE, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
+    {"sort", 1, 1, XR_ARRAY_MEMBER_RESULT_RECEIVER, 0, XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE,
+     XR_ARRAY_MEMBER_REFERENCE_PRESERVE, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 0},
     /* Reads every element and builds a string from them: it stores nothing
      * into the container, so reference-capable elements are fine, and the
      * string it returns is freshly owned rather than a borrow of anything. */
-    {"join", 2, 2, XR_ARRAY_MEMBER_RESULT_STRING, 0, 1, 1},
+    {"join", 2, 2, XR_ARRAY_MEMBER_RESULT_STRING, 0, XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ,
+     XR_ARRAY_MEMBER_REFERENCE_PRESERVE, XR_ARRAY_MEMBER_REFERENCE_DROP_NONE, 1},
 };
 
 static inline const XrArrayMemberShape *xr_array_member_shape(const char *selector,

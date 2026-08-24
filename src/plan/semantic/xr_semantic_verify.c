@@ -1930,12 +1930,11 @@ static bool verify_json_namespace_value(const XrSemanticPlan *plan,
  * source class identity, so no declaration can present this receiver record;
  * the frozen selector then names one implementation.  Each row below states the
  * whole shape one selector may present: the operand count range, which operand
- * carries the element, and what the result is.  The element clause is checked
- * against the receiver's own element entry rather than a spelled type, and a
- * reference capable element is refused because every member here either
- * consumes an element or moves elements inside the container, and that traffic
- * must stay free of any reference-count obligation for this authority to be
- * complete. */
+ * carries the element, and what the result is. The element clause is checked
+ * against the receiver's own element entry rather than a spelled type. The
+ * verifier independently reconstructs the row's reference action and drop
+ * lifecycle, including the exact consumed source-class element of tagged
+ * `Array.push`. */
 
 static bool verify_array_reserve(const XrSemanticPlan *plan,
                                  const XrSemanticOperationRecord *operation) {
@@ -2313,6 +2312,36 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
  * the operation records as an alias of operand 0 with a complete owned return
  * provenance and no storage of its own. */
 
+static bool verify_array_member_reference_contract(
+    const XrSemanticPlan *plan, const XrArrayMemberShape *shape,
+    const XrSemanticOperationRecord *operation, uint32_t element_type_index,
+    const XrSemanticTypeRecord *element_type) {
+    if (!plan || !shape || !operation || !element_type)
+        return false;
+    if ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0)
+        return true;
+    if (shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_PRESERVE)
+        return shape->element_operand == 0 &&
+               (shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_READ ||
+                shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_MOVE) &&
+               shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_NONE;
+    if (shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
+        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
+        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
+        shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
+        xr_semantic_class_instance_type_source_class(plan, element_type) == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    uint32_t semantic_operand = operation->operand_begin + shape->element_operand;
+    if (semantic_operand >= plan->operand_count)
+        return false;
+    const XrSemanticOperandRecord *element = &plan->operands[semantic_operand];
+    return element->type == element_type_index &&
+           element->role == XR_SEM_OPERAND_ARGUMENT &&
+           element->parameter == (int16_t) (shape->element_operand - 1u) &&
+           element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+           element->ownership_action == XR_SEM_OPERAND_CONSUME;
+}
+
 static bool verify_array_member_scalar(const XrSemanticPlan *plan,
                                        const XrSemanticOperationRecord *operation, char *error,
                                        size_t error_size) {
@@ -2349,9 +2378,9 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
         exact ? plan->type_children[receiver_type->child_begin] : XR_SEMANTIC_INDEX_NONE;
     const XrSemanticTypeRecord *element_type =
         exact && element_type_index < plan->type_count ? &plan->types[element_type_index] : NULL;
-    exact = exact && element_type &&
-            ((element_type->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 ||
-             shape->permits_reference_elements);
+    exact = exact && element_type && verify_array_member_reference_contract(
+                                               plan, shape, operation, element_type_index,
+                                               element_type);
     for (uint16_t i = 1; exact && i < operation->operand_count; i++) {
         const XrSemanticOperandRecord *argument = receiver + i;
         const XrSemanticTypeRecord *argument_type =

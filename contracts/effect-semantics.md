@@ -94,12 +94,20 @@ return an exact signed 64-bit integer or an exact boolean on the same terms;
 `fill`, `reverse` and `sort` return the receiver itself, recorded as an alias of
 operand 0 with a complete owned return provenance. The element operand is proven
 against the receiver's own element entry and every remaining argument is an
-exact signed 64-bit bound. The frozen element must not be reference capable:
-these members either consume an element or move elements inside the container,
-and only an element carrying no reference makes that traffic a copy that leaves
-no reference-count obligation for a backend to discharge. Every other container
-member, every operand count outside the frozen range, and every
-reference-capable element, stays without dispatch authority.
+exact signed 64-bit bound. Each shape now freezes element access, reference
+action, and drop lifecycle instead of publishing a permission bit. `reverse`,
+`sort`, and `join` preserve references already in the container. The sole
+reference-capable storing form is exact `Array<source-class>.push`: its element
+operand is consumed into tagged storage, and the canonical tagged Array
+lifecycle releases that stored value when it is erased or when the container
+is destroyed. TargetPlan binds this boundary with two ordered argument rows:
+the dynamic receiver is borrowed, while the exact owned source-class element
+is consumed with `TAGGED` call storage. Its independent verifier reconstructs
+the selector, lifecycle, source-class identity, both semantic operands, stable
+argument identities, ownership, storage, and dynamic caller representations.
+`unshift`, `fill`, `indexOf`, and `contains` remain unavailable for reference-
+capable elements, as do every unknown shape and every operand count outside the
+frozen range.
 `Array.reserve` is the closed stable-identity member of this container family:
 the analyzer records `core.array.reserve`, SemanticPlan freezes the exact array
 receiver, signed capacity operand, receiver-alias result, write/may-throw
@@ -472,7 +480,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
 anchor-sha256: src/plan/format/xr_xsm_encode.c df686c9b9dca307b266c633c0f7f8591ef8dd08845fa0cfdeadc033a34b8822b
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 13e29a7fbf2507baebbf589f62a76c6928f17ed596076411e4337dde8c75ddeb
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c ba038e1299e7c44f8ad7a14dfb0b2121aa34f3099f8f822babeb0711102d0607
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
@@ -487,7 +495,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe272bdac489c45b4411f8d9075cac07db14b76a3d62181efdac7276
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c d28a1e76869338a1b2364d428246895c1ee2b103d8714d78f206197ae2c5bcee
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 142d32903e18beeddca711c6430291035a05fda1836e9f65115e2184e651ad0b
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 4c98752eca9af3d3cc2489008cad6a5fad58fa0f40e9c046ad5dd70d20df2d89

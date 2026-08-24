@@ -14,6 +14,7 @@
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
@@ -362,6 +363,13 @@ static XrType stub_target_source_instance = {
             .class_name = "FinalTargetWorker",
             .class_ref = &stub_target_source_class_info,
         },
+};
+static XrType stub_target_source_instance_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 181,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_target_source_instance},
 };
 static XrType stub_target_open_source_instance = {
     .kind = XR_KIND_INSTANCE,
@@ -3008,6 +3016,66 @@ static XrSemanticPlan *build_direct_local_class_argument_semantic(XiOwnership ca
     REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
     root->module = NULL;
     xi_func_free(root);
+    module->init = NULL;
+    xi_module_free(module);
+    return plan;
+}
+
+static XrSemanticPlan *build_source_class_array_push_semantic(void) {
+    XiFunc *function = xi_func_new("target_source_class_array_push", &stub_unit);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    function->nparams = function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] =
+        xi_param(function, entry, 0, &stub_target_source_instance_array);
+    function->params[1] = xi_param(function, entry, 1, &stub_target_source_instance);
+    REQUIRE(function->params[0] != NULL && function->params[1] != NULL);
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 2;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->param_own[1] = XI_OWN_OWNED;
+    function->arc_borrow_sig->valid = true;
+
+    XiValue *push = xi_value_new(function, entry, XI_CALL_METHOD, &stub_unit, 2);
+    REQUIRE(push != NULL);
+    push->args[0] = function->params[0];
+    push->args[1] = function->params[1];
+    push->aux = "push";
+    push->aux_int = 2;
+    xi_block_set_return(entry, push);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module =
+        xi_module_new("pkg/target_source_class_array_push.xr", "target_source_class_array_push",
+                      function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=33:target-source-class-array-push-v1"));
+    function->module = module;
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &source_class;
+    module->nclasses = 1;
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(function, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-class Array.push semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL);
+    function->module = NULL;
+    xi_func_free(function);
     module->init = NULL;
     xi_module_free(module);
     return plan;
@@ -5673,6 +5741,136 @@ static void test_array_reserve_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_source_class_array_push_authority(void) {
+    XrSemanticPlan *semantic = build_source_class_array_push_semantic();
+    char error[512] = {0};
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < semantic->operation_count; i++) {
+        XrSemanticOperationRecord *candidate = &semantic->operations[i];
+        const char *selector =
+            candidate->metadata_count == 1 && candidate->metadata_begin < semantic->metadata_count
+                ? semantic->metadata[candidate->metadata_begin]
+                : NULL;
+        if (candidate->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR && selector &&
+            strcmp(selector, "push") == 0) {
+            REQUIRE(operation == NULL);
+            operation = candidate;
+            operation_index = i;
+        }
+    }
+    REQUIRE(operation != NULL && operation->operand_count == 2);
+    XrSemanticOperandRecord *receiver = &semantic->operands[operation->operand_begin];
+    XrSemanticOperandRecord *element = receiver + 1;
+    const XrSemanticTypeRecord *array_type = xr_semantic_plan_type(semantic, receiver->type);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    REQUIRE(array_type && children && array_type->child_begin < child_count);
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(semantic, children[array_type->child_begin]);
+    const XrArrayMemberShape *shape = xr_array_member_shape("push", operation->operand_count);
+    REQUIRE(shape && shape->element_access == XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE &&
+            shape->reference_action == XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE &&
+            shape->reference_drop == XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY &&
+            xr_semantic_class_instance_type_source_class(semantic, element_type) !=
+                XR_SEMANTIC_INDEX_NONE &&
+            receiver->ownership_action == XR_SEM_OPERAND_BORROW &&
+            element->ownership_action == XR_SEM_OPERAND_CONSUME);
+
+    uint8_t saved_semantic_ownership = element->ownership_action;
+    element->ownership_action = XR_SEM_OPERAND_BORROW;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    element->ownership_action = saved_semantic_ownership;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-class Array.push TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && plan->calls_count == 1 && plan->call_arguments_count == 2);
+    XrTargetCallRecord *call = &plan->calls[0];
+    REQUIRE(call->semantic_operation == operation_index && call->argument_count == 2 &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
+            call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
+            call->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED);
+    XrTargetCallArgumentRecord *receiver_argument =
+        &plan->call_arguments[call->argument_begin];
+    XrTargetCallArgumentRecord *element_argument = receiver_argument + 1;
+    REQUIRE(receiver_argument->semantic_operand == operation->operand_begin &&
+            receiver_argument->semantic_value == receiver->value &&
+            receiver_argument->ownership == XR_TARGET_CALL_BORROW &&
+            receiver_argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+            element_argument->semantic_operand == operation->operand_begin + 1u &&
+            element_argument->semantic_value == element->value &&
+            element_argument->ownership == XR_TARGET_CALL_CONSUME &&
+            element_argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+            plan->machine_reps[receiver_argument->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[element_argument->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[element_argument->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_OWNED &&
+            element_argument->caller_slot < plan->slots_count &&
+            plan->slots[element_argument->caller_slot].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+    bool tagged_layout = false;
+    uint32_t array_layout = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type != receiver->type)
+            continue;
+        REQUIRE(!tagged_layout);
+        tagged_layout = plan->layouts[i].array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED;
+        array_layout = i;
+    }
+    REQUIRE(tagged_layout && array_layout != XR_SEMANTIC_INDEX_NONE);
+
+    uint8_t saved = receiver_argument->ownership;
+    receiver_argument->ownership = XR_TARGET_CALL_CONSUME;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    receiver_argument->ownership = saved;
+    saved = element_argument->ownership;
+    element_argument->ownership = XR_TARGET_CALL_READ;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    element_argument->ownership = saved;
+    saved = element_argument->array_element_storage;
+    element_argument->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    element_argument->array_element_storage = saved;
+    uint16_t saved_rep = element_argument->register_rep;
+    element_argument->register_rep = call->error_register_rep;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    element_argument->register_rep = saved_rep;
+    saved = call->array_element_storage;
+    call->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->array_element_storage = saved;
+    uint16_t saved_count = call->argument_count;
+    call->argument_count = 1;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->argument_count = saved_count;
+    uint32_t saved_operand = element_argument->semantic_operand;
+    element_argument->semantic_operand = receiver_argument->semantic_operand;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    element_argument->semantic_operand = saved_operand;
+    XrStableId saved_identity = element_argument->identity;
+    element_argument->identity.bytes[0] ^= 1u;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    element_argument->identity = saved_identity;
+    saved = plan->layouts[array_layout].array_element_storage;
+    plan->layouts[array_layout].array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    xr_target_layout_compute_fingerprint(plan, array_layout,
+                                         &plan->layouts[array_layout].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    plan->layouts[array_layout].array_element_storage = saved;
+    xr_target_layout_compute_fingerprint(plan, array_layout,
+                                         &plan->layouts[array_layout].fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static XrTargetCallRecord *find_call_by_convention(XrTargetPlan *plan, uint8_t convention) {
     XrTargetCallRecord *match = NULL;
     for (uint32_t i = 0; i < plan->calls_count; i++) {
@@ -7193,12 +7391,18 @@ int main(int argc, char **argv) {
         puts("Imported source-class constructor authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "source-class-array-push-authority") == 0) {
+        test_source_class_array_push_authority();
+        puts("Source-class Array.push authority tests passed");
+        return 0;
+    }
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
     test_array_hof_call_authority();
     test_tagged_string_array_copy_authority();
     test_array_reserve_call_authority();
+    test_source_class_array_push_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();
     test_stringbuilder_to_string_call_authority();
