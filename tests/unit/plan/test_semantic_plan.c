@@ -776,6 +776,7 @@ static XrSemanticPlan *build_source_instance_method_local_plan(bool explicit_fin
     XiFunc *callee = xi_func_new("wait", &stub_unit);
     XiFunc *caller = xi_func_new("run", &stub_unit);
     REQUIRE(root != NULL && callee != NULL && caller != NULL);
+    root->is_module_initializer = true;
     XiBlock *root_entry = xi_block_new(root);
     XiBlock *callee_entry = xi_block_new(callee);
     XiBlock *caller_entry = xi_block_new(caller);
@@ -1928,6 +1929,39 @@ static size_t find_raw_bytes(const uint8_t *bytes, size_t size, const uint8_t *n
             return i;
     }
     return SIZE_MAX;
+}
+
+static uint32_t read_u32_le(const uint8_t *bytes) {
+    return (uint32_t) bytes[0] | (uint32_t) bytes[1] << 8u | (uint32_t) bytes[2] << 16u |
+           (uint32_t) bytes[3] << 24u;
+}
+
+static size_t find_function_initializer_byte(const uint8_t *bytes, size_t size,
+                                             const XrSemanticFunctionRecord *function) {
+    REQUIRE(bytes != NULL && size >= XR_XSM_HEADER_SIZE && function != NULL &&
+            function->canonical_key != NULL && function->name != NULL);
+    const uint8_t *payload = bytes + XR_XSM_HEADER_SIZE;
+    size_t payload_size = size - XR_XSM_HEADER_SIZE;
+    size_t key_size = strlen(function->canonical_key);
+    size_t name_size = strlen(function->name);
+    const size_t fixed_bytes_after_name = 3u * sizeof(uint32_t) + 2u * sizeof(uint16_t) +
+                                          sizeof(uint32_t) + 2u * sizeof(uint16_t) +
+                                          7u * sizeof(uint32_t) + 2u * sizeof(uint16_t) + 3u;
+    size_t match = SIZE_MAX;
+    for (size_t offset = 0; offset + key_size <= payload_size; offset++) {
+        if (memcmp(payload + offset, function->canonical_key, key_size) != 0)
+            continue;
+        size_t cursor = offset + key_size;
+        if (cursor + sizeof(uint32_t) + name_size + fixed_bytes_after_name >= payload_size ||
+            read_u32_le(payload + cursor) != name_size ||
+            memcmp(payload + cursor + sizeof(uint32_t), function->name, name_size) != 0)
+            continue;
+        REQUIRE(match == SIZE_MAX);
+        match = XR_XSM_HEADER_SIZE + cursor + sizeof(uint32_t) + name_size +
+                fixed_bytes_after_name;
+    }
+    REQUIRE(match != SIZE_MAX);
+    return match;
 }
 
 static char *dump_plan(const XrSemanticPlan *plan, size_t *size) {
@@ -3318,6 +3352,7 @@ static void test_source_instance_method_local_authority(void) {
     XrSemanticPlan *plan =
         build_source_instance_method_local_plan(true, true, true, NULL, NULL);
     REQUIRE(plan != NULL && plan->source_class_count == 1);
+    REQUIRE(plan->functions[0].is_module_initializer == 1);
     XrSemanticSourceClassRecord *source_class = &plan->source_classes[0];
     REQUIRE(source_class->ordinal == 0 && source_class->method_count == 2);
     REQUIRE(source_class->flags ==
@@ -3363,6 +3398,9 @@ static void test_source_instance_method_local_authority(void) {
     XrSemanticPlan *decoded = NULL;
     REQUIRE(xr_xsm_decode(bytes, size, &decoded, error, sizeof(error)));
     REQUIRE(decoded->source_class_count == 1 && decoded->call_target_count == 1);
+    REQUIRE(decoded->functions[0].is_module_initializer == 1);
+    REQUIRE(xr_fingerprint_equal(xr_semantic_plan_fingerprint(plan),
+                                 xr_semantic_plan_fingerprint(decoded)));
     REQUIRE(decoded->call_targets[0].kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_LOCAL);
     uint8_t *roundtrip = NULL;
     size_t roundtrip_size = 0;
@@ -3370,6 +3408,13 @@ static void test_source_instance_method_local_authority(void) {
     REQUIRE(roundtrip_size == size && memcmp(roundtrip, bytes, size) == 0);
     xr_free(roundtrip);
     xr_semantic_plan_free(decoded);
+    size_t initializer_offset = find_function_initializer_byte(bytes, size, &plan->functions[0]);
+    REQUIRE(bytes[initializer_offset] == 1);
+    uint8_t *cleared_initializer = copy_bytes(bytes, size);
+    cleared_initializer[initializer_offset] = 0;
+    rewrite_payload_digest(cleared_initializer, size);
+    expect_decode_failure(cleared_initializer, size, "XR_ARTIFACT_2002");
+    xr_free(cleared_initializer);
     uint8_t *old_schema = copy_bytes(bytes, size);
     old_schema[8] = 19;
     old_schema[9] = old_schema[10] = old_schema[11] = 0;
@@ -5072,7 +5117,12 @@ static void test_semantic_build_requires_typed_module_identity(void) {
                                                    "XR_SEM_0019");
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "source-class-xsm-roundtrip") == 0) {
+        test_source_instance_method_local_authority();
+        puts("Source-class XSM round-trip tests passed");
+        return 0;
+    }
     test_semantic_build_requires_typed_module_identity();
     test_stable_ids();
     test_source_enum_identity_and_mutations();

@@ -245,6 +245,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, function->return_provenance);
         hash_u64(&ctx, function->source_kind);
         hash_u64(&ctx, function->flags);
+        hash_u64(&ctx, function->is_module_initializer);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         const XrSemanticParameterRecord *parameter = &plan->parameters[i];

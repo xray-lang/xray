@@ -144,7 +144,7 @@ static void encode_functions(XrXsmWriter *writer, const XrSemanticPlan *plan) {
         xr_xsm_put_u8(writer, record->return_provenance);
         xr_xsm_put_u8(writer, record->source_kind);
         xr_xsm_put_u8(writer, record->flags);
-        xr_xsm_put_u8(writer, 0);
+        xr_xsm_put_u8(writer, record->is_module_initializer);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         const XrSemanticParameterRecord *record = &plan->parameters[i];
