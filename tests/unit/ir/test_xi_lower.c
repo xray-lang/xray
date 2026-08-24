@@ -55,11 +55,20 @@ static void teardown(void) {
 static XiFunc *lower_source(const char *source) {
     assert(g_iso != NULL);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+    const XrCompileUnitIdentity identity = {
+        .kind = XR_COMPILE_UNIT_MEMORY,
+        .module_identity = "memory-module-v1:id=19:xi-lower-fixture-v1",
+    };
+    if (!xr_compiler_session_set_compile_unit_identity(session, &identity)) {
+        fprintf(stderr, "  MODULE IDENTITY SETUP FAILED\n");
+        return NULL;
+    }
 
     /* Parse */
     AstNode *program = xr_parse(session, source);
     if (!program) {
         fprintf(stderr, "  PARSE FAILED for: %s\n", source);
+        (void) xr_compiler_session_set_compile_unit_identity(session, NULL);
         return NULL;
     }
 
@@ -68,6 +77,7 @@ static XiFunc *lower_source(const char *source) {
     if (!analyzer) {
         fprintf(stderr, "  ANALYZER ALLOC FAILED\n");
         xr_program_destroy(program);
+        (void) xr_compiler_session_set_compile_unit_identity(session, NULL);
         return NULL;
     }
     xa_analyzer_analyze(analyzer, "test.xr", program);
@@ -93,6 +103,7 @@ static XiFunc *lower_source(const char *source) {
         fprintf(stderr, "  LOWER FAILED for: %s\n", source);
         xa_analyzer_free(analyzer);
         xr_program_destroy(program);
+        (void) xr_compiler_session_set_compile_unit_identity(session, NULL);
         return NULL;
     }
 
@@ -102,6 +113,7 @@ static XiFunc *lower_source(const char *source) {
     /* Cleanup AST and analyzer (Xi IR is independent) */
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
+    (void) xr_compiler_session_set_compile_unit_identity(session, NULL);
 
     return func;
 }
@@ -122,7 +134,10 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
 
     XrModuleSpec spec;
     memset(&spec, 0, sizeof(spec));
-    spec.source_path = "test.xr";
+    spec.canonical = "memory-module-v1:id=19:xi-lower-fixture-v1";
+    spec.kind = XR_MOD_MEMORY;
+    spec.authority.kind = XR_MODULE_IDENTITY_MEMORY;
+    spec.authority.namespace_id = "xi-lower-fixture-v1";
     spec.ast = program;
     int topo_order[1] = {0};
     XrModuleGraph graph;
@@ -3012,7 +3027,7 @@ TEST(read_value_struct_param_uses_internal_call_place) {
 TEST(as_to_scalar_rep_int_lowers_to_narrow) {
     XiFunc *f = lower_source("fn run(i: i64) -> i64 {\n"
                              "    var v = i as u16\n"
-                             "    return i64(v)\n"
+                             "    return v as i64\n"
                              "}\n"
                              "print(run(65537))\n");
     assert(f != NULL);
