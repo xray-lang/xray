@@ -38,6 +38,13 @@ static void setup(void) {
         g_iso = xray_vm_new_full(&p);
         g_session = xr_compiler_session_current_for_isolate(g_iso);
         assert(g_session != NULL);
+        const XrCompileUnitIdentity identity = {
+            .kind = XR_COMPILE_UNIT_MEMORY,
+            .module_identity = "memory-module-v1:id=18:selection-facts-v1",
+        };
+        bool identity_set = xr_compiler_session_set_compile_unit_identity(g_session, &identity);
+        assert(identity_set);
+        (void) identity_set;
     }
 }
 
