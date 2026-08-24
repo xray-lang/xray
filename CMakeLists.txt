@@ -4188,6 +4188,33 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME target_machine_migration_source_classification
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_migration_classification.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_migration_source_classification PROPERTIES
+        LABELS "meta;target-machine;governance;migration"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME target_machine_migration_source_classification_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_target_machine_migration_classification.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(target_machine_migration_source_classification_self_test PROPERTIES
+        LABELS "meta;target-machine;governance;migration"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME stdlib_bytecode_staging_identity
         COMMAND ${XRAY_PYTHON}
                 ${XRAY_STDLIB_EMBED_GENERATOR}

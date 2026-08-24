@@ -1,0 +1,238 @@
+{
+  "categories": [
+    "SURVIVOR_AUTHORITY",
+    "BRIDGE_TEST_ONLY",
+    "LEGACY_TOMBSTONE",
+    "FIXTURE_ONLY"
+  ],
+  "checker": "target-machine-migration-source-classification/1",
+  "discovery": {
+    "aot_plan_inventory": "contracts/target-machine/aot-plan-destination-inventory.json",
+    "legacy_vm_inventory": "contracts/target-machine/legacy-vm-inventory.json",
+    "semantic_owner_inventory": "contracts/target-machine/semantic-owner-inventory.json",
+    "typed_source_globs": [
+      "src/vm/xr_*",
+      "src/vm/debug/xr_*",
+      "src/runtime/xr_*"
+    ]
+  },
+  "items": [
+    {
+      "category": "SURVIVOR_AUTHORITY",
+      "completion_limit": "verified-target-plan-authority-not-program-semantic-closure",
+      "final_disposition": "retain-as-the-unique-target-plan-builder-and-independent-verifier",
+      "id": "target-plan-authority",
+      "independent_checker": "src/plan/target/xr_target_verify.c",
+      "installed": false,
+      "paths": [
+        "src/plan/target/xr_target_builder.c",
+        "src/plan/target/xr_target_builder.h",
+        "src/plan/target/xr_target_instruction_verify.c",
+        "src/plan/target/xr_target_instruction_verify.h",
+        "src/plan/target/xr_target_plan.c",
+        "src/plan/target/xr_target_plan.h",
+        "src/plan/target/xr_target_verify.c",
+        "src/plan/target/xr_target_verify.h"
+      ],
+      "serialization_cache_impact": "TargetPlan and XTP identity",
+      "typed_consumers": [
+        "src/vm/xr_typed_dispatch.c",
+        "src/aot/xi_cgen.c"
+      ]
+    },
+    {
+      "category": "SURVIVOR_AUTHORITY",
+      "completion_limit": "typed-target-plan-executor-and-derived-cache-not-semantic-owner",
+      "final_disposition": "retain-as-the-typed-target-plan-executor-and-discardable-derived-cache",
+      "id": "typed-target-vm",
+      "independent_checker": "src/plan/target/xr_target_instruction_verify.c",
+      "installed": false,
+      "paths": [
+        "src/vm/xr_typed_dispatch.c",
+        "src/vm/xr_typed_dispatch.h",
+        "src/vm/xr_typed_frame.c",
+        "src/vm/xr_typed_frame.h",
+        "src/vm/xr_typed_lifecycle.c",
+        "src/vm/xr_typed_lifecycle.h",
+        "src/vm/xr_vm_decoded_cache.c",
+        "src/vm/xr_vm_decoded_cache.h",
+        "src/vm/xr_vm_dynamic_entry.h",
+        "src/vm/xr_vm_entry_adapter.c",
+        "src/vm/xr_vm_entry_adapter.h",
+        "src/vm/xr_vm_ops.def"
+      ],
+      "serialization_cache_impact": "no artifact authority; decoded state is rebuilt from a verified TargetPlan",
+      "typed_consumers": [
+        "src/runtime/xr_module_generation.c",
+        "tests/unit/vm/test_typed_dispatch.c"
+      ]
+    },
+    {
+      "category": "SURVIVOR_AUTHORITY",
+      "completion_limit": "typed-debug-projection-not-target-plan-or-semantic-owner",
+      "final_disposition": "retain-only-as-a-fingerprint-bound-runtime-projection",
+      "id": "typed-target-debug",
+      "independent_checker": "tests/unit/vm/test_typed_dispatch.c",
+      "installed": false,
+      "paths": [
+        "src/vm/debug/xr_vm_debug_control.c",
+        "src/vm/debug/xr_vm_debug_control.h",
+        "src/vm/debug/xr_vm_debug_control_internal.h",
+        "src/vm/debug/xr_vm_materialize.c",
+        "src/vm/debug/xr_vm_materialize.h",
+        "src/vm/debug/xr_vm_profile.c",
+        "src/vm/debug/xr_vm_profile.h",
+        "src/vm/debug/xr_vm_trace.c",
+        "src/vm/debug/xr_vm_trace.h",
+        "src/vm/debug/xr_vm_trace_internal.h"
+      ],
+      "serialization_cache_impact": "debug side metadata only; never artifact authority",
+      "typed_consumers": [
+        "src/vm/xr_typed_dispatch.c"
+      ]
+    },
+    {
+      "category": "SURVIVOR_AUTHORITY",
+      "completion_limit": "lifecycle-primitive-not-generation-closure-id",
+      "final_disposition": "retain-the-runtime-lifecycle-but-bind-it-to-the-future-exact-generation-closure",
+      "id": "runtime-target-and-generation-lifecycle",
+      "independent_checker": "src/runtime/xr_module_generation_verify.c",
+      "installed": true,
+      "missing_authority": [
+        "ProgramSemanticClosure",
+        "GenerationClosureId",
+        "module dependency graph"
+      ],
+      "paths": [
+        "src/runtime/xr_dynamic_entry_runtime.c",
+        "src/runtime/xr_dynamic_entry_runtime.h",
+        "src/runtime/xr_entry_cell.c",
+        "src/runtime/xr_entry_cell.h",
+        "src/runtime/xr_module_generation.c",
+        "src/runtime/xr_module_generation_internal.h",
+        "src/runtime/xr_module_generation_verify.c",
+        "src/runtime/xr_process_shutdown.c",
+        "src/runtime/xr_process_shutdown.h",
+        "src/runtime/xr_runtime_api.c",
+        "src/runtime/xr_runtime_artifact_authority.c",
+        "src/runtime/xr_runtime_artifact_authority_internal.h",
+        "src/runtime/xr_runtime_artifact_verify.c",
+        "src/runtime/xr_target_plan_load.c"
+      ],
+      "serialization_cache_impact": "runtime generation fingerprint currently binds plan/profile/runtime/provider/object facts but not the future program dependency closure",
+      "typed_consumers": [
+        "src/vm/xr_typed_dispatch.c",
+        "include/xray_runtime_api.h"
+      ]
+    },
+    {
+      "category": "SURVIVOR_AUTHORITY",
+      "completion_limit": "source-backed-kernels-only; representation-adapter-status-does-not-prove-full-capability",
+      "final_disposition": "retain-the-unique-kernel-owner-and-keep-vm-aot-consumers-mechanical",
+      "id": "shared-semantic-kernels",
+      "independent_checker": "scripts/check_semantic_owners.py",
+      "installed": true,
+      "inventory": {
+        "family": "shared-kernel",
+        "kind": "semantic-owner-rows"
+      },
+      "serialization_cache_impact": "stable semantic owner identity only",
+      "typed_consumers": [
+        "src/vm",
+        "src/aot"
+      ]
+    },
+    {
+      "category": "LEGACY_TOMBSTONE",
+      "completion_limit": "inventory-count-is-residue-not-feature-coverage",
+      "final_disposition": "delete-opcode-tagged-frame-public-api-and-xrc-owners-at-product-cutover",
+      "id": "legacy-vm-and-artifact",
+      "independent_checker": "scripts/check_target_machine_completion.py",
+      "installed": true,
+      "inventory": {
+        "kind": "legacy-vm-inventory"
+      },
+      "new_feature": false,
+      "serialization_cache_impact": "retire XRC and legacy bytecode cache identity; no compatibility reader",
+      "tombstone_deadline": "W8",
+      "typed_consumers": []
+    },
+    {
+      "category": "LEGACY_TOMBSTONE",
+      "completion_limit": "current-private-plan-records-only; independent-refinement-checker-is-not-a-tombstone",
+      "final_disposition": "move-each-fact-to-its-semantic-target-refinement-or-emission-owner-and-delete-the-private-record",
+      "id": "legacy-aot-private-plan-records",
+      "independent_checker": "src/aot/xaot_verify.c",
+      "installed": false,
+      "inventory": {
+        "kind": "aot-plan-rows"
+      },
+      "new_feature": false,
+      "serialization_cache_impact": "replace private AOT cache keys with stable semantic/target/refinement identities",
+      "tombstone_deadline": "W7",
+      "typed_consumers": []
+    },
+    {
+      "category": "LEGACY_TOMBSTONE",
+      "completion_limit": "observable-semantics-still-owned-by-an-executor",
+      "final_disposition": "delete-each-old-executor-answer-in-the-same-capability-slice-that-activates-the-typed-owner",
+      "id": "executor-semantic-duplicate-owners",
+      "independent_checker": "scripts/check_target_machine_completion.py",
+      "installed": true,
+      "inventory": {
+        "kind": "semantic-dual-owner-rows"
+      },
+      "new_feature": false,
+      "serialization_cache_impact": "the replacement owner must contribute its stable identity to the plan and cache key",
+      "tombstone_deadline": "same-capability-slice",
+      "typed_consumers": []
+    },
+    {
+      "build_targets": [
+        "test_target_machine_comparison_fixture"
+      ],
+      "category": "BRIDGE_TEST_ONLY",
+      "completion_limit": "comparison-evidence-only; never-a-product-selector-or-fallback",
+      "final_disposition": "delete-after-the-final-same-plan-vm-aot-oracles-no-longer-need-the-frozen-comparator",
+      "id": "private-target-machine-comparator",
+      "independent_checker": "tests/target_machine/comparison/run_comparison.py",
+      "installed": false,
+      "paths": [
+        "tests/target_machine/comparison/cases.json",
+        "tests/target_machine/comparison/run_comparison.py",
+        "tests/target_machine/comparison/typed_fixture.c"
+      ],
+      "serialization_cache_impact": "none",
+      "tombstone_deadline": "W9",
+      "typed_consumers": []
+    },
+    {
+      "category": "FIXTURE_ONLY",
+      "completion_limit": "historical-disposed-spike-evidence-only",
+      "final_disposition": "retain-until-replacement-evidence-is-governed-then-retire-through-the-evidence-tombstone",
+      "id": "disposed-phase0-spikes",
+      "independent_checker": "scripts/target_machine_phase0.py",
+      "installed": false,
+      "paths": [
+        "tests/target-machine/phase0/coroutine_vertical/loop_suspend_try_catch.xr",
+        "tests/target-machine/phase0/coroutine_vertical/manifest.toml",
+        "tests/target-machine/phase0/coroutine_vertical/report.json",
+        "tests/target-machine/phase0/negative/manifest.toml",
+        "tests/target-machine/phase0/typed_slot_calibration/mailbox.xr",
+        "tests/target-machine/phase0/typed_slot_calibration/manifest.toml",
+        "tests/target-machine/phase0/typed_slot_calibration/report.json",
+        "tests/target-machine/phase0/typed_slot_calibration/workload.xr"
+      ],
+      "serialization_cache_impact": "none",
+      "typed_consumers": []
+    }
+  ],
+  "policy": {
+    "broad_name_prefix_is_classification": "forbidden",
+    "bridge_or_fixture_install_reachability": "forbidden",
+    "legacy_new_feature_or_schema": "forbidden",
+    "multiple_classification": "error",
+    "unclassified_governed_path": "error"
+  },
+  "schema": 1
+}
