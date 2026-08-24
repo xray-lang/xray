@@ -498,6 +498,7 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
         case AST_LITERAL_NULL:
         case AST_LITERAL_BIGINT:
         case AST_LITERAL_REGEX:
+        case AST_FIXED_BYTES_LITERAL:
         case AST_BREAK_STMT:
         case AST_CONTINUE_STMT:
         case AST_THIS_EXPR:
@@ -778,7 +779,7 @@ TEST(channel_and_go) {
     /* `go` takes a call, so the inline body is spelled `go fn() { ... }()`.
      * The bare-lambda form this used to carry has not parsed since the rule
      * landed, which cost the whole case rather than the go node alone. */
-    return assert_all_typed("const ch = Channel(1)\n"
+    return assert_all_typed("const ch = Channel<i64>(1)\n"
                             "go fn() {\n"
                             "    ch.send(42)\n"
                             "}()\n"
