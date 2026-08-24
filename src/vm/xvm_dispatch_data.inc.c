@@ -113,7 +113,6 @@ vmcase(OP_STRBUF_NEW) {
 
     XrStringBuilder *sb = xr_stringbuilder_new(VM_CURRENT_CORO);
     R(a) = xr_stringbuilder_value(sb);
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -192,7 +191,6 @@ vmcase(OP_STR_CONCAT_N) {
         xr_free(buf);
 
     R(a) = xr_string_value(result);
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -203,6 +201,5 @@ vmcase(OP_STRBUF_FINISH) {
     XrString *result = xr_stringbuilder_to_string(sb);
 
     R(a) = xr_string_value(result);
-    checkGC(base + a + 1);
     vmbreak;
 }

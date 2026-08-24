@@ -12,7 +12,7 @@
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_DEC_FRAME_COUNT, VM_STACK, VM_STACK_TOP,
- * VM_STACK_CHECK, TRACE_EXECUTION, checkGC,
+ * VM_STACK_CHECK, TRACE_EXECUTION,
  * startfunc / handle_closure_pending labels, ...) provided by
  * the surrounding scope. CMake excludes *.inc.c from the
  * VM_SRC glob.
@@ -40,12 +40,6 @@ op_call_entry:;
     ** Strategy: distinguish two most common types for performance
     */
     TRACE_EXECUTION();
-
-    /* The legacy tracing-GC hook at call boundaries is now a no-op.
-    ** Reductions check intentionally absent here: only OP_JMP backward
-    ** jumps check reductions. This reduces overhead from <3% to <1%.
-    ** Preemption for pure call chains relies on sysmon + handoff. */
-    VM_GC_SAFEPOINT();
 
     int a = GETARG_A(i);
     int nargs = GETARG_B(i);
@@ -421,11 +415,10 @@ vmcase(OP_LOOP_BACK) {
     // Reset PC to function entry
     pc = PROTO_CODE_BASE(frame->closure->proto);
 
-    // Legacy tracing-GC no-op + reduction check (same as backward JMP)
+    // Reduction and deadline checks mirror the backward jump path.
     if (vm_ctx && vm_ctx->current_coro) {
         XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
         xr_worker_bump_heartbeat(vm_worker);
-        VM_GC_SAFEPOINT();
 
         /* Same wall-clock deadline check as the backward JMP path;
         ** tail recursion can spin without ever executing OP_JMP. */
@@ -665,9 +658,6 @@ vmcase(OP_TAILCALL) {
 
 vmcase(OP_RETURN) {
     // OP_RETURN: function return (multi-value support)
-
-    /* Legacy tracing-GC hook; currently a no-op before frame teardown. */
-    VM_GC_SAFEPOINT();
 
     // Clean up exception handlers belonging to current frame
     while (VM_HANDLER_COUNT > 0 &&

@@ -14,8 +14,7 @@
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
  * Owns:
- *   OP_JMP      — unconditional jump with reductions / GC safe
- *                 point on backward edges
+ *   OP_JMP      — unconditional jump with reductions on backward edges
  *   OP_TEST     — branch on truthiness (skip-next if !R[A] xor C)
  *   OP_TESTSET  — assign-then-branch (R[A] = R[B] if condition)
  */
@@ -45,10 +44,6 @@ vmcase(OP_JMP) {
         if (vm_ctx && vm_ctx->current_coro) {
             XrCoroutine *coro = (XrCoroutine *) vm_ctx->current_coro;
             xr_worker_bump_heartbeat(vm_worker);
-
-            /* Legacy tracing-GC hook; currently a no-op. Scheduling and
-            ** cancellation are handled by the reduction check below. */
-            VM_GC_SAFEPOINT();
 
             if (xr_coro_consume_reds(coro, 1) <= 0) {
                 if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED) &&

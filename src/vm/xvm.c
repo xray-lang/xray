@@ -578,13 +578,6 @@ XrVMResult run(XrVMRuntime *isolate, XrVMContext *vm_ctx) {
         }                                                                                          \
     } while (0)
 
-/* Per-coroutine tracing safepoint: retired. Tracing's incremental step used to
-** run here when gc_requested was set; reference counting reclaims inline
-** (drop-to-zero) and at coroutine teardown, so there is no step to trigger. */
-#define VM_GC_SAFEPOINT() ((void) 0)
-
-#define checkGC(c) VM_GC_SAFEPOINT()
-
 /* ========== Debug Hook (Zero Overhead When No Debugger) ========== */
 /* All decision logic (breakpoints, stepping, pause, logpoints) lives in
  * the on_line hook impl (DAP side).  VM just resolves (path, line) and

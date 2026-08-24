@@ -13,7 +13,7 @@
  * pc, ci, frame, base, k, R, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_DISPATCH, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT, VM_STACK*, VM_CURRENT_CORO,
- * checkGC, startfunc label, ...) provided by the surrounding
+ * startfunc label, ...) provided by the surrounding
  * scope. CMake excludes *.inc.c from the VM_SRC glob.
  *
  * Owns:
@@ -328,8 +328,6 @@ vmcase(OP_NEWOBJECT) {
     }
 
     R(a) = xr_object_instance_value(object);
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -462,7 +460,6 @@ vmcase(OP_JSON_DECODE) vmcase(OP_JSON_DECODE_IGNORE) vmcase(OP_JSON_DECODE_REQUI
         R(a) = xr_json_decode_struct_instance_with_class(isolate, VM_CURRENT_CORO,
                                                          xr_value_to_object_instance(data), cls,
                                                          ignore_unknown_fields);
-        checkGC(base + a + 1);
         vmbreak;
     } else if (root_schema && schema) {
         XrValue decoded = xr_null();
@@ -477,7 +474,6 @@ vmcase(OP_JSON_DECODE) vmcase(OP_JSON_DECODE_IGNORE) vmcase(OP_JSON_DECODE_REQUI
             vmbreak;
         }
         R(a) = decoded;
-        checkGC(base + a + 1);
         vmbreak;
     } else {
         R(a) = xr_null();
@@ -485,7 +481,6 @@ vmcase(OP_JSON_DECODE) vmcase(OP_JSON_DECODE_IGNORE) vmcase(OP_JSON_DECODE_REQUI
     }
     R(a) = xr_json_decode_struct_object_with_class(isolate, VM_CURRENT_CORO, src, cls,
                                                    ignore_unknown_fields);
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -532,7 +527,6 @@ vmcase(OP_JSON_PARSE_TYPED) vmcase(OP_JSON_PARSE_TYPED_IGNORE) {
         goto startfunc;
     }
     R(a) = parsed;
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -586,7 +580,6 @@ vmcase(OP_JSON_PARSE_WITH_REST) vmcase(OP_JSON_PARSE_WITH_REST_IGNORE) {
         goto startfunc;
     }
     R(a) = parsed;
-    checkGC(base + a + 1);
     vmbreak;
 }
 

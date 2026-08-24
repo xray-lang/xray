@@ -146,7 +146,6 @@ vmcase(OP_CLOSURE) {
         }
     }
     R(a) = xr_value_from_closure(closure);
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -167,7 +166,6 @@ vmcase(OP_CELL_NEW) {
     XrCell *cell = xr_cell_new(isolate, (XrCoroutine *) vm_ctx->current_coro);
     cell->value = R(b);
     R(a) = xr_make_ptr_val(cell);
-    checkGC(base + a + 1);
     vmbreak;
 }
 

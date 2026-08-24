@@ -11,7 +11,7 @@
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
  * pc, frame, ci, base, R, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_DISPATCH, VM_HANDLER_COUNT,
- * VM_FRAME_COUNT, VM_CURRENT_CORO, TRACE_EXECUTION, checkGC,
+ * VM_FRAME_COUNT, VM_CURRENT_CORO, TRACE_EXECUTION,
  * startfunc label, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
@@ -72,8 +72,6 @@ vmcase(OP_ARRAY_COPY_NEW) {
     }
 
     R(a) = arr ? xr_value_from_array(arr) : xr_null();
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 

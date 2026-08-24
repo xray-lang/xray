@@ -14,7 +14,7 @@
  * pc, frame, ci, base, R, k, savepc, vmcase, vmbreak,
  * VM_RUNTIME_ERROR, VM_STACK, VM_FRAMES, VM_FRAME_COUNT,
  * VM_INC_FRAME_COUNT,
- * VM_CURRENT_CORO, checkGC, startfunc label, ...) provided by
+ * VM_CURRENT_CORO, startfunc label, ...) provided by
  * the surrounding scope. CMake excludes *.inc.c from the
  * VM_SRC glob.
  *
@@ -135,8 +135,6 @@ vmcase(OP_NEWARRAY) {
         }
     }
     R(a) = xr_value_from_array(array);
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -173,8 +171,6 @@ vmcase(OP_ARRAY_NEW_CAP) {
     if (array)
         array->elem_tid = elem_tid;
     R(a) = array ? xr_value_from_array(array) : xr_null();
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -215,8 +211,6 @@ vmcase(OP_ARRAY_NEW_LEN) {
             memset(array->data, 0, (size_t) length * sizeof(XrValue));
     }
     R(a) = array ? xr_value_from_array(array) : xr_null();
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -240,8 +234,6 @@ vmcase(OP_NEWTUPLE) {
             xr_tuple_set(tup, (uint16_t) j, R(a + 1 + j));
     }
     R(a) = xr_value_from_tuple(tup);
-    if (storage_mode == XR_OBJ_STORAGE_NORMAL)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -310,8 +302,6 @@ vmcase(OP_NEWMAP) {
     }
 
     R(a) = xr_value_from_map(map);
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -378,8 +368,6 @@ vmcase(OP_NEWSET) {
     }
 
     R(a) = xr_value_from_set(set);
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -396,7 +384,6 @@ vmcase(OP_NEWRANGE) {
         XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,
                              XR_SEM_CONSUMER_VM, start_val, end_val, false);
     R(a) = xr_range_from_core(isolate, core);
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -413,7 +400,6 @@ vmcase(OP_NEWRANGE_INCLUSIVE) {
         XR_RANGE_OWNER_APPLY(XR_SEM_OWNER_ID_SHARED_RANGE_HI, XR_SEM_OWNER_ID_SHARED_RANGE_LO,
                              XR_SEM_CONSUMER_VM, start_val, end_val, true);
     R(a) = xr_range_from_core(isolate, core);
-    checkGC(base + a + 1);
     vmbreak;
 }
 
@@ -465,8 +451,6 @@ vmcase(OP_NEWSTRINGBUILDER) {
     }
 
     R(a) = xr_stringbuilder_value(sb);
-    if (storage_mode == 0)
-        checkGC(base + a + 1);
     vmbreak;
 }
 
