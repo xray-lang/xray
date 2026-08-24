@@ -64,7 +64,8 @@ static XrValue vm_builtin_enum_member(XrVMRuntime *isolate, int builtin_index,
     if (!type || member_index >= type->member_count || !type->members[member_index].ctor)
         return xr_null();
     if (xr_enum_type_payload_count(type, member_index) == 0) {
-        XrEnumAggregateValue *value = xr_enum_zero_payload_value(isolate, type, member_index);
+        XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+            xr_isolate_get_runtime_core(isolate), type, member_index);
         return value ? XR_FROM_PTR(value) : xr_null();
     }
     return XR_FROM_PTR(type->members[member_index].ctor);
@@ -722,8 +723,8 @@ XR_FUNC XrDispatchAction vm_invoke_enum(XrVMRuntime *isolate, XrValue receiver, 
             const char *member_name = xr_enum_type_member_name(enum_type, (uint32_t) midx);
             int expected_pc = xr_enum_type_payload_count(enum_type, (uint32_t) midx);
             if (expected_pc == 0) {
-                XrEnumAggregateValue *value =
-                    xr_enum_zero_payload_value(isolate, enum_type, (uint32_t) midx);
+                XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+                    xr_isolate_get_runtime_core(isolate), enum_type, (uint32_t) midx);
                 if (!value) {
                     VM_THROW(frame, pc, XR_ERR_TYPE_NO_CALL,
                              "failed to construct enum variant '%s.%s'", enum_type->name,

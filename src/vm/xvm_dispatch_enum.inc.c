@@ -27,8 +27,8 @@ vmcase(OP_ENUM_ACCESS) {
         VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "enum member index out of bounds");
     }
     if (xr_enum_type_payload_count(enum_type, (uint32_t) member_index) == 0) {
-        XrEnumAggregateValue *value =
-            xr_enum_zero_payload_value(isolate, enum_type, (uint32_t) member_index);
+        XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+            xr_isolate_get_runtime_core(isolate), enum_type, (uint32_t) member_index);
         R(a) = value ? XR_FROM_PTR(value) : xr_null();
     } else {
         R(a) = XR_FROM_PTR(enum_type->members[member_index].ctor);

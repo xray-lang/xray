@@ -24,6 +24,7 @@
 #include "module/xmodule_identity.h"
 #include "runtime/object/xpanic_info.h"
 #include "runtime/object/xarray.h"
+#include "runtime/class/xbuiltin_enum_error.h"
 #include "runtime/class/xenum.h"
 #include "vm/xvm_internal.h"
 #include "base/xnumber_parse_error.h"
@@ -167,7 +168,52 @@ TEST(catch_clears_pending_error_state) {
     xray_vm_delete(iso);
 }
 
-TEST(number_parse_error_vm_publication_is_exact_and_non_overwriting) {
+TEST(builtin_enum_error_kernel_is_typed_and_context_free) {
+    XrVMRuntime *iso = make_quiet_isolate();
+    ASSERT_NOT_NULL(iso);
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+    ASSERT_NOT_NULL(core);
+
+    XrBuiltinEnumErrorResult result =
+        xr_builtin_enum_error_construct(NULL, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                                        XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_INVALID_BUILTIN);
+    ASSERT(XR_IS_NULL(result.value));
+
+    result = xr_builtin_enum_error_construct(core, -1,
+                                             XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_INVALID_BUILTIN);
+    result = xr_builtin_enum_error_construct(core, XR_USER_GLOBALS_START,
+                                             XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_INVALID_BUILTIN);
+    result = xr_builtin_enum_error_construct(core, XR_GLOBAL_VAR_COUNTDOWNLATCH,
+                                             XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_BUILTIN_NOT_ENUM);
+    result = xr_builtin_enum_error_construct(core, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                                             XR_NUMBER_PARSE_ERROR_MEMBER_COUNT);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_INVALID_VARIANT);
+    result = xr_builtin_enum_error_construct(core, XR_GLOBAL_VAR_RECV, 0);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_PAYLOAD_REQUIRED);
+
+    result = xr_builtin_enum_error_construct(core, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                                             XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    ASSERT_EQ_INT(result.status, XR_BUILTIN_ENUM_ERROR_OK);
+    ASSERT(xr_value_is_enum_aggregate(result.value));
+    XrEnumAggregateValue *error = xr_value_to_enum_aggregate(result.value);
+    ASSERT_NOT_NULL(error);
+    ASSERT_STR_EQ(xr_enum_aggregate_type(error)->name, XR_NUMBER_PARSE_ERROR_NAME);
+    ASSERT_STR_EQ(xr_enum_aggregate_member_name(error),
+                  XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX_NAME);
+
+    XrBuiltinEnumErrorResult repeated = xr_builtin_enum_error_construct(
+        core, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    ASSERT_EQ_INT(repeated.status, XR_BUILTIN_ENUM_ERROR_OK);
+    ASSERT_EQ_PTR(XR_TO_PTR(repeated.value), XR_TO_PTR(result.value));
+    ASSERT(XR_IS_NULL(xr_vm_current_ctx(iso)->pending_error));
+    xray_vm_delete(iso);
+}
+
+TEST(builtin_enum_error_vm_publication_is_non_overwriting) {
     XrVMRuntime *iso = make_quiet_isolate();
     ASSERT_NOT_NULL(iso);
     XrCoroutine *coro = xr_test_init_coro(iso);
@@ -180,23 +226,16 @@ TEST(number_parse_error_vm_publication_is_exact_and_non_overwriting) {
         xr_number_parse_error_registry_row(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR);
     ASSERT_NOT_NULL(row);
     ASSERT_EQ_INT(row->global_index, 30);
-    ASSERT(!xr_vm_set_builtin_enum_error(iso, XR_GLOBAL_VAR_COUNTDOWNLATCH,
-                                         XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX));
-    ASSERT(XR_IS_NULL(ctx->pending_error));
-    ASSERT(!xr_vm_set_builtin_enum_error(iso, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                                         XR_NUMBER_PARSE_ERROR_MEMBER_COUNT));
-    ASSERT(XR_IS_NULL(ctx->pending_error));
-    ASSERT(!xr_vm_set_builtin_enum_error(
-        iso, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-        xr_number_parse_failure_member_index(XR_NUMBER_PARSE_OK)));
-    ASSERT(XR_IS_NULL(ctx->pending_error));
-    ASSERT(!xr_vm_set_builtin_enum_error(
-        iso, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-        xr_number_parse_failure_member_index((XrNumberParseFailure) 99)));
-    ASSERT(XR_IS_NULL(ctx->pending_error));
+    XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
+    XrBuiltinEnumErrorResult first = xr_builtin_enum_error_construct(
+        core, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX);
+    XrBuiltinEnumErrorResult second = xr_builtin_enum_error_construct(
+        core, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR, XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE);
+    ASSERT_EQ_INT(first.status, XR_BUILTIN_ENUM_ERROR_OK);
+    ASSERT_EQ_INT(second.status, XR_BUILTIN_ENUM_ERROR_OK);
 
-    ASSERT(xr_vm_set_builtin_enum_error(iso, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                                        XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX));
+    ASSERT(XR_IS_NULL(ctx->pending_error));
+    xr_vm_set_pending_error(iso, first.value);
     ASSERT(xr_value_is_enum_aggregate(ctx->pending_error));
     XrEnumAggregateValue *error = xr_value_to_enum_aggregate(ctx->pending_error);
     ASSERT_NOT_NULL(error);
@@ -204,14 +243,14 @@ TEST(number_parse_error_vm_publication_is_exact_and_non_overwriting) {
     ASSERT_STR_EQ(xr_enum_aggregate_member_name(error),
                   row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX]);
     XrValue original = ctx->pending_error;
-    ASSERT(!xr_vm_set_builtin_enum_error(iso, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                                         XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE));
+    if (XR_IS_NULL(ctx->pending_error))
+        xr_vm_set_pending_error(iso, second.value);
     ASSERT(ctx->pending_error.ptr == original.ptr);
     xr_rc_release_value(xr_coro_get_heap(coro), ctx->pending_error);
     ctx->pending_error = xr_null();
 
-    ASSERT(xr_vm_set_builtin_enum_error(iso, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                                        XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE));
+    ASSERT(XR_IS_NULL(ctx->pending_error));
+    xr_vm_set_pending_error(iso, second.value);
     error = xr_value_to_enum_aggregate(ctx->pending_error);
     ASSERT_NOT_NULL(error);
     ASSERT_STR_EQ(xr_enum_aggregate_member_name(error),
@@ -261,7 +300,8 @@ RUN_TEST(map_getk_missing_key_throws_e0431);
 
 RUN_TEST_SUITE("Catch state cleanup");
 RUN_TEST(catch_clears_pending_error_state);
-RUN_TEST(number_parse_error_vm_publication_is_exact_and_non_overwriting);
+RUN_TEST(builtin_enum_error_kernel_is_typed_and_context_free);
+RUN_TEST(builtin_enum_error_vm_publication_is_non_overwriting);
 
 RUN_TEST_SUITE("Error rethrow surface");
 RUN_TEST(caught_error_rethrow_reaches_top_level);

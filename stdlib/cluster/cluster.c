@@ -1319,7 +1319,8 @@ static XrValue cluster_delivery_value(XrVMRuntime *X, XrClusterDelivery delivery
     if (!type || delivery < XR_CLUSTER_DELIVERY_ACCEPTED ||
         delivery > XR_CLUSTER_DELIVERY_DISCONNECTED)
         return XR_NULL_VAL;
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, type, (uint32_t) delivery);
+    XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+        xr_isolate_get_runtime_core(X), type, (uint32_t) delivery);
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 
@@ -1365,7 +1366,8 @@ static XrValue cluster_node_state_value(XrVMRuntime *X, int state) {
     XrEnumType *type = xr_stdlib_enum_type_get(X, "cluster", "ClusterNodeState");
     if (!type || state < XR_NODE_IDLE || state > XR_NODE_CLOSING)
         return XR_NULL_VAL;
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, type, (uint32_t) state);
+    XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+        xr_isolate_get_runtime_core(X), type, (uint32_t) state);
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 

@@ -292,7 +292,8 @@ static inline bool xr_json_decode_value_with_schema(XrVMRuntime *X, struct XrCor
                 if (!candidate || strlen(candidate) != name->length ||
                     memcmp(candidate, name->data, name->length) != 0)
                     continue;
-                XrEnumAggregateValue *value = xr_enum_zero_payload_value(X, target, i);
+                XrEnumAggregateValue *value =
+                    xr_enum_zero_payload_value(xr_isolate_get_runtime_core(X), target, i);
                 if (!value)
                     return false;
                 *out = XR_FROM_PTR(value);

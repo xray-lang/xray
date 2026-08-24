@@ -96,10 +96,13 @@ class CryptoNativeErrorAbiTest(unittest.TestCase):
         ]
 
         self.assertIn("XR_GLOBAL_VAR_CRYPTO_ERROR", vm_random_bytes)
-        self.assertIn("crypto_set_builtin_enum_error", vm_random_bytes)
+        self.assertIn("crypto_publish_builtin_enum_error", vm_random_bytes)
         self.assertIn("XR_GLOBAL_VAR_CRYPTO_ERROR", vm_decrypt)
-        self.assertIn("crypto_set_builtin_enum_error", vm_decrypt)
+        self.assertIn("crypto_publish_builtin_enum_error", vm_decrypt)
         self.assertIn("crypto.decrypt invalid ciphertext length", vm_decrypt)
+        self.assertIn("xr_builtin_enum_error_construct", vm_runtime)
+        self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
+        self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
         self.assertIn('"CryptoError", "InvalidLength"', aot_random_bytes)
         self.assertIn('"CryptoError", "InvalidLength"', aot_decrypt)
         self.assertIn("xrt_pending_error = xrt_enum_aggregate_box(err);", aot_runtime)

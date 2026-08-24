@@ -561,22 +561,3 @@ void xr_vm_set_pending_error(XrVMRuntime *isolate, XrValue error) {
     if (ctx)
         ctx->pending_error = error;
 }
-
-bool xr_vm_set_builtin_enum_error(XrVMRuntime *isolate, int builtin_index,
-                                  uint32_t member_index) {
-    if (!isolate || builtin_index < 0 || builtin_index >= XR_USER_GLOBALS_START)
-        return false;
-    XrVMContext *ctx = xr_vm_current_ctx(isolate);
-    if (!ctx || !XR_IS_NULL(ctx->pending_error))
-        return false;
-    XrRuntimeCore *core = xr_isolate_get_runtime_core(isolate);
-    XrValue enum_value = xr_runtime_core_builtin(core, builtin_index);
-    if (!XR_IS_ENUM_TYPE(enum_value))
-        return false;
-    XrEnumType *type = (XrEnumType *) XR_TO_PTR(enum_value);
-    XrEnumAggregateValue *value = xr_enum_zero_payload_value(isolate, type, member_index);
-    if (!value)
-        return false;
-    ctx->pending_error = XR_FROM_PTR(value);
-    return true;
-}

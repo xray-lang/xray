@@ -420,9 +420,9 @@ XR_FUNC XrEnumAggregateValue *xr_enum_adt_construct_in(XrAllocationContext *allo
     return value;
 }
 
-XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enum_type,
+XrEnumAggregateValue *xr_enum_zero_payload_value(XrRuntimeCore *core, XrEnumType *enum_type,
                                                  uint32_t member_index) {
-    if (!X || !enum_type || member_index >= enum_type->member_count)
+    if (!core || !enum_type || member_index >= enum_type->member_count)
         return NULL;
     if (xr_enum_type_payload_count(enum_type, member_index) != 0)
         return NULL;
@@ -434,7 +434,6 @@ XrEnumAggregateValue *xr_enum_zero_payload_value(XrVMRuntime *X, XrEnumType *enu
     /* First touch can race across workers. Serialize on metadata_lock: the
      * loser must not build a duplicate, and module_alloc is not a concurrent
      * allocator. Cold path — one contended pass per member ever. */
-    XrRuntimeCore *core = xr_isolate_get_runtime_core(X);
     xr_amutex_lock(&core->metadata_lock);
     value = atomic_load_explicit(&enum_type->members[member_index].value, memory_order_acquire);
     if (value) {

@@ -144,8 +144,8 @@ invoke_dispatch:;
             const char *member_name = xr_enum_type_member_name(etype, (uint32_t) member_index);
             int payload_ct = xr_enum_type_payload_count(etype, (uint32_t) member_index);
             if (payload_ct == 0) {
-                XrEnumAggregateValue *value =
-                    xr_enum_zero_payload_value(isolate, etype, (uint32_t) member_index);
+                XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+                    xr_isolate_get_runtime_core(isolate), etype, (uint32_t) member_index);
                 if (!value) {
                     VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL,
                                      "failed to construct enum variant '%s.%s'", etype->name,

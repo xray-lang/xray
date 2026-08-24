@@ -94,8 +94,6 @@ XR_FUNC void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...);
 
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
 XR_FUNC void xr_vm_set_pending_error(XrVMRuntime *isolate, XrValue error);
-XR_FUNC bool xr_vm_set_builtin_enum_error(XrVMRuntime *isolate, int builtin_index,
-                                          uint32_t member_index);
 /* Unified throw: records the full stack trace and performs the
  * unwind in one call. See xvm_exception.c for rationale. */
 XR_FUNC void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception);

@@ -1304,8 +1304,8 @@ static void net_set_pending_error(XrVMRuntime *X, uint8_t error) {
     XrEnumType *type = net_error_type(X);
     if (!type)
         return;
-    XrEnumAggregateValue *value =
-        xr_enum_zero_payload_value(X, type, net_error_variant_index(error));
+    XrEnumAggregateValue *value = xr_enum_zero_payload_value(
+        xr_isolate_get_runtime_core(X), type, net_error_variant_index(error));
     if (value)
         xr_vm_set_pending_error(X, XR_FROM_PTR(value));
 }

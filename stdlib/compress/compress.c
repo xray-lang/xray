@@ -26,10 +26,10 @@
 #include "../../stdlib/common.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xglobal_indices.h"
-#include "../../src/runtime/class/xenum.h"
+#include "../../src/runtime/class/xbuiltin_enum_error.h"
 #include "../../src/runtime/core/xr_runtime_core.h"
 #include "../../src/runtime/object/xpanic_info.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_internal.h"
 
 /* ========== External Declarations ========== */
 
@@ -1064,18 +1064,19 @@ static int compress_level_arg(XrValue *args, int nargs) {
 
 /* ========== xray Binding Functions ========== */
 
-static void compress_set_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
-                                            uint32_t member_index, const char *fallback_message) {
-    if (iso && builtin_index >= 0 && builtin_index < XR_USER_GLOBALS_START) {
-        XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
-        XrValue enum_value = xr_runtime_core_builtin(core, builtin_index);
-        if (XR_IS_ENUM_TYPE(enum_value)) {
-            XrEnumType *type = (XrEnumType *) XR_TO_PTR(enum_value);
-            XrEnumAggregateValue *value = xr_enum_zero_payload_value(iso, type, member_index);
-            if (value) {
-                xr_vm_set_pending_error(iso, XR_FROM_PTR(value));
+static void compress_publish_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
+                                                uint32_t member_index,
+                                                const char *fallback_message) {
+    XrBuiltinEnumErrorResult result = xr_builtin_enum_error_construct(
+        iso ? xr_isolate_get_runtime_core(iso) : NULL, builtin_index, member_index);
+    if (result.status == XR_BUILTIN_ENUM_ERROR_OK) {
+        XrVMContext *ctx = iso ? xr_vm_current_ctx(iso) : NULL;
+        if (ctx && !XR_IS_NULL(ctx->pending_error))
+            return;
+        if (ctx) {
+            xr_vm_set_pending_error(iso, result.value);
+            if (ctx->pending_error.ptr == result.value.ptr)
                 return;
-            }
         }
     }
     XrValue exc = xr_panic_info_newf(iso, XR_ERR_INTERNAL, "%s",
@@ -1119,8 +1120,8 @@ static XrValue compress_gunzip(XrVMRuntime *X, XrValue *args, int nargs) {
     size_t out_len;
     uint8_t *output = xr_gunzip_alloc((const uint8_t *) data, len, &out_len);
     if (!output) {
-        compress_set_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
-                                        "compress.gunzip invalid gzip data");
+        compress_publish_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
+                                            "compress.gunzip invalid gzip data");
         return xr_null();
     }
 
@@ -1166,8 +1167,8 @@ static XrValue compress_inflate(XrVMRuntime *X, XrValue *args, int nargs) {
     uint8_t *output = xr_compress_core_inflate_alloc((const uint8_t *) data, len, &out_len,
                                                      compress_core_alloc, compress_core_free, NULL);
     if (!output) {
-        compress_set_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
-                                        "compress.inflate invalid deflate data");
+        compress_publish_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
+                                            "compress.inflate invalid deflate data");
         return xr_null();
     }
 
@@ -1214,8 +1215,8 @@ static XrValue compress_zlib_decompress(XrVMRuntime *X, XrValue *args, int nargs
     uint8_t *output = xr_compress_core_zlib_decompress_alloc(
         (const uint8_t *) data, len, &out_len, compress_core_alloc, compress_core_free, NULL);
     if (!output) {
-        compress_set_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
-                                        "compress.zlibDecompress invalid zlib data");
+        compress_publish_builtin_enum_error(X, XR_GLOBAL_VAR_COMPRESSION_ERROR, 0,
+                                            "compress.zlibDecompress invalid zlib data");
         return xr_null();
     }
 

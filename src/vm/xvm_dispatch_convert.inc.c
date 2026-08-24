@@ -215,11 +215,18 @@ vmcase(OP_TOINT) {
                 R(a) = xr_null();
                 vmbreak;
             }
-            if (!xr_vm_set_builtin_enum_error(
-                    isolate, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                    xr_number_parse_failure_member_index(parsed.failure)))
+            XrBuiltinEnumErrorResult parse_error = xr_builtin_enum_error_construct(
+                xr_isolate_get_runtime_core(isolate), XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                xr_number_parse_failure_member_index(parsed.failure));
+            if (parse_error.status != XR_BUILTIN_ENUM_ERROR_OK)
                 VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
                                  "failed to construct NumberParseError in i64.parse");
+            if (XR_IS_NULL(vm_ctx->pending_error)) {
+                xr_vm_set_pending_error(isolate, parse_error.value);
+                if (XR_IS_NULL(vm_ctx->pending_error))
+                    VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
+                                     "failed to publish NumberParseError in i64.parse");
+            }
             R(a) = xr_null();
             vmbreak;
         }
@@ -275,11 +282,18 @@ vmcase(OP_TOFLOAT) {
                 R(a) = xr_null();
                 vmbreak;
             }
-            if (!xr_vm_set_builtin_enum_error(
-                    isolate, XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                    xr_number_parse_failure_member_index(parsed.failure)))
+            XrBuiltinEnumErrorResult parse_error = xr_builtin_enum_error_construct(
+                xr_isolate_get_runtime_core(isolate), XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                xr_number_parse_failure_member_index(parsed.failure));
+            if (parse_error.status != XR_BUILTIN_ENUM_ERROR_OK)
                 VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
                                  "failed to construct NumberParseError in f64.parse");
+            if (XR_IS_NULL(vm_ctx->pending_error)) {
+                xr_vm_set_pending_error(isolate, parse_error.value);
+                if (XR_IS_NULL(vm_ctx->pending_error))
+                    VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
+                                     "failed to publish NumberParseError in f64.parse");
+            }
             R(a) = xr_null();
             vmbreak;
         }

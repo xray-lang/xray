@@ -89,7 +89,8 @@ static XrValue vm_coro_state_value(XrVMRuntime *isolate, const char *state) {
     if (!type)
         return XR_NULL_VAL;
     XrEnumAggregateValue *value =
-        xr_enum_zero_payload_value(isolate, type, (uint32_t) vm_coro_state_ordinal(state));
+        xr_enum_zero_payload_value(xr_isolate_get_runtime_core(isolate), type,
+                                   (uint32_t) vm_coro_state_ordinal(state));
     return value ? XR_FROM_PTR(value) : XR_NULL_VAL;
 }
 

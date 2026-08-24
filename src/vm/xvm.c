@@ -90,6 +90,7 @@
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xjson_serde.h"
 #include "../runtime/symbol/xsymbol_table.h"
+#include "../runtime/class/xbuiltin_enum_error.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../module/xmodule.h"

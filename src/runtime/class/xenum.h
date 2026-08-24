@@ -120,7 +120,8 @@ XR_FUNC XrEnumCtor *xr_enum_get_member_by_symbol(XrEnumType *enum_type, int symb
 XR_FUNC int xr_enum_type_find_member_index_by_symbol(XrEnumType *enum_type, int symbol);
 XR_FUNC const char *xr_enum_ctor_name(XrEnumCtor *ctor);
 XR_FUNC XrEnumAggregateValue *
-xr_enum_zero_payload_value(struct XrVMRuntime *X, XrEnumType *enum_type, uint32_t member_index);
+xr_enum_zero_payload_value(struct XrRuntimeCore *core, XrEnumType *enum_type,
+                           uint32_t member_index);
 
 /* ========== Enum Aggregate Construction ========== */
 

@@ -116,13 +116,16 @@ class StringNativeErrorAbiTest(unittest.TestCase):
 
         self.assertIn("xr_utf8_scan_strict(data, len)", vm_runtime)
         self.assertIn(
-            "string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_UTF8_ERROR, 0",
+            "string_publish_builtin_enum_error(iso, XR_GLOBAL_VAR_UTF8_ERROR, 0",
             vm_runtime,
         )
         self.assertIn(
-            "string_set_builtin_enum_error(iso, XR_GLOBAL_VAR_STRING_SLICE_ERROR, 0",
+            "string_publish_builtin_enum_error(iso, XR_GLOBAL_VAR_STRING_SLICE_ERROR, 0",
             vm_runtime,
         )
+        self.assertIn("xr_builtin_enum_error_construct", vm_runtime)
+        self.assertIn("if (ctx && !XR_IS_NULL(ctx->pending_error))", vm_runtime)
+        self.assertIn("ctx->pending_error.ptr == result.value.ptr", vm_runtime)
         self.assertIn("xr_utf8_core_scan_strict(data, len)", aot_runtime)
         self.assertIn(
             'xrt_set_builtin_enum_error("Utf8Error", "InvalidUtf8", 0);',

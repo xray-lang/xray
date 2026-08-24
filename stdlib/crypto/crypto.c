@@ -21,12 +21,12 @@
 #include "../../stdlib/common.h"
 #include "../../src/os/os_random.h"
 #include "../../src/base/xglobal_indices.h"
-#include "../../src/runtime/class/xenum.h"
+#include "../../src/runtime/class/xbuiltin_enum_error.h"
 #include "../../src/runtime/core/xr_runtime_core.h"
 #include "../../src/runtime/object/xpanic_info.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/runtime/object/xstring.h"
-#include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_internal.h"
 #endif
 #include <string.h>
 #include <stdlib.h>
@@ -785,18 +785,19 @@ XR_FUNC int xr_hex_to_bytes(const char *hex, uint8_t *output, size_t max_len) {
 
 /* ========== Module Bindings ========== */
 
-static void crypto_set_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
-                                          uint32_t member_index, const char *fallback_message) {
-    if (iso && builtin_index >= 0 && builtin_index < XR_USER_GLOBALS_START) {
-        XrRuntimeCore *core = xr_isolate_get_runtime_core(iso);
-        XrValue enum_value = xr_runtime_core_builtin(core, builtin_index);
-        if (XR_IS_ENUM_TYPE(enum_value)) {
-            XrEnumType *type = (XrEnumType *) XR_TO_PTR(enum_value);
-            XrEnumAggregateValue *value = xr_enum_zero_payload_value(iso, type, member_index);
-            if (value) {
-                xr_vm_set_pending_error(iso, XR_FROM_PTR(value));
+static void crypto_publish_builtin_enum_error(XrVMRuntime *iso, int builtin_index,
+                                              uint32_t member_index,
+                                              const char *fallback_message) {
+    XrBuiltinEnumErrorResult result = xr_builtin_enum_error_construct(
+        iso ? xr_isolate_get_runtime_core(iso) : NULL, builtin_index, member_index);
+    if (result.status == XR_BUILTIN_ENUM_ERROR_OK) {
+        XrVMContext *ctx = iso ? xr_vm_current_ctx(iso) : NULL;
+        if (ctx && !XR_IS_NULL(ctx->pending_error))
+            return;
+        if (ctx) {
+            xr_vm_set_pending_error(iso, result.value);
+            if (ctx->pending_error.ptr == result.value.ptr)
                 return;
-            }
         }
     }
     XrValue exc = xr_panic_info_newf(iso, XR_ERR_INTERNAL, "%s",
@@ -867,8 +868,8 @@ static XrValue crypto_random_bytes(XrVMRuntime *isolate, XrValue *args, int narg
         return xr_null();
     int len = (int) XR_TO_INT(args[0]);
     if (len <= 0 || len > 1024) {
-        crypto_set_builtin_enum_error(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, 0,
-                                      "crypto.randomBytes invalid length");
+        crypto_publish_builtin_enum_error(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, 0,
+                                          "crypto.randomBytes invalid length");
         return xr_null();
     }
     uint8_t buf[1024];
@@ -976,8 +977,8 @@ static XrValue crypto_decrypt(XrVMRuntime *isolate, XrValue *args, int nargs) {
     size_t raw_len = 0;
     size_t cipher_len = 0;
     if (!xr_crypto_core_aead_decrypt_plan(cipher_hex_str->length, &raw_len, &cipher_len)) {
-        crypto_set_builtin_enum_error(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, 0,
-                                      "crypto.decrypt invalid ciphertext length");
+        crypto_publish_builtin_enum_error(isolate, XR_GLOBAL_VAR_CRYPTO_ERROR, 0,
+                                          "crypto.decrypt invalid ciphertext length");
         return xr_null();
     }
 

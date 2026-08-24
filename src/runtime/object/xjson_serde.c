@@ -689,7 +689,8 @@ static bool direct_parse_typed_enum(JsonDirectParser *p, const XrJsonDecodeSchem
         if (!candidate || strlen(candidate) != name->length ||
             memcmp(candidate, name->data, name->length) != 0)
             continue;
-        XrEnumAggregateValue *value = xr_enum_zero_payload_value(p->X, target, i);
+        XrEnumAggregateValue *value =
+            xr_enum_zero_payload_value(xr_isolate_get_runtime_core(p->X), target, i);
         if (value) {
             *out = XR_FROM_PTR(value);
             ok = true;
