@@ -883,6 +883,13 @@ const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
     return NULL;
 }
 
+const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *plan,
+                                                         uint32_t dependency) {
+    return plan && dependency < plan->semantic_dependency_count
+               ? plan->semantic_dependencies[dependency]
+               : NULL;
+}
+
 const XrTargetInstructionRecord *
 xr_target_plan_function_instructions(const XrTargetPlan *plan, uint32_t function, uint32_t *count) {
     if (count)

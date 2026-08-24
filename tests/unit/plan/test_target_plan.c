@@ -18,8 +18,11 @@
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
+#include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/refine/xr_aot_representation_refinement.h"
+#include "../../../src/ir/xi_opt.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
@@ -380,6 +383,21 @@ static XrType stub_target_imported_open_source_instance = {
         {
             .class_name = "OpenTargetWorker",
             .class_ref = &stub_target_imported_open_source_class_info,
+        },
+};
+static XrClassInfo stub_imported_constructor_class_info = {
+    .name = "ImportedDiagnostic",
+    .xg_class_id = 802,
+};
+static XrType stub_imported_constructor_instance = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 180,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance =
+        {
+            .class_name = "ImportedDiagnostic",
+            .class_ref = &stub_imported_constructor_class_info,
         },
 };
 
@@ -1643,6 +1661,7 @@ static XrSemanticPlan *build_struct_and_named_aggregate_semantic(bool unknown_ca
 
     XiFunc *function = xi_func_new("target_struct_aggregate_probe", &named);
     REQUIRE(function != NULL);
+    function->is_module_initializer = true;
     XiModule *module =
         xi_module_new("pkg/target_struct_aggregate.xr", "target_struct_aggregate", function);
     REQUIRE(module != NULL);
@@ -2180,7 +2199,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "23c367b86d38bd32a5781000aeba26e738dd234726a42ce063641f4b46385905") == 0);
+                   "a2962dc7fbdfc2853d8c985099fcbe57fb510c2a9726c8506d1ce6fbb6de373b") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -3360,6 +3379,334 @@ static XrSemanticPlan *build_source_export_semantic(XrSemanticPlan **dependency_
     return semantic;
 }
 
+/* The real imported-class shape is a named XI_IMPORT_REF stored in the caller
+ * root and read as an erased class object by a child function. The dependency
+ * freezes the public class export and its constructor declaration; no caller
+ * local class slot or function-export fallback exists in this fixture. */
+static XrSemanticPlan *build_imported_source_class_constructor_semantic(
+    XrSemanticPlan **dependency_out, bool exact_member, char *error, size_t error_size) {
+    XiFunc *dependency_root = xi_func_new("diagnostic_init", &stub_unit);
+    XiFunc *constructor = xi_func_new("ImportedDiagnostic", &stub_unit);
+    REQUIRE(dependency_root && constructor);
+    dependency_root->is_module_initializer = true;
+    XiBlock *dependency_entry = xi_block_new(dependency_root);
+    XiBlock *constructor_entry = xi_block_new(constructor);
+    REQUIRE(dependency_entry && constructor_entry);
+    dependency_root->children = (XiFunc **) xr_calloc(1, sizeof(*dependency_root->children));
+    REQUIRE(dependency_root->children);
+    dependency_root->children[0] = constructor;
+    dependency_root->nchildren = dependency_root->children_cap = 1;
+    constructor->parent_func = dependency_root;
+    constructor->nparams = 4;
+    constructor->min_params = 3;
+    constructor->params = (XiValue **) xr_calloc(4, sizeof(*constructor->params));
+    REQUIRE(constructor->params);
+    constructor->params[0] =
+        xi_param(constructor, constructor_entry, 0, &stub_imported_constructor_instance);
+    constructor->params[1] = xi_param(constructor, constructor_entry, 1, &stub_int);
+    constructor->params[2] = xi_param(constructor, constructor_entry, 2, &stub_exact_string);
+    constructor->params[3] = xi_param(constructor, constructor_entry, 3, &stub_exact_string);
+    REQUIRE(constructor->params[0] && constructor->params[1] && constructor->params[2] &&
+            constructor->params[3]);
+    constructor->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        constructor, (uint32_t) sizeof(*constructor->arc_borrow_sig));
+    REQUIRE(constructor->arc_borrow_sig);
+    constructor->arc_borrow_sig->nparams = 4;
+    constructor->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    constructor->arc_borrow_sig->param_own[1] = XI_OWN_NONE;
+    constructor->arc_borrow_sig->param_own[2] = XI_OWN_OWNED;
+    constructor->arc_borrow_sig->param_own[3] = XI_OWN_BORROWED;
+    constructor->arc_borrow_sig->valid = true;
+    xi_block_set_return(constructor_entry, NULL);
+
+    XiClassMethod constructor_method = {
+        .name = "ImportedDiagnostic",
+        .is_constructor = true,
+    };
+    uint16_t constructor_child = 0;
+    XiClassData declaration = {
+        .class_info = &stub_imported_constructor_class_info,
+        .xg_class_id = 802,
+        .class_name = "ImportedDiagnostic",
+        .methods = &constructor_method,
+        .nmethod = 1,
+        .child_idx = &constructor_child,
+        .ninst = 1,
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    XiValue *class_object =
+        xi_value_new(dependency_root, dependency_entry, XI_CLASS_CREATE, &stub_unknown, 0);
+    XiValue *class_store =
+        xi_value_new(dependency_root, dependency_entry, XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(class_object && class_store);
+    class_object->aux = &declaration;
+    class_store->args[0] = class_object;
+    class_store->aux_int = 0;
+    dependency_root->nshared = 1;
+    xi_block_set_return(dependency_entry, NULL);
+    dependency_root->stage = constructor->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *dependency_module =
+        xi_module_new("pkg/diagnostic.xr", "diagnostic", dependency_root);
+    REQUIRE(dependency_module);
+    REQUIRE(xi_module_set_identity(
+        dependency_module, "memory-module-v1:id=34:imported-constructor-dependency-v1"));
+    dependency_root->module = dependency_module;
+    dependency_module->classes = (XiClassData **) xr_calloc(1, sizeof(*dependency_module->classes));
+    dependency_module->slot_classes =
+        (XiClassData **) xr_calloc(1, sizeof(*dependency_module->slot_classes));
+    dependency_module->exports =
+        (XiModuleExport *) xr_calloc(1, sizeof(*dependency_module->exports));
+    REQUIRE(dependency_module->classes && dependency_module->slot_classes &&
+            dependency_module->exports);
+    dependency_module->classes[0] = &declaration;
+    dependency_module->slot_classes[0] = &declaration;
+    dependency_module->nclasses = 1;
+    dependency_module->nslots = 1;
+    dependency_module->nexports = 1;
+    dependency_module->exports[0].name = "ImportedDiagnostic";
+    dependency_module->exports[0].shared_slot = 0;
+    dependency_module->exports[0].class_data = &declaration;
+    bool dependency_built =
+        xr_semantic_plan_build_and_attach(dependency_root, error, error_size);
+    if (!dependency_built)
+        fprintf(stderr, "imported constructor dependency fixture failed: %s\n", error);
+    REQUIRE(dependency_built);
+    XrSemanticPlan *dependency = xr_semantic_plan_retain(dependency_root->semantic_plan);
+    REQUIRE(dependency && dependency->source_export_count == 1 &&
+            dependency->source_exports[0].kind == XR_SEM_SOURCE_EXPORT_SOURCE_CLASS &&
+            dependency->source_exports[0].function == XR_SEMANTIC_INDEX_NONE &&
+            dependency->source_exports[0].source_class == 0 &&
+            xr_stable_id_equal(dependency->source_exports[0].exported_entity,
+                               dependency->source_classes[0].id));
+    uint8_t *dependency_bytes = NULL;
+    size_t dependency_size = 0;
+    XrSemanticPlan *decoded_dependency = NULL;
+    REQUIRE(xr_xsm_encode(dependency, &dependency_bytes, &dependency_size, error, error_size) &&
+            xr_xsm_decode(dependency_bytes, dependency_size, &decoded_dependency, error,
+                          error_size) &&
+            decoded_dependency->source_export_count == 1 &&
+            decoded_dependency->source_exports[0].kind ==
+                XR_SEM_SOURCE_EXPORT_SOURCE_CLASS &&
+            decoded_dependency->source_exports[0].source_class == 0 &&
+            decoded_dependency->source_exports[0].function == XR_SEMANTIC_INDEX_NONE &&
+            xr_stable_id_equal(decoded_dependency->source_exports[0].exported_entity,
+                               decoded_dependency->source_classes[0].id));
+    xr_free(dependency_bytes);
+    xr_semantic_plan_free(decoded_dependency);
+
+    XiFunc *caller_root = xi_func_new("diagnostic_user_init", &stub_unit);
+    XiFunc *caller = xi_func_new("make_diagnostic", &stub_imported_constructor_instance);
+    REQUIRE(caller_root && caller);
+    caller_root->is_module_initializer = true;
+    XiBlock *caller_root_entry = xi_block_new(caller_root);
+    XiBlock *caller_entry = xi_block_new(caller);
+    REQUIRE(caller_root_entry && caller_entry);
+    caller_root->children = (XiFunc **) xr_calloc(1, sizeof(*caller_root->children));
+    REQUIRE(caller_root->children);
+    caller_root->children[0] = caller;
+    caller_root->nchildren = caller_root->children_cap = 1;
+    caller->parent_func = caller_root;
+    XiImportRef import_ref = {
+        .module_path = "pkg/diagnostic.xr",
+        .member_name = exact_member ? "ImportedDiagnostic" : "WrongDiagnostic",
+        .resolved_mod_index = 0,
+        .resolved_shared_slot = 0,
+        .resolved_export_slot = 0,
+        .resolved_module = dependency_module,
+        .resolution_attempted = true,
+    };
+    XiValue *import =
+        xi_value_new(caller_root, caller_root_entry, XI_IMPORT_REF, &stub_unknown, 0);
+    XiValue *import_store =
+        xi_value_new(caller_root, caller_root_entry, XI_SET_SHARED, &stub_unit, 1);
+    REQUIRE(import && import_store);
+    import->aux = &import_ref;
+    import_store->args[0] = import;
+    import_store->aux_int = 0;
+    caller_root->nshared = 1;
+    xi_block_set_return(caller_root_entry, NULL);
+
+    XiValue *callee = xi_value_new(caller, caller_entry, XI_GET_SHARED, &stub_unknown, 0);
+    XiValue *code = xi_const_int(caller, caller_entry, 41, &stub_int);
+    XiValue *message =
+        xi_const_str(caller, caller_entry, "imported-constructor", &stub_exact_string);
+    XiValue *call =
+        xi_value_new(caller, caller_entry, XI_CALL, &stub_imported_constructor_instance, 3);
+    REQUIRE(callee && code && message && call);
+    callee->aux_int = 0;
+    call->args[0] = callee;
+    call->args[1] = code;
+    call->args[2] = message;
+    XiCallPlan *call_plan =
+        (XiCallPlan *) xi_func_arena_alloc(caller, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plans =
+        (XiCallArgPlan *) xi_func_arena_alloc(caller, 2u * (uint32_t) sizeof(*argument_plans));
+    REQUIRE(call_plan && argument_plans);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plans, 0, 2u * sizeof(*argument_plans));
+    call_plan->args = argument_plans;
+    call_plan->nargs = 2;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    call->lowering_flags |= XI_LOWERING_FLAG_CONSTRUCTOR_CALL;
+    xi_block_set_return(caller_entry, call);
+    caller_root->stage = caller->stage = XI_STAGE_OPTIMIZED;
+    XiModule *caller_module =
+        xi_module_new("pkg/diagnostic_user.xr", "diagnostic_user", caller_root);
+    REQUIRE(caller_module);
+    REQUIRE(xi_module_set_identity(
+        caller_module, "memory-module-v1:id=30:imported-constructor-caller-v1"));
+    caller_root->module = caller_module;
+    caller_module->nslots = 1;
+    XiModule *dependency_modules[] = {dependency_module};
+    XrSemanticPlan *semantic = NULL;
+    bool built = xr_semantic_plan_build_and_attach_module_set(
+        caller_root, dependency_modules, 1, error, error_size);
+    if (built)
+        semantic = xr_semantic_plan_retain(caller_root->semantic_plan);
+
+    caller_root->module = NULL;
+    xi_func_free(caller_root);
+    caller_module->init = NULL;
+    xi_module_free(caller_module);
+    dependency_root->module = NULL;
+    xi_func_free(dependency_root);
+    dependency_module->init = NULL;
+    xi_module_free(dependency_module);
+    *dependency_out = dependency;
+    return semantic;
+}
+
+static void test_imported_source_class_constructor_authority(void) {
+    char error[512] = {0};
+    XrSemanticPlan *negative_dependency = NULL;
+    XrSemanticPlan *negative = build_imported_source_class_constructor_semantic(
+        &negative_dependency, false, error, sizeof(error));
+    REQUIRE(negative == NULL && negative_dependency != NULL &&
+            strncmp(error, "XR_SEM_0019", strlen("XR_SEM_0019")) == 0);
+    xr_semantic_plan_free(negative_dependency);
+
+    memset(error, 0, sizeof(error));
+    XrSemanticPlan *dependency = NULL;
+    XrSemanticPlan *semantic = build_imported_source_class_constructor_semantic(
+        &dependency, true, error, sizeof(error));
+    if (!semantic)
+        fprintf(stderr, "imported source class semantic fixture failed: %s\n", error);
+    REQUIRE(semantic && dependency && semantic->dependency_count == 1 &&
+            semantic->call_target_count == 1);
+    const XrSemanticCallTargetRecord *semantic_target = &semantic->call_targets[0];
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(semantic, semantic_target->operation);
+    const XrSemanticSourceExportRecord *source_export = &dependency->source_exports[0];
+    uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(operation && operation->opcode == XI_CALL &&
+            semantic_target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            semantic_target->dependency == 0 && semantic_target->source_export == 0 &&
+            semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
+            semantic_target->callable_type == operation->result_type &&
+            xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=39:") != NULL &&
+            xr_semantic_imported_class_construction_authority_source_class(
+                semantic, dependency, &semantic->dependencies[0], source_export, operation,
+                &constructor) == 0 &&
+            constructor != XR_SEMANTIC_INDEX_NONE &&
+            xr_stable_id_equal(semantic_target->callee_function,
+                               dependency->functions[constructor].id));
+
+    const XrSemanticPlan *dependencies[] = {dependency};
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    bool built = xr_target_plan_build_module_set(semantic, dependencies, 1, profile, &plan, error,
+                                                 sizeof(error));
+    if (!built)
+        fprintf(stderr, "imported source class Target fixture failed: %s\n", error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)) &&
+            plan->semantic_dependency_count == 1 && plan->calls_count == 1 &&
+            plan->call_arguments_count == 2 &&
+            (plan->completed_family_mask & XR_TARGET_FAMILY_SOURCE_CLASS_INSTANCE_STORAGE) != 0);
+    XrTargetCallRecord *call = &plan->calls[0];
+    REQUIRE(call->semantic_call_target == 0 && call->semantic_operation == semantic_target->operation &&
+            call->source_dependency == 0 && call->source_export == 0 &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 2 &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && call->flags == 0 &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR &&
+            call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            xr_stable_id_equal(call->source_export_identity, source_export->id) &&
+            xr_stable_id_equal(call->source_callee_identity, semantic_target->callee_function));
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(plan, operation->result_value);
+    REQUIRE(result && result->slot < plan->slots_count &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+    REQUIRE(plan->machine_reps[plan->call_arguments[0].register_rep].kind == XR_MACHINE_REP_I64 &&
+            plan->machine_reps[plan->call_arguments[1].register_rep].kind ==
+                XR_MACHINE_REP_DYN_VALUE &&
+            plan->call_arguments[0].callee_slot == XR_SEMANTIC_INDEX_NONE &&
+            plan->call_arguments[1].callee_slot == XR_SEMANTIC_INDEX_NONE);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic refinement_diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        plan, &policy, &refinement, &refinement_diag));
+    XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
+    REQUIRE(refinement_view.frozen && refinement_view.verified &&
+            xr_aot_refinement_verify(&refinement_view, plan, &refinement_diag));
+    xr_aot_refinement_plan_free(refinement);
+
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(plan, xr_target_profile_fingerprint(profile), &emission, error,
+                                     sizeof(error)) &&
+            xr_c_emission_plan_verify(emission, plan, xr_target_profile_fingerprint(profile), error,
+                                      sizeof(error)));
+    XrCValueEmissionView result_view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, operation->result_value, &result_view, error,
+                                          sizeof(error)));
+    REQUIRE(result_view.rep == XR_C_VALUE_REP_TAGGED &&
+            xr_c_emission_plan_call_argument_count(emission) == 0);
+    xr_c_emission_plan_free(emission);
+
+    XrStableId saved_entity = dependency->source_exports[0].exported_entity;
+    dependency->source_exports[0].exported_entity.bytes[0] ^= 1u;
+    REQUIRE(xr_semantic_imported_class_construction_authority_source_class(
+                semantic, dependency, &semantic->dependencies[0], &dependency->source_exports[0],
+                operation, NULL) == XR_SEMANTIC_INDEX_NONE);
+    dependency->source_exports[0].exported_entity = saved_entity;
+    uint8_t saved_kind = dependency->source_exports[0].kind;
+    dependency->source_exports[0].kind = XR_SEM_SOURCE_EXPORT_FUNCTION;
+    REQUIRE(xr_semantic_imported_class_construction_authority_source_class(
+                semantic, dependency, &semantic->dependencies[0], &dependency->source_exports[0],
+                operation, NULL) == XR_SEMANTIC_INDEX_NONE);
+    dependency->source_exports[0].kind = saved_kind;
+
+    XrTargetCallRecord saved_call = *call;
+    call->source_export_identity.bytes[0] ^= 1u;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    *call = saved_call;
+    saved_call = *call;
+    call->source_dependency = XR_SEMANTIC_INDEX_NONE;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    *call = saved_call;
+    XrTargetCallArgumentRecord saved_argument = plan->call_arguments[1];
+    plan->call_arguments[1].callee_parameter = XR_SEMANTIC_INDEX_NONE;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->call_arguments[1] = saved_argument;
+    xr_target_call_compute_fingerprint(plan, 0, &call->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_semantic_plan_free(dependency);
+}
+
 typedef enum ChannelCloseCallMutation {
     CHANNEL_CLOSE_MUTATE_IDENTITY,
     CHANNEL_CLOSE_MUTATE_SEMANTIC_TARGET,
@@ -3487,7 +3834,7 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "01d4157d33ed0b57ea0afb8c387fae4aae055bf4dde6a490544c3219c099c821") ==
+    REQUIRE(strcmp(call_hex, "3b00a225efd2b78383c8250f74a58bd447c350afff74e4dd7c4e82008fffedb9") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -4178,7 +4525,7 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "1ba2f6657f5248e61456a6f95be47a74d0e6d4454c08a2a189de73471cc3ccf0") ==
+    REQUIRE(strcmp(call_hex, "c73c1b83c8b180d195b0a4a2b73b518535e4dd0292cc48fe36e4fea808ae996b") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -4449,7 +4796,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
             plan->functions[tail_call->caller_function].coroutine_count == 0);
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex, "21b2ab0a3bf524af0bb01edc54ee402afab704140392867fba1c29e0f8ab931b") ==
+    REQUIRE(strcmp(tail_hex, "3a43db6348509d3dab6470091693364b9279eefdf6b2236c7e9bc2acc1b2ed69") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
@@ -6841,6 +7188,11 @@ int main(int argc, char **argv) {
         puts("Source-export ref C emission family tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "imported-source-class-constructor-authority") == 0) {
+        test_imported_source_class_constructor_authority();
+        puts("Imported source-class constructor authority tests passed");
+        return 0;
+    }
     test_direct_local_raw_pointer_call_authority();
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
@@ -6866,6 +7218,7 @@ int main(int argc, char **argv) {
     test_source_export_call_authority();
     test_source_export_call_argument_authority();
     test_source_export_ref_argument_is_not_array_projection();
+    test_imported_source_class_constructor_authority();
     test_exact_i64_dynamic_entry_authority();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();

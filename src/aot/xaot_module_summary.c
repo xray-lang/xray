@@ -127,7 +127,7 @@ static void declaration_fingerprint(const XrSemanticPlan *plan, XrFingerprint *o
     XrSHA256Context ctx;
     uint32_t count = (uint32_t) xr_semantic_plan_source_export_count(plan);
     xr_sha256_init(&ctx);
-    hash_text(&ctx, "xray-module-summary-declarations-v1");
+    hash_text(&ctx, "xray-module-summary-declarations-v2");
     hash_u32(&ctx, count);
     for (uint32_t i = 0; i < count; i++) {
         const XrSemanticSourceExportRecord *record = xr_semantic_plan_source_export(plan, i);
@@ -137,8 +137,12 @@ static void declaration_fingerprint(const XrSemanticPlan *plan, XrFingerprint *o
         }
         hash_text(&ctx, record->name);
         xr_sha256_update(&ctx, record->id.bytes, sizeof(record->id.bytes));
+        xr_sha256_update(&ctx, record->exported_entity.bytes,
+                         sizeof(record->exported_entity.bytes));
         hash_u32(&ctx, record->function);
+        hash_u32(&ctx, record->source_class);
         hash_u32(&ctx, record->shared_slot);
+        hash_u32(&ctx, record->kind);
     }
     xr_sha256_final(&ctx, out->bytes);
 }

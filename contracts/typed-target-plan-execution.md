@@ -225,7 +225,7 @@ failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
 TargetPlan schema 46 is a hard cutover from v45 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 38 and its compact 225-row Xi operation registry.
+schema. It requires SemanticPlan schema 39 and its compact 225-row Xi operation registry.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
 bounded `Iterator<(K,V)>.hasNext()`/`next()` continuations; selector spelling
@@ -525,12 +525,12 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 29137aa30e3c01a593dd466a1dfbdbc5300dace1c16f88a91e2bd9ec7be1717f
-anchor-sha256: src/plan/target/xr_target_plan.c 40070d0d76f43f39e11339a00a6d5cc98f07bc3527dfe7ae3048e4759d40fbcf
-anchor-sha256: src/plan/target/xr_target_builder.c 6a90dd6e4a00e559361de5ca595f951ef642aee0b46f28a90f0e401e97dca074
+anchor-sha256: src/plan/target/xr_target_plan.h 34595b5ba399e4d05a8dc6ec240faec7d021fadd6c053fecb91534dcfbe3edfd
+anchor-sha256: src/plan/target/xr_target_plan.c 00b20639baa9c8aaa46b76517d98d6aafc3d5f77dbcc649ade2a0238248f37d4
+anchor-sha256: src/plan/target/xr_target_builder.c 5e03f1dd68ec4f7a2b0934b6e0a041c4134fc3919508fc7e7506414d2ab0c079
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
-anchor-sha256: src/plan/target/xr_target_verify.c e87a9deb5699da06d2cfe1be48bf9f8977de23a03befc45734770b2918fa961a
+anchor-sha256: src/plan/target/xr_target_verify.c 1086b0eb677034e7b96f99aa95c4a9d6f8966d81e36edcebad3bda92f057b386
 anchor-sha256: src/plan/format/xr_xtp_schema.h 536d47688befcdf9340632a4bcaa98edb115dae99dce289d7df40deca589e07c
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29

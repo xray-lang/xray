@@ -312,8 +312,15 @@ static void encode_dependencies_and_exports(XrXsmWriter *writer, const XrSemanti
         xr_xsm_put_bytes(writer, record->id.bytes, sizeof(record->id.bytes));
         xr_xsm_put_string(writer, record->canonical_key);
         xr_xsm_put_string(writer, record->name);
+        xr_xsm_put_bytes(writer, record->exported_entity.bytes,
+                         sizeof(record->exported_entity.bytes));
         xr_xsm_put_u32(writer, record->function);
+        xr_xsm_put_u32(writer, record->source_class);
         xr_xsm_put_u32(writer, record->shared_slot);
+        xr_xsm_put_u8(writer, record->kind);
+        xr_xsm_put_u8(writer, record->reserved[0]);
+        xr_xsm_put_u8(writer, record->reserved[1]);
+        xr_xsm_put_u8(writer, record->reserved[2]);
     }
 }
 

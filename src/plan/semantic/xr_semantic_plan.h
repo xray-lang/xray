@@ -540,14 +540,27 @@ typedef struct XrSemanticDependencyRecord {
     XrFingerprint semantic_fingerprint;
 } XrSemanticDependencyRecord;
 
+typedef enum XrSemanticSourceExportKind {
+    XR_SEM_SOURCE_EXPORT_FUNCTION = 1,
+    XR_SEM_SOURCE_EXPORT_SOURCE_CLASS,
+    XR_SEM_SOURCE_EXPORT_KIND_COUNT,
+} XrSemanticSourceExportKind;
+
 /* A source export is admitted only when the local root entry uniquely stores
- * the named local closure into this shared slot before module activation. */
+ * the named local closure or declared class object into this shared slot before
+ * module activation. KIND selects exactly one local entity index; EXPORTED_ENTITY
+ * freezes that entity's stable identity so module-set consumers never infer it
+ * from the initializer graph. */
 typedef struct XrSemanticSourceExportRecord {
     XrStableId id;
     const char *canonical_key;
     const char *name;
+    XrStableId exported_entity;
     uint32_t function;
+    uint32_t source_class;
     uint32_t shared_slot;
+    uint8_t kind;
+    uint8_t reserved[3];
 } XrSemanticSourceExportRecord;
 
 XR_FUNC XrSemanticPlan *xr_semantic_plan_retain(XrSemanticPlan *plan);

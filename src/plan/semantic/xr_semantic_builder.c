@@ -53,6 +53,7 @@
 
 #define XR_SEMANTIC_MAX_TYPES UINT32_C(1000000)
 #define XR_SEMANTIC_MAX_FUNCTIONS UINT32_C(100000)
+#define XR_SEMANTIC_MAX_SOURCE_EXPORTS UINT32_C(200000)
 #define XR_SEMANTIC_MAX_BLOCKS UINT32_C(2000000)
 #define XR_SEMANTIC_MAX_OPERATIONS UINT32_C(10000000)
 #define XR_SEMANTIC_MAX_CALL_TARGETS XR_SEMANTIC_MAX_OPERATIONS
@@ -264,6 +265,7 @@ static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx, const X
 static bool source_class_identity_for_type(const XrSemanticBuildContext *ctx, const XrType *type,
                                            XrStableId *out);
 static uint8_t classify_import_resolution(const XiImportRef *ref);
+static const XiValue *strip_identity_copies(const XiFunc *function, const XiValue *value);
 
 static bool source_enum_key(const XrType *type, XrTextBuilder *key, XrStableId *identity,
                             uint8_t *flags) {
@@ -1586,7 +1588,10 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             const XiModuleExport *match = NULL;
             for (uint16_t i = 0; module && owner == module->init && i < module->nexports; i++) {
                 const XiModuleExport *candidate = &module->exports[i];
-                if (candidate->shared_slot != value->aux_int || !candidate->function)
+                bool function_export = candidate->function && !candidate->class_data;
+                bool class_export = candidate->class_data && !candidate->function;
+                if (candidate->shared_slot != value->aux_int ||
+                    (!function_export && !class_export))
                     continue;
                 if (match)
                     return fail(ctx, "XR_SEM_0019", "source export shared slot is ambiguous");
@@ -1595,14 +1600,35 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             if (match) {
                 bool ambiguous = false;
                 const XiValue *store = indexed_root_shared_store(ctx, value->aux_int, &ambiguous);
-                int function = store && store == value && !ambiguous && store->nargs == 1 &&
-                                       root_store_precedes_activation(owner, store)
+                const XiValue *stored = store && store == value && !ambiguous && store->nargs == 1 &&
+                                                root_store_precedes_activation(owner, store)
+                                            ? strip_identity_copies(owner, store->args[0])
+                                            : NULL;
+                int function = match->function && stored
                                    ? resolve_closure_binding(ctx, owner, store->args[0])
                                    : -1;
-                if (function < 0 || ctx->functions[function].source != match->function)
+                bool exact_function = function >= 0 &&
+                                      ctx->functions[function].source == match->function;
+                uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
+                for (uint32_t c = 0; match->class_data && module && c < module->nclasses; c++) {
+                    if (module->classes[c] != match->class_data)
+                        continue;
+                    if (source_class != XR_SEMANTIC_INDEX_NONE) {
+                        source_class = XR_SEMANTIC_INDEX_NONE;
+                        break;
+                    }
+                    source_class = c;
+                }
+                bool exact_class = match->class_data && stored && stored->op == XI_CLASS_CREATE &&
+                                   stored->aux == match->class_data && module->slot_classes &&
+                                   value->aux_int >= 0 && value->aux_int < module->nslots &&
+                                   module->slot_classes[value->aux_int] == match->class_data &&
+                                   xr_semantic_class_declaration_is_frozen(ctx->plan, source_class);
+                if (!exact_function && !exact_class)
                     match = NULL;
             }
-            return !match || (add_metadata(ctx, record, "source-export-v1") &&
+            return !match || (add_metadata(ctx, record, match->function ? "source-export-v1"
+                                                                       : "source-class-export-v1") &&
                               add_metadata(ctx, record, match->name));
         }
         case XI_AGG_NEW: {
@@ -2063,7 +2089,9 @@ static bool build_source_exports(XrSemanticBuildContext *ctx, const XiFunc *root
         return fail(ctx, "XR_EXEC_5003", "source-export slot index allocation failed");
     for (uint16_t i = 0; module && i < module->nexports; i++) {
         const XiModuleExport *source_export = &module->exports[i];
-        if (!source_export->function)
+        bool function_export = source_export->function != NULL && source_export->class_data == NULL;
+        bool class_export = source_export->class_data != NULL && source_export->function == NULL;
+        if (!function_export && !class_export)
             continue;
         if (source_export->shared_slot >= module->nslots ||
             export_slots[source_export->shared_slot]) {
@@ -2071,17 +2099,38 @@ static bool build_source_exports(XrSemanticBuildContext *ctx, const XiFunc *root
             return fail(ctx, "XR_SEM_0019", "source-export shared slot is duplicated");
         }
         export_slots[source_export->shared_slot] = true;
-        int function = function_index(ctx, source_export->function);
+        int function = function_export ? function_index(ctx, source_export->function) : -1;
+        uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t c = 0; class_export && c < module->nclasses; c++) {
+            if (module->classes[c] != source_export->class_data)
+                continue;
+            if (source_class != XR_SEMANTIC_INDEX_NONE) {
+                source_class = XR_SEMANTIC_INDEX_NONE;
+                break;
+            }
+            source_class = c;
+        }
         bool ambiguous = false;
         const XiValue *store =
             indexed_root_shared_store(ctx, source_export->shared_slot, &ambiguous);
-        if (!source_export->name || function < 0 || ambiguous || !store || store->nargs != 1 ||
-            !root_store_precedes_activation(root, store) ||
-            resolve_closure_binding(ctx, root, store->args[0]) != function)
+        const XiValue *stored =
+            store && store->nargs == 1 ? strip_identity_copies(root, store->args[0]) : NULL;
+        bool exact_function =
+            function_export && function >= 0 &&
+            resolve_closure_binding(ctx, root, store ? store->args[0] : NULL) == function;
+        bool exact_class =
+            class_export && source_class < ctx->plan->source_class_count && stored &&
+            stored->op == XI_CLASS_CREATE && stored->aux == source_export->class_data &&
+            module->slot_classes && source_export->shared_slot < module->nslots &&
+            module->slot_classes[source_export->shared_slot] == source_export->class_data &&
+            xr_semantic_class_declaration_is_frozen(ctx->plan, source_class);
+        if (!source_export->name || !source_export->name[0] || ambiguous || !store ||
+            store->nargs != 1 || !root_store_precedes_activation(root, store) ||
+            (!exact_function && !exact_class))
             continue;
         if (!reserve_array((void **) &ctx->plan->source_exports, &ctx->plan->source_export_capacity,
                            ctx->plan->source_export_count + 1, sizeof(*ctx->plan->source_exports),
-                           XR_SEMANTIC_MAX_FUNCTIONS)) {
+                           XR_SEMANTIC_MAX_SOURCE_EXPORTS)) {
             xr_free(export_slots);
             return fail(ctx, "XR_EXEC_5003", "semantic source-export budget exhausted");
         }
@@ -2089,14 +2138,23 @@ static bool build_source_exports(XrSemanticBuildContext *ctx, const XiFunc *root
             &ctx->plan->source_exports[ctx->plan->source_export_count++];
         memset(record, 0, sizeof(*record));
         record->name = xr_semantic_plan_copy_string(ctx->plan, source_export->name);
-        record->function = (uint32_t) function;
+        record->exported_entity = exact_function ? ctx->plan->functions[function].id
+                                                  : ctx->plan->source_classes[source_class].id;
+        record->function = exact_function ? (uint32_t) function : XR_SEMANTIC_INDEX_NONE;
+        record->source_class = exact_class ? source_class : XR_SEMANTIC_INDEX_NONE;
         record->shared_slot = source_export->shared_slot;
+        record->kind = exact_function ? XR_SEM_SOURCE_EXPORT_FUNCTION
+                                      : XR_SEM_SOURCE_EXPORT_SOURCE_CLASS;
         XrTextBuilder key = {0};
         bool valid = record->name &&
-                     text_append_format(
-                         &key, "source-export-v1:schema=%u:name=", XR_SEMANTIC_SCHEMA_VERSION) &&
-                     text_append_component(&key, record->name) && text_append(&key, ":function=") &&
-                     text_append_stable_id(&key, ctx->plan->functions[function].id) &&
+                     text_append_format(&key, exact_function ? "source-export-v1:schema=%u:name="
+                                                             : "source-class-export-v1:schema=%u:name=",
+                                        XR_SEMANTIC_SCHEMA_VERSION) &&
+                     text_append_component(&key, record->name) &&
+                     text_append(&key, exact_function ? ":function=" : ":source-class=") &&
+                     text_append_stable_id(&key, exact_function
+                                                     ? ctx->plan->functions[function].id
+                                                     : ctx->plan->source_classes[source_class].id) &&
                      text_append_format(&key, ":slot=%u", record->shared_slot);
         if (valid)
             record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
@@ -2360,6 +2418,71 @@ static const XiImportRef *resolve_source_import_callee(const XrSemanticBuildCont
     for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
         dependency_present |= ctx->dependency_modules[i] == ref->resolved_module;
     return dependency_present ? ref : NULL;
+}
+
+/* A named class import is not a source-function export: resolved_func is
+ * intentionally NULL. Prove the resolver's shared/export slot, the module's
+ * public class export and the dependency SemanticPlan class-export row as one
+ * identity before the builder is allowed to freeze a constructor target. */
+static const XiImportRef *resolve_source_imported_class_callee(
+    const XrSemanticBuildContext *ctx, const XiFunc *caller, const XiValue *callee,
+    const XrSemanticPlan **dependency_plan_out,
+    const XrSemanticSourceExportRecord **source_export_out, uint32_t *source_export_index_out,
+    uint32_t *source_class_out) {
+    const XiImportRef *ref = xi_value_import_ref(caller, callee);
+    if (!ctx || !ref || classify_import_resolution(ref) != XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE ||
+        !ref->member_name || !ref->member_name[0] || !ref->resolved_module || ref->resolved_func ||
+        ref->resolved_shared_slot < 0 || ref->resolved_export_slot < 0 ||
+        ref->resolved_shared_slot >= ref->resolved_module->nslots ||
+        !ref->resolved_module->slot_classes)
+        return NULL;
+    bool dependency_present = false;
+    for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
+        dependency_present |= ctx->dependency_modules[i] == ref->resolved_module;
+    const XiClassData *class_data =
+        ref->resolved_module->slot_classes[ref->resolved_shared_slot];
+    const XiModuleExport *module_export = NULL;
+    for (uint16_t i = 0; dependency_present && class_data &&
+                         i < ref->resolved_module->nexports;
+         i++) {
+        const XiModuleExport *candidate = &ref->resolved_module->exports[i];
+        if (!candidate->name || strcmp(candidate->name, ref->member_name) != 0 ||
+            candidate->shared_slot != ref->resolved_shared_slot ||
+            candidate->class_data != class_data || candidate->function)
+            continue;
+        if (module_export)
+            return NULL;
+        module_export = candidate;
+    }
+    const XrSemanticPlan *dependency_plan =
+        ref->resolved_module->init ? ref->resolved_module->init->semantic_plan : NULL;
+    uint32_t source_export_index = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticSourceExportRecord *source_export =
+        find_source_export(dependency_plan, ref->member_name, &source_export_index);
+    uint32_t source_class = xr_semantic_source_class_export_source_class(dependency_plan,
+                                                                         source_export);
+    const XrSemanticSourceClassRecord *semantic_class =
+        xr_semantic_plan_source_class(dependency_plan, source_class);
+    if (!dependency_present || !class_data || !module_export || !dependency_plan ||
+        !xr_semantic_plan_is_verified(dependency_plan) || !source_export ||
+        source_export->kind != XR_SEM_SOURCE_EXPORT_SOURCE_CLASS ||
+        source_export->function != XR_SEMANTIC_INDEX_NONE ||
+        source_export->source_class != source_class ||
+        !semantic_class ||
+        !xr_stable_id_equal(source_export->exported_entity, semantic_class->id) ||
+        source_class >= ref->resolved_module->nclasses ||
+        ref->resolved_module->classes[source_class] != class_data ||
+        !class_data->class_name || strcmp(class_data->class_name, semantic_class->name) != 0)
+        return NULL;
+    if (dependency_plan_out)
+        *dependency_plan_out = dependency_plan;
+    if (source_export_out)
+        *source_export_out = source_export;
+    if (source_export_index_out)
+        *source_export_index_out = source_export_index;
+    if (source_class_out)
+        *source_class_out = source_class;
+    return ref;
 }
 
 static const XiImportRef *
@@ -2715,7 +2838,9 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
     const XrSemanticFunctionRecord *callee =
         exported ? xr_semantic_plan_function(dependency_plan, exported->function) : NULL;
     const uint8_t *suspendable = plan_suspendability(ctx, dependency_plan);
-    if (!exported || !callee || !suspendable || callee->parameter_count == UINT16_MAX ||
+    if (!exported || exported->kind != XR_SEM_SOURCE_EXPORT_FUNCTION || !callee ||
+        !xr_stable_id_equal(exported->exported_entity, callee->id) || !suspendable ||
+        callee->parameter_count == UINT16_MAX ||
         value->nargs != (uint16_t) (callee->parameter_count + 1u) ||
         (value->op == XI_CALL_METHOD &&
          (call->metadata_count != 1 ||
@@ -2758,17 +2883,48 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
     return true;
 }
 
-/* Names the construction of a declared class. The call carries no callee
- * function, no argument and no selector, so nothing in the operation names what
- * it builds; the shared class-shape judgement proves it from the instance type
- * the call returns and from the class object its callee operand loads, and both
- * must name the same declaration. The row therefore names the declaration and
- * nothing else: no callee identity, no dependency, no export. */
+/* Names the construction of a declared class. A local construction is proved
+ * through its own class-object shared slot. An imported construction instead
+ * freezes the exact dependency class export and constructor body; treating its
+ * import binding as a local class slot would erase the module boundary. */
 static bool append_source_class_constructor_call_target(XrSemanticBuildContext *ctx,
+                                                        const XiValue *value,
                                                         uint32_t operation) {
     const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
     uint32_t source_class = xr_semantic_class_construction_source_class(ctx->plan, call);
-    if (source_class == XR_SEMANTIC_INDEX_NONE)
+    uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_export = XR_SEMANTIC_INDEX_NONE;
+    uint32_t imported_source_class = XR_SEMANTIC_INDEX_NONE;
+    uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticPlan *dependency_plan = NULL;
+    const XrSemanticSourceExportRecord *exported = NULL;
+    const XiFunc *caller = call->function < ctx->plan->function_count
+                               ? ctx->functions[call->function].source
+                               : NULL;
+    const XiImportRef *import_ref = NULL;
+    if (source_class == XR_SEMANTIC_INDEX_NONE && value && value->nargs > 0 &&
+        xi_value_is_constructor_call(value)) {
+        import_ref = resolve_source_imported_class_callee(
+            ctx, caller, value->args[0], &dependency_plan, &exported, &source_export,
+            &imported_source_class);
+        XrSemanticDependencyRecord preview = {
+            .module_path = import_ref ? import_ref->resolved_module->identity : NULL,
+        };
+        if (import_ref && xr_semantic_imported_class_construction_source_class(
+                              ctx->plan, dependency_plan, &preview, exported, call,
+                              &constructor) != imported_source_class)
+            import_ref = NULL;
+        if (import_ref && !append_dependency(ctx, import_ref->resolved_module, &dependency))
+            return fail(ctx, "XR_SEM_0019",
+                        "imported source class dependency is incomplete");
+        if (import_ref &&
+            xr_semantic_imported_class_construction_source_class(
+                ctx->plan, dependency_plan, &ctx->plan->dependencies[dependency], exported, call,
+                &constructor) != imported_source_class)
+            import_ref = NULL;
+    }
+    bool imported = import_ref != NULL;
+    if (source_class == XR_SEMANTIC_INDEX_NONE && !imported)
         return true;
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
@@ -2779,18 +2935,43 @@ static bool append_source_class_constructor_call_target(XrSemanticBuildContext *
     memset(record, 0, sizeof(*record));
     record->operation = operation;
     record->function = XR_SEMANTIC_INDEX_NONE;
-    record->dependency = XR_SEMANTIC_INDEX_NONE;
-    record->source_export = XR_SEMANTIC_INDEX_NONE;
+    record->dependency = imported ? dependency : XR_SEMANTIC_INDEX_NONE;
+    record->source_export = imported ? source_export : XR_SEMANTIC_INDEX_NONE;
+    if (imported) {
+        record->export_identity = exported->id;
+        if (constructor != XR_SEMANTIC_INDEX_NONE)
+            record->callee_function = dependency_plan->functions[constructor].id;
+    }
     record->callable_type = call->result_type;
     record->kind = XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR;
     XrTextBuilder key = {0};
-    bool valid = text_append_format(
-                     &key, "call-target-v9:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
-                 text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
-                 text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
-                 text_append(&key, ":type=") &&
-                 text_append_stable_id(&key, ctx->plan->types[record->callable_type].id) &&
-                 text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    bool valid = false;
+    if (!imported) {
+        valid = text_append_format(
+                    &key, "call-target-v9:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+                text_append_stable_id(&key, call->id) && text_append(&key, ":source-class=") &&
+                text_append_stable_id(&key, ctx->plan->source_classes[source_class].id) &&
+                text_append(&key, ":type=") &&
+                text_append_stable_id(&key, ctx->plan->types[record->callable_type].id) &&
+                text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    } else {
+        XrStableId zero = {{0}};
+        valid = text_append_format(
+                    &key, "call-target-v10:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
+                text_append_stable_id(&key, call->id) && text_append(&key, ":dependency=") &&
+                text_append_stable_id(&key, ctx->plan->dependencies[dependency].id) &&
+                text_append(&key, ":class-export=") &&
+                text_append_stable_id(&key, exported->id) && text_append(&key, ":source-class=") &&
+                text_append_stable_id(
+                    &key, dependency_plan->source_classes[imported_source_class].id) &&
+                text_append(&key, ":constructor=") &&
+                (xr_stable_id_equal(record->callee_function, zero)
+                     ? text_append(&key, "none")
+                     : text_append_stable_id(&key, record->callee_function)) &&
+                text_append(&key, ":type=") &&
+                text_append_stable_id(&key, ctx->plan->types[record->callable_type].id) &&
+                text_append_format(&key, ":kind=%u", (unsigned) record->kind);
+    }
     if (valid)
         record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
     text_dispose(&key);
@@ -2858,7 +3039,7 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         indirect_callee->op != XI_GET_SHARED && indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
     if (function < 0 && !native_yieldable && !indirect_callable)
-        return append_source_class_constructor_call_target(ctx, operation);
+        return append_source_class_constructor_call_target(ctx, value, operation);
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
                        ctx->plan->call_target_count + 1, sizeof(*ctx->plan->call_targets),

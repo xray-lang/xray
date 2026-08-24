@@ -5468,6 +5468,75 @@ static bool oracle_dynamic_source_class_object_storage(const VerifyAuthority *ct
     return true;
 }
 
+/* Imported construction has no local source-class index. Re-prove its exact
+ * dependency export and constructor target from the immutable SemanticPlan and
+ * TargetPlan before admitting the same tagged instance storage as a local
+ * construction. */
+static bool oracle_imported_source_class_construction_is_exact(
+    const VerifyAuthority *ctx, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation) {
+    if (!ctx || !operation)
+        return false;
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(ctx->semantic);
+    const XrSemanticCallTargetRecord *target = NULL;
+    uint32_t target_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < target_count; i++) {
+        const XrSemanticCallTargetRecord *candidate =
+            xr_semantic_plan_call_target(ctx->semantic, i);
+        if (!candidate || candidate->operation != operation_index ||
+            candidate->kind != XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR ||
+            candidate->dependency == XR_SEMANTIC_INDEX_NONE)
+            continue;
+        if (target)
+            return false;
+        target = candidate;
+        target_index = i;
+    }
+    const XrSemanticPlan *dependency =
+        target ? xr_target_plan_semantic_dependency(ctx->target_plan, target->dependency) : NULL;
+    const XrSemanticSourceExportRecord *source_export =
+        dependency && target->source_export < xr_semantic_plan_source_export_count(dependency)
+            ? xr_semantic_plan_source_export(dependency, target->source_export)
+            : NULL;
+    uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_class =
+        target && target->dependency < xr_semantic_plan_dependency_count(ctx->semantic)
+            ? xr_semantic_imported_class_construction_authority_source_class(
+                  ctx->semantic, dependency,
+                  xr_semantic_plan_dependency(ctx->semantic, target->dependency),
+                  source_export, operation, &constructor)
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticFunctionRecord *callee =
+        constructor != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_function(dependency, constructor)
+            : NULL;
+    XrStableId zero = {{0}};
+    bool target_identity =
+        target && source_export && source_class != XR_SEMANTIC_INDEX_NONE &&
+        xr_stable_id_equal(target->export_identity, source_export->id) &&
+        ((callee && xr_stable_id_equal(target->callee_function, callee->id)) ||
+         (!callee && xr_stable_id_equal(target->callee_function, zero)));
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; target_identity && calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index ||
+            calls[i].semantic_call_target != target_index)
+            continue;
+        if (call)
+            return false;
+        call = &calls[i];
+    }
+    return call && call->source_dependency == target->dependency &&
+           call->source_export == target->source_export &&
+           xr_stable_id_equal(call->source_export_identity, target->export_identity) &&
+           xr_stable_id_equal(call->source_callee_identity, target->callee_function) &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_SOURCE_CLASS_CONSTRUCTOR &&
+           call->target_kind == XR_TARGET_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+           call->result_value == operation->result_value &&
+           call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && call->flags == 0;
+}
+
 /* The same proof for the three values a source-class construction produces. The
  * ownership is not fixed by the family: the construction owns its instance and
  * both the class object read and the instance read borrow, so the expected
@@ -5484,8 +5553,13 @@ static bool oracle_dynamic_source_class_instance_storage(const VerifyAuthority *
         operation_index != XR_SEMANTIC_INDEX_NONE
             ? xr_semantic_plan_operation(ctx->semantic, operation_index)
             : NULL;
+    bool exact_local =
+        operation && xr_semantic_class_instance_value_is_exact(ctx->semantic, operation, NULL);
+    bool exact_imported = operation && operation->opcode == XI_CALL &&
+                          oracle_imported_source_class_construction_is_exact(
+                              ctx, operation_index, operation);
     if (!operation || operation->result_value != semantic_value ||
-        !xr_semantic_class_instance_value_is_exact(ctx->semantic, operation, NULL))
+        (!exact_local && !exact_imported))
         return false;
     uint8_t ownership = operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED
                             ? XR_TARGET_OWNERSHIP_OWNED

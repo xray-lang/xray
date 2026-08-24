@@ -375,8 +375,13 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_bytes(&ctx, source_export->id.bytes, sizeof(source_export->id.bytes));
         hash_string(&ctx, source_export->canonical_key);
         hash_string(&ctx, source_export->name);
+        hash_bytes(&ctx, source_export->exported_entity.bytes,
+                   sizeof(source_export->exported_entity.bytes));
         hash_u64(&ctx, source_export->function);
+        hash_u64(&ctx, source_export->source_class);
         hash_u64(&ctx, source_export->shared_slot);
+        hash_u64(&ctx, source_export->kind);
+        hash_bytes(&ctx, source_export->reserved, sizeof(source_export->reserved));
     }
     for (uint32_t i = 0; i < plan->operand_count; i++) {
         const XrSemanticOperandRecord *operand = &plan->operands[i];
@@ -965,7 +970,10 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         dump_text(out, record->canonical_key);
         fputs(" name=", out);
         dump_text(out, record->name);
-        fprintf(out, " function=%u shared-slot=%u\n", record->function, record->shared_slot);
+        fputs(" exported-entity=", out);
+        dump_id(out, record->exported_entity);
+        fprintf(out, " function=%u source-class=%u shared-slot=%u kind=%u\n", record->function,
+                record->source_class, record->shared_slot, record->kind);
     }
     for (uint32_t i = 0; i < plan->edge_count; i++) {
         const XrSemanticEdgeRecord *record = &plan->edges[i];

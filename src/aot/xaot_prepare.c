@@ -5249,8 +5249,12 @@ static bool prepare_seed_source_export_call_place_reps(XaotBundle *bundle, XiFun
         export_index = i;
     }
     const XrSemanticFunctionRecord *callee_function =
-        source_export ? xr_semantic_plan_function(callee_semantic, source_export->function) : NULL;
-    if (!source_export || export_index != source_call->source_export || !callee_function ||
+        source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION
+            ? xr_semantic_plan_function(callee_semantic, source_export->function)
+            : NULL;
+    if (!source_export || source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION ||
+        export_index != source_call->source_export || !callee_function ||
+        !xr_stable_id_equal(source_export->exported_entity, callee_function->id) ||
         !xr_stable_id_equal(callee_function->id, source_call->source_callee_identity) ||
         source_call->argument_count != callee_function->parameter_count ||
         call->nargs != (uint16_t) (source_call->argument_count + 1u)) {

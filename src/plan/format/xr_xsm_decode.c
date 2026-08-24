@@ -229,7 +229,7 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     XR_MINIMUM_PAYLOAD(operations, 160u);
     XR_MINIMUM_PAYLOAD(call_targets, 76u);
     XR_MINIMUM_PAYLOAD(dependencies, 72u);
-    XR_MINIMUM_PAYLOAD(source_exports, 32u);
+    XR_MINIMUM_PAYLOAD(source_exports, 56u);
     XR_MINIMUM_PAYLOAD(operands, 19u);
     XR_MINIMUM_PAYLOAD(metadata, 4u);
     XR_MINIMUM_PAYLOAD(edges, 40u);
@@ -340,7 +340,8 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
            count->blocks <= 2000000u && count->operations <= 10000000u &&
            count->call_targets <= count->operations &&
            count->dependencies <= count->functions + count->operations &&
-           count->source_exports <= count->functions && count->edges <= 40000000u &&
+           count->source_exports <= count->functions + count->source_classes &&
+           count->edges <= 40000000u &&
            count->constants <= 10000000u && count->entities <= 80000000u &&
            count->type_children <= 8000000u && count->parameters <= 25600000u &&
            count->captures <= 6400000u && count->predecessors <= 16000000u &&
@@ -638,8 +639,15 @@ static void decode_dependencies_and_exports(XrXsmReader *reader, XrSemanticPlan 
         xr_xsm_take_bytes(reader, record->id.bytes, sizeof(record->id.bytes));
         record->canonical_key = take_plan_string(reader, plan, false);
         record->name = take_plan_string(reader, plan, false);
+        xr_xsm_take_bytes(reader, record->exported_entity.bytes,
+                          sizeof(record->exported_entity.bytes));
         record->function = xr_xsm_take_u32(reader);
+        record->source_class = xr_xsm_take_u32(reader);
         record->shared_slot = xr_xsm_take_u32(reader);
+        record->kind = xr_xsm_take_u8(reader);
+        record->reserved[0] = xr_xsm_take_u8(reader);
+        record->reserved[1] = xr_xsm_take_u8(reader);
+        record->reserved[2] = xr_xsm_take_u8(reader);
     }
 }
 

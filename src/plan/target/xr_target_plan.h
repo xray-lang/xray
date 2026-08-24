@@ -844,6 +844,8 @@ XR_FUNC const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTarge
                                                                    uint16_t rep);
 XR_FUNC const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
                                                                uint32_t semantic_value);
+XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *plan,
+                                                                 uint32_t dependency);
 XR_FUNC uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
                                                                uint32_t function);
 XR_FUNC const XrTargetInstructionRecord *

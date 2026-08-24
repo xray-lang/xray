@@ -3326,7 +3326,8 @@ static bool verify_source_export_rows(const XrSemanticPlan *plan, const uint32_t
                 root_shared_stores[slot] = operation;
         }
         if (candidate->opcode == XI_SET_SHARED && candidate->metadata_count == 2 &&
-            strcmp(plan->metadata[candidate->metadata_begin], "source-export-v1") == 0)
+            (strcmp(plan->metadata[candidate->metadata_begin], "source-export-v1") == 0 ||
+             strcmp(plan->metadata[candidate->metadata_begin], "source-class-export-v1") == 0))
             annotated++;
     }
     if (annotated != plan->source_export_count) {
@@ -3340,7 +3341,15 @@ static bool verify_source_export_rows(const XrSemanticPlan *plan, const uint32_t
         uint32_t store = record->shared_slot < root_shared_count
                              ? root_shared_stores[record->shared_slot]
                              : XR_SEMANTIC_INDEX_NONE;
-        if (!record->name || !record->name[0] || record->function >= plan->function_count ||
+        bool function_export = record->kind == XR_SEM_SOURCE_EXPORT_FUNCTION &&
+                               record->function < plan->function_count &&
+                               record->source_class == XR_SEMANTIC_INDEX_NONE;
+        bool class_export = record->kind == XR_SEM_SOURCE_EXPORT_SOURCE_CLASS &&
+                            record->function == XR_SEMANTIC_INDEX_NONE &&
+                            record->source_class < plan->source_class_count;
+        if (!record->name || !record->name[0] || (!function_export && !class_export) ||
+            record->reserved[0] != 0 || record->reserved[1] != 0 ||
+            record->reserved[2] != 0 ||
             (previous && strcmp(previous, record->name) >= 0) ||
             record->shared_slot >= root_shared_count ||
             root_shared_ambiguous[record->shared_slot] || store == XR_SEMANTIC_INDEX_NONE ||
@@ -3350,20 +3359,61 @@ static bool verify_source_export_rows(const XrSemanticPlan *plan, const uint32_t
             return report(error, error_size, "XR_SEM_0019", "source-export table is not canonical");
         }
         const XrSemanticOperationRecord *operation = &plan->operations[store];
-        uint32_t target =
-            operation->operand_count == 1
-                ? resolve_frozen_closure_value(plan, definitions, value_count, 0,
-                                               plan->operands[operation->operand_begin].value)
+        uint32_t target = function_export && operation->operand_count == 1
+                              ? resolve_frozen_closure_value(
+                                    plan, definitions, value_count, 0,
+                                    plan->operands[operation->operand_begin].value)
+                              : XR_SEMANTIC_INDEX_NONE;
+        const XrSemanticOperationRecord *class_definition = NULL;
+        uint32_t value = operation->operand_count == 1
+                             ? plan->operands[operation->operand_begin].value
+                             : XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t depth = 0; class_export && depth < plan->operation_count; depth++) {
+            if (value >= value_count || definitions[value] >= plan->operation_count)
+                break;
+            const XrSemanticOperationRecord *producer = &plan->operations[definitions[value]];
+            if (producer->function != 0)
+                break;
+            if (producer->opcode == XI_COPY && producer->semantic_immediate == XI_COPY_KIND_IDENTITY &&
+                producer->operand_count == 1 && producer->result_alias_operand == 0) {
+                value = plan->operands[producer->operand_begin].value;
+                continue;
+            }
+            class_definition = producer;
+            break;
+        }
+        uint32_t source_class =
+            class_export
+                ? xr_semantic_class_object_source_class(plan, class_definition)
                 : XR_SEMANTIC_INDEX_NONE;
         char expected[512];
-        char function_id[XR_STABLE_ID_BYTES * 2 + 1];
-        xr_stable_id_hex(plan->functions[record->function].id, function_id);
+        char subject_id[XR_STABLE_ID_BYTES * 2 + 1];
+        if (function_export)
+            xr_stable_id_hex(plan->functions[record->function].id, subject_id);
+        else if (source_class < plan->source_class_count)
+            xr_stable_id_hex(plan->source_classes[source_class].id, subject_id);
+        else
+            subject_id[0] = '\0';
         int length = snprintf(expected, sizeof(expected),
-                              "source-export-v1:schema=%u:name=%zu:%s:function=%s:slot=%u",
+                              function_export
+                                  ? "source-export-v1:schema=%u:name=%zu:%s:function=%s:slot=%u"
+                                  : "source-class-export-v1:schema=%u:name=%zu:%s:source-class=%s:slot=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, strlen(record->name), record->name,
-                              function_id, record->shared_slot);
-        if (target != record->function || operation->metadata_count != 2 ||
-            strcmp(plan->metadata[operation->metadata_begin], "source-export-v1") != 0 ||
+                              subject_id, record->shared_slot);
+        const char *expected_tag =
+            function_export ? "source-export-v1" : "source-class-export-v1";
+        XrStableId exported_entity = function_export
+                                         ? plan->functions[record->function].id
+                                         : (source_class < plan->source_class_count
+                                                ? plan->source_classes[source_class].id
+                                                : (XrStableId) {{0}});
+        if (!xr_stable_id_equal(record->exported_entity, exported_entity) ||
+            (function_export && target != record->function) ||
+            (class_export &&
+             (source_class != record->source_class ||
+              !xr_semantic_class_declaration_is_frozen(plan, source_class))) ||
+            operation->metadata_count != 2 ||
+            strcmp(plan->metadata[operation->metadata_begin], expected_tag) != 0 ||
             strcmp(plan->metadata[operation->metadata_begin + 1], record->name) != 0 ||
             length <= 0 || (size_t) length >= sizeof(expected) ||
             strcmp(record->canonical_key ? record->canonical_key : "", expected) != 0 ||
@@ -3495,14 +3545,34 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
          * judgement, never read back from the row being checked. */
         uint32_t class_construction =
             xr_semantic_class_construction_source_class(plan, source_call);
+        bool imported_class_result =
+            source_namespace && source_call->opcode == XI_CALL &&
+            xr_semantic_external_class_instance_type_is_exact(
+                xr_semantic_plan_type(plan, source_call->result_type));
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
              indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace || builtin_instance ||
              source_instance_function != XR_SEMANTIC_INDEX_NONE ||
-             class_construction != XR_SEMANTIC_INDEX_NONE) &&
+             class_construction != XR_SEMANTIC_INDEX_NONE || imported_class_result) &&
             !target) {
+            char detail[512];
+            snprintf(detail, sizeof(detail),
+                     "provable call has no call-target authority operation=%u function=%u "
+                     "name=%s opcode=%u direct=%u native-yieldable=%u indirect=%u "
+                     "native-namespace=%u builtin-instance=%u source-instance=%u "
+                     "source-module=%s source-selector=%s class-construction=%u "
+                     "imported-class-result=%u",
+                     operation, source_call->function,
+                     source_call->function < plan->function_count &&
+                             plan->functions[source_call->function].name
+                         ? plan->functions[source_call->function].name
+                         : "",
+                     source_call->opcode, direct_function, native_yieldable ? 1u : 0u,
+                     indirect_type, native_namespace ? 1u : 0u, builtin_instance ? 1u : 0u,
+                     source_instance_function, source_module ? source_module : "",
+                     source_selector ? source_selector : "", class_construction,
+                     imported_class_result ? 1u : 0u);
             xr_free(stores.rows);
-            return report(error, error_size, "XR_SEM_0019",
-                          "provable call has no call-target authority");
+            return report(error, error_size, "XR_SEM_0019", detail);
         }
         if (!target)
             continue;
@@ -3598,9 +3668,22 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             target->source_export == XR_SEMANTIC_INDEX_NONE &&
             stable_id_zero(target->export_identity) && stable_id_zero(target->callee_function) &&
             target->callable_type == source_call->result_type;
+        const XrSemanticTypeRecord *imported_result_type =
+            xr_semantic_plan_type(plan, source_call->result_type);
+        bool imported_class_construction_shape =
+            source_namespace && source_call->opcode == XI_CALL && source_selector &&
+            source_selector[0] != '\0' &&
+            target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            target->function == XR_SEMANTIC_INDEX_NONE &&
+            target->dependency < plan->dependency_count &&
+            strcmp(plan->dependencies[target->dependency].module_path, source_module) == 0 &&
+            target->source_export != XR_SEMANTIC_INDEX_NONE &&
+            !stable_id_zero(target->export_identity) &&
+            target->callable_type == source_call->result_type &&
+            xr_semantic_external_class_instance_type_is_exact(imported_result_type);
         if ((!direct && !native && !source_shape && !indirect && !native_namespace_shape &&
              !builtin_instance_shape && !source_instance_shape && !open_source_instance_shape &&
-             !class_construction_shape) ||
+             !class_construction_shape && !imported_class_construction_shape) ||
             target->reserved[0] != 0 || target->reserved[1] != 0 || target->reserved[2] != 0) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -3656,6 +3739,31 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                               "type=%s:kind=%u",
                               XR_SEMANTIC_SCHEMA_VERSION, operation_id, builtin_instance, selector,
                               type_id, (unsigned) target->kind);
+        } else if (imported_class_construction_shape) {
+            char dependency_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char export_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char class_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char constructor_id[XR_STABLE_ID_BYTES * 2 + 1];
+            char type_id[XR_STABLE_ID_BYTES * 2 + 1];
+            xr_stable_id_hex(plan->dependencies[target->dependency].id, dependency_id);
+            xr_stable_id_hex(target->export_identity, export_id);
+            xr_stable_id_hex(imported_result_type->source_class_identity, class_id);
+            xr_stable_id_hex(target->callee_function, constructor_id);
+            xr_stable_id_hex(plan->types[target->callable_type].id, type_id);
+            length = stable_id_zero(target->callee_function)
+                         ? snprintf(expected_key, sizeof(expected_key),
+                                    "call-target-v10:schema=%u:operation=%s:dependency=%s:"
+                                    "class-export=%s:source-class=%s:constructor=none:type=%s:"
+                                    "kind=%u",
+                                    XR_SEMANTIC_SCHEMA_VERSION, operation_id, dependency_id,
+                                    export_id, class_id, type_id, (unsigned) target->kind)
+                         : snprintf(expected_key, sizeof(expected_key),
+                                    "call-target-v10:schema=%u:operation=%s:dependency=%s:"
+                                    "class-export=%s:source-class=%s:constructor=%s:type=%s:"
+                                    "kind=%u",
+                                    XR_SEMANTIC_SCHEMA_VERSION, operation_id, dependency_id,
+                                    export_id, class_id, constructor_id, type_id,
+                                    (unsigned) target->kind);
         } else if (class_construction_shape) {
             char class_id[XR_STABLE_ID_BYTES * 2 + 1];
             char type_id[XR_STABLE_ID_BYTES * 2 + 1];
@@ -4307,6 +4415,7 @@ static bool verify_module_set_coroutine_authority(const XrSemanticPlan *plan,
                     : NULL;
             if (!source_export || !dependency_suspendable ||
                 !dependency_suspendable[target->dependency] ||
+                source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION ||
                 source_export->function >= dependency->function_count) {
                 coroutine_authority_work_dispose(&work);
                 return report(error, error_size, "XR_SEM_0019",
@@ -4564,7 +4673,7 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
         plan->edge_count > 40000000u || plan->operand_count > 40000000u ||
         plan->entity_count > 80000000u || plan->call_target_count > plan->operation_count ||
         plan->dependency_count > plan->function_count + plan->operation_count ||
-        plan->source_export_count > plan->function_count)
+        plan->source_export_count > plan->function_count + plan->source_class_count)
         return report(error, error_size, "XR_EXEC_5003", "SemanticPlan exceeds hard budgets");
     uint8_t *block_edge_mask = (uint8_t *) xr_calloc(plan->block_count, sizeof(*block_edge_mask));
     uint8_t *operation_edge_mask =
@@ -4704,6 +4813,48 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
          target_index++) {
         const XrSemanticCallTargetRecord *target = &plan->call_targets[target_index];
         bool target_valid = true;
+        if (target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
+            target->dependency != XR_SEMANTIC_INDEX_NONE) {
+            if (target->dependency >= dependency_count ||
+                target->operation >= plan->operation_count ||
+                target->source_export >= dependencies[target->dependency]->source_export_count) {
+                valid = false;
+                break;
+            }
+            const XrSemanticPlan *match = dependencies[target->dependency];
+            const XrSemanticOperationRecord *operation = &plan->operations[target->operation];
+            const XrSemanticSourceExportRecord *source_export =
+                &match->source_exports[target->source_export];
+            uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
+            uint32_t source_class = xr_semantic_imported_class_construction_source_class(
+                plan, match, &plan->dependencies[target->dependency], source_export, operation,
+                &constructor);
+            const XrSemanticFunctionRecord *callee =
+                constructor != XR_SEMANTIC_INDEX_NONE ? &match->functions[constructor] : NULL;
+            XrStableId zero = {{0}};
+            bool callee_identity =
+                callee ? xr_stable_id_equal(target->callee_function, callee->id)
+                       : xr_stable_id_equal(target->callee_function, zero);
+            if (source_class == XR_SEMANTIC_INDEX_NONE ||
+                target->function != XR_SEMANTIC_INDEX_NONE ||
+                target->callable_type != operation->result_type ||
+                !xr_stable_id_equal(target->export_identity, source_export->id) ||
+                !callee_identity) {
+                snprintf(authority_detail, sizeof(authority_detail),
+                         "imported source class construction disagrees with frozen dependency "
+                         "target=%u operation=%u dependency=%u export=%u",
+                         target_index, target->operation, target->dependency,
+                         target->source_export);
+                valid = false;
+                if (!survey)
+                    break;
+                semantic_survey_row("source_imported_class_constructor", authority_detail);
+                refused_rows++;
+                continue;
+            }
+            used[target->dependency] = 1;
+            continue;
+        }
         if (target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN) {
             if (target->dependency >= dependency_count ||
                 target->operation >= plan->operation_count ||
@@ -4771,7 +4922,8 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
         const XrSemanticOperationRecord *operation =
             target->operation < plan->operation_count ? &plan->operations[target->operation] : NULL;
         const XrSemanticFunctionRecord *callee =
-            source_export && source_export->function < match->function_count
+            source_export && source_export->kind == XR_SEM_SOURCE_EXPORT_FUNCTION &&
+                    source_export->function < match->function_count
                 ? &match->functions[source_export->function]
                 : NULL;
         const XrSemanticTypeRecord *caller_result =
@@ -4786,7 +4938,9 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
         bool exact_source_call = operation && resolve_frozen_source_namespace_target(
                                                   plan, definitions, value_count, &stores,
                                                   target->operation, &source_module, &selector);
-        if (!source_export || !operation || !callee || !exact_source_call || !source_module ||
+        if (!source_export || source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION || !operation ||
+            !callee || !xr_stable_id_equal(source_export->exported_entity, callee->id) ||
+            !exact_source_call || !source_module ||
             !selector ||
             strcmp(source_module, plan->dependencies[target->dependency].module_path) != 0 ||
             strcmp(selector, source_export->name) != 0 || callee->parameter_count == UINT16_MAX ||

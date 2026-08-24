@@ -427,18 +427,23 @@ row names the declared class and no callee at all; a method identity on such a
 row is refused as stale, and a class that does declare an instance constructor
 keeps the ordinary method callsite and composes that body's effects.
 
-The SemanticPlan names that construction in its own right as well, through a
-call-target kind whose row names the declaration and nothing else: no callee
-identity, no dependency, no export. What the call builds is proved from the
-instance type it returns and from the class object its callee operand loads out
-of its module slot, and the two must name the same declaration. A slot the
-module writes more than once, a value it defines more than once, or a call whose
-effects are not the generated call effects names nothing and is refused rather
-than guessed, so a construction that may suspend keeps no row at all. The row
-grounds no reachable callee and therefore leaves the coroutine-state expectation
-of its operation unchanged. The plan builder and the plan verifier derive the
-construction from the same shared judgement, and the verifier reads the frozen
-plan rather than the row it is checking.
+SemanticPlan schema 39 names local and imported construction without erasing
+their module boundary. A local construction target names only the declaration:
+the instance result and the class object loaded from its unique local shared
+slot must name the same frozen source class. An imported construction target
+instead binds the ordered dependency, an explicitly tagged source-class export,
+the exported declaration stable identity, and the dependency constructor stable
+identity when one exists. The dependency source-export row is a tagged union;
+function and source-class indexes are mutually exclusive, and the exported
+entity identity is serialized rather than rediscovered from the initializer by
+Target or AOT. Semantic construction proves the named `XI_IMPORT_REF` through
+the caller root store, while module-set verification independently repeats the
+import/member/dependency/export/class/constructor and argument proof. A
+duplicated store or definition, mismatched export kind or entity, missing exact
+constructor parameter, or call whose effects differ from the generated call
+effects names nothing. There is no local-shared-slot or function-export
+fallback for an imported class. The target grounds no coroutine-state
+expectation of its own.
 
 ## Digest anchors
 
@@ -465,15 +470,15 @@ anchor-sha256: tests/unit/ir/test_xi_lower.c d9238d4bad9d277667d5af676be81e77d9f
 anchor-sha256: src/frontend/analyzer/xanalyzer.c 9273a00f9e4dc55656e47b8d2d04acfa868e48e14ac53ba3599c7d8e6dfee2c3
 anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee106075efdec66d5602811f4a5cd7f82ea
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
-anchor-sha256: src/plan/format/xr_xsm_encode.c 9d322e36c30d8475caa74ded9cea9f3bf7e72f002c6c91f66e153505d80cb8c2
+anchor-sha256: src/plan/format/xr_xsm_encode.c df686c9b9dca307b266c633c0f7f8591ef8dd08845fa0cfdeadc033a34b8822b
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c e1219cc42d502203efd06d3248fc49d0dd2aaebfad5ca3b95f8f5242df0e63f4
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 13e29a7fbf2507baebbf589f62a76c6928f17ed596076411e4337dde8c75ddeb
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h babc9142bbb3b42f63fd50e5f5fb009f80e082bb2c7be61aeed04327ee7e27a3
-anchor-sha256: src/plan/semantic/xr_semantic_plan.c 561eaae59525ba3d0b57e9adcfc3bb6e970bc9be2bac3b750af58653a237dbae
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h 16b7c06af95f0c5af98d0e6768a40cb64339762f7327c802f56c91e686190fea
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h d105696880066d9a5d0b8bc653d122aa7d0ed827a8639e739328bcb4d22e837c
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c 878eb0e3c9d9e2658f32daab2a18095a87dffc2b2746d2ee68fb5a1bdb987cec
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 4669f2e0bd25fa37fac6239b42e147e2118cf24675c6313cafd41244768acbc3
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 63905a40cb54d913e4a9366c0ed29116b5f6d482ac90100da16add5ebf366966
 anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h b3d62a8e20b7512a08225328479b21ee99eb24c9a415796a93e71f8f20677216
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
@@ -482,10 +487,10 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe272bdac489c45b4411f8d9075cac07db14b76a3d62181efdac7276
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 2bcdc8e045fd715c9b78c94d23260238ae663128a5866d4a4759ab0217fb575a
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c d28a1e76869338a1b2364d428246895c1ee2b103d8714d78f206197ae2c5bcee
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 39a4accd8c8e23ca8696b8b96a445d129089d7ca18fe6458f4d14dabb3664a99
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 4c98752eca9af3d3cc2489008cad6a5fad58fa0f40e9c046ad5dd70d20df2d89
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
 anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1

@@ -3581,6 +3581,7 @@ static void test_named_aggregate_emission_is_exact_and_fail_closed(void) {
 
     XiFunc *function = xi_func_new("named_aggregate_emission", &named_type);
     REQUIRE(function != NULL);
+    function->is_module_initializer = true;
     XiModule *module = xi_module_new("named_aggregate_emission.xr",
                                      "named_aggregate_emission", function);
     REQUIRE(module != NULL);
