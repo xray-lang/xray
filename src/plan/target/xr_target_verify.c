@@ -38,7 +38,6 @@
 #include "../semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_next_shape.h"
 #include "../semantic/xr_semantic_iterator_rune_nth_shape.h"
-#include "../semantic/xr_semantic_rune_to_uint32_shape.h"
 #include "../semantic/xr_semantic_rune_to_string_shape.h"
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
@@ -3215,6 +3214,75 @@ static bool imported_source_class_instance_storage_is_exact_verify(
     const XrTargetPlan *plan, uint32_t semantic_operation,
     const XrSemanticOperationRecord *operation);
 
+static bool rune_to_uint32_type_is_exact_target_verify(const XrSemanticTypeRecord *type,
+                                                       uint16_t kind, uint8_t scalar_rep,
+                                                       const char *canonical_key) {
+    XrStableId zero = {{0}};
+    return type && type->kind == kind && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           xr_stable_id_equal(type->source_enum_identity, zero) && !type->source_enum_key &&
+           type->child_count == 0 && type->scalar_rep == scalar_rep &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->reserved_enum == 0 && type->flags == 0 && type->canonical_key &&
+           strcmp(type->canonical_key, canonical_key) == 0;
+}
+
+/* The Target verifier reconstructs the frozen semantic relation itself. It
+ * intentionally does not call the builder's complete shape predicate. */
+static bool operation_is_exact_rune_to_uint32_verify(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t *receiver_value) {
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation || !operands || !metadata ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_RUNE_TO_UINT32 ||
+        operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1 ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        strcmp(metadata[operation->metadata_begin], "toUInt32") != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        (operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) &&
+         operation->flags != (xi_generated_op_default_flags(XI_CALL_METHOD) | XI_FLAG_TAIL)) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_NONE ||
+        operation->return_complete != 0 || operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE || operation->view_capability != 0 ||
+        operation->view_lifetime != 0 || operation->view_complete != 0 ||
+        operation->reserved_view[0] != 0 || operation->reserved_view[1] != 0)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    if (!rune_to_uint32_type_is_exact_target_verify(
+            xr_semantic_plan_type(plan, receiver->type), XR_KIND_RUNE, XR_SCALAR_REP_NONE,
+            "type-v3:24:0:0:0:0:0:0:0:0:255:0:") ||
+        !rune_to_uint32_type_is_exact_target_verify(
+            xr_semantic_plan_type(plan, operation->result_type), XR_KIND_INT, XR_NATIVE_U32,
+            "type-v3:0:0:0:0:0:0:0:0:0:8:0:") ||
+        receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
+        receiver->transfer_mode != XR_TRANSFER_SHARE ||
+        receiver->ownership_action != XR_SEM_OPERAND_BORROW || receiver->parameter_mode != 0 ||
+        receiver->access != 0 || receiver->origin != 0 || receiver->lifetime != 0 ||
+        receiver->escape != 0 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+        return false;
+    if (receiver_value)
+        *receiver_value = receiver->value;
+    return true;
+}
+
 static bool collect_exact_dynamic_types(
     const XrTargetPlan *plan, const uint8_t *exact_direct_callees, const uint8_t *exact_go_callees,
     const uint8_t *exact_channel_values, const uint8_t *exact_source_namespaces,
@@ -3307,7 +3375,7 @@ static bool collect_exact_dynamic_types(
                                                                  NULL) ||
             semantic_map_entry_iterator_next_is_exact_verify(plan->semantic_plan, operation,
                                                              NULL) ||
-            xr_semantic_rune_to_uint32_is_exact(plan->semantic_plan, operation, NULL) ||
+            operation_is_exact_rune_to_uint32_verify(plan->semantic_plan, operation, NULL) ||
             xr_semantic_rune_to_string_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_rune_is_whitespace_is_exact(plan->semantic_plan, operation, NULL) ||
             xr_semantic_string_slice_range_is_exact(plan->semantic_plan, operation, NULL, NULL,
@@ -5290,7 +5358,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
-        if (xr_semantic_rune_to_uint32_is_exact(semantic, operation, NULL)) {
+        if (operation_is_exact_rune_to_uint32_verify(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
                 break;
@@ -5553,7 +5621,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         uint32_t rune_to_uint32_receiver = XR_SEMANTIC_INDEX_NONE;
         bool rune_to_uint32 =
             !semantic_target &&
-            xr_semantic_rune_to_uint32_is_exact(semantic, operation, &rune_to_uint32_receiver);
+            operation_is_exact_rune_to_uint32_verify(semantic, operation,
+                                                     &rune_to_uint32_receiver);
         uint32_t rune_to_string_receiver = XR_SEMANTIC_INDEX_NONE;
         bool rune_to_string =
             !semantic_target &&

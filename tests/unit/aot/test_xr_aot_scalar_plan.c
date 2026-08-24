@@ -1965,27 +1965,16 @@ static void test_rune_to_uint32_c_emission_recipe_is_exact(void) {
     REQUIRE(root != NULL);
     XiBlock *entry = xi_block_new(root);
     REQUIRE(entry != NULL);
-    XiValue *source = xi_const_str(root, entry, "authority", &scalar_string);
-    XiValue *runes = xi_value_new(root, entry, XI_CALL_METHOD,
-                                  &iterator_rune_type, 1);
-    XiValue *next = xi_value_new(root, entry, XI_CALL_METHOD, &rune_type, 1);
+    XiValue *receiver = xi_param(root, entry, 0, &rune_type);
     XiValue *to_u32 = xi_value_new(root, entry, XI_CALL_METHOD, &u32_type, 1);
-    REQUIRE(source && runes && next && to_u32);
-    runes->args[0] = source;
-    runes->aux = (void *) "runes";
-    runes->aux_int = 470;
-    next->args[0] = runes;
-    next->aux = (void *) "next";
-    next->aux_int = 114;
-    next->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
-    next->call_return_ownership.param_index = -1;
-    next->call_return_ownership.complete = true;
-    to_u32->args[0] = next;
+    REQUIRE(receiver && to_u32);
+    root->nparams = root->min_params = 1;
+    root->params = (XiValue **) xr_calloc(1, sizeof(*root->params));
+    REQUIRE(root->params != NULL);
+    root->params[0] = receiver;
+    to_u32->args[0] = receiver;
     to_u32->aux = (void *) "toUInt32";
-    to_u32->aux_int = 474;
-    XiValue *release = xi_value_new(root, entry, XI_RELEASE, &scalar_unit, 1);
-    REQUIRE(release != NULL);
-    release->args[0] = runes;
+    to_u32->aux_int = (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1;
     xi_block_set_return(entry, NULL);
     root->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
@@ -1995,18 +1984,24 @@ static void test_rune_to_uint32_c_emission_recipe_is_exact(void) {
     XiRepPolicy policy = xi_rep_policy_native_boundary();
     XrAotRefinementDiagnostic refinement_diag = {0};
     XrAotRefinementPlan *refinement = NULL;
-    REQUIRE(xr_aot_representation_refinement_build_from_authority(
-        target, &policy, &refinement, &refinement_diag));
+    bool refined = xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &refinement_diag);
+    if (!refined)
+        fprintf(stderr,
+                "rune.toUInt32 refinement failed: issue=%u value=%u operation=%u call=%u\n",
+                refinement_diag.issue, refinement_diag.semantic_value,
+                refinement_diag.semantic_operation, refinement_diag.target_call_index);
+    REQUIRE(refined);
     xr_aot_refinement_plan_free(refinement);
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;
     REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
                                      error, sizeof(error)));
     uint32_t ignored_function = XR_SEMANTIC_INDEX_NONE;
-    uint32_t next_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
     uint32_t to_u32_value = XR_SEMANTIC_INDEX_NONE;
     REQUIRE(xr_aot_scalar_semantic_value_id(
-        target, root, next, &ignored_function, &next_value, error,
+        target, root, receiver, &ignored_function, &receiver_value, error,
         sizeof(error)));
     REQUIRE(xr_aot_scalar_semantic_value_id(
         target, root, to_u32, &ignored_function, &to_u32_value, error,
@@ -2018,7 +2013,7 @@ static void test_rune_to_uint32_c_emission_recipe_is_exact(void) {
             view.target_register_kind == XR_MACHINE_REP_U32 &&
             view.target_memory_kind == XR_MACHINE_REP_U32 &&
             view.materialization == XR_C_VALUE_MATERIALIZATION_RUNE_TO_UINT32 &&
-            view.recipe_operand_value == next_value && view.recipe_symbol &&
+            view.recipe_operand_value == receiver_value && view.recipe_symbol &&
             strcmp(view.recipe_symbol, "xrt_rune_to_uint32") == 0);
     XrCValueEmissionView *row = NULL;
     for (uint32_t i = 0; i < emission->value_count; i++)

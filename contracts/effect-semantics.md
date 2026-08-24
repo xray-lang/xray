@@ -9,13 +9,16 @@ operations; it does not add a source-level effect or permit backend inference.
 Task 251 makes source-parameter write provenance complete for scalar `ref`
 parameters and permits an advisory unused-`ref` hint only from that canonical,
 complete effect product.
-SemanticPlan schema 32 preserves exact `String.runes()` builtin-member identity
+SemanticPlan schema 39 preserves exact `String.runes()` builtin-member identity
 and the sealed `Iterator<rune>.next()` result reached directly from it as frozen
 intrinsics. The latter requires one unique same-function `String.runes()` result;
 an Iterator type or selector alone is not authority. The schema also retains the
-exact `rune.toUInt32()` intrinsic only when its receiver is the unique
-same-function result of that frozen `Iterator<rune>.next()` intrinsic. Its
-result is exact non-null native `u32`; later phases cannot reconstruct the
+exact `rune.toUInt32()` intrinsic for an exact canonical Rune SSA receiver,
+including a parameter, phi, literal, or iterator result. The exact method symbol,
+non-null native `u32` result, borrowed Rune operand, and call ownership are the
+authority; the operation that produced the Rune is not part of the conversion
+semantics. The independent verifier reconstructs those facts without using the
+builder's complete-answer predicate, and later phases cannot reconstruct the
 identity from selector, live type, or argument count. The schema also retains the
 exact `rune.isWhitespace()` intrinsic only for that same uniquely proven Rune;
 its exact bool result and call contract cannot be reconstructed from selector,
@@ -488,7 +491,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
 anchor-sha256: src/plan/format/xr_xsm_encode.c d091aa2e885f3384d3ef4f41d8d915cd820ce2147f729b4ea3c513df10a86c31
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c ddf0b70a96d1740de60a027aa8588002c5a9f5e66248360638c28b4bfb60b65b
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 50cfe87e28338a642e12129ad54c4a437fca708983911d36f2be2a715efb1152
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
@@ -501,9 +504,9 @@ anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h 2b0db2abc1652ec45f6a8090ad973cd60bafe039eb4f64c7d0e38674fd388dce
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 520152cb6e93b1cdd6639e094772a652905206e97bf15677ba753eecb4d075f6
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
-anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe272bdac489c45b4411f8d9075cac07db14b76a3d62181efdac7276
+anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 9e459eff49bbe199d58dd4b63b8e27490fc6968e96a0b7227eb9c54ca98dba97
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c beeb105e17181dab96f74aadf34f91c3df926546cf2c8b39f6ca30d8923f99c2
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 15fff7c8f42b44a1822b628c7de0bde3dc996f48b694ead0a4d8d8e917541f5d

@@ -1,2 +1,4 @@
-c_regex=uint32_t v[0-9]+ = \(uint32_t\)\([^;]+\);
+c_contains=xrt_rune_to_uint32(
 c_not_contains=xrt_method_0(
+c_not_contains=XRT_SYM_TO_UINT32
+c_not_contains=(uint32_t)(

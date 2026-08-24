@@ -1160,32 +1160,28 @@ static XrSemanticPlan *build_map_entry_iterator_semantic(XiMethodSymbolId factor
     return semantic;
 }
 
-static XrSemanticPlan *build_rune_to_uint32_semantic(void) {
+static XrSemanticPlan *build_rune_to_uint32_semantic_with_receiver(
+    XrType *receiver_type, int64_t method_symbol) {
     XiFunc *function = xi_func_new("target_rune_to_uint32", &stub_int);
     REQUIRE(function != NULL);
     XiBlock *entry = xi_block_new(function);
     REQUIRE(entry != NULL);
-    XiValue *source = xi_const_str(function, entry, "target-rune-u32", &stub_exact_string);
-    XiValue *runes = xi_value_new(function, entry, XI_CALL_METHOD, &stub_iterator_rune, 1);
-    XiValue *next = xi_value_new(function, entry, XI_CALL_METHOD, &stub_rune, 1);
+    XiValue *receiver = xi_param(function, entry, 0, receiver_type);
     XiValue *to_u32 = xi_value_new(function, entry, XI_CALL_METHOD, &stub_u32, 1);
-    REQUIRE(source && runes && next && to_u32);
-    runes->args[0] = source;
-    runes->aux = (void *) "runes";
-    runes->aux_int = 470;
-    next->args[0] = runes;
-    next->aux = (void *) "next";
-    next->aux_int = 114;
-    next->call_return_ownership.kind = XI_RETURN_OWNERSHIP_OWNED;
-    next->call_return_ownership.param_index = -1;
-    next->call_return_ownership.complete = true;
-    to_u32->args[0] = next;
+    REQUIRE(receiver && to_u32);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = receiver;
+    to_u32->args[0] = receiver;
     to_u32->aux = (void *) "toUInt32";
-    to_u32->aux_int = 474;
-    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
-    REQUIRE(release != NULL);
-    release->args[0] = runes;
+    to_u32->aux_int = method_symbol;
     return finish_stringbuilder_semantic(function, entry, "rune.toUInt32");
+}
+
+static XrSemanticPlan *build_rune_to_uint32_semantic(void) {
+    return build_rune_to_uint32_semantic_with_receiver(
+        &stub_rune, (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1);
 }
 
 static XrSemanticPlan *build_rune_is_whitespace_semantic(void) {
@@ -6892,11 +6888,14 @@ static void test_rune_to_uint32_call_authority(void) {
     REQUIRE(xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan);
     XrTargetCallRecord *call =
         find_call_by_convention(plan, XR_TARGET_CALL_CONVENTION_RUNE_TO_UINT32);
-    const XrSemanticOperationRecord *operation =
-        call ? xr_semantic_plan_operation(semantic, call->semantic_operation) : NULL;
+    XrSemanticOperationRecord *operation =
+        call ? &semantic->operations[call->semantic_operation] : NULL;
+    XrSemanticOperandRecord *receiver =
+        operation ? &semantic->operands[operation->operand_begin] : NULL;
     const XrTargetValueRepRecord *result =
         operation ? xr_target_plan_value_rep(plan, operation->result_value) : NULL;
-    REQUIRE(operation && operation->intrinsic_kind == XR_SEM_INTRINSIC_RUNE_TO_UINT32 &&
+    REQUIRE(operation && receiver &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_RUNE_TO_UINT32 &&
             call->target_kind == XR_TARGET_CALL_TARGET_RUNE_TO_UINT32 &&
             call->result_ownership == XR_TARGET_CALL_NONE &&
             call->result_mode == XR_TARGET_CALL_VALUE && call->argument_count == 0 && result &&
@@ -6919,18 +6918,37 @@ static void test_rune_to_uint32_call_authority(void) {
     call->calling_convention = saved_convention;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
-    XrSemanticOperationRecord *next_operation = NULL;
-    for (uint32_t i = 0; i < semantic->operation_count; i++)
-        if (semantic->operations[i].intrinsic_kind == XR_SEM_INTRINSIC_ITERATOR_RUNE_NEXT)
-            next_operation = &semantic->operations[i];
-    REQUIRE(next_operation != NULL);
-    uint8_t saved_intrinsic = next_operation->intrinsic_kind;
-    next_operation->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
+    int64_t saved_immediate = semantic->operations[call->semantic_operation].semantic_immediate;
+    semantic->operations[call->semantic_operation].semantic_immediate =
+        (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1;
     REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
-    next_operation->intrinsic_kind = saved_intrinsic;
+    semantic->operations[call->semantic_operation].semantic_immediate = saved_immediate;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    uint8_t saved_ownership = receiver->ownership_action;
+    receiver->ownership_action = XR_SEM_OPERAND_CONSUME;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    receiver->ownership_action = saved_ownership;
     REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
 
     xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    semantic = build_rune_to_uint32_semantic_with_receiver(
+        &stub_rune, (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1);
+    profile = build_profile(0);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL);
+    REQUIRE(strstr(error, "XR_TARGET_1003") != NULL);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
+
+    semantic = build_rune_to_uint32_semantic_with_receiver(
+        &stub_u32, (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1);
+    profile = build_profile(0);
+    plan = NULL;
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL);
+    REQUIRE(strstr(error, "XR_TARGET_1003") != NULL);
     xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
 }
@@ -7639,6 +7657,11 @@ int main(int argc, char **argv) {
     if (argc == 2 && strcmp(argv[1], "rune-to-string-result-authority") == 0) {
         test_rune_to_string_result_authority();
         puts("rune.toString result authority tests passed");
+        return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "rune-to-uint32-parameter-authority") == 0) {
+        test_rune_to_uint32_call_authority();
+        puts("rune.toUInt32 parameter authority tests passed");
         return 0;
     }
     if (argc == 2 && strcmp(argv[1], "string-runes-result-authority") == 0) {

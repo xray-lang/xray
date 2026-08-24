@@ -24,7 +24,6 @@
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_map_entry_iterator_shape.h"
-#include "xr_semantic_rune_to_uint32_shape.h"
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
 #include "xr_semantic_native_module_shape.h"
@@ -1811,12 +1810,76 @@ static bool verify_map_entry_iterator(const XrSemanticPlan *plan,
                            "Map entry iterator authority is not exact");
 }
 
+static bool rune_to_uint32_type_is_exact_verify(const XrSemanticTypeRecord *type, uint16_t kind,
+                                                uint8_t scalar_rep,
+                                                const char *canonical_key) {
+    XrStableId zero = {{0}};
+    return type && type->kind == kind && type->builtin_type == XR_TID_NULL &&
+           type->source_class == XR_SEMANTIC_INDEX_NONE &&
+           xr_stable_id_equal(type->source_class_identity, zero) &&
+           xr_stable_id_equal(type->source_enum_identity, zero) && !type->source_enum_key &&
+           type->child_count == 0 && type->scalar_rep == scalar_rep &&
+           type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->enum_layout_id == 0 && type->enum_member_count == 0 && type->enum_flags == 0 &&
+           type->reserved_enum == 0 && type->flags == 0 && type->canonical_key &&
+           strcmp(type->canonical_key, canonical_key) == 0;
+}
+
+/* Independent of the builder's shape helper: a bad producer/helper change
+ * cannot make the verifier accept the same fabricated answer. */
+static bool rune_to_uint32_is_exact_verify(const XrSemanticPlan *plan,
+                                           const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    uint32_t metadata_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
+    if (!plan || !operation || !operands || !metadata ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_RUNE_TO_UINT32 ||
+        operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1 ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        strcmp(metadata[operation->metadata_begin], "toUInt32") != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        (operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) &&
+         operation->flags != (xi_generated_op_default_flags(XI_CALL_METHOD) | XI_FLAG_TAIL)) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_NONE ||
+        operation->return_complete != 0 || operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        operation->view_origin != XI_VIEW_ORIGIN_NONE || operation->view_capability != 0 ||
+        operation->view_lifetime != 0 || operation->view_complete != 0 ||
+        operation->reserved_view[0] != 0 || operation->reserved_view[1] != 0)
+        return false;
+    const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
+    return rune_to_uint32_type_is_exact_verify(
+               xr_semantic_plan_type(plan, receiver->type), XR_KIND_RUNE, XR_SCALAR_REP_NONE,
+               "type-v3:24:0:0:0:0:0:0:0:0:255:0:") &&
+           rune_to_uint32_type_is_exact_verify(
+               xr_semantic_plan_type(plan, operation->result_type), XR_KIND_INT, XR_NATIVE_U32,
+               "type-v3:0:0:0:0:0:0:0:0:0:8:0:") &&
+           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+           receiver->transfer_mode == XR_TRANSFER_SHARE &&
+           receiver->ownership_action == XR_SEM_OPERAND_BORROW && receiver->parameter_mode == 0 &&
+           receiver->access == 0 && receiver->origin == 0 && receiver->lifetime == 0 &&
+           receiver->escape == 0 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT;
+}
+
 static bool verify_rune_to_uint32(const XrSemanticPlan *plan,
                                   const XrSemanticOperationRecord *operation, char *error,
                                   size_t error_size) {
     if (operation->intrinsic_kind != XR_SEM_INTRINSIC_RUNE_TO_UINT32)
         return true;
-    return xr_semantic_rune_to_uint32_is_exact(plan, operation, NULL) ||
+    return rune_to_uint32_is_exact_verify(plan, operation) ||
            report(error, error_size, "XR_SEM_0019", "rune.toUInt32 authority is not exact");
 }
 

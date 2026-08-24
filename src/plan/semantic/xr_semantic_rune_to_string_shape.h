@@ -11,14 +11,33 @@
 #ifndef XR_SEMANTIC_RUNE_TO_STRING_SHAPE_H
 #define XR_SEMANTIC_RUNE_TO_STRING_SHAPE_H
 
-#include "xr_semantic_rune_to_uint32_shape.h"
+#include "xr_semantic_iterator_rune_nth_shape.h"
 #include "xr_semantic_string_shape.h"
 
+static inline bool
+xr_semantic_rune_to_string_receiver_is_exact(const XrSemanticPlan *plan,
+                                             const XrSemanticOperationRecord *operation,
+                                             uint32_t receiver_value) {
+    if (!plan || !operation)
+        return false;
+    const XrSemanticOperationRecord *definition = NULL;
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->result_value != receiver_value)
+            continue;
+        if (definition)
+            return false;
+        definition = candidate;
+    }
+    return definition && definition->function == operation->function &&
+           xr_semantic_iterator_rune_source_is_exact(plan, definition);
+}
+
 /* `r.toString()` where the rune came from a `String.runes()` iterator: the
- * one-rune string. Same receiver requirement as toUInt32 next door -- the rune
- * has to be one this plan can trace back to an iterator, not any rune at all,
- * because that is what makes the conversion's operand exact.
- */
+ * one-rune string. This owned-String family retains its iterator-only receiver
+ * proof even though the separate scalar-to-u32 conversion accepts every exact
+ * Rune value. */
 static inline bool xr_semantic_rune_to_string_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticOperationRecord *operation,
                                                        uint32_t *receiver_value) {
@@ -76,7 +95,7 @@ static inline bool xr_semantic_rune_to_string_is_exact(const XrSemanticPlan *pla
         receiver->access != 0 || receiver->origin != 0 || receiver->lifetime != 0 ||
         receiver->escape != 0 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
         return false;
-    if (!xr_semantic_rune_to_uint32_receiver_is_exact(plan, operation, receiver->value))
+    if (!xr_semantic_rune_to_string_receiver_is_exact(plan, operation, receiver->value))
         return false;
     if (receiver_value)
         *receiver_value = receiver->value;

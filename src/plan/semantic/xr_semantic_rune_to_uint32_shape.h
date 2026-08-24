@@ -5,33 +5,24 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_semantic_rune_to_uint32_shape.h - Exact iterator-rune conversion authority
+ * xr_semantic_rune_to_uint32_shape.h - Exact rune conversion authority
  */
 
 #ifndef XR_SEMANTIC_RUNE_TO_UINT32_SHAPE_H
 #define XR_SEMANTIC_RUNE_TO_UINT32_SHAPE_H
 
-#include "xr_semantic_iterator_rune_nth_shape.h"
+#include "xr_semantic_plan.h"
+#include "../../ir/xi.h"
+#include "../../ir/xi_own.h"
+#include "../../ir/xi_ops_gen.h"
+#include "../../runtime/value/xtype.h"
+#include <string.h>
 
-static inline bool
-xr_semantic_rune_to_uint32_receiver_is_exact(const XrSemanticPlan *plan,
-                                             const XrSemanticOperationRecord *operation,
-                                             uint32_t receiver_value) {
-    if (!plan || !operation)
-        return false;
-    const XrSemanticOperationRecord *definition = NULL;
-    size_t operation_count = xr_semantic_plan_operation_count(plan);
-    for (uint32_t i = 0; i < operation_count; i++) {
-        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
-        if (!candidate || candidate->result_value != receiver_value)
-            continue;
-        if (definition)
-            return false;
-        definition = candidate;
-    }
-    return definition && definition->function == operation->function &&
-           xr_semantic_iterator_rune_source_is_exact(plan, definition);
-}
+/* A rune is a complete scalar value. Its conversion does not depend on which
+ * operation produced it: parameters, phi results, iterator results and rune
+ * literals all have the same native Rune representation. The exact method
+ * symbol and the frozen operand/type rows below are the authority; producer
+ * spelling is deliberately not a second, narrower dispatch gate. */
 
 static inline bool xr_semantic_rune_to_uint32_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticOperationRecord *operation,
@@ -42,8 +33,9 @@ static inline bool xr_semantic_rune_to_uint32_is_exact(const XrSemanticPlan *pla
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     if (!plan || !operation || !operands || !metadata ||
         operation->intrinsic_kind != XR_SEM_INTRINSIC_RUNE_TO_UINT32 ||
-        operation->opcode != XI_CALL_METHOD || operation->semantic_immediate <= 0 ||
-        (operation->semantic_immediate & 1) != 0 || operation->operand_count != 1 ||
+        operation->opcode != XI_CALL_METHOD ||
+        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1 ||
+        operation->operand_count != 1 ||
         operation->operand_begin >= operand_count || operation->metadata_count != 1 ||
         operation->metadata_begin >= metadata_count ||
         strcmp(metadata[operation->metadata_begin], "toUInt32") != 0 ||
@@ -104,8 +96,7 @@ static inline bool xr_semantic_rune_to_uint32_is_exact(const XrSemanticPlan *pla
         receiver->transfer_mode != XR_TRANSFER_SHARE ||
         receiver->ownership_action != XR_SEM_OPERAND_BORROW || receiver->parameter_mode != 0 ||
         receiver->access != 0 || receiver->origin != 0 || receiver->lifetime != 0 ||
-        receiver->escape != 0 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
-        !xr_semantic_rune_to_uint32_receiver_is_exact(plan, operation, receiver->value))
+        receiver->escape != 0 || receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT)
         return false;
     if (receiver_value)
         *receiver_value = receiver->value;

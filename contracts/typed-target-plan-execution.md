@@ -276,10 +276,13 @@ String method or slice construction authority. Schema 18 adds a sealed
 `String.runes` result and whose fixed runtime helper preserves pending-error
 polling. C emission schema 30 adds the separate native-rune `next` recipe only
 when the receiver has that same unique frozen `String.runes` producer, plus
-the exact native-u32 `rune.toUInt32` recipe only when its receiver is the
-unique exact `.next()` result in the same function, and the exact native-bool
-`rune.isWhitespace` recipe under the same receiver proof. None grants general
-Iterator or Rune dispatch. It separately adds the exact owned String
+the exact native-u32 `rune.toUInt32` recipe for any exact canonical Rune SSA
+receiver. TargetPlan independently reconstructs the exact method, type,
+ownership, receiver identity, native-Rune binding, and dedicated call row;
+refinement then re-proves that frozen binding instead of demanding a particular
+Rune producer. The exact native-bool `rune.isWhitespace` recipe remains under
+the iterator receiver proof. None grants general Iterator or Rune dispatch. It
+separately adds the exact owned String
 range-slice recipe only for a frozen required String parameter or exact String
 literal receiver plus two ordered i64 bounds; this grants no generic String
 dispatch. C emission schema 30 also projects the first non-empty cleanup
@@ -530,7 +533,7 @@ anchor-sha256: src/plan/target/xr_target_plan.c 00b20639baa9c8aaa46b76517d98d6aa
 anchor-sha256: src/plan/target/xr_target_builder.c 177b9205896b4f9f2c97fbd950b683abfe0d6a9c6a5e9d4998c70f5548b7d095
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
-anchor-sha256: src/plan/target/xr_target_verify.c 0bacdd7663853176fa4376b60a651d08bf788f6212ff07c218644b1f210bf97a
+anchor-sha256: src/plan/target/xr_target_verify.c f4a22b0e43b4901836e9655e9dfc81fde7518091f79793d8d9eb250cbcda4837
 anchor-sha256: src/plan/format/xr_xtp_schema.h 536d47688befcdf9340632a4bcaa98edb115dae99dce289d7df40deca589e07c
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29

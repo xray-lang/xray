@@ -5114,8 +5114,9 @@ static bool oracle_rune_to_string_call(const VerifyAuthority *ctx, uint32_t sema
     return true;
 }
 
-/* Exact rune-to-u32 conversion preserves the native integer lane and is
- * admitted only for the Rune produced by the frozen Iterator<rune>.next row. */
+/* Exact rune-to-u32 conversion preserves the native integer lane. The frozen
+ * semantic row proves the receiver is Rune; TargetPlan must independently
+ * prove that the referenced value actually occupies the native Rune lane. */
 static bool oracle_rune_to_uint32_call(const VerifyAuthority *ctx, uint32_t semantic_value,
                                        XrRep *out_storage, uint16_t *out_machine_kind) {
     if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
@@ -5131,7 +5132,7 @@ static bool oracle_rune_to_uint32_call(const VerifyAuthority *ctx, uint32_t sema
         return false;
     XrRep receiver_storage = XR_REP_TAGGED;
     uint16_t receiver_kind = XR_MACHINE_REP_COUNT;
-    if (!oracle_iterator_rune_source_call(ctx, receiver, &receiver_storage, &receiver_kind) ||
+    if (!oracle_machine_storage(ctx, receiver, &receiver_storage, &receiver_kind) ||
         receiver_storage != XR_REP_I64 || receiver_kind != XR_MACHINE_REP_RUNE)
         return false;
     const XrSemanticTypeRecord *result_type =
@@ -8635,8 +8636,8 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 if (operand_index != 0 ||
                     !oracle_rune_to_uint32_call(ctx, operation->result_value, &result_storage,
                                                 &ignored_kind) ||
-                    !oracle_iterator_rune_source_call(ctx, source_value, out_storage,
-                                                      &ignored_kind))
+                    !oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind) ||
+                    ignored_kind != XR_MACHINE_REP_RUNE)
                     return false;
                 *out_storage = XR_REP_I64;
                 return true;

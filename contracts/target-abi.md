@@ -229,10 +229,12 @@ selector, live type, arity, `nth`, other Iterator specialization, or generic
 method path can substitute for that authority.
 For exact `rune.toUInt32()`, schema 30 owns the trivial native-u32 result, its
 single native-Rune recipe operand, and fixed `xrt_rune_to_uint32` helper. The
-semantic receiver must be the unique exact `Iterator<rune>.next()` result in
-the same function, and TargetPlan, refinement, and CEmission independently
-rebuild that chain. CGen consumes the frozen recipe without selector, live
-type, arity, or generic-method fallback.
+semantic receiver may be any exact canonical Rune SSA value, including a
+parameter, phi, literal, or iterator result. TargetPlan independently rebuilds
+the exact method, type, ownership, receiver identity, native-Rune binding, and
+dedicated call row; refinement re-proves that binding, and CEmission projects
+the frozen receiver into the immutable recipe. CGen consumes that recipe without
+selector, live type, arity, producer-shape, or generic-method fallback.
 For exact `rune.isWhitespace()`, schema 30 owns the trivial native-bool result,
 its single native-Rune recipe operand, and fixed `xrt_rune_is_whitespace`
 helper. The semantic receiver must be the unique exact
@@ -649,7 +651,7 @@ anchor-sha256: src/aot/xaot_prepare.c b025cbd2f99f6069b8ef142d840f09a1c2c1f996d4
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c 787a6bef6b2498164b08005832d5299ab8f54f2b62e15b5802d1c2bc1bf50992
 anchor-sha256: src/aot/xaot_verify.c b02e1be0c00c291d36de9f7eb62bcf2f00a7851a3e0aaf65f09edf76c769b154
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 9d62cbead4303fbffabc1d5f046f29e16bc7ea6706fc9efa21df013305d3d026
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 82a663ecb49eea10f176ad4e119af74d1d64ba7530344c5c64016bb4ca57f3a6
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
@@ -666,7 +668,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af
 anchor-sha256: src/plan/semantic/xr_semantic_string_slice_shape.h 2b0db2abc1652ec45f6a8090ad973cd60bafe039eb4f64c7d0e38674fd388dce
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 520152cb6e93b1cdd6639e094772a652905206e97bf15677ba753eecb4d075f6
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
-anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe272bdac489c45b4411f8d9075cac07db14b76a3d62181efdac7276
+anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c 609e5795a81a2b62602eb75950a4b5e53755d8cc6ab8216287b3650422ad2d7a
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c f0c51f3ae3551c40fa93026af14abe02f9eb5e5310ff7935752836847b0519cc
