@@ -2965,7 +2965,6 @@ static bool cg_direct_local_array_ref_argument_emission(XiCgenCtx *ctx, const Xi
         out->mode != XR_TARGET_CALL_REFERENCE || out->ownership != XR_TARGET_CALL_BORROW ||
         out->transfer_mode != XR_TRANSFER_SHARE ||
         out->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
-        out->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
         out->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT || out->reserved[0] != 0 ||
         out->reserved[1] != 0 || out->reserved[2] != 0 || !out->c_type ||
         strcmp(out->c_type, "XrValue *") != 0) {
@@ -2981,7 +2980,6 @@ static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
     if (view->materialization == XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_ARRAY_REF_PARAMETER)
         return view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
                view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
-               view->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
                view->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
                strcmp(view->c_type, "XrValue *") == 0;
     if (view->materialization == XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS)

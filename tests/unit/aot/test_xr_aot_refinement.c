@@ -95,6 +95,29 @@ struct XrCEmissionPlan {
         }                                                                                          \
     } while (0)
 
+static bool ensure_fixture_module_identity(XiFunc *root) {
+    if (!root)
+        return false;
+    if (!root->module) {
+        root->module = xi_module_new("fixture/aot_refinement.xr",
+                                     root->name ? root->name : "aot_refinement_fixture", root);
+        if (!root->module)
+            return false;
+    }
+    if (!root->module->identity &&
+        !xi_module_set_identity(root->module,
+                                "memory-module-v1:id=25:aot-refinement-fixture-v1"))
+        return false;
+    return true;
+}
+
+static bool build_fixture_semantic_plan_and_attach(XiFunc *root, char *error,
+                                                   size_t error_size) {
+    if (!ensure_fixture_module_identity(root))
+        return false;
+    return xr_semantic_plan_build_and_attach(root, error, error_size);
+}
+
 typedef struct RefinementFixture {
     XrSemanticPlan *semantic_plan;
     XrTargetProfile *target_profile;
@@ -331,6 +354,14 @@ static XrType direct_local_int_array = {
     .container = {.element_type = &scalar_int},
 };
 
+static XrType tagged_string_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 18,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &scalar_string},
+};
+
 static XrFunctionParam array_hof_unary_int_params[] = {
     {.type = &scalar_int, .mode = XR_PARAM_READ},
 };
@@ -407,6 +438,7 @@ static XrSemanticPlan *build_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic_plan = NULL;
     char error[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(function));
     REQUIRE(xr_semantic_plan_build(function, &semantic_plan, error, sizeof(error)));
     xi_func_free(function);
     return semantic_plan;
@@ -466,7 +498,7 @@ static RepresentationFixture representation_fixture_create(void) {
     xi_block_set_return(fixture.entry, fixture.sum);
     fixture.function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(fixture.function, error,
                                               sizeof(error)));
     fixture.target_profile = build_target_profile();
     REQUIRE(xr_target_plan_build(fixture.function->semantic_plan,
@@ -527,7 +559,7 @@ static MaterializationFixture materialization_fixture_create(void) {
     fixture.function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(fixture.function, error,
                                               sizeof(error)));
     fixture.target_profile = build_target_profile();
     if (!xr_target_plan_build(fixture.function->semantic_plan,
@@ -572,7 +604,7 @@ static SharedScalarFixture shared_scalar_fixture_create(void) {
     fixture.function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(fixture.function, error,
                                               sizeof(error)));
     fixture.target_profile = build_target_profile();
     REQUIRE(xr_target_plan_build(fixture.function->semantic_plan,
@@ -645,7 +677,7 @@ static ClosureStorageFixture closure_storage_fixture_create(bool captured) {
     fixture.function->stage = fixture.child->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(fixture.function, error,
                                               sizeof(error)));
     fixture.target_profile = build_target_profile();
     REQUIRE(xr_target_plan_build(fixture.function->semantic_plan,
@@ -729,7 +761,7 @@ direct_local_callee_storage_fixture_create(bool extra_use, bool tail_call) {
         fixture.decoy->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(fixture.function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(fixture.function, error,
                                               sizeof(error)));
     fixture.target_profile = build_target_profile();
     bool built = xr_target_plan_build(
@@ -875,7 +907,7 @@ static DirectLocalArrayRefFixture direct_local_array_ref_fixture_create(void) {
     fixture.function->stage = fixture.child->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    bool built = xr_semantic_plan_build_and_attach(
+    bool built = build_fixture_semantic_plan_and_attach(
         fixture.function, error, sizeof(error));
     if (!built)
         fprintf(stderr, "direct-local Array ref SemanticPlan failed: %s\n",
@@ -958,6 +990,9 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
         "fixture/source_namespace_dependency.xr", "source_namespace_dependency",
         dependency_root);
     REQUIRE(fixture.dependency_module);
+    REQUIRE(xi_module_set_identity(
+        fixture.dependency_module,
+        "memory-module-v1:id=30:source-namespace-dependency-v1"));
     dependency_root->module = fixture.dependency_module;
     fixture.dependency_module->nslots = 1;
     fixture.dependency_module->nexports = 1;
@@ -969,7 +1004,7 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
     fixture.dependency_module->exports[0].function = worker;
 
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(dependency_root, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(dependency_root, error,
                                               sizeof(error)));
     fixture.dependency =
         xr_semantic_plan_retain(dependency_root->semantic_plan);
@@ -1064,6 +1099,9 @@ static SourceNamespaceStorageFixture source_namespace_storage_fixture_create(
                                    "source_namespace_caller",
                                    fixture.function);
     REQUIRE(fixture.module);
+    REQUIRE(xi_module_set_identity(
+        fixture.module,
+        "memory-module-v1:id=26:source-namespace-caller-v1"));
     fixture.function->module = fixture.module;
     fixture.module->nslots = 1;
     XiModule *dependencies[] = {fixture.dependency_module};
@@ -1186,7 +1224,7 @@ native_namespace_yieldable_storage_fixture_create(bool extra_use) {
     fixture.function->stage = fixture.caller->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
-    bool built = xr_semantic_plan_build_and_attach(
+    bool built = build_fixture_semantic_plan_and_attach(
         fixture.function, error, sizeof(error));
     if (!built)
         fprintf(stderr, "native namespace SemanticPlan build failed: %s\n",
@@ -1287,7 +1325,7 @@ direct_local_go_callee_storage_fixture_create(bool extra_use,
     fixture.function->stage = fixture.child->stage =
         fixture.decoy->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    bool semantic_built = xr_semantic_plan_build_and_attach(
+    bool semantic_built = build_fixture_semantic_plan_and_attach(
         fixture.function, error, sizeof(error));
     if (!semantic_built)
         fprintf(stderr, "go fixture SemanticPlan failed: %s\n", error);
@@ -1880,7 +1918,7 @@ static void test_scalar_shared_boundary_is_exact_and_fail_closed(void) {
     xi_block_set_return(entry, NULL);
     string_function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(string_function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(string_function, error,
                                               sizeof(error)));
     XrTargetProfile *profile = build_target_profile();
     XrTargetPlan *target_plan = NULL;
@@ -2947,7 +2985,7 @@ static void test_exact_string_literal_storage_is_tagged_and_fail_closed(void) {
     xi_block_set_return(entry, NULL);
     function->stage = XI_STAGE_OPTIMIZED;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error,
+    REQUIRE(build_fixture_semantic_plan_and_attach(function, error,
                                               sizeof(error)));
     XrTargetProfile *profile = build_target_profile();
     XrTargetPlan *target_plan = NULL;
@@ -3270,8 +3308,9 @@ static XrTargetPlan *build_attached_target_plan(XiFunc *function,
                                                 XrTargetProfile **out_profile) {
     char error[512] = {0};
     function->stage = XI_STAGE_OPTIMIZED;
-    REQUIRE(xr_semantic_plan_build_and_attach(function, error,
-                                              sizeof(error)));
+    if (!build_fixture_semantic_plan_and_attach(function, error, sizeof(error)))
+        fprintf(stderr, "semantic plan build for %s failed: %s\n", function->name, error);
+    REQUIRE(function->semantic_plan != NULL);
     *out_profile = build_target_profile();
     XrTargetPlan *target_plan = NULL;
     if (!xr_target_plan_build(function->semantic_plan, *out_profile,
@@ -3788,6 +3827,128 @@ static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
     xr_aot_refinement_builder_free(builder);
     xr_aot_refinement_plan_free(native_plan);
     representation_fixture_free(&fixture);
+}
+
+static void test_tagged_string_array_copy_refinement_is_exact(void) {
+    XiFunc *function = xi_func_new("tagged_string_array_copy_refinement", &scalar_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_param(function, entry, 0, &tagged_string_array);
+    XiValue *copy = xi_value_new(function, entry, XI_CALL_BUILTIN, &tagged_string_array, 1);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &scalar_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &scalar_int);
+    REQUIRE(source && copy && release && result);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = source;
+    function->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+    copy->args[0] = source;
+    copy->aux = (void *) "copy";
+    copy->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    release->args[0] = copy;
+    xi_block_set_return(entry, result);
+
+    XiModule module = {
+        .identity = "memory-module-v1:id=27:target-plan-unit-fixture-v1",
+        .path = "tagged-string-array-copy-refinement.xr",
+        .name = "tagged_string_array_copy_refinement",
+        .init = function,
+    };
+    function->module = &module;
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t copy_value = XR_SEMANTIC_INDEX_NONE;
+    char error[512] = {0};
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, function, copy, &semantic_function,
+                                            &copy_value, error, sizeof(error)));
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->result_value != copy_value)
+            continue;
+        REQUIRE(operation == NULL);
+        operation = candidate;
+        operation_index = i;
+    }
+    REQUIRE(operation && operation_index != XR_SEMANTIC_INDEX_NONE);
+    const XrTargetValueRepRecord *binding = xr_target_plan_value_rep(target, copy_value);
+    REQUIRE(binding && binding->slot < target->slots_count &&
+            target->machine_reps[binding->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            target->machine_reps[binding->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            target->slots[binding->slot].semantic_operation == operation_index &&
+            target->slots[binding->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            target->slots[binding->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < target->layouts_count; i++) {
+        if (target->layouts[i].semantic_type != operation->result_type)
+            continue;
+        REQUIRE(layout_index == XR_SEMANTIC_INDEX_NONE);
+        layout_index = i;
+    }
+    REQUIRE(layout_index != XR_SEMANTIC_INDEX_NONE &&
+            target->layouts[layout_index].kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            target->layouts[layout_index].array_element_storage ==
+                XR_TARGET_ARRAY_STORAGE_TAGGED);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &diag));
+    XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
+    REQUIRE(refinement != NULL && refinement_view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &refinement_view, function, target, &policy, &diag));
+
+    XrCEmissionPlan *emission = NULL;
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error,
+                                     sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, copy_value, &view, error, sizeof(error)) &&
+            view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                      sizeof(error)));
+
+    XrTargetLayoutRecord saved_layout = target->layouts[layout_index];
+    XrFingerprint saved_fingerprint = target->fingerprint;
+    target->layouts[layout_index].array_element_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    xr_target_layout_compute_fingerprint(target, layout_index,
+                                         &target->layouts[layout_index].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)) &&
+            strstr(error, "XR_TARGET_1002") != NULL);
+    XrAotRefinementPlan *refused = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refused, &diag));
+    REQUIRE(refused == NULL && diag.issue == XR_AOT_REFINEMENT_PLAN_STATE);
+    target->layouts[layout_index] = saved_layout;
+    target->fingerprint = saved_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_aot_refinement_plan_free(refinement);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    function->module = NULL;
+    xi_func_free(function);
 }
 
 static void test_scalar_array_allocation_storage_is_exact_and_fail_closed(void) {
@@ -4495,7 +4656,12 @@ static void test_string_concat_cleanup_materialization_is_exact(void) {
     xi_func_free(function);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "tagged-string-array-copy-refinement") == 0) {
+        test_tagged_string_array_copy_refinement_is_exact();
+        puts("Tagged String Array copy AOT refinement tests passed");
+        return 0;
+    }
     test_open_target_direct_call_refuses_without_baseline_change();
     test_direct_call_authority_applies_closed_local_binding();
     test_tail_call_backend_conformance_is_exact();
@@ -4521,6 +4687,7 @@ int main(void) {
     test_named_aggregate_emission_is_exact_and_fail_closed();
     test_scalar_addressable_alias_recipe_is_exact_and_fail_closed();
     test_direct_local_array_ref_parameter_index_is_exact_and_fail_closed();
+    test_tagged_string_array_copy_refinement_is_exact();
     test_scalar_array_allocation_storage_is_exact_and_fail_closed();
     test_array_intrinsic_index_storage_is_exact_and_fail_closed();
     test_array_fill_scalar_authority_is_exact_and_fail_closed();

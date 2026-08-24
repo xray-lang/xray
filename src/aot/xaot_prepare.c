@@ -9,7 +9,6 @@
  */
 
 #include "xaot_prepare.h"
-#include "../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "emit_c/xr_c_emission_plan.h"
 #include "xaot_boundary.h"
 #include "xaot_class_native.h"
@@ -106,113 +105,31 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     return true;
 }
 
-/* RAW_PTR is shared by language Ptr/MutPtr and by the callee-side place of an
- * exact direct-local `ref Array<T>` parameter.  Rebuild the latter identity
- * from frozen SemanticPlan and TargetPlan rows so prepare never guesses the C
- * pointee spelling from the mutable Xi type. */
-static const char *prepare_exact_raw_pointer_c_type(const XrTargetPlan *target_plan,
-                                                    const XrTargetValueRepRecord *binding,
-                                                    const XiValue *value) {
-    const char *language_pointer = value ? xaot_raw_pointer_c_type(value->type) : NULL;
-    if (language_pointer)
-        return language_pointer;
-    const XrSemanticPlan *semantic = target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
-    if (!semantic || !binding)
+/* The verified C emission plan is the sole owner of C spelling. Prepare only
+ * projects its immutable value row; it must not reconstruct pointer identity
+ * from mutable Xi types or repeat Semantic/Target call-boundary judgements. */
+static const char *prepare_exact_raw_pointer_c_type(const XaotBundle *bundle,
+                                                    const XiFunc *func,
+                                                    const XrTargetValueRepRecord *binding) {
+    XrCValueEmissionView view = {0};
+    char error[256] = {0};
+    const XrCEmissionPlan *emission_plan =
+        xaot_bundle_emission_plan_for_func(bundle, func);
+    if (!binding || !emission_plan ||
+        !xr_c_emission_plan_value_view(emission_plan, binding->semantic_value, &view, error,
+                                       sizeof(error)) ||
+        view.semantic_value != binding->semantic_value ||
+        view.target_register_rep != binding->register_rep ||
+        view.target_memory_rep != binding->memory_rep ||
+        view.target_register_kind != XR_MACHINE_REP_RAW_PTR ||
+        view.target_memory_kind != XR_MACHINE_REP_RAW_PTR ||
+        view.rep != XR_C_VALUE_REP_RAW_PTR || !view.c_type)
         return NULL;
-    /* The address of a local is spelled as an untyped pointer: the plan records
-     * the subject's type on this operation, so asking the type for a pointer
-     * spelling answers for the subject and produces `int64_t` for something
-     * that holds an address. Each read and write through it states the width it
-     * wants at the access, which is where the subject's type belongs. */
-    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
-        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
-        if (!candidate || candidate->result_value != binding->semantic_value)
-            continue;
-        if (!xr_semantic_local_addr_is_exact(semantic, candidate, NULL))
-            break;
-        const XaotRepInfo *pointer_info = xaot_rep_info(XAOT_REP_RAWPTR);
-        return pointer_info ? pointer_info->c_type : NULL;
-    }
-    const XrSemanticParameterRecord *parameter = NULL;
-    uint32_t parameter_index = XR_SEMANTIC_INDEX_NONE;
-    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_parameter_count(semantic); i++) {
-        const XrSemanticParameterRecord *candidate = xr_semantic_plan_parameter(semantic, i);
-        if (!candidate || candidate->value != binding->semantic_value)
-            continue;
-        if (parameter)
-            return NULL;
-        parameter = candidate;
-        parameter_index = i;
-    }
-    const XrSemanticTypeRecord *array =
-        parameter ? xr_semantic_plan_type(semantic, parameter->type) : NULL;
-    const XrTargetMachineRepRecord *register_rep =
-        xr_target_plan_machine_rep(target_plan, binding->register_rep);
-    const XrTargetMachineRepRecord *memory_rep =
-        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
-    uint32_t slot_count = 0;
-    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
-    const XrTargetSlotRecord *slot = binding->slot < slot_count ? &slots[binding->slot] : NULL;
-    if (!parameter || !array || !register_rep || !memory_rep || !slot ||
-        parameter->mode != XR_PARAM_REF || parameter->ownership != XI_OWN_BORROWED ||
-        parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
-        array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
-        array->child_count != 1 || array->aggregate_extent != 0 || array->aggregate_align != 0 ||
-        array->scalar_rep != XR_SCALAR_REP_NONE ||
-        array->flags != (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) ||
-        register_rep->kind != XR_MACHINE_REP_RAW_PTR ||
-        memory_rep->kind != XR_MACHINE_REP_RAW_PTR ||
-        register_rep->root_kind != XR_TARGET_ROOT_NONE ||
-        memory_rep->root_kind != XR_TARGET_ROOT_NONE ||
-        register_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-        memory_rep->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-        slot->semantic_value != binding->semantic_value ||
-        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
-        slot->function != parameter->function || slot->role != XR_TARGET_SLOT_PARAMETER ||
-        slot->register_rep != binding->register_rep || slot->memory_rep != binding->memory_rep ||
-        slot->root_kind != XR_TARGET_ROOT_NONE || slot->ownership != XR_TARGET_OWNERSHIP_BORROWED)
-        return NULL;
-    uint32_t argument_count = 0, call_count = 0;
-    const XrTargetCallArgumentRecord *arguments =
-        xr_target_plan_call_arguments(target_plan, &argument_count);
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
-    uint32_t matches = 0;
-    for (uint32_t i = 0; arguments && calls && i < argument_count; i++) {
-        const XrTargetCallArgumentRecord *argument = &arguments[i];
-        if (argument->callee_parameter != parameter_index)
-            continue;
-        const XrTargetCallRecord *call =
-            argument->call < call_count ? &calls[argument->call] : NULL;
-        const XrTargetMachineRepRecord *caller_register =
-            xr_target_plan_machine_rep(target_plan, argument->register_rep);
-        const XrTargetMachineRepRecord *caller_memory =
-            xr_target_plan_machine_rep(target_plan, argument->memory_rep);
-        if (!call || !caller_register || !caller_memory ||
-            call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
-            call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
-            call->callee_function != parameter->function ||
-            argument->callee_slot != binding->slot ||
-            argument->callee_register_rep != binding->register_rep ||
-            argument->callee_memory_rep != binding->memory_rep ||
-            argument->mode != XR_TARGET_CALL_REFERENCE ||
-            argument->ownership != XR_TARGET_CALL_BORROW ||
-            argument->transfer_mode != XR_TRANSFER_SHARE ||
-            argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
-            argument->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
-            argument->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
-            argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
-            argument->reserved8[2] != 0 || caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
-            caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
-            caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-            caller_memory->ownership != XR_TARGET_OWNERSHIP_BORROWED)
-            return NULL;
-        matches++;
-    }
-    return matches ? "XrValue *" : NULL;
+    return view.c_type;
 }
 
-static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
+static bool prepare_target_machine_value_rep(const XaotBundle *bundle, const XiFunc *func,
+                                             const XrTargetPlan *target_plan,
                                              const XrTargetValueRepRecord *binding,
                                              const XiValue *value, XaotValueRep *out) {
     const XrTargetMachineRepRecord *machine;
@@ -319,7 +236,7 @@ static bool prepare_target_machine_value_rep(const XrTargetPlan *target_plan,
     out->rep = rep;
     out->type = value->type;
     out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
-                      ? prepare_exact_raw_pointer_c_type(target_plan, binding, value)
+                      ? prepare_exact_raw_pointer_c_type(bundle, func, binding)
                       : info->c_type;
     if (!out->c_type)
         return false;
@@ -338,7 +255,7 @@ static bool prepare_effective_value_rep(XaotBundle *bundle, const XiFunc *func,
         return false;
     if (binding) {
         target_plan = xaot_bundle_target_plan_for_func(bundle, func);
-        if (!prepare_target_machine_value_rep(target_plan, binding, value, out)) {
+        if (!prepare_target_machine_value_rep(bundle, func, target_plan, binding, value, out)) {
             bundle->error_msg = "AOT TargetPlan binding has no supported C value rep";
             return false;
         }
@@ -4395,8 +4312,8 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             if (binding) {
                 const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
                 XaotValueRep target_rep;
-                if (!prepare_target_machine_value_rep(target_plan, binding, &phi->value,
-                                                      &target_rep)) {
+                if (!prepare_target_machine_value_rep(bundle, func, target_plan, binding,
+                                                      &phi->value, &target_rep)) {
                     bundle->error_msg = "AOT TargetPlan binding has no supported C value rep";
                     return false;
                 }
@@ -4436,8 +4353,8 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
             if (binding) {
                 const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
                 XaotValueRep target_rep;
-                if (!prepare_target_machine_value_rep(target_plan, binding, blk->values[vi],
-                                                      &target_rep)) {
+                if (!prepare_target_machine_value_rep(bundle, func, target_plan, binding,
+                                                      blk->values[vi], &target_rep)) {
                     bundle->error_msg = "AOT TargetPlan binding has no supported C value rep";
                     return false;
                 }

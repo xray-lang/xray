@@ -13,9 +13,11 @@
 #include "../xr_target_aggregate_c_projection.h"
 #include "../../plan/target/xr_target_plan.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
+#include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_catch_shape.h"
 #include "../../plan/semantic/xr_semantic_enum_shape.h"
 #include "../../plan/semantic/xr_semantic_string_shape.h"
+#include "../../plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../plan/semantic/xr_semantic_string_runes_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_has_next_shape.h"
 #include "../../plan/semantic/xr_semantic_iterator_rune_next_shape.h"
@@ -1657,11 +1659,18 @@ static bool exact_direct_local_array_ref_parameter_prior(const XrTargetPlan *tar
     const XrSemanticTypeRecord *array =
         parameter ? xr_semantic_plan_type(semantic, parameter->type) : NULL;
     uint8_t storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    if (!semantic || !parameter || !children || !array ||
+    if (!semantic || !parameter || !array ||
         parameter->function >= xr_semantic_plan_function_count(semantic) ||
         parameter->mode != XR_PARAM_REF || parameter->ownership != XI_OWN_BORROWED ||
         parameter->transfer_mode != XR_TRANSFER_SHARE ||
-        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
+        return false;
+    if (xr_semantic_class_instance_type_source_class(semantic, array) != XR_SEMANTIC_INDEX_NONE) {
+        if (out_storage)
+            *out_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        return true;
+    }
+    if (!children ||
         array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
         array->child_count != 1 || array->child_begin >= child_count ||
         array->aggregate_extent != 0 || array->aggregate_align != 0 ||
@@ -1777,8 +1786,9 @@ static bool exact_direct_local_array_ref_parameter_recipe(const XrTargetPlan *ta
             argument->memory_rep != caller->memory_rep || !caller_register || !caller_memory ||
             caller_register->kind != XR_MACHINE_REP_DYN_VALUE ||
             caller_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
-            caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
-            caller_memory->ownership != XR_TARGET_OWNERSHIP_BORROWED)
+            caller_register->ownership != caller_memory->ownership ||
+            (caller_register->ownership != XR_TARGET_OWNERSHIP_OWNED &&
+             caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED))
             return false;
     }
     if (matches == 0)
@@ -1865,12 +1875,14 @@ static bool build_direct_local_array_ref_argument_view(const XrTargetPlan *targe
         argument->ownership != XR_TARGET_CALL_BORROW ||
         argument->transfer_mode != XR_TRANSFER_SHARE ||
         argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
-        argument->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
         argument->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
         argument->reserved8[0] != 0 || argument->reserved8[1] != 0 || argument->reserved8[2] != 0 ||
         caller_slot->register_rep != argument->register_rep ||
         caller_slot->memory_rep != argument->memory_rep ||
-        caller_slot->ownership != XR_TARGET_OWNERSHIP_BORROWED ||
+        caller_slot->ownership != caller_register->ownership ||
+        caller_register->ownership != caller_memory->ownership ||
+        (caller_register->ownership != XR_TARGET_OWNERSHIP_OWNED &&
+         caller_register->ownership != XR_TARGET_OWNERSHIP_BORROWED) ||
         parameter_binding->slot != argument->callee_slot ||
         parameter_binding->register_rep != argument->callee_register_rep ||
         parameter_binding->memory_rep != argument->callee_memory_rep ||
@@ -3517,7 +3529,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
                  : value->recipe_argument_value != UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_ARRAY_FILLED_NEW_SYMBOL) == 0) &&
             value->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
-            value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
+            value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_TAGGED &&
             value->recipe_argument_count == 0 && value->recipe_arguments == NULL;
     bool array_fill_member = value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_FILL_SCALAR;
     if (array_fill_member)
@@ -3525,7 +3537,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value != UINT32_MAX && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
-                       value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
+                       value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_TAGGED &&
                        value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
                        value->recipe_symbol == NULL && value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
@@ -3535,7 +3547,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
-                       value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
+                       value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_TAGGED &&
                        value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
                        value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_ARRAY_NEW_SYMBOL) == 0 &&
@@ -3547,7 +3559,6 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        strcmp(value->c_type, "XrValue *") == 0 && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value == UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_layout_id == 0 &&
-                       value->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
                        value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
                        value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
                        value->recipe_symbol == NULL && value->recipe_type_name == NULL &&
@@ -3662,7 +3673,6 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
             argument->ownership != XR_TARGET_CALL_BORROW ||
             argument->transfer_mode != XR_TRANSFER_SHARE ||
             argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
-            argument->array_element_storage <= XR_TARGET_ARRAY_STORAGE_NONE ||
             argument->array_element_storage >= XR_TARGET_ARRAY_STORAGE_COUNT ||
             argument->reserved[0] != 0 || argument->reserved[1] != 0 ||
             argument->reserved[2] != 0 ||
@@ -3781,10 +3791,54 @@ static bool verify_target_kind_projection(const XrTargetPlan *target_plan, uint3
     }
 }
 
+static bool verify_container_copy_call_storage(const XrTargetPlan *target_plan) {
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t operation_index = 0; operation_index < operation_count; operation_index++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, operation_index);
+        uint8_t semantic_storage = XR_ELEM_ANY;
+        if (!xr_semantic_container_copy_is_exact(semantic, operation, NULL, &semantic_storage))
+            continue;
+        uint8_t expected_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+        if (semantic_storage == XR_ELEM_ANY)
+            expected_storage = XR_TARGET_ARRAY_STORAGE_TAGGED;
+        else if (!c_array_storage_from_semantic(semantic_storage, &expected_storage))
+            return false;
+        const XrTargetCallRecord *match = NULL;
+        for (uint32_t call_index = 0; calls && call_index < call_count; call_index++) {
+            if (calls[call_index].semantic_operation != operation_index)
+                continue;
+            if (match)
+                return false;
+            match = &calls[call_index];
+        }
+        if (!match ||
+            match->calling_convention != XR_TARGET_CALL_CONVENTION_CONTAINER_COPY ||
+            match->target_kind != XR_TARGET_CALL_TARGET_CONTAINER_COPY ||
+            match->array_element_storage != expected_storage)
+            return false;
+    }
+    for (uint32_t call_index = 0; calls && call_index < call_count; call_index++) {
+        const XrTargetCallRecord *call = &calls[call_index];
+        if (call->calling_convention != XR_TARGET_CALL_CONVENTION_CONTAINER_COPY &&
+            call->target_kind != XR_TARGET_CALL_TARGET_CONTAINER_COPY)
+            continue;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, call->semantic_operation);
+        if (!xr_semantic_container_copy_is_exact(semantic, operation, NULL, NULL))
+            return false;
+    }
+    return true;
+}
+
 bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *target_plan,
                                XrFingerprint expected_profile_fingerprint, char *error,
                                size_t error_size) {
-    if (!plan || !target_plan || !xr_target_plan_is_verified(target_plan))
+    if (!plan || !target_plan || !xr_target_plan_is_verified(target_plan) ||
+        !verify_container_copy_call_storage(target_plan))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission verification authority is missing");
     XrFingerprint target_fingerprint = xr_target_plan_fingerprint(target_plan);

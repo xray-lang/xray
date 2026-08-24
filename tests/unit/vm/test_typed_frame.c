@@ -3,6 +3,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/base/xmalloc.h"
@@ -25,6 +26,20 @@
             abort();                                                                               \
         }                                                                                          \
     } while (0)
+
+static bool ensure_fixture_module_identity(XiFunc *root) {
+    if (!root)
+        return false;
+    if (!root->module) {
+        root->module = xi_module_new("fixture/typed_frame.xr",
+                                     root->name ? root->name : "typed_frame_fixture", root);
+        if (!root->module)
+            return false;
+    }
+    return root->module->identity ||
+           xi_module_set_identity(root->module,
+                                  "memory-module-v1:id=22:typed-frame-fixture-v1");
+}
 
 typedef struct TypedFrameFixture {
     XrSemanticPlan *semantic;
@@ -149,6 +164,7 @@ static XrSemanticPlan *build_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(function));
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
@@ -169,6 +185,7 @@ static XrSemanticPlan *build_executable_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(function));
     REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
@@ -212,6 +229,7 @@ static XrSemanticPlan *build_lifecycle_semantic_plan(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(function));
     REQUIRE(xr_semantic_plan_build(function, &semantic, error,
                                    sizeof(error)));
     xi_func_free(function);

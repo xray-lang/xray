@@ -1807,6 +1807,8 @@ XR_FUNC bool xaot_func_plan_carries_coroutine_ops(const XaotFuncPlan *plan);
 
 XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBundle *bundle,
                                                                     uint32_t module_index);
+XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_func(const XaotBundle *bundle,
+                                                                  const XiFunc *func);
 
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module);

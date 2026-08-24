@@ -815,11 +815,17 @@ static bool semantic_direct_local_array_type_is_exact_verify_ex(const XrSemantic
     if (!semantic || !children || !xr_semantic_array_type_row_is_exact(array) ||
         array->child_begin >= child_count)
         return false;
-    if (!xr_target_array_storage_from_type(
-            xr_semantic_plan_type(semantic, children[array->child_begin]), &element)) {
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(semantic, children[array->child_begin]);
+    if (!xr_target_array_storage_from_type(element_type, &element)) {
         if (indexes_elements)
             return false;
-        element = XR_TARGET_ARRAY_STORAGE_NONE;
+        element =
+            xr_semantic_tagged_string_type_is_exact(element_type) ||
+                    xr_semantic_class_instance_type_source_class(semantic, element_type) !=
+                        XR_SEMANTIC_INDEX_NONE
+                ? XR_TARGET_ARRAY_STORAGE_TAGGED
+                : XR_TARGET_ARRAY_STORAGE_NONE;
     }
     if (storage)
         *storage = element;
@@ -930,27 +936,6 @@ semantic_direct_local_array_ref_place_is_exact_verify(const XrSemanticPlan *sema
     if (storage_value)
         *storage_value = source->value;
     return true;
-}
-
-/* The borrowed read of an Array held in a shared cell, re-derived from the
- * frozen rows. It states nothing about a call boundary, and the builder applies
- * it to every shared read for that reason: a judgement re-proved here more
- * widely than it was applied there is what makes an unbound value look like a
- * missing binding. */
-static bool semantic_array_shared_read_is_exact_verify(const XrSemanticPlan *semantic,
-                                                       const XrSemanticOperationRecord *operation,
-                                                       uint32_t semantic_value,
-                                                       uint32_t semantic_type,
-                                                       uint32_t semantic_function) {
-    /* Opts in to the class instance exactly as the builder's producer does.
-     * The shared judgement mirrors the builder including which call sites opt
-     * in, so a site that opts in on one side and takes the default on the other
-     * makes the builder bind a row this pass then cannot re-derive. */
-    return semantic_direct_local_array_type_is_exact_verify_ex(semantic, semantic_type, false,
-                                                               /*admits_instance=*/true, NULL) &&
-           xr_semantic_shared_read_operation_is_exact(operation) &&
-           operation->result_value == semantic_value && operation->result_type == semantic_type &&
-           operation->function == semantic_function;
 }
 
 /* The borrowed read of a String held in a shared cell, re-derived through the
@@ -3210,9 +3195,6 @@ static bool collect_exact_dynamic_types(
             xr_semantic_container_copy_is_exact(plan->semantic_plan, operation, NULL, NULL) ||
             semantic_array_fill_scalar_is_exact_verify(plan->semantic_plan, operation, NULL, NULL,
                                                        NULL) ||
-            semantic_array_shared_read_is_exact_verify(
-                plan->semantic_plan, operation, operation->result_value, operation->result_type,
-                operation->function) ||
             semantic_string_shared_read_is_exact_verify(
                 plan->semantic_plan, operation, operation->result_value, operation->result_type,
                 operation->function) ||
@@ -3352,8 +3334,6 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         operation->function == semantic_function;
     bool exact_array_fill = semantic_array_fill_scalar_is_exact_verify(plan->semantic_plan,
                                                                        operation, NULL, NULL, NULL);
-    bool exact_array_shared_read = semantic_array_shared_read_is_exact_verify(
-        plan->semantic_plan, operation, semantic_value, semantic_type, semantic_function);
     /* A String read back out of its shared cell. It borrows the cell's
      * allocation, so it is bound to the same borrowed tagged carrier an Array
      * read of that cell gets. */
@@ -3551,7 +3531,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     int eligibility =
         operation_result_void || exact_heap_closure || exact_panic_catch || exact_dynamic_value ||
                 exact_array_allocation || exact_array_intrinsic || exact_array_hof_result ||
-                exact_container_copy || exact_array_fill || exact_array_shared_read ||
+                exact_container_copy || exact_array_fill ||
                 exact_string_shared_read || exact_array_ref_place_load || exact_class_object ||
                 exact_class_instance || exact_class_receiver || exact_string_literal ||
                 exact_bigint_value || exact_string_concat || exact_string_convert ||
@@ -3595,7 +3575,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     int expected_layout = -1;
     if (exact_heap_closure || exact_panic_catch || exact_dynamic_value || exact_array_allocation ||
         exact_class_object || exact_array_intrinsic || exact_array_hof_result ||
-        exact_container_copy || exact_array_shared_read || exact_string_shared_read ||
+        exact_container_copy || exact_string_shared_read ||
         exact_array_ref_place_load || exact_array_fill || exact_class_instance ||
         exact_class_receiver || exact_string_literal || exact_bigint_value || exact_string_concat ||
         exact_string_convert || exact_direct_string_result || exact_stringbuilder ||
@@ -3706,7 +3686,7 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
             (exact_direct_callee || exact_go_callee || exact_go_task || exact_source_namespace ||
              exact_native_module_namespace || exact_nullable_scalar ||
              exact_class_instance_borrowed || exact_class_receiver_borrowed ||
-             exact_adt_enum_borrowed || exact_array_shared_read || exact_string_shared_read ||
+             exact_adt_enum_borrowed || exact_string_shared_read ||
              exact_array_ref_place_load || exact_array_value_parameter ||
              exact_string_value_parameter_borrowed ||
              (exact_dynamic_value && xr_semantic_dynamic_value_is_borrowed(operation)) ||
@@ -5348,9 +5328,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool stringbuilder_constructor =
             !semantic_target && semantic_stringbuilder_constructor_is_exact(semantic, operation);
         uint32_t container_copy_argument = XR_SEMANTIC_INDEX_NONE;
+        uint8_t container_copy_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         bool container_copy =
             !semantic_target && xr_semantic_container_copy_is_exact(semantic, operation,
-                                                                    &container_copy_argument, NULL);
+                                                                    &container_copy_argument, NULL) &&
+            xr_target_container_copy_storage(semantic, operation, &container_copy_storage);
         uint32_t scalar_copy_argument = XR_SEMANTIC_INDEX_NONE;
         bool scalar_copy = !semantic_target && xr_semantic_scalar_copy_is_exact(
                                                    semantic, operation, &scalar_copy_argument);
@@ -5583,6 +5565,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                        call->array_element_storage == array_hof_source_storage &&
                        call->array_hof_kind == array_hof_kind &&
                        call->array_result_element_storage == array_hof_result_storage
+             : container_copy
+                 ? call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
+                       call->array_element_storage == container_copy_storage &&
+                       call->array_hof_kind == XR_TARGET_ARRAY_HOF_NONE &&
+                       call->array_result_element_storage == XR_TARGET_ARRAY_STORAGE_NONE
                  : call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
                        call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
                        call->array_hof_kind == XR_TARGET_ARRAY_HOF_NONE &&
@@ -5761,9 +5748,11 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     plan->machine_reps[callee_value->register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
                     plan->machine_reps[callee_value->memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
                     plan->machine_reps[caller_value->register_rep].ownership ==
-                        XR_TARGET_OWNERSHIP_BORROWED &&
-                    plan->machine_reps[caller_value->memory_rep].ownership ==
-                        XR_TARGET_OWNERSHIP_BORROWED &&
+                        plan->machine_reps[caller_value->memory_rep].ownership &&
+                    (plan->machine_reps[caller_value->register_rep].ownership ==
+                         XR_TARGET_OWNERSHIP_OWNED ||
+                     plan->machine_reps[caller_value->register_rep].ownership ==
+                         XR_TARGET_OWNERSHIP_BORROWED) &&
                     plan->machine_reps[callee_value->register_rep].ownership ==
                         XR_TARGET_OWNERSHIP_BORROWED &&
                     plan->machine_reps[callee_value->memory_rep].ownership ==
@@ -6302,6 +6291,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->flags == 0 &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_CONTAINER_COPY &&
                     call->target_kind == XR_TARGET_CALL_TARGET_CONTAINER_COPY &&
+                    call->array_element_storage == container_copy_storage &&
                     call->result_ownership == XR_TARGET_CALL_RETURN_OWNED;
             if (!valid)
                 break;

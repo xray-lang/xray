@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_semantic_dynamic_value_shape.h - Values whose type is the untyped reference
+ * xr_semantic_dynamic_value_shape.h - Values carried in generic tagged reference storage
  */
 
 #ifndef XR_SEMANTIC_DYNAMIC_VALUE_SHAPE_H
@@ -105,8 +105,11 @@ xr_semantic_dynamic_value_allocates_nothing(const XrSemanticOperationRecord *ope
  * list grows one measured opcode at a time rather than by opening the family
  * to whatever carries the untyped type.
  *
- * XI_PHI       a join the plan could not narrow to one type: it merges what its
- *              edges already carry, so it names no constant and no metadata.
+ * XI_PHI       a join of reference-capable values. It merges tagged carriers its
+ *              incoming edges already own, so it names no constant or metadata.
+ *              Unlike the producer-only cases below, a join may preserve an
+ *              exact source type such as Array<T> or a class instance; storage
+ *              is still the same tagged reference carrier.
  * XI_CONST     an enum declaration's namespace descriptor, marked as such by
  *              lowering.  A constant backs it and the member table describes
  *              it, so both are required to be present rather than absent.
@@ -223,16 +226,99 @@ static inline bool xr_semantic_dynamic_value_is_join(const XrSemanticOperationRe
     return operation && operation->opcode == XI_PHI;
 }
 
-static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan,
+/* Re-prove the typed SSA source behind one incoming edge. Target consumers call
+ * this only after the whole SemanticPlan verifier has accepted CFG dominance;
+ * this local judgement still checks the identity facts that decide whether the
+ * incoming value can occupy the same tagged carrier as the PHI result. */
+static inline bool xr_semantic_reference_phi_input_is_exact(const XrSemanticPlan *plan,
+                                                            uint32_t value, uint32_t type,
+                                                            uint32_t function) {
+    bool found = false;
+    size_t operation_count = xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *definition = xr_semantic_plan_operation(plan, i);
+        if (!definition || definition->result_value != value)
+            continue;
+        if (found || definition->result_type != type || definition->function != function)
+            return false;
+        found = true;
+    }
+    size_t parameter_count = xr_semantic_plan_parameter_count(plan);
+    for (uint32_t i = 0; i < parameter_count; i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(plan, i);
+        if (!parameter || parameter->value != value)
+            continue;
+        if (found || parameter->type != type || parameter->function != function)
+            return false;
+        found = true;
+    }
+    return found;
+}
+
+/* A PHI may preserve an exact source type while merging reference-capable
+ * values. It is a generic tagged carrier only when every incoming edge carries
+ * that same type in the same function and the operation has the generated,
+ * ownership-consuming PHI shape. This keeps the broad carrier reusable without
+ * admitting a mixed or forged join. */
+static inline bool xr_semantic_reference_phi_is_exact(const XrSemanticPlan *plan,
                                                       const XrSemanticOperationRecord *operation) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticBlockRecord *block =
+        operation ? xr_semantic_plan_block(plan, operation->block) : NULL;
     const XrSemanticTypeRecord *type =
         operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (!operation || !block || !operands || operation->opcode != XI_PHI ||
+        !xr_semantic_dynamic_value_common_is_exact(plan, operation) ||
+        !xr_semantic_dynamic_value_producer_is_exact(operation) ||
+        !xr_semantic_dynamic_value_carrier_type_is_exact(type) ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->operand_count == 0 || operation->operand_count != block->predecessor_count ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->effects != xi_generated_op_effects(XI_PHI) ||
+        operation->flags != xi_generated_op_default_flags(XI_PHI) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_PHI) ||
+        operation->result_ownership != xi_generated_op_result_ownership(XI_PHI) ||
+        operation->transfer_mode != XR_TRANSFER_SHARE ||
+        operation->parameter_mode != XR_PARAM_READ || operation->parameter_ownership != XI_OWN_NONE ||
+        operation->evidence[0] != 0 || operation->evidence[1] != 0 ||
+        operation->evidence[2] != 0 || operation->evidence[3] != 0 ||
+        operation->evidence[4] != 0 || operation->evidence[5] != 0 ||
+        operation->evidence[6] != 0 || operation->evidence[7] != XR_SEMANTIC_INDEX_NONE ||
+        operation->array_element_storage != 0 ||
+        operation->array_hof_kind != XR_SEM_ARRAY_HOF_NONE ||
+        operation->array_result_element_storage != 0 ||
+        operation->reserved_view[0] != 0 || operation->reserved_view[1] != 0)
+        return false;
+    for (uint16_t i = 0; i < operation->operand_count; i++) {
+        const XrSemanticOperandRecord *operand = &operands[operation->operand_begin + i];
+        if (operand->type != operation->result_type || operand->role != XR_SEM_OPERAND_VALUE ||
+            operand->parameter != -1 || operand->transfer_mode != XR_TRANSFER_SHARE ||
+            operand->ownership_action != XR_SEM_OPERAND_CONSUME ||
+            operand->parameter_mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
+            operand->origin != XI_PLACE_ORIGIN_NONE ||
+            operand->lifetime != XI_PLACE_LIFETIME_NONE ||
+            operand->escape != XI_PLACE_ESCAPE_NONE || operand->flags != 0 ||
+            !xr_semantic_reference_phi_input_is_exact(
+                plan, operand->value, operation->result_type, operation->function))
+            return false;
+    }
+    return true;
+}
+
+static inline bool xr_semantic_dynamic_value_is_exact(const XrSemanticPlan *plan,
+                                                       const XrSemanticOperationRecord *operation) {
+    const XrSemanticTypeRecord *type =
+        operation ? xr_semantic_plan_type(plan, operation->result_type) : NULL;
+    if (operation && operation->opcode == XI_PHI)
+        return xr_semantic_reference_phi_is_exact(plan, operation);
     if (!xr_semantic_dynamic_value_producer_is_exact(operation) ||
         !xr_semantic_dynamic_value_common_is_exact(plan, operation))
         return false;
-    /* A slot read is tagged because of the slot; the other producers are tagged
-     * because of the type they carry, and only they are held to the narrow
-     * test. */
+    /* A join, slot read, await or coroutine result is tagged because of the
+     * carrier it propagates. The other producers manufacture the compiler's
+     * untyped reference value and are held to that narrower type. */
     return (operation->opcode == XI_GET_SHARED || operation->opcode == XI_AWAIT ||
             operation->opcode == XI_CORO_OP)
                ? xr_semantic_dynamic_value_carrier_type_is_exact(type)

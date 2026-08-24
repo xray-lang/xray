@@ -665,6 +665,40 @@ static void test_iterator_release_balances_source_and_arc_object(void) {
                   "final iterator release frees both retained source and iterator shell");
 }
 
+static void test_tagged_string_array_clone_is_deep_and_independently_owned(void) {
+    reset_alloc_counts();
+    XrValue source = xrt_array_new(0);
+    XrValue source_string = xrt_str_alloc(3);
+    memcpy(xr_str_buf(source_string), "abc", 3);
+    xrt_array_push(source, source_string);
+
+    XrValue clone = xrt_value_clone_for_coro(source);
+    xrt_array_t *source_array = (xrt_array_t *) source.ptr;
+    xrt_array_t *clone_array = (xrt_array_t *) clone.ptr;
+    XrValue source_item = xr_typed_get(source_array->data, 0, source_array->elem_type);
+    XrValue clone_item = xr_typed_get(clone_array->data, 0, clone_array->elem_type);
+
+    ASSERT_TRUE(XR_IS_ARRAY(clone), "tagged Array clone preserves the container tag");
+    ASSERT_TRUE(clone.ptr != source.ptr, "tagged Array clone owns a distinct container");
+    ASSERT_EQ_INT(clone_array->elem_type, XR_ELEM_ANY,
+                  "tagged Array clone preserves tagged element storage");
+    ASSERT_EQ_INT(clone_array->length, 1, "tagged Array clone preserves its element count");
+    ASSERT_EQ_INT(xrt_value_kind(source_item), XR_TAG_STR_ARC,
+                  "tagged Array source carries an ARC String element");
+    ASSERT_EQ_INT(xrt_value_kind(clone_item), XR_TAG_STR_ARC,
+                  "tagged Array clone carries an ARC String element");
+    ASSERT_TRUE(clone_item.ptr != source_item.ptr,
+                "tagged Array clone deep-copies its ARC String element");
+    ASSERT_XR_STR_EQ(clone_item, "abc", "tagged Array clone preserves String content");
+
+    xrt_release(source);
+    ASSERT_XR_STR_EQ(clone_item, "abc",
+                     "tagged Array clone remains valid after releasing its source");
+    xrt_release(clone);
+    ASSERT_EQ_INT(g_malloc_count, g_free_count,
+                  "tagged Array clone balances container and String ownership");
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -781,6 +815,7 @@ int main(void) {
     test_byte_runtime_u8_guards_are_defensive();
     test_stringbuilder_release_frees_arc_object_and_buffer();
     test_iterator_release_balances_source_and_arc_object();
+    test_tagged_string_array_clone_is_deep_and_independently_owned();
     test_stack_closure_borrows_cell_upval();
     test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges();
     test_hosted_pod_slice_owners_preserve_overlap_and_byte_order();

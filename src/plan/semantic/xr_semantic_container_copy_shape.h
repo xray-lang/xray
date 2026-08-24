@@ -17,7 +17,9 @@
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_ops_gen.h"
 #include "xr_semantic_array_element_storage_shape.h"
+#include "xr_semantic_class_shape.h"
 #include "xr_semantic_plan.h"
+#include "xr_semantic_string_shape.h"
 
 /* `copy(c)` on a container.  Unlike the scalar spelling -- where the result is a
  * second name for the same bits -- this one materialises: it allocates a fresh
@@ -33,10 +35,11 @@
  * which is what makes the shape provable: a copy that changed element type, or
  * handed back a borrow, would be some other operation wearing this selector.
  *
- * The element must have a storage class this plan can name.  An element the
- * storage vocabulary has no word for -- a class instance, say -- would make the
- * fill a promise about layout that nothing here can keep, so it stays refused
- * rather than being answered approximately. */
+ * The element must have a storage class this plan can name. Plain scalars use
+ * their unboxed storage class. An exact String or a frozen source-class
+ * instance uses the tagged XrValue element lane. Other XR_ELEM_ANY cases
+ * remain refused: without a copy-capability and lifecycle fact they would make
+ * the copy promise more than this shape proves. */
 static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *plan,
                                                        const XrSemanticOperationRecord *operation,
                                                        uint32_t *argument_value,
@@ -99,8 +102,15 @@ static inline bool xr_semantic_container_copy_is_exact(const XrSemanticPlan *pla
     const XrSemanticTypeRecord *element =
         xr_semantic_plan_type(plan, children[result->child_begin]);
     uint8_t storage = xr_semantic_array_element_storage(element);
-    if (storage == XR_ELEM_ANY)
-        return false;
+    if (storage == XR_ELEM_ANY) {
+        if (!xr_semantic_tagged_string_type_is_exact(element) &&
+            xr_semantic_class_instance_type_source_class(plan, element) ==
+                XR_SEMANTIC_INDEX_NONE)
+            return false;
+        /* The semantic storage vocabulary calls the runtime XrValue lane ANY.
+         * TargetPlan translates this exact subset to its explicit TAGGED row;
+         * no other semantic ANY reaches that translation. */
+    }
     if (argument_value)
         *argument_value = argument->value;
     if (element_storage)

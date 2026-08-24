@@ -53,7 +53,7 @@ int main(void) {
         coroutine != (XrTypedCoroutineI64 *) (uintptr_t) 1)
         return 1;
     coroutine = NULL;
-    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(42) ||
+    if (XR_TYPED_FRAME_SUPPORTED_PLAN_SCHEMA_VERSION != UINT32_C(45) ||
         XR_TYPED_LIFECYCLE_CONTEXT_SCHEMA_VERSION != UINT32_C(2) ||
         XR_VM_DYNAMIC_ENTRY_CONTEXT_SCHEMA_VERSION != UINT32_C(4) ||
         XR_VM_TRACE_SCHEMA_VERSION != UINT32_C(3) ||

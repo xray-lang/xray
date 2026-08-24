@@ -5,6 +5,7 @@
 #include "../../../include/xray_runtime_generation.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/os/os_thread.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -27,11 +28,28 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 
+static bool ensure_fixture_module_identity(XiFunc *root) {
+    if (!root)
+        return false;
+    if (!root->module) {
+        root->module = xi_module_new("fixture/runtime_generation.xr",
+                                     root->name ? root->name : "runtime_generation_fixture",
+                                     root);
+        if (!root->module)
+            return false;
+    }
+    return root->module->identity ||
+           xi_module_set_identity(
+               root->module,
+               "memory-module-v1:id=29:runtime-generation-fixture-v1");
+}
+
 static XrTargetPlan *finish_plan(XiFunc *root,
                                  XrSemanticPlan **semantic_out,
                                  XrTargetProfile **profile_out) {
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(root));
     REQUIRE(xr_semantic_plan_build(root, &semantic, diagnostic,
                                    sizeof(diagnostic)));
     xi_func_free(root);

@@ -2244,9 +2244,9 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-44-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-45-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 44 cutover tests passed");
+        puts("XTP schema 45 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

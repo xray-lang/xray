@@ -14,6 +14,7 @@
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
@@ -268,6 +269,13 @@ static XrType stub_target_u8_array = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_target_u8},
+};
+static XrType stub_target_string_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 135,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_exact_string},
 };
 static XrFunctionParam stub_array_hof_unary_params[] = {
     {.type = &stub_int, .mode = XR_PARAM_READ},
@@ -755,6 +763,47 @@ static XrSemanticPlan *build_array_reserve_semantic(void) {
     bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "Array.reserve semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_tagged_string_array_copy_semantic(void) {
+    XiFunc *function = xi_func_new("target_tagged_string_array_copy", &stub_int);
+    REQUIRE(function != NULL);
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    XiValue *source = xi_param(function, entry, 0, &stub_target_string_array);
+    XiValue *copy = xi_value_new(function, entry, XI_CALL_BUILTIN,
+                                 &stub_target_string_array, 1);
+    XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(source && copy && release && result);
+    function->nparams = function->min_params = 1;
+    function->params = (XiValue **) xr_calloc(1, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = source;
+    function->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 1;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->valid = true;
+    copy->args[0] = source;
+    copy->aux = (void *) "copy";
+    copy->call_return_ownership = (XiReturnOwnership) {
+        .kind = XI_RETURN_OWNERSHIP_OWNED,
+        .param_index = -1,
+        .complete = true,
+    };
+    release->args[0] = copy;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "tagged String Array copy semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
     xi_func_free(function);
     return semantic;
@@ -2131,7 +2180,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "87b382efe15684065dc3e479dd8db2b59e3669dd5224174737152e2e7716a4fc") == 0);
+                   "67f96ed85f72645ab1cc81f359760eb2b4f3981b6621c9ed0ab1426320ad7956") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -5096,6 +5145,131 @@ static void test_array_hof_call_authority(void) {
     xr_target_profile_free(profile);
 }
 
+static void test_tagged_string_array_copy_authority(void) {
+    XrSemanticPlan *semantic = build_tagged_string_array_copy_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "tagged String Array copy TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && xr_target_plan_verify(plan, error, sizeof(error)));
+
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t argument_value = XR_SEMANTIC_INDEX_NONE;
+    uint8_t element_storage = UINT8_MAX;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        uint32_t candidate_argument = XR_SEMANTIC_INDEX_NONE;
+        uint8_t candidate_storage = UINT8_MAX;
+        if (!xr_semantic_container_copy_is_exact(semantic, candidate, &candidate_argument,
+                                                  &candidate_storage))
+            continue;
+        REQUIRE(operation == NULL);
+        operation = candidate;
+        operation_index = i;
+        argument_value = candidate_argument;
+        element_storage = candidate_storage;
+    }
+    REQUIRE(operation && operation_index != XR_SEMANTIC_INDEX_NONE &&
+            element_storage == XR_ELEM_ANY);
+    const XrTargetValueRepRecord *source = xr_target_plan_value_rep(plan, argument_value);
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(plan, operation->result_value);
+    REQUIRE(source && result && source->slot < plan->slots_count &&
+            result->slot < plan->slots_count &&
+            plan->machine_reps[source->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[source->register_rep].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            plan->slots[source->slot].role == XR_TARGET_SLOT_PARAMETER &&
+            plan->slots[source->slot].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            plan->machine_reps[result->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[result->register_rep].ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            plan->slots[result->slot].semantic_operation == operation_index &&
+            plan->slots[result->slot].role == XR_TARGET_SLOT_TEMPORARY &&
+            plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED);
+
+    XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; i < plan->calls_count; i++) {
+        if (plan->calls[i].calling_convention != XR_TARGET_CALL_CONVENTION_CONTAINER_COPY)
+            continue;
+        REQUIRE(call == NULL);
+        call = &plan->calls[i];
+    }
+    REQUIRE(call != NULL);
+    REQUIRE(call->semantic_operation == operation_index && call->argument_count == 0 &&
+            call->result_value == operation->result_value &&
+            call->result_slot == result->slot && call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_RETURN_OWNED &&
+            call->target_kind == XR_TARGET_CALL_TARGET_CONTAINER_COPY &&
+            call->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED && call->flags == 0);
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type != operation->result_type)
+            continue;
+        REQUIRE(layout_index == XR_SEMANTIC_INDEX_NONE);
+        layout_index = i;
+    }
+    REQUIRE(layout_index != XR_SEMANTIC_INDEX_NONE &&
+            plan->layouts[layout_index].kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            plan->layouts[layout_index].array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED);
+
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    REQUIRE(xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error)));
+    XrCValueEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_value_view(emission, operation->result_value, &view, error,
+                                          sizeof(error)) &&
+            view.rep == XR_C_VALUE_REP_TAGGED &&
+            view.target_register_kind == XR_MACHINE_REP_DYN_VALUE &&
+            view.target_memory_kind == XR_MACHINE_REP_DYN_VALUE &&
+            view.materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
+            xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+
+    uint8_t saved_kind = call->target_kind;
+    call->target_kind = XR_TARGET_CALL_TARGET_SCALAR_COPY;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->target_kind = saved_kind;
+    uint8_t saved_call_storage = call->array_element_storage;
+    call->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    call->array_element_storage = saved_call_storage;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                      sizeof(error)));
+    uint8_t saved_ownership = call->result_ownership;
+    call->result_ownership = XR_TARGET_CALL_NONE;
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    call->result_ownership = saved_ownership;
+    uint8_t saved_storage = plan->layouts[layout_index].array_element_storage;
+    plan->layouts[layout_index].array_element_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    xr_target_layout_compute_fingerprint(plan, layout_index,
+                                         &plan->layouts[layout_index].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    plan->layouts[layout_index].array_element_storage = saved_storage;
+    xr_target_layout_compute_fingerprint(plan, layout_index,
+                                         &plan->layouts[layout_index].fingerprint);
+
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    XrSemanticTypeRecord *result_type = &semantic->types[operation->result_type];
+    REQUIRE(children && result_type->child_begin < child_count);
+    XrSemanticTypeRecord *element = &semantic->types[children[result_type->child_begin]];
+    uint16_t saved_element_kind = element->kind;
+    element->kind = XR_KIND_INSTANCE;
+    REQUIRE(!xr_semantic_container_copy_is_exact(semantic, operation, NULL, NULL));
+    element->kind = saved_element_kind;
+    REQUIRE(xr_semantic_container_copy_is_exact(semantic, operation, NULL, NULL) &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_array_reserve_call_authority(void) {
     XrSemanticPlan *semantic = build_array_reserve_semantic();
     XrTargetProfile *profile = build_profile(0);
@@ -6632,6 +6806,11 @@ int main(int argc, char **argv) {
         puts("Array HOF TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "tagged-string-array-copy-authority") == 0) {
+        test_tagged_string_array_copy_authority();
+        puts("Tagged String Array copy TargetPlan authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "string-slice-range-authority") == 0) {
         test_string_slice_range_call_authority();
         puts("String range-slice TargetPlan authority tests passed");
@@ -6666,6 +6845,7 @@ int main(int argc, char **argv) {
     test_unit_enum_target_rep_mutations();
     test_array_intrinsic_call_authority();
     test_array_hof_call_authority();
+    test_tagged_string_array_copy_authority();
     test_array_reserve_call_authority();
     test_stringbuilder_constructor_call_authority();
     test_stringbuilder_append_rune_call_authority();

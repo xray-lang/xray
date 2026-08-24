@@ -26,6 +26,7 @@
 
 #include "xr_target_plan.h"
 #include "../semantic/xr_semantic_array_element_storage_shape.h"
+#include "../semantic/xr_semantic_container_copy_shape.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -91,6 +92,24 @@ static inline bool xr_target_array_storage_from_type(const XrSemanticTypeRecord 
         type->kind != XR_KIND_FLOAT)
         return false;
     return xr_target_array_storage_from_semantic(element, out);
+}
+
+/* Container copy is the one family that proves a reference-capable element's
+ * lifecycle before asking the target for its physical lane. Semantic ANY is
+ * therefore translated only after the copy shape has narrowed it to an exact
+ * tagged String or frozen source-class instance. */
+static inline bool xr_target_container_copy_storage(const XrSemanticPlan *plan,
+                                                    const XrSemanticOperationRecord *operation,
+                                                    uint8_t *out) {
+    uint8_t semantic_storage = XR_ELEM_ANY;
+    if (!out ||
+        !xr_semantic_container_copy_is_exact(plan, operation, NULL, &semantic_storage))
+        return false;
+    if (semantic_storage == XR_ELEM_ANY) {
+        *out = XR_TARGET_ARRAY_STORAGE_TAGGED;
+        return true;
+    }
+    return xr_target_array_storage_from_semantic(semantic_storage, out);
 }
 
 #endif  // XR_TARGET_ARRAY_STORAGE_SHAPE_H

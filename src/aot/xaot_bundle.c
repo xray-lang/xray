@@ -421,6 +421,23 @@ XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBu
     return bundle->module_emission_plans[module_index];
 }
 
+XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_func(const XaotBundle *bundle,
+                                                                  const XiFunc *func) {
+    if (!bundle || !func || !func->semantic_plan || !bundle->module_emission_plans ||
+        !bundle->target_plans)
+        return NULL;
+    const XrCEmissionPlan *match = NULL;
+    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+        if (!target_plan || xr_target_plan_semantic_plan(target_plan) != func->semantic_plan)
+            continue;
+        if (match || !bundle->module_emission_plans[module_index])
+            return NULL;
+        match = bundle->module_emission_plans[module_index];
+    }
+    return match;
+}
+
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module) {
     if (!bundle || !modules || nmodules == 0 || entry_module >= nmodules)
