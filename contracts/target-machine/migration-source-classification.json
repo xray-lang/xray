@@ -61,6 +61,28 @@
         "src/vm/xr_vm_entry_adapter.h",
         "src/vm/xr_vm_ops.def"
       ],
+      "legacy_residue_scan": {
+        "consumers": [
+          "CMakeLists.txt",
+          "scripts/check_contract_freeze.py",
+          "scripts/check_xi_aot_generated_sync.py",
+          "src/runtime/xr_dynamic_entry_runtime.c",
+          "src/runtime/xr_dynamic_entry_runtime.h",
+          "src/runtime/xr_entry_cell.c",
+          "src/runtime/xr_module_generation.c",
+          "src/runtime/xr_module_generation_internal.h",
+          "tests/install/run_installed_runtime_symbol_tests.py",
+          "tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c",
+          "tests/unit/vm/test_typed_dispatch.c",
+          "tests/unit/vm/test_vm_decoded_cache.c"
+        ],
+        "namespaces": [
+          "xr_vm_decoded_cache",
+          "xr_vm_dynamic_entry",
+          "xr_vm_entry_adapter",
+          "xr_vm_ops"
+        ]
+      },
       "serialization_cache_impact": "no artifact authority; decoded state is rebuilt from a verified TargetPlan",
       "typed_consumers": [
         "src/runtime/xr_module_generation.c",
@@ -86,6 +108,24 @@
         "src/vm/debug/xr_vm_trace.h",
         "src/vm/debug/xr_vm_trace_internal.h"
       ],
+      "legacy_residue_scan": {
+        "consumers": [
+          "scripts/check_contract_freeze.py",
+          "src/vm/xr_typed_dispatch.c",
+          "src/vm/xr_typed_dispatch.h",
+          "tests/install/run_installed_runtime_symbol_tests.py",
+          "tests/target_machine/comparison/typed_fixture.c",
+          "tests/unit/runtime/test_dynamic_entry_runtime.c",
+          "tests/unit/runtime/test_typed_frame_runtime_archive.c",
+          "tests/unit/vm/test_typed_dispatch.c"
+        ],
+        "namespaces": [
+          "xr_vm_debug_control",
+          "xr_vm_materialize",
+          "xr_vm_profile",
+          "xr_vm_trace"
+        ]
+      },
       "serialization_cache_impact": "debug side metadata only; never artifact authority",
       "typed_consumers": [
         "src/vm/xr_typed_dispatch.c"

@@ -27,6 +27,7 @@ EXPECTED_POLICY = {
     "multiple_classification": "error",
     "unclassified_governed_path": "error",
 }
+SURVIVOR_NAMESPACE_RE = re.compile(r"xr_vm_[a-z0-9]+(?:_[a-z0-9]+)*")
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -37,11 +38,14 @@ def read_json(path: Path) -> dict[str, Any]:
 
 
 def is_exact_relative_path(value: Any) -> bool:
+    path = Path(value) if isinstance(value, str) else None
     return (
         isinstance(value, str)
         and value != ""
         and "\\" not in value
-        and not value.startswith(("/", "../"))
+        and path is not None
+        and not path.is_absolute()
+        and ".." not in path.parts
         and not any(token in value for token in ("*", "?", "[", "]"))
     )
 
@@ -116,6 +120,7 @@ def validate(root: Path, data: dict[str, Any]) -> tuple[list[str], dict[str, int
 
     ids: set[str] = set()
     path_owner: dict[str, str] = {}
+    namespace_owner: dict[str, str] = {}
     target_install_blocks = install_blocks(root)
     for item in items:
         if not isinstance(item, dict):
@@ -152,6 +157,54 @@ def validate(root: Path, data: dict[str, Any]) -> tuple[list[str], dict[str, int
                 errors.append(f"{relative}: classified by both {previous} and {item_id}")
             path_owner[relative] = item_id
 
+        residue_scan = item.get("legacy_residue_scan")
+        if residue_scan is not None:
+            if category != "SURVIVOR_AUTHORITY":
+                errors.append(f"{item_id}: legacy residue scan requires survivor authority")
+            if not isinstance(residue_scan, dict) or set(residue_scan) != {
+                "consumers", "namespaces"
+            }:
+                errors.append(f"{item_id}: legacy residue scan shape is not exact")
+            else:
+                namespaces = residue_scan.get("namespaces")
+                consumers = residue_scan.get("consumers")
+                if (
+                    not isinstance(namespaces, list)
+                    or not namespaces
+                    or any(
+                        not isinstance(namespace, str)
+                        or SURVIVOR_NAMESPACE_RE.fullmatch(namespace) is None
+                        for namespace in namespaces
+                    )
+                    or len(set(namespaces)) != len(namespaces)
+                ):
+                    errors.append(f"{item_id}: survivor namespaces are not exact and unique")
+                else:
+                    for namespace in namespaces:
+                        previous = namespace_owner.get(namespace)
+                        if previous is not None:
+                            errors.append(
+                                f"{namespace}: residue namespace owned by both "
+                                f"{previous} and {item_id}"
+                            )
+                        namespace_owner[namespace] = item_id
+                if (
+                    not isinstance(consumers, list)
+                    or any(not is_exact_relative_path(value) for value in consumers)
+                    or len(set(consumers)) != len(consumers)
+                ):
+                    errors.append(f"{item_id}: residue consumers are not exact and unique")
+                else:
+                    for relative in consumers:
+                        if not (root / relative).is_file():
+                            errors.append(
+                                f"{item_id}: residue consumer does not exist: {relative}"
+                            )
+                        if relative in paths:
+                            errors.append(
+                                f"{item_id}: residue consumer duplicates an owner path: {relative}"
+                            )
+
         markers = item.get("markers", [])
         if not isinstance(markers, list):
             errors.append(f"{item_id}: markers must be a list")
@@ -179,6 +232,14 @@ def validate(root: Path, data: dict[str, Any]) -> tuple[list[str], dict[str, int
         if category == "LEGACY_TOMBSTONE":
             if item.get("new_feature") is not False or not item.get("tombstone_deadline"):
                 errors.append(f"{item_id}: legacy tombstone lacks the no-feature rule or deadline")
+
+    namespaces = sorted(namespace_owner)
+    for index, namespace in enumerate(namespaces):
+        for other in namespaces[index + 1:]:
+            if other.startswith(namespace + "_"):
+                errors.append(
+                    f"survivor namespace boundary overlaps: {namespace} and {other}"
+                )
 
     discovery = data.get("discovery", {})
     globs = discovery.get("typed_source_globs") if isinstance(discovery, dict) else None
@@ -237,6 +298,60 @@ def self_test(root: Path, data: dict[str, Any]) -> int:
         if item.get("id") == "runtime-target-and-generation-lifecycle":
             item["completion_limit"] = "generation-closure-complete"
     mutations.append(("generation-overclaim", generation_overclaim))
+    residue_scan_items = [
+        item for item in data["items"]
+        if isinstance(item, dict) and "legacy_residue_scan" in item
+    ]
+    if residue_scan_items:
+        broad_namespace = copy.deepcopy(data)
+        for item in broad_namespace["items"]:
+            if "legacy_residue_scan" in item:
+                item["legacy_residue_scan"]["namespaces"][0] = "xr_vm_*"
+                break
+        mutations.append(("exact-survivor-namespace", broad_namespace))
+        broad_consumer = copy.deepcopy(data)
+        for item in broad_consumer["items"]:
+            if "legacy_residue_scan" in item:
+                item["legacy_residue_scan"]["consumers"][0] = "tests/unit/*"
+                break
+        mutations.append(("exact-residue-consumer", broad_consumer))
+        missing_consumer = copy.deepcopy(data)
+        for item in missing_consumer["items"]:
+            if "legacy_residue_scan" in item:
+                item["legacy_residue_scan"]["consumers"][0] = (
+                    "tests/__missing_residue_consumer__.c"
+                )
+                break
+        mutations.append(("existing-residue-consumer", missing_consumer))
+        duplicate_consumer = copy.deepcopy(data)
+        for item in duplicate_consumer["items"]:
+            if "legacy_residue_scan" in item:
+                consumers = item["legacy_residue_scan"]["consumers"]
+                consumers.append(consumers[0])
+                break
+        mutations.append(("unique-residue-consumer", duplicate_consumer))
+    if len(residue_scan_items) >= 2:
+        duplicate_namespace = copy.deepcopy(data)
+        scans = [
+            item["legacy_residue_scan"] for item in duplicate_namespace["items"]
+            if "legacy_residue_scan" in item
+        ]
+        scans[1]["namespaces"].append(scans[0]["namespaces"][0])
+        mutations.append(("unique-residue-namespace-owner", duplicate_namespace))
+    non_survivor = next(
+        (item for item in data["items"]
+         if isinstance(item, dict) and item.get("category") != "SURVIVOR_AUTHORITY"),
+        None,
+    )
+    if non_survivor is not None and residue_scan_items:
+        scan_on_legacy = copy.deepcopy(data)
+        for item in scan_on_legacy["items"]:
+            if item.get("id") == non_survivor.get("id"):
+                item["legacy_residue_scan"] = copy.deepcopy(
+                    residue_scan_items[0]["legacy_residue_scan"]
+                )
+                break
+        mutations.append(("survivor-only-residue-scan", scan_on_legacy))
     for name, mutation in mutations:
         mutation_errors, _ = validate(root, mutation)
         if not mutation_errors:

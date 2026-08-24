@@ -14,6 +14,9 @@ from pathlib import Path
 
 SCHEMA = 3
 INVENTORY = Path("contracts/target-machine/legacy-product-residue.json")
+MIGRATION_CLASSIFICATION = Path(
+    "contracts/target-machine/migration-source-classification.json"
+)
 SELF_PATH = Path("scripts/check_legacy_product_residue.py")
 TEXT_SUFFIXES = {".c", ".h", ".in", ".py", ".sh", ".ps1", ".cmake", ".toml"}
 
@@ -51,10 +54,9 @@ CANDIDATE_RE = re.compile(
     r"(?P<cli_alias>\"(?:bytecode|bc|source|header|c|h)\")",
 )
 
-# These exact namespaces belong to the typed TargetPlan runtime.  They retain
-# the historical file prefix only; treating them as legacy aliases makes the
-# residue ratchet count its replacement as residue.  Keep this list narrow so
-# every other xr_vm_* spelling remains fail closed.
+# These exact namespaces belong to the typed TargetPlan runtime.  A governed
+# manifest relationship must also match so an arbitrary legacy path cannot
+# evade the residue ratchet by copying a prefix.
 SURVIVOR_INTERNAL_VM_NAMESPACES = (
     "xr_vm_debug_control",
     "xr_vm_decoded_cache",
@@ -67,10 +69,74 @@ SURVIVOR_INTERNAL_VM_NAMESPACES = (
 )
 
 
-def is_survivor_internal_vm_token(token: str) -> bool:
+def is_exact_migration_path(root: Path, relative: object) -> bool:
+    if not isinstance(relative, str) or not relative or "\\" in relative:
+        return False
+    path = Path(relative)
+    return (
+        not path.is_absolute()
+        and ".." not in path.parts
+        and not any(character in relative for character in ("*", "?", "[", "]"))
+        and (root / path).is_file()
+    )
+
+
+def is_exact_internal_vm_namespace(namespace: object) -> bool:
+    return (
+        isinstance(namespace, str)
+        and namespace in SURVIVOR_INTERNAL_VM_NAMESPACES
+    )
+
+
+def migration_survivor_paths(root: Path) -> dict[str, frozenset[str]]:
+    try:
+        data = json.loads(
+            (root / MIGRATION_CLASSIFICATION).read_text(
+                encoding="utf-8", errors="strict"
+            )
+        )
+    except (OSError, json.JSONDecodeError):
+        return {}
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return {}
+    paths: dict[str, set[str]] = defaultdict(set)
+    for item in items:
+        if not isinstance(item, dict) or item.get("category") != "SURVIVOR_AUTHORITY":
+            continue
+        scan = item.get("legacy_residue_scan")
+        if not isinstance(scan, dict) or set(scan) != {"namespaces", "consumers"}:
+            continue
+        namespaces = scan.get("namespaces")
+        consumers = scan.get("consumers")
+        owners = item.get("paths")
+        if (
+            not isinstance(namespaces, list)
+            or not namespaces
+            or not all(isinstance(value, str) for value in namespaces)
+            or len(set(namespaces)) != len(namespaces)
+            or not all(is_exact_internal_vm_namespace(value) for value in namespaces)
+            or not isinstance(consumers, list)
+            or not all(isinstance(value, str) for value in consumers)
+            or len(set(consumers)) != len(consumers)
+            or not isinstance(owners, list)
+        ):
+            continue
+        relationships = owners + consumers
+        if not all(is_exact_migration_path(root, value) for value in relationships):
+            continue
+        for relative in relationships:
+            paths[relative].update(namespaces)
+    return {relative: frozenset(namespaces)
+            for relative, namespaces in paths.items()}
+
+
+def is_survivor_internal_vm_token(
+    relative: str, token: str, survivor_paths: dict[str, frozenset[str]]
+) -> bool:
     return any(
         token == namespace or token.startswith(namespace + "_")
-        for namespace in SURVIVOR_INTERNAL_VM_NAMESPACES
+        for namespace in survivor_paths.get(relative, ())
     )
 
 
@@ -184,6 +250,7 @@ def collect(root: Path) -> dict[str, object]:
         lambda: {"tokens": set(), "evidence": [], "hit_count": 0}
     )
     symbol_tokens: set[str] = set()
+    survivor_paths = migration_survivor_paths(root)
     for path in discovery_files(root):
         relative = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8", errors="strict")
@@ -193,7 +260,9 @@ def collect(root: Path) -> dict[str, object]:
                     continue
                 token = match.group(0)
                 if (match.lastgroup == "internal_vm_alias"
-                        and is_survivor_internal_vm_token(token)):
+                        and is_survivor_internal_vm_token(
+                            relative, token, survivor_paths
+                        )):
                     continue
                 family = family_for(match.lastgroup or "", token)
                 surface = surface_for(relative, line)
@@ -327,8 +396,32 @@ def self_test() -> int:
     with tempfile.TemporaryDirectory(prefix="xray-legacy-product-residue-") as directory:
         root = Path(directory)
         for item in ("contracts/target-machine", "include", "src/app/cli",
-                     "src/app/tools", "scripts", "tests"):
+                     "src/app/tools", "src/vm", "scripts", "tests"):
             (root / item).mkdir(parents=True, exist_ok=True)
+        migration_classification = root / MIGRATION_CLASSIFICATION
+        migration_classification_text = json.dumps(
+            {
+                "items": [
+                    {
+                        "id": "typed-target-vm",
+                        "category": "SURVIVOR_AUTHORITY",
+                        "paths": ["src/vm/xr_vm_decoded_cache.c"],
+                        "legacy_residue_scan": {
+                            "namespaces": ["xr_vm_decoded_cache"],
+                            "consumers": ["src/typed_consumer.c"],
+                        },
+                    },
+                    {
+                        "category": "LEGACY_TOMBSTONE",
+                        "paths": ["src/legacy_vm.c"],
+                    },
+                ]
+            }
+        )
+        migration_classification.write_text(
+            migration_classification_text,
+            encoding="utf-8",
+        )
         (root / "CMakeLists.txt").write_text("# clean\n", encoding="utf-8")
         owner = root / "src/app/cli/owner.c"
         owner.write_text('const char *suffix = ".xrc";\n', encoding="utf-8")
@@ -338,18 +431,37 @@ def self_test() -> int:
         bcgen_format_owner.write_text('const char *format = "bytecode";\n', encoding="utf-8")
         staging_owner = root / "scripts/generate_stdlib_embedded.py"
         staging_owner.write_text("# canonical extensionless staging\n", encoding="utf-8")
-        typed_vm_owner = root / "src/typed_target_vm.c"
+        typed_vm_owner = root / "src/vm/xr_vm_decoded_cache.c"
         typed_vm_owner.write_text(
             "XrVmDecodedCache *cache;\n"
             "int status = XR_VM_DECODED_CACHE_OK;\n"
-            "void *a = xr_vm_decoded_cache_create;\n"
-            "void *b = xr_vm_trace_emit;\n",
+            "void *a = xr_vm_decoded_cache_create;\n",
+            encoding="utf-8",
+        )
+        typed_vm_consumer = root / "src/typed_consumer.c"
+        typed_vm_consumer.write_text(
+            "void *cache = xr_vm_decoded_cache_create;\n",
             encoding="utf-8",
         )
         survivor_spelling_safe = collect(root)["total"] == 3
         inventory = root / INVENTORY
         inventory.write_text(render(collect(root)), encoding="utf-8")
         clean, _ = check(root, collect(root))
+        migration_classification.unlink()
+        classification_missing_rejected = not check(root, collect(root))[0]
+        migration_classification.write_text("{", encoding="utf-8")
+        classification_damaged_rejected = not check(root, collect(root))[0]
+        migration_classification.write_text(
+            migration_classification_text,
+            encoding="utf-8",
+        )
+        survivor_prefix_spoof = root / "src/legacy_vm.c"
+        survivor_prefix_spoof.write_text(
+            "void *legacy = xr_vm_decoded_cache_legacy_call;\n",
+            encoding="utf-8",
+        )
+        survivor_prefix_spoof_rejected = not check(root, collect(root))[0]
+        survivor_prefix_spoof.unlink()
         typed_vm_owner.write_text(
             "XrVmDecodedCache *cache;\n"
             "int status = XR_VM_DECODED_CACHE_OK;\n"
@@ -360,8 +472,7 @@ def self_test() -> int:
         typed_vm_owner.write_text(
             "XrVmDecodedCache *cache;\n"
             "int status = XR_VM_DECODED_CACHE_OK;\n"
-            "void *a = xr_vm_decoded_cache_create;\n"
-            "void *b = xr_vm_trace_emit;\n",
+            "void *a = xr_vm_decoded_cache_create;\n",
             encoding="utf-8",
         )
         compile_format_owner.write_text(
@@ -750,11 +861,16 @@ def self_test() -> int:
         bcgen_format_owner.unlink()
         staging_owner.unlink()
         typed_vm_owner.unlink()
+        typed_vm_consumer.unlink()
         (root / "src/new_loader.c").unlink()
         (root / "src/new_codec.c").unlink()
         zero = collect(root)
         terminal, _ = check(root, zero)
-    if (not survivor_spelling_safe or not clean or legacy_internal_spelling_drifted
+    if (not survivor_spelling_safe or not clean
+            or not classification_missing_rejected
+            or not classification_damaged_rejected
+            or not survivor_prefix_spoof_rejected
+            or legacy_internal_spelling_drifted
             or compile_format_alias_drifted or compile_xrc_compatibility_drifted
             or bcgen_format_alias_drifted
             or staging_suffix_drifted or staging_variable_drifted
