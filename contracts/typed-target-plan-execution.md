@@ -1,6 +1,6 @@
 # Typed TargetPlan scalar execution contract
 
-TargetPlan schema 42 may carry a canonical per-function instruction table and
+TargetPlan schema 44 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -224,8 +224,8 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 42 is a hard cutover from v41 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 37 and its compact 225-row Xi operation registry.
+TargetPlan schema 44 is a hard cutover from v43 and every earlier TargetPlan
+schema. It requires SemanticPlan schema 38 and its compact 225-row Xi operation registry.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
 bounded `Iterator<(K,V)>.hasNext()`/`next()` continuations; selector spelling

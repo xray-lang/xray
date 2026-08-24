@@ -231,12 +231,13 @@ roots, or general module activation.
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
-5. Runtime loading accepts only an XTP v42 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v44 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V42 is a breaking hard cutover from
-   v41 and all earlier XTP schemas. It requires SemanticPlan schema 37 and
-   TargetPlan schema 42 after freezing exact typed Map-entry iterator call
-   authority; no compatibility alias is accepted. It
+   independent TargetPlan verification. V44 is a breaking hard cutover from
+   v43 and all earlier XTP schemas. It requires SemanticPlan schema 38 and
+   TargetPlan schema 44 after freezing exact standard-library/module identities,
+   rune-to-String result storage, and String-runes result layout; no compatibility
+   alias is accepted. It
    preserves the exact 144-byte dynamic-entry
    expectation section and preserves the compact instruction stream introduced
    by v34. It additionally carries exact Array HOF result/callback authority,
@@ -381,8 +382,8 @@ anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c aa42e2ea69d8e2669f1019905a213c62002e9c0d07d4e5df14e0758d8fc14c4a
-anchor-sha256: src/runtime/xr_target_plan_load.c 83021d42e11ca25eb53161850933a31f9c966e1aa3d8ccf4b7f6f943e862d585
-anchor-sha256: src/app/cli/xcmd_run.c 8acf2d9270e9b9d67c4b521108f0c0fd33348b0ab5ddeac50529a4e835cc583a
+anchor-sha256: src/runtime/xr_target_plan_load.c 6b7f72151ed3359a8233e5b45e74b8175a42a120ade628ecb930aab1cb8a9fbb
+anchor-sha256: src/app/cli/xcmd_run.c b9f4d84d60191279ad6800ec3d18594fc58b85717a7fc3a0f4b9ebcfce50a832
 anchor-sha256: contracts/target-machine/legacy-product-residue.json ddbc46a5e2a8c1f88e8707ec6b7e917b1e58ef4f23a565238c70b24889a1f358
 anchor-sha256: scripts/check_legacy_product_residue.py c3f15f8812355cb1bd3b316137d5cabc08ad2d915a1c92431c018923842bc327
 anchor-sha256: tests/unit/plan/test_target_plan.c 32fc3c81cefee28f3c5f245fdf4db86c99dcfa2c6db3664a3ad1c51b3e51bf42
@@ -390,7 +391,7 @@ anchor-sha256: tests/unit/plan/test_xtp_format.c 2449ef2de5dbe45d856d8b187958928
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
 anchor-sha256: tests/unit/CMakeLists.txt 009763d182aa6697883f811de12d716efcc8a3366d82417807cc904a4a46e88e
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
-anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py 5714ef411b492a2c0c893ade832e0b2c3c2ead7306e26b000f2e8c583e9e2c42
+anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 70d40dfa429c78f663381887bf4676c2b68c97334c55344554a6da587e886be8

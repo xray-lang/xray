@@ -140,7 +140,7 @@
       "id": "exact-xtp-artifact",
       "path": "src/plan/format/xr_xtp_schema.h",
       "required_regex": [
-        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(42\\)",
+        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(44\\)",
         "XR_XTP_MAX_ARTIFACT_SIZE",
         "xr_xtp_decode_candidate"
       ]
@@ -167,7 +167,8 @@
       "id": "runtime-xtp-load-boundary",
       "path": "src/runtime/xr_target_plan_load.c",
       "required_regex": [
-        "accepts only XTP v41 bytes",
+        "runtime TargetPlan loading accepts only XTP v%",
+        "XR_XTP_SCHEMA_VERSION",
         "xr_runtime_artifact_authority_bind_candidate",
         "xr_runtime_artifact_authority_bind_plan"
       ]
@@ -242,7 +243,7 @@
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
     ],
-    "sha256": "e2073a0cfdeaa2928db23a0d788d3cdbab2894ee2af506be7d2e46c385f85673"
+    "sha256": "340a9f6b25fad72747295cb23fac5bb7e7422e71c25551384c91889e33e791b9"
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",

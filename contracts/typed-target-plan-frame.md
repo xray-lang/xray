@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 42 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 44 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every

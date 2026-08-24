@@ -56,7 +56,7 @@
       },
       "producer": {
         "path": "src/plan/semantic/xr_semantic_ids.h",
-        "required_regex": "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(37\\)$"
+        "required_regex": "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(38\\)$"
       },
       "semantic_meaning": "Exact semantic plan and artifact schema identity accepted by all current readers and cache identities",
       "serialized_form": [
@@ -78,7 +78,7 @@
       ],
       "stable_identity": {
         "kind": "exact-u32",
-        "value": 37
+        "value": 38
       },
       "trust_boundary": "XSM and XTP readers reject a semantic schema mismatch before a decoded plan can be verified, frozen or activated"
     }

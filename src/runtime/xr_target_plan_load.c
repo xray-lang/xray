@@ -12,6 +12,7 @@
 #include "xr_runtime_artifact_authority_internal.h"
 #include "../plan/format/xr_artifact_kind.h"
 #include "../plan/format/xr_xtp_internal.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -56,16 +57,24 @@ XRAY_API bool xr_runtime_target_plan_load(
     XrArtifactProbeResult probe =
         xr_artifact_probe(NULL, artifact_bytes, prefix_size);
     if (probe.status != XR_ARTIFACT_PROBE_MATCH ||
-        probe.kind != XR_ARTIFACT_KIND_XTP)
+        probe.kind != XR_ARTIFACT_KIND_XTP) {
+        char detail[128];
+        snprintf(detail, sizeof(detail),
+                 "runtime TargetPlan loading accepts only XTP v%" PRIu32 " bytes",
+                 XR_XTP_SCHEMA_VERSION);
         return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2000",
-                    "runtime TargetPlan loading accepts only XTP v41 bytes");
+                    detail);
+    }
     XrXtpCandidate *candidate = NULL;
     char nested[512] = {0};
     if (!xr_xtp_decode_candidate(artifact_bytes, artifact_size, &candidate,
-                                 nested, sizeof(nested)))
+                                 nested, sizeof(nested))) {
+        char stage[96];
+        snprintf(stage, sizeof(stage), "XTP v%" PRIu32 " candidate decoding failed",
+                 XR_XTP_SCHEMA_VERSION);
         return propagate_nested(diagnostic, diagnostic_size,
-                                "XR_ARTIFACT_2000",
-                                "XTP v41 candidate decoding failed", nested);
+                                "XR_ARTIFACT_2000", stage, nested);
+    }
 
     XrXtpIdentity identity;
     bool have_identity = xr_xtp_candidate_identity(candidate, &identity);
@@ -78,10 +87,13 @@ XRAY_API bool xr_runtime_target_plan_load(
             candidate, authority->semantic_plan, authority->target_profile,
             &plan, nested, sizeof(nested));
     xr_xtp_candidate_release(candidate);
-    if (!materialized)
+    if (!materialized) {
+        char stage[96];
+        snprintf(stage, sizeof(stage), "XTP v%" PRIu32 " materialization failed",
+                 XR_XTP_SCHEMA_VERSION);
         return propagate_nested(diagnostic, diagnostic_size,
-                                "XR_ARTIFACT_2004",
-                                "XTP v41 materialization failed", nested);
+                                "XR_ARTIFACT_2004", stage, nested);
+    }
 
     nested[0] = '\0';
     if (!xr_target_plan_is_verified(plan) ||
