@@ -24,7 +24,8 @@ static XrCEmissionRuleFacts exact_push_facts(void) {
         .call_convention = XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR,
         .target_kind = XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR,
         .layout_kind = XR_TARGET_LAYOUT_DYNAMIC,
-        .storage = XR_TARGET_ARRAY_STORAGE_TAGGED,
+        .call_storage = XR_TARGET_ARRAY_STORAGE_TAGGED,
+        .layout_storage = XR_TARGET_ARRAY_STORAGE_TAGGED,
         .argument_ownership = {XR_TARGET_CALL_BORROW, XR_TARGET_CALL_CONSUME},
         .argument_storage = {XR_TARGET_ARRAY_STORAGE_NONE, XR_TARGET_ARRAY_STORAGE_TAGGED},
         .caller_register_kind = {XR_MACHINE_REP_DYN_VALUE, XR_MACHINE_REP_DYN_VALUE},
@@ -44,7 +45,6 @@ static void require_fact_mutation_rejected(XrCEmissionRuleFacts facts) {
         XR_C_VALUE_REP_VOID,
         XR_TARGET_ARRAY_STORAGE_TAGGED,
         "xrt_array_push",
-        "XR_EXEC_5003:Array.push tagged C emission rule mismatch",
     };
     require(xr_c_emission_rule_verify(&facts, &exact, NULL) == XR_C_EMISSION_RULE_MALFORMED);
 }
@@ -69,9 +69,6 @@ static void test_exact_and_decision_mutations(void) {
     require(xr_c_emission_rule_verify(&facts, &mutation, NULL) == XR_C_EMISSION_RULE_MALFORMED);
     mutation = decision;
     mutation.symbol = "xrt_array_set";
-    require(xr_c_emission_rule_verify(&facts, &mutation, NULL) == XR_C_EMISSION_RULE_MALFORMED);
-    mutation = decision;
-    mutation.diagnostic = "XR_EXEC_5003:wrong rule";
     require(xr_c_emission_rule_verify(&facts, &mutation, NULL) == XR_C_EMISSION_RULE_MALFORMED);
 }
 
@@ -110,7 +107,10 @@ static void test_clause_mutations(void) {
     facts.layout_kind = XR_TARGET_LAYOUT_SCALAR;
     require_fact_mutation_rejected(facts);
     facts = exact_push_facts();
-    facts.storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    facts.call_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    require_fact_mutation_rejected(facts);
+    facts = exact_push_facts();
+    facts.layout_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     require_fact_mutation_rejected(facts);
     facts = exact_push_facts();
     facts.argument_ownership[1] = XR_TARGET_CALL_BORROW;
@@ -145,10 +145,26 @@ static void test_closed_domain(void) {
             XR_C_EMISSION_RULE_NOT_APPLICABLE);
 }
 
+static void test_scalar_push_is_outside_tagged_domain(void) {
+    XrCEmissionRuleFacts facts = exact_push_facts();
+    facts.element_source_class = false;
+    facts.call_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    facts.layout_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    facts.argument_storage[1] = XR_TARGET_ARRAY_STORAGE_U8;
+    facts.caller_register_kind[1] = XR_MACHINE_REP_U8;
+    facts.caller_memory_kind[1] = XR_MACHINE_REP_U8;
+    XrCEmissionRuleDecision decision = {0};
+    require(xr_c_emission_rule_build(&facts, &decision) ==
+            XR_C_EMISSION_RULE_NOT_APPLICABLE);
+    require(xr_c_emission_rule_verify(&facts, &decision, NULL) ==
+            XR_C_EMISSION_RULE_NOT_APPLICABLE);
+}
+
 int main(void) {
     test_exact_and_decision_mutations();
     test_clause_mutations();
     test_closed_domain();
-    puts("test_c_emission_typed_rules: 3 passed");
+    test_scalar_push_is_outside_tagged_domain();
+    puts("test_c_emission_typed_rules: 4 passed");
     return 0;
 }

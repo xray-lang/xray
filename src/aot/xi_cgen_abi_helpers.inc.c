@@ -150,7 +150,8 @@ static bool cg_value_emission_is_named_aggregate(XiCgenCtx *ctx, const XiValue *
     if (out->target_register_kind != XR_MACHINE_REP_AGGREGATE ||
         out->target_memory_kind != XR_MACHINE_REP_AGGREGATE ||
         out->address_projection != XR_C_ADDRESS_PROJECTION_NAMED_AGGREGATE || out->reserved != 0 ||
-        out->recipe_reserved != 0 || out->projection_reserved != 0 || !out->c_type ||
+        out->recipe_rule_id != XR_C_EMISSION_RULE_NONE || out->projection_reserved != 0 ||
+        !out->c_type ||
         !out->c_type[0] || out->literal_byte_length != 0 || out->literal_bytes != NULL ||
         out->recipe_operand_value != UINT32_MAX || out->recipe_argument_value != UINT32_MAX ||
         out->recipe_layout_id != 0 || out->recipe_discriminant != 0 ||

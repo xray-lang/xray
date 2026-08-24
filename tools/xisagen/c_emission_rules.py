@@ -49,6 +49,8 @@ class Rule:
     reference_action: str
     reference_drop: str
     element_source_class: bool
+    applies_element_source_class: bool
+    applies_storage: str
     call_convention: str
     target_kind: str
     layout_kind: str
@@ -71,7 +73,8 @@ class Rule:
 RULE_KEYWORDS = {
     ":stable-id", ":domain", ":member", ":opcode", ":intrinsic", ":operand-count",
     ":result-kind", ":element-access", ":reference-action", ":reference-drop",
-    ":element-source-class", ":call-convention", ":target-kind", ":layout-kind",
+    ":element-source-class", ":applies-element-source-class", ":applies-storage",
+    ":call-convention", ":target-kind", ":layout-kind",
     ":storage", ":receiver-ownership", ":element-ownership", ":receiver-storage",
     ":element-storage", ":caller-register-kind", ":caller-memory-kind", ":recipe",
     ":recipe-rep", ":recipe-symbol", ":diagnostic", ":coverage",
@@ -247,6 +250,9 @@ def parse(text: str, path: str = "<input>") -> tuple[list[RuleDomain], list[Rule
             reference_action=_c_token(form, ":reference-action", path),
             reference_drop=_c_token(form, ":reference-drop", path),
             element_source_class=_boolean(form, ":element-source-class", path),
+            applies_element_source_class=_boolean(
+                form, ":applies-element-source-class", path),
+            applies_storage=_c_token(form, ":applies-storage", path),
             call_convention=_c_token(form, ":call-convention", path),
             target_kind=_c_token(form, ":target-kind", path),
             layout_kind=_c_token(form, ":layout-kind", path),
@@ -315,7 +321,8 @@ def _clauses(rule: Rule) -> list[str]:
         f"facts->call_convention == {rule.call_convention}",
         f"facts->target_kind == {rule.target_kind}",
         f"facts->layout_kind == {rule.layout_kind}",
-        f"facts->storage == {rule.storage}",
+        f"facts->call_storage == {rule.storage}",
+        f"facts->layout_storage == {rule.storage}",
         f"facts->argument_ownership[0] == {rule.receiver_ownership}",
         f"facts->argument_ownership[1] == {rule.element_ownership}",
         f"facts->argument_storage[0] == {rule.receiver_storage}",
@@ -327,6 +334,17 @@ def _clauses(rule: Rule) -> list[str]:
         "facts->operation_result_bound",
         "facts->call_result_bound",
         "facts->arguments_structurally_exact",
+    ]
+
+
+def _applicability_clauses(rule: Rule) -> list[str]:
+    source_class = "true" if rule.applies_element_source_class else "false"
+    return [
+        f"facts->element_source_class == {source_class}",
+        f"facts->call_storage == {rule.applies_storage}",
+        f"facts->layout_storage == {rule.applies_storage}",
+        f"facts->argument_storage[0] == {rule.applies_storage}",
+        f"facts->argument_storage[1] == {rule.applies_storage}",
     ]
 
 
@@ -358,6 +376,14 @@ def render_builder(rules: list[Rule]) -> str:
     ]
     for rule in rules:
         block = [f"        case {rule.member}:", "            if (!("]
+        applicability = _applicability_clauses(rule)
+        for index, clause in enumerate(applicability):
+            block.append(
+                f"                {clause}{' ||' if index + 1 < len(applicability) else '))'}")
+        block.extend([
+            "                return XR_C_EMISSION_RULE_NOT_APPLICABLE;",
+            "            if (!("
+        ])
         clauses = _clauses(rule)
         for index, clause in enumerate(clauses):
             block.append(f"                {clause}{' &&' if index + 1 < len(clauses) else '))'}")
@@ -365,7 +391,7 @@ def render_builder(rules: list[Rule]) -> str:
             "                return XR_C_EMISSION_RULE_MALFORMED;",
             "            *out = (XrCEmissionRuleDecision) {",
             f"                XR_C_EMISSION_RULE_{_ident(rule)}, {rule.recipe}, {rule.recipe_rep},",
-            f"                {rule.storage}, \"{rule.recipe_symbol}\", \"{rule.diagnostic}\"}};",
+            f"                {rule.storage}, \"{rule.recipe_symbol}\"}};",
             "            return XR_C_EMISSION_RULE_EXACT;",
         ])
         if len(block) > rule.max_builder_lines:
@@ -396,7 +422,16 @@ def render_verifier(rules: list[Rule]) -> str:
         "    switch (facts->member) {",
     ]
     for rule in rules:
-        block = [f"        case {rule.member}: {{", "            bool clauses ="]
+        block = [f"        case {rule.member}: {{", "            bool applicable ="]
+        applicability = list(reversed(_applicability_clauses(rule)))
+        for index, clause in enumerate(applicability):
+            block.append(
+                f"                {clause}{' ||' if index + 1 < len(applicability) else ';'}")
+        block.extend([
+            "            if (!applicable)",
+            "                return XR_C_EMISSION_RULE_NOT_APPLICABLE;",
+            "            bool clauses ="
+        ])
         clauses = list(reversed(_clauses(rule)))
         for index, clause in enumerate(clauses):
             block.append(f"                {clause}{' &&' if index + 1 < len(clauses) else ';'}")
@@ -405,8 +440,7 @@ def render_verifier(rules: list[Rule]) -> str:
             f"                actual->rule_id == XR_C_EMISSION_RULE_{_ident(rule)} &&",
             f"                actual->recipe == {rule.recipe} && actual->rep == {rule.recipe_rep} &&",
             f"                actual->storage == {rule.storage} && actual->symbol &&",
-            f"                strcmp(actual->symbol, \"{rule.recipe_symbol}\") == 0 &&",
-            f"                actual->diagnostic && strcmp(actual->diagnostic, \"{rule.diagnostic}\") == 0;",
+            f"                strcmp(actual->symbol, \"{rule.recipe_symbol}\") == 0;",
             "            if (!clauses || !decision) {",
             f"                if (diagnostic) *diagnostic = \"{rule.diagnostic}\";",
             "                return XR_C_EMISSION_RULE_MALFORMED;",
@@ -451,6 +485,8 @@ def self_test() -> None:
       :reference-action XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE
       :reference-drop XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY
       :element-source-class yes
+      :applies-element-source-class yes
+      :applies-storage XR_TARGET_ARRAY_STORAGE_TAGGED
       :call-convention XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR
       :target-kind XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR
       :layout-kind XR_TARGET_LAYOUT_DYNAMIC :storage XR_TARGET_ARRAY_STORAGE_TAGGED
@@ -475,6 +511,8 @@ def self_test() -> None:
                        ":members (XI_METHOD_SYMBOL_PUSH XI_METHOD_SYMBOL_POP)"),
         source + source[source.index("(define-c-emission-rule"):],
         source.replace(":element-source-class yes", ":element-source-class maybe"),
+        source.replace(":applies-storage XR_TARGET_ARRAY_STORAGE_TAGGED",
+                       ":applies-storage tagged"),
         source.replace(":recipe XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED",
                        ":recipe arbitrary-c-expression"),
         source.replace(":coverage source-class-array-push", ":coverage \"not-a-key\""),

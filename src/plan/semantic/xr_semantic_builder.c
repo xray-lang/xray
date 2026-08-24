@@ -4243,11 +4243,18 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
                                      : XR_SEM_INTRINSIC_ARRAY_FILLED_NEW;
         record->array_element_storage = value->array_element_storage;
     }
+    const XrType *array_allocation_element =
+        value->type && XR_TYPE_IS_ARRAY(value->type) ? value->type->container.element_type : NULL;
+    bool array_allocation_scalar = value->array_element_storage > XR_ELEM_ANY &&
+                                   value->array_element_storage < XR_ELEM_RAWPTR;
+    bool array_allocation_source_class =
+        value->array_element_storage == XR_ELEM_ANY &&
+        source_class_for_type(ctx, array_allocation_element) != XR_SEMANTIC_INDEX_NONE;
     bool array_allocation_exact =
         value->op == XI_ARRAY_NEW && value->type && XR_TYPE_IS_ARRAY(value->type) &&
-        value->type->container.element_type && value->nargs == 1 && value->args[0] &&
+        array_allocation_element && value->nargs == 1 && value->args[0] &&
         value->args[0]->type && XR_TYPE_IS_INT(value->args[0]->type) &&
-        value->array_element_storage > XR_ELEM_ANY && value->array_element_storage < XR_ELEM_RAWPTR;
+        (array_allocation_scalar || array_allocation_source_class);
     if (array_allocation_exact) {
         record->array_element_storage = value->array_element_storage;
         record->semantic_immediate = 0;

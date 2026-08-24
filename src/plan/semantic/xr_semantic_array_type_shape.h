@@ -19,6 +19,7 @@
 #define XR_SEMANTIC_ARRAY_TYPE_SHAPE_H
 
 #include "xr_semantic_plan.h"
+#include "xr_semantic_shared_read_shape.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
@@ -69,6 +70,22 @@ static inline bool xr_semantic_array_type_row_is_exact(const XrSemanticTypeRecor
     if (type->flags & XR_SEM_TYPE_CONST)
         return strncmp(type->canonical_key, expected_const, (size_t) const_length) == 0;
     return strncmp(type->canonical_key, expected, (size_t) length) == 0;
+}
+
+/* A borrowed read of an Array held in a shared cell. The shared operation
+ * proves the carrier and ownership shape; the exact Array row proves that this
+ * judgement cannot accidentally claim another reference-capable value. The
+ * unique definition requirement makes a storage row describe the value's
+ * whole life rather than one of several competing producers. Element storage
+ * stays a TargetPlan question because it is target layout authority, not a
+ * SemanticPlan fact. */
+static inline bool
+xr_semantic_tagged_array_shared_read_is_exact(const XrSemanticPlan *plan,
+                                              const XrSemanticOperationRecord *operation) {
+    return plan && operation && xr_semantic_shared_read_operation_is_exact(operation) &&
+           xr_semantic_array_type_row_is_exact(
+               xr_semantic_plan_type(plan, operation->result_type)) &&
+           xr_semantic_unique_value_definition(plan, operation->result_value) == operation;
 }
 
 #endif /* XR_SEMANTIC_ARRAY_TYPE_SHAPE_H */

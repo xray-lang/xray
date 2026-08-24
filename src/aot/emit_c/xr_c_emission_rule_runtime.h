@@ -45,7 +45,8 @@ typedef struct XrCEmissionRuleFacts {
     uint8_t call_convention;
     uint8_t target_kind;
     uint8_t layout_kind;
-    uint8_t storage;
+    uint8_t call_storage;
+    uint8_t layout_storage;
     uint8_t argument_ownership[2];
     uint8_t argument_storage[2];
     uint16_t caller_register_kind[2];
@@ -61,7 +62,6 @@ typedef struct XrCEmissionRuleDecision {
     uint8_t rep;
     uint8_t storage;
     const char *symbol;
-    const char *diagnostic;
 } XrCEmissionRuleDecision;
 
 #include "xr_c_emission_rule_build_gen.inc.c"

@@ -145,7 +145,7 @@ typedef struct XrCValueEmissionView {
     uint32_t recipe_layout_id;
     uint32_t recipe_discriminant;
     uint16_t recipe_argument_count;
-    uint16_t recipe_reserved;
+    uint16_t recipe_rule_id;
     uint32_t recipe_callee_function;
     uint8_t recipe_hof_kind;
     uint8_t recipe_hof_source_storage;

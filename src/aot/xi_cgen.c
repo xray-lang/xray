@@ -19,6 +19,7 @@
  */
 #include "xi_cgen.h"
 #include "emit_c/xr_c_emission_plan.h"
+#include "emit_c/xr_c_emission_rule_ids_gen.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "xaot_bundle.h"
 #include "xaot_callable.h"
@@ -3124,7 +3125,7 @@ static bool cg_value_emission_views_equal(const XrCValueEmissionView *left,
         left->recipe_layout_id != right->recipe_layout_id ||
         left->recipe_discriminant != right->recipe_discriminant ||
         left->recipe_argument_count != right->recipe_argument_count ||
-        left->recipe_reserved != right->recipe_reserved ||
+        left->recipe_rule_id != right->recipe_rule_id ||
         left->recipe_callee_function != right->recipe_callee_function ||
         left->recipe_hof_kind != right->recipe_hof_kind ||
         left->recipe_hof_source_storage != right->recipe_hof_source_storage ||
@@ -7403,7 +7404,7 @@ static bool cg_debug_value_has_storage_for_source(XiCgenCtx *ctx, const XiFunc *
         cg_class_native_map_method_call_value_is_elided(ctx, f, v) ||
         cg_class_native_set_method_call_value_is_elided(ctx, f, v) ||
         cg_class_native_ref_stack_return_takes_value(ctx, f, v) ||
-        cg_array_typed_push_value_is_elided(ctx, f, v) ||
+        cg_array_push_value_is_elided(ctx, f, v) ||
         cg_class_native_array_method_call_value_is_elided(ctx, f, v) ||
         cg_value_is_dead_aot_marker(ctx, f, v))
         return false;
@@ -9887,9 +9888,10 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_portable_collection_value_stmt(ctx, out, f, v, prefix))
         return;
 
-    if (cg_array_typed_push_value_is_elided(ctx, f, v)) {
-        if (!emit_typed_array_push_stmt(ctx, out, f, prefix, v)) {
-            fprintf(stderr, "[xi_cgen] ERROR: typed Array.push has no portable statement plan\n");
+    if (cg_array_push_value_is_elided(ctx, f, v)) {
+        if (!emit_tagged_array_push_recipe_stmt(ctx, out, f, v) &&
+            !emit_typed_array_push_stmt(ctx, out, f, prefix, v)) {
+            fprintf(stderr, "[xi_cgen] ERROR: Array.push has no portable statement plan\n");
             ctx->error = true;
         }
         return;
@@ -10855,7 +10857,7 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_class_native_ref_stack_return_takes_value(ctx, f, v))
         return true;
-    if (cg_array_typed_push_value_is_elided(ctx, f, v))
+    if (cg_array_push_value_is_elided(ctx, f, v))
         return true;
     if (cg_class_native_array_method_call_value_is_elided(ctx, f, v))
         return true;

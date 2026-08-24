@@ -29,6 +29,7 @@
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_verify.h"
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/emit_c/xr_c_emission_rule_ids_gen.h"
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/runtime/value/xenum_layout.h"
@@ -48,6 +49,8 @@ struct XrCEmissionPlan {
     uint32_t recipe_argument_count;
     XrCCleanupEmissionView *cleanups;
     uint32_t cleanup_count;
+    XrCFunctionAbiEmissionView *function_abis;
+    uint32_t function_abi_count;
     uint32_t schema_version;
     XrFingerprint target_fingerprint;
     XrFingerprint profile_fingerprint;
@@ -3046,7 +3049,7 @@ static XrSemanticPlan *build_source_class_array_push_semantic(void) {
     push->args[0] = function->params[0];
     push->args[1] = function->params[1];
     push->aux = "push";
-    push->aux_int = 2;
+    push->aux_int = (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
     xi_block_set_return(entry, push);
     function->stage = XI_STAGE_OPTIMIZED;
 
@@ -5865,6 +5868,93 @@ static void test_source_class_array_push_authority(void) {
     xr_target_layout_compute_fingerprint(plan, array_layout,
                                          &plan->layouts[array_layout].fingerprint);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    built = xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-class Array.push CEmissionPlan failed: %s\n", error);
+    REQUIRE(built);
+    XrCValueEmissionView push_view = {0};
+    bool projected = xr_c_emission_plan_value_view(
+        emission, operation->result_value, &push_view, error, sizeof(error));
+    if (!projected)
+        fprintf(stderr, "source-class Array.push C emission view failed: %s\n", error);
+    REQUIRE(projected);
+    bool emission_verified =
+        xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error));
+    if (!emission_verified)
+        fprintf(stderr, "source-class Array.push C emission verify failed: %s\n", error);
+    if (push_view.recipe_rule_id != XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1 ||
+        push_view.materialization != XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED ||
+        push_view.rep != XR_C_VALUE_REP_VOID ||
+        push_view.target_register_kind != XR_MACHINE_REP_VOID ||
+        push_view.target_memory_kind != XR_MACHINE_REP_VOID ||
+        push_view.recipe_operand_value != receiver->value ||
+        push_view.recipe_argument_value != element->value ||
+        push_view.recipe_discriminant != XR_TARGET_ARRAY_STORAGE_TAGGED ||
+        !push_view.recipe_symbol || !push_view.c_type)
+        fprintf(stderr,
+                "source-class Array.push C emission mismatch: rule=%u recipe=%u rep=%u "
+                "reg=%u mem=%u receiver=%u/%u element=%u/%u storage=%u symbol=%s ctype=%s\n",
+                (unsigned) push_view.recipe_rule_id, (unsigned) push_view.materialization,
+                (unsigned) push_view.rep, (unsigned) push_view.target_register_kind,
+                (unsigned) push_view.target_memory_kind, push_view.recipe_operand_value,
+                receiver->value, push_view.recipe_argument_value, element->value,
+                push_view.recipe_discriminant,
+                push_view.recipe_symbol ? push_view.recipe_symbol : "<null>",
+                push_view.c_type ? push_view.c_type : "<null>");
+    REQUIRE(push_view.recipe_rule_id ==
+                XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1 &&
+            push_view.materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED &&
+            push_view.rep == XR_C_VALUE_REP_VOID &&
+            push_view.target_register_kind == XR_MACHINE_REP_VOID &&
+            push_view.target_memory_kind == XR_MACHINE_REP_VOID &&
+            push_view.recipe_operand_value == receiver->value &&
+            push_view.recipe_argument_value == element->value &&
+            push_view.recipe_discriminant == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+            push_view.recipe_symbol && strcmp(push_view.recipe_symbol, "xrt_array_push") == 0 &&
+            push_view.c_type && strcmp(push_view.c_type, "void") == 0 && emission_verified);
+
+    XrCValueEmissionView *mutable_push = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == operation->result_value)
+            mutable_push = &emission->values[i];
+    REQUIRE(mutable_push != NULL);
+    uint16_t saved_rule = mutable_push->recipe_rule_id;
+    mutable_push->recipe_rule_id = XR_C_EMISSION_RULE_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    mutable_push->recipe_rule_id = saved_rule;
+    uint8_t saved_materialization = mutable_push->materialization;
+    mutable_push->materialization = XR_C_VALUE_MATERIALIZATION_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    mutable_push->materialization = saved_materialization;
+    uint32_t saved_u32 = mutable_push->recipe_operand_value;
+    mutable_push->recipe_operand_value = mutable_push->recipe_argument_value;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    mutable_push->recipe_operand_value = saved_u32;
+    saved_u32 = mutable_push->recipe_argument_value;
+    mutable_push->recipe_argument_value = UINT32_MAX;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    mutable_push->recipe_argument_value = saved_u32;
+    uint32_t saved_discriminant = mutable_push->recipe_discriminant;
+    mutable_push->recipe_discriminant = XR_TARGET_ARRAY_STORAGE_NONE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    mutable_push->recipe_discriminant = saved_discriminant;
+    const char *saved_symbol = mutable_push->recipe_symbol;
+    mutable_push->recipe_symbol = "xrt_array_set";
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                       sizeof(error)));
+    mutable_push->recipe_symbol = saved_symbol;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                      sizeof(error)));
+
+    xr_c_emission_plan_free(emission);
 
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);

@@ -204,7 +204,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         cg_array_err_check_after_direct_byte_array_mutator_trusted(ctx, f, v) ||
         cg_array_err_check_after_index_get_trusted(ctx, f, v) ||
         cg_array_err_check_after_byte_array_append_trusted(ctx, f, v) ||
-        cg_array_err_check_after_typed_push(ctx, f, v) ||
+        cg_array_err_check_after_push(ctx, f, v) ||
         cg_class_native_err_check_after_nothrow_call(ctx, f, v))
         return true;
 

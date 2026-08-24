@@ -2196,7 +2196,11 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
     const XrSemanticTypeRecord *capacity_type =
         capacity && capacity->type < plan->type_count ? &plan->types[capacity->type] : NULL;
     uint8_t expected_storage = xr_semantic_array_element_storage(element);
-    bool candidate = expected_storage > XR_ELEM_ANY && expected_storage < XR_ELEM_RAWPTR;
+    bool source_class_element =
+        xr_semantic_class_instance_type_source_class(plan, element) != XR_SEMANTIC_INDEX_NONE;
+    bool candidate =
+        (expected_storage > XR_ELEM_ANY && expected_storage < XR_ELEM_RAWPTR) ||
+        (source_class_element && expected_storage == XR_ELEM_ANY);
     if (!candidate)
         return operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILL_SCALAR ||
                operation->array_element_storage == XR_ELEM_ANY ||
@@ -2206,8 +2210,9 @@ static bool verify_array_allocation_storage(const XrSemanticPlan *plan,
         array_type && element && capacity && capacity_type &&
         xr_semantic_array_type_row_is_exact(array_type) &&
         expected_storage == operation->array_element_storage &&
-        operation->array_element_storage > XR_ELEM_ANY &&
-        operation->array_element_storage < XR_ELEM_RAWPTR &&
+        ((operation->array_element_storage > XR_ELEM_ANY &&
+          operation->array_element_storage < XR_ELEM_RAWPTR) ||
+         (source_class_element && operation->array_element_storage == XR_ELEM_ANY)) &&
         xr_semantic_array_member_i64_type_is_exact(capacity_type) &&
         capacity->role == XR_SEM_OPERAND_VALUE && capacity->parameter == -1 &&
         capacity->flags == 0 && capacity->ownership_action == XR_SEM_OPERAND_CONSUME &&

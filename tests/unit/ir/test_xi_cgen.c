@@ -5984,6 +5984,43 @@ TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
     xi_func_free(ir);
 }
 
+TEST(cgen_source_class_array_push_consumes_generated_emission_recipe) {
+    const char *src = "class Item {\n"
+                      "    value: i64\n"
+                      "    constructor(value: i64) { this.value = value }\n"
+                      "}\n"
+                      "fn run() -> i64 {\n"
+                      "    var items: Array<Item> = []\n"
+                      "    var item = Item(42)\n"
+                      "    items.push(item)\n"
+                      "    return len(items)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "source-class Array.push IR compilation succeeded");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL, "source-class Array.push C output exists");
+    TEST_REQUIRE(!had_error, "source-class Array.push C generation succeeded");
+    const char *run = find_static_function_definition(code, "test_run_");
+    TEST_REQUIRE(run != NULL, "source-class Array.push function definition exists");
+    const char *run_end = next_static_after(run);
+    TEST_REQUIRE(run_end != NULL, "source-class Array.push function body is bounded");
+    TEST_REQUIRE(count_between(run, run_end, "xrt_array_push(") == 1,
+                 "source-class Array.push uses the canonical tagged runtime owner once");
+    TEST_REQUIRE(!contains_between(run, run_end, "xrt_method_1("),
+                 "source-class Array.push does not use dynamic selector dispatch");
+    TEST_REQUIRE(!contains_between(run, run_end, "xrt_array_check_store_or_abort(") &&
+                     !contains_between(run, run_end, "XR_ARRAY_MARK_MUTATED("),
+                 "source-class Array.push does not inline the old mutation body");
+
+    printf("  Generated source-class Array.push recipe %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_string_copy_bytes_preserves_byte_storage_fast_path) {
     const char *src = "fn first(s: string) -> i64 {\n"
                       "    var bytes = s.copyBytes()\n"
@@ -14693,6 +14730,7 @@ int main(int argc, char **argv) {
     run_cgen_builtin_iterator_pull_methods_preserve_error_polls();
     run_cgen_err_check_releases_live_arc_owners_on_cold_edge();
     run_cgen_typed_array_u8_uses_byte_storage_fast_path();
+    run_cgen_source_class_array_push_consumes_generated_emission_recipe();
     run_cgen_string_copy_bytes_preserves_byte_storage_fast_path();
     run_cgen_typed_array_zero_fill_range_uses_memset();
     run_cgen_byte_slice_safe_methods_use_stable_owners();

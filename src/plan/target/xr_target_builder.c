@@ -1753,9 +1753,11 @@ semantic_native_module_namespace_value_is_exact(const XrSemanticPlan *plan,
 }
 
 /* A freshly allocated `Array<T>` carries an owned tagged outer value plus one
- * dedicated scalar element-storage identity. Reference-capable elements remain
- * outside this family because their stores need a separate ownership/drop
- * contract. The capacity operand is the sole ordered value operand. */
+ * exact element-storage identity. Scalar elements use their direct storage;
+ * source-class elements use tagged storage because their member-store family
+ * freezes consume-on-write and release-on-erase/destroy. Other reference
+ * elements remain outside this family until they state an equally complete
+ * lifecycle contract. The capacity operand is the sole ordered value operand. */
 static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
                                                const XrSemanticOperationRecord *operation) {
     uint32_t operand_count = 0, child_count = 0;
@@ -1782,12 +1784,26 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
     uint16_t capacity_kind = XR_MACHINE_REP_COUNT;
     uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     uint8_t type_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    return element && capacity_type && function &&
-           (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0 &&
-           xr_target_array_storage_from_semantic(operation->array_element_storage,
-                                                 &semantic_storage) &&
-           xr_target_array_storage_from_type(element, &type_storage) &&
-           semantic_storage == type_storage &&
+    bool source_class_element =
+        xr_semantic_class_instance_type_source_class(plan, element) != XR_SEMANTIC_INDEX_NONE;
+    bool element_storage_exact = false;
+    bool semantic_storage_exact = false;
+    if (element && (element->flags & XR_SEM_TYPE_REFERENCE_CAPABLE) == 0) {
+        element_storage_exact = xr_target_array_storage_from_type(element, &type_storage);
+        semantic_storage_exact =
+            xr_target_array_storage_from_semantic(operation->array_element_storage,
+                                                  &semantic_storage) &&
+            semantic_storage == type_storage;
+    } else if (source_class_element) {
+        /* SemanticPlan spells the full tagged XrValue lane as XR_ELEM_ANY;
+         * together with the exact source-class child that answer is no longer
+         * ambiguous, so TargetPlan can freeze its backend-neutral TAGGED name. */
+        type_storage = XR_TARGET_ARRAY_STORAGE_TAGGED;
+        element_storage_exact = true;
+        semantic_storage_exact = operation->array_element_storage == XR_ELEM_ANY;
+    }
+    return element && capacity_type && function && element_storage_exact &&
+           semantic_storage_exact &&
            classify_scalar_type(capacity_type, &capacity_kind) == XR_TARGET_SCALAR_VALUE &&
            capacity_kind == XR_MACHINE_REP_I64 && capacity->role == XR_SEM_OPERAND_VALUE &&
            capacity->parameter == -1 && capacity->flags == 0 &&
@@ -4424,13 +4440,27 @@ static bool note_array_allocation_storage_value(XrTargetPlanBuilder *builder,
         xr_semantic_plan_operation(plan, semantic_operation);
     uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     uint8_t hof_kind = XR_TARGET_ARRAY_HOF_NONE;
+    bool exact_array_allocation = semantic_array_allocation_is_exact(plan, operation);
+    if (exact_array_allocation) {
+        uint32_t child_count = 0;
+        const uint32_t *children = xr_semantic_plan_type_children(plan, &child_count);
+        const XrSemanticTypeRecord *array = xr_semantic_plan_type(plan, operation->result_type);
+        const XrSemanticTypeRecord *element =
+            children && array && array->child_begin < child_count
+                ? xr_semantic_plan_type(plan, children[array->child_begin])
+                : NULL;
+        if (xr_semantic_class_instance_type_source_class(plan, element) !=
+            XR_SEMANTIC_INDEX_NONE)
+            array_storage = XR_TARGET_ARRAY_STORAGE_TAGGED;
+        else if (!xr_target_array_storage_from_semantic(operation->array_element_storage,
+                                                        &array_storage))
+            exact_array_allocation = false;
+    }
     if (!operation || operation->result_value >= analysis->total_values ||
         operation->result_type >= analysis->type_count ||
         operation->function >= xr_semantic_plan_function_count(plan) ||
         analysis->defined_values[operation->result_value] ||
-        !((operation->opcode == XI_ARRAY_NEW &&
-           xr_target_array_storage_from_semantic(operation->array_element_storage,
-                                                 &array_storage)) ||
+        !(exact_array_allocation ||
           semantic_array_intrinsic_is_exact(plan, operation, NULL, &array_storage) ||
           (semantic_array_hof_is_exact(plan, operation, &hof_kind, NULL, &array_storage, NULL, NULL,
                                        NULL) &&
@@ -4832,6 +4862,22 @@ static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBui
         valid = note_direct_local_array_boundary_storage(
             builder, &analysis, call->result_value, call->result_type, call->function, i,
             XR_TARGET_SLOT_TEMPORARY, XR_TARGET_ARRAY_CARRIER_OWNED_VALUE, call->id, error,
+            error_size);
+    }
+    /* Every exact shared read of an Array is a borrowed outer tagged value,
+     * whether or not a direct-local call later observes it. A named mutable
+     * local lowers through a shared cell, so omitting this carrier left the
+     * ordinary receiver of Array members without target storage authority. */
+    for (uint32_t i = 0; valid && i < operation_count; i++) {
+        const XrSemanticOperationRecord *read =
+            xr_semantic_plan_operation(builder->semantic_plan, i);
+        if (!read || read->result_value >= analysis.total_values ||
+            analysis.defined_values[read->result_value] ||
+            !xr_semantic_tagged_array_shared_read_is_exact(builder->semantic_plan, read))
+            continue;
+        valid = note_direct_local_array_boundary_storage(
+            builder, &analysis, read->result_value, read->result_type, read->function, i,
+            XR_TARGET_SLOT_TEMPORARY, XR_TARGET_ARRAY_CARRIER_BORROWED_VALUE, read->id, error,
             error_size);
     }
     uint32_t parameter_count = (uint32_t) xr_semantic_plan_parameter_count(builder->semantic_plan);

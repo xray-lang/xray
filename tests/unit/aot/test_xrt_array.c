@@ -699,6 +699,32 @@ static void test_tagged_string_array_clone_is_deep_and_independently_owned(void)
                   "tagged Array clone balances container and String ownership");
 }
 
+static void test_tagged_array_push_transfers_owner_to_clear_and_destroy(void) {
+    reset_alloc_counts();
+    XrValue array = xrt_array_new(0);
+    XrValue cleared = xrt_str_alloc(3);
+    memcpy(xr_str_buf(cleared), "one", 3);
+    XrString *cleared_string = (XrString *) cleared.ptr;
+
+    xrt_array_push(array, cleared);
+    ASSERT_EQ_INT(atomic_load_explicit(&cleared_string->header.rc, memory_order_relaxed), 1,
+                  "tagged push transfers the existing element owner without retaining");
+    int frees_before_clear = g_free_count;
+    xrt_array_clear_value(array);
+    ASSERT_EQ_INT(g_free_count, frees_before_clear + 1,
+                  "tagged clear releases the transferred element owner exactly once");
+
+    XrValue destroyed = xrt_str_alloc(3);
+    memcpy(xr_str_buf(destroyed), "two", 3);
+    XrString *destroyed_string = (XrString *) destroyed.ptr;
+    xrt_array_push(array, destroyed);
+    ASSERT_EQ_INT(atomic_load_explicit(&destroyed_string->header.rc, memory_order_relaxed), 1,
+                  "tagged push gives destroy one element owner");
+    xrt_release(array);
+    ASSERT_EQ_INT(g_malloc_count, g_free_count,
+                  "tagged destroy releases its element and container ownership exactly once");
+}
+
 static XrValue dummy_closure_body(xrt_closure_t *cl) {
     (void) cl;
     return XR_NULL_VAL;
@@ -816,6 +842,7 @@ int main(void) {
     test_stringbuilder_release_frees_arc_object_and_buffer();
     test_iterator_release_balances_source_and_arc_object();
     test_tagged_string_array_clone_is_deep_and_independently_owned();
+    test_tagged_array_push_transfers_owner_to_clear_and_destroy();
     test_stack_closure_borrows_cell_upval();
     test_hosted_numeric_neg_owner_preserves_scalar_and_bigint_edges();
     test_hosted_pod_slice_owners_preserve_overlap_and_byte_order();

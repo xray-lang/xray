@@ -7622,9 +7622,19 @@ static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const XiValue *v, const char *prefix, const char *method,
                                            uint16_t nargs) {
     if (nargs == 1 &&
-        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) &&
-        emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
-        return true;
+        cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH)) {
+        if (emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
+            return true;
+        CgArrayElemInfo info;
+        if (cg_array_value_storage_info(ctx, f, v->args[0], &info,
+                                        CG_ARRAY_STORAGE_MUTABLE) &&
+            info.rep == XR_REP_TAGGED) {
+            (void) cg_value_emission_fail(
+                ctx, "tagged Array.push reached legacy selector-based emission");
+            emit_codegen_abort_expr(out);
+            return true;
+        }
+    }
     if (nargs == 2 &&
         cg_call_method_matches_receiver_registry_id(v, XA_BUILTIN_RECEIVER_METHOD_ARRAY_SET) &&
         emit_typed_array_set_unchecked_expr(ctx, out, f, prefix, v))
@@ -11430,6 +11440,8 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    if (emit_tagged_array_push_recipe_expr(ctx, out, f, v))
+        return;
     XrCValueEmissionView string_slice_range = {0};
     if (cg_string_slice_range_emission_view(ctx, f, v, &string_slice_range)) {
         bool discard = cg_unused_call_result_emits_statement(ctx, f, v);

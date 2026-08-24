@@ -18,6 +18,8 @@
   :reference-action XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE
   :reference-drop XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY
   :element-source-class yes
+  :applies-element-source-class yes
+  :applies-storage XR_TARGET_ARRAY_STORAGE_TAGGED
   :call-convention XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR
   :target-kind XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR
   :layout-kind XR_TARGET_LAYOUT_DYNAMIC

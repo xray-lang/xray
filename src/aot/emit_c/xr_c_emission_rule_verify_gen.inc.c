@@ -10,6 +10,14 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_verify(
         return XR_C_EMISSION_RULE_MALFORMED;
     switch (facts->member) {
         case XI_METHOD_SYMBOL_PUSH: {
+            bool applicable =
+                facts->argument_storage[1] == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->argument_storage[0] == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->layout_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->call_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->element_source_class == true;
+            if (!applicable)
+                return XR_C_EMISSION_RULE_NOT_APPLICABLE;
             bool clauses =
                 facts->arguments_structurally_exact &&
                 facts->call_result_bound &&
@@ -22,7 +30,8 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_verify(
                 facts->argument_storage[0] == XR_TARGET_ARRAY_STORAGE_NONE &&
                 facts->argument_ownership[1] == XR_TARGET_CALL_CONSUME &&
                 facts->argument_ownership[0] == XR_TARGET_CALL_BORROW &&
-                facts->storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+                facts->layout_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+                facts->call_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
                 facts->layout_kind == XR_TARGET_LAYOUT_DYNAMIC &&
                 facts->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
                 facts->call_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
@@ -38,8 +47,7 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_verify(
                 actual->rule_id == XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1 &&
                 actual->recipe == XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED && actual->rep == XR_C_VALUE_REP_VOID &&
                 actual->storage == XR_TARGET_ARRAY_STORAGE_TAGGED && actual->symbol &&
-                strcmp(actual->symbol, "xrt_array_push") == 0 &&
-                actual->diagnostic && strcmp(actual->diagnostic, "XR_EXEC_5003:Array.push tagged C emission rule mismatch") == 0;
+                strcmp(actual->symbol, "xrt_array_push") == 0;
             if (!clauses || !decision) {
                 if (diagnostic) *diagnostic = "XR_EXEC_5003:Array.push tagged C emission rule mismatch";
                 return XR_C_EMISSION_RULE_MALFORMED;

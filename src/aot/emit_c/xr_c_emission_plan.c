@@ -9,6 +9,7 @@
  */
 
 #include "xr_c_emission_plan.h"
+#include "xr_c_emission_rule_runtime.h"
 #include "../xaot_layout_gen.h"
 #include "../xr_target_aggregate_c_projection.h"
 #include "../../plan/target/xr_target_plan.h"
@@ -38,7 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(36)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(37)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -63,6 +64,8 @@
 #define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
 #define XR_C_RELEASE_SYMBOL "xrt_release"
 #define XR_C_STRING_SLICE_RANGE_SYMBOL "xrt_string_slice_range"
+
+#include "xr_c_emission_rule_rows.inc.c"
 
 struct XrCEmissionPlan {
     XrCValueEmissionView *values;
@@ -952,6 +955,20 @@ static bool exact_array_allocation_recipe(const XrTargetPlan *target_plan,
         count && semantic ? xr_semantic_plan_type(semantic, count->type) : NULL;
     uint8_t semantic_storage = XR_TARGET_ARRAY_STORAGE_NONE;
     uint8_t type_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    bool source_class_element =
+        xr_semantic_class_instance_type_source_class(semantic, element) != XR_SEMANTIC_INDEX_NONE;
+    bool storage_exact = false;
+    if (source_class_element) {
+        semantic_storage = XR_TARGET_ARRAY_STORAGE_TAGGED;
+        type_storage = XR_TARGET_ARRAY_STORAGE_TAGGED;
+        storage_exact = operation && operation->array_element_storage == XR_ELEM_ANY;
+    } else {
+        storage_exact = operation &&
+                        c_array_storage_from_semantic(operation->array_element_storage,
+                                                      &semantic_storage) &&
+                        c_array_storage_from_type(element, &type_storage) &&
+                        semantic_storage == type_storage;
+    }
     if (!target_plan || !binding || !semantic || !operation || !operands || !children || !array ||
         !element || !count || !count_type || operation->opcode != XI_ARRAY_NEW ||
         operation->result_value != binding->semantic_value ||
@@ -971,8 +988,7 @@ static bool exact_array_allocation_recipe(const XrTargetPlan *target_plan,
         operation->return_provenance != XR_SEM_RETURN_OWNED || operation->return_parameter != -1 ||
         operation->return_complete != 1 ||
         !xr_semantic_allocation_identity_is_canonical(operation) ||
-        !c_array_storage_from_semantic(operation->array_element_storage, &semantic_storage) ||
-        !c_array_storage_from_type(element, &type_storage) || semantic_storage != type_storage ||
+        !storage_exact ||
         array->kind != XR_KIND_ARRAY || array->builtin_type != XR_TID_NULL ||
         array->scalar_rep != XR_SCALAR_REP_NONE || array->aggregate_extent != 0 ||
         array->aggregate_align != 0 ||
@@ -1922,12 +1938,13 @@ static bool build_direct_local_tagged_ref_argument_view(
     return true;
 }
 
-/* A call-argument row belongs to this consumer only when it carries either
- * the dedicated Array storage discriminant or the direct-local reference
- * boundary. Other reference families, including SOURCE_EXPORT writeback,
- * remain available to their own projections. Once a row claims this family,
- * every Semantic and Target prior fact, including its stable identity, must
- * reconstruct exactly or the projection fails closed. */
+/* A call-argument row belongs to this consumer only when its call is in the
+ * direct-local family and it also carries tagged-ref boundary evidence.
+ * Array member and intrinsic calls reuse the storage discriminant, so storage
+ * alone must never let this projection claim those independent families.
+ * Once a row claims this family, every Semantic and Target prior fact,
+ * including its stable identity, must reconstruct exactly or the projection
+ * fails closed. */
 static XrDirectLocalTaggedRefArgumentMatch
 classify_direct_local_tagged_ref_argument(const XrTargetPlan *target_plan,
                                           const XrTargetCallArgumentRecord *argument,
@@ -1954,14 +1971,15 @@ classify_direct_local_tagged_ref_argument(const XrTargetPlan *target_plan,
                                     semantic_target->id,
                                     parameter->id, argument->ordinal, &expected_identity) &&
         xr_stable_id_equal(argument->identity, expected_identity);
-    bool direct_reference_claim =
-        call && semantic_tagged_prior && call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
-        call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
-        (argument->mode == XR_TARGET_CALL_REFERENCE ||
-         argument->ownership == XR_TARGET_CALL_BORROW ||
-         (argument->flags & XR_TARGET_CALL_ARGUMENT_ADDRESSABLE) != 0);
-    bool claimed = argument && (argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
-                                direct_reference_claim || exact_prior_identity);
+    bool direct_local_claim =
+        call && (call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+                 call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+                 (semantic_target &&
+                  semantic_target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL));
+    bool tagged_ref_claim =
+        semantic_tagged_prior || exact_prior_identity ||
+        argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE;
+    bool claimed = argument && direct_local_claim && tagged_ref_claim;
     if (!claimed)
         return XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY;
     return build_direct_local_tagged_ref_argument_view(target_plan, argument, out)
@@ -3089,7 +3107,7 @@ static bool target_plan_has_call_result_rep(const XrTargetPlan *target_plan, uin
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v25\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v26\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -3134,7 +3152,7 @@ static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out)
         hash_u64(&ctx, value->recipe_layout_id);
         hash_u64(&ctx, value->recipe_discriminant);
         hash_u64(&ctx, value->recipe_argument_count);
-        hash_u64(&ctx, value->recipe_reserved);
+        hash_u64(&ctx, value->recipe_rule_id);
         hash_u64(&ctx, value->recipe_callee_function);
         hash_u64(&ctx, value->recipe_hof_kind);
         hash_u64(&ctx, value->recipe_hof_source_storage);
@@ -3432,6 +3450,16 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_RUNE_IS_WHITESPACE_SYMBOL) == 0;
+    bool typed_rule =
+        value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED;
+    if (typed_rule)
+        recipe_valid = value->recipe_rule_id != XR_C_EMISSION_RULE_NONE &&
+                       value->rep == XR_C_VALUE_REP_VOID && value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value != UINT32_MAX &&
+                       value->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
+                       value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
+                       value->recipe_symbol != NULL;
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_STRING_SLICE_RANGE) {
         recipe_valid = value->rep == XR_C_VALUE_REP_TAGGED && value->literal_byte_length == 0 &&
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
@@ -3549,7 +3577,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant > XR_TARGET_ARRAY_STORAGE_NONE &&
-                       value->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_TAGGED &&
+                       value->recipe_discriminant <= XR_TARGET_ARRAY_STORAGE_TAGGED &&
                        value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
                        value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_ARRAY_NEW_SYMBOL) == 0 &&
@@ -3616,7 +3644,7 @@ static bool verify_value(const XrCValueEmissionView *value) {
     }
     if (value->materialization != XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
         !array_recipe && !array_fill_member && !array_allocation && !direct_tagged_ref_parameter &&
-        !array_hof_direct)
+        !array_hof_direct && !typed_rule)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant == 0 && value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
@@ -3632,8 +3660,10 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_hof_callback_parameter_reps[1] == XR_C_VALUE_REP_VOID &&
                        value->recipe_hof_callback_return_rep == XR_C_VALUE_REP_VOID &&
                        value->recipe_hof_reserved == 0;
+    if (!typed_rule && value->recipe_rule_id != XR_C_EMISSION_RULE_NONE)
+        return false;
     return expected_rep == (XrCValueRep) value->rep && value->c_type && value->reserved == 0 &&
-           value->recipe_reserved == 0 && recipe_valid &&
+           recipe_valid &&
            strcmp(value->c_type, expected_c_type) == 0 &&
            (value->rep == XR_C_VALUE_REP_VOID
                 ? value->register_bits == 0 && value->memory_size == 0 && value->memory_align == 0
@@ -3934,6 +3964,27 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             (!aggregate_supported && row->address_projection != XR_C_ADDRESS_PROJECTION_NONE))
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "C emission row disagrees with TargetPlan authority");
+        XrCEmissionRuleLocation typed_location = {0};
+        XrCEmissionRuleMatch typed_location_match =
+            xr_c_emission_rule_locate(target_plan, binding, &typed_location);
+        if (typed_location_match == XR_C_EMISSION_RULE_MALFORMED)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "typed C emission structural projection is malformed");
+        XrCEmissionRuleDecision typed_actual = {
+            row->recipe_rule_id, row->materialization, row->rep,
+            row->recipe_discriminant, row->recipe_symbol,
+        };
+        const char *typed_diagnostic = NULL;
+        XrCEmissionRuleMatch typed_rule_match =
+            typed_location_match == XR_C_EMISSION_RULE_EXACT
+                ? xr_c_emission_rule_verify(&typed_location.facts, &typed_actual,
+                                            &typed_diagnostic)
+                : XR_C_EMISSION_RULE_NOT_APPLICABLE;
+        if (typed_rule_match == XR_C_EMISSION_RULE_MALFORMED)
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  typed_diagnostic ? typed_diagnostic
+                                                   : "typed C emission rule mismatch");
+        bool expected_typed_rule = typed_rule_match == XR_C_EMISSION_RULE_EXACT;
         const char *expected_literal = verify_expected_string_literal(target_plan, binding);
         uint32_t expected_capacity = UINT32_MAX;
         bool expected_channel = exact_channel_new_recipe(target_plan, binding, &expected_capacity);
@@ -4028,7 +4079,8 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         bool expected_local_address =
             exact_local_address_recipe(target_plan, binding, &expected_local_address_source);
         uint8_t expected_recipe =
-            expected_scalar_alias    ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
+            expected_typed_rule      ? row->materialization
+            : expected_scalar_alias  ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
             : expected_local_address ? XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS
             : expected_direct_tagged_ref_parameter
                 ? XR_C_VALUE_MATERIALIZATION_DIRECT_LOCAL_TAGGED_REF_PARAMETER
@@ -4053,7 +4105,8 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_string_concat ? XR_C_VALUE_MATERIALIZATION_STRING_CONCAT
                                      : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand =
-            expected_scalar_alias             ? expected_scalar_source
+            expected_typed_rule                ? typed_location.receiver_value
+            : expected_scalar_alias            ? expected_scalar_source
             : expected_local_address          ? expected_local_address_source
             : expected_adt_enum               ? expected_enum.receiver_value
             : expected_channel                ? expected_capacity
@@ -4071,12 +4124,15 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_stringbuilder_finish   ? expected_finish_receiver
             : expected_append_string          ? expected_append_string_receiver
                                               : UINT32_MAX;
-        uint32_t expected_argument = expected_stringbuilder_append ? expected_append_argument
-                                     : expected_append_string      ? expected_append_string_argument
-                                     : expected_iterator_rune_nth ? expected_iterator_rune_nth_index
-                                                                  : UINT32_MAX;
+        uint32_t expected_argument =
+            expected_typed_rule ? typed_location.element_value
+            : expected_stringbuilder_append ? expected_append_argument
+            : expected_append_string        ? expected_append_string_argument
+            : expected_iterator_rune_nth    ? expected_iterator_rune_nth_index
+                                            : UINT32_MAX;
         const char *expected_symbol =
-            expected_adt_enum                 ? XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL
+            expected_typed_rule               ? row->recipe_symbol
+            : expected_adt_enum               ? XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL
             : expected_channel                ? XR_C_CHANNEL_NEW_SYMBOL
             : expected_receive_symbol         ? expected_receive_symbol
             : expected_stringbuilder          ? XR_C_STRINGBUILDER_NEW_SYMBOL
@@ -4116,12 +4172,15 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         }
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
-            row->recipe_reserved != 0 || row->literal_byte_length != expected_length ||
+            row->recipe_rule_id !=
+                (expected_typed_rule ? typed_actual.rule_id : XR_C_EMISSION_RULE_NONE) ||
+            row->literal_byte_length != expected_length ||
             row->recipe_operand_value != expected_operand ||
             row->recipe_argument_value != expected_argument ||
             row->recipe_layout_id != (expected_adt_enum ? expected_enum.layout_id : 0) ||
             row->recipe_discriminant !=
-                (expected_adt_enum                     ? expected_enum.member_ordinal
+                (expected_typed_rule                   ? typed_actual.storage
+                 : expected_adt_enum                   ? expected_enum.member_ordinal
                  : expected_array_fill_member          ? expected_array_fill_member_storage
                  : expected_array                      ? expected_array_storage
                  : expected_array_allocation           ? expected_array_allocation_storage
@@ -4616,6 +4675,33 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             return emission_error(error, error_size, "XR_EXEC_5003",
                                   "aggregate C type allocation failed");
         }
+        XrCEmissionRuleLocation typed_location = {0};
+        XrCEmissionRuleDecision typed_decision = {0};
+        XrCEmissionRuleMatch typed_location_match =
+            xr_c_emission_rule_locate(target_plan, binding, &typed_location);
+        if (typed_location_match == XR_C_EMISSION_RULE_MALFORMED) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "typed C emission structural projection is malformed");
+        }
+        XrCEmissionRuleMatch typed_rule_match =
+            typed_location_match == XR_C_EMISSION_RULE_EXACT
+                ? xr_c_emission_rule_build(&typed_location.facts, &typed_decision)
+                : XR_C_EMISSION_RULE_NOT_APPLICABLE;
+        if (typed_rule_match == XR_C_EMISSION_RULE_MALFORMED) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "typed C emission rule rejected frozen target facts");
+        }
+        bool typed_rule = typed_rule_match == XR_C_EMISSION_RULE_EXACT;
+        if (typed_rule &&
+            (typed_decision.rep != value->rep ||
+             typed_location.receiver_value == UINT32_MAX ||
+             typed_location.element_value == UINT32_MAX)) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_EXEC_5003",
+                                  "typed C emission recipe result is inconsistent");
+        }
         const char *literal = build_exact_string_literal(target_plan, binding);
         const XrSemanticOperandRecord *concat_arguments = NULL;
         uint16_t concat_argument_count = 0;
@@ -4662,7 +4748,19 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint32_t local_address_source = UINT32_MAX;
         bool local_address =
             exact_local_address_recipe(target_plan, binding, &local_address_source);
-        if (scalar_addressable_alias) {
+        if (typed_rule) {
+            value->recipe_symbol = xr_strdup(typed_decision.symbol);
+            if (!value->recipe_symbol) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "typed C emission recipe allocation failed");
+            }
+            value->recipe_rule_id = typed_decision.rule_id;
+            value->materialization = typed_decision.recipe;
+            value->recipe_operand_value = typed_location.receiver_value;
+            value->recipe_argument_value = typed_location.element_value;
+            value->recipe_discriminant = typed_decision.storage;
+        } else if (scalar_addressable_alias) {
             value->materialization = XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS;
             value->recipe_operand_value = scalar_alias_source;
         } else if (local_address) {

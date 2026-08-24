@@ -8,6 +8,13 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_build(
     switch (facts->member) {
         case XI_METHOD_SYMBOL_PUSH:
             if (!(
+                facts->element_source_class == true ||
+                facts->call_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->layout_storage == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->argument_storage[0] == XR_TARGET_ARRAY_STORAGE_TAGGED ||
+                facts->argument_storage[1] == XR_TARGET_ARRAY_STORAGE_TAGGED))
+                return XR_C_EMISSION_RULE_NOT_APPLICABLE;
+            if (!(
                 facts->opcode == XI_CALL_METHOD &&
                 facts->intrinsic == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
                 facts->operand_count == 2 &&
@@ -19,7 +26,8 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_build(
                 facts->call_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
                 facts->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
                 facts->layout_kind == XR_TARGET_LAYOUT_DYNAMIC &&
-                facts->storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+                facts->call_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+                facts->layout_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
                 facts->argument_ownership[0] == XR_TARGET_CALL_BORROW &&
                 facts->argument_ownership[1] == XR_TARGET_CALL_CONSUME &&
                 facts->argument_storage[0] == XR_TARGET_ARRAY_STORAGE_NONE &&
@@ -34,7 +42,7 @@ static inline XrCEmissionRuleMatch xr_c_emission_rule_build(
                 return XR_C_EMISSION_RULE_MALFORMED;
             *out = (XrCEmissionRuleDecision) {
                 XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1, XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED, XR_C_VALUE_REP_VOID,
-                XR_TARGET_ARRAY_STORAGE_TAGGED, "xrt_array_push", "XR_EXEC_5003:Array.push tagged C emission rule mismatch"};
+                XR_TARGET_ARRAY_STORAGE_TAGGED, "xrt_array_push"};
             return XR_C_EMISSION_RULE_EXACT;
         default:
             return XR_C_EMISSION_RULE_NOT_APPLICABLE;

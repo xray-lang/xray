@@ -3110,6 +3110,10 @@ static bool cg_array_elem_info_from_emission_recipe(XiCgenCtx *ctx, const XiFunc
             rep = XAOT_REP_RUNE;
             element_name = "XR_ELEM_RUNE";
             break;
+        case XR_TARGET_ARRAY_STORAGE_TAGGED:
+            rep = XAOT_REP_TAGGED;
+            element_name = "XR_ELEM_ANY";
+            break;
         default:
             return false;
     }
@@ -3164,6 +3168,12 @@ static bool cg_array_builtin_tid_from_emission_storage(uint32_t storage, uint8_t
             return true;
         case XR_TARGET_ARRAY_STORAGE_RUNE:
             *out = XR_TID_RUNE;
+            return true;
+        case XR_TARGET_ARRAY_STORAGE_TAGGED:
+            /* Source-class identity is already frozen in SemanticPlan and the
+             * Target layout; the runtime element TID vocabulary has no nominal
+             * class ID, so the tagged lane intentionally carries NULL here. */
+            *out = XR_TID_NULL;
             return true;
         default:
             return false;
@@ -5214,11 +5224,83 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     return true;
 }
 
+static CgValueEmissionStatus cg_tagged_array_push_emission_view(
+    XiCgenCtx *ctx, const XiFunc *f, const XiValue *call, XrCValueEmissionView *out) {
+    XrCValueEmissionView view = {0};
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, f, call, &view);
+    if (status != CG_VALUE_EMISSION_FOUND)
+        return status;
+    if (view.materialization != XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED)
+        return CG_VALUE_EMISSION_NOT_COVERED;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t element = XR_SEMANTIC_INDEX_NONE;
+    bool exact =
+        call && call->nargs == 2 && call->args && call->args[0] && call->args[1] &&
+        cg_value_semantic_id(ctx, f, call->args[0], &receiver) &&
+        cg_value_semantic_id(ctx, f, call->args[1], &element) &&
+        view.recipe_rule_id == XR_C_EMISSION_RULE_C_EMISSION_ARRAY_PUSH_TAGGED_V1 &&
+        view.rep == XR_C_VALUE_REP_VOID &&
+        view.target_register_kind == XR_MACHINE_REP_VOID &&
+        view.target_memory_kind == XR_MACHINE_REP_VOID && view.register_bits == 0 &&
+        view.memory_size == 0 && view.memory_align == 0 && view.c_type &&
+        strcmp(view.c_type, "void") == 0 && view.literal_byte_length == 0 &&
+        view.literal_bytes == NULL && view.recipe_operand_value == receiver &&
+        view.recipe_argument_value == element && view.recipe_layout_id == 0 &&
+        view.recipe_discriminant == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+        view.recipe_argument_count == 0 && view.recipe_arguments == NULL &&
+        view.recipe_symbol && strcmp(view.recipe_symbol, "xrt_array_push") == 0 &&
+        view.recipe_type_name == NULL && view.recipe_member_name == NULL;
+    if (!exact)
+        return cg_value_emission_fail(
+            ctx, "XR_EXEC_5003:Array.push tagged C emission recipe is inconsistent");
+    if (out)
+        *out = view;
+    return CG_VALUE_EMISSION_FOUND;
+}
+
+static bool emit_tagged_array_push_recipe_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *call) {
+    XrCValueEmissionView recipe = {0};
+    CgValueEmissionStatus status =
+        cg_tagged_array_push_emission_view(ctx, f, call, &recipe);
+    if (status == CG_VALUE_EMISSION_ERROR) {
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (status != CG_VALUE_EMISSION_FOUND)
+        return false;
+    fprintf(out, "(%s(", recipe.recipe_symbol);
+    emit_value_as_rep_ctx(ctx, out, call->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, call->args[1], XR_REP_TAGGED);
+    fprintf(out, "), XR_NULL_VAL)");
+    return true;
+}
+
+static bool emit_tagged_array_push_recipe_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                               const XiValue *call) {
+    XrCValueEmissionView recipe = {0};
+    CgValueEmissionStatus status =
+        cg_tagged_array_push_emission_view(ctx, f, call, &recipe);
+    if (status == CG_VALUE_EMISSION_ERROR)
+        return true;
+    if (status != CG_VALUE_EMISSION_FOUND)
+        return false;
+    fprintf(out, "    %s(", recipe.recipe_symbol);
+    emit_value_as_rep_ctx(ctx, out, call->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, call->args[1], XR_REP_TAGGED);
+    fprintf(out, ");\n");
+    emit_value_generated_line_reset(ctx, out, call);
+    return true;
+}
+
 static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                        const char *prefix, const XiValue *call, const XiValue *recv,
                                        const XiValue *arg) {
     CgArrayElemInfo info;
-    if (!cg_array_value_storage_info(ctx, f, recv, &info, CG_ARRAY_STORAGE_MUTABLE))
+    if (!cg_array_value_storage_info(ctx, f, recv, &info, CG_ARRAY_STORAGE_MUTABLE) ||
+        info.rep == XR_REP_TAGGED)
         return false;
 
     CgArrayFillLoop fill;
@@ -5287,7 +5369,8 @@ static bool emit_typed_array_push_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
                                        const char *prefix, const XiValue *call) {
     CgArrayElemInfo info;
     if (!call || call->nargs != 2 ||
-        !cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
+        !cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE) ||
+        info.rep == XR_REP_TAGGED)
         return false;
 
     CgArrayFillLoop fill;
@@ -6001,18 +6084,25 @@ static bool cg_array_err_check_after_unchecked_fill_push(XiCgenCtx *ctx, const X
            unique.push == prev;
 }
 
-static bool cg_array_call_is_typed_push(XiCgenCtx *ctx, const XiFunc *f, const XiValue *call) {
+static bool cg_array_call_is_legacy_scalar_push(XiCgenCtx *ctx, const XiFunc *f,
+                                                const XiValue *call) {
     CgArrayElemInfo info;
     if (!call || call->op != XI_CALL_METHOD || call->nargs != 2)
         return false;
     return cg_call_method_matches_receiver_registry_id(call,
                                                        XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH) &&
-           cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE);
+           cg_array_value_storage_info(ctx, f, call->args[0], &info, CG_ARRAY_STORAGE_MUTABLE) &&
+           info.rep != XR_REP_TAGGED;
 }
 
-static bool cg_array_typed_push_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
-                                                const XiValue *target) {
-    if (!f || !cg_array_call_is_typed_push(ctx, f, target))
+static bool cg_array_push_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                          const XiValue *target) {
+    XrCValueEmissionView tagged = {0};
+    CgValueEmissionStatus tagged_status =
+        f ? cg_tagged_array_push_emission_view(ctx, f, target, &tagged)
+          : CG_VALUE_EMISSION_NOT_COVERED;
+    if (!f || (tagged_status != CG_VALUE_EMISSION_FOUND &&
+               !cg_array_call_is_legacy_scalar_push(ctx, f, target)))
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -6042,8 +6132,8 @@ static bool cg_array_typed_push_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
     return true;
 }
 
-static bool cg_array_err_check_after_typed_push(XiCgenCtx *ctx, const XiFunc *f,
-                                                const XiValue *check) {
+static bool cg_array_err_check_after_push(XiCgenCtx *ctx, const XiFunc *f,
+                                          const XiValue *check) {
     if (!check || check->op != XI_ERR_CHECK || !check->block)
         return false;
     const XiValue *prev = NULL;
@@ -6054,7 +6144,10 @@ static bool cg_array_err_check_after_typed_push(XiCgenCtx *ctx, const XiFunc *f,
         if (cur)
             prev = cur;
     }
-    return cg_array_call_is_typed_push(ctx, f, prev);
+    XrCValueEmissionView tagged = {0};
+    return cg_tagged_array_push_emission_view(ctx, f, prev, &tagged) ==
+               CG_VALUE_EMISSION_FOUND ||
+           cg_array_call_is_legacy_scalar_push(ctx, f, prev);
 }
 
 static bool cg_array_class_field_value_is_elided(XiCgenCtx *ctx, const XiFunc *f,
