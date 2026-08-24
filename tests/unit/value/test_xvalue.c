@@ -296,10 +296,10 @@ TEST(value_equality_null) {
 }
 
 TEST(value_equality_cross_type) {
-    // Note: xray considers int and float with same numeric value as equal
-    ASSERT_TRUE(xr_value_deep_eq(xr_int(0), xr_float(0.0)));
-    ASSERT_TRUE(xr_value_deep_eq(xr_int(42), xr_float(42.0)));
-    // Different value types (non-numeric) should not be equal
+    // Runtime equality is tag exact; integer/float comparison requires an explicit conversion.
+    ASSERT_FALSE(xr_value_deep_eq(xr_int(0), xr_float(0.0)));
+    ASSERT_FALSE(xr_value_deep_eq(xr_int(42), xr_float(42.0)));
+    // Other distinct value tags are likewise never equal.
     ASSERT_FALSE(xr_value_deep_eq(xr_int(0), xr_bool(false)));
     ASSERT_FALSE(xr_value_deep_eq(xr_int(0), xr_null()));
     ASSERT_FALSE(xr_value_deep_eq(xr_bool(false), xr_null()));

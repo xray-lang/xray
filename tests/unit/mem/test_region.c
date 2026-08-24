@@ -246,14 +246,18 @@ static void test_rc_destroy_unregisters_finalizer(void) {
 static void test_large_object_rc_free_unregisters_node(void) {
     TEST("large object: RC free unregisters large object node");
 
+    setup_test_ext_finalizer();
+    g_destroy_count = 0;
+
     XrCoroHeap *heap = xr_coro_heap_create(dummy_coro.core);
     ASSERT(heap != NULL, "create failed");
 
-    XrObjHeader *large = xr_coro_heap_new_obj(heap, XR_TSTRING, 8 * 1024);
+    XrObjHeader *large = xr_coro_heap_new_obj(heap, XR_TEST_EXT_TYPE, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
     ASSERT(heap->large_set.count == 1, "large registration missing");
 
     xr_coro_heap_destroy_obj(heap, large);
+    ASSERT(g_destroy_count == 1, "large object finalizer should run once");
     ASSERT(heap->large_set.count == 0, "large registration should be removed");
     ASSERT(heap->large_bytes == 0, "large bytes should be decremented");
 
