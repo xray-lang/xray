@@ -631,6 +631,9 @@ add_xray_unit_test(test_xaot_driver
 add_xray_unit_test(test_xaot_transfer_plan aot/test_xaot_transfer_plan.c)
 add_xray_unit_test(test_cgen_verify_output aot/test_cgen_verify_output.c)
 set_tests_properties(test_cgen_verify_output PROPERTIES LABELS "aot;cgen;task-218")
+add_xray_unit_test(test_c_emission_typed_rules aot/test_c_emission_typed_rules.c)
+set_tests_properties(test_c_emission_typed_rules PROPERTIES
+    LABELS "aot;cgen;typed-rules;mutation")
 add_xray_unit_test(test_xi_backend_plan_contract aot/test_xi_backend_plan_contract.c)
 add_xray_unit_test(test_xrt_array aot/test_xrt_array.c)
 add_xray_unit_test(test_xrt_execution_arena aot/test_xrt_execution_arena.c)

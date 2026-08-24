@@ -354,6 +354,9 @@ set(XRAY_GEN_AOT_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
 )
 
 set(XRAY_GEN_STDLIB_METADATA_DEPS
@@ -454,6 +457,19 @@ add_custom_command(
 )
 
 add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
+            ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
+            ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-c-emission-rules
+            ${CMAKE_SOURCE_DIR}/xisa/aot/c_emission_rules.def
+            ${CMAKE_SOURCE_DIR}
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/tools/xisagen/c_emission_rules.py
+            ${CMAKE_SOURCE_DIR}/xisa/aot/c_emission_rules.def
+    COMMENT "xisagen: generating typed C emission rules"
+)
+
+add_custom_command(
     OUTPUT  ${XRAY_GEN_STDLIB_METADATA_DEPS}
     COMMAND ${XRAY_PYTHON} ${STDLIBGEN}
             --root ${CMAKE_SOURCE_DIR}
@@ -489,6 +505,12 @@ add_custom_target(gen-xi-lowering DEPENDS
 
 add_custom_target(gen-aot-metadata DEPENDS
     ${XRAY_GEN_AOT_METADATA_DEPS}
+)
+
+add_custom_target(gen-c-emission-rules DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_ids_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c
 )
 
 add_custom_target(gen-stdlib-metadata DEPENDS

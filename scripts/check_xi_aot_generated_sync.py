@@ -35,8 +35,9 @@ XISAGEN = Path("tools/xisagen/xisagen.py")
 
 XI_SOURCES = (XISAGEN, Path("xisa/xi/ops.def"), Path("xisa/xi/lowering.def"),
               Path("xisa/xi/verifier.def"), Path("xisa/target/vm_ops.def"))
-AOT_SOURCES = (XISAGEN, Path("xisa/aot/rep.def"), Path("xisa/aot/abi.def"),
-               Path("xisa/aot/layout.def"))
+AOT_SOURCES = (XISAGEN, Path("tools/xisagen/c_emission_rules.py"),
+               Path("xisa/aot/rep.def"), Path("xisa/aot/abi.def"),
+               Path("xisa/aot/layout.def"), Path("xisa/aot/c_emission_rules.def"))
 
 XI_ARTIFACTS = (
     "src/ir/xi_ops_gen.h",
@@ -64,6 +65,9 @@ AOT_ARTIFACTS = (
     "src/aot/xaot_rep_gen.h",
     "src/aot/xaot_abi_gen.h",
     "src/aot/xaot_layout_gen.h",
+    "src/aot/emit_c/xr_c_emission_rule_ids_gen.h",
+    "src/aot/emit_c/xr_c_emission_rule_build_gen.inc.c",
+    "src/aot/emit_c/xr_c_emission_rule_verify_gen.inc.c",
 )
 
 RED = "\033[31m"
@@ -152,7 +156,9 @@ def main(argv: list[str]) -> int:
                                        scratch / "src/aot/xaot_abi_gen.h"])
                     and run_gen(gate, ["aot-layout", "xisa/aot/rep.def",
                                        "xisa/aot/layout.def",
-                                       scratch / "src/aot/xaot_layout_gen.h"])):
+                                       scratch / "src/aot/xaot_layout_gen.h"])
+                    and run_gen(gate, ["aot-c-emission-rules",
+                                       "xisa/aot/c_emission_rules.def", scratch])):
                 compare(gate, "AOT", scratch, AOT_ARTIFACTS)
 
     return 1 if gate.failed else 0

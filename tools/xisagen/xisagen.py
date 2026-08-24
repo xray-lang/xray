@@ -10,6 +10,7 @@ Reads declarative .def files, generates C headers for Xi IR and AOT metadata:
   - aot-rep: xisa/aot/rep.def    → xaot_rep_gen.h
   - aot-abi: xisa/aot/abi.def    → xaot_abi_gen.h
   - aot-layout: xisa/aot/layout.def → xaot_layout_gen.h
+  - aot-c-emission-rules: xisa/aot/c_emission_rules.def → independent evaluators
   - target-vm-ops: xisa/target/vm_ops.def → target contract and dispatch
 
 Usage:
@@ -20,6 +21,7 @@ Usage:
   python3 xisagen.py aot-rep <rep.def>     <output.h>
   python3 xisagen.py aot-abi <rep.def> <abi.def> <output.h>
   python3 xisagen.py aot-layout <rep.def> <layout.def> <output.h>
+  python3 xisagen.py aot-c-emission-rules <rules.def> <output-root>
   python3 xisagen.py target-vm-ops <vm_ops.def> <output-root>
   python3 xisagen.py test
 """
@@ -32,6 +34,8 @@ import os
 import hashlib
 import json
 from dataclasses import dataclass, field
+
+import c_emission_rules
 
 # ============================================================
 # Common utilities
@@ -4173,6 +4177,19 @@ def cmd_aot_layout(args: list[str]):
     print(f"xisagen: generated {args[2]}", file=sys.stderr)
 
 
+def cmd_aot_c_emission_rules(args: list[str]):
+    if len(args) != 2:
+        die("usage: xisagen.py aot-c-emission-rules <rules.def> <output-root>")
+    try:
+        outputs = c_emission_rules.generate(read_file(args[0]), args[0])
+    except c_emission_rules.RuleError as error:
+        die(str(error))
+    for relative, content in outputs.items():
+        output = os.path.join(args[1], *relative.split('/'))
+        write_file(output, content)
+        print(f"xisagen: generated {output}", file=sys.stderr)
+
+
 def cmd_target_vm_ops(args: list[str]):
     if len(args) != 2:
         die("usage: xisagen.py target-vm-ops <vm_ops.def> <output-root>")
@@ -4197,6 +4214,7 @@ def cmd_test(args: list[str]):
     _test_aot_rep_parser()
     _test_aot_abi_parser()
     _test_aot_layout_parser()
+    c_emission_rules.self_test()
     _test_target_instruction_parser()
     _test_error_paths()
     print("All xisagen self-tests passed.", file=sys.stderr)
@@ -4792,9 +4810,9 @@ def _test_xi_lowering_parser():
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},
                       template='value-binary'),
     ])
-    assert 'XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, +, +' in vm_arith_binary
-    assert 'XVM_TEMPLATE_ARITH_NUMERIC_CASE(OP_SUB, -, -' in vm_arith_binary
-    assert 'XVM_TEMPLATE_ARITH_MUL_CASE(OP_MUL, *, *' in vm_arith_binary
+    assert 'XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, xr_i64_add_wrap, +,' in vm_arith_binary
+    assert 'XVM_TEMPLATE_ARITH_NUMERIC_CASE(OP_SUB, xr_i64_sub_wrap, -,' in vm_arith_binary
+    assert 'XVM_TEMPLATE_ARITH_MUL_CASE(OP_MUL, xr_i64_mul_wrap, *,' in vm_arith_binary
     assert 'XVM_TEMPLATE_ARITH_DIV_CASE(OP_DIV, xr_bigint_div' in vm_arith_binary
     assert 'XVM_TEMPLATE_ARITH_MOD_CASE(OP_MOD, xr_bigint_mod' in vm_arith_binary
     vm_shift = generate_xi_vm_template_shift_dispatch([
@@ -5282,6 +5300,7 @@ def main():
         'aot-rep': cmd_aot_rep,
         'aot-abi': cmd_aot_abi,
         'aot-layout': cmd_aot_layout,
+        'aot-c-emission-rules': cmd_aot_c_emission_rules,
         'target-vm-ops': cmd_target_vm_ops,
         'test': cmd_test,
     }
