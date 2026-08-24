@@ -14,6 +14,7 @@
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_class_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
@@ -3024,6 +3025,102 @@ static XrSemanticPlan *build_direct_local_class_argument_semantic(XiOwnership ca
     return plan;
 }
 
+static XrSemanticPlan *build_direct_local_array_ref_semantic(XrType *array_type,
+                                                              bool register_source_class) {
+    XiFunc *root = xi_func_new("target_array_ref_root", &stub_int);
+    XiFunc *child = xi_func_new("target_array_ref_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+
+    root->nparams = root->min_params = 1;
+    child->nparams = child->min_params = 1;
+    root->params = (XiValue **) xr_calloc(1, sizeof(*root->params));
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    REQUIRE(root->params != NULL && child->params != NULL);
+    root->params[0] = xi_param(root, root_entry, 0, array_type);
+    child->params[0] = xi_param(child, child_entry, 0, array_type);
+    REQUIRE(root->params[0] != NULL && child->params[0] != NULL);
+    REQUIRE(xi_func_set_param_passing_mode(child, 0, XR_PARAM_REF));
+    root->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    child->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    set_single_parameter_ownership(root, XI_OWN_BORROWED);
+    set_single_parameter_ownership(child, XI_OWN_BORROWED);
+    XiValue *child_result = xi_const_int(child, child_entry, 7, &stub_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    XiValue *place = xi_value_new(root, root_entry, XI_LOCAL_ADDR, array_type, 1);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(closure != NULL && place != NULL && call != NULL);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    place->args[0] = root->params[0];
+    call->args[0] = closure;
+    call->args[1] = place;
+
+    XiCallPlan *call_plan =
+        (XiCallPlan *) xi_func_arena_alloc(root, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(root, (uint32_t) sizeof(*argument_plan));
+    REQUIRE(call_plan != NULL && argument_plan != NULL);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_REF;
+    argument_plan->access = XR_CALL_ARG_REF;
+    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+    argument_plan->addressable = true;
+    argument_plan->origin_var_id = 0;
+    argument_plan->place = root->params[0];
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module =
+        xi_module_new("pkg/target_array_ref.xr", "target_array_ref", root);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(module,
+                                   "memory-module-v1:id=27:target-array-ref-fixture-v1"));
+    root->module = module;
+    XiClassData source_class = {
+        .class_info = &stub_target_source_class_info,
+        .class_name = "FinalTargetWorker",
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    if (register_source_class) {
+        module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+        REQUIRE(module->classes != NULL);
+        module->classes[0] = &source_class;
+        module->nclasses = 1;
+    }
+
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local Array ref semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
+    root->module = NULL;
+    xi_func_free(root);
+    module->init = NULL;
+    xi_module_free(module);
+    return plan;
+}
+
 static XrSemanticPlan *build_source_class_array_push_semantic(void) {
     XiFunc *function = xi_func_new("target_source_class_array_push", &stub_unit);
     REQUIRE(function != NULL);
@@ -4762,6 +4859,79 @@ static void test_direct_local_class_argument_authority(void) {
             !xr_semantic_class_parameter_call_transfer_is_exact(
                 scalar, callee->parameter_begin, operand));
     xr_semantic_plan_free(scalar);
+}
+
+static void test_direct_local_source_class_array_ref_authority(void) {
+    XrSemanticPlan *semantic =
+        build_direct_local_array_ref_semantic(&stub_target_source_instance_array, true);
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "source-class Array ref TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && plan->calls_count == 1 &&
+            plan->call_arguments_count == 1 &&
+            (plan->completed_family_mask &
+             XR_TARGET_FAMILY_DIRECT_LOCAL_TAGGED_REF_ARGUMENT_STORAGE) != 0);
+
+    XrTargetCallRecord saved_call = plan->calls[0];
+    XrTargetCallArgumentRecord saved_argument = plan->call_arguments[0];
+    XrFingerprint saved_fingerprint = plan->fingerprint;
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(semantic, argument->callee_parameter);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    const XrSemanticTypeRecord *array_type =
+        parameter ? xr_semantic_plan_type(semantic, parameter->type) : NULL;
+    const XrSemanticTypeRecord *element_type =
+        array_type && children && array_type->child_begin < child_count
+            ? xr_semantic_plan_type(semantic, children[array_type->child_begin])
+            : NULL;
+    REQUIRE(parameter != NULL &&
+            xr_semantic_array_type_row_is_exact(array_type) &&
+            xr_semantic_class_instance_type_source_class(semantic, element_type) !=
+                XR_SEMANTIC_INDEX_NONE &&
+            argument->mode == XR_TARGET_CALL_REFERENCE &&
+            argument->ownership == XR_TARGET_CALL_BORROW &&
+            argument->transfer_mode == XR_TRANSFER_SHARE &&
+            argument->flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED &&
+            argument->caller_slot < plan->slots_count &&
+            argument->callee_slot < plan->slots_count &&
+            plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[argument->memory_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[argument->callee_register_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[argument->callee_memory_rep].kind == XR_MACHINE_REP_RAW_PTR &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+    uint32_t array_layout = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->layouts_count; i++)
+        if (plan->layouts[i].semantic_type == parameter->type) {
+            REQUIRE(array_layout == XR_SEMANTIC_INDEX_NONE);
+            array_layout = i;
+        }
+    REQUIRE(array_layout != XR_SEMANTIC_INDEX_NONE &&
+            plan->layouts[array_layout].array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED);
+
+    argument->array_element_storage = XR_TARGET_ARRAY_STORAGE_U8;
+    xr_target_call_compute_fingerprint(plan, 0, &plan->calls[0].fingerprint);
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    plan->call_arguments[0] = saved_argument;
+    plan->calls[0] = saved_call;
+    plan->fingerprint = saved_fingerprint;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+    xr_target_plan_free(plan);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_direct_local_array_ref_semantic(&stub_target_string_array, false);
+    plan = NULL;
+    error[0] = '\0';
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)) && plan == NULL &&
+            strncmp(error, "XR_TARGET_1003", 14) == 0);
+    xr_semantic_plan_free(semantic);
+    xr_target_profile_free(profile);
 }
 
 static void test_direct_local_raw_pointer_call_authority(void) {
@@ -7420,6 +7590,11 @@ int main(int argc, char **argv) {
         puts("Direct-local class argument authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "direct-local-source-class-array-ref-authority") == 0) {
+        test_direct_local_source_class_array_ref_authority();
+        puts("Direct-local source-class Array ref authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle-authority") == 0) {
         test_owned_string_coroutine_lifecycle_authority();
         test_large_coroutine_lifecycle_projection_is_bounded();
@@ -7526,6 +7701,7 @@ int main(int argc, char **argv) {
     test_unknown_call_target_fails_closed();
     test_direct_local_call_adapter_family();
     test_direct_local_class_argument_authority();
+    test_direct_local_source_class_array_ref_authority();
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();

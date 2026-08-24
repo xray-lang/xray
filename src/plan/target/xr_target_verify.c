@@ -802,9 +802,9 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
  * the element storage that boundary is entitled to know. A carrier holding the
  * tagged outer value never reaches an element and so asks nothing of it; a
  * carrier holding a pointer into the caller's cell may index and rewrite
- * elements and so demands one scalar element storage. `indexes_elements` is
- * which of the two is asking, and `storage` is the element's scalar storage
- * when the element has one and NONE otherwise. */
+ * elements and so demands an exact scalar or source-class tagged storage.
+ * `indexes_elements` is which of the two is asking, and `storage` is the
+ * independently reconstructed element storage. */
 static bool semantic_direct_local_array_type_is_exact_verify_ex(const XrSemanticPlan *semantic,
                                                                 uint32_t type_index,
                                                                 bool indexes_elements,
@@ -831,12 +831,13 @@ static bool semantic_direct_local_array_type_is_exact_verify_ex(const XrSemantic
     const XrSemanticTypeRecord *element_type =
         xr_semantic_plan_type(semantic, children[array->child_begin]);
     if (!xr_target_array_storage_from_type(element_type, &element)) {
-        if (indexes_elements)
+        bool source_class_element =
+            xr_semantic_class_instance_type_source_class(semantic, element_type) !=
+            XR_SEMANTIC_INDEX_NONE;
+        if (indexes_elements && !source_class_element)
             return false;
         element =
-            xr_semantic_tagged_string_type_is_exact(element_type) ||
-                    xr_semantic_class_instance_type_source_class(semantic, element_type) !=
-                        XR_SEMANTIC_INDEX_NONE
+            xr_semantic_tagged_string_type_is_exact(element_type) || source_class_element
                 ? XR_TARGET_ARRAY_STORAGE_TAGGED
                 : XR_TARGET_ARRAY_STORAGE_NONE;
     }

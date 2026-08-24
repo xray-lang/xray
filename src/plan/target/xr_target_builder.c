@@ -1821,9 +1821,11 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *plan,
  * shares one allocation; it never reaches an element, so what the elements are
  * is not its question and `Array<String>` is as carryable as `Array<i64>`. A
  * carrier that hands the callee a pointer into the caller's cell does reach
- * them: the callee may index and rewrite elements, and that needs one scalar
- * element storage identity, because a reference-capable element would need an
- * element ownership and drop contract this plan does not state.
+ * them: the callee may index and rewrite elements, so it needs an exact element
+ * storage identity. Scalars state their direct storage. A source-class element
+ * states tagged storage because its nominal class identity and the Array
+ * member-store lifecycle are both frozen by SemanticPlan; other reference-
+ * capable elements remain outside this boundary.
  *
  * `indexes_elements` is which of the two is asking. Writing it as one judgement
  * with that as its parameter is what keeps the wide carriers from inheriting
@@ -1857,12 +1859,13 @@ static bool semantic_direct_local_array_type_is_exact_ex(const XrSemanticPlan *p
     const XrSemanticTypeRecord *element_type =
         xr_semantic_plan_type(plan, children[array->child_begin]);
     if (!xr_target_array_storage_from_type(element_type, &element)) {
-        if (indexes_elements)
+        bool source_class_element =
+            xr_semantic_class_instance_type_source_class(plan, element_type) !=
+            XR_SEMANTIC_INDEX_NONE;
+        if (indexes_elements && !source_class_element)
             return false;
         element =
-            xr_semantic_tagged_string_type_is_exact(element_type) ||
-                    xr_semantic_class_instance_type_source_class(plan, element_type) !=
-                        XR_SEMANTIC_INDEX_NONE
+            xr_semantic_tagged_string_type_is_exact(element_type) || source_class_element
                 ? XR_TARGET_ARRAY_STORAGE_TAGGED
                 : XR_TARGET_ARRAY_STORAGE_NONE;
     }

@@ -238,6 +238,13 @@ roots, or general module activation.
    requirements have dense records bound to the same canonical provider kinds.
    Missing, duplicate, additional, or mismatched family,
    capability, or provider records fail before any activation boundary.
+   A direct-local borrowed `ref Array<T>` argument is admitted only when the
+   frozen Array child has exact scalar storage or resolves to one frozen
+   source-class declaration. The latter maps to `TAGGED` element storage;
+   parameter and operand rows remain the sole ownership and transfer
+   authority. Builder and verifier derive that judgement independently from
+   SemanticPlan, while String and other reference-capable children continue to
+   fail closed at this element-indexing boundary.
 5. Runtime loading accepts only an XTP v46 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V46 is a breaking hard cutover from
@@ -384,8 +391,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 4214f061dafa1caab006bc885cd81
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 34595b5ba399e4d05a8dc6ec240faec7d021fadd6c053fecb91534dcfbe3edfd
 anchor-sha256: src/plan/target/xr_target_plan.c 00b20639baa9c8aaa46b76517d98d6aafc3d5f77dbcc649ade2a0238248f37d4
-anchor-sha256: src/plan/target/xr_target_builder.c e3475715d2c61f5753ea2cdd7f96af44a66a348d919f5194a089850755189a88
-anchor-sha256: src/plan/target/xr_target_verify.c 32625804480632ea1b8667c712645a4a04585e5f5b4509d68fd12494fd1dc214
+anchor-sha256: src/plan/target/xr_target_builder.c 177b9205896b4f9f2c97fbd950b683abfe0d6a9c6a5e9d4998c70f5548b7d095
+anchor-sha256: src/plan/target/xr_target_verify.c 0bacdd7663853176fa4376b60a651d08bf788f6212ff07c218644b1f210bf97a
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c eca95f69c7cf1e562ddd50b39787f7fe6e842c9e99f04baf72419854060ad317
@@ -394,7 +401,7 @@ anchor-sha256: src/runtime/xr_target_plan_load.c 6b7f72151ed3359a8233e5b45e74b81
 anchor-sha256: src/app/cli/xcmd_run.c b9f4d84d60191279ad6800ec3d18594fc58b85717a7fc3a0f4b9ebcfce50a832
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c 5946410a03055a01d6bf0d52659fe1879535c208d52e96b53dea4aee851db4fe
+anchor-sha256: tests/unit/plan/test_target_plan.c 1e2638322b553d3c1626dbbf6d31ff524b052113aeca4abb460f5b2e758a42a7
 anchor-sha256: tests/unit/plan/test_xtp_format.c 6d32b43ddbac5d1bef3976afa6bb10e06665e19ddcfec8b207f7d160df828cc0
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
 anchor-sha256: tests/unit/CMakeLists.txt 5e426fd9d22ef5649b3824956d94d85697fb3075652a9db87b11aba998afe754
