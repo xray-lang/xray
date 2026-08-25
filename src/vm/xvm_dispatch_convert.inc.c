@@ -222,7 +222,7 @@ vmcase(OP_TOINT) {
                 VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
                                  "failed to construct NumberParseError in i64.parse");
             if (XR_IS_NULL(vm_ctx->pending_error)) {
-                xr_vm_set_pending_error(isolate, parse_error.value);
+                vm_ctx->pending_error = parse_error.value;
                 if (XR_IS_NULL(vm_ctx->pending_error))
                     VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
                                      "failed to publish NumberParseError in i64.parse");
@@ -289,7 +289,7 @@ vmcase(OP_TOFLOAT) {
                 VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
                                  "failed to construct NumberParseError in f64.parse");
             if (XR_IS_NULL(vm_ctx->pending_error)) {
-                xr_vm_set_pending_error(isolate, parse_error.value);
+                vm_ctx->pending_error = parse_error.value;
                 if (XR_IS_NULL(vm_ctx->pending_error))
                     VM_RUNTIME_ERROR(XR_ERR_INTERNAL,
                                      "failed to publish NumberParseError in f64.parse");
