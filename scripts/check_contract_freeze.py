@@ -467,6 +467,7 @@ CONTRACT_SPECS = (
             "src/vm/xr_vm_entry_adapter.c",
             "xisa/target/vm_entry_adapters.def",
             "src/vm/xr_vm_ops.def",
+            "src/shared/xr_array_push_status.h",
             "src/runtime/object/xarray.h",
             "src/runtime/object/xarray.c",
             "src/vm/xvm_dispatch_collection.inc.c",

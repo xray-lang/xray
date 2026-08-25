@@ -3288,10 +3288,19 @@ static void test_source_class_array_push_managed_execution(const XrTargetPlan *p
             .verified_plan = plan,
             .required_plan_fingerprint = &fingerprint,
             .arguments = success_arguments,
+            .array_push = xr_array_push_owned_checked,
             .provider = providers[i],
             .function = 0,
             .argument_count = 2,
         };
+        request.array_push = NULL;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) ==
+                    XR_TYPED_DISPATCH_INVALID_ARGUMENT &&
+                memcmp(&success_arguments[0], &borrowed_receiver,
+                       sizeof(borrowed_receiver)) == 0 &&
+                memcmp(&success_arguments[1], &element, sizeof(element)) == 0 &&
+                success.length == 0);
+        request.array_push = xr_array_push_owned_checked;
         REQUIRE(xr_typed_dispatch_execute_values(&request) == XR_TYPED_DISPATCH_OK &&
                 memcmp(&success_arguments[0], &borrowed_receiver,
                        sizeof(borrowed_receiver)) == 0 &&

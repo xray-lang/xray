@@ -13,11 +13,13 @@
 
 #include "../plan/target/xr_target_plan.h"
 #include "../runtime/value/xvalue.h"
+#include "../shared/xr_array_push_status.h"
 #include "debug/xr_vm_trace.h"
 #include "xr_vm_dynamic_entry.h"
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 typedef struct XrTypedCoroutineI64 XrTypedCoroutineI64;
+typedef XrArrayPushStatus (*XrTypedArrayPushKernel)(XrValue receiver, XrValue value);
 
 typedef enum XrTypedDispatchProvider {
     XR_TYPED_DISPATCH_PROVIDER_INVALID = 0,
@@ -107,6 +109,7 @@ typedef struct XrTypedDispatchValueRequest {
     const XrTargetPlan *verified_plan;
     const XrFingerprint *required_plan_fingerprint;
     XrValue *arguments;
+    XrTypedArrayPushKernel array_push;
     XrTypedDispatchProvider provider;
     uint32_t function;
     uint32_t argument_count;

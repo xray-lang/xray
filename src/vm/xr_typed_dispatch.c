@@ -24,7 +24,6 @@
 #include "../shared/xr_compare_core.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
-#include "../runtime/object/xarray.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
@@ -264,6 +263,7 @@ typedef struct XrTypedDispatchExecution {
     XrTypedDispatchProvider provider;
     XrValue *value_arguments;
     uint32_t value_argument_count;
+    XrTypedArrayPushKernel array_push;
 } XrTypedDispatchExecution;
 
 struct XrTypedCoroutineI64 {
@@ -638,12 +638,12 @@ static XrTypedDispatchStatus execute_array_push(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
     XrTypedDispatchRowContext *context) {
-    (void) context;
     if (!contract || contract->error_kind != XR_TARGET_INSTRUCTION_ERROR_ARRAY_PUSH ||
         contract->operand_ownership[0] !=
             XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_BORROW ||
         contract->operand_ownership[1] !=
-            XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_CONSUME)
+            XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_CONSUME ||
+        !context || !context->execution || !context->execution->array_push)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrValue receiver = xr_null();
     XrValue element = xr_null();
@@ -657,7 +657,7 @@ static XrTypedDispatchStatus execute_array_push(
     status = take_owned_value(frame, row->operand_slots[1], &element);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
-    XrArrayPushStatus pushed = xr_array_push_owned_checked(receiver, element);
+    XrArrayPushStatus pushed = context->execution->array_push(receiver, element);
     if (pushed == XR_ARRAY_PUSH_OK)
         return XR_TYPED_DISPATCH_OK;
     if (restore_owned_value(frame, row->operand_slots[1], element) !=
@@ -1549,7 +1549,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
 XrTypedDispatchStatus xr_typed_dispatch_execute_values(
     const XrTypedDispatchValueRequest *request) {
     if (!request || !request->verified_plan || !request->required_plan_fingerprint ||
-        !request->arguments || request->argument_count != 2 ||
+        !request->arguments || !request->array_push || request->argument_count != 2 ||
         (request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH &&
          request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE))
         return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
@@ -1592,6 +1592,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_values(
         .provider = request->provider,
         .value_arguments = request->arguments,
         .value_argument_count = request->argument_count,
+        .array_push = request->array_push,
     };
     uint64_t ignored_result = 0;
     XrTypedDispatchStatus status = execute_function(

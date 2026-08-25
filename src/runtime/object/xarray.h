@@ -32,6 +32,7 @@
 #include "../../shared/xr_elem_type.h"
 #include "../../shared/xr_typed_ops.h"
 #include "../../shared/xr_array_abi.h"
+#include "../../shared/xr_array_push_status.h"
 #include "../../shared/xr_byte_array_append_core.h"
 #include "../../shared/xr_byte_array_repeat_core.h"
 
@@ -109,14 +110,6 @@ XR_FUNC int xr_array_size(XrArray *arr);
  * and the typed TargetPlan executor.  The element owner moves into the array
  * only on OK; every failure leaves both the array contents and the caller's
  * element ownership unchanged. */
-typedef enum XrArrayPushStatus {
-    XR_ARRAY_PUSH_OK = 0,
-    XR_ARRAY_PUSH_INVALID_ARRAY,
-    XR_ARRAY_PUSH_SLICE,
-    XR_ARRAY_PUSH_TYPE_MISMATCH,
-    XR_ARRAY_PUSH_ALLOCATION_FAILED,
-} XrArrayPushStatus;
-
 XR_FUNC XrArrayPushStatus xr_array_push_owned_checked(XrValue receiver, XrValue value);
 
 XR_FUNC void xr_array_push(XrArray *arr, XrValue value);

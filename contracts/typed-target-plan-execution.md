@@ -506,10 +506,14 @@ Evidence:
   unknown opcodes, and complete-contract mismatches.
 - `test_target_plan` proves the production source-class tagged `Array.push`
   group, exact DYN representation and per-operand ownership, both generated
-  providers, and success ownership transfer. It mutates parameter ownership,
-  operand slots, call identity, Target call ownership/storage/type relations,
-  and instruction shape independently. Invalid receivers, slices, and typed
-  storage mismatches prove fail-closed carrier restoration without array
+  providers, the mandatory runtime-kernel capability, and success ownership
+  transfer. A missing kernel is refused before the frame can acquire the
+  element; the runtime-only VM archive therefore contains no hidden object
+  implementation or unresolved hosted-runtime symbol. The test mutates
+  parameter ownership, operand slots, call identity, Target call
+  ownership/storage/type relations, and instruction shape independently.
+  Invalid receivers, slices, and typed storage mismatches prove fail-closed
+  carrier restoration without array
   mutation.
 - `test_xarray` proves the shared status-returning push kernel accepts the exact
   tagged carrier and leaves receiver shape and caller ownership unchanged on
@@ -581,8 +585,8 @@ anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863c
 anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e794988105d6bdc18aa19d82ac4162
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
-anchor-sha256: src/vm/xr_typed_dispatch.h 96e645102f385fed814cd74b7754822e976ea2c40fccd03345b06708f0ef84f2
-anchor-sha256: src/vm/xr_typed_dispatch.c 41da5489046adcdd1bed6dc61822d24ea2ed81d9717a45883a6a5918b222b70d
+anchor-sha256: src/vm/xr_typed_dispatch.h 96c324021b0f4a8cd5375ab1a155eb7a69db84f6246f6872994a9ec0c4397f75
+anchor-sha256: src/vm/xr_typed_dispatch.c d7b818d5dc454879bf2e31098e9844ebde8c71a0402ae1606d34aa5cd0658f94
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9afae20ec066e588cc69e60f05c21
 anchor-sha256: src/vm/xr_typed_frame.c f7cbfdc3dc805bcfdf9c8a75e2a8293c9770f9873ba036402959980959ae13c9
@@ -610,12 +614,13 @@ anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e
 anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
 anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
 anchor-sha256: src/vm/xr_vm_ops.def 29f593ee6c27b514b3c31499095f973e2eda82ce7c6f7cc3485da210fec4efc5
-anchor-sha256: src/runtime/object/xarray.h dd95a8886a004158802581476a306b1c2d832e7e7c4c75e25216220f657e71d8
+anchor-sha256: src/shared/xr_array_push_status.h 2d092c8b4b91fd7f8c09bb90f72bd0408d4eabedf2d235b5643bd0b1c81dbe04
+anchor-sha256: src/runtime/object/xarray.h 65c5272371925c830c046d08247fee289464b4fed2453b9546815367a41d6ff5
 anchor-sha256: src/runtime/object/xarray.c 102a52b887e0e777a79da3c78be8e025e1b2826f0a01cd4b0aee5cbe431c6416
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c 90f5cfc9be2b1b675bed606993e6e8365f792a1df59732ab19c00df7757737ae
+anchor-sha256: tests/unit/plan/test_target_plan.c 6366bed4c2bbdacc7693693409529c7bec8bd5f951a65847cde418fe3b7c61ae
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h f922cec7513c0e232d840936820f270d4b8a0c22c23296fe53a45e924ed76ee4
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d6cff74156a07c9a7751f3e7d5857f65d3d6d05ca1dbc862605f6cc4fa2c5c16
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c eede18e3210d979c26b0adaca5c5454acdbd609514383d0e285525f69fef9883
