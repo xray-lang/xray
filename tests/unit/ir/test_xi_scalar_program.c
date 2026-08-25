@@ -33,6 +33,7 @@
 #include "plan/target/xr_target_verify.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
 #include "toolchain/xcompiler_session.h"
+#include "vm/xr_typed_dispatch.h"
 #include <string.h>
 
 static const char kScalarSource[] =
@@ -294,7 +295,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
         decision.target_profile_fingerprint));
     ASSERT_EQ_UINT(target_plan->functions_count, 3);
     ASSERT_EQ_UINT(target_plan->value_reps_count, 10);
-    ASSERT_EQ_UINT(target_plan->slots_count, 8);
+    ASSERT_EQ_UINT(target_plan->slots_count, 7);
     ASSERT_EQ_UINT(target_plan->instructions_count, 7);
     ASSERT_EQ_UINT(target_plan->calls_count, 1);
     ASSERT_EQ_UINT(target_plan->call_arguments_count, 1);
@@ -313,6 +314,12 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     const XrSemanticOperationRecord *semantic_call =
         xr_semantic_plan_operation(semantic, program_call->operation);
     ASSERT_NOT_NULL(semantic_call);
+    const XrSemanticOperandRecord *semantic_callee =
+        &semantic->operands[semantic_call->operand_begin];
+    const XrTargetValueRepRecord *target_callee =
+        xr_target_plan_value_rep(target_plan, semantic_callee->value);
+    ASSERT_NOT_NULL(target_callee);
+    ASSERT_EQ_UINT(target_callee->slot, XR_SEMANTIC_INDEX_NONE);
     const XrTargetCallRecord *target_call = &target_plan->calls[0];
     const XrSemanticCallTargetRecord *semantic_target =
         xr_semantic_plan_call_target(semantic,
@@ -449,6 +456,46 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
 
     XrFingerprint original_target_fingerprint =
         xr_target_plan_fingerprint(target_plan);
+    XrTargetValueRepRecord *mutable_target_callee =
+        &target_plan->value_reps[
+            (size_t) (target_callee - target_plan->value_reps)];
+    mutable_target_callee->slot = target_argument->caller_slot;
+    xr_target_plan_compute_fingerprint(target_plan,
+                                       &target_plan->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target_plan, error, sizeof(error)));
+    mutable_target_callee->slot = XR_SEMANTIC_INDEX_NONE;
+    xr_target_plan_compute_fingerprint(target_plan,
+                                       &target_plan->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target_plan, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(target_plan->fingerprint,
+                                     original_target_fingerprint));
+
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        int64_t result = -1;
+        XrTypedDispatchI64Request request = {
+            .verified_plan = target_plan,
+            .required_plan_fingerprint = &original_target_fingerprint,
+            .result = &result,
+            .provider = providers[i],
+            .function = target_call->caller_function,
+        };
+        ASSERT_EQ_UINT(xr_typed_dispatch_execute_i64(&request),
+                       XR_TYPED_DISPATCH_OK);
+        ASSERT_EQ_INT(result, 42);
+
+        XrFingerprint wrong_fingerprint = original_target_fingerprint;
+        wrong_fingerprint.bytes[0] ^= UINT8_C(0x80);
+        request.required_plan_fingerprint = &wrong_fingerprint;
+        result = -1;
+        ASSERT_EQ_UINT(xr_typed_dispatch_execute_i64(&request),
+                       XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH);
+        ASSERT_EQ_INT(result, 0);
+    }
+
     uint16_t saved_native_abi = target_plan->calls[0].native_abi;
     target_plan->calls[0].native_abi = XR_TARGET_ABI_NONE;
     xr_target_call_compute_fingerprint(
@@ -471,6 +518,20 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     mutable_call_instruction->immediate_bits = UINT32_MAX;
     xr_target_plan_compute_fingerprint(target_plan,
                                        &target_plan->fingerprint);
+    XrFingerprint resigned_invalid_fingerprint = target_plan->fingerprint;
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        int64_t result = -1;
+        XrTypedDispatchI64Request request = {
+            .verified_plan = target_plan,
+            .required_plan_fingerprint = &resigned_invalid_fingerprint,
+            .result = &result,
+            .provider = providers[i],
+            .function = target_call->caller_function,
+        };
+        ASSERT_EQ_UINT(xr_typed_dispatch_execute_i64(&request),
+                       XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED);
+        ASSERT_EQ_INT(result, 0);
+    }
     ASSERT_FALSE(xr_target_plan_verify(target_plan, error, sizeof(error)));
     mutable_call_instruction->immediate_bits = saved_call_immediate;
     xr_target_plan_compute_fingerprint(target_plan,

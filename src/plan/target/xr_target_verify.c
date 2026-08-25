@@ -3966,6 +3966,14 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
     }
     if (target_plan_layout_for_type(plan, semantic_type) < 0)
         XR_VALUE_BINDING_FAIL(4);
+    /* A direct-local callee is compile-time resolution authority carried by
+     * the call record. Its representation remains fingerprinted, but the
+     * canonical TargetPlan must not invent a runtime frame slot for it. */
+    if (exact_direct_callee) {
+        if (record->slot != XR_SEMANTIC_INDEX_NONE)
+            XR_VALUE_BINDING_FAIL(8);
+        return true;
+    }
     if (semantic_function >= plan->functions_count || record->slot >= plan->slots_count)
         XR_VALUE_BINDING_FAIL(5);
     const XrTargetFunctionRecord *target_function = &plan->functions[semantic_function];

@@ -4002,36 +4002,19 @@ static bool note_direct_local_callee_storage_value(
         !append_rep_intent(builder, &rep, error, error_size))
         return fail(error, error_size, "XR_TARGET_1001",
                     "target profile cannot materialize static callable storage");
-    XrStableId slot_identity;
-    if (!make_slot_identity(builder->semantic_plan, operation->function, XR_TARGET_SLOT_TEMPORARY,
-                            operation->id, XR_SEMANTIC_INDEX_NONE, &slot_identity))
-        return fail(error, error_size, "XR_TARGET_1001",
-                    "direct-local callee slot identity is incomplete");
-    XrTargetSlotIntent slot = {
-        .identity = slot_identity,
-        .function = operation->function,
-        .semantic_value = operation->result_value,
-        .semantic_operation = semantic_operation,
-        .logical_slot = XR_SEMANTIC_INDEX_NONE,
-        .register_rep = rep,
-        .memory_rep = rep,
-        .role = XR_TARGET_SLOT_TEMPORARY,
-        .root_kind = XR_TARGET_ROOT_DYNAMIC,
-        .ownership = XR_TARGET_OWNERSHIP_BORROWED,
-        .debug_variable = XR_SEMANTIC_INDEX_NONE,
-    };
+    /* Exact direct-local callee uses are resolved by the call record. Keep the
+     * immutable representation fact, but do not allocate runtime frame storage
+     * for a value no executable instruction or call argument can access. */
     XrTargetValueIntent value = {
         .semantic_value = operation->result_value,
         .semantic_function = operation->function,
         .semantic_type = operation->result_type,
         .register_rep = rep,
         .memory_rep = rep,
-        .slot_identity = slot_identity,
-        .has_slot = true,
     };
-    if (!append_slot_intent(builder, &slot, error, error_size) ||
-        !append_layout_intent(builder, operation->result_type, XR_TARGET_LAYOUT_DYNAMIC, 0, &rep,
-                              error, error_size) ||
+    if (!append_layout_intent(builder, operation->result_type,
+                              XR_TARGET_LAYOUT_DYNAMIC, 0, &rep, error,
+                              error_size) ||
         !append_value_intent(builder, &value, error, error_size))
         return false;
     analysis->defined_values[operation->result_value] = 1;
