@@ -48,10 +48,6 @@ struct XrClosure;
 XR_FUNC XrValue xr_vm_call_closure(struct XrVMRuntime *isolate, struct XrClosure *closure,
                                    XrValue *args, int nargs);
 
-// Truthy check for higher-order filter methods.
-// Implementation in vm/xvm.c.
-XR_FUNC bool xr_vm_is_truthy(XrValue value);
-
 /* ========== VM Interpreter Entry (coro → vm decoupling) ========== */
 
 struct XrVMContext;

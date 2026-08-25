@@ -9,7 +9,7 @@
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, pc,
- * frame, ci, base, vm_worker, R, vmcase, vmbreak, savepc, xr_vm_is_truthy,
+ * frame, ci, base, vm_worker, R, vmcase, vmbreak, savepc, vm_is_truthy,
  * VM_CURRENT_CORO, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *

@@ -207,9 +207,6 @@ XR_FUNC const char *xr_debug_local_name(XrProto *proto, int reg, int pc);
 
 // Closure operations: see runtime/closure/xclosure.h
 
-// Value operation helpers
-XR_FUNC bool xr_vm_is_truthy(XrValue value);
-
 /* ========== API Functions (in xvm_api.c) ========== */
 
 /*

@@ -757,14 +757,4 @@ XrCFunction *xr_yieldable_cfunction_new(XrVMRuntime *isolate, XrYieldableCFuncti
 
 // Closure creation now lives in runtime/closure/xclosure.c.
 
-// ========== Value Operation Helpers ==========
-
-/*
- * Check if value is truthy (public API, for higher-order functions)
- * Uses vm_is_falsey from xvm_internal.h for consistent behavior
- */
-bool xr_vm_is_truthy(XrValue value) {
-    return vm_is_truthy(value);
-}
-
 // ========== VM Execution Loop ==========

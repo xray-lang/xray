@@ -589,7 +589,7 @@ vmcase(OP_MOD_U) {
             vmbreak;                                                                               \
         }                                                                                          \
         XVM_TRY_UNARY_OP_OVERLOAD(vb, a, op_name);                                                 \
-        R(a) = xr_bool(!xr_vm_is_truthy(vb));                                                      \
+        R(a) = xr_bool(!vm_is_truthy(vb));                                                         \
         vmbreak;                                                                                   \
     }
 

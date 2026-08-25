@@ -103,10 +103,6 @@ XR_FUNC void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception);
  * (e.g. xr_vm_call_closure returning XR_VM_RUNTIME_ERROR). */
 XR_FUNC bool xr_vm_is_catch_reachable(XrVMRuntime *isolate);
 
-/* ========== Helper Functions ========== */
-
-XR_FUNC bool xr_vm_is_truthy(XrValue value);
-
 /* ========== C11 Compile-time Checks ========== */
 
 #if __STDC_VERSION__ >= 201112L
