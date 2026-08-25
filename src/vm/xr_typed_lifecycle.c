@@ -82,19 +82,10 @@ static bool build_native_profile(const XrTargetPlan *plan,
         xr_runtime_target_authority_native_hosted(authority) !=
             XR_RUNTIME_ABI_OK)
         return false;
-    XrTargetProfileBuildInput input = {
-        .machine = authority->machine,
-        .runtime_abi = &authority->runtime_abi,
-        .object_header_materialization =
-            &authority->object_header_materialization,
-        .string_contract = &authority->string_contract,
-        .providers = authority->providers,
-        .provider_count = authority->provider_count,
-    };
     XrTargetProfile *native_profile = NULL;
     char error[256] = {0};
-    bool built = xr_target_profile_build(&input, &native_profile, error,
-                                         sizeof(error));
+    bool built = xr_target_profile_build_native_hosted(
+        &native_profile, error, sizeof(error));
     bool exact = built && native_profile &&
                  xr_target_profile_require_exact(
                      xr_target_plan_profile(plan), native_profile, error,

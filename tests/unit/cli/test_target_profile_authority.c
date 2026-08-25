@@ -35,6 +35,29 @@ static bool build_native_profile(XaotTarget *aot_target,
                &codegen, out, error, sizeof(error));
 }
 
+static void test_canonical_native_projection_is_deterministic(void) {
+    XrTargetProfile *first = NULL;
+    XrTargetProfile *second = NULL;
+    XrRuntimeTargetAuthority authority;
+    char error[256] = {0};
+    CHECK(xr_target_profile_build_native_hosted(
+        &first, error, sizeof(error)));
+    CHECK(xr_target_profile_build_native_hosted(
+        &second, error, sizeof(error)));
+    CHECK(first != NULL);
+    CHECK(second != NULL);
+    CHECK(xr_target_profile_require_exact(first, second, error, sizeof(error)));
+    CHECK(xr_runtime_target_authority_native_hosted(&authority) ==
+          XR_RUNTIME_ABI_OK);
+    CHECK(first && xr_runtime_target_authority_machine_matches(
+                       &authority, xr_target_profile_machine_facts(first)));
+    CHECK(first && xr_target_profile_machine_facts(first)->vector_feature_mask == 0);
+    CHECK(first && xr_target_profile_machine_facts(first)->maximum_vector_bits == 0);
+    CHECK(!xr_target_profile_build_native_hosted(NULL, error, sizeof(error)));
+    xr_target_profile_free(second);
+    xr_target_profile_free(first);
+}
+
 static void test_native_authority_is_deterministic(void) {
     XaotTarget aot_target = {0};
     XrToolchainTarget toolchain_target;
@@ -252,6 +275,34 @@ static void test_compiler_session_rejects_conflicting_layout_authority(void) {
     xaot_target_free(&aot_target);
 }
 
+static void test_compiler_session_rejects_conflicting_explicit_profile(void) {
+    const uint64_t providers =
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+        XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+    XrToolchainTarget native_target;
+    XrTargetCodegenFacts codegen = {0};
+    XrTargetProfile *hosted = NULL;
+    XrTargetProfile *freestanding = NULL;
+    char error[256] = {0};
+    CHECK(xtc_target_parse("native", &native_target, error, sizeof(error)));
+    CHECK(xr_target_profile_build_native_hosted(
+        &hosted, error, sizeof(error)));
+    CHECK(xtc_target_profile_build_native_freestanding(
+        &native_target, &codegen, providers, &freestanding, error,
+        sizeof(error)));
+    XrCompilerSessionConfig config = {.target_profile = hosted};
+    XrCompilerSession *session = xr_compiler_session_new(&config);
+    CHECK(session != NULL);
+    CHECK(session && !xr_compiler_session_set_target_profile(
+                         session, freestanding));
+    CHECK(session && xr_target_profile_require_exact(
+                         hosted, xr_compiler_session_target_profile(session),
+                         error, sizeof(error)));
+    xr_compiler_session_delete(session);
+    xr_target_profile_free(freestanding);
+    xr_target_profile_free(hosted);
+}
+
 static void test_aot_rejects_missing_profile_before_source_work(void) {
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
@@ -266,12 +317,14 @@ static void test_aot_rejects_missing_profile_before_source_work(void) {
 }
 
 int main(void) {
+    test_canonical_native_projection_is_deterministic();
     test_native_authority_is_deterministic();
     test_runtime_owner_publishes_validated_structures();
     test_freestanding_authority_is_not_hosted_projection();
     test_cross_target_and_reserved_facts_fail_closed();
     test_compiler_session_retains_exact_profile();
     test_compiler_session_rejects_conflicting_layout_authority();
+    test_compiler_session_rejects_conflicting_explicit_profile();
     test_aot_rejects_missing_profile_before_source_work();
     if (failures) {
         fprintf(stderr, "%d target authority test(s) failed\n", failures);

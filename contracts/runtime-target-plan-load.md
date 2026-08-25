@@ -41,6 +41,10 @@ roots, or general module activation.
    re-derives the same fields; caller-authored profile or runtime/provider/
    object fingerprints cannot authorize a foreign machine or a foreign XTP
    artifact.
+   The shared native-hosted TargetProfile projection mechanically consumes
+   this same runtime authority and adds no code-generator features, defaults,
+   or caller-authored machine facts. Product compiler sessions install that
+   exact frozen projection; a missing or conflicting profile fails closed.
    The current runtime has no governed SIMD discovery or installed SIMD
    manifest, so its exact native execution authority is scalar-only. Any
    nonzero vector feature or maximum vector width fails closed.
@@ -387,15 +391,15 @@ anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b7
 anchor-sha256: src/runtime/abi/xr_target_machine_facts.h 8c8d1c341fb4639bb47c982ac6dfd851571d154823101e00011a63fcb14486d8
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h ec7f8aba2e76b4e2a10f898468f316c2f36863e8f35a7cb335ad9a30b75974e3
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c d0836e34b01e009e2a260b4c4c022b6a7f7a4e9ce80e77f18fc23b2d0e912ce2
-anchor-sha256: src/plan/target/xr_target_profile.h 2e37c59739b459a24a1ec455fbbb84e520579f0f69c67fbbdd995d47d8e3f946
-anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
+anchor-sha256: src/plan/target/xr_target_profile.h b1ba627fd18c6bd6c1aa849d9a9daf2a326183850acda9c05410b184a245833f
+anchor-sha256: src/plan/target/xr_target_profile.c 45ea77de1785fd6d5c5bbe60bf28925a0b4999fbf211b5da8fa3d46203388fa7
 anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
 anchor-sha256: src/plan/target/xr_target_plan.c 9e7140184ca04bab125144d1f4559ac87a42172eefcf22eb434f33ac8101edff
 anchor-sha256: src/plan/target/xr_target_builder.c 94aad1858c8813c8183cdc5a69e0a896deb804e1870161c242cecb894be64da6
 anchor-sha256: src/plan/target/xr_target_verify.c 90b44fa2b4f8839550e722a8679c6dddf50eeb5801c41a4f85b5a8c595d7d385
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
-anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 219f048d367efac2364748c2f3360312d30f682f68034f2354029527ff3ec37b
+anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 125d54fba9ed14eaa418080797a2e680098f71046422fc4d844113f0739522ae
 anchor-sha256: src/runtime/xr_runtime_artifact_verify.c 954452a1b4ff3923afb3a1b5171e185cf688dad96189ab2ac23e1b984befad19
 anchor-sha256: src/runtime/xr_target_plan_load.c 6b7f72151ed3359a8233e5b45e74b8175a42a120ade628ecb930aab1cb8a9fbb
 anchor-sha256: src/app/cli/xcmd_run.c b9f4d84d60191279ad6800ec3d18594fc58b85717a7fc3a0f4b9ebcfce50a832

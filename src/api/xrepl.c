@@ -37,6 +37,7 @@
 #include "../runtime/value/xvalue_format.h"
 #include "../runtime/value/xtype_names.h"
 #include "../toolchain/xcompiler_session.h"
+#include "../plan/target/xr_target_profile.h"
 #include "../base/xmalloc.h"
 #include "../base/xdynarray.h"
 #include <stdio.h>
@@ -54,19 +55,10 @@
 
 static XrCompilerSession *repl_compiler_session_for_isolate(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
-    if (session)
-        return session;
-
-    XrCompilerSessionConfig cfg = {
-        .vm_host = isolate,
-        .source_file = "<repl>",
-        .repl_mode = true,
-    };
-    session = xr_compiler_session_new(&cfg);
-    if (!session)
-        return NULL;
-    xr_compiler_session_attach_isolate(isolate, session);
-    return session;
+    const XrTargetProfile *profile =
+        xr_compiler_session_target_profile(session);
+    return profile && xr_target_profile_verify(profile, NULL, 0) ? session
+                                                                  : NULL;
 }
 
 XrReplSymbolTable *xr_repl_symbols_new(void) {
@@ -608,9 +600,12 @@ XrReplEvalResult xr_repl_eval(XrCompilerSession *session, XrVMRuntime *vm_host,
     XR_DCHECK(session != NULL, "xr_repl_eval: NULL compiler session");
     XR_DCHECK(vm_host != NULL, "xr_repl_eval: NULL VM host");
     XR_DCHECK(source != NULL, "xr_repl_eval: NULL source");
+    const XrTargetProfile *target_profile =
+        xr_compiler_session_target_profile(session);
     if (!session || !vm_host || !source || !authority ||
         authority->kind != XR_MODULE_IDENTITY_MEMORY ||
-        !xr_module_identity_authority_valid(authority))
+        !xr_module_identity_authority_valid(authority) || !target_profile ||
+        !xr_target_profile_verify(target_profile, NULL, 0))
         return result;
     XR_DCHECK(xr_compiler_session_vm_host(session) == vm_host,
               "xr_repl_eval: compiler session VM host mismatch");
@@ -907,6 +902,10 @@ void xr_repl_print_type(XrVMRuntime *isolate, const char *expr,
     snprintf(src, src_size, "print(typeName(%s))\n", expr);
 
     XrCompilerSession *session = repl_compiler_session_for_isolate(isolate);
+    if (!session) {
+        xr_free(src);
+        return;
+    }
     XrReplEvalResult result = xr_repl_eval(session, isolate, src, authority);
     xr_free(src);
 

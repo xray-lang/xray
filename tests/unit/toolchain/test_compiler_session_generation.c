@@ -17,6 +17,7 @@
 #include "os/os_temp.h"
 #include "toolchain/xcompiler_session.h"
 #include "api/xrepl.h"
+#include "api/xisolate_profile.h"
 #include "runtime/xisolate_api.h"
 #include "runtime/value/xchunk.h"
 #include "module/xmodule_identity.h"
@@ -198,8 +199,8 @@ TEST(repl_declaration_generations_publish_and_abandon_without_reuse) {
 }
 
 TEST(production_repl_eval_publishes_and_abandons_declaration_generations) {
-    XrVMConfig config = {0};
-    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    XrVMRuntime *isolate =
+        xr_isolate_profile_new(XR_ISOLATE_PROFILE_REPL);
     ASSERT_NOT_NULL(isolate);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     ASSERT_NOT_NULL(session);

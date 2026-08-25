@@ -27,6 +27,7 @@
 #include "../../../src/runtime/xexec_state.h"
 #include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/toolchain/xcompiler_session.h"
+#include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/module/xmodule_identity.h"
 #include "xrepl.h"
 #include "xisolate_profile.h"
@@ -52,6 +53,50 @@ static XrProto *eval_repl(XrCompilerSession *session, XrVMRuntime *isolate, cons
     if (result.proto)
         xr_free_code(isolate, result.proto);
     return NULL;
+}
+
+TEST(product_isolate_profiles_install_exact_native_authority) {
+    static const XrIsolateProfile profiles[] = {
+        XR_ISOLATE_PROFILE_RUN,
+        XR_ISOLATE_PROFILE_EVAL,
+        XR_ISOLATE_PROFILE_TEST,
+        XR_ISOLATE_PROFILE_REPL,
+    };
+    XrTargetProfile *expected = NULL;
+    char error[256] = {0};
+    ASSERT_TRUE(xr_target_profile_build_native_hosted(
+        &expected, error, sizeof(error)));
+    for (size_t i = 0; i < sizeof(profiles) / sizeof(profiles[0]); i++) {
+        XrVMRuntime *isolate = xr_isolate_profile_new(profiles[i]);
+        ASSERT_NOT_NULL(isolate);
+        XrCompilerSession *session =
+            xr_compiler_session_current_for_isolate(isolate);
+        ASSERT_NOT_NULL(session);
+        ASSERT_TRUE(xr_target_profile_require_exact(
+            expected, xr_compiler_session_target_profile(session), error,
+            sizeof(error)));
+        xray_vm_delete(isolate);
+    }
+    xr_target_profile_free(expected);
+}
+
+TEST(repl_eval_rejects_session_without_target_profile) {
+    XrVMRuntime *isolate = make_repl_iso();
+    ASSERT_NOT_NULL(isolate);
+    XrCompilerSessionConfig config = {
+        .vm_host = isolate,
+        .source_file = "<missing-target-profile>",
+        .repl_mode = true,
+    };
+    XrCompilerSession *session = xr_compiler_session_new(&config);
+    ASSERT_NOT_NULL(session);
+    ASSERT_NULL(xr_compiler_session_target_profile(session));
+    XrReplEvalResult result = xr_repl_eval(
+        session, isolate, "1 + 2\n", &k_repl_memory_authority);
+    ASSERT_EQ(XR_REPL_EVAL_COMPILE_ERROR, result.status);
+    ASSERT_NULL(result.proto);
+    xr_compiler_session_delete(session);
+    xray_vm_delete(isolate);
 }
 
 /* Find a symbol by name; returns -1 if not present. */
@@ -893,6 +938,8 @@ TEST(repl_print_type_simple_expression) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Globals Dict");
 RUN_TEST(globals_dict_initialized_with_isolate);
+RUN_TEST(product_isolate_profiles_install_exact_native_authority);
+RUN_TEST(repl_eval_rejects_session_without_target_profile);
 RUN_TEST(globals_dict_set_get_round_trip);
 RUN_TEST(globals_dict_overwrite_keeps_count);
 RUN_TEST(globals_dict_missing_key_returns_null);

@@ -65,35 +65,6 @@ static void copy_fingerprint(uint8_t out[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE],
     memcpy(out, fingerprint.bytes, XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
 }
 
-static bool build_native_target_profile(XrTargetProfile **profile,
-                                        char *diagnostic,
-                                        size_t diagnostic_size) {
-    if (profile)
-        *profile = NULL;
-    if (!profile)
-        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
-                    "native TargetProfile output is required");
-    XrRuntimeTargetAuthority runtime;
-    if (xr_runtime_target_authority_native_hosted(&runtime) !=
-        XR_RUNTIME_ABI_OK)
-        return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
-                    "canonical native runtime authority is unavailable");
-    XrTargetProfileBuildInput input = {
-        .machine = runtime.machine,
-        .runtime_abi = &runtime.runtime_abi,
-        .object_header_materialization =
-            &runtime.object_header_materialization,
-        .string_contract = &runtime.string_contract,
-        .providers = runtime.providers,
-        .provider_count = runtime.provider_count,
-    };
-    char nested[512] = {0};
-    if (!xr_target_profile_build(&input, profile, nested, sizeof(nested)))
-        return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
-                    "canonical native TargetProfile construction failed");
-    return true;
-}
-
 static bool populate_identity(
     const XrSemanticPlan *semantic_plan, const XrTargetProfile *target_profile,
     XrRuntimeArtifactAuthorityIdentity *identity, char *diagnostic,
@@ -213,8 +184,8 @@ XR_FUNCDEF bool xr_runtime_artifact_authority_create_internal(
                     "verified semantic authority is required");
 
     XrTargetProfile *native_profile = NULL;
-    if (!build_native_target_profile(&native_profile, diagnostic,
-                                     diagnostic_size))
+    if (!xr_target_profile_build_native_hosted(
+            &native_profile, diagnostic, diagnostic_size))
         return false;
 
     XrRuntimeArtifactAuthorityIdentity identity;

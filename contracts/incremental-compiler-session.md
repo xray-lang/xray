@@ -122,6 +122,12 @@ configuration generation. Replacement and installation during an operation
 are forbidden, while each cache load or publication supplies its own exact
 artifact authority and operation-local verifier output.
 
+Product run, eval, test, and REPL isolate profiles install the canonical native
+hosted TargetProfile in their compiler session before exposing the isolate.
+The projection comes only from the runtime target authority. A session cannot
+replace it with a different profile, and REPL compilation rejects a missing or
+invalid profile instead of constructing a graph-less fallback session.
+
 ## Required evidence
 
 - The compiler-session focused test proves deep-copy ownership, session
@@ -163,6 +169,6 @@ anchor-sha256: src/incremental/xr_cache_invalidate.h d546845678f14a1c84a11237038
 anchor-sha256: src/incremental/xr_cache_invalidate.c f134e5e0ea324161a54cf4d9e352faf630ce7c27bb8c3c7aaaa2856d195ef828
 anchor-sha256: src/toolchain/xcompiler_session.h 62f34571937418ee3484f2ee60469fc1f8ef10b6ba35dfc7a75299b44342c886
 anchor-sha256: src/toolchain/xcompiler_session.c 58a0ad044e2ade6bb1869e4e562654984d0181e15900ba98a54721c782e4aaad
-anchor-sha256: src/api/xrepl.c 957a0684ec073538e2394ebe44293f8ca42181da05cd2712427e6ee888324b6a
+anchor-sha256: src/api/xrepl.c b387df71983b1e55794e4a1c3b7e0bab5b8900e89485099204268be87c225f80
 anchor-sha256: tests/unit/incremental/test_dependency_graph.c 968768a0272e1fd5d06767e55698d00449f52bee1b67b4316e1e39042eddb888
-anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 38477c734381400a94426de7756a70d27f84fc9a3117542856f4f83ffe578d25
+anchor-sha256: tests/unit/toolchain/test_compiler_session_generation.c 8d10d92c041450bc847779f0f5eac632f9e33a6b1a0eba848c585710e9aba36a
