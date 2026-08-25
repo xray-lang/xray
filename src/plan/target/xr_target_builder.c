@@ -11080,6 +11080,14 @@ static bool semantic_layout_field_type(const XrTargetPlanBuilder *builder,
         type->kind == XR_KIND_INSTANCE && (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
         return fail(error, error_size, "XR_TARGET_1002",
                     "leaf aggregate field authority is missing");
+    XrSemanticValueAggregateShape aggregate_shape = {0};
+    bool named_value_aggregate =
+        type->kind == XR_KIND_INSTANCE && (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0;
+    if (named_value_aggregate &&
+        !xr_semantic_value_aggregate_shape_for_type(builder->semantic_plan,
+                                                    intent->semantic_type, &aggregate_shape))
+        return fail(error, error_size, "XR_TARGET_1002",
+                    "value aggregate field identity is incomplete");
     uint32_t child_table_count = 0;
     const uint32_t *children =
         xr_semantic_plan_type_children(builder->semantic_plan, &child_table_count);
@@ -11089,6 +11097,8 @@ static bool semantic_layout_field_type(const XrTargetPlanBuilder *builder,
         child_ordinal >= type->child_count)
         return fail(error, error_size, "XR_TARGET_1002", "aggregate field type range is invalid");
     *out_child_type = children[type->child_begin + child_ordinal];
+    if (named_value_aggregate)
+        *out_semantic_name = aggregate_shape.field_metadata_begin + field_index;
     return true;
 }
 
