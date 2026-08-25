@@ -709,6 +709,8 @@ static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrVMRuntime *X
         return !need_storage;
 
     XrVMContext *ctx = &state->ctx;
+    if (!xr_exec_context_bind_error_channel(&coro->exec_ctx, &ctx->pending_error))
+        return false;
     if (!is_clean) {
         XrValue *saved_stack = ctx->stack;
         int saved_stack_cap = ctx->stack_capacity;
@@ -814,13 +816,30 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
         vm_backend_reset_handlers(ctx);
         vm_backend_free_struct_storage(ctx);
     }
+    /* The VM state survives shell pooling, but its error slot is borrowed only
+     * by one execution lifetime. Close that exact borrow before the shell is
+     * made reusable; the next shell initialization creates a fresh execution
+     * identity and prepare_execution_state binds the retained physical slot.
+     * A memset must never be the unbind operation. */
+    XR_CHECK(coro->exec_ctx.error_channel.pending == &ctx->pending_error,
+             "VM coroutine recycle error channel owner drifted");
+    XR_CHECK(xr_exec_context_unbind_error_channel(&coro->exec_ctx, &ctx->pending_error),
+             "VM coroutine recycle error channel unbinding failed");
     vm_backend_clear_entry_state(coro);
     return true;
 }
 
 static void vm_backend_reset_reusable(XrCoroutine *coro) {
-    if (!vm_state_for_coro(coro))
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
         return;
+    XrVMContext *ctx = &state->ctx;
+    if (coro->exec_ctx.error_channel.pending) {
+        XR_CHECK(coro->exec_ctx.error_channel.pending == &ctx->pending_error,
+                 "VM reusable error channel owner drifted");
+        XR_CHECK(xr_exec_context_unbind_error_channel(&coro->exec_ctx, &ctx->pending_error),
+                 "VM reusable error channel unbinding failed");
+    }
     vm_backend_clear_entry_state(coro);
 }
 
@@ -944,6 +963,16 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     vm_backend_free_struct_storage(ctx);
     xr_vm_ctx_free_ic_tables(ctx);
     vm_backend_clear_entry_state(coro);
+
+    /* State allocation precedes shell initialization.  If initialization
+     * rejected the bind, there is no borrow to close; otherwise teardown must
+     * prove that the exact VM-state slot is still bound before reclaiming it. */
+    if (coro->exec_ctx.error_channel.pending) {
+        XR_CHECK(coro->exec_ctx.error_channel.pending == &ctx->pending_error,
+                 "VM coroutine error channel owner drifted");
+        XR_CHECK(xr_exec_context_unbind_error_channel(&coro->exec_ctx, &ctx->pending_error),
+                 "VM coroutine error channel unbinding failed");
+    }
 
     if (coro->gc_flags & XR_CORO_GC_BACKEND_STATE_OWNED) {
         xr_free(state);

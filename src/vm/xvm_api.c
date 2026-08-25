@@ -553,11 +553,3 @@ bool xr_vm_is_catch_reachable(XrVMRuntime *isolate) {
     int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
     return ctx->handlers[ctx->handler_count - 1].frame_count > floor;
 }
-
-void xr_vm_set_pending_error(XrVMRuntime *isolate, XrValue error) {
-    if (!isolate)
-        return;
-    XrVMContext *ctx = xr_vm_current_ctx(isolate);
-    if (ctx)
-        ctx->pending_error = error;
-}

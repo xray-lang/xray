@@ -3590,7 +3590,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "c72074bfe597061005ed640d581907e3ee531a4b7a1b3bd5a9ca3a1a9095411c",
+  "source_tree_fingerprint": "aef9d1c0016c18e2dc0d485e789eeeea39b27ae19d8da1b3477a6a8adcc928b4",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xr_typed_dispatch.c",
@@ -3902,6 +3902,20 @@
       "path": "src/runtime/closure/xbound_method.h",
       "pointer_names": [
         "args"
+      ]
+    },
+    {
+      "path": "src/runtime/core/xr_exec_context.c",
+      "pointer_names": [
+        "owned_error",
+        "pending"
+      ]
+    },
+    {
+      "path": "src/runtime/core/xr_exec_context.h",
+      "pointer_names": [
+        "owned_error",
+        "pending"
       ]
     },
     {

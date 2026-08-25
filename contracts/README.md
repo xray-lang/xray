@@ -36,3 +36,4 @@ Initial frozen contracts:
 - `semantic-performance-baseline.json`
 - `semantic-runtime-benchmark.json`
 - `unified-target-machine-discovery.md`
+- `execution-error-publication.md`

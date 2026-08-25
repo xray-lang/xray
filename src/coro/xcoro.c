@@ -638,6 +638,14 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
     // Cache worker pointer (single TLS lookup for VM stack slab + ID allocation)
     XrWorker *w = xr_current_worker();
 
+    /* Establish the target-neutral execution identity before asking a backend
+     * to prepare target-owned state.  Backends may bind exact borrowed slots
+     * into this context; initializing it after backend preparation would erase
+     * those bindings before the first instruction executes. */
+    xr_alloc_context_init(&coro->alloc_ctx, core, XR_STORAGE_EXEC_LOCAL);
+    coro->alloc_ctx.local_heap = coro->heap;
+    xr_exec_context_init(&coro->exec_ctx, core, &coro->alloc_ctx);
+
     backend = coro->backend;
     if (backend && backend->prepare_execution_state) {
         if (!X)
@@ -656,6 +664,7 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
         coro->heap = xr_coro_heap_create(core);
         if (!coro->heap)
             return false;
+        coro->alloc_ctx.local_heap = coro->heap;
     }
 
     // Allocate ID (per-Worker batch cache to avoid atomic_fetch_add per spawn)
@@ -678,9 +687,6 @@ static bool xr_coro_init_shell_owner(XrCoroutine *coro, XrVMRuntime *X, XrRuntim
         }
     }
 
-    xr_alloc_context_init(&coro->alloc_ctx, core, XR_STORAGE_EXEC_LOCAL);
-    coro->alloc_ctx.local_heap = coro->heap;
-    xr_exec_context_init(&coro->exec_ctx, core, &coro->alloc_ctx);
     coro->exec_ctx.task = coro;
     coro->exec_ctx.logical_root_id = (uint64_t) (uint32_t) coro->id;
 

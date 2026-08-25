@@ -246,6 +246,12 @@ static void init_vm_context(XrVMRuntime *isolate) {
     ctx->isolate = isolate;
     ctx->cleanup_depth = 0;
     ctx->cancellation_cleanup_active = false;
+    XR_CHECK(xr_exec_context_bind_error_channel(
+                 xr_runtime_core_root_exec(isolate->core_rt), &ctx->pending_error),
+             "root execution error channel binding failed");
+    XR_CHECK(xr_exec_context_bind_error_channel(
+                 xr_runtime_core_module_exec(isolate->core_rt), &ctx->pending_error),
+             "module execution error channel binding failed");
 }
 
 // Initialize VM execution engine
@@ -284,6 +290,14 @@ int xr_execution_engine_init(XrVMRuntime *isolate) {
 
 // Cleanup VM execution engine
 void xr_execution_engine_cleanup(XrVMRuntime *isolate) {
+    if (isolate && isolate->core_rt) {
+        bool root_unbound = xr_exec_context_unbind_error_channel(
+            xr_runtime_core_root_exec(isolate->core_rt), &isolate->vm_ctx.pending_error);
+        bool module_unbound = xr_exec_context_unbind_error_channel(
+            xr_runtime_core_module_exec(isolate->core_rt), &isolate->vm_ctx.pending_error);
+        XR_CHECK(root_unbound, "root execution error channel unbinding failed");
+        XR_CHECK(module_unbound, "module execution error channel unbinding failed");
+    }
     if (isolate->vm.strings_map != NULL) {
         xr_hashmap_free(isolate->vm.strings_map);
         isolate->vm.strings_map = NULL;

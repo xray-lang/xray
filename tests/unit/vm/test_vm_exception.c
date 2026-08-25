@@ -27,6 +27,7 @@
 #include "runtime/class/xbuiltin_enum_error.h"
 #include "runtime/class/xenum.h"
 #include "vm/xvm_internal.h"
+#include "vm/xvm_coro_state.h"
 #include "base/xnumber_parse_error.h"
 #include "shared/xr_string_parse_core.h"
 
@@ -218,7 +219,7 @@ TEST(builtin_enum_error_vm_publication_is_non_overwriting) {
     ASSERT_NOT_NULL(iso);
     XrCoroutine *coro = xr_test_init_coro(iso);
     ASSERT_NOT_NULL(coro);
-    XrVMContext *ctx = xr_vm_current_ctx(iso);
+    XrVMContext *ctx = xr_coro_vm_ctx(coro);
     ASSERT_NOT_NULL(ctx);
     ASSERT(XR_IS_NULL(ctx->pending_error));
 
@@ -235,7 +236,9 @@ TEST(builtin_enum_error_vm_publication_is_non_overwriting) {
     ASSERT_EQ_INT(second.status, XR_BUILTIN_ENUM_ERROR_OK);
 
     ASSERT(XR_IS_NULL(ctx->pending_error));
-    xr_vm_set_pending_error(iso, first.value);
+    ASSERT_EQ_INT(xr_exec_context_publish_error_owned(core, &first.value),
+                  XR_EXEC_ERROR_PUBLISH_OK);
+    ASSERT(XR_IS_NULL(first.value));
     ASSERT(xr_value_is_enum_aggregate(ctx->pending_error));
     XrEnumAggregateValue *error = xr_value_to_enum_aggregate(ctx->pending_error);
     ASSERT_NOT_NULL(error);
@@ -243,20 +246,42 @@ TEST(builtin_enum_error_vm_publication_is_non_overwriting) {
     ASSERT_STR_EQ(xr_enum_aggregate_member_name(error),
                   row->members[XR_NUMBER_PARSE_ERROR_INVALID_SYNTAX]);
     XrValue original = ctx->pending_error;
-    if (XR_IS_NULL(ctx->pending_error))
-        xr_vm_set_pending_error(iso, second.value);
+    ASSERT_EQ_INT(xr_exec_context_publish_error_owned(core, &second.value),
+                  XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED);
+    ASSERT(!XR_IS_NULL(second.value));
     ASSERT(ctx->pending_error.ptr == original.ptr);
     xr_rc_release_value(xr_coro_get_heap(coro), ctx->pending_error);
     ctx->pending_error = xr_null();
 
     ASSERT(XR_IS_NULL(ctx->pending_error));
-    xr_vm_set_pending_error(iso, second.value);
+    ASSERT_EQ_INT(xr_exec_context_publish_error_owned(core, &second.value),
+                  XR_EXEC_ERROR_PUBLISH_OK);
+    ASSERT(XR_IS_NULL(second.value));
     error = xr_value_to_enum_aggregate(ctx->pending_error);
     ASSERT_NOT_NULL(error);
     ASSERT_STR_EQ(xr_enum_aggregate_member_name(error),
                   row->members[XR_NUMBER_PARSE_ERROR_OUT_OF_RANGE]);
     xr_rc_release_value(xr_coro_get_heap(coro), ctx->pending_error);
     ctx->pending_error = xr_null();
+    void *owned_state = coro->backend_state;
+    ASSERT_EQ_PTR(coro->exec_ctx.error_channel.pending, &ctx->pending_error);
+
+    XrExecutionContext *previous = xr_exec_context_enter(xr_runtime_core_root_exec(core));
+    ASSERT(coro->backend->prepare_recycle(coro, NULL));
+    ASSERT_NULL(coro->exec_ctx.error_channel.pending);
+    ASSERT_EQ_PTR(coro->backend_state, owned_state);
+
+    /* Reuse creates a new execution identity before the retained VM state is
+     * prepared. Rebinding, not initialization/memset, opens the new borrow. */
+    xr_alloc_context_init(&coro->alloc_ctx, core, XR_STORAGE_EXEC_LOCAL);
+    coro->alloc_ctx.local_heap = coro->heap;
+    xr_exec_context_init(&coro->exec_ctx, core, &coro->alloc_ctx);
+    ASSERT_NULL(coro->exec_ctx.error_channel.pending);
+    ASSERT(coro->backend->prepare_execution_state(coro, iso, NULL, true, true));
+    ASSERT_EQ_PTR(coro->exec_ctx.error_channel.pending, &ctx->pending_error);
+    ASSERT_EQ_PTR(coro->backend_state, owned_state);
+
+    xr_exec_context_restore(previous);
     xray_vm_delete(iso);
 }
 

@@ -503,10 +503,26 @@ bool xr_hosted_fragment_as_int(XrValue value, int64_t *out) {
     return true;
 }
 
+/* Consume exactly one hosted error token.  The active execution channel owns
+ * it on success; an already-published error wins and this later token is
+ * released.  Missing execution identity/channel is an internal contract
+ * violation, never a request to rediscover VM state. */
+static void stdlib_publish_owned_error(XrVMRuntime *isolate, XrValue *error) {
+    XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
+        isolate ? xr_isolate_get_runtime_core(isolate) : NULL, error);
+    if (publish != XR_EXEC_ERROR_PUBLISH_OK && error && !XR_IS_NULL(*error)) {
+        xr_rc_release_value(xr_current_coro_heap(), *error);
+        *error = xr_null();
+    }
+    XR_CHECK(publish == XR_EXEC_ERROR_PUBLISH_OK ||
+                 publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED,
+             "hosted fragment error has no active execution error channel");
+}
+
 XrValue xr_hosted_fragment_handle_signal(XrVMRuntime *isolate, const char *symbol,
-                                         const XrHostedFragmentSignal *signal) {
+                                         XrHostedFragmentSignal *signal) {
     if (signal && signal->status == XR_HOSTED_FRAGMENT_ERROR) {
-        xr_vm_set_pending_error(isolate, signal->error);
+        stdlib_publish_owned_error(isolate, &signal->error);
         return xr_null();
     }
     char message[192];
@@ -514,13 +530,14 @@ XrValue xr_hosted_fragment_handle_signal(XrVMRuntime *isolate, const char *symbo
              "%s hosted fragment rejected the call (status=%u, argument=%u)",
              symbol ? symbol : "stdlib", signal ? signal->status : UINT32_MAX,
              signal ? signal->argument_index : UINT32_MAX);
-    xr_vm_set_pending_error(isolate, xr_panic_info_new(isolate, XR_ERR_TYPE_MISMATCH, message));
+    XrValue error = xr_panic_info_new(isolate, XR_ERR_TYPE_MISMATCH, message);
+    stdlib_publish_owned_error(isolate, &error);
     return xr_null();
 }
 
 XrCFuncResult xr_stdlib_vm_fastpath_handle_yieldable_signal(XrVMRuntime *isolate,
                                                             const char *symbol,
-                                                            const XrHostedFragmentSignal *signal,
+                                                            XrHostedFragmentSignal *signal,
                                                             XrContinuation continuation,
                                                             XrValue value, XrValue *result) {
     if (!isolate || !signal || !result)
@@ -530,7 +547,7 @@ XrCFuncResult xr_stdlib_vm_fastpath_handle_yieldable_signal(XrVMRuntime *isolate
             *result = value;
             return XR_CFUNC_DONE;
         case XR_HOSTED_FRAGMENT_ERROR:
-            xr_vm_set_pending_error(isolate, signal->error);
+            stdlib_publish_owned_error(isolate, &signal->error);
             return XR_CFUNC_ERROR;
         case XR_HOSTED_FRAGMENT_SUSPEND:
             if (!signal->continuation || !continuation ||

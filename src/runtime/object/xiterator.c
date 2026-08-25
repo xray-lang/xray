@@ -599,12 +599,22 @@ static bool iterator_raise_generator_error(XrVMRuntime *iso, XrIterator *iter) {
     if (iter->type != XR_ITERATOR_GENERATOR || !iter->source.gen ||
         XR_IS_NULL(iter->source.gen->error))
         return false;
-    XrValue err = iter->source.gen->error;
-    if (iter->source.gen->error_is_value)
-        xr_vm_set_pending_error(iso, err);
-    else
+    if (iter->source.gen->error_is_value) {
+        XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
+            iso ? xr_isolate_get_runtime_core(iso) : NULL, &iter->source.gen->error);
+        if (publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED) {
+            XrValue later_error = iter->source.gen->error;
+            iter->source.gen->error = xr_null();
+            xr_rc_release_value(xr_coro_get_heap(iter->source.gen), later_error);
+        }
+        XR_CHECK(publish == XR_EXEC_ERROR_PUBLISH_OK ||
+                     publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED,
+                 "generator value error has no active execution error channel");
+    } else {
+        XrValue err = iter->source.gen->error;
         xr_vm_throw_exception(iso, err);
-    iter->source.gen->error = xr_null();
+        iter->source.gen->error = xr_null();
+    }
     return true;
 }
 

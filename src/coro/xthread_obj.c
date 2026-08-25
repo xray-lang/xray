@@ -319,6 +319,22 @@ static XrValue thread_observe_terminal_payload(XrThread *thread, bool failed) {
     return value;
 }
 
+/* thread_observe_terminal_payload returns one owned observation: either the
+ * transferable token or a retain of shared storage.  Publication consumes it
+ * on success.  A pre-existing error wins; discard this later observation with
+ * the same storage-domain owner instead of overwriting the active channel. */
+static void thread_publish_value_error(XrVMRuntime *isolate, XrThread *thread, XrValue error) {
+    XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
+        isolate ? xr_isolate_get_runtime_core(isolate) : NULL, &error);
+    if (publish != XR_EXEC_ERROR_PUBLISH_OK) {
+        uint8_t owner = thread_payload_owner_for_value(error);
+        thread_release_payload(thread->core, &error, &owner);
+    }
+    XR_CHECK(publish == XR_EXEC_ERROR_PUBLISH_OK ||
+                 publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED,
+             "Thread.join value error has no active execution error channel");
+}
+
 void xr_thread_obj_drain_isolate(struct XrVMRuntime *isolate) {
     if (!isolate)
         return;
@@ -525,7 +541,7 @@ static XrValue thread_join_result_value(XrVMRuntime *isolate, XrThread *thread, 
         if (XR_IS_NULL(err)) {
             thread_throw(isolate, XR_ERR_RUNTIME, "Thread.join: thread body failed");
         } else if (thread->error_is_value) {
-            xr_vm_set_pending_error(isolate, err);
+            thread_publish_value_error(isolate, thread, err);
         } else {
             xr_vm_throw_exception(isolate, err);
         }

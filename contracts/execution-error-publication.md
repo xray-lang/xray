@@ -1,0 +1,69 @@
+# Execution error publication contract
+
+Status: frozen.
+
+`XrExecutionContext` is the sole target-neutral owner of value-error
+publication.  Publication never discovers a VM context, coroutine, worker, or
+AOT recipe.  It observes the exact TLS-active execution context and accepts a
+publication only when that context belongs to the expected `XrRuntimeCore` and
+has an executor-bound error channel.
+
+Each executor lends one `XrValue` pending-error slot to its execution context.
+The execution context owns neither the slot nor its lifetime.  Binding the same
+slot is idempotent; rebinding to a different slot fails.  Exact unbinding ends
+the borrow before executor storage is reclaimed.  Binding or unbinding an
+active context fails so a running publication can never observe a replaced or
+dangling slot.  The root and module execution contexts borrow the isolate VM
+slot; each VM coroutine execution context borrows its own VM-state slot.  An
+executor with no value-error channel remains explicitly unbound.
+
+A pooled VM coroutine may retain its target-owned backend state, including the
+physical pending-error slot, but the borrow never crosses an execution
+lifetime.  The recycle/reset boundary exact-unbinds before exposing the shell
+to a pool.  Reuse initializes a new execution identity and then exact-binds the
+retained slot.  Zeroing or reinitializing the execution context is not an
+unbind operation.
+
+`xr_exec_context_publish_error_owned` is a move operation.  On success, the
+empty destination receives the exact value and the caller's owning source slot
+is cleared.  It does not retain, release, clone, or reinterpret the value.  A
+null argument/value, no active context, wrong runtime, unbound channel, or
+occupied channel is rejected without changing either source or destination.
+The first published error therefore wins.  A consumer that chooses to discard
+a later rejected error must release it through the storage-domain owner that
+provided that token and clear that owner's slot; it may not retry indefinitely
+or overwrite the first diagnosis.
+
+Builtin enum construction is independent from publication.  Construction may
+produce an immutable sticky module value, but each adapter must still close its
+caller-owned token on rejected publication.  Hosted-fragment signals expose a
+mutable owning error slot so the adapter can move or release it exactly once.
+Generator rejection is released through the producer coroutine heap; thread
+terminal observations are released through their recorded transferable/shared
+owner.  A missing active context never falls back to `isolate->vm_ctx`.
+
+The independent runtime test fixes active identity, runtime identity,
+non-overwrite, move-on-success, rejection stability, and exact borrow lifetime.
+VM publication tests additionally prove that executor bindings reach the
+existing pending-error consumer without restoring a VM-private setter.
+
+## Digest anchors
+
+anchor-sha256: src/runtime/core/xr_exec_context.h af6e7cdc5e3a00c5e91de9d57fa828fb4b662f670fe8b235e4009fff8b9a0377
+anchor-sha256: src/runtime/core/xr_exec_context.c fc953b234bf24e26ef953f9da946603e5f274485ec28a2136417e6d0e0438eec
+anchor-sha256: src/coro/xcoro.c 55602c9d05121142e1e69b84caa5946f86b28d15e24df3ca9675fd668209256c
+anchor-sha256: src/api/xvm_exec.c a4e92536fec225013dcc807654bd93d346129c1f97fafd59f86e3aa430ec4db3
+anchor-sha256: src/vm/xvm_coro_backend.c 0648b8205f74e3fcb0820cfb03d443c0a5f88f3a4b9e327501433368476c0419
+anchor-sha256: src/vm/xvm.h c2c4e3c70a464c86be9697c80751c7bf6282cc12e1a1473c15e2cfb7ea0ec7f2
+anchor-sha256: src/vm/xvm_api.c e302889a5ee8b5131de99a50b7278edbd20153446e8f12f96b8bc7cdbf2ef883
+anchor-sha256: src/coro/xthread_obj.c c289b005477750eaf9ce12d080b40e31b6ae7693c6252feb26bfa1ee33938d4f
+anchor-sha256: src/runtime/object/xiterator.c b23b3abaee212db907dfe3e48f85a524bbbe43e1401e00e1bcb4788f7c5ace60
+anchor-sha256: src/runtime/object/xstring_methods.c f6fdadd8b5a8cbd9180159b3a302dcf32b24b0e700848bf7e2c0d129eaab89d5
+anchor-sha256: src/stdlib/xstdlib_vm_fastpath.c d776df25171aad520a4086846f9609463e1d5ec3a5d393351a0fdc398f7263cd
+anchor-sha256: include/xray_hosted_fragment_runtime.h d9d219298d8b4c7ebd0aef72c3becfa7f6224f6686582556a31e4ca65f0834bc
+anchor-sha256: tools/stdlibgen/generate_vm_fastpaths.py c94ce73f3b614a7c70747a2f1ebbf87249a6c6a41788d5a16cc227b9f235cbe7
+anchor-sha256: stdlib/compress/compress.c 9fe9b1c698eb34f73ecfac01668a1619d8f3e50ddc541a7c181fd76bf43ff33a
+anchor-sha256: stdlib/crypto/crypto.c b9756835dba030d062515843c2259f7287f4a8bd1b6bfb23e8920543e4e10d01
+anchor-sha256: stdlib/net/net.c ce1b12d80e55924f0f4b04fbbd11d5f8cd671cf4bfa70697d2b4e64574037d75
+anchor-sha256: tests/unit/runtime/test_execution_error_channel.c 6402bf9a867f5b4a107fb180344b63becd6b142e677d14fb6f421d83185f03b0
+anchor-sha256: tests/unit/vm/test_vm_exception.c a8300b244b00b02359d8876f8c71088ef60d3df6baf2bee64cc83e85f5d96754

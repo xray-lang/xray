@@ -1300,14 +1300,24 @@ static XrEnumType *net_error_type(XrVMRuntime *X) {
     return xr_stdlib_enum_type_get(X, "net", "NetError");
 }
 
-static void net_set_pending_error(XrVMRuntime *X, uint8_t error) {
+static void net_publish_error(XrVMRuntime *X, uint8_t error) {
     XrEnumType *type = net_error_type(X);
     if (!type)
         return;
     XrEnumAggregateValue *value = xr_enum_zero_payload_value(
         xr_isolate_get_runtime_core(X), type, net_error_variant_index(error));
-    if (value)
-        xr_vm_set_pending_error(X, XR_FROM_PTR(value));
+    if (value) {
+        XrValue owned_error = XR_FROM_PTR(value);
+        XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
+            xr_isolate_get_runtime_core(X), &owned_error);
+        if (publish != XR_EXEC_ERROR_PUBLISH_OK) {
+            xr_rc_release_value(xr_current_coro_heap(), owned_error);
+            owned_error = xr_null();
+        }
+        XR_CHECK(publish == XR_EXEC_ERROR_PUBLISH_OK ||
+                     publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED,
+                 "net error has no active execution error channel");
+    }
 }
 
 static void net_bidi_shared_set_error(NetBidiShared *shared, uint8_t error) {
@@ -1616,12 +1626,12 @@ static XrCFuncResult net_bidi_wait_step(XrVMRuntime *X, NetBidiWaitState *state,
     if (atomic_load_explicit(&state->shared->done, memory_order_acquire) >= 2) {
         if (!atomic_load_explicit(&state->shared->ok, memory_order_acquire)) {
             uint8_t error = atomic_load_explicit(&state->shared->error, memory_order_acquire);
-            net_set_pending_error(X, error == XR_NETERR_NONE ? XR_NETERR_IO : error);
+            net_publish_error(X, error == XR_NETERR_NONE ? XR_NETERR_IO : error);
             *result = XR_NULL_VAL;
         } else {
             *result = net_bidi_result_object(X, state);
             if (XR_IS_NULL(*result))
-                net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
+                net_publish_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         }
         net_bidi_shared_release(state->shared);
         xr_free(state);
@@ -1650,7 +1660,7 @@ static XrCFuncResult net_copy_direction_coro(XrVMRuntime *X, XrValue *args, int 
 static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *args, int nargs,
                                                       XrValue *result) {
     if (nargs < 2) {
-        net_set_pending_error(X, XR_NETERR_INVALID);
+        net_publish_error(X, XR_NETERR_INVALID);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
@@ -1659,19 +1669,19 @@ static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *a
     if (!a || a->closed || a->fd < 0 || !b || b->closed || b->fd < 0) {
         net_conn_set_error(a, XR_NETERR_CLOSED, 0);
         net_conn_set_error(b, XR_NETERR_CLOSED, 0);
-        net_set_pending_error(X, XR_NETERR_CLOSED);
+        net_publish_error(X, XR_NETERR_CLOSED);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
     if (a == b || a->fd == b->fd) {
-        net_set_pending_error(X, XR_NETERR_INVALID);
+        net_publish_error(X, XR_NETERR_INVALID);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
 
     NetBidiShared *shared = (NetBidiShared *) xr_calloc(1, sizeof(NetBidiShared));
     if (!shared) {
-        net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
+        net_publish_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
@@ -1693,7 +1703,7 @@ static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *a
         xr_coro_destroy(ab);
         xr_coro_destroy(ba);
         xr_free(shared);
-        net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
+        net_publish_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }
@@ -1703,7 +1713,7 @@ static XrCFuncResult net_copy_bidirectional_yieldable(XrVMRuntime *X, XrValue *a
         xr_coro_destroy(ab);
         xr_coro_destroy(ba);
         xr_free(shared);
-        net_set_pending_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
+        net_publish_error(X, NET_BIDI_ERROR_OUT_OF_MEMORY);
         *result = XR_NULL_VAL;
         return XR_CFUNC_DONE;
     }

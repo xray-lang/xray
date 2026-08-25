@@ -25,6 +25,6 @@ XRAY_API bool xr_hosted_fragment_context_init(XrVMRuntime *isolate, const char *
 XRAY_API XrValue xr_hosted_fragment_int(int64_t value);
 XRAY_API bool xr_hosted_fragment_as_int(XrValue value, int64_t *out);
 XRAY_API XrValue xr_hosted_fragment_handle_signal(XrVMRuntime *isolate, const char *symbol,
-                                                  const XrHostedFragmentSignal *signal);
+                                                  XrHostedFragmentSignal *signal);
 
 #endif /* XRAY_HOSTED_FRAGMENT_RUNTIME_H */

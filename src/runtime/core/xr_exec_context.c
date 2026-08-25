@@ -11,6 +11,7 @@
 #include "../mem/xcoro_heap.h"
 #include "../mem/xfixed_heap.h"
 #include "../mem/xsystem_heap.h"
+#include "../value/xvalue.h"
 #include <string.h>
 
 static _Thread_local XrExecutionContext *xr_tls_exec_context;
@@ -68,6 +69,42 @@ void xr_exec_context_init(XrExecutionContext *ctx, XrRuntimeCore *core,
     memset(ctx, 0, sizeof(*ctx));
     ctx->core = core;
     ctx->alloc = alloc;
+}
+
+bool xr_exec_context_bind_error_channel(XrExecutionContext *ctx, XrValue *pending) {
+    if (!ctx || !pending || xr_exec_context_current() == ctx)
+        return false;
+    if (ctx->error_channel.pending && ctx->error_channel.pending != pending)
+        return false;
+    ctx->error_channel.pending = pending;
+    return true;
+}
+
+bool xr_exec_context_unbind_error_channel(XrExecutionContext *ctx, XrValue *pending) {
+    if (!ctx || !pending || xr_exec_context_current() == ctx ||
+        ctx->error_channel.pending != pending)
+        return false;
+    ctx->error_channel.pending = NULL;
+    return true;
+}
+
+XrExecutionErrorPublishStatus xr_exec_context_publish_error_owned(XrRuntimeCore *expected_core,
+                                                                   XrValue *owned_error) {
+    if (!expected_core || !owned_error || XR_IS_NULL(*owned_error))
+        return XR_EXEC_ERROR_PUBLISH_INVALID_ARGUMENT;
+    XrExecutionContext *active = xr_exec_context_current();
+    if (!active)
+        return XR_EXEC_ERROR_PUBLISH_NO_ACTIVE_CONTEXT;
+    if (active->core != expected_core)
+        return XR_EXEC_ERROR_PUBLISH_WRONG_RUNTIME;
+    XrValue *pending = active->error_channel.pending;
+    if (!pending)
+        return XR_EXEC_ERROR_PUBLISH_CHANNEL_UNBOUND;
+    if (!XR_IS_NULL(*pending))
+        return XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED;
+    *pending = *owned_error;
+    *owned_error = xr_null();
+    return XR_EXEC_ERROR_PUBLISH_OK;
 }
 
 bool xr_exec_context_has_task(const XrExecutionContext *ctx) {

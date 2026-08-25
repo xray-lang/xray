@@ -68,6 +68,10 @@ if(XR_ENABLE_CYCLE_DETECTOR)
     target_compile_definitions(test_cycle_detector_shared PRIVATE XR_ENABLE_CYCLE_DETECTOR=1)
 endif()
 
+add_xray_unit_test(test_execution_error_channel runtime/test_execution_error_channel.c)
+set_tests_properties(test_execution_error_channel PROPERTIES
+    LABELS "runtime;ownership;target-machine")
+
 # These contract tests build only the low-level runtime modules. The focused
 # validation loop stays independent of the full compiler archive. Ownership
 # audit instrumentation is intentionally absent from release product archives.

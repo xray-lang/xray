@@ -93,7 +93,6 @@ XR_FUNC void xr_runtime_error(XrVMRuntime *isolate, const char *format, ...);
 /* ========== Exception Handling API ========== */
 
 XR_FUNC void xr_vm_throw_exception(XrVMRuntime *isolate, XrValue exception);
-XR_FUNC void xr_vm_set_pending_error(XrVMRuntime *isolate, XrValue error);
 /* Unified throw: records the full stack trace and performs the
  * unwind in one call. See xvm_exception.c for rationale. */
 XR_FUNC void xr_vm_unwind_with_trace(XrVMRuntime *isolate, XrValue exception);

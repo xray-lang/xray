@@ -27,13 +27,14 @@
 #include "../class/xbuiltin_enum_error.h"
 #include "../class/xenum.h"
 #include "../core/xr_runtime_core.h"
+#include "../mem/xalloc_unified.h"
 #include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
 #include "../../base/xchecks.h"
 #include "../../base/xglobal_indices.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xutf8.h"
-#include "../../vm/xvm_internal.h"
+#include "../../vm/xvm.h"
 #include "../xerror_codes.h"
 #include <string.h>
 
@@ -55,14 +56,18 @@ static void string_publish_builtin_enum_error(XrVMRuntime *iso, int builtin_inde
     XrBuiltinEnumErrorResult result = xr_builtin_enum_error_construct(
         iso ? xr_isolate_get_runtime_core(iso) : NULL, builtin_index, member_index);
     if (result.status == XR_BUILTIN_ENUM_ERROR_OK) {
-        XrVMContext *ctx = iso ? xr_vm_current_ctx(iso) : NULL;
-        if (ctx && !XR_IS_NULL(ctx->pending_error))
+        XrValue error = result.value;
+        XrExecutionErrorPublishStatus publish = xr_exec_context_publish_error_owned(
+            iso ? xr_isolate_get_runtime_core(iso) : NULL, &error);
+        if (publish == XR_EXEC_ERROR_PUBLISH_OK)
             return;
-        if (ctx) {
-            xr_vm_set_pending_error(iso, result.value);
-            if (ctx->pending_error.ptr == result.value.ptr)
-                return;
-        }
+        /* Unit enum variants are sticky module constants, so this release is
+         * deliberately a no-op today.  It still closes the caller-owned token
+         * contract if their representation later stops being immortal. */
+        xr_rc_release_value(xr_current_coro_heap(), error);
+        error = xr_null();
+        if (publish == XR_EXEC_ERROR_PUBLISH_CHANNEL_OCCUPIED)
+            return;
     }
     XrValue exc = xr_panic_info_newf(iso, XR_ERR_INTERNAL, "%s",
                                      fallback_message ? fallback_message
