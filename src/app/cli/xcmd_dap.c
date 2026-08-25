@@ -19,6 +19,7 @@
 #include "xcli_spec.h"
 #include "xcli_fs.h"
 #include "../../base/xchecks.h"
+#include "../../os/os_fd.h"
 #include "../dap/xdap_controller.h"
 #include "../dap/xdap_transport.h"
 #include "../dap/xdap_protocol.h"
@@ -42,7 +43,7 @@ XR_FUNC int cmd_dap(const XrCliInvocation *inv) {
         }
         const char *self_exe = inv->ctx ? inv->ctx->program : NULL;
         const char *debugger = xr_cli_opt_string(&inv->options, "debugger", NULL);
-        int rc = xdap_native_run(fileno(stdin), fileno(stdout), self_exe, debugger);
+        int rc = xdap_native_run(xr_stdin_fd(), xr_stdout_fd(), self_exe, debugger);
         return (rc != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;
     }
 

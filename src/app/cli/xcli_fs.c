@@ -290,7 +290,15 @@ int xr_cli_write_file_atomic(const char *path, const char *content) {
     /* Preserve original permissions if file exists */
     struct stat st;
     if (stat(path, &st) == 0) {
-        chmod(tmp_path, st.st_mode);
+#ifdef XR_OS_WINDOWS
+        int chmod_result = _chmod(tmp_path, (int) st.st_mode);
+#else
+        int chmod_result = chmod(tmp_path, st.st_mode);
+#endif
+        if (chmod_result != 0) {
+            xr_fs_remove(tmp_path);
+            return -1;
+        }
     }
 
     if (rename(tmp_path, path) != 0) {

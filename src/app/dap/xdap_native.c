@@ -24,6 +24,27 @@
 
 #if defined(XR_OS_WINDOWS)
 
+#include <limits.h>
+#if defined(_MSC_VER)
+#include <corecrt_io.h>
+#else
+#include <io.h>
+#endif
+
+static bool write_all(int fd, const char *buf, size_t len) {
+    size_t offset = 0;
+    while (offset < len) {
+        size_t remaining = len - offset;
+        unsigned int chunk =
+            remaining > (size_t) INT_MAX ? (unsigned int) INT_MAX : (unsigned int) remaining;
+        int written = _write(fd, buf + offset, chunk);
+        if (written <= 0)
+            return false;
+        offset += (size_t) written;
+    }
+    return true;
+}
+
 /* lldb-dap based native debugging is POSIX-only for now. Windows native
  * debugging would route through a different backend (e.g. the VS debug
  * engine) and is intentionally out of scope here. */
@@ -37,14 +58,10 @@ XR_FUNC int xdap_native_run(int in_fd, int out_fd, const char *self_exe,
         "\"output\":\"native DAP backend is not supported on this platform\\n\"}}";
     char header[64];
     int hn = snprintf(header, sizeof(header), "Content-Length: %zu\r\n\r\n", sizeof(body) - 1);
-    if (out_fd >= 0 && hn > 0) {
-        FILE *out = fdopen(out_fd, "w");
-        if (out) {
-            fwrite(header, 1, (size_t) hn, out);
-            fwrite(body, 1, sizeof(body) - 1, out);
-            fflush(out);
-        }
-    }
+    if (out_fd < 0 || hn <= 0 || (size_t) hn >= sizeof(header))
+        return 1;
+    if (!write_all(out_fd, header, (size_t) hn) || !write_all(out_fd, body, sizeof(body) - 1))
+        return 1;
     return 1;
 }
 
