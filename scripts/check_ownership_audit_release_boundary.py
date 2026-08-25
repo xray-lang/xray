@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import os
 from pathlib import Path
 import re
 import sys
@@ -302,15 +303,58 @@ def self_test() -> list[str]:
     )
     if not verify(missing_exclusion):
         failures.append("mutation was not rejected: missing-exclude-from-all")
+
+    path_cases = {
+        "CMakeLists.txt": False,
+        "tests/unit/CMakeLists.txt": False,
+        "cmake/runtime.cmake": False,
+        ".wt/worker/CMakeLists.txt": True,
+        "tools/.wt/worker/CMakeLists.txt": True,
+        ".claude/worktrees/worker/CMakeLists.txt": True,
+        ".codex/worktrees/worker/extra.cmake": True,
+        "build-gate/CMakeLists.txt": True,
+    }
+    for path, expected in path_cases.items():
+        if _is_non_product_cmake_path(Path(path)) != expected:
+            failures.append(f"CMake path classification mismatch: {path}")
     return failures
 
 
-def project_texts() -> dict[str, str]:
-    paths = sorted(ROOT.rglob("CMakeLists.txt")) + sorted(ROOT.rglob("*.cmake"))
+def _is_non_product_cmake_path(relative: Path) -> bool:
+    parts = relative.parts
+    if any(part.startswith("build") for part in parts):
+        return True
+    if any(part in {".git", ".wt"} for part in parts):
+        return True
+    return any(
+        part.startswith(".") and parts[index + 1] == "worktrees"
+        for index, part in enumerate(parts[:-1])
+    )
+
+
+def _project_cmake_paths(root: Path) -> list[Path]:
+    paths: list[Path] = []
+    for directory, subdirectories, filenames in os.walk(root):
+        current = Path(directory)
+        relative = current.relative_to(root)
+        subdirectories[:] = sorted(
+            name
+            for name in subdirectories
+            if not _is_non_product_cmake_path(relative / name)
+        )
+        for filename in sorted(filenames):
+            if filename != "CMakeLists.txt" and not filename.endswith(".cmake"):
+                continue
+            path = current / filename
+            if not _is_non_product_cmake_path(path.relative_to(root)):
+                paths.append(path)
+    return paths
+
+
+def project_texts(root: Path = ROOT) -> dict[str, str]:
     return {
-        path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
-        for path in paths
-        if not any(part.startswith("build") for part in path.relative_to(ROOT).parts)
+        path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
+        for path in _project_cmake_paths(root)
     }
 
 
