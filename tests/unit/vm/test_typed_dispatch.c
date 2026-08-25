@@ -148,7 +148,11 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 == 26);
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_ENTRY_I64 == 27);
     REQUIRE(XR_TARGET_INSTRUCTION_SUSPEND == 28);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 28u);
+    REQUIRE(XR_TARGET_INSTRUCTION_PARAM_DYN_BORROW == 29);
+    REQUIRE(XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED == 30);
+    REQUIRE(XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED == 31);
+    REQUIRE(XR_TARGET_INSTRUCTION_RETURN_UNIT == 32);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 32u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     static const XrTypedDispatchProvider providers[] = {
@@ -163,8 +167,15 @@ static void test_generated_instruction_contract(void) {
         REQUIRE(contract->arity <= 2u);
         REQUIRE(contract->terminator ==
                 (contract->control_kind != XR_TARGET_INSTRUCTION_CONTROL_NONE));
-        REQUIRE(contract->terminator ==
-                (contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE));
+        REQUIRE(!contract->terminator ||
+                contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE);
+        if (!contract->terminator &&
+            contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE)
+            REQUIRE(contract->dispatch_kind ==
+                        XR_TARGET_INSTRUCTION_DISPATCH_ARRAY_PUSH &&
+                    contract->arity == 2 &&
+                    (contract->effects &
+                     XR_TARGET_INSTRUCTION_EFFECT_MEMORY_WRITE) != 0);
         REQUIRE((contract->error_kind != XR_TARGET_INSTRUCTION_ERROR_NONE) ==
                 ((contract->effects &
                   XR_TARGET_INSTRUCTION_EFFECT_MAY_ERROR) != 0));
@@ -188,7 +199,7 @@ static void test_generated_instruction_contract(void) {
             REQUIRE(strcmp(contract->name,
                            xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 24u);
+    REQUIRE(semantic_bindings == 26u);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
@@ -2762,7 +2773,12 @@ static void test_scalar_coroutine_reuses_one_packed_frame(void) {
     xr_semantic_plan_free(semantic);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "generated-instruction-contract") == 0) {
+        test_generated_instruction_contract();
+        puts("typed dispatch generated instruction contract tests passed");
+        return 0;
+    }
     test_generated_instruction_contract();
     test_closed_program_and_unavailable_boundary();
     test_production_builder_keeps_unsupported_function_unavailable();

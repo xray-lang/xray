@@ -1,4 +1,4 @@
-# Typed TargetPlan scalar execution contract
+# Typed TargetPlan execution contract
 
 TargetPlan schema 46 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
@@ -6,10 +6,11 @@ Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
 family. A function with zero instruction rows is execution unavailable, never
 an empty successful program. The production builder emits a complete group
-only for a verified, capture-free signed-`i64` function whose declared
+only for either a verified, capture-free signed-`i64` function whose declared
 parameters are all exact signed `i64`, whose blocks are all returns, plain
 jumps, or two-way branches, and whose operations are entirely in the supported
-family. Every other function emits zero rows; no partial group or fallback is
+family, or the exact source-class tagged `Array.push` call family described
+below. Every other function emits zero rows; no partial group or fallback is
 allowed.
 
 The scalar representation boundary separately recognizes an exact unaliased
@@ -30,6 +31,18 @@ referenced slot to belong to that function and have identical trivial
 signed-`i64` register and memory representations. It also proves single
 assignment, canonical arity and unused fields, and that a computation row is
 never the last row of a group. Unknown or unsupported instructions fail closed.
+
+The managed executable family is deliberately one exact operation: a
+source-class `Array<T>.push(T)` Target call whose receiver is `BORROW`, whose
+element is `CONSUME`, whose storage is `TAGGED`/`DYN_VALUE`, and whose result is
+the Unit-valued void side effect. Its complete instruction group is two
+required parameter rows, `ARRAY_PUSH_TAGGED`, and `RETURN_UNIT`. Per-operand
+ownership, the memory-write/may-error effects, the exact Target call row and
+argument rows, source-class element type, selector identity, slot identities,
+and dense row shape are independently rederived by the Target verifier. The
+builder and verifier consume SemanticPlan/TargetPlan authority directly; the
+VM never reads an AOT CEmission recipe and never derives an executable answer
+from a selector spelling.
 
 The second executable family adds only non-suspending SOURCE_EXPORT calls whose
 parameters and result are exact signed `i64`, whose ownership is trivial, and
@@ -126,11 +139,12 @@ TargetPlan rows before verification; the decoded cache and dispatcher consume
 only those rows and never observe a wire token. Text dump and diff use the same
 sequential iterator rather than random row-size access. There is no v33
 reader, translated row, alternate stream, or compatibility path.
-The internal scalar dispatcher accepts one immutable request containing only a
-verified plan, its exact fingerprint, a derived nonzero function execution
-family, a positional signed-`i64` argument vector, exact typed-frame slot
-identities, an optional runtime-only debug session, and an optional immutable
-decoded cache for that exact plan object. A dynamic family request additionally
+The internal typed dispatcher has two disjoint request carriers. The scalar
+entry accepts a verified plan, its exact fingerprint, a derived nonzero scalar
+execution family, a positional signed-`i64` argument vector, exact typed-frame
+slot identities, an optional runtime-only debug session, and an optional
+immutable decoded cache for that exact plan object. A dynamic-call scalar
+request additionally
 carries the exact caller generation identity and its generation-owned dynamic
 entry context. Generation identity is execution authority; a debug session may
 check and observe it or stop at an exact TargetPlan debug fact, but can never
@@ -152,8 +166,18 @@ fingerprint before consuming any row; it never treats a miss or mismatch as
 authority to build or execute. Neither path inspects SemanticPlan or Xi. The verified rows are the only signature it honours: the
 argument count must equal the number of parameter rows, and a shorter,
 longer, or absent vector is rejected before the frame exists rather than
-truncated, padded, or zero filled. It has no legacy VM opcode, `XrValue`, AOT,
-or generated-C fallback.
+truncated, padded, or zero filled.
+
+The managed entry accepts only the exact tagged push execution family and a
+mutable two-element `XrValue` vector. The receiver remains borrowed. The
+element owner moves into the typed frame, then into the shared array kernel;
+success leaves the caller argument cleared and the array owning the exact
+carrier. Every rejection or kernel failure restores that exact carrier to the
+caller and preserves array length, capacity, and contents. The shared kernel
+returns an explicit status and rejects a non-array receiver, slice mutation,
+or incompatible typed storage before mutation; allocation failure is a
+separate status and restores the caller owner. Neither entry has a legacy VM
+opcode, AOT, generated-C, or name-derived fallback.
 
 The dispatcher carries an instruction pointer that starts at the group's first
 row and moves only where a row says, repeating the verifier's target bound so a
@@ -239,7 +263,9 @@ XTP schema 42 preserves the compact instruction stream introduced by v34,
 appends the exact 144-byte entry-expectation section after all prior tables,
 widens each coroutine state with its function-local resume-instruction
 authority, and preserves the exact lifecycle root-map, root-slot, and cleanup
-rows. The generated registry appends `SUSPEND` as opcode 28 without
+rows. The generated registry appends `SUSPEND` as opcode 28 and the exact
+managed push rows `PARAM_DYN_BORROW`, `PARAM_DYN_OWNED`,
+`ARRAY_PUSH_TAGGED`, and `RETURN_UNIT` as opcodes 29 through 32 without
 renumbering any prior opcode. A suspend row names both the exact coroutine
 state and that state's independently frozen resume instruction. Unknown,
 duplicated, redirected, mismatched, or absent rows fail closed. No v39 or
@@ -478,6 +504,16 @@ Evidence:
   error, termination, step-budget, and call-depth outcomes. The generated
   contract KAT covers every current opcode and refuses unknown providers,
   unknown opcodes, and complete-contract mismatches.
+- `test_target_plan` proves the production source-class tagged `Array.push`
+  group, exact DYN representation and per-operand ownership, both generated
+  providers, and success ownership transfer. It mutates parameter ownership,
+  operand slots, call identity, Target call ownership/storage/type relations,
+  and instruction shape independently. Invalid receivers, slices, and typed
+  storage mismatches prove fail-closed carrier restoration without array
+  mutation.
+- `test_xarray` proves the shared status-returning push kernel accepts the exact
+  tagged carrier and leaves receiver shape and caller ownership unchanged on
+  invalid receiver, slice, and typed-storage failures.
 - `test_xtp_format` proves fixed compact KAT bytes and digest, primitive and
   each registered super-pair encoding, byte-exact canonical re-encoding,
   primitive/super row equivalence, directory field mutations, every stream
@@ -528,11 +564,11 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 34595b5ba399e4d05a8dc6ec240faec7d021fadd6c053fecb91534dcfbe3edfd
-anchor-sha256: src/plan/target/xr_target_plan.c 00b20639baa9c8aaa46b76517d98d6aafc3d5f77dbcc649ade2a0238248f37d4
-anchor-sha256: src/plan/target/xr_target_builder.c c04af76972de7d031b0707496db848b151d7017ab7ed8e381fcf518c2a4476c0
+anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
+anchor-sha256: src/plan/target/xr_target_plan.c 9e7140184ca04bab125144d1f4559ac87a42172eefcf22eb434f33ac8101edff
+anchor-sha256: src/plan/target/xr_target_builder.c 55230807a691d124370312ca83c3ae092d2df471740fb0befc8b111527e949bd
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c e617933ea48f4f822d3abaa9400a5112a1eaeb0026d693ef5c678052494bf1c5
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 93d4b68bee1aade849af677e8ee0d5fd2160bc068646a1db184052435acd9a26
 anchor-sha256: src/plan/target/xr_target_verify.c cbf56698c98984f41474d2514b0bca49fad3846d341239529f0c6dd5083e4a37
 anchor-sha256: src/plan/format/xr_xtp_schema.h 536d47688befcdf9340632a4bcaa98edb115dae99dce289d7df40deca589e07c
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -545,12 +581,12 @@ anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863c
 anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e794988105d6bdc18aa19d82ac4162
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
-anchor-sha256: src/vm/xr_typed_dispatch.h 3c3adf76ba8478621d9e6b860e98b111599dc9f4149cef433fbc2db8eee1692a
-anchor-sha256: src/vm/xr_typed_dispatch.c d60391ef1366d9933fa19dd7f4fb30f5a2e86eeef6ca45061dba7985d9607cb4
+anchor-sha256: src/vm/xr_typed_dispatch.h 96e645102f385fed814cd74b7754822e976ea2c40fccd03345b06708f0ef84f2
+anchor-sha256: src/vm/xr_typed_dispatch.c 41da5489046adcdd1bed6dc61822d24ea2ed81d9717a45883a6a5918b222b70d
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9afae20ec066e588cc69e60f05c21
-anchor-sha256: src/vm/xr_typed_frame.c 397f46fa8647614c06745dc365676989abdc9e079f25a89994b96d9d34fbd405
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c 0b03b534fe198f74ac4736ca848ee0f9d80a35b44ad3548c52b2ce52f62bfda1
+anchor-sha256: src/vm/xr_typed_frame.c f7cbfdc3dc805bcfdf9c8a75e2a8293c9770f9873ba036402959980959ae13c9
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c c2f72696f05b3563d4d0951794a6227d200fb549629fc4e8b1cb5d005b98f88f
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: tests/unit/plan/test_xtp_format.c 6d32b43ddbac5d1bef3976afa6bb10e06665e19ddcfec8b207f7d160df828cc0
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
@@ -564,16 +600,22 @@ anchor-sha256: include/xray_runtime_generation.h b8d8ab25bf7945cb6837af74a2460ff
 anchor-sha256: src/runtime/xr_module_generation.c a07ba16736dd26135e4256d01092ad7f1be71e29787ef68504cd3f61eb979305
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c c80a1074ebae720cf6798025641740742c2c3cd202487f3aac3a09a7aacbcd00
 anchor-sha256: CMakeLists.txt 78a07b0cd8efbe0a3b2536fe915e933460725da81a77647d614560f892ea0aa7
-anchor-sha256: xisa/target/vm_ops.def ab542edb35da796d4bf1f5f196c7b45d521ebb877edbc448d517d62bdfaeb2cb
-anchor-sha256: tools/xisagen/xisagen.py d99d9bd295fe0d49acce7b3312dac0b8fce4455c9bc3ef33e194de077d07015b
+anchor-sha256: xisa/target/vm_ops.def 36dc261bb48b5908d445998a432711b359552f9a6ada71e199fb100f7b7e9304
+anchor-sha256: tools/xisagen/xisagen.py 9bc7501baa050d17830576325831de9331d0f8644566254b2b953047d37f7821
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
-anchor-sha256: src/plan/target/xr_target_instruction_gen.h 065cdbeb39196bf03d8ab21ad0c8bd1e5e6f140d5ffff72008875bbcb284998e
+anchor-sha256: src/plan/target/xr_target_instruction_gen.h 04c9ca0ca30fff53152c64744e4d884b3eec3c0156c299a8d52be39abd50bc08
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
 anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e95fa04444b73cb1e3f8584b61544
 anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
 anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
-anchor-sha256: src/vm/xr_vm_ops.def 9ea1657b3d9b6545dd0237cef9ddc490ee9f7efacc6047fe7e7d61cdb7a96eab
+anchor-sha256: src/vm/xr_vm_ops.def 29f593ee6c27b514b3c31499095f973e2eda82ce7c6f7cc3485da210fec4efc5
+anchor-sha256: src/runtime/object/xarray.h dd95a8886a004158802581476a306b1c2d832e7e7c4c75e25216220f657e71d8
+anchor-sha256: src/runtime/object/xarray.c 102a52b887e0e777a79da3c78be8e025e1b2826f0a01cd4b0aee5cbe431c6416
+anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
+anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
+anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
+anchor-sha256: tests/unit/plan/test_target_plan.c 90f5cfc9be2b1b675bed606993e6e8365f792a1df59732ab19c00df7757737ae
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h f922cec7513c0e232d840936820f270d4b8a0c22c23296fe53a45e924ed76ee4
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c d6cff74156a07c9a7751f3e7d5857f65d3d6d05ca1dbc862605f6cc4fa2c5c16
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c eede18e3210d979c26b0adaca5c5454acdbd609514383d0e285525f69fef9883

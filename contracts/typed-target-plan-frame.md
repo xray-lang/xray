@@ -17,10 +17,13 @@ unrelated representation in another function cannot make an otherwise exact
 frame unavailable. It transports complete object representations for every
 scalar width, floating-point value, Rune, unit-enum ordinal, trivial aggregate,
 and trivial raw pointer. It also accepts an exact immutable String literal as
-a no-lifecycle prerequisite carrier, and one exact owned dynamic String whose
-coroutine root and release lifecycle is complete. Every other rooted, owned,
-borrowed, View, object-reference, code-reference, dynamic, and vector slot
-remains fail closed. Every access
+a no-lifecycle prerequisite carrier, one exact owned dynamic String whose
+coroutine root and release lifecycle is complete, and the two exact short-lived
+DYN_VALUE parameters of the managed source-class tagged `Array.push` family.
+The push receiver is borrowed transport and never enters the lifecycle ledger;
+its element is an owned carrier governed by the executable `CONSUME` operand.
+Every other rooted, owned, borrowed, View, object-reference, code-reference,
+dynamic, and vector slot remains fail closed. Every access
 repeats the stable slot identity, physical size, alignment, register
 representation, and memory representation from the plan, and both
 representations must be storage-compatible with the slot's exact root and
@@ -183,6 +186,17 @@ another function's rows; the regression fixture adds 8,192 unrelated root and
 cleanup rows while preserving the target function's exact result. The
 registered mutation gate rejects a return to either global-table scan.
 
+Managed tagged push is not admitted through the scalar or coroutine lifecycle
+families. Its owned parameter becomes active only after the exact caller
+carrier is stored. Immediately before the shared kernel, the executor performs
+the one permitted `ACTIVE` to `TRANSFERRED` move. Kernel success commits that
+transfer with no later fallible lifecycle step. Kernel failure performs the
+single exact reverse transition to `ACTIVE`, after which dispatch returns the
+same carrier to the caller; a different value, slot, function, or execution
+family cannot use either transition. Frame destruction refuses an active owner
+and accepts the transferred success state, so no success or failure path can
+silently duplicate or lose the element owner.
+
 The production lifecycle executor is a separate runtime-only consumer of that
 exact frame contract. Initialization independently requires an intact verified
 plan, exact native hosted TargetProfile, and the selected function's complete
@@ -219,7 +233,9 @@ exact-once inactive.
 The scalar dispatcher remains unchanged and still rejects every selected
 function with lifecycle rows. This executor does not execute String concat,
 length, yield/resume instructions, child continuations, scheduling, arbitrary
-owned types, panic unwinding, or a general coroutine instruction stream.
+owned types, panic unwinding, or a general coroutine instruction stream. The
+separate managed-value entry executes only the exact tagged push group and
+grants no general managed instruction-stream authority.
 
 The plan also admits one sealed non-static call descriptor: an exact,
 non-super, non-suspending `Channel.close()` operation reconstructed from
@@ -267,6 +283,10 @@ Evidence:
   root and cleanup rows belonging to another function do not enter target
   bind, visit, or cleanup work. Schema-only representation fixtures do
   not claim production-builder reachability.
+- `test_target_plan` integrates the exact managed push group with both generated
+  dispatcher providers and proves borrowed receiver preservation, owned
+  element transfer on success, exact restoration on each failure, and refusal
+  before ownership movement for invalid carrier categories.
 - `test_typed_frame_runtime_archive` proves the public header and symbols link
   from the runtime-only archive without compiler or AOT ownership, proves the
   footprint, exact slot transport, trace, profile, TargetPlan debug control,
@@ -313,10 +333,10 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 34595b5ba399e4d05a8dc6ec240faec7d021fadd6c053fecb91534dcfbe3edfd
-anchor-sha256: src/vm/xr_typed_frame.h 9c18e4e54645dc7da2257fb0755d5ba2bab0f0cdada6b64d2569f89ff88889dc
-anchor-sha256: src/vm/xr_typed_frame.c 397f46fa8647614c06745dc365676989abdc9e079f25a89994b96d9d34fbd405
-anchor-sha256: src/vm/xr_typed_dispatch.c d60391ef1366d9933fa19dd7f4fb30f5a2e86eeef6ca45061dba7985d9607cb4
+anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
+anchor-sha256: src/vm/xr_typed_frame.h 9133b5de787c3d9025ccaedf986f4237019dd98f81a50214df4b46b5f9699aa1
+anchor-sha256: src/vm/xr_typed_frame.c f7cbfdc3dc805bcfdf9c8a75e2a8293c9770f9873ba036402959980959ae13c9
+anchor-sha256: src/vm/xr_typed_dispatch.c 41da5489046adcdd1bed6dc61822d24ea2ed81d9717a45883a6a5918b222b70d
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041

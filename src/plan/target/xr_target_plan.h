@@ -92,6 +92,10 @@ typedef enum XrTargetExecutionFamily {
      * exact coroutine-state row. Resume enters the frozen continuation block;
      * no legacy interpreter stack is retained. */
     XR_TARGET_EXECUTION_SCALAR_I64_COROUTINE = UINT64_C(1) << 2,
+    /* One exact managed mutation: Array<source-class>.push.  The receiver is
+     * borrowed, the tagged element is consumed, and the unit result occupies
+     * no slot. */
+    XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED = UINT64_C(1) << 3,
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX

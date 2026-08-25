@@ -3653,11 +3653,11 @@ def generate_aot_layout_header(entries: list[AotLayoutDef]) -> str:
 # Typed TargetPlan instruction contract
 # ============================================================
 
-TARGET_REP_FAMILIES = {'none', 'i64', 'bool'}
-TARGET_RESULT_OWNERSHIPS = {'none', 'trivial'}
-TARGET_OPERAND_OWNERSHIPS = {'none', 'borrow'}
-TARGET_EFFECTS = {'control', 'may-error', 'may-suspend'}
-TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero', 'entry-call'}
+TARGET_REP_FAMILIES = {'none', 'i64', 'bool', 'dyn-value'}
+TARGET_RESULT_OWNERSHIPS = {'none', 'trivial', 'borrow', 'owned'}
+TARGET_OPERAND_OWNERSHIPS = {'borrow', 'consume'}
+TARGET_EFFECTS = {'control', 'may-error', 'may-suspend', 'memory-write'}
+TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero', 'entry-call', 'array-push'}
 TARGET_IMMEDIATE_KINDS = {
     'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
     'call-record', 'entry-expectation', 'coroutine-state',
@@ -3677,6 +3677,8 @@ TARGET_DISPATCH_ARGUMENTS = {
     'call': {'none'},
     'entry-call': {'none'},
     'suspend': {'none'},
+    'array-push': {'none'},
+    'return-unit': {'none'},
 }
 
 
@@ -3691,7 +3693,7 @@ class TargetInstructionDef:
     result_rep: str
     operand_reps: tuple[str, ...]
     result_ownership: str
-    operand_ownership: str
+    operand_ownership: tuple[str, ...]
     effects: tuple[str, ...]
     error: str
     suspend: bool
@@ -3743,7 +3745,9 @@ def parse_target_instruction_def(text: str,
         operand_reps = tuple(_xi_parse_atom_list(
             _xi_get_kw_list(form, ':operand-reps'), f"{context}:operand-reps"))
         result_ownership = _target_required_atom(form, ':result-ownership', context)
-        operand_ownership = _target_required_atom(form, ':operand-ownership', context)
+        operand_ownership = tuple(_xi_parse_atom_list(
+            _xi_get_kw_list(form, ':operand-ownership'),
+            f"{context}:operand-ownership"))
         effects = tuple(_xi_parse_atom_list(
             _xi_get_kw_list(form, ':effects'), f"{context}:effects"))
         error = _target_required_atom(form, ':error', context)
@@ -3771,8 +3775,10 @@ def parse_target_instruction_def(text: str,
             die(f"{context}: operand reps must be concrete target families")
         if result_ownership not in TARGET_RESULT_OWNERSHIPS:
             die(f"{context}: unknown result ownership '{result_ownership}'")
-        if operand_ownership not in TARGET_OPERAND_OWNERSHIPS:
-            die(f"{context}: unknown operand ownership '{operand_ownership}'")
+        if len(operand_ownership) != arity or any(
+                ownership not in TARGET_OPERAND_OWNERSHIPS
+                for ownership in operand_ownership):
+            die(f"{context}: operand ownership must exactly classify every operand")
         if len(set(effects)) != len(effects) or any(
                 effect not in TARGET_EFFECTS for effect in effects):
             die(f"{context}: effects contain an unknown or duplicate value")
@@ -3789,12 +3795,11 @@ def parse_target_instruction_def(text: str,
             _xi_op_ident(semantic)
 
         has_result = result_rep != 'none'
-        if terminator == has_result:
-            die(f"{context}: terminators have no result and computations require one")
-        if has_result != (result_ownership == 'trivial'):
+        if terminator and has_result:
+            die(f"{context}: terminators cannot produce a result")
+        if (not has_result and result_ownership != 'none') or \
+                (has_result and result_ownership == 'none'):
             die(f"{context}: result ownership does not match result presence")
-        if bool(operand_reps) != (operand_ownership == 'borrow'):
-            die(f"{context}: operand ownership does not match operand presence")
         if terminator != (control != 'none') or terminator != ('control' in effects):
             die(f"{context}: terminator, control kind, and control effect disagree")
         if (error != 'none') != ('may-error' in effects):
@@ -3865,16 +3870,20 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_REP_NONE = 0,',
         '    XR_TARGET_INSTRUCTION_REP_I64,',
         '    XR_TARGET_INSTRUCTION_REP_BOOL,',
+        '    XR_TARGET_INSTRUCTION_REP_DYN_VALUE,',
         '} XrTargetInstructionRepFamily;',
         '',
         'typedef enum XrTargetInstructionResultOwnership {',
         '    XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_NONE = 0,',
         '    XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_TRIVIAL,',
+        '    XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_BORROW,',
+        '    XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_OWNED,',
         '} XrTargetInstructionResultOwnership;',
         '',
         'typedef enum XrTargetInstructionOperandOwnership {',
         '    XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_NONE = 0,',
         '    XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_BORROW,',
+        '    XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_CONSUME,',
         '} XrTargetInstructionOperandOwnership;',
         '',
         'typedef enum XrTargetInstructionEffect {',
@@ -3882,6 +3891,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_EFFECT_CONTROL = 1u << 0,',
         '    XR_TARGET_INSTRUCTION_EFFECT_MAY_ERROR = 1u << 1,',
         '    XR_TARGET_INSTRUCTION_EFFECT_MAY_SUSPEND = 1u << 2,',
+        '    XR_TARGET_INSTRUCTION_EFFECT_MEMORY_WRITE = 1u << 3,',
         '} XrTargetInstructionEffect;',
         '',
         'typedef enum XrTargetInstructionErrorKind {',
@@ -3889,6 +3899,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_ERROR_DIVIDE_BY_ZERO,',
         '    XR_TARGET_INSTRUCTION_ERROR_MODULO_BY_ZERO,',
         '    XR_TARGET_INSTRUCTION_ERROR_ENTRY_CALL,',
+        '    XR_TARGET_INSTRUCTION_ERROR_ARRAY_PUSH,',
         '} XrTargetInstructionErrorKind;',
         '',
         'typedef enum XrTargetInstructionImmediateKind {',
@@ -3924,6 +3935,8 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_CALL,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_SUSPEND,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_ARRAY_PUSH,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN_UNIT,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',
@@ -3959,7 +3972,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    uint8_t result_rep;',
         '    uint8_t operand_rep[2];',
         '    uint8_t result_ownership;',
-        '    uint8_t operand_ownership;',
+        '    uint8_t operand_ownership[2];',
         '    uint8_t effects;',
         '    uint8_t error_kind;',
         '    uint8_t may_suspend;',
@@ -3975,7 +3988,8 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '        {NULL, NULL, 0, false, XR_TARGET_INSTRUCTION_REP_NONE,',
         '         {XR_TARGET_INSTRUCTION_REP_NONE, XR_TARGET_INSTRUCTION_REP_NONE},',
         '         XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_NONE,',
-        '         XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_NONE,',
+        '         {XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_NONE,',
+        '          XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_NONE},',
         '         XR_TARGET_INSTRUCTION_EFFECT_NONE, XR_TARGET_INSTRUCTION_ERROR_NONE,',
         '         false, XR_TARGET_INSTRUCTION_IMMEDIATE_NONE,',
         '         XR_TARGET_INSTRUCTION_CONTROL_NONE,',
@@ -3984,6 +3998,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
     ])
     for entry in entries:
         operand_reps = list(entry.operand_reps) + ['none'] * (2 - entry.arity)
+        operand_ownership = list(entry.operand_ownership) + ['none'] * (2 - entry.arity)
         semantic_name = 'NULL' if entry.semantic == 'none' else f'"{entry.semantic}"'
         lines.extend([
             f'        {{"{entry.name}", {semantic_name}, {entry.arity},',
@@ -3992,7 +4007,8 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
             f'         {{{_target_enum("XR_TARGET_INSTRUCTION_REP", operand_reps[0])},',
             f'          {_target_enum("XR_TARGET_INSTRUCTION_REP", operand_reps[1])}}},',
             f'         {_target_enum("XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP", entry.result_ownership)},',
-            f'         {_target_enum("XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP", entry.operand_ownership)},',
+            f'         {{{_target_enum("XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP", operand_ownership[0])},',
+            f'          {_target_enum("XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP", operand_ownership[1])}}},',
             f'         {_target_effect_expr(entry.effects)},',
             f'         {_target_enum("XR_TARGET_INSTRUCTION_ERROR", entry.error)},',
             f'         {str(entry.suspend).lower()},',
@@ -5196,13 +5212,13 @@ def _test_target_instruction_parser():
     (define-target-instruction const-i64
       :id 1 :name "const.i64" :arity 0 :terminator no
       :result-rep i64 :operand-reps ()
-      :result-ownership trivial :operand-ownership none
+      :result-ownership trivial :operand-ownership ()
       :effects () :error none :suspend no :immediate i64 :control none
       :semantic xi.const :dispatch const :dispatch-arg none)
     (define-target-instruction return-i64
       :id 2 :name "return.i64" :arity 1 :terminator yes
       :result-rep none :operand-reps (i64)
-      :result-ownership none :operand-ownership borrow
+      :result-ownership none :operand-ownership (borrow)
       :effects (control) :error none :suspend no :immediate none :control return
       :semantic none :dispatch return :dispatch-arg none)
     '''
@@ -5225,7 +5241,7 @@ def _test_target_instruction_parser():
         f'''(define-target-instruction op-{stable_id}
           :id {stable_id} :name "op.{stable_id}" :arity 0 :terminator no
           :result-rep i64 :operand-reps ()
-          :result-ownership trivial :operand-ownership none
+          :result-ownership trivial :operand-ownership ()
           :effects () :error none :suspend no :immediate none :control none
           :semantic none :dispatch const :dispatch-arg none)'''
         for stable_id in range(1, 257))
@@ -5245,6 +5261,19 @@ def _test_target_instruction_parser():
                          ':error divide-by-zero :suspend no :immediate none :control return'))
     rejects(text.replace(':dispatch return :dispatch-arg none',
                          ':dispatch return :dispatch-arg i64'))
+    side_effect = parse_target_instruction_def('''
+    (define-target-instruction array-push-tagged
+      :id 1 :name "array.push.tagged" :arity 2 :terminator no
+      :result-rep none :operand-reps (dyn-value dyn-value)
+      :result-ownership none :operand-ownership (borrow consume)
+      :effects (may-error memory-write) :error array-push :suspend no
+      :immediate call-record :control none
+      :semantic none :dispatch array-push :dispatch-arg none)
+    ''')[0]
+    assert side_effect.result_rep == 'none'
+    assert side_effect.operand_ownership == ('borrow', 'consume')
+    rejects(text.replace(':operand-ownership (borrow)',
+                         ':operand-ownership (borrow consume)'))
     print(" PASS", file=sys.stderr)
 
 

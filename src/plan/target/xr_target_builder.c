@@ -12405,9 +12405,204 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
     return true;
 }
 
-static bool materialize_scalar_instructions(const XrTargetPlanBuilder *builder,
-                                            XrTargetMaterializedPlan *materialized, char *error,
-                                            size_t error_size) {
+/* The managed tagged Array.push family is deliberately separate from the
+ * scalar family.  Its two parameter slots carry XrValue, the element slot is
+ * consumed by the side-effect row, and the unit return has no result slot at
+ * all.  CEmissionPlan is not consulted: the executable row binds directly to
+ * the already materialized Target call authority. */
+static bool materialized_dyn_parameter_slot_is_exact(
+    const XrTargetMaterializedPlan *materialized, uint32_t function,
+    uint32_t semantic_value, uint8_t ownership, uint32_t *out_slot) {
+    const XrTargetValueRepRecord *value = find_materialized_value(materialized, semantic_value);
+    if (!value || value->slot >= materialized->slot_count ||
+        value->register_rep >= materialized->machine_rep_count ||
+        value->memory_rep >= materialized->machine_rep_count)
+        return false;
+    const XrTargetSlotRecord *slot = &materialized->slots[value->slot];
+    const XrTargetMachineRepRecord *register_rep =
+        &materialized->machine_reps[value->register_rep];
+    const XrTargetMachineRepRecord *memory_rep =
+        &materialized->machine_reps[value->memory_rep];
+    if (slot->id != value->slot || slot->function != function ||
+        slot->semantic_value != semantic_value ||
+        slot->semantic_operation != XR_SEMANTIC_INDEX_NONE ||
+        slot->role != XR_TARGET_SLOT_PARAMETER ||
+        slot->register_rep != value->register_rep || slot->memory_rep != value->memory_rep ||
+        slot->root_kind != XR_TARGET_ROOT_DYNAMIC || slot->ownership != ownership ||
+        register_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        memory_rep->kind != XR_MACHINE_REP_DYN_VALUE ||
+        register_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        memory_rep->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        register_rep->ownership != ownership || memory_rep->ownership != ownership ||
+        register_rep->memory_size != memory_rep->memory_size ||
+        register_rep->memory_align != memory_rep->memory_align ||
+        slot->size != memory_rep->memory_size || slot->align != memory_rep->memory_align)
+        return false;
+    if (out_slot)
+        *out_slot = value->slot;
+    return true;
+}
+
+static bool tagged_array_push_parameter_operation_is_exact(
+    const XrSemanticPlan *semantic, const XrSemanticFunctionRecord *function,
+    const XrSemanticBlockRecord *block, uint32_t function_index,
+    const XrSemanticParameterRecord *parameter, uint16_t ordinal) {
+    if (!semantic || !function || !block || !parameter ||
+        parameter->function != function_index || parameter->ordinal != ordinal ||
+        parameter->mode != XR_PARAM_READ || parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        parameter->flags != XR_SEM_PARAMETER_REQUIRED || parameter->reserved != 0)
+        return false;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < block->operation_count; i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, block->operation_begin + i);
+        if (!operation || operation->opcode != XI_PARAM ||
+            operation->result_value != parameter->value)
+            continue;
+        matches++;
+        if (operation->function != function_index || operation->block != function->block_begin ||
+            operation->result_type != parameter->type || operation->operand_count != 0 ||
+            operation->semantic_immediate != ordinal ||
+            operation->constant != XR_SEMANTIC_INDEX_NONE ||
+            operation->effects != xi_generated_op_effects(XI_PARAM))
+            return false;
+    }
+    return matches == 1;
+}
+
+static bool materialize_tagged_array_push_instruction_function(
+    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    uint32_t function_index, XrTargetInstructionRecord *rows, uint32_t row_begin,
+    uint32_t *out_row_count) {
+    if (out_row_count)
+        *out_row_count = 0;
+    const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
+    const XrSemanticFunctionRecord *function =
+        semantic ? xr_semantic_plan_function(semantic, function_index) : NULL;
+    const XrSemanticBlockRecord *block =
+        function && function->block_count == 1
+            ? xr_semantic_plan_block(semantic, function->block_begin)
+            : NULL;
+    if (!semantic || !materialized || !function || !block || function->parameter_count != 2 ||
+        function->capture_count != 0 || block->function != function_index ||
+        block->kind != XI_BLOCK_RETURN || block->operation_count != 3 ||
+        block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+        block->successors[1] != XR_SEMANTIC_INDEX_NONE)
+        return false;
+
+    uint32_t call_index = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *push = NULL;
+    for (uint32_t i = 0; i < materialized->call_count; i++) {
+        const XrTargetCallRecord *candidate = &materialized->calls[i];
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, candidate->semantic_operation);
+        if (candidate->caller_function != function_index ||
+            !semantic_array_member_tagged_store_is_exact(semantic, operation, NULL, NULL, NULL))
+            continue;
+        if (push)
+            return false;
+        push = operation;
+        call_index = i;
+    }
+    if (!push || block->control_value != push->result_value ||
+        !xr_semantic_array_member_unit_type_is_exact(
+            xr_semantic_plan_type(semantic, function->return_type)) ||
+        call_index >= materialized->call_count)
+        return false;
+    const XrTargetCallRecord *call = &materialized->calls[call_index];
+    if (call->id != call_index || call->semantic_operation >=
+            xr_semantic_plan_operation_count(semantic) ||
+        call->argument_count != 2 ||
+        call->argument_begin > materialized->call_argument_count ||
+        call->argument_count > materialized->call_argument_count - call->argument_begin ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_TAGGED ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_hof_kind != XR_TARGET_ARRAY_HOF_NONE ||
+        call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->result_slot != XR_SEMANTIC_INDEX_NONE || call->flags != 0)
+        return false;
+
+    const XrSemanticParameterRecord *receiver_parameter =
+        xr_semantic_plan_parameter(semantic, function->parameter_begin);
+    const XrSemanticParameterRecord *element_parameter =
+        xr_semantic_plan_parameter(semantic, function->parameter_begin + 1u);
+    const XrTargetCallArgumentRecord *receiver =
+        &materialized->call_arguments[call->argument_begin];
+    const XrTargetCallArgumentRecord *element = receiver + 1;
+    uint32_t receiver_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    uint32_t element_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    if (!receiver_parameter || !element_parameter ||
+        receiver_parameter->ownership != XI_OWN_BORROWED ||
+        element_parameter->ownership != XI_OWN_OWNED ||
+        !tagged_array_push_parameter_operation_is_exact(
+            semantic, function, block, function_index, receiver_parameter, 0) ||
+        !tagged_array_push_parameter_operation_is_exact(
+            semantic, function, block, function_index, element_parameter, 1) ||
+        !materialized_dyn_parameter_slot_is_exact(
+            materialized, function_index, receiver_parameter->value,
+            XR_TARGET_OWNERSHIP_BORROWED, &receiver_slot) ||
+        !materialized_dyn_parameter_slot_is_exact(
+            materialized, function_index, element_parameter->value,
+            XR_TARGET_OWNERSHIP_OWNED, &element_slot) ||
+        receiver->call != call_index || receiver->ordinal != 0 ||
+        receiver->semantic_value != receiver_parameter->value ||
+        receiver->caller_slot != receiver_slot || receiver->mode != XR_TARGET_CALL_VALUE ||
+        receiver->ownership != XR_TARGET_CALL_BORROW || receiver->flags != 0 ||
+        receiver->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        element->call != call_index || element->ordinal != 1 ||
+        element->semantic_value != element_parameter->value ||
+        element->caller_slot != element_slot || element->mode != XR_TARGET_CALL_VALUE ||
+        element->ownership != XR_TARGET_CALL_CONSUME || element->flags != 0 ||
+        element->array_element_storage != XR_TARGET_ARRAY_STORAGE_TAGGED)
+        return false;
+
+    XrTargetInstructionRecord group[4] = {
+        {.function = function_index,
+         .result_slot = receiver_slot,
+         .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE, XR_TARGET_INSTRUCTION_SLOT_NONE},
+         .opcode = XR_TARGET_INSTRUCTION_PARAM_DYN_BORROW,
+         .immediate_bits = 0},
+        {.function = function_index,
+         .result_slot = element_slot,
+         .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE, XR_TARGET_INSTRUCTION_SLOT_NONE},
+         .opcode = XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED,
+         .immediate_bits = 1},
+        {.function = function_index,
+         .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+         .operand_slots = {receiver_slot, element_slot},
+         .opcode = XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED,
+         .operand_count = 2,
+         .immediate_bits = call_index},
+        {.function = function_index,
+         .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+         .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE, XR_TARGET_INSTRUCTION_SLOT_NONE},
+         .opcode = XR_TARGET_INSTRUCTION_RETURN_UNIT},
+    };
+    if (!xr_target_instruction_rows_control_flow_is_exact(
+            group, 4, materialized->functions[function_index].slot_begin,
+            materialized->functions[function_index].slot_count, materialized->calls,
+            materialized->call_count, materialized->call_arguments,
+            materialized->call_argument_count, materialized->entry_expectations,
+            materialized->entry_expectation_count, materialized->coroutines,
+            materialized->coroutine_count))
+        return false;
+    if (rows)
+        for (uint32_t i = 0; i < 4; i++) {
+            group[i].id = row_begin + i;
+            rows[row_begin + i] = group[i];
+        }
+    if (out_row_count)
+        *out_row_count = 4;
+    return true;
+}
+
+static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
+                                           XrTargetMaterializedPlan *materialized, char *error,
+                                           size_t error_size) {
     XrScalarInstructionAnalysis analysis = {0};
     if (!scalar_instruction_analysis_init(builder, materialized, &analysis))
         return fail(error, error_size, "XR_EXEC_5003", "scalar instruction analysis failed");
@@ -12415,18 +12610,25 @@ static bool materialize_scalar_instructions(const XrTargetPlanBuilder *builder,
         (uint32_t *) allocate_records(materialized->function_count, sizeof(*function_rows));
     uint8_t *executable =
         (uint8_t *) allocate_records(materialized->function_count, sizeof(*executable));
-    if (materialized->function_count && (!function_rows || !executable)) {
+    uint8_t *managed_push =
+        (uint8_t *) allocate_records(materialized->function_count, sizeof(*managed_push));
+    if (materialized->function_count && (!function_rows || !executable || !managed_push)) {
         xr_free(function_rows);
         xr_free(executable);
+        xr_free(managed_push);
         scalar_instruction_analysis_dispose(&analysis);
         return fail(error, error_size, "XR_EXEC_5003",
-                    "scalar instruction eligibility allocation failed");
+                    "typed instruction eligibility allocation failed");
     }
     uint32_t instruction_count = 0;
     for (uint32_t function = 0; function < materialized->function_count; function++) {
         if (!materialize_scalar_instruction_function(builder, materialized, function, &analysis,
-                                                     NULL, NULL, 0, &function_rows[function]))
-            continue;
+                                                     NULL, NULL, 0, &function_rows[function])) {
+            if (!materialize_tagged_array_push_instruction_function(
+                    builder, materialized, function, NULL, 0, &function_rows[function]))
+                continue;
+            managed_push[function] = 1;
+        }
         executable[function] = 1;
     }
     bool changed = true;
@@ -12450,8 +12652,9 @@ static bool materialize_scalar_instructions(const XrTargetPlanBuilder *builder,
         if (function_rows[function] > 40000000u - instruction_count) {
             xr_free(function_rows);
             xr_free(executable);
+            xr_free(managed_push);
             scalar_instruction_analysis_dispose(&analysis);
-            return fail(error, error_size, "XR_EXEC_5003", "scalar instruction budget exhausted");
+            return fail(error, error_size, "XR_EXEC_5003", "typed instruction budget exhausted");
         }
         instruction_count += function_rows[function];
     }
@@ -12472,31 +12675,39 @@ static bool materialize_scalar_instructions(const XrTargetPlanBuilder *builder,
         if (!executable[function])
             continue;
         uint32_t emitted_rows = 0;
-        if (!materialize_scalar_instruction_function(builder, materialized, function, &analysis,
-                                                     executable, materialized->instructions,
-                                                     next_instruction, &emitted_rows) ||
+        bool emitted = managed_push[function]
+                           ? materialize_tagged_array_push_instruction_function(
+                                 builder, materialized, function, materialized->instructions,
+                                 next_instruction, &emitted_rows)
+                           : materialize_scalar_instruction_function(
+                                 builder, materialized, function, &analysis, executable,
+                                 materialized->instructions, next_instruction, &emitted_rows);
+        if (!emitted ||
             emitted_rows != function_rows[function]) {
             xr_free(function_rows);
             xr_free(executable);
+            xr_free(managed_push);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_TARGET_1005",
-                        "scalar instruction eligibility changed during materialization");
+                        "typed instruction eligibility changed during materialization");
         }
         next_instruction += emitted_rows;
     }
     xr_free(function_rows);
     xr_free(executable);
+    xr_free(managed_push);
     scalar_instruction_analysis_dispose(&analysis);
     if (next_instruction != materialized->instruction_count)
         return fail(error, error_size, "XR_TARGET_1005",
-                    "scalar instruction row count changed during materialization");
+                    "typed instruction row count changed during materialization");
     return true;
 
 allocation_failed:
     xr_free(function_rows);
     xr_free(executable);
+    xr_free(managed_push);
     scalar_instruction_analysis_dispose(&analysis);
-    return fail(error, error_size, "XR_EXEC_5003", "scalar instruction materialization failed");
+    return fail(error, error_size, "XR_EXEC_5003", "typed instruction materialization failed");
 }
 
 static int find_rep_kind(const XrTargetMaterializedPlan *materialized, uint16_t kind) {
@@ -13264,7 +13475,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_entry_expectations(builder, materialized, error, error_size) ||
         !materialize_coroutine_state_calls(builder, materialized, error, error_size) ||
-        !materialize_scalar_instructions(builder, materialized, error, error_size) ||
+        !materialize_typed_instructions(builder, materialized, error, error_size) ||
         !materialize_debug_facts(builder, materialized, error, error_size) ||
         !materialize_foundation_capabilities(builder, materialized, error, error_size)) {
         builder->poisoned = true;

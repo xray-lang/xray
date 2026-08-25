@@ -916,6 +916,11 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
         xr_target_plan_function_instructions(plan, function, &count);
     if (!rows || !count)
         return 0;
+    if (count == 4 && rows[0].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_BORROW &&
+        rows[1].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED &&
+        rows[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
+        rows[3].opcode == XR_TARGET_INSTRUCTION_RETURN_UNIT)
+        return (uint64_t) XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED;
     bool suspends = false;
     for (uint32_t i = 0; i < count; i++)
         suspends |= rows[i].opcode == XR_TARGET_INSTRUCTION_SUSPEND;

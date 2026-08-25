@@ -24,6 +24,7 @@
 #include "../shared/xr_compare_core.h"
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
+#include "../runtime/object/xarray.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
@@ -166,6 +167,59 @@ static XrTypedDispatchStatus store_bool_byte(XrTypedFrame *frame, uint32_t slot,
                : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
+static XrTypedDispatchStatus describe_value(XrTypedFrame *frame, uint32_t slot,
+                                            XrTypedSlotAccess *access) {
+    if (xr_typed_frame_describe_slot(frame, slot, access) != XR_TYPED_FRAME_OK ||
+        access->size != sizeof(XrValue) || access->alignment != _Alignof(XrValue))
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus load_value(XrTypedFrame *frame, uint32_t slot,
+                                        XrValue *value) {
+    XrTypedSlotAccess access = {0};
+    XrTypedDispatchStatus status = describe_value(frame, slot, &access);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_load(frame, &access, value, sizeof(*value)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus store_value(XrTypedFrame *frame, uint32_t slot,
+                                         XrValue value) {
+    XrTypedSlotAccess access = {0};
+    XrTypedDispatchStatus status = describe_value(frame, slot, &access);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_store(frame, &access, &value, sizeof(value)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus take_owned_value(XrTypedFrame *frame, uint32_t slot,
+                                              XrValue *value) {
+    XrTypedSlotAccess access = {0};
+    XrTypedDispatchStatus status = describe_value(frame, slot, &access);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_take_owned(frame, &access, value, sizeof(*value)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus restore_owned_value(XrTypedFrame *frame, uint32_t slot,
+                                                 XrValue value) {
+    XrTypedSlotAccess access = {0};
+    XrTypedDispatchStatus status = describe_value(frame, slot, &access);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_restore_owned(frame, &access, &value, sizeof(value)) ==
+                   XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
 typedef struct XrTypedDispatchRowContext {
     const int64_t *arguments;
     uint32_t argument_count;
@@ -208,6 +262,8 @@ typedef struct XrTypedDispatchExecution {
     uint32_t row_suspend_state;
     uint32_t resume_start_instruction;
     XrTypedDispatchProvider provider;
+    XrValue *value_arguments;
+    uint32_t value_argument_count;
 } XrTypedDispatchExecution;
 
 struct XrTypedCoroutineI64 {
@@ -358,9 +414,20 @@ static XrTypedDispatchStatus execute_param(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
     XrTypedDispatchRowContext *context) {
-    (void) contract;
     if (context->parameters_prebound)
         return XR_TYPED_DISPATCH_OK;
+    if (contract->result_rep == XR_TARGET_INSTRUCTION_REP_DYN_VALUE) {
+        XrTypedDispatchExecution *execution = context->execution;
+        if (!execution || !execution->value_arguments ||
+            row->immediate_bits >= execution->value_argument_count)
+            return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+        XrValue *argument = &execution->value_arguments[row->immediate_bits];
+        XrTypedDispatchStatus status = store_value(frame, row->result_slot, *argument);
+        if (status == XR_TYPED_DISPATCH_OK &&
+            contract->result_ownership == XR_TARGET_INSTRUCTION_RESULT_OWNERSHIP_OWNED)
+            *argument = xr_null();
+        return status;
+    }
     if (!context->arguments || row->immediate_bits >= context->argument_count)
         return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
     uint64_t bits = 0;
@@ -551,6 +618,60 @@ static XrTypedDispatchStatus execute_return(
     (void) contract;
     *context->returned = true;
     return load_i64_bits(frame, row->operand_slots[0], context->return_bits);
+}
+
+static XrTypedDispatchStatus execute_return_unit(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) frame;
+    (void) row;
+    if (!contract || contract->result_rep != XR_TARGET_INSTRUCTION_REP_NONE ||
+        contract->arity != 0 || !context || !context->returned)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    *context->returned = true;
+    *context->return_bits = 0;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus execute_array_push(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) context;
+    if (!contract || contract->error_kind != XR_TARGET_INSTRUCTION_ERROR_ARRAY_PUSH ||
+        contract->operand_ownership[0] !=
+            XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_BORROW ||
+        contract->operand_ownership[1] !=
+            XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_CONSUME)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrValue receiver = xr_null();
+    XrValue element = xr_null();
+    XrTypedDispatchStatus status = load_value(frame, row->operand_slots[0], &receiver);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    /* Move the frame owner into this operation before mutation. A rejected
+     * kernel call restores the exact owner and leaves the frame active; once
+     * the kernel succeeds there is no remaining lifecycle operation that can
+     * fail after the array has taken ownership. */
+    status = take_owned_value(frame, row->operand_slots[1], &element);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    XrArrayPushStatus pushed = xr_array_push_owned_checked(receiver, element);
+    if (pushed == XR_ARRAY_PUSH_OK)
+        return XR_TYPED_DISPATCH_OK;
+    if (restore_owned_value(frame, row->operand_slots[1], element) !=
+        XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (pushed == XR_ARRAY_PUSH_INVALID_ARRAY)
+        return XR_TYPED_DISPATCH_ARRAY_PUSH_INVALID_RECEIVER;
+    if (pushed == XR_ARRAY_PUSH_SLICE)
+        return XR_TYPED_DISPATCH_ARRAY_PUSH_SLICE;
+    if (pushed == XR_ARRAY_PUSH_TYPE_MISMATCH)
+        return XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH;
+    if (pushed == XR_ARRAY_PUSH_ALLOCATION_FAILED)
+        return XR_TYPED_DISPATCH_ARRAY_PUSH_ALLOCATION_FAILED;
+    return XR_TYPED_DISPATCH_PROGRAM_INVALID;
 }
 
 static XrTypedDispatchStatus execute_suspend(
@@ -964,7 +1085,8 @@ static bool instruction_contract_is_exact(
            contract->operand_rep[0] == expected->operand_rep[0] &&
            contract->operand_rep[1] == expected->operand_rep[1] &&
            contract->result_ownership == expected->result_ownership &&
-           contract->operand_ownership == expected->operand_ownership &&
+           contract->operand_ownership[0] == expected->operand_ownership[0] &&
+           contract->operand_ownership[1] == expected->operand_ownership[1] &&
            contract->effects == expected->effects &&
            contract->error_kind == expected->error_kind &&
            contract->may_suspend == expected->may_suspend &&
@@ -1228,10 +1350,19 @@ static XrTypedDispatchStatus execute_function(
     uint32_t declared_parameters = decoded_function.instructions
                                        ? decoded_function.parameter_count
                                        : 0;
-    if (!decoded_function.instructions)
-        for (uint32_t i = 0; i < instruction_count; i++)
+    if (!decoded_function.instructions) {
+        for (uint32_t i = 0; i < instruction_count; i++) {
+            const XrTargetInstructionContract *contract =
+                xr_target_instruction_contract(instructions[i].opcode);
+            if (!contract) {
+                status = XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+                goto report_error;
+            }
             declared_parameters +=
-                instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_I64;
+                contract->immediate_kind ==
+                XR_TARGET_INSTRUCTION_IMMEDIATE_PARAMETER_ORDINAL;
+        }
+    }
     if (declared_parameters != argument_count) {
         status = XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
         goto report_error;
@@ -1413,6 +1544,78 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         return status;
     memcpy(request->result, &return_bits, sizeof(*request->result));
     return XR_TYPED_DISPATCH_OK;
+}
+
+XrTypedDispatchStatus xr_typed_dispatch_execute_values(
+    const XrTypedDispatchValueRequest *request) {
+    if (!request || !request->verified_plan || !request->required_plan_fingerprint ||
+        !request->arguments || request->argument_count != 2 ||
+        (request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH &&
+         request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE))
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    const XrTargetPlan *plan = request->verified_plan;
+    if (!xr_target_plan_is_verified(plan))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (!xr_fingerprint_equal(xr_target_plan_fingerprint(plan),
+                              *request->required_plan_fingerprint) ||
+        !xr_target_plan_fingerprint_is_intact(plan))
+        return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+    char error[512] = {0};
+    if (!xr_target_instruction_program_verify(plan, error, sizeof(error)))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (xr_target_plan_function_execution_family_mask(plan, request->function) !=
+            XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED ||
+        !function_has_zero_lifecycle(plan, request->function))
+        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+    /* The public XrValue edge is untrusted.  TargetPlan proves the exact
+     * source-class type statically; the runtime carrier must still be an
+     * instance rather than an arbitrary tagged value before ownership moves. */
+    if (!XR_IS_ARRAY(request->arguments[0]))
+        return XR_TYPED_DISPATCH_ARRAY_PUSH_INVALID_RECEIVER;
+    if (!XR_IS_INSTANCE(request->arguments[1]))
+        return XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH;
+
+    XrValue original_element = request->arguments[1];
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    XrTypedFrame *frame = NULL;
+    if (xr_typed_frame_create(plan, request->required_plan_fingerprint,
+                              request->function, &limits, &frame) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    XrTypedDispatchExecution execution = {
+        .plan = plan,
+        .fingerprint = request->required_plan_fingerprint,
+        .limits = limits,
+        .remaining_steps = XR_TYPED_DISPATCH_MAX_STEPS,
+        .call_depth = 1,
+        .next_frame_id = 1,
+        .provider = request->provider,
+        .value_arguments = request->arguments,
+        .value_argument_count = request->argument_count,
+    };
+    uint64_t ignored_result = 0;
+    XrTypedDispatchStatus status = execute_function(
+        &execution, frame, request->function, NULL, request->argument_count,
+        false, 0, XR_VM_TRACE_ID_NONE, &ignored_result);
+
+    /* Once PARAM_DYN_OWNED clears argument 1, every failure must move that
+     * exact owner back before the frame can be destroyed. */
+    if (status != XR_TYPED_DISPATCH_OK && XR_IS_NULL(request->arguments[1])) {
+        uint32_t row_count = 0;
+        const XrTargetInstructionRecord *rows =
+            xr_target_plan_function_instructions(plan, request->function, &row_count);
+        XrValue restored = xr_null();
+        if (!rows || row_count != 4 ||
+            take_owned_value(frame, rows[1].result_slot, &restored) != XR_TYPED_DISPATCH_OK ||
+            memcmp(&restored, &original_element, sizeof(restored)) != 0) {
+            status = XR_TYPED_DISPATCH_FRAME_ERROR;
+        } else {
+            request->arguments[1] = restored;
+        }
+    }
+    if (xr_typed_frame_free(&frame) != XR_TYPED_FRAME_OK)
+        status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    return status;
 }
 
 XrTypedDispatchStatus xr_typed_coroutine_i64_create(

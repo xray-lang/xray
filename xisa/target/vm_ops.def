@@ -6,42 +6,42 @@
 (define-target-instruction const-i64
   :id 1 :name "const.i64" :arity 0 :terminator no
   :result-rep i64 :operand-reps ()
-  :result-ownership trivial :operand-ownership none
+  :result-ownership trivial :operand-ownership ()
   :effects () :error none :suspend no :immediate i64 :control none
   :semantic xi.const :dispatch const :dispatch-arg none)
 
 (define-target-instruction copy-i64
   :id 2 :name "copy.i64" :arity 1 :terminator no
   :result-rep i64 :operand-reps (i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.copy :dispatch copy :dispatch-arg none)
 
 (define-target-instruction add-wrap-i64
   :id 3 :name "add.wrap.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.add :dispatch binary :dispatch-arg add)
 
 (define-target-instruction sub-wrap-i64
   :id 4 :name "sub.wrap.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.sub :dispatch binary :dispatch-arg sub)
 
 (define-target-instruction mul-wrap-i64
   :id 5 :name "mul.wrap.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.mul :dispatch binary :dispatch-arg mul)
 
 (define-target-instruction div-trap-i64
   :id 6 :name "div.trap.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects (may-error) :error divide-by-zero :suspend no
   :immediate none :control none
   :semantic xi.div :dispatch divmod :dispatch-arg div)
@@ -49,7 +49,7 @@
 (define-target-instruction mod-trap-i64
   :id 7 :name "mod.trap.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects (may-error) :error modulo-by-zero :suspend no
   :immediate none :control none
   :semantic xi.mod :dispatch divmod :dispatch-arg mod)
@@ -57,140 +57,140 @@
 (define-target-instruction band-i64
   :id 8 :name "band.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.band :dispatch binary :dispatch-arg band)
 
 (define-target-instruction bor-i64
   :id 9 :name "bor.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.bor :dispatch binary :dispatch-arg bor)
 
 (define-target-instruction bxor-i64
   :id 10 :name "bxor.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.bxor :dispatch binary :dispatch-arg bxor)
 
 (define-target-instruction neg-wrap-i64
   :id 11 :name "neg.wrap.i64" :arity 1 :terminator no
   :result-rep i64 :operand-reps (i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.neg :dispatch unary :dispatch-arg neg)
 
 (define-target-instruction bnot-i64
   :id 12 :name "bnot.i64" :arity 1 :terminator no
   :result-rep i64 :operand-reps (i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.bnot :dispatch unary :dispatch-arg bnot)
 
 (define-target-instruction shl-masked-i64
   :id 13 :name "shl.masked.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.shl :dispatch shift :dispatch-arg left)
 
 (define-target-instruction shr-arith-masked-i64
   :id 14 :name "shr.arith.masked.i64" :arity 2 :terminator no
   :result-rep i64 :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.shr :dispatch shift :dispatch-arg right)
 
 (define-target-instruction return-i64
   :id 15 :name "return.i64" :arity 1 :terminator yes
   :result-rep none :operand-reps (i64)
-  :result-ownership none :operand-ownership borrow
+  :result-ownership none :operand-ownership (borrow)
   :effects (control) :error none :suspend no :immediate none :control return
   :semantic none :dispatch return :dispatch-arg none)
 
 (define-target-instruction param-i64
   :id 16 :name "param.i64" :arity 0 :terminator no
   :result-rep i64 :operand-reps ()
-  :result-ownership trivial :operand-ownership none
+  :result-ownership trivial :operand-ownership ()
   :effects () :error none :suspend no :immediate parameter-ordinal :control none
   :semantic xi.param :dispatch param :dispatch-arg none)
 
 (define-target-instruction jump
   :id 17 :name "jump" :arity 0 :terminator yes
   :result-rep none :operand-reps ()
-  :result-ownership none :operand-ownership none
+  :result-ownership none :operand-ownership ()
   :effects (control) :error none :suspend no :immediate jump-target :control jump
   :semantic none :dispatch branch :dispatch-arg jump)
 
 (define-target-instruction branch-if-nonzero-i64
   :id 18 :name "branch.if-nonzero.i64" :arity 1 :terminator yes
   :result-rep none :operand-reps (i64)
-  :result-ownership none :operand-ownership borrow
+  :result-ownership none :operand-ownership (borrow)
   :effects (control) :error none :suspend no :immediate branch-targets :control branch
   :semantic none :dispatch branch :dispatch-arg i64)
 
 (define-target-instruction cmp-eq-i64
   :id 19 :name "cmp.eq.i64" :arity 2 :terminator no
   :result-rep bool :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.eq :dispatch compare :dispatch-arg eq)
 
 (define-target-instruction cmp-ne-i64
   :id 20 :name "cmp.ne.i64" :arity 2 :terminator no
   :result-rep bool :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.ne :dispatch compare :dispatch-arg ne)
 
 (define-target-instruction cmp-lt-i64
   :id 21 :name "cmp.lt.i64" :arity 2 :terminator no
   :result-rep bool :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.lt :dispatch compare :dispatch-arg lt)
 
 (define-target-instruction cmp-le-i64
   :id 22 :name "cmp.le.i64" :arity 2 :terminator no
   :result-rep bool :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.le :dispatch compare :dispatch-arg le)
 
 (define-target-instruction cmp-gt-i64
   :id 23 :name "cmp.gt.i64" :arity 2 :terminator no
   :result-rep bool :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.gt :dispatch compare :dispatch-arg gt)
 
 (define-target-instruction cmp-ge-i64
   :id 24 :name "cmp.ge.i64" :arity 2 :terminator no
   :result-rep bool :operand-reps (i64 i64)
-  :result-ownership trivial :operand-ownership borrow
+  :result-ownership trivial :operand-ownership (borrow borrow)
   :effects () :error none :suspend no :immediate none :control none
   :semantic xi.ge :dispatch compare :dispatch-arg ge)
 
 (define-target-instruction branch-if-true-bool
   :id 25 :name "branch.if-true.bool" :arity 1 :terminator yes
   :result-rep none :operand-reps (bool)
-  :result-ownership none :operand-ownership borrow
+  :result-ownership none :operand-ownership (borrow)
   :effects (control) :error none :suspend no :immediate branch-targets :control branch
   :semantic none :dispatch branch :dispatch-arg bool)
 
 (define-target-instruction call-direct-i64
   :id 26 :name "call.direct.i64" :arity 0 :terminator no
   :result-rep i64 :operand-reps ()
-  :result-ownership trivial :operand-ownership none
+  :result-ownership trivial :operand-ownership ()
   :effects () :error none :suspend no :immediate call-record :control none
   :semantic xi.call :dispatch call :dispatch-arg none)
 
 (define-target-instruction call-entry-i64
   :id 27 :name "call.entry.i64" :arity 0 :terminator no
   :result-rep i64 :operand-reps ()
-  :result-ownership trivial :operand-ownership none
+  :result-ownership trivial :operand-ownership ()
   :effects (may-error) :error entry-call :suspend no
   :immediate entry-expectation :control none
   :semantic xi.call :dispatch entry-call :dispatch-arg none)
@@ -198,7 +198,36 @@
 (define-target-instruction suspend
   :id 28 :name "suspend" :arity 0 :terminator yes
   :result-rep none :operand-reps ()
-  :result-ownership none :operand-ownership none
+  :result-ownership none :operand-ownership ()
   :effects (control may-suspend) :error none :suspend yes
   :immediate coroutine-state :control suspend
   :semantic xi.yield :dispatch suspend :dispatch-arg none)
+
+(define-target-instruction param-dyn-borrow
+  :id 29 :name "param.dyn.borrow" :arity 0 :terminator no
+  :result-rep dyn-value :operand-reps ()
+  :result-ownership borrow :operand-ownership ()
+  :effects () :error none :suspend no :immediate parameter-ordinal :control none
+  :semantic xi.param :dispatch param :dispatch-arg none)
+
+(define-target-instruction param-dyn-owned
+  :id 30 :name "param.dyn.owned" :arity 0 :terminator no
+  :result-rep dyn-value :operand-reps ()
+  :result-ownership owned :operand-ownership ()
+  :effects () :error none :suspend no :immediate parameter-ordinal :control none
+  :semantic xi.param :dispatch param :dispatch-arg none)
+
+(define-target-instruction array-push-tagged
+  :id 31 :name "array.push.tagged" :arity 2 :terminator no
+  :result-rep none :operand-reps (dyn-value dyn-value)
+  :result-ownership none :operand-ownership (borrow consume)
+  :effects (may-error memory-write) :error array-push :suspend no
+  :immediate call-record :control none
+  :semantic none :dispatch array-push :dispatch-arg none)
+
+(define-target-instruction return-unit
+  :id 32 :name "return.unit" :arity 0 :terminator yes
+  :result-rep none :operand-reps ()
+  :result-ownership none :operand-ownership ()
+  :effects (control) :error none :suspend no :immediate none :control return
+  :semantic none :dispatch return-unit :dispatch-arg none)

@@ -912,17 +912,15 @@ vmcase(OP_ARRAY_PUSH) {
     // OP_ARRAY_PUSH: array push
     int a = GETARG_A(i);
     int b = GETARG_B(i);
-    XrArray *arr = XR_TO_ARRAY(R(a));
-    XrValue val = R(b);
-    if (arr->length >= arr->capacity)
-        xr_array_grow(arr);
-    if (arr->elem_type == XR_ELEM_ANY) {
-        ((XrValue *) arr->data)[arr->length++] = val;
-        XR_ARRAY_MARK_REFS(arr, val);
-    } else {
-        VM_ARRAY_CHECK_STORABLE(arr, val);
-        xr_array_set_element(arr, arr->length++, val);
-    }
+    XrArrayPushStatus status = xr_array_push_owned_checked(R(a), R(b));
+    if (XR_UNLIKELY(status == XR_ARRAY_PUSH_SLICE))
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, XR_ERROR_CORE_ARRAY_SLICE_PUSH_MSG);
+    if (XR_UNLIKELY(status == XR_ARRAY_PUSH_TYPE_MISMATCH))
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "value is not storable in typed array");
+    if (XR_UNLIKELY(status == XR_ARRAY_PUSH_ALLOCATION_FAILED))
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "array push allocation failed");
+    if (XR_UNLIKELY(status != XR_ARRAY_PUSH_OK))
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "array push receiver must be a valid Array");
     vmbreak;
 }
 

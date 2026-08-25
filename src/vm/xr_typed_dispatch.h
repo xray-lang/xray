@@ -5,13 +5,14 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xr_typed_dispatch.h - Typed TargetPlan scalar executor
+ * xr_typed_dispatch.h - Typed TargetPlan executor
  */
 
 #ifndef XR_TYPED_DISPATCH_H
 #define XR_TYPED_DISPATCH_H
 
 #include "../plan/target/xr_target_plan.h"
+#include "../runtime/value/xvalue.h"
 #include "debug/xr_vm_trace.h"
 #include "xr_vm_dynamic_entry.h"
 
@@ -59,6 +60,10 @@ typedef enum XrTypedDispatchStatus {
     XR_TYPED_DISPATCH_ENTRY_CANCELLED,
     XR_TYPED_DISPATCH_ENTRY_RETIRE_DEFERRED,
     XR_TYPED_DISPATCH_SUSPENDED,
+    XR_TYPED_DISPATCH_ARRAY_PUSH_INVALID_RECEIVER,
+    XR_TYPED_DISPATCH_ARRAY_PUSH_SLICE,
+    XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH,
+    XR_TYPED_DISPATCH_ARRAY_PUSH_ALLOCATION_FAILED,
 } XrTypedDispatchStatus;
 
 /*
@@ -93,6 +98,20 @@ typedef struct XrTypedDispatchI64Request {
     bool use_dynamic_entry_cache;
 } XrTypedDispatchI64Request;
 
+/* Managed XrValue entry for the exact tagged Array.push instruction family.
+ * `arguments` is mutable because argument 1 transfers ownership: the executor
+ * clears it once the owner enters the frame, keeps it clear after success, and
+ * restores the exact value on every failure.  Argument 0 is borrowed and is
+ * never modified. */
+typedef struct XrTypedDispatchValueRequest {
+    const XrTargetPlan *verified_plan;
+    const XrFingerprint *required_plan_fingerprint;
+    XrValue *arguments;
+    XrTypedDispatchProvider provider;
+    uint32_t function;
+    uint32_t argument_count;
+} XrTypedDispatchValueRequest;
+
 /* A suspended typed coroutine is single-owner and owns one packed frame and
  * one immutable decoded program. Resuming reuses those exact objects; no
  * retained legacy value stack or bytecode frame is created. The initial slice
@@ -116,6 +135,8 @@ XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
     const XrTargetInstructionContract *contract);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     const XrTypedDispatchI64Request *request);
+XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_values(
+    const XrTypedDispatchValueRequest *request);
 /* Creation requires an empty owning output slot. Failure preserves that slot;
  * success transfers the sole coroutine owner into it. Free is the only API
  * that releases the owned frame/cache/plan and clears the slot. */

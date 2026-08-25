@@ -162,6 +162,18 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_store(
 XR_FUNC XrTypedFrameStatus xr_typed_frame_load(
     const XrTypedFrame *frame, const XrTypedSlotAccess *access, void *bytes,
     size_t size);
+/* Move the exact managed Array.push consume parameter out of a frame. Success
+ * poisons the slot and makes frame cleanup legal; failure leaves the owner
+ * active in place. Other lifecycle slots have no transfer authority here. */
+XR_FUNC XrTypedFrameStatus xr_typed_frame_take_owned(
+    XrTypedFrame *frame, const XrTypedSlotAccess *access, void *bytes,
+    size_t size);
+/* Compensate a failed managed Array.push after take_owned. This exact reverse
+ * transition is the only way a transferred consume parameter becomes active
+ * again; it is unavailable to every other lifecycle slot. */
+XR_FUNC XrTypedFrameStatus xr_typed_frame_restore_owned(
+    XrTypedFrame *frame, const XrTypedSlotAccess *access, const void *bytes,
+    size_t size);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_poison(
     XrTypedFrame *frame, const XrTypedSlotAccess *access);
 XR_FUNC XrTypedFrameStatus xr_typed_frame_slot_state(

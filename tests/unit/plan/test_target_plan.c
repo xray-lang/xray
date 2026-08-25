@@ -32,9 +32,11 @@
 #include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/aot/emit_c/xr_c_emission_rule_ids_gen.h"
 #include "../../../src/runtime/class/xclass_info.h"
+#include "../../../src/runtime/object/xarray.h"
 #include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/runtime/value/xenum_layout.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/vm/xr_typed_dispatch.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -3255,6 +3257,94 @@ static XrSemanticPlan *build_source_class_array_fill_semantic(void) {
     return plan;
 }
 
+static void dispose_inplace_array(XrArray *array) {
+    REQUIRE(array != NULL && array->storage == NULL && !xr_array_is_slice(array));
+    while (array->length > 0)
+        (void) xr_array_pop(array);
+    xr_free(array->data);
+    array->data = NULL;
+    array->capacity = 0;
+}
+
+static void test_source_class_array_push_managed_execution(const XrTargetPlan *plan) {
+    REQUIRE(plan != NULL);
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        XrObjHeader instance = {0};
+        xr_obj_header_init_type(&instance, XR_TINSTANCE);
+        XrValue element =
+            xr_value_from_instance((struct XrInstance *) (void *) &instance);
+
+        XrArray success = {0};
+        xr_obj_header_init_type(&success.hdr, XR_TARRAY);
+        xr_array_init_inplace(&success, 1, XR_ELEM_ANY);
+        XrValue success_arguments[2] = {xr_value_from_array(&success), element};
+        XrValue borrowed_receiver = success_arguments[0];
+        XrTypedDispatchValueRequest request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &fingerprint,
+            .arguments = success_arguments,
+            .provider = providers[i],
+            .function = 0,
+            .argument_count = 2,
+        };
+        REQUIRE(xr_typed_dispatch_execute_values(&request) == XR_TYPED_DISPATCH_OK &&
+                memcmp(&success_arguments[0], &borrowed_receiver,
+                       sizeof(borrowed_receiver)) == 0 &&
+                XR_IS_NULL(success_arguments[1]) && success.length == 1 &&
+                success.contains_refs == 1 &&
+                memcmp(&((XrValue *) success.data)[0], &element, sizeof(element)) == 0);
+        XrValue returned = xr_array_pop(&success);
+        REQUIRE(memcmp(&returned, &element, sizeof(element)) == 0);
+        dispose_inplace_array(&success);
+
+        XrArray slice = {0};
+        xr_obj_header_init_type(&slice.hdr, XR_TARRAY);
+        xr_array_init_inplace(&slice, 1, XR_ELEM_ANY);
+        slice.data_storage = XR_ARRAY_DATA_BORROWED;
+        XrValue slice_arguments[2] = {xr_value_from_array(&slice), element};
+        request.arguments = slice_arguments;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) ==
+                    XR_TYPED_DISPATCH_ARRAY_PUSH_SLICE &&
+                memcmp(&slice_arguments[1], &element, sizeof(element)) == 0 &&
+                slice.length == 0 && slice.capacity == 1);
+        slice.data_storage = XR_ARRAY_DATA_HEAP;
+        dispose_inplace_array(&slice);
+
+        XrArray wrong_storage = {0};
+        xr_obj_header_init_type(&wrong_storage.hdr, XR_TARRAY);
+        xr_array_init_inplace(&wrong_storage, 1, XR_ELEM_I64);
+        XrValue mismatch_arguments[2] = {xr_value_from_array(&wrong_storage), element};
+        request.arguments = mismatch_arguments;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) ==
+                    XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH &&
+                memcmp(&mismatch_arguments[1], &element, sizeof(element)) == 0 &&
+                wrong_storage.length == 0 && wrong_storage.capacity == 1);
+        dispose_inplace_array(&wrong_storage);
+
+        XrValue invalid_arguments[2] = {xr_int(7), element};
+        request.arguments = invalid_arguments;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) ==
+                    XR_TYPED_DISPATCH_ARRAY_PUSH_INVALID_RECEIVER &&
+                memcmp(&invalid_arguments[1], &element, sizeof(element)) == 0);
+
+        XrArray element_mismatch = {0};
+        xr_obj_header_init_type(&element_mismatch.hdr, XR_TARRAY);
+        xr_array_init_inplace(&element_mismatch, 1, XR_ELEM_ANY);
+        XrValue non_instance_arguments[2] = {xr_value_from_array(&element_mismatch), xr_int(9)};
+        request.arguments = non_instance_arguments;
+        REQUIRE(xr_typed_dispatch_execute_values(&request) ==
+                    XR_TYPED_DISPATCH_ARRAY_PUSH_TYPE_MISMATCH &&
+                XR_IS_INT(non_instance_arguments[1]) &&
+                XR_TO_INT(non_instance_arguments[1]) == 9 && element_mismatch.length == 0);
+        dispose_inplace_array(&element_mismatch);
+    }
+}
+
 static XrSemanticPlan *build_channel_method_semantic(const char *selector,
                                                      int64_t selector_immediate,
                                                      XrType *receiver_type, XrType *result_type,
@@ -6037,6 +6127,50 @@ static void test_source_class_array_push_authority(void) {
     if (!built)
         fprintf(stderr, "source-class Array.push TargetPlan failed: %s\n", error);
     REQUIRE(built && plan && plan->calls_count == 1 && plan->call_arguments_count == 2);
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(plan, 0, &instruction_count);
+    REQUIRE(instructions && instruction_count == 4 && plan->instructions_count == 4 &&
+            instructions[0].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_BORROW &&
+            instructions[1].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED &&
+            instructions[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
+            instructions[3].opcode == XR_TARGET_INSTRUCTION_RETURN_UNIT &&
+            instructions[0].result_slot == plan->call_arguments[0].caller_slot &&
+            instructions[1].result_slot == plan->call_arguments[1].caller_slot &&
+            instructions[2].result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE &&
+            instructions[2].operand_count == 2 && instructions[2].operand_slots[0] ==
+                instructions[0].result_slot && instructions[2].operand_slots[1] ==
+                instructions[1].result_slot && instructions[2].immediate_bits == 0 &&
+            xr_target_plan_function_execution_family_mask(plan, 0) ==
+                XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED);
+    const XrTargetInstructionContract *push_contract =
+        xr_target_instruction_contract(XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED);
+    REQUIRE(push_contract && !push_contract->terminator &&
+            push_contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE &&
+            push_contract->operand_rep[0] == XR_TARGET_INSTRUCTION_REP_DYN_VALUE &&
+            push_contract->operand_rep[1] == XR_TARGET_INSTRUCTION_REP_DYN_VALUE &&
+            push_contract->operand_ownership[0] ==
+                XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_BORROW &&
+            push_contract->operand_ownership[1] ==
+                XR_TARGET_INSTRUCTION_OPERAND_OWNERSHIP_CONSUME &&
+            (push_contract->effects & XR_TARGET_INSTRUCTION_EFFECT_MEMORY_WRITE) != 0 &&
+            (push_contract->effects & XR_TARGET_INSTRUCTION_EFFECT_MAY_ERROR) != 0 &&
+            push_contract->error_kind == XR_TARGET_INSTRUCTION_ERROR_ARRAY_PUSH);
+
+    XrTargetInstructionRecord *mutable_instructions = plan->instructions;
+    uint16_t saved_opcode = mutable_instructions[0].opcode;
+    mutable_instructions[0].opcode = XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED;
+    expect_verify_failure(plan, "XR_TARGET_1005");
+    mutable_instructions[0].opcode = saved_opcode;
+    uint32_t saved_slot = mutable_instructions[2].operand_slots[0];
+    mutable_instructions[2].operand_slots[0] = mutable_instructions[2].operand_slots[1];
+    expect_verify_failure(plan, "XR_TARGET_1005");
+    mutable_instructions[2].operand_slots[0] = saved_slot;
+    uint64_t saved_immediate = mutable_instructions[2].immediate_bits;
+    mutable_instructions[2].immediate_bits = UINT64_MAX;
+    expect_verify_failure(plan, "XR_TARGET_1005");
+    mutable_instructions[2].immediate_bits = saved_immediate;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
     XrTargetCallRecord *call = &plan->calls[0];
     REQUIRE(call->semantic_operation == operation_index && call->argument_count == 2 &&
             call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
@@ -6112,6 +6246,8 @@ static void test_source_class_array_push_authority(void) {
     xr_target_layout_compute_fingerprint(plan, array_layout,
                                          &plan->layouts[array_layout].fingerprint);
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    test_source_class_array_push_managed_execution(plan);
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
     XrCEmissionPlan *emission = NULL;

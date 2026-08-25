@@ -493,21 +493,37 @@ int xr_array_size(XrArray *arr) {
 
 /* ====== Array Modification ====== */
 
+XrArrayPushStatus xr_array_push_owned_checked(XrValue receiver, XrValue value) {
+    if (!XR_IS_ARRAY(receiver))
+        return XR_ARRAY_PUSH_INVALID_ARRAY;
+    XrArray *arr = XR_TO_ARRAY(receiver);
+    if (!arr || arr->length < 0 || arr->capacity < arr->length ||
+        (arr->capacity && !arr->data))
+        return XR_ARRAY_PUSH_INVALID_ARRAY;
+    if (xr_array_is_slice(arr))
+        return XR_ARRAY_PUSH_SLICE;
+    /* Check before growth: a rejected element must not even change capacity. */
+    if (!xr_typed_value_is_storable(value, arr->elem_type))
+        return XR_ARRAY_PUSH_TYPE_MISMATCH;
+    if (arr->length >= arr->capacity)
+        xr_array_grow(arr);
+    if (arr->length >= arr->capacity || !arr->data)
+        return XR_ARRAY_PUSH_ALLOCATION_FAILED;
+    xr_array_set_element(arr, arr->length, value);
+    arr->length++;
+    XR_ARRAY_MARK_REFS(arr, value);
+    XR_ARRAY_MARK_MUTATED(arr);
+    XR_DCHECK(arr->length <= arr->capacity, "array_push: length > capacity after push");
+    return XR_ARRAY_PUSH_OK;
+}
+
 void xr_array_push(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_push: NULL array");
     XR_DCHECK(XR_OBJ_GET_TYPE(&arr->hdr) == XR_TARRAY, "array_push: object is not an array");
-    // Slices cannot push
-    if (xr_array_is_slice(arr)) {
-        return;
-    }
-
-    if (arr->length >= arr->capacity) {
-        xr_array_grow(arr);
-    }
-
-    xr_array_set_element(arr, arr->length++, value);
-    XR_ARRAY_MARK_MUTATED(arr);
-    XR_DCHECK(arr->length <= arr->capacity, "array_push: length > capacity after push");
+    XrArrayPushStatus status =
+        xr_array_push_owned_checked(xr_value_from_array(arr), value);
+    XR_DCHECK(status == XR_ARRAY_PUSH_OK || status == XR_ARRAY_PUSH_SLICE,
+              "array_push: element is not storable");
 }
 
 XrValue xr_array_pop(XrArray *arr) {

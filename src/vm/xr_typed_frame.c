@@ -76,6 +76,7 @@ typedef enum XrTypedLifecycleState {
     XR_TYPED_LIFECYCLE_EMPTY,
     XR_TYPED_LIFECYCLE_ACTIVE,
     XR_TYPED_LIFECYCLE_RELEASED,
+    XR_TYPED_LIFECYCLE_TRANSFERRED,
 } XrTypedLifecycleState;
 
 static bool is_power_of_two(size_t value) {
@@ -264,6 +265,50 @@ static bool slot_lifecycle_contract_is_exact(
     return terminal == 1 && normal == 1;
 }
 
+/* Array.push owns one short-lived managed parameter without inventing root or
+ * cleanup rows: its executable CONSUME operand is the transfer authority.  A
+ * borrowed receiver is admitted as managed transport but never enters the
+ * lifecycle ledger; the owned element does, and the frame cannot be freed
+ * until execution either transfers or returns it. */
+static bool slot_managed_array_push_parameter_is_exact(
+    const XrTargetPlan *plan, const XrTargetSlotRecord *slot, bool *owned) {
+    if (owned)
+        *owned = false;
+    if (!plan || !slot || slot->role != XR_TARGET_SLOT_PARAMETER ||
+        xr_target_plan_function_execution_family_mask(plan, slot->function) !=
+            XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED)
+        return false;
+    uint32_t count = 0;
+    const XrTargetInstructionRecord *rows =
+        xr_target_plan_function_instructions(plan, slot->function, &count);
+    bool is_borrowed = rows && count == 4 && rows[0].result_slot == slot->id &&
+                       rows[0].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_BORROW;
+    bool is_owned = rows && count == 4 && rows[1].result_slot == slot->id &&
+                    rows[1].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED;
+    if (!is_borrowed && !is_owned)
+        return false;
+    uint8_t ownership = is_owned ? XR_TARGET_OWNERSHIP_OWNED
+                                 : XR_TARGET_OWNERSHIP_BORROWED;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(plan, slot->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(plan, slot->memory_rep);
+    bool exact = register_rep && memory_rep &&
+                 register_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+                 memory_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+                 register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                 memory_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                 register_rep->ownership == ownership &&
+                 memory_rep->ownership == ownership &&
+                 reps_are_storage_compatible(register_rep, memory_rep) &&
+                 slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+                 slot->ownership == ownership && slot->size == memory_rep->memory_size &&
+                 slot->align == memory_rep->memory_align;
+    if (exact && owned)
+        *owned = is_owned;
+    return exact;
+}
+
 /* Immutable String literals are the already-frozen prerequisite carrier for
  * the concat inputs.  They own no frame-local lifecycle: their exact
  * BORROWED_STATIC SemanticPlan identity is sufficient, while every fresh
@@ -330,7 +375,9 @@ static bool slot_rep_contract_is_exact(
     bool managed = slot_lifecycle_contract_is_exact(plan, slot);
     bool immutable_literal =
         slot_is_exact_immutable_string_literal(plan, slot);
-    return slot && (transportable || managed || immutable_literal) &&
+    bool managed_push_parameter =
+        slot_managed_array_push_parameter_is_exact(plan, slot, NULL);
+    return slot && (transportable || managed || immutable_literal || managed_push_parameter) &&
            reps_are_storage_compatible(register_rep, memory_rep) &&
            register_rep->id == slot->register_rep &&
            memory_rep->id == slot->memory_rep &&
@@ -454,9 +501,13 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
     if (arena_allocation > limits->max_arena_bytes)
         return XR_TYPED_FRAME_BUDGET_EXHAUSTED;
     uint32_t lifecycle_count = 0;
-    for (uint32_t i = 0; i < function->slot_count; i++)
-        lifecycle_count += slot_lifecycle_contract_is_exact(
-            plan, &slots[function->slot_begin + i]);
+    for (uint32_t i = 0; i < function->slot_count; i++) {
+        bool push_owner = false;
+        const XrTargetSlotRecord *slot = &slots[function->slot_begin + i];
+        lifecycle_count += slot_lifecycle_contract_is_exact(plan, slot) ||
+                           (slot_managed_array_push_parameter_is_exact(
+                                plan, slot, &push_owner) && push_owner);
+    }
     size_t lifecycle_metadata = 0;
     if (lifecycle_count > SIZE_MAX /
                               (sizeof(uint32_t) + sizeof(uint8_t)))
@@ -533,7 +584,10 @@ static XrTypedFrameStatus allocate_frame(const XrTargetPlan *plan,
         }
         uint32_t next = 0;
         for (uint32_t i = 0; i < shape->function->slot_count; i++) {
-            if (!slot_lifecycle_contract_is_exact(plan, &shape->slots[i]))
+            bool push_owner = false;
+            if (!slot_lifecycle_contract_is_exact(plan, &shape->slots[i]) &&
+                !(slot_managed_array_push_parameter_is_exact(
+                      plan, &shape->slots[i], &push_owner) && push_owner))
                 continue;
             frame->lifecycle_slots[next] = shape->slots[i].id;
             frame->lifecycle_states[next] = XR_TYPED_LIFECYCLE_EMPTY;
@@ -698,7 +752,8 @@ static XrTypedFrameStatus transfer_slot(
             lifecycle == XR_TYPED_LIFECYCLE_ACTIVE)
             return XR_TYPED_FRAME_LIFECYCLE_ACTIVE;
         if (transfer == XR_TYPED_FRAME_TRANSFER_STORE &&
-            lifecycle == XR_TYPED_LIFECYCLE_RELEASED)
+            (lifecycle == XR_TYPED_LIFECYCLE_RELEASED ||
+             lifecycle == XR_TYPED_LIFECYCLE_TRANSFERRED))
             return XR_TYPED_FRAME_LIFECYCLE_INACTIVE;
         if (transfer == XR_TYPED_FRAME_TRANSFER_LOAD &&
             lifecycle != XR_TYPED_LIFECYCLE_ACTIVE)
@@ -793,6 +848,69 @@ XR_FUNC XrTypedFrameStatus xr_typed_frame_load(
     size_t size) {
     return transfer_slot(frame, access, NULL, bytes, size,
                          XR_TYPED_FRAME_TRANSFER_LOAD);
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_take_owned(
+    XrTypedFrame *frame, const XrTypedSlotAccess *access, void *bytes,
+    size_t size) {
+    if (!frame || !access || !bytes)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    XrTypedResolvedSlot resolved = {0};
+    XrTypedFrameStatus status = resolve_slot(frame, access->slot, access, &resolved);
+    if (status != XR_TYPED_FRAME_OK)
+        return status;
+    if (size != resolved.record->size)
+        return XR_TYPED_FRAME_ACCESS_MISMATCH;
+    bool push_owner = false;
+    if (!slot_managed_array_push_parameter_is_exact(
+            frame->plan, resolved.record, &push_owner) || !push_owner)
+        return XR_TYPED_FRAME_ACCESS_MISMATCH;
+    int32_t lifecycle = frame_lifecycle_index(frame, resolved.record->id);
+    if (lifecycle < 0 ||
+        frame->lifecycle_states[lifecycle] != XR_TYPED_LIFECYCLE_ACTIVE)
+        return XR_TYPED_FRAME_LIFECYCLE_INACTIVE;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+    if (frame->states[resolved.local_slot] != XR_TYPED_SLOT_STATE_INITIALIZED)
+        return XR_TYPED_FRAME_UNINITIALIZED;
+#endif
+    memcpy(bytes, resolved.bytes, size);
+    memset(resolved.bytes, 0, size);
+    frame->lifecycle_states[lifecycle] = XR_TYPED_LIFECYCLE_TRANSFERRED;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+    frame->states[resolved.local_slot] = XR_TYPED_SLOT_STATE_POISONED;
+#endif
+    return XR_TYPED_FRAME_OK;
+}
+
+XR_FUNC XrTypedFrameStatus xr_typed_frame_restore_owned(
+    XrTypedFrame *frame, const XrTypedSlotAccess *access, const void *bytes,
+    size_t size) {
+    if (!frame || !access || !bytes)
+        return XR_TYPED_FRAME_INVALID_ARGUMENT;
+    XrTypedResolvedSlot resolved = {0};
+    XrTypedFrameStatus status = resolve_slot(frame, access->slot, access, &resolved);
+    if (status != XR_TYPED_FRAME_OK)
+        return status;
+    if (size != resolved.record->size)
+        return XR_TYPED_FRAME_ACCESS_MISMATCH;
+    bool push_owner = false;
+    if (!slot_managed_array_push_parameter_is_exact(
+            frame->plan, resolved.record, &push_owner) || !push_owner)
+        return XR_TYPED_FRAME_ACCESS_MISMATCH;
+    int32_t lifecycle = frame_lifecycle_index(frame, resolved.record->id);
+    if (lifecycle < 0 ||
+        frame->lifecycle_states[lifecycle] != XR_TYPED_LIFECYCLE_TRANSFERRED)
+        return XR_TYPED_FRAME_LIFECYCLE_INACTIVE;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+    if (frame->states[resolved.local_slot] != XR_TYPED_SLOT_STATE_POISONED)
+        return XR_TYPED_FRAME_ACCESS_MISMATCH;
+#endif
+    memcpy(resolved.bytes, bytes, size);
+    frame->lifecycle_states[lifecycle] = XR_TYPED_LIFECYCLE_ACTIVE;
+#if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
+    frame->states[resolved.local_slot] = XR_TYPED_SLOT_STATE_INITIALIZED;
+#endif
+    return XR_TYPED_FRAME_OK;
 }
 
 XR_FUNC XrTypedFrameStatus xr_typed_frame_poison(

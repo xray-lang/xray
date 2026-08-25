@@ -97,6 +97,55 @@ TEST(array_push_multiple) {
     teardown();
 }
 
+TEST(array_push_owned_checked_status_and_atomicity) {
+    setup();
+    XrArray *arr = xr_array_new(main_coro);
+    ASSERT_NOT_NULL(arr);
+    XrValue receiver = xr_value_from_array(arr);
+    XrValue element = xr_int(42);
+    ASSERT_EQ_INT(xr_array_push_owned_checked(receiver, element), XR_ARRAY_PUSH_OK);
+    ASSERT_EQ_INT(arr->length, 1);
+    ASSERT_EQ_INT(xr_as_int(xr_array_get(arr, 0)), 42);
+
+    XrObjHeader instance = {0};
+    xr_obj_header_init_type(&instance, XR_TINSTANCE);
+    XrArray *ref_arr = xr_array_new(main_coro);
+    ASSERT_NOT_NULL(ref_arr);
+    XrValue reference =
+        xr_value_from_instance((struct XrInstance *) (void *) &instance);
+    ASSERT_EQ_INT(xr_array_push_owned_checked(xr_value_from_array(ref_arr), reference),
+                  XR_ARRAY_PUSH_OK);
+    ASSERT_TRUE(ref_arr->contains_refs);
+    XrValue popped_reference = xr_array_pop(ref_arr);
+    ASSERT_TRUE(XR_IS_INSTANCE(popped_reference));
+
+    int64_t length = arr->length;
+    int64_t capacity = arr->capacity;
+    ASSERT_EQ_INT(xr_array_push_owned_checked(xr_int(1), element),
+                  XR_ARRAY_PUSH_INVALID_ARRAY);
+    ASSERT_EQ_INT(arr->length, length);
+    ASSERT_EQ_INT(arr->capacity, capacity);
+
+    XrArray *slice = xr_array_slice(main_coro, arr, 0, 1);
+    ASSERT_NOT_NULL(slice);
+    length = slice->length;
+    capacity = slice->capacity;
+    ASSERT_EQ_INT(xr_array_push_owned_checked(xr_value_from_array(slice), element),
+                  XR_ARRAY_PUSH_SLICE);
+    ASSERT_EQ_INT(slice->length, length);
+    ASSERT_EQ_INT(slice->capacity, capacity);
+
+    XrArray *typed = xr_array_with_capacity_typed(main_coro, 0, XR_ELEM_I64);
+    ASSERT_NOT_NULL(typed);
+    length = typed->length;
+    capacity = typed->capacity;
+    ASSERT_EQ_INT(xr_array_push_owned_checked(xr_value_from_array(typed), receiver),
+                  XR_ARRAY_PUSH_TYPE_MISMATCH);
+    ASSERT_EQ_INT(typed->length, length);
+    ASSERT_EQ_INT(typed->capacity, capacity);
+    teardown();
+}
+
 TEST(array_pop_single) {
     setup();
     XrArray *arr = xr_array_new(main_coro);
@@ -455,6 +504,7 @@ static void run_all_tests(void) {
     RUN_TEST_SUITE("Array Push/Pop");
     RUN_TEST(array_push_single);
     RUN_TEST(array_push_multiple);
+    RUN_TEST(array_push_owned_checked_status_and_atomicity);
     RUN_TEST(array_pop_single);
     RUN_TEST(array_pop_empty);
     RUN_TEST(array_push_pop_sequence);

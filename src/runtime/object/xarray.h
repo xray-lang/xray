@@ -105,6 +105,20 @@ XR_FUNC int xr_array_size(XrArray *arr);
 
 /* ====== Array Modification ====== */
 
+/* The one ownership-preserving push kernel shared by legacy bytecode adapters
+ * and the typed TargetPlan executor.  The element owner moves into the array
+ * only on OK; every failure leaves both the array contents and the caller's
+ * element ownership unchanged. */
+typedef enum XrArrayPushStatus {
+    XR_ARRAY_PUSH_OK = 0,
+    XR_ARRAY_PUSH_INVALID_ARRAY,
+    XR_ARRAY_PUSH_SLICE,
+    XR_ARRAY_PUSH_TYPE_MISMATCH,
+    XR_ARRAY_PUSH_ALLOCATION_FAILED,
+} XrArrayPushStatus;
+
+XR_FUNC XrArrayPushStatus xr_array_push_owned_checked(XrValue receiver, XrValue value);
+
 XR_FUNC void xr_array_push(XrArray *arr, XrValue value);
 XR_FUNC XrValue xr_array_pop(XrArray *arr);
 XR_FUNC void xr_array_unshift(XrArray *arr, XrValue value);
