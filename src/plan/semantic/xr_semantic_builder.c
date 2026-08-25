@@ -3246,19 +3246,6 @@ static bool semantic_string_builder_type_exact(const XrSemanticTypeRecord *type)
            type->canonical_key && strcmp(type->canonical_key, expected) == 0;
 }
 
-static bool xi_string_builder_append_rune_exact(const XiValue *value) {
-    return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
-           value->args[1] && value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-           value->aux &&
-           strcmp((const char *) value->aux,
-                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE &&
-           value->aux_int == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
-           xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
-           value->args[1]->type && value->args[1]->type->kind == XR_KIND_RUNE &&
-           xr_type_is_builtin_named_class(value->type, "StringBuilder");
-}
-
 static bool xi_string_builder_to_string_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 1 && value->args[0] &&
            value->aux && strcmp((const char *) value->aux, "toString") == 0 &&
@@ -3267,21 +3254,11 @@ static bool xi_string_builder_to_string_exact(const XiValue *value) {
            value->type->kind == XR_KIND_STRING;
 }
 
-static bool xi_string_builder_append_string_exact(const XiValue *value) {
-    return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
-           value->args[1] && value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-           value->aux &&
-           strcmp((const char *) value->aux,
-                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE &&
-           value->aux_int == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
-           xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
-           value->args[1]->type && value->args[1]->type->kind == XR_KIND_STRING &&
-           xr_type_is_builtin_named_class(value->type, "StringBuilder");
-}
-
-static bool semantic_string_builder_append_rune_exact(const XrSemanticBuildContext *ctx,
-                                                      const XrSemanticOperationRecord *record) {
+static bool semantic_string_builder_append_common_exact(
+    const XrSemanticBuildContext *ctx, const XrSemanticOperationRecord *record,
+    const XrSemanticTypeRecord **out_argument_type) {
+    if (out_argument_type)
+        *out_argument_type = NULL;
     if (!ctx || !record || record->operand_count != 2 ||
         record->operand_begin > ctx->plan->operand_count ||
         record->operand_count > ctx->plan->operand_count - record->operand_begin ||
@@ -3293,20 +3270,52 @@ static bool semantic_string_builder_append_rune_exact(const XrSemanticBuildConte
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
     const XrSemanticTypeRecord *argument_type =
         argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
-    return semantic_string_builder_type_exact(receiver_type) &&
-           record->result_type == receiver->type && argument_type &&
+    const XrSemanticFunctionRecord *function =
+        record->function < ctx->plan->function_count ? &ctx->plan->functions[record->function]
+                                                    : NULL;
+    bool result_exact =
+        (record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+         record->return_parameter == -1 &&
+         ((record->return_provenance == XR_SEM_RETURN_OWNED && record->return_complete == 1) ||
+          (record->return_provenance == XR_SEM_RETURN_NONE && record->return_complete == 0))) ||
+        (record->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+         (((record->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+            record->return_parameter == -1) ||
+           (record->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
+            record->return_parameter >= 0 &&
+            (uint16_t) record->return_parameter < function->parameter_count)) &&
+          record->return_complete == 1) ||
+         (record->return_provenance == XR_SEM_RETURN_NONE && record->return_parameter == -1 &&
+          record->return_complete == 0));
+    bool exact =
+        semantic_string_builder_type_exact(receiver_type) && argument_type && result_exact &&
+        record->opcode == XI_CALL_METHOD && record->result_type == receiver->type &&
+        record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
+        record->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+        strcmp(ctx->plan->metadata[record->metadata_begin],
+               XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
+        record->auxiliary_kind == XI_AUX_KIND_NONE && record->constant == XR_SEMANTIC_INDEX_NONE &&
+        record->callable_function == XR_SEMANTIC_INDEX_NONE &&
+        record->import_resolution == XR_SEM_IMPORT_RESOLUTION_NONE &&
+        record->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
+        record->ownership_use == xi_generated_op_own_use(XI_CALL_METHOD) &&
+        record->flags == xi_generated_op_default_flags(XI_CALL_METHOD) &&
+        receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
+        receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
+        argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
+        argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == 0;
+    if (exact && out_argument_type)
+        *out_argument_type = argument_type;
+    return exact;
+}
+
+static bool semantic_string_builder_append_rune_exact(const XrSemanticBuildContext *ctx,
+                                                      const XrSemanticOperationRecord *record) {
+    const XrSemanticTypeRecord *argument_type = NULL;
+    return semantic_string_builder_append_common_exact(ctx, record, &argument_type) &&
            argument_type->kind == XR_KIND_RUNE && argument_type->builtin_type == XR_TID_NULL &&
            argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
-           argument_type->flags == 0 &&
-           record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
-           record->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-           strcmp(ctx->plan->metadata[record->metadata_begin],
-                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
-           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == 0 &&
-           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
+           argument_type->flags == 0;
 }
 
 static bool semantic_string_builder_to_string_exact(const XrSemanticBuildContext *ctx,
@@ -3332,31 +3341,11 @@ static bool semantic_string_builder_to_string_exact(const XrSemanticBuildContext
 
 static bool semantic_string_builder_append_string_exact(const XrSemanticBuildContext *ctx,
                                                         const XrSemanticOperationRecord *record) {
-    if (!ctx || !record || record->operand_count != 2 ||
-        record->operand_begin > ctx->plan->operand_count ||
-        record->operand_count > ctx->plan->operand_count - record->operand_begin ||
-        record->metadata_count != 1 || record->metadata_begin >= ctx->plan->metadata_count)
-        return false;
-    const XrSemanticOperandRecord *receiver = &ctx->plan->operands[record->operand_begin];
-    const XrSemanticOperandRecord *argument = receiver + 1;
-    const XrSemanticTypeRecord *receiver_type =
-        receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
-    const XrSemanticTypeRecord *argument_type =
-        argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
-    return semantic_string_builder_type_exact(receiver_type) && argument_type &&
+    const XrSemanticTypeRecord *argument_type = NULL;
+    return semantic_string_builder_append_common_exact(ctx, record, &argument_type) &&
            argument_type->kind == XR_KIND_STRING && argument_type->builtin_type == XR_TID_NULL &&
            argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
-           argument_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
-           record->result_type == receiver->type &&
-           record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
-           record->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
-           strcmp(ctx->plan->metadata[record->metadata_begin],
-                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
-           receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
-           receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
-           argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
-           argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && record->result_alias_operand == 0 &&
-           record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED;
+           argument_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT);
 }
 
 /* `Array<T>` is a compiler-owned container: the array kind is produced only by
@@ -4201,15 +4190,18 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         if (!xr_semantic_string_slice_range_is_exact(ctx->plan, record, NULL, NULL, NULL))
             record->intrinsic_kind = XR_SEM_INTRINSIC_NONE;
     }
-    if (xi_string_builder_append_rune_exact(value) &&
-        semantic_string_builder_append_rune_exact(ctx, record))
-        record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE;
+    if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND) {
+        bool rune = semantic_string_builder_append_rune_exact(ctx, record);
+        bool string = semantic_string_builder_append_string_exact(ctx, record);
+        if (rune == string)
+            return fail(ctx, "XR_SEM_0019",
+                        "StringBuilder.append producer identity has no unique frozen shape");
+        record->intrinsic_kind = rune ? XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE
+                                      : XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING;
+    }
     if (xi_string_builder_to_string_exact(value) &&
         semantic_string_builder_to_string_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_TO_STRING;
-    if (xi_string_builder_append_string_exact(value) &&
-        semantic_string_builder_append_string_exact(ctx, record))
-        record->intrinsic_kind = XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING;
     if (xi_json_namespace_value_exact(value) && semantic_json_namespace_value_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_JSON_NAMESPACE_VALUE;
     if (xi_panic_info_constructor_exact(value)) {

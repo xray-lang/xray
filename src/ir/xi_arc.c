@@ -1026,6 +1026,17 @@ XR_FUNC uint8_t xi_arc_value_result_ownership(const XiFunc *function, const XiVa
         return XI_GEN_RESULT_OWNERSHIP_OWNED;
     if (arc_value_is_borrow_alias(value, 0))
         return XI_GEN_RESULT_OWNERSHIP_BORROWED;
+    /* A receiver-returning builtin forwards the receiver's ownership; it does
+     * not manufacture a fresh owner.  The explicit alias is lowering-owned,
+     * so this projection never recovers the contract from an opcode or name. */
+    if (value->result_alias_operand >= 0 &&
+        (uint16_t) value->result_alias_operand < value->nargs && value->args) {
+        const XiValue *source = value->args[value->result_alias_operand];
+        uint8_t source_ownership = xi_arc_value_result_ownership(function, source);
+        if (source_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED ||
+            source_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED)
+            return source_ownership;
+    }
     if (!op_is_call(value->op))
         return op_result_ownership(value->op);
     XiReturnOwnership ownership = xi_arc_value_return_ownership(function, value);

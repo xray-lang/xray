@@ -438,6 +438,21 @@ static XrSemanticOperationRecord *semantic_find_intrinsic_operation(XrSemanticPl
     return NULL;
 }
 
+static uint32_t semantic_count_string_builder_append_operations(const XrSemanticPlan *plan,
+                                                                uint8_t ownership) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &plan->operations[i];
+        bool append =
+            operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+            (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
+             operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE);
+        if (append && (ownership == UINT8_MAX || operation->result_ownership == ownership))
+            count++;
+    }
+    return count;
+}
+
 static void func_tree_mark_optimized_for_semantic_fixture(XiFunc *f) {
     if (!f)
         return;
@@ -975,15 +990,17 @@ TEST(user_method_named_fetch_add_remains_ordinary_call) {
 }
 
 TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
-    XiFunc *f = lower_source("fn build() -> string {\n"
+    XiFunc *f = lower_source("fn appendRune(out: ref StringBuilder) { out.append('x') }\n"
+                             "fn build() -> string {\n"
                              "  var builder = StringBuilder()\n"
                              "  builder.append(\"x\")\n"
                              "  builder.append('中')\n"
+                             "  appendRune(ref builder)\n"
                              "  return builder.toString()\n"
                              "}\n");
     assert(f != NULL);
     assert(func_tree_count_intrinsic_method(
-               f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 2 &&
+               f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 3 &&
            "every builtin StringBuilder.append call must carry one stable intrinsic identity");
     XiValue *append = func_tree_find_method(f, "append");
     assert(append && append->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
@@ -1006,6 +1023,13 @@ TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
     if (!built)
         fprintf(stderr, "StringBuilder.append SemanticPlan build failed: %s\n", error);
     assert(built && plan != NULL);
+    assert(semantic_count_string_builder_append_operations(plan, UINT8_MAX) == 3 &&
+           semantic_count_string_builder_append_operations(
+               plan, XI_GEN_RESULT_OWNERSHIP_BORROWED) == 1 &&
+           semantic_count_string_builder_append_operations(plan, XI_GEN_RESULT_OWNERSHIP_OWNED) ==
+               2 &&
+           "every producer-marked append must freeze one exact shape and preserve receiver "
+           "ownership");
     XrSemanticOperationRecord *operation =
         semantic_find_intrinsic_operation(plan, XA_INTRINSIC_STRING_BUILDER_APPEND);
     assert(operation &&

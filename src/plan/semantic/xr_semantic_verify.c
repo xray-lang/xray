@@ -1732,6 +1732,28 @@ static bool verify_string_byte_slice_view(const XrSemanticPlan *plan,
     return exact;
 }
 
+static bool string_builder_append_result_is_exact(const XrSemanticPlan *plan,
+                                                  const XrSemanticOperationRecord *operation) {
+    const XrSemanticFunctionRecord *function =
+        operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
+    return operation &&
+           ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+             operation->return_parameter == -1 &&
+             ((operation->return_provenance == XR_SEM_RETURN_OWNED &&
+               operation->return_complete == 1) ||
+              (operation->return_provenance == XR_SEM_RETURN_NONE &&
+               operation->return_complete == 0))) ||
+            (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+             ((((operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+                 operation->return_parameter == -1) ||
+                (operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
+                 operation->return_parameter >= 0 &&
+                 (uint16_t) operation->return_parameter < function->parameter_count)) &&
+               operation->return_complete == 1) ||
+              (operation->return_provenance == XR_SEM_RETURN_NONE &&
+               operation->return_parameter == -1 && operation->return_complete == 0))));
+}
+
 static bool verify_string_builder_append_rune(const XrSemanticPlan *plan,
                                               const XrSemanticOperationRecord *operation,
                                               char *error, size_t error_size) {
@@ -1764,8 +1786,7 @@ static bool verify_string_builder_append_rune(const XrSemanticPlan *plan,
         receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
         argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
         argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && operation->result_alias_operand == 0 &&
-        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-        operation->return_complete == 1;
+        string_builder_append_result_is_exact(plan, operation);
     return exact || report(error, error_size, "XR_SEM_0019",
                            "StringBuilder.append(rune) authority is not exact");
 }
@@ -2660,8 +2681,7 @@ static bool verify_string_builder_append_string(const XrSemanticPlan *plan,
         receiver->parameter == -1 && receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
         argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
         argument->flags == XR_SEM_OPERAND_CALL_CONTRACT && operation->result_alias_operand == 0 &&
-        operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
-        operation->return_complete == 1;
+        string_builder_append_result_is_exact(plan, operation);
     return exact || report(error, error_size, "XR_SEM_0019",
                            "StringBuilder.append(string) authority is not exact");
 }

@@ -494,6 +494,7 @@ static bool scalar_rep_matches_profile(const XrTargetMachineRepRecord *rep,
 
 static bool semantic_direct_local_tagged_ref_parameter_is_exact_verify(
     const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage);
+static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *type);
 
 /* A borrowed RAW_PTR is not a general pointer lifecycle. It exists only as
  * the physical callee-side carrier of an exact direct-local tagged ref
@@ -797,38 +798,36 @@ static bool semantic_array_allocation_is_exact(const XrSemanticPlan *semantic,
            operation->result_value < function->value_begin + function->value_count;
 }
 
-/* Independently rebuilt: an exact `Array<T>` at a direct-local boundary, and
- * the element storage that boundary is entitled to know. A carrier holding the
- * tagged outer value never reaches an element and so asks nothing of it; a
- * carrier holding a pointer into the caller's cell may index and rewrite
- * elements and so demands an exact scalar or source-class tagged storage.
- * `indexes_elements` is which of the two is asking, and `storage` is the
- * independently reconstructed element storage. */
-static bool semantic_direct_local_array_type_is_exact_verify_ex(const XrSemanticPlan *semantic,
-                                                                uint32_t type_index,
-                                                                bool indexes_elements,
-                                                                bool admits_instance,
-                                                                uint8_t *storage) {
+/* Independently rebuilt: an exact tagged value at a direct-local boundary.
+ * Array carriers additionally state the element storage the boundary may
+ * reach; compiler/source-owned class instances admitted only at ref boundaries
+ * have no element storage. `indexes_elements` and `admits_instance` keep those
+ * two questions explicit instead of inferring them from a slot role. */
+static bool semantic_direct_local_tagged_boundary_type_is_exact_verify(
+    const XrSemanticPlan *semantic, uint32_t type_index, bool indexes_elements,
+    bool admits_instance, uint8_t *storage) {
     uint32_t child_count = 0;
     const uint32_t *children =
         semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
-    const XrSemanticTypeRecord *array =
+    const XrSemanticTypeRecord *type =
         semantic ? xr_semantic_plan_type(semantic, type_index) : NULL;
     uint8_t element = XR_TARGET_ARRAY_STORAGE_NONE;
     /* Mirrors the builder, including which call sites opt in: a class instance
      * is admitted at a ref boundary and nowhere else.  The two sides must admit
      * the same set, or the plan the builder froze is one this pass refuses. */
     if (admits_instance && semantic &&
-        xr_semantic_class_instance_type_source_class(semantic, array) != XR_SEMANTIC_INDEX_NONE) {
+        (xr_semantic_class_instance_type_source_class(semantic, type) !=
+             XR_SEMANTIC_INDEX_NONE ||
+         semantic_stringbuilder_type_is_exact(type))) {
         if (storage)
             *storage = XR_TARGET_ARRAY_STORAGE_NONE;
         return true;
     }
-    if (!semantic || !children || !xr_semantic_array_type_row_is_exact(array) ||
-        array->child_begin >= child_count)
+    if (!semantic || !children || !xr_semantic_array_type_row_is_exact(type) ||
+        type->child_begin >= child_count)
         return false;
     const XrSemanticTypeRecord *element_type =
-        xr_semantic_plan_type(semantic, children[array->child_begin]);
+        xr_semantic_plan_type(semantic, children[type->child_begin]);
     if (!xr_target_array_storage_from_type(element_type, &element)) {
         bool source_class_element =
             xr_semantic_class_instance_type_source_class(semantic, element_type) !=
@@ -849,8 +848,8 @@ static bool semantic_direct_local_array_type_is_exact_verify(const XrSemanticPla
                                                              uint32_t type_index,
                                                              bool indexes_elements,
                                                              uint8_t *storage) {
-    return semantic_direct_local_array_type_is_exact_verify_ex(semantic, type_index,
-                                                               indexes_elements, false, storage);
+    return semantic_direct_local_tagged_boundary_type_is_exact_verify(
+        semantic, type_index, indexes_elements, false, storage);
 }
 
 /* A borrowed `Array<T>` parameter in either passing mode. Both modes borrow the
@@ -868,14 +867,19 @@ semantic_direct_local_array_parameter_is_exact_verify(const XrSemanticPlan *sema
         parameter->ownership != XI_OWN_BORROWED || parameter->transfer_mode != XR_TRANSFER_SHARE ||
         (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0)
         return false;
-    return semantic_direct_local_array_type_is_exact_verify_ex(
-        semantic, parameter->type, mode == XR_PARAM_REF, mode == XR_PARAM_REF, storage);
+    return semantic_direct_local_array_type_is_exact_verify(semantic, parameter->type,
+                                                            mode == XR_PARAM_REF, storage);
 }
 
 static bool semantic_direct_local_tagged_ref_parameter_is_exact_verify(
     const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
-    return semantic_direct_local_array_parameter_is_exact_verify(semantic, parameter, XR_PARAM_REF,
-                                                                 storage);
+    return parameter && parameter->function < xr_semantic_plan_function_count(semantic) &&
+           parameter->value != XR_SEMANTIC_INDEX_NONE && parameter->mode == XR_PARAM_REF &&
+           parameter->ownership == XI_OWN_BORROWED &&
+           parameter->transfer_mode == XR_TRANSFER_SHARE &&
+           (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) == 0 && parameter->reserved == 0 &&
+           semantic_direct_local_tagged_boundary_type_is_exact_verify(
+               semantic, parameter->type, true, true, storage);
 }
 
 static bool semantic_direct_local_array_value_parameter_is_exact_verify(
@@ -1954,6 +1958,28 @@ static bool semantic_stringbuilder_type_is_exact(const XrSemanticTypeRecord *typ
            type->scalar_rep == XR_SCALAR_REP_NONE &&
            type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            type->canonical_key && strcmp(type->canonical_key, expected_type_key) == 0;
+}
+
+static bool semantic_stringbuilder_append_result_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *operation) {
+    const XrSemanticFunctionRecord *function =
+        operation ? xr_semantic_plan_function(semantic, operation->function) : NULL;
+    return operation &&
+           ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+             operation->return_parameter == -1 &&
+             ((operation->return_provenance == XR_SEM_RETURN_OWNED &&
+               operation->return_complete == 1) ||
+              (operation->return_provenance == XR_SEM_RETURN_NONE &&
+               operation->return_complete == 0))) ||
+            (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+             ((((operation->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+                 operation->return_parameter == -1) ||
+                (operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
+                 operation->return_parameter >= 0 &&
+                 (uint16_t) operation->return_parameter < function->parameter_count)) &&
+               operation->return_complete == 1) ||
+              (operation->return_provenance == XR_SEM_RETURN_NONE &&
+               operation->return_parameter == -1 && operation->return_complete == 0))));
 }
 
 static bool operation_is_exact_stringbuilder_append_rune(const XrSemanticPlan *semantic,
@@ -3578,9 +3604,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
         operation->result_type == semantic_type;
     bool exact_stringbuilder =
         semantic_stringbuilder_constructor_is_exact(plan->semantic_plan, operation);
-    /* All three StringBuilder method families bind a freshly owned dynamic
-     * result, exactly like the constructor. Leaving one out here makes the
-     * builder's value rep unexpected (reason 7) and the family unverifiable. */
+    /* StringBuilder methods bind a dynamic result in their own right. Append
+     * preserves the receiver's ownership, while toString creates a new owner. */
     bool exact_stringbuilder_append =
         operation_is_exact_stringbuilder_append_rune(plan->semantic_plan, operation, NULL, NULL);
     bool exact_stringbuilder_to_string =
@@ -3891,6 +3916,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
              exact_adt_enum_borrowed || exact_string_shared_read || exact_array_shared_read ||
              exact_tagged_ref_place_load || exact_array_value_parameter ||
              exact_string_value_parameter_borrowed ||
+             ((exact_stringbuilder_append || exact_stringbuilder_append_string) && operation &&
+              operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED) ||
              (exact_dynamic_value && xr_semantic_dynamic_value_is_borrowed(operation)) ||
              (exact_channel && operation && operation->opcode == XI_COPY))
                 ? XR_TARGET_OWNERSHIP_BORROWED
@@ -4608,7 +4635,7 @@ operation_is_exact_stringbuilder_append_string(const XrSemanticPlan *semantic,
      * should not have written. */
     bool exact = semantic_stringbuilder_type_is_exact(rt) && at && at->kind == XR_KIND_STRING &&
                  operation->result_type == receiver->type &&
-                 operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
+                 semantic_stringbuilder_append_result_is_exact_verify(semantic, operation) &&
                  receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
                  receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
                  argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
@@ -5195,7 +5222,7 @@ static bool operation_is_exact_stringbuilder_append_rune(const XrSemanticPlan *s
         operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
         strcmp(metadata[operation->metadata_begin], "append") != 0 ||
         operation->result_alias_operand != 0 ||
-        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_OWNED)
+        !semantic_stringbuilder_append_result_is_exact_verify(semantic, operation))
         return false;
     const XrSemanticOperandRecord *receiver = &operands[operation->operand_begin];
     const XrSemanticOperandRecord *argument = receiver + 1;
@@ -5756,6 +5783,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
         }
+        bool borrowed_stringbuilder_append =
+            (stringbuilder_append_rune || stringbuilder_append_string) && operation &&
+            operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
         if (map_entries_iterator) {
             result_scalar = 1;
             result_kind = XR_MACHINE_REP_DYN_VALUE;
@@ -5812,14 +5842,17 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             plan->machine_reps[call->error_register_rep].kind == XR_MACHINE_REP_VOID &&
             plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
             call->native_abi == machine->native_abi && call->result_mode == XR_TARGET_CALL_VALUE &&
-            /* Every family that hands back a freshly owned dynamic value
-             * agrees on RETURN_OWNED here; the per-family branches below
-             * re-assert it, so the two demands must stay in step. */
+            /* Receiver-aliasing StringBuilder append preserves a borrowed
+             * receiver. Every genuinely fresh dynamic family agrees on
+             * RETURN_OWNED; the per-family branches below re-assert the same
+             * answer, so the shared and specific checks cannot drift. */
             call->result_ownership ==
-                (stringbuilder_constructor || direct_string_result || direct_array_result ||
-                         direct_adt_enum_result || direct_class_instance_result ||
-                         stringbuilder_append_rune || string_runes || string_slice_range ||
-                         rune_to_string ||
+                (borrowed_stringbuilder_append
+                     ? XR_TARGET_CALL_BORROW
+                 : stringbuilder_constructor || direct_string_result || direct_array_result ||
+                          direct_adt_enum_result || direct_class_instance_result ||
+                          stringbuilder_append_rune || string_runes || string_slice_range ||
+                          rune_to_string ||
                          stringbuilder_to_string || stringbuilder_append_string ||
                          json_namespace_value || class_construction || adt_enum_constructor ||
                          array_intrinsic || panic_info_constructor || container_copy ||
@@ -6662,6 +6695,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         } else if (stringbuilder_append_rune) {
             const XrSemanticTypeRecord *receiver_type =
                 xr_semantic_plan_type(semantic, operation->result_type);
+            bool borrowed =
+                operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
             valid =
                 receiver_type && !suspends &&
                 reconstruct_call_identity("xray-target-stringbuilder-append-rune-v1", operation->id,
@@ -6676,10 +6711,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 call->flags == 0 &&
                 call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_RUNE &&
                 call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_RUNE &&
-                call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
+                call->result_ownership ==
+                    (borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED) &&
+                result &&
                 result->slot < plan->slots_count &&
                 plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+                plan->slots[result->slot].ownership ==
+                    (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
             if (!valid)
                 break;
         } else if (string_runes) {
@@ -6989,6 +7027,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             if (!valid)
                 break;
         } else if (stringbuilder_append_string) {
+            bool borrowed =
+                operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED;
             valid =
                 result_type && !suspends &&
                 reconstruct_call_identity("xray-target-stringbuilder-append-string-v1",
@@ -6999,10 +7039,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                 call->flags == 0 &&
                 call->calling_convention == XR_TARGET_CALL_CONVENTION_STRINGBUILDER_APPEND_STRING &&
                 call->target_kind == XR_TARGET_CALL_TARGET_STRINGBUILDER_APPEND_STRING &&
-                call->result_ownership == XR_TARGET_CALL_RETURN_OWNED && result &&
+                call->result_ownership ==
+                    (borrowed ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_RETURN_OWNED) &&
+                result &&
                 result->slot < plan->slots_count &&
                 plan->slots[result->slot].root_kind == XR_TARGET_ROOT_DYNAMIC &&
-                plan->slots[result->slot].ownership == XR_TARGET_OWNERSHIP_OWNED;
+                plan->slots[result->slot].ownership ==
+                    (borrowed ? XR_TARGET_OWNERSHIP_BORROWED : XR_TARGET_OWNERSHIP_OWNED);
             if (!valid)
                 break;
         } else if (panic_info_constructor) {
