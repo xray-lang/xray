@@ -348,6 +348,8 @@ add_test(NAME test_target_map_entry_iterator_authority
     COMMAND $<TARGET_FILE:test_target_plan> map-entry-iterator-authority)
 add_test(NAME test_target_iterator_rune_nth_argument_authority
     COMMAND $<TARGET_FILE:test_target_plan> iterator-rune-nth-argument-authority)
+add_test(NAME test_target_source_class_array_fill_authority
+    COMMAND $<TARGET_FILE:test_target_plan> source-class-array-fill-authority)
 add_xray_unit_test(test_xtp_format plan/test_xtp_format.c
     ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_xtp_resource_stress

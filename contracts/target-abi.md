@@ -203,8 +203,16 @@ For exact scalar `Array.fill(value)`, schema 30 owns the receiver and fill
 semantic identities, scalar element storage, receiver-alias result, exact
 Target call identity, and immutable C materialization recipe. SemanticPlan,
 TargetPlan, refinement, and C emission independently reconstruct the same
-two-operand call; selector text, live Xi types, range-fill overloads, mutable
-metadata, and generic method dispatch grant no authority or fallback.
+two-operand call; selector text, live Xi types, mutable metadata, and generic
+method dispatch grant no authority or fallback. Separately, the typed Target
+array-member family owns exactly the four-operand
+`Array<source-class>.fill(value, start, end)` call: its selector and numeric
+method identity, exact source-class element, tagged consume boundary, borrowed
+receiver, and two trivial i64 bounds are frozen and independently rebuilt.
+Shorter reference fill forms and other container methods remain unavailable.
+This Target slice grants no representation-refinement, C-emission, or VM
+execution recipe for source-class range fill; those layers must continue to
+fail closed until a later family owns them.
 For exact `String.runes()`, schema 30 owns the borrowed String receiver, owned
 `Iterator<rune>` dynamic result, exact Target call identity, fixed
 `xrt_string_runes` symbol, slot, layout, and extent. Refinement independently

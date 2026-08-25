@@ -2375,10 +2375,9 @@ static bool verify_array_intrinsic(const XrSemanticPlan *plan,
     return exact;
 }
 
-/* A unit, int, or bool result is a fresh value the call owns outright; a
- * receiver result is the receiver's own reference handed straight back, which
- * the operation records as an alias of operand 0 with a complete owned return
- * provenance and no storage of its own. */
+/* Rebuild the sealed reference-storage family without trusting the builder:
+ * only exact source-class push and range-fill identities may consume an
+ * element into tagged Array storage. */
 
 static bool verify_array_member_reference_contract(
     const XrSemanticPlan *plan, const XrArrayMemberShape *shape,
@@ -2398,6 +2397,12 @@ static bool verify_array_member_reference_contract(
         shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
         shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
         xr_semantic_class_instance_type_source_class(plan, element_type) == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    bool exact_push = strcmp(shape->selector, "push") == 0 && operation->operand_count == 2 &&
+                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
+    bool exact_fill = strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
+                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    if (!exact_push && !exact_fill)
         return false;
     uint32_t semantic_operand = operation->operand_begin + shape->element_operand;
     if (semantic_operand >= plan->operand_count)
@@ -2437,7 +2442,6 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
         (operation->semantic_immediate & 1) == 0 && receiver &&
         xr_semantic_array_type_row_is_exact(receiver_type) &&
         receiver_type->child_begin < plan->type_child_count &&
-        xr_semantic_array_member_result_is_exact(operation, shape, result_type, receiver->type) &&
         operation->effects == xi_generated_op_effects(XI_CALL_METHOD) &&
         receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
         receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
@@ -2446,6 +2450,23 @@ static bool verify_array_member_scalar(const XrSemanticPlan *plan,
         exact ? plan->type_children[receiver_type->child_begin] : XR_SEMANTIC_INDEX_NONE;
     const XrSemanticTypeRecord *element_type =
         exact && element_type_index < plan->type_count ? &plan->types[element_type_index] : NULL;
+    bool source_class_fill_result =
+        exact && element_type && strcmp(shape->selector, "fill") == 0 &&
+        operation->operand_count == 4 &&
+        operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1 &&
+        xr_semantic_class_instance_type_source_class(plan, element_type) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        operation->result_type == receiver->type && operation->result_alias_operand == 0 &&
+        ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+          operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM &&
+          operation->return_parameter == 0 && operation->return_complete == 1) ||
+         (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+          operation->return_provenance == XR_SEM_RETURN_NONE &&
+          operation->return_parameter == -1 && operation->return_complete == 0));
+    exact = exact &&
+            (xr_semantic_array_member_result_is_exact(operation, shape, result_type,
+                                                      receiver->type) ||
+             source_class_fill_result);
     exact = exact && element_type && verify_array_member_reference_contract(
                                                plan, shape, operation, element_type_index,
                                                element_type);

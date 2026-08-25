@@ -31,9 +31,13 @@ phases cannot reconstruct this authority from selector, live type, or arity.
 The schema additionally freezes only the exact two-operand scalar
 `Array.fill(value)` method form: its array receiver, scalar element storage,
 fill argument, receiver-alias result, ownership, effects, and selector metadata
-are canonical facts. Range overloads, non-scalar elements, live Xi types, and
-selector spelling alone remain unavailable rather than falling through to the
-scalar authority. The schema additionally freezes the first complete
+are canonical facts. This scalar family still excludes range overloads and
+non-scalar elements. Separately, the sealed array-member family admits exactly
+the four-operand `Array<source-class>.fill(value, start, end)` shape: the frozen
+selector and numeric method identity, exact source-class element, consumed
+tagged fill value, and two ordered signed-i64 bounds are all required. Live Xi
+types and selector spelling alone remain unavailable. The schema additionally
+freezes the first complete
 coroutine-owned value lifecycle. Only an exact fresh owned String concat whose
 producer dominates one frozen suspension state and whose unique exact release
 post-dominates that state qualifies. Three canonical entities record LIVE,
@@ -95,22 +99,24 @@ admits, which operand carries the element, and what the result is: `push` and
 no returned ownership; `indexOf` and `contains` consume one element operand and
 return an exact signed 64-bit integer or an exact boolean on the same terms;
 `fill`, `reverse` and `sort` return the receiver itself, recorded as an alias of
-operand 0 with a complete owned return provenance. The element operand is proven
-against the receiver's own element entry and every remaining argument is an
-exact signed 64-bit bound. Each shape now freezes element access, reference
+operand 0. The element operand is proven against the receiver's own element
+entry and every remaining argument is an exact signed 64-bit bound. Each shape
+now freezes element access, reference
 action, and drop lifecycle instead of publishing a permission bit. `reverse`,
-`sort`, and `join` preserve references already in the container. The sole
-reference-capable storing form is exact `Array<source-class>.push`: its element
-operand is consumed into tagged storage, and the canonical tagged Array
-lifecycle releases that stored value when it is erased or when the container
-is destroyed. TargetPlan binds this boundary with two ordered argument rows:
-the dynamic receiver is borrowed, while the exact owned source-class element
-is consumed with `TAGGED` call storage. Its independent verifier reconstructs
-the selector, lifecycle, source-class identity, both semantic operands, stable
-argument identities, ownership, storage, and dynamic caller representations.
-`unshift`, `fill`, `indexOf`, and `contains` remain unavailable for reference-
-capable elements, as do every unknown shape and every operand count outside the
-frozen range.
+`sort`, and `join` preserve references already in the container. The reference-
+capable storing forms are exact `Array<source-class>.push(value)` and exact
+`Array<source-class>.fill(value, start, end)`. Both consume the source-class
+element into tagged storage, whose canonical Array lifecycle releases it when
+erased or when the container is destroyed. TargetPlan binds two ordered rows
+for `push` and four for range `fill`: the dynamic receiver is borrowed, the
+exact owned source-class element is consumed with `TAGGED` call storage, and
+the two fill bounds are consumed trivial i64 values with no array storage.
+Its independent verifier reconstructs selector plus numeric method identity,
+lifecycle, source-class identity, every ordered semantic operand, stable
+argument identity, ownership, storage, and caller representation. Shorter
+source-class `fill` forms, `unshift`, `indexOf`, and `contains` remain
+unavailable for reference-capable elements, as do every unknown shape and every
+operand count outside the frozen range.
 `Array.reserve` is the closed stable-identity member of this container family:
 the analyzer records `core.array.reserve`, SemanticPlan freezes the exact array
 receiver, signed capacity operand, receiver-alias result, write/may-throw
@@ -491,7 +497,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
 anchor-sha256: src/plan/format/xr_xsm_encode.c d091aa2e885f3384d3ef4f41d8d915cd820ce2147f729b4ea3c513df10a86c31
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 50cfe87e28338a642e12129ad54c4a437fca708983911d36f2be2a715efb1152
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 145558f574ebad5786247665c42693fbaf0027aaced1f11083e2f49c66c37d75
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
@@ -506,7 +512,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c beeb105e17181dab96f74aadf34f91c3df926546cf2c8b39f6ca30d8923f99c2
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 36640304a54d31817f52870cfb8ede71a9db99559cec30d9f303a0a30e7af1b3
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 15fff7c8f42b44a1822b628c7de0bde3dc996f48b694ead0a4d8d8e917541f5d

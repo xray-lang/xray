@@ -3639,10 +3639,9 @@ static bool semantic_array_fill_scalar_exact(const XrSemanticBuildContext *ctx,
            fill->ownership_action == XR_SEM_OPERAND_CONSUME;
 }
 
-/* The result clause the frozen shape demands. A unit, int, or bool result is a
- * fresh value the call owns outright; a receiver result is the receiver's own
- * reference handed straight back, which the operation records as an alias of
- * operand 0 with a complete owned return provenance. */
+/* Reference-capable storage authority is narrower than the shape table: only
+ * the exact source-class push and range-fill method identities may consume an
+ * element into tagged Array storage. */
 
 static bool semantic_array_member_reference_contract_exact(
     const XrSemanticBuildContext *ctx, const XrArrayMemberShape *shape,
@@ -3663,6 +3662,12 @@ static bool semantic_array_member_reference_contract_exact(
         shape->element_operand == 0 || shape->element_operand >= record->operand_count ||
         xr_semantic_class_instance_type_source_class(ctx->plan, element_type) ==
             XR_SEMANTIC_INDEX_NONE)
+        return false;
+    bool exact_push = strcmp(shape->selector, "push") == 0 && record->operand_count == 2 &&
+                      record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
+    bool exact_fill = strcmp(shape->selector, "fill") == 0 && record->operand_count == 4 &&
+                      record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    if (!exact_push && !exact_fill)
         return false;
     uint32_t semantic_operand = record->operand_begin + shape->element_operand;
     if (semantic_operand >= ctx->plan->operand_count)
@@ -3694,10 +3699,23 @@ static bool semantic_array_member_scalar_exact(const XrSemanticBuildContext *ctx
     uint32_t element_type_index = ctx->plan->type_children[receiver_type->child_begin];
     const XrSemanticTypeRecord *element_type =
         element_type_index < ctx->plan->type_count ? &ctx->plan->types[element_type_index] : NULL;
+    bool source_class_fill_result =
+        element_type && strcmp(shape->selector, "fill") == 0 && record->operand_count == 4 &&
+        record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1 &&
+        xr_semantic_class_instance_type_source_class(ctx->plan, element_type) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        record->result_type == receiver->type && record->result_alias_operand == 0 &&
+        ((record->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+          record->return_provenance == XR_SEM_RETURN_BORROWED_PARAM &&
+          record->return_parameter == 0 && record->return_complete == 1) ||
+         (record->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+          record->return_provenance == XR_SEM_RETURN_NONE && record->return_parameter == -1 &&
+          record->return_complete == 0));
     if (!element_type ||
         !semantic_array_member_reference_contract_exact(ctx, shape, record, element_type_index,
                                                         element_type) ||
-        !xr_semantic_array_member_result_is_exact(record, shape, result_type, receiver->type) ||
+        (!xr_semantic_array_member_result_is_exact(record, shape, result_type, receiver->type) &&
+         !source_class_fill_result) ||
         record->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
         receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||

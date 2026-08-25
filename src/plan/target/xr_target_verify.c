@@ -2116,6 +2116,12 @@ static bool operation_is_exact_array_member_tagged_store(
         shape->element_operand == 0 || shape->element_operand >= operation->operand_count ||
         !receiver_type || receiver_type->child_begin >= child_count)
         return false;
+    bool exact_push = strcmp(shape->selector, "push") == 0 && operation->operand_count == 2 &&
+                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
+    bool exact_fill = strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
+                      operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    if (!exact_push && !exact_fill)
+        return false;
     uint32_t type_index = children[receiver_type->child_begin];
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, type_index);
     uint32_t operand_index = operation->operand_begin + shape->element_operand;
@@ -4784,16 +4790,29 @@ static bool operation_is_exact_array_member_scalar(const XrSemanticPlan *semanti
     const XrSemanticTypeRecord *receiver_type = xr_semantic_plan_type(semantic, receiver->type);
     if (!shape || !xr_semantic_array_type_row_is_exact(receiver_type) ||
         receiver_type->child_begin >= child_count ||
-        !xr_semantic_array_member_result_is_exact(
-            operation, shape, xr_semantic_plan_type(semantic, operation->result_type),
-            receiver->type) ||
         receiver->role != XR_SEM_OPERAND_RECEIVER || receiver->parameter != -1 ||
         receiver->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
         receiver->ownership_action != XR_SEM_OPERAND_BORROW)
         return false;
     uint32_t element_type_index = children[receiver_type->child_begin];
     const XrSemanticTypeRecord *element_type = xr_semantic_plan_type(semantic, element_type_index);
+    bool source_class_fill_result =
+        element_type && strcmp(shape->selector, "fill") == 0 && operation->operand_count == 4 &&
+        operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1 &&
+        xr_semantic_class_instance_type_source_class(semantic, element_type) !=
+            XR_SEMANTIC_INDEX_NONE &&
+        operation->result_type == receiver->type && operation->result_alias_operand == 0 &&
+        ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+          operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM &&
+          operation->return_parameter == 0 && operation->return_complete == 1) ||
+         (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+          operation->return_provenance == XR_SEM_RETURN_NONE &&
+          operation->return_parameter == -1 && operation->return_complete == 0));
     if (!element_type ||
+        (!xr_semantic_array_member_result_is_exact(
+             operation, shape, xr_semantic_plan_type(semantic, operation->result_type),
+             receiver->type) &&
+         !source_class_fill_result) ||
         !verifier_array_member_reference_contract_is_exact(
             semantic, shape, operation, element_type_index, element_type))
         return false;
@@ -5662,11 +5681,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                     semantic, operation, &array_member_receiver_type,
                                     &array_member_element, &array_member_receiver_result);
         uint32_t array_member_store_operand = XR_SEMANTIC_INDEX_NONE;
-        uint32_t array_member_store_type = XR_SEMANTIC_INDEX_NONE;
         bool array_member_tagged_store =
             array_member_scalar && operation_is_exact_array_member_tagged_store(
                                        semantic, operation, &array_member_store_operand,
-                                       &array_member_element, &array_member_store_type);
+                                       &array_member_element, NULL);
         uint32_t native_module_arity = 0;
         bool native_module_scalar =
             !semantic_target &&
@@ -7074,7 +7092,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->source_export == XR_SEMANTIC_INDEX_NONE &&
                     stable_id_is_zero(call->source_export_identity) &&
                     stable_id_is_zero(call->source_callee_identity) &&
-                    call->argument_count == (array_member_tagged_store ? 2 : 0) &&
+                    call->argument_count ==
+                        (array_member_tagged_store ? operation->operand_count : 0) &&
                     call->flags == 0 &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
                     call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
@@ -7095,13 +7114,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                          ? result->slot == XR_SEMANTIC_INDEX_NONE
                          : result->slot < plan->slots_count &&
                                 plan->slots[result->slot].semantic_value == operation->result_value);
-            for (uint16_t ordinal = 0; valid && array_member_tagged_store && ordinal < 2;
+            for (uint16_t ordinal = 0; valid && array_member_tagged_store &&
+                                       ordinal < operation->operand_count;
                  ordinal++) {
-                uint32_t semantic_operand =
-                    ordinal == 0 ? operation->operand_begin : array_member_store_operand;
+                uint32_t semantic_operand = operation->operand_begin + ordinal;
                 const XrSemanticOperandRecord *operand = &operands[semantic_operand];
-                const XrSemanticTypeRecord *operand_type = xr_semantic_plan_type(
-                    semantic, ordinal == 0 ? array_member_receiver_type : array_member_store_type);
+                const XrSemanticTypeRecord *operand_type =
+                    xr_semantic_plan_type(semantic, operand->type);
                 const XrTargetValueRepRecord *caller_value =
                     xr_target_plan_value_rep(plan, operand->value);
                 const XrTargetCallArgumentRecord *argument =
@@ -7137,12 +7156,15 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                             (ordinal == 0 ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_CONSUME) &&
                         argument->transfer_mode == operand->transfer_mode && argument->flags == 0 &&
                         argument->array_element_storage ==
-                            (ordinal == 0 ? XR_TARGET_ARRAY_STORAGE_NONE
-                                          : XR_TARGET_ARRAY_STORAGE_TAGGED) &&
+                            (semantic_operand == array_member_store_operand
+                                 ? XR_TARGET_ARRAY_STORAGE_TAGGED
+                                 : XR_TARGET_ARRAY_STORAGE_NONE) &&
                         argument->reserved8[0] == 0 && argument->reserved8[1] == 0 &&
                         argument->reserved8[2] == 0 &&
-                        caller_register->kind == XR_MACHINE_REP_DYN_VALUE &&
-                        caller_memory->kind == XR_MACHINE_REP_DYN_VALUE &&
+                        caller_register->kind ==
+                            (ordinal < 2 ? XR_MACHINE_REP_DYN_VALUE : XR_MACHINE_REP_I64) &&
+                        caller_memory->kind ==
+                            (ordinal < 2 ? XR_MACHINE_REP_DYN_VALUE : XR_MACHINE_REP_I64) &&
                         caller_slot->register_rep == caller_value->register_rep &&
                         caller_slot->memory_rep == caller_value->memory_rep &&
                         caller_slot->ownership == caller_register->ownership &&
@@ -7150,7 +7172,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                         (ordinal == 0
                              ? (caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED ||
                                 caller_register->ownership == XR_TARGET_OWNERSHIP_BORROWED)
-                             : caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED);
+                         : ordinal == 1
+                             ? caller_register->ownership == XR_TARGET_OWNERSHIP_OWNED
+                             : caller_register->ownership == XR_TARGET_OWNERSHIP_TRIVIAL);
                 next_argument++;
             }
             if (!valid)
