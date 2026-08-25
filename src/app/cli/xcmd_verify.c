@@ -38,6 +38,9 @@ typedef struct VerifyAnalysis {
     XrModuleGraph *graph;
     XaAnalyzer *analyzer;
     char *entry;
+    XrModuleIdentityAuthority entry_authority;
+    char *entry_authority_namespace;
+    char *entry_authority_root;
 } VerifyAnalysis;
 
 static bool verify_native_target_profile(const char *target_name,
@@ -257,6 +260,8 @@ static void verify_analysis_clear(VerifyAnalysis *state) {
     if (state->isolate)
         xray_vm_delete(state->isolate);
     xr_free(state->entry);
+    xr_free(state->entry_authority_namespace);
+    xr_free(state->entry_authority_root);
     xr_project_free(state->project);
     memset(state, 0, sizeof(*state));
 }
@@ -276,7 +281,10 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     }
     state->entry = xr_path_join(root, state->project->main);
     state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
-    if (!state->entry || !state->isolate)
+    if (!state->entry || !state->isolate ||
+        !xr_project_module_identity_authority(
+            state->project, &state->entry_authority,
+            &state->entry_authority_namespace, &state->entry_authority_root))
         return false;
     xr_module_system_init_with_script(state->isolate, state->entry);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
@@ -284,13 +292,9 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     XrModuleRegistry *registry = xr_isolate_get_module_registry(state->isolate);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     state->graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
-    XrModuleIdentityAuthority authority = {
-        .kind = XR_MODULE_IDENTITY_PROJECT,
-        .namespace_id = state->project->name,
-        .physical_root = state->project->root,
-    };
     if (!state->graph ||
-        xr_module_graph_build(state->graph, state->entry, &authority, &graph_error) != 0 ||
+        xr_module_graph_build(state->graph, state->entry,
+                              &state->entry_authority, &graph_error) != 0 ||
         xr_module_graph_topological_sort(state->graph) != 0 || state->graph->has_cycle) {
         xr_cli_error("verify", "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);
@@ -532,6 +536,7 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
         return false;
     }
     options.target_profile = target_profile;
+    options.entry_module_authority = state->entry_authority;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     options.emit_residue_dump = true;
     options.quiet = true;
@@ -1176,6 +1181,7 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
         return false;
     }
     options.target_profile = target_profile;
+    options.entry_module_authority = state->entry_authority;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
     options.emit_local_evidence_dump = true;
     options.quiet = true;

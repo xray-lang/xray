@@ -73,6 +73,9 @@ static int generate_native_fastpaths(int argc, char **argv) {
     XaotTarget target;
     XaotBuildOptions options;
     XaotBuildResult result;
+    XrModuleIdentityAuthority entry_authority = {0};
+    char *entry_authority_namespace = NULL;
+    char *entry_authority_root = NULL;
     XrTargetProfile *target_profile = NULL;
     XrProject *project = xr_project_load(NULL, ".");
     if (!project || !project->initialized || !project->native_plan) {
@@ -103,6 +106,17 @@ static int generate_native_fastpaths(int argc, char **argv) {
     options.target = &target;
     options.target_profile = target_profile;
     options.native_package_plan = project->native_plan;
+    if (!xr_project_module_identity_authority(
+            project, &entry_authority, &entry_authority_namespace,
+            &entry_authority_root)) {
+        fprintf(stderr,
+                "Error: invalid generated fastpath module identity authority\n");
+        xr_target_profile_free(target_profile);
+        xaot_target_free(&target);
+        xr_project_free(project);
+        return 1;
+    }
+    options.entry_module_authority = entry_authority;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     options.c_dialect = XI_CGEN_C_DIALECT_C11;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_NONE;
@@ -110,6 +124,8 @@ static int generate_native_fastpaths(int argc, char **argv) {
     options.quiet = true;
 
     int rc = xaot_build(input, &options, &result);
+    xr_free(entry_authority_namespace);
+    xr_free(entry_authority_root);
     xr_target_profile_free(target_profile);
     xaot_target_free(&target);
     if (rc != 0) {

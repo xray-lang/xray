@@ -340,6 +340,9 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
     char root[XR_CLI_PATH_MAX];
     XrProject *project = NULL;
     char *entry = NULL;
+    XrModuleIdentityAuthority entry_authority = {0};
+    char *entry_authority_namespace = NULL;
+    char *entry_authority_root = NULL;
     XaotTarget target = {0};
     XrTargetProfile *target_profile = NULL;
     XaotBuildOptions options = {0};
@@ -357,6 +360,12 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
         goto cleanup;
     }
     entry = xr_path_join(root, project->main);
+    if (!xr_project_module_identity_authority(
+            project, &entry_authority, &entry_authority_namespace,
+            &entry_authority_root)) {
+        xr_cli_error("explain", "project has no valid module identity authority");
+        goto cleanup;
+    }
     XrTargetCodegenFacts codegen;
     char profile_error[256];
     if (!entry || !xaot_target_init(&target, "native-c90") ||
@@ -368,6 +377,7 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
     }
     options.target = &target;
     options.target_profile = target_profile;
+    options.entry_module_authority = entry_authority;
     options.native_package_plan = project->native_plan;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     options.type_name_profile = XI_CGEN_TYPE_NAMES_ALL;
@@ -404,6 +414,8 @@ cleanup:
     if (target.name)
         xaot_target_free(&target);
     xr_free(entry);
+    xr_free(entry_authority_namespace);
+    xr_free(entry_authority_root);
     xr_project_free(project);
     return rc;
 }

@@ -9,6 +9,7 @@
  */
 
 #include "xproject.h"
+#include "xsemver.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../base/xfileio.h"
@@ -218,6 +219,74 @@ XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root) {
     project->initialized = !project->native_plan || project->native_plan->valid;
     xtoml_free(root);
     return project;
+}
+
+XR_FUNC bool xr_project_module_identity_authority(
+    const XrProject *project, XrModuleIdentityAuthority *authority,
+    char **namespace_out, char **physical_root_out) {
+    if (authority)
+        *authority = (XrModuleIdentityAuthority) {0};
+    if (namespace_out)
+        *namespace_out = NULL;
+    if (physical_root_out)
+        *physical_root_out = NULL;
+    if (!project || !authority || !namespace_out || !physical_root_out ||
+        !project->root || !project->root[0] || !project->name || !project->name[0])
+        return false;
+
+    char *physical_root = xr_realpath(project->root);
+    char *namespace_id = NULL;
+    if (!physical_root)
+        return false;
+    if (project->is_package) {
+        if (!project->version || !project->version[0] ||
+            !xr_semver_is_valid(project->version)) {
+            xr_free(physical_root);
+            return false;
+        }
+        size_t name_length = strlen(project->name);
+        size_t version_length = strlen(project->version);
+        if (version_length > SIZE_MAX - 2 ||
+            name_length > SIZE_MAX - version_length - 2) {
+            xr_free(physical_root);
+            return false;
+        }
+        size_t namespace_size = name_length + version_length + 2;
+        namespace_id = (char *) xr_malloc(namespace_size);
+        if (!namespace_id) {
+            xr_free(physical_root);
+            return false;
+        }
+        int written = snprintf(namespace_id, namespace_size, "%s@%s",
+                               project->name, project->version);
+        if (written < 0 || (size_t) written + 1 != namespace_size) {
+            xr_free(namespace_id);
+            xr_free(physical_root);
+            return false;
+        }
+    } else {
+        namespace_id = xr_strdup(project->name);
+        if (!namespace_id) {
+            xr_free(physical_root);
+            return false;
+        }
+    }
+
+    XrModuleIdentityAuthority candidate = {
+        .kind = project->is_package ? XR_MODULE_IDENTITY_PACKAGE
+                                    : XR_MODULE_IDENTITY_PROJECT,
+        .namespace_id = namespace_id,
+        .physical_root = physical_root,
+    };
+    if (!xr_module_identity_authority_valid(&candidate)) {
+        xr_free(namespace_id);
+        xr_free(physical_root);
+        return false;
+    }
+    *authority = candidate;
+    *namespace_out = namespace_id;
+    *physical_root_out = physical_root;
+    return true;
 }
 
 /*

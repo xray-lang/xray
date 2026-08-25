@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "../test_win_compat.h"
+#include "base/xmalloc.h"
 #include "module/xproject.h"
 
 #include <stdio.h>
@@ -278,6 +279,61 @@ TEST(c_export_prefix_and_exclude_shape_manifest_roots) {
     teardown_tmpdir();
 }
 
+TEST(module_identity_authority_is_manifest_typed) {
+    setup_tmpdir();
+    XrModuleIdentityAuthority authority = {0};
+    char *namespace_id = NULL;
+    char *physical_root = NULL;
+    XrProject project = {
+        .root = g_tmpdir,
+        .name = "identity-project",
+    };
+
+    ASSERT_TRUE(xr_project_module_identity_authority(
+        &project, &authority, &namespace_id, &physical_root));
+    ASSERT_EQ_INT(authority.kind, XR_MODULE_IDENTITY_PROJECT);
+    ASSERT_STR_EQ(authority.namespace_id, "identity-project");
+    ASSERT_TRUE(authority.physical_root[0] != '\0');
+    xr_free(namespace_id);
+    xr_free(physical_root);
+
+    project.is_package = true;
+    project.name = "xray/identity-package";
+    project.version = "1.2.3-beta.1+build.7";
+    ASSERT_TRUE(xr_project_module_identity_authority(
+        &project, &authority, &namespace_id, &physical_root));
+    ASSERT_EQ_INT(authority.kind, XR_MODULE_IDENTITY_PACKAGE);
+    ASSERT_STR_EQ(authority.namespace_id,
+                  "xray/identity-package@1.2.3-beta.1+build.7");
+    ASSERT_TRUE(authority.physical_root[0] != '\0');
+    xr_free(namespace_id);
+    xr_free(physical_root);
+
+    const struct {
+        bool is_package;
+        const char *name;
+        const char *version;
+    } rejected[] = {
+        {false, NULL, NULL},
+        {false, "xray/project", NULL},
+        {true, "xray/package", NULL},
+        {true, "package", "1.0.0"},
+        {true, "xray/package", "^1.0.0"},
+        {true, "xray/package", "not-a-version"},
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
+        project.is_package = rejected[i].is_package;
+        project.name = (char *) rejected[i].name;
+        project.version = (char *) rejected[i].version;
+        ASSERT_FALSE(xr_project_module_identity_authority(
+            &project, &authority, &namespace_id, &physical_root));
+        ASSERT_NULL(namespace_id);
+        ASSERT_NULL(physical_root);
+    }
+
+    teardown_tmpdir();
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Project Configuration");
 RUN_TEST(load_target_config);
@@ -285,4 +341,5 @@ RUN_TEST(load_verified_native_package_plan);
 RUN_TEST(native_package_hash_mismatch_fails_closed);
 RUN_TEST(native_package_unknown_target_policy_fails_closed);
 RUN_TEST(c_export_prefix_and_exclude_shape_manifest_roots);
+RUN_TEST(module_identity_authority_is_manifest_typed);
 TEST_MAIN_END()

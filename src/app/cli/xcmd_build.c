@@ -3373,6 +3373,9 @@ static int cmd_build_native(
     const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
+    XrModuleIdentityAuthority entry_authority = {0};
+    char *entry_authority_namespace = NULL;
+    char *entry_authority_root = NULL;
     XrTargetProfile *target_profile = NULL;
     XaotTargetCapabilityProvider capability_provider;
     bool has_capability_provider = false;
@@ -3436,8 +3439,21 @@ static int cmd_build_native(
     build_options.target = &build_target;
     build_options.target_profile = target_profile;
     build_options.native_package_plan = native_package_plan;
-    build_options.project_root = project ? project->root : NULL;
-    build_options.project_name = project ? project->name : NULL;
+    bool have_entry_authority =
+        project ? xr_project_module_identity_authority(
+                      project, &entry_authority, &entry_authority_namespace,
+                      &entry_authority_root)
+                : xr_module_identity_script_authority_from_source(
+                      input, &entry_authority, &entry_authority_root);
+    if (!have_entry_authority) {
+        fprintf(stderr, "Error: failed to establish exact entry module identity authority\n");
+        xr_free(entry_authority_namespace);
+        xr_free(entry_authority_root);
+        xr_target_profile_free(target_profile);
+        xaot_target_free(&build_target);
+        return 1;
+    }
+    build_options.entry_module_authority = entry_authority;
     XrLockfile *build_lockfile = NULL;
     char lockfile_path[XR_PATH_MAX];
     if (project && project->root) {
@@ -3459,6 +3475,8 @@ static int cmd_build_native(
     build_options.incremental_cache_verbose = verbose;
     int rc = xaot_build(input, &build_options, &aot_result);
     xr_lockfile_free(build_lockfile);
+    xr_free(entry_authority_namespace);
+    xr_free(entry_authority_root);
     xr_target_profile_free(target_profile);
     xaot_target_free(&build_target);
     if (rc != 0)

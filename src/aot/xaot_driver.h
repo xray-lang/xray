@@ -25,6 +25,7 @@
 
 #include "../base/xchecks.h"
 #include "../analysis/xglobal_summary.h"
+#include "../module/xmodule_identity.h"
 #include "../plan/target/xr_target_profile.h"
 #include "xi_cgen.h"
 #include "xaot_artifact.h"
@@ -168,8 +169,7 @@ typedef struct XaotBuildOptions {
     const XaotTarget *target;
     XrTargetProfile *target_profile; /* borrowed; exact authority is required */
     const struct XrNativePackagePlan *native_package_plan; /* borrowed for this build */
-    const char *project_root; /* physical I/O root; excluded from durable identities */
-    const char *project_name; /* stable project namespace coordinate */
+    XrModuleIdentityAuthority entry_module_authority; /* borrowed strings; exact typed authority */
     struct XrLockfile *lockfile; /* borrowed exact package authority */
     const XaotTargetCapabilityProvider *capability_provider;
     XaotBuildProfile profile;

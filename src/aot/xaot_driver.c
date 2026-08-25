@@ -1995,6 +1995,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         !xr_target_data_layout_validate(&options->target->data_layout) || !result)
         return 1;
     memset(result, 0, sizeof(*result));
+    if (!options->entry_module_authority.physical_root ||
+        !options->entry_module_authority.physical_root[0] ||
+        !xr_module_identity_authority_valid(&options->entry_module_authority)) {
+        fprintf(stderr, "Error: exact typed entry module identity authority is missing or invalid\n");
+        return 1;
+    }
     if (!xaot_target_profile_matches_options(options)) {
         fprintf(stderr,
                 "Error: exact TargetProfile authority is missing or does not match AOT options\n");
@@ -2065,47 +2071,21 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     xr_module_system_init_with_script(X, input_path);
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
-    char *script_authority_root = NULL;
-    XrModuleIdentityAuthority authority = {0};
-    if (options->project_root && options->project_root[0]) {
-        authority = (XrModuleIdentityAuthority) {
-            .kind = XR_MODULE_IDENTITY_PROJECT,
-            .namespace_id = options->project_name,
-            .physical_root = options->project_root,
-        };
-        if (!options->project_name || !options->project_name[0] ||
-            !xr_module_identity_authority_valid(&authority)) {
-            fprintf(stderr, "Error: failed to install project module identity authority\n");
-            xray_vm_delete(X);
-            return 1;
-        }
-    } else {
-        if (!xr_module_identity_script_authority_from_source(
-                input_path, &authority, &script_authority_root)) {
-            fprintf(stderr, "Error: failed to install script module identity authority\n");
-            xr_free(script_authority_root);
-            xray_vm_delete(X);
-            return 1;
-        }
-    }
     if (options->lockfile && !xr_module_resolver_set_lockfile(resolver, options->lockfile)) {
         fprintf(stderr, "Error: failed to install package lock authority\n");
-        xr_free(script_authority_root);
         xray_vm_delete(X);
         return 1;
     }
     XrModuleGraph *graph = xr_module_graph_new(session, resolver);
     if (!graph) {
         fprintf(stderr, "Error: failed to create module graph\n");
-        xr_free(script_authority_root);
         xray_vm_delete(X);
         return 1;
     }
 
     char *build_err = NULL;
-    int graph_rc = xr_module_graph_build(graph, input_path, &authority, &build_err);
-    xr_free(script_authority_root);
-    script_authority_root = NULL;
+    int graph_rc = xr_module_graph_build(
+        graph, input_path, &options->entry_module_authority, &build_err);
     if (graph_rc != 0) {
         fprintf(stderr, "Error: module graph build failed: %s\n", build_err ? build_err : "?");
         xr_free(build_err);

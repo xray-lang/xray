@@ -313,6 +313,14 @@ static void test_aot_rejects_missing_profile_before_source_work(void) {
     CHECK(xaot_target_init(&target, NULL));
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.entry_module_authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+#ifdef _WIN32
+        .physical_root = "C:\\",
+#else
+        .physical_root = "/tmp",
+#endif
+    };
     CHECK(xaot_build("definitely-missing.xr", &options, &result) != 0);
     CHECK(result.n_sources == 0);
     xaot_build_result_free(&result);

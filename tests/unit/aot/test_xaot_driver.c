@@ -39,6 +39,21 @@ static void release_target_profile(XaotBuildOptions *options) {
     options->target_profile = NULL;
 }
 
+static int xaot_build_script(const char *source_path, XaotBuildOptions *options,
+                             XaotBuildResult *result) {
+    XrModuleIdentityAuthority authority = {0};
+    char *authority_root = NULL;
+    if (!options ||
+        !xr_module_identity_script_authority_from_source(
+            source_path, &authority, &authority_root))
+        return 1;
+    options->entry_module_authority = authority;
+    int rc = xaot_build(source_path, options, result);
+    options->entry_module_authority = (XrModuleIdentityAuthority) {0};
+    xr_free(authority_root);
+    return rc;
+}
+
 #define ASSERT_TRUE(cond)                                                                          \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
@@ -601,7 +616,7 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     options.incremental_cache_dir = cache_dir;
     options.target_plan_workers = 8;
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
     ASSERT_TRUE(result.target_plan_cache.misses == 1);
@@ -609,13 +624,13 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     ASSERT_TRUE(result.target_plan_cache.workers == 1);
 
     xaot_build_result_free(&result);
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(result.target_plan_cache.hits == 1);
     ASSERT_TRUE(result.target_plan_cache.misses == 0);
     ASSERT_TRUE(result.target_plan_cache.workers == 1);
     xaot_build_result_free(&result);
     ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(result.target_plan_cache.hits == 0);
     ASSERT_TRUE(result.target_plan_cache.misses == 1);
     ASSERT_TRUE(result.target_plan_cache.rejected == 1);
@@ -645,7 +660,7 @@ static void test_driver_dumps_subject_bound_local_evidence(void) {
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_local_evidence_dump = true;
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(result.local_evidence_dump != NULL);
     ASSERT_TRUE(strstr(result.local_evidence_dump, "xi-evidence function=") != NULL);
     ASSERT_TRUE(strstr(result.local_evidence_dump, "revision=") != NULL);
@@ -677,7 +692,7 @@ static void test_driver_rejects_invalid_imported_summary_payload_set(void) {
     options.imported_summary_payloads = payloads;
     options.imported_summary_payload_count = 1;
 
-    ASSERT_TRUE(xaot_build("/tmp/xray-xaot-driver-missing.xr", &options, &result) != 0);
+    ASSERT_TRUE(xaot_build_script("/tmp/xray-xaot-driver-missing.xr", &options, &result) != 0);
     ASSERT_TRUE(result.n_sources == 0);
 
     xaot_build_result_free(&result);
@@ -712,7 +727,7 @@ static void test_driver_analyzes_aggregate_layout_with_selected_target(void) {
     options.emit_plan_dump = true;
     memset(&result, 0, sizeof(result));
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
     ASSERT_TRUE(result.plan_dump == NULL);
     ASSERT_TRUE(result.n_sources == 0);
 
@@ -748,7 +763,7 @@ static void test_driver_analyzes_riscv64_layout_with_selected_target(void) {
     options.emit_plan_dump = true;
     memset(&result, 0, sizeof(result));
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
     ASSERT_TRUE(result.plan_dump == NULL);
     ASSERT_TRUE(result.n_sources == 0);
 
@@ -809,7 +824,7 @@ static void test_spawn_target_contributes_artifact_runtime_capabilities(void) {
     options.emit_plan_dump = true;
     memset(&result, 0, sizeof(result));
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(manifest_has_runtime_cap(&result.link_manifest, "timer"));
     ASSERT_TRUE(result.plan_dump != NULL);
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=worker", "reachable=1"));
@@ -835,7 +850,7 @@ static void test_driver_hosted_fragment_borrows_runtime_ownership(void) {
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
 
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(result.n_sources > 0);
     ASSERT_TRUE(!manifest_has_define(&result.link_manifest, "XRT_IMPL"));
     for (int i = 0; i < result.n_sources; i++) {
@@ -877,18 +892,18 @@ static void test_driver_validates_freestanding_runtime_provider(void) {
     options.profile = XAOT_BUILD_PROFILE_FREESTANDING;
 
     memset(&result, 0, sizeof(result));
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
     xaot_build_result_free(&result);
 
     provider.hook_bits &= ~XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
     options.capability_provider = &provider;
     memset(&result, 0, sizeof(result));
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
     xaot_build_result_free(&result);
 
     provider.hook_bits |= XAOT_PROVIDER_HOOK_EXECUTOR_PUMP;
     memset(&result, 0, sizeof(result));
-    ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) != 0);
     xaot_build_result_free(&result);
 
     xaot_target_free(&target);
@@ -935,7 +950,7 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
 
-    ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
     xaot_build_result_free(&result);
@@ -1006,7 +1021,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
     if (!parallel_probe) {
-        ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+        ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
         ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump,
                                               imported_hash));
     } else {
@@ -1022,7 +1037,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
         for (uint32_t run = 0; run < 3u; run++) {
             options.incremental_cache_dir = cache_roots[run];
             options.target_plan_workers = worker_limits[run];
-            ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+            ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
             cold[run] = result.module_summary_cache;
             ASSERT_TRUE(cold[run].workers == expected_workers[run]);
             ASSERT_TRUE(cold[run].tasks == 3);
@@ -1047,7 +1062,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
         for (uint32_t run = 0; run < 3u; run++) {
             options.incremental_cache_dir = cache_roots[run];
             options.target_plan_workers = worker_limits[run];
-            ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+            ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
             warm[run] = result.module_summary_cache;
             ASSERT_TRUE(warm[run].workers == expected_workers[run]);
             ASSERT_TRUE(warm[run].tasks == 3);
@@ -1075,7 +1090,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
         for (uint32_t run = 0; run < 3u; run++) {
             options.incremental_cache_dir = cache_roots[run];
             options.target_plan_workers = worker_limits[run];
-            ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+            ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
             edited[run] = result.module_summary_cache;
             ASSERT_TRUE(edited[run].workers == expected_workers[run]);
             ASSERT_TRUE(edited[run].tasks == 3);
@@ -1109,7 +1124,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
         xr_target_plan_cancellation_token_request(&cancellation);
         options.target_plan_cancellation = &cancellation;
         options.incremental_cache_rebuild = false;
-        ASSERT_TRUE(xaot_build(entry_source, &options, &result) != 0);
+        ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
         ASSERT_TRUE(result.target_plan_cache.cancelled == 3);
         ASSERT_TRUE(result.n_sources == 0);
         options.target_plan_cancellation = NULL;
@@ -1191,7 +1206,7 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
 
-    ASSERT_TRUE(xaot_build(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
 
     xaot_build_result_free(&result);
@@ -1201,6 +1216,84 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     xr_free(payload_ab);
     xr_free(payload_b);
     xr_test_unlink(entry_source);
+    passed++;
+}
+
+static void test_driver_requires_exact_typed_entry_authority(void) {
+    char source_path[256];
+    char *physical_root = NULL;
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    XrModuleIdentityAuthority script_authority = {0};
+
+    ASSERT_TRUE(write_temp_source(source_path, sizeof(source_path)));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    ASSERT_TRUE(xr_module_identity_script_authority_from_source(
+        source_path, &script_authority, &physical_root));
+
+    options.entry_module_authority = script_authority;
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    xaot_build_result_free(&result);
+
+    options.entry_module_authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PROJECT,
+        .namespace_id = "identity-fixture",
+        .physical_root = physical_root,
+    };
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    xaot_build_result_free(&result);
+
+    options.entry_module_authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PACKAGE,
+        .namespace_id = "xray/identity-fixture@1.0.0",
+        .physical_root = physical_root,
+    };
+    ASSERT_TRUE(xaot_build(source_path, &options, &result) == 0);
+    xaot_build_result_free(&result);
+
+    const XrModuleIdentityAuthority rejected[] = {
+        {0},
+        {
+            .kind = XR_MODULE_IDENTITY_PROJECT,
+            .namespace_id = "xray/identity-fixture",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_PACKAGE,
+            .namespace_id = "identity-fixture@1.0.0",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_PACKAGE,
+            .namespace_id = "xray/identity-fixture@^1.0.0",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_SCRIPT,
+            .namespace_id = "identity-fixture",
+            .physical_root = physical_root,
+        },
+        {
+            .kind = XR_MODULE_IDENTITY_PROJECT,
+            .namespace_id = "identity-fixture",
+            .physical_root = NULL,
+        },
+    };
+    for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
+        options.entry_module_authority = rejected[i];
+        ASSERT_TRUE(xaot_build(source_path, &options, &result) != 0);
+        ASSERT_TRUE(result.n_sources == 0);
+        xaot_build_result_free(&result);
+    }
+
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_free(physical_root);
+    xr_test_unlink(source_path);
     passed++;
 }
 
@@ -1216,6 +1309,11 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
+    if (filter && strcmp(filter, "identity_authority") == 0) {
+        test_driver_requires_exact_typed_entry_authority();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
     test_driver_dumps_subject_bound_local_evidence();
@@ -1228,6 +1326,7 @@ int main(void) {
     test_driver_auto_discovers_package_summary_payloads();
     test_driver_auto_discovers_multiple_package_summary_payloads();
     test_driver_auto_discovers_package_dependency_summary_payload();
+    test_driver_requires_exact_typed_entry_authority();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }

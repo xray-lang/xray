@@ -21,6 +21,7 @@
 
 #include "../base/xforward_decl.h"
 #include "../base/xdefs.h"
+#include "xmodule_identity.h"
 #include "xnative_package.h"
 
 /* ========== Dependency Declaration ========== */
@@ -78,6 +79,12 @@ typedef struct XrProject {
 
 XR_FUNC XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_root);
 XR_FUNC void xr_project_free(XrProject *project);
+
+/* Build the exact typed entry authority declared by the manifest. Both
+ * returned strings are xr_malloc-owned and back the authority fields. */
+XR_FUNC bool xr_project_module_identity_authority(
+    const XrProject *project, XrModuleIdentityAuthority *authority,
+    char **namespace_out, char **physical_root_out);
 
 // Returns local path (caller frees), or NULL for non-local dependencies
 XR_FUNC char *xr_resolve_local_dependency(XrProject *project, const char *package_name);
