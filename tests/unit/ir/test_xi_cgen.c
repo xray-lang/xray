@@ -2054,6 +2054,8 @@ TEST(cgen_rep_identical_span_box_shares_immutable_c_local) {
                  "release C must not materialize a representation-identical span box");
     TEST_REQUIRE(!contains_between(fn, fn_end, "v1"),
                  "ordinary C consumers must not reference the elided span box local");
+    TEST_REQUIRE(!contains_between(fn, fn_end, "v2"),
+                 "the exact backend unbox must share the original span local");
 
     printf("  Generated representation-identical span box coalescing %zu bytes of C code\n",
            strlen(code));

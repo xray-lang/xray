@@ -118,6 +118,8 @@ static bool cg_static_direct_function_closure_is_elided(XiCgenCtx *ctx, const Xi
 static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static bool cg_unused_call_result_emits_statement(XiCgenCtx *ctx, const XiFunc *f,
                                                   const XiValue *v);
+static bool cg_coalesced_semantic_box_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                const XiValue *box);
 
 static const char *ctype_str(XrRep rep) {
     switch (rep) {
@@ -9622,6 +9624,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     if (cg_native_box_value_is_elided_in_aot(ctx, f, v))
         return;
+    if (cg_coalesced_semantic_box_is_elided(ctx, f, v))
+        return;
     if (cg_vec_shuffle_only_feeds_fused_widen_mul(ctx, f, v))
         return;
     if (cg_const_only_emits_immediate(ctx, f, v)) {
@@ -10837,6 +10841,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_native_box_value_is_elided_in_aot(ctx, f, v))
         return true;
+    if (cg_coalesced_semantic_box_is_elided(ctx, f, v))
+        return true;
     if (cg_unused_call_result_emits_statement(ctx, f, v))
         return true;
     if (cg_vec_shuffle_only_feeds_fused_widen_mul(ctx, f, v))
@@ -11036,14 +11042,50 @@ static bool cg_rep_alias_source_relation_is_exact(XiCgenCtx *ctx, const XiValue 
     if (alias->args[0] == source)
         return true;
     const XiValue *adapter = alias->args[0];
-    bool inverse = (alias->op == XI_UNBOX && adapter->op == XI_BOX &&
-                    adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX) ||
-                   (alias->op == XI_BOX && adapter->op == XI_UNBOX &&
-                    adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
-    if (!inverse || adapter->nargs != 1 || !adapter->args || adapter->args[0] != source)
+    bool backend_inverse =
+        (alias->op == XI_UNBOX && adapter->op == XI_BOX &&
+         adapter->backend_origin == XI_BACKEND_VALUE_REP_BOX) ||
+        (alias->op == XI_BOX && adapter->op == XI_UNBOX &&
+         adapter->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
+    if (adapter->nargs != 1 || !adapter->args || adapter->args[0] != source)
         return false;
-    const XaotValuePlan *adapter_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, adapter);
-    return adapter_plan && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter_plan);
+    if (backend_inverse) {
+        const XaotValuePlan *adapter_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, adapter);
+        return adapter_plan && xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter_plan);
+    }
+
+    /* A backend UNBOX may exactly cancel a source-level BOX, but only when
+     * both halves retain their independent frozen authorities. The UNBOX is
+     * proven by its post-freeze adapter row; the BOX is proven by the exact
+     * SemanticPlan operand plus its verified boundary step. */
+    const XiFunc *f = alias->block ? alias->block->func : NULL;
+    if (!f || alias->op != XI_UNBOX ||
+        alias->backend_origin != XI_BACKEND_VALUE_REP_UNBOX || adapter->op != XI_BOX ||
+        adapter->backend_origin != XI_BACKEND_VALUE_NONE || adapter->type != source->type ||
+        alias->type != source->type ||
+        (adapter->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
+                           XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT)) != 0)
+        return false;
+    const XaotValuePlan *alias_plan = xaot_bundle_find_value_plan(ctx->aot_bundle, alias);
+    if (!alias_plan || !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, alias_plan))
+        return false;
+    const XrSemanticOperationRecord *operation =
+        cg_semantic_operation_for_value(ctx, f, adapter);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(f->semantic_plan, &operand_count);
+    uint32_t semantic_source = XR_SEMANTIC_INDEX_NONE;
+    if (!operation || operation->opcode != XI_BOX || operation->operand_count != 1 ||
+        operation->operand_begin >= operand_count || !operands || operation->effects != 0 ||
+        !cg_value_semantic_id(ctx, f, source, &semantic_source) ||
+        operands[operation->operand_begin].value != semantic_source)
+        return false;
+    const XaotBoundaryStep *box_step = xaot_bundle_find_boundary_step(
+        ctx->aot_bundle, XAOT_BOUNDARY_STEP_VALUE_REP, f, adapter, source);
+    const XaotBoundaryStep *unbox_step = xaot_bundle_find_boundary_step(
+        ctx->aot_bundle, XAOT_BOUNDARY_STEP_VALUE_REP, f, alias, adapter);
+    return box_step && box_step->reason == XAOT_BOUNDARY_BOX && unbox_step &&
+           unbox_step->reason == XAOT_BOUNDARY_UNBOX;
 }
 
 static const XiValue *cg_rep_alias_exact_source(XiCgenCtx *ctx, const XiValue *alias) {
@@ -11147,19 +11189,11 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
         if (live) {
             const XiPhi *reps[CG_PHI_COALESCE_MAX];
             int nreps = 0;
-            bool dbg = getenv("XRAY_DBG_PHI_COALESCE") != NULL;
             for (uint32_t bi = 0; bi < f->nblocks; bi++) {
                 const XiBlock *blk = f->blocks[bi];
                 if (!blk)
                     continue;
                 for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-                    if (dbg)
-                        fprintf(stderr, "[phi-coalesce] phi%u ctype=%s var=%u cand=%d blk=%u\n",
-                                phi->value.id, local_ctype_str_ctx(ctx, f, &phi->value),
-                                xi_var_id_is_valid(phi->value.var_id) ? (unsigned) phi->value.var_id
-                                                                      : UINT_MAX,
-                                (int) cg_phi_coalesce_candidate(ctx, f, phi),
-                                phi->value.block ? phi->value.block->id : 9999u);
                     if (!cg_phi_coalesce_candidate(ctx, f, phi))
                         continue;
                     int join = -1;
@@ -11227,6 +11261,50 @@ static void cg_build_phi_coalesce(XiCgenCtx *ctx, XiFunc *f) {
         f->phi_coalesce = ctx->phi_repr;
         f->phi_coalesce_count = need;
     }
+}
+
+/* Elide a frozen semantic BOX only after every use is an exact backend UNBOX
+ * that the pre-emission coalescing map redirected to the BOX operand's local.
+ * Other consumers keep the real tagged carrier and its allocation boundary. */
+static bool cg_coalesced_semantic_box_is_elided(XiCgenCtx *ctx, const XiFunc *f,
+                                                const XiValue *box) {
+    if (!ctx || !f || !box || box->op != XI_BOX ||
+        box->backend_origin != XI_BACKEND_VALUE_NONE || box->nargs != 1 || !box->args ||
+        !box->args[0] || !f->phi_coalesce ||
+        (box->flags & (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
+                       XI_FLAG_MAY_SUSPEND | XI_FLAG_SIDE_EFFECT)) != 0)
+        return false;
+    const XiValue *source = box->args[0];
+    if (source->id >= f->phi_coalesce_count)
+        return false;
+    uint32_t source_local = f->phi_coalesce[source->id];
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *block = f->blocks[bi];
+        if (!block)
+            continue;
+        if (block->control == box)
+            return false;
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            for (uint16_t a = 0; a < phi->value.nargs; a++)
+                if (phi->value.args[a] == box)
+                    return false;
+        for (uint32_t vi = 0; vi < block->nvalues; vi++) {
+            const XiValue *user = block->values[vi];
+            if (!user || user == box)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != box)
+                    continue;
+                seen_use = true;
+                if (user->id >= f->phi_coalesce_count ||
+                    f->phi_coalesce[user->id] != source_local ||
+                    !cg_rep_alias_source_relation_is_exact(ctx, user, source))
+                    return false;
+            }
+        }
+    }
+    return seen_use;
 }
 
 static bool cg_value_is_cleanup_live_local_source(const XiFunc *f, const XiValue *value) {
