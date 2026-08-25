@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -21,6 +22,13 @@ SPEC.loader.exec_module(generator)
 
 
 class HostedSignatureTest(unittest.TestCase):
+    def test_harness_manifest_declares_project_authority(self) -> None:
+        _harness, manifest = generator.render_harness([], "fixture-fingerprint")
+        self.assertEqual(
+            {"project": {"name": "xray-stdlib-vm-native-fastpaths", "main": "main.xr"}},
+            tomllib.loads(manifest),
+        )
+
     def test_retired_scalar_signature_is_not_hostable(self) -> None:
         value_types = dict(generator.VALUE_TYPES)
         self.assertIsNone(generator.hosted_signature("(value: int): int", value_types))

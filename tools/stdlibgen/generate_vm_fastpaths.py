@@ -796,10 +796,8 @@ def render_harness(entries: list[dict[str, Any]], fingerprint: str) -> tuple[str
     toml_lines = [
         "# AUTO-GENERATED - DO NOT EDIT.",
         f"# source-fingerprint: {fingerprint}",
-        "[package]",
+        "[project]",
         'name = "xray-stdlib-vm-native-fastpaths"',
-        'version = "1.0.0"',
-        'license = "MIT"',
         'main = "main.xr"',
         "",
     ]
