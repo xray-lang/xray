@@ -888,8 +888,9 @@ static XrSemanticPlan *build_stringbuilder_append_rune_semantic(void) {
     REQUIRE(append != NULL);
     append->args[0] = builder;
     append->args[1] = rune;
-    append->aux = (void *) "append";
-    append->aux_int = 2;
+    append->xa_intrinsic_id = XA_INTRINSIC_STRING_BUILDER_APPEND;
+    append->aux = (void *) XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER;
+    append->aux_int = (int64_t) XI_METHOD_SYMBOL_APPEND << 1;
     append->result_alias_operand = 0;
     XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
     REQUIRE(release != NULL);
@@ -928,8 +929,9 @@ static XrSemanticPlan *build_stringbuilder_append_string_semantic(void) {
     REQUIRE(append != NULL);
     append->args[0] = builder;
     append->args[1] = text;
-    append->aux = (void *) "append";
-    append->aux_int = 2;
+    append->xa_intrinsic_id = XA_INTRINSIC_STRING_BUILDER_APPEND;
+    append->aux = (void *) XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER;
+    append->aux_int = (int64_t) XI_METHOD_SYMBOL_APPEND << 1;
     append->result_alias_operand = 0;
     XiValue *release = xi_value_new(function, entry, XI_RELEASE, &stub_unit, 1);
     REQUIRE(release != NULL);
