@@ -18,6 +18,7 @@
 #include "xisolate_profile.h"
 #include "../base/xchecks.h"
 #include "../plan/target/xr_target_profile.h"
+#include "../runtime/abi/xr_runtime_target_profile.h"
 #include "../toolchain/xcompiler_session.h"
 #include <stdio.h>
 
@@ -39,7 +40,7 @@ static bool install_native_hosted_profile(XrVMRuntime *isolate) {
         xr_compiler_session_current_for_isolate(isolate);
     XrTargetProfile *profile = NULL;
     char error[256] = {0};
-    if (!session || !xr_target_profile_build_native_hosted(
+    if (!session || !xr_runtime_target_profile_build_native_hosted(
                         &profile, error, sizeof(error))) {
         fprintf(stderr, "xray: %s\n",
                 error[0] ? error : "native hosted TargetProfile is unavailable");

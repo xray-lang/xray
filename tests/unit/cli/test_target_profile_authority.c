@@ -10,7 +10,9 @@
 
 #include "../../../src/aot/xaot_driver.h"
 #include "../../../src/app/toolchain/xtc_target_profile.h"
+#include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
+#include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include <stdio.h>
 #include <string.h>
@@ -40,9 +42,9 @@ static void test_canonical_native_projection_is_deterministic(void) {
     XrTargetProfile *second = NULL;
     XrRuntimeTargetAuthority authority;
     char error[256] = {0};
-    CHECK(xr_target_profile_build_native_hosted(
+    CHECK(xr_runtime_target_profile_build_native_hosted(
         &first, error, sizeof(error)));
-    CHECK(xr_target_profile_build_native_hosted(
+    CHECK(xr_runtime_target_profile_build_native_hosted(
         &second, error, sizeof(error)));
     CHECK(first != NULL);
     CHECK(second != NULL);
@@ -53,7 +55,8 @@ static void test_canonical_native_projection_is_deterministic(void) {
                        &authority, xr_target_profile_machine_facts(first)));
     CHECK(first && xr_target_profile_machine_facts(first)->vector_feature_mask == 0);
     CHECK(first && xr_target_profile_machine_facts(first)->maximum_vector_bits == 0);
-    CHECK(!xr_target_profile_build_native_hosted(NULL, error, sizeof(error)));
+    CHECK(!xr_runtime_target_profile_build_native_hosted(
+        NULL, error, sizeof(error)));
     xr_target_profile_free(second);
     xr_target_profile_free(first);
 }
@@ -285,7 +288,7 @@ static void test_compiler_session_rejects_conflicting_explicit_profile(void) {
     XrTargetProfile *freestanding = NULL;
     char error[256] = {0};
     CHECK(xtc_target_parse("native", &native_target, error, sizeof(error)));
-    CHECK(xr_target_profile_build_native_hosted(
+    CHECK(xr_runtime_target_profile_build_native_hosted(
         &hosted, error, sizeof(error)));
     CHECK(xtc_target_profile_build_native_freestanding(
         &native_target, &codegen, providers, &freestanding, error,

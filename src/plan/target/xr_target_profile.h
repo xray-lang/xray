@@ -52,11 +52,6 @@ typedef struct XrTargetProfileBuildInput {
 XR_FUNC bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
                                      XrTargetProfile **out, char *error,
                                      size_t error_size);
-/* Projects the canonical native hosted runtime authority without adding
- * backend feature guesses or caller-authored machine facts. */
-XR_FUNC bool xr_target_profile_build_native_hosted(XrTargetProfile **out,
-                                                   char *error,
-                                                   size_t error_size);
 XR_FUNC bool xr_target_profile_require_exact(const XrTargetProfile *expected,
                                              const XrTargetProfile *actual,
                                              char *error, size_t error_size);

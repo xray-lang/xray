@@ -11,7 +11,6 @@
 #include "xr_target_profile_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
-#include "../../runtime/abi/xr_runtime_target_authority.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -266,36 +265,6 @@ bool xr_target_profile_build(const XrTargetProfileBuildInput *input,
         .string_literal = input->string_contract->literal_view,
     };
     return xr_target_profile_freeze(&draft, out, error, error_size);
-}
-
-bool xr_target_profile_build_native_hosted(XrTargetProfile **out, char *error,
-                                           size_t error_size) {
-    if (out)
-        *out = NULL;
-    if (!out) {
-        set_error(error, error_size, "XR_TARGET_1000",
-                  "native hosted target profile output is missing");
-        return false;
-    }
-
-    XrRuntimeTargetAuthority authority;
-    XrRuntimeAbiStatus status =
-        xr_runtime_target_authority_native_hosted(&authority);
-    if (status != XR_RUNTIME_ABI_OK) {
-        set_runtime_error(error, error_size,
-                          "native hosted runtime authority is invalid", status);
-        return false;
-    }
-    XrTargetProfileBuildInput input = {
-        .machine = authority.machine,
-        .runtime_abi = &authority.runtime_abi,
-        .object_header_materialization =
-            &authority.object_header_materialization,
-        .string_contract = &authority.string_contract,
-        .providers = authority.providers,
-        .provider_count = authority.provider_count,
-    };
-    return xr_target_profile_build(&input, out, error, error_size);
 }
 
 bool xr_target_profile_freeze(const XrTargetProfileDraft *draft, XrTargetProfile **out,

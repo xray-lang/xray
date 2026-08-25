@@ -28,6 +28,7 @@
 #include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../src/plan/target/xr_target_profile.h"
+#include "../../../src/runtime/abi/xr_runtime_target_profile.h"
 #include "../../../src/module/xmodule_identity.h"
 #include "xrepl.h"
 #include "xisolate_profile.h"
@@ -64,7 +65,7 @@ TEST(product_isolate_profiles_install_exact_native_authority) {
     };
     XrTargetProfile *expected = NULL;
     char error[256] = {0};
-    ASSERT_TRUE(xr_target_profile_build_native_hosted(
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
         &expected, error, sizeof(error)));
     for (size_t i = 0; i < sizeof(profiles) / sizeof(profiles[0]); i++) {
         XrVMRuntime *isolate = xr_isolate_profile_new(profiles[i]);

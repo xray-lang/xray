@@ -401,6 +401,8 @@ CONTRACT_SPECS = (
             "src/runtime/abi/xr_target_machine_facts.h",
             "src/runtime/abi/xr_runtime_target_authority.h",
             "src/runtime/abi/xr_runtime_target_authority.c",
+            "src/runtime/abi/xr_runtime_target_profile.h",
+            "src/runtime/abi/xr_runtime_target_profile.c",
             "src/plan/target/xr_target_profile.h",
             "src/plan/target/xr_target_profile.c",
             "src/plan/target/xr_target_entry_abi.h",

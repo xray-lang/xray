@@ -15,6 +15,7 @@
 #include "plan/target/xr_target_plan.h"
 #include "plan/target/xr_target_profile.h"
 #include "runtime/abi/xr_runtime_target_authority.h"
+#include "runtime/abi/xr_runtime_target_profile.h"
 #include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
@@ -341,7 +342,7 @@ static bool load_exact_string_authority(XrTypedLifecycleAuditContext *context) {
         return false;
     XrTargetProfile *native_profile = NULL;
     char error[256] = {0};
-    bool exact = xr_target_profile_build_native_hosted(
+    bool exact = xr_runtime_target_profile_build_native_hosted(
                      &native_profile, error, sizeof(error)) &&
                  native_profile &&
                  xr_target_profile_require_exact(xr_target_plan_profile(context->target_plan),

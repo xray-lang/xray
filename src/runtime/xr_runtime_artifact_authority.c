@@ -10,6 +10,7 @@
 
 #include "xr_runtime_artifact_authority_internal.h"
 #include "abi/xr_runtime_target_authority.h"
+#include "abi/xr_runtime_target_profile.h"
 #include "../base/xmalloc.h"
 #include "../base/xsha256.h"
 #include "../plan/format/xr_xsm_schema.h"
@@ -184,7 +185,7 @@ XR_FUNCDEF bool xr_runtime_artifact_authority_create_internal(
                     "verified semantic authority is required");
 
     XrTargetProfile *native_profile = NULL;
-    if (!xr_target_profile_build_native_hosted(
+    if (!xr_runtime_target_profile_build_native_hosted(
             &native_profile, diagnostic, diagnostic_size))
         return false;
 
