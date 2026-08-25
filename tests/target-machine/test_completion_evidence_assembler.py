@@ -39,15 +39,7 @@ def git(arguments: list[str], cwd: Path) -> str:
 
 def framed_tree_hash(root: Path) -> str:
     paths = [item for item in git(["ls-files"], root).splitlines() if item]
-    digest = hashlib.sha256()
-    for relative in sorted(paths):
-        name = relative.replace("\\", "/").encode("utf-8")
-        content = (root / relative).read_bytes()
-        digest.update(len(name).to_bytes(8, "big"))
-        digest.update(name)
-        digest.update(len(content).to_bytes(8, "big"))
-        digest.update(content)
-    return digest.hexdigest()
+    return assembler.completion.framed_tree_hash(root, paths)
 
 
 def init_repository(root: Path) -> dict[str, str]:
@@ -62,8 +54,14 @@ def init_repository(root: Path) -> dict[str, str]:
     (root / "include/fixture_runtime.h").write_text(
         "/* fixture public runtime */\n", encoding="utf-8"
     )
-    (root / "src/authority.h").write_text("#define FIXTURE_AUTHORITY 1\n",
-                                           encoding="utf-8")
+    (root / "src/authority.h").write_text(
+        "#define FIXTURE_AUTHORITY 1\n"
+        "#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(1)\n"
+        "#define SEMANTIC_SCHEMA_CONSUMER 1\n"
+        "#define SEMANTIC_SCHEMA_SERIALIZED 1\n"
+        "#define SEMANTIC_SCHEMA_CACHE_KEY 1\n",
+        encoding="utf-8",
+    )
     (root / "scripts/check_target_machine_completion.py").write_bytes(
         (ROOT / "scripts/check_target_machine_completion.py").read_bytes()
     )
@@ -92,6 +90,63 @@ def init_repository(root: Path) -> dict[str, str]:
             "result": "passed", "evidence_sha256": "a" * 64,
         },
     })
+    write_json(root / "contracts/target-machine/completion-items.json", {
+        "schema": assembler.completion.COMPLETION_ITEM_SCHEMA,
+        "catalog": assembler.completion.COMPLETION_ITEM_CATALOG,
+        "items": [{
+            "id": f"TM-COMP-ITEM-{index:03d}",
+            "domain": "fixture",
+            "requirement": f"fixture completion requirement {index}",
+        } for index in range(1, assembler.completion.COMPLETION_ITEM_COUNT + 1)],
+    })
+    write_json(root / assembler.completion.SEMANTIC_AUTHORITY_MANIFEST, {
+        "schema": assembler.completion.SEMANTIC_AUTHORITY_SCHEMA,
+        "checker": assembler.completion.SEMANTIC_AUTHORITY_CHECKER,
+        "required_fact_ids": ["semantic.schema.version"],
+        "facts": [{
+            "fact_id": "semantic.schema.version",
+            "semantic_meaning": "fixture semantic schema identity",
+            "definition_domain": "fixture",
+            "key_type": "uint32-exact-version",
+            "producer": {
+                "path": "src/authority.h",
+                "required_regex":
+                    "^#define\\s+XR_SEMANTIC_SCHEMA_VERSION\\s+UINT32_C\\(1\\)$",
+            },
+            "consumers": [{
+                "path": "src/authority.h", "role": "fixture consumer",
+                "required_regex": "SEMANTIC_SCHEMA_CONSUMER",
+            }],
+            "freeze_stage": "fixture freeze",
+            "stable_identity": {"kind": "exact-u32", "value": 1},
+            "serialized_form": [{
+                "artifact": "fixture", "path": "src/authority.h",
+                "required_regex": "SEMANTIC_SCHEMA_SERIALIZED",
+            }],
+            "cache_key_contribution": [{
+                "cache": "fixture", "path": "src/authority.h",
+                "required_regex": "SEMANTIC_SCHEMA_CACHE_KEY",
+            }],
+            "trust_boundary": "fixture mismatch rejection",
+            "independent_checker": {
+                "entrypoint": "semantic_authority_findings",
+                "path": "scripts/check_target_machine_completion.py",
+                "required_regex": "def\\s+semantic_authority_findings",
+            },
+            "mutation_operator": {
+                "id": "fixture-anchor",
+                "expected_finding": "TM-COMP-SEMANTIC-AUTHORITY-ANCHOR",
+            },
+            "positive_negative_oracle_coverage": {
+                "positive": "fixture-positive", "negative": "fixture-negative",
+                "oracle": "fixture-oracle",
+            },
+            "legacy_duplicate_owners": [],
+            "completion_tombstone": {
+                "status": "retained-authority", "condition": "fixture-condition",
+            },
+        }],
+    })
     git(["init"], root)
     git(["config", "user.email", "fixture@example.invalid"], root)
     git(["config", "user.name", "Fixture"], root)
@@ -103,14 +158,16 @@ def init_repository(root: Path) -> dict[str, str]:
     }
 
 
-def governance(identity_hash: str) -> dict[str, Any]:
+def governance(_identity_hash: str) -> dict[str, Any]:
     kinds = [
         "activation-generation", "dependency-graph", "full-validation",
         "installed", "matrix", "runtime-reachability", "symbol",
     ]
     return {
-        "schema": 2,
-        "checker": "target-machine-completion-governance/2",
+        "schema": 3,
+        "checker": "target-machine-completion-governance/3",
+        "completion_items": "contracts/target-machine/completion-items.json",
+        "semantic_authority_manifest": assembler.completion.SEMANTIC_AUTHORITY_MANIFEST,
         "policy": {
             "accepted_evidence_status": ["passed", "unsupported"],
             "compatibility_or_fallback": "forbidden",
@@ -119,10 +176,7 @@ def governance(identity_hash: str) -> dict[str, Any]:
             "self_certifying_write": "forbidden",
             "skip_or_allowlist": "forbidden",
         },
-        "input_identity": {
-            "algorithm": "sha256", "files": ["CMakeLists.txt"],
-            "sha256": identity_hash,
-        },
+        "input_identity": {"algorithm": "sha256", "files": ["CMakeLists.txt"]},
         "authorities": [{
             "id": "fixture", "path": "src/authority.h",
             "required_regex": ["FIXTURE_AUTHORITY"],

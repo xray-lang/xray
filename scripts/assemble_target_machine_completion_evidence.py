@@ -326,13 +326,9 @@ def assemble(root: Path, manifest_path: Path, bundle_path: Path,
         root, bundle.get("source_commit", ""),
         bundle.get("repository_sha256", ""),
     )
-    governance_sha256 = governance["input_identity"]["sha256"]
+    governance_sha256 = completion.governance_input_sha256(root, governance)
     if bundle.get("governance_input_sha256") != governance_sha256:
         raise AssemblyError("raw bundle governance input is stale")
-    if completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    ) != governance_sha256:
-        raise AssemblyError("governance input hash does not match current sources")
     validate_terminal_inventories(root, governance)
     lanes = bundle.get("lanes")
     required = governance["evidence"]["required_files"]

@@ -137,10 +137,15 @@
       ]
     },
     {
+      "derived_defines": [
+        {
+          "format": "uint32-c",
+          "name": "XR_XTP_SCHEMA_VERSION"
+        }
+      ],
       "id": "exact-xtp-artifact",
       "path": "src/plan/format/xr_xtp_schema.h",
       "required_regex": [
-        "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(46\\)",
         "XR_XTP_MAX_ARTIFACT_SIZE",
         "xr_xtp_decode_candidate"
       ]
@@ -174,7 +179,8 @@
       ]
     }
   ],
-  "checker": "target-machine-completion-governance/2",
+  "checker": "target-machine-completion-governance/3",
+  "completion_items": "contracts/target-machine/completion-items.json",
   "dual_owner": {
     "inventory": "contracts/target-machine/semantic-owner-inventory.json",
     "mechanical_adapter": "representation adapter"
@@ -196,8 +202,11 @@
     "files": [
       ".gitattributes",
       "CMakeLists.txt",
+      "contracts/target-machine/completion-governance.json",
+      "contracts/target-machine/completion-items.json",
       "contracts/ownership-audit-foundation.md",
       "contracts/typed-target-plan-execution.md",
+      "contracts/unified-target-machine-discovery.md",
       "contracts/target-machine/aot-plan-destination-inventory.json",
       "contracts/target-machine/baseline-manifest.json",
       "contracts/target-machine/diagnostic-codes.toml",
@@ -211,6 +220,7 @@
       "scripts/assemble_target_machine_completion_evidence.py",
       "scripts/collect_target_machine_activation_generation_evidence.py",
       "scripts/check_target_machine_completion.py",
+      "scripts/collect_target_machine_completion_evidence.py",
       "scripts/collect_target_machine_dependency_graph_evidence.py",
       "scripts/collect_target_machine_full_validation_evidence.py",
       "scripts/collect_target_machine_installed_evidence.py",
@@ -220,6 +230,12 @@
       "scripts/run_target_machine_matrix_row.py",
       "scripts/collect_target_machine_symbol_evidence.py",
       "scripts/target_machine_retired_runtime_symbols.py",
+      "tests/target-machine/test_activation_generation_evidence_collector.py",
+      "tests/target-machine/test_completion_evidence_assembler.py",
+      "tests/target-machine/test_dependency_graph_evidence_collector.py",
+      "tests/target-machine/test_installed_evidence_collector.py",
+      "tests/target-machine/test_matrix_evidence_collector.py",
+      "tests/target-machine/test_runtime_reachability_evidence_collector.py",
       "tests/target-machine/test_symbol_evidence_collector.py",
       "tests/target-machine/phase0/run_baseline.py",
       "tests/target-machine/test_full_validation_evidence_collector.py",
@@ -242,8 +258,7 @@
       "tests/unit/vm/test_typed_dispatch.c",
       "tests/target-machine/phase0/coroutine_vertical/report.json",
       "tests/target-machine/phase0/typed_slot_calibration/report.json"
-    ],
-    "sha256": "340a9f6b25fad72747295cb23fac5bb7e7422e71c25551384c91889e33e791b9"
+    ]
   },
   "installed": {
     "forbidden_path_regex": "(?i)(?:^|/)(?:xray_vm\\.h|[^/]*\\.xrc|(?:lib)?xray_vm_runtime\\.(?:a|lib|so|dylib|dll)|(?:xrc|bytecode)(?:/|$)|[^/]*bytecode[^/]*)",
@@ -353,7 +368,7 @@
     }
   },
   "semantic_authority_manifest": "contracts/target-machine/semantic-authority-manifest.json",
-  "schema": 2,
+  "schema": 3,
   "symbols": {
     "forbidden_regex": "(?i)(?<![A-Za-z0-9_])_?(?:xray_vm_[A-Za-z0-9_]+|xr_vm_[A-Za-z0-9_]+|xr_(?:bytecode_[A-Za-z0-9_]+|detect_output_format|eval_bytecode|output_c_source|run_bytecode_file)|XrOpcode)\\b"
   },

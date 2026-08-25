@@ -212,10 +212,7 @@ def produce(root: Path, build: Path, row_id: str,
     if completion.validate_manifest(governance):
         raise RowError("completion governance manifest is invalid")
     identity = matrix.repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    if completion.framed_tree_hash(
-            root, governance["input_identity"]["files"]) != governance_hash:
-        raise RowError("completion governance input identity is stale")
+    governance_hash = completion.governance_input_sha256(root, governance)
     policy_path = root / governance["matrix"]["policy"]
     policy = assembler.read_object(policy_path)
     rows = matrix.validate_policy(policy, governance)

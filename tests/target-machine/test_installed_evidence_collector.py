@@ -66,18 +66,18 @@ def initialize(root: Path) -> dict[str, Any]:
         "installed", "matrix", "runtime-reachability", "symbol",
     )
     policy = {
-        "schema": 2,
-        "checker": "target-machine-completion-governance/2",
+        "schema": 3,
+        "checker": "target-machine-completion-governance/3",
+        "completion_items": "contracts/target-machine/completion-items.json",
+        "semantic_authority_manifest":
+            "contracts/target-machine/semantic-authority-manifest.json",
         "policy": {
             "accepted_evidence_status": ["passed", "unsupported"],
             "compatibility_or_fallback": "forbidden",
             "missing_or_unclassified": "error", "residue_count": 0,
             "self_certifying_write": "forbidden", "skip_or_allowlist": "forbidden",
         },
-        "input_identity": {
-            "algorithm": "sha256", "files": ["CMakeLists.txt"],
-            "sha256": assembler.completion.framed_tree_hash(root, ["CMakeLists.txt"]),
-        },
+        "input_identity": {"algorithm": "sha256", "files": ["CMakeLists.txt"]},
         "authorities": [{
             "id": "fixture", "path": "src/authority.h", "required_regex": ["FIXTURE"],
         }],
@@ -200,7 +200,8 @@ def validate_raw(path: Path, root: Path, policy: dict[str, Any],
     for field in ("source_commit", "repository_sha256"):
         if row[field] != identity[field]:
             raise AssertionError(f"raw installed {field} is stale")
-    if row["governance_input_sha256"] != policy["input_identity"]["sha256"]:
+    if row["governance_input_sha256"] != \
+            assembler.completion.governance_input_sha256(root, policy):
         raise AssertionError("raw installed governance identity is stale")
     for log in row["logs"]:
         retained = path.parent / log["path"]
@@ -240,7 +241,8 @@ def self_test() -> int:
             stage.mkdir()
             envelope = assembler.validate_raw_manifest(
                 clean_output / "installed.raw.json", clean_output, "installed",
-                collector.repository_identity(root), policy["input_identity"]["sha256"], stage,
+                collector.repository_identity(root),
+                assembler.completion.governance_input_sha256(root, policy), stage,
             )
             verified = {row["path"] for row in envelope["logs"]}
             findings = assembler.completion.installed_findings(

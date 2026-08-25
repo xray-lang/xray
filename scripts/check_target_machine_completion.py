@@ -18,9 +18,12 @@ from typing import Any, Iterable
 
 
 DEFAULT_MANIFEST = "contracts/target-machine/completion-governance.json"
-CHECKER = "target-machine-completion-governance/2"
-SCHEMA = 2
+CHECKER = "target-machine-completion-governance/3"
+SCHEMA = 3
 EVIDENCE_SCHEMA = 1
+COMPLETION_ITEM_CATALOG = "target-machine-completion-items/1"
+COMPLETION_ITEM_SCHEMA = 1
+COMPLETION_ITEM_COUNT = 73
 SEMANTIC_AUTHORITY_CHECKER = "target-machine-semantic-authority/1"
 SEMANTIC_AUTHORITY_SCHEMA = 1
 SEMANTIC_AUTHORITY_MANIFEST = \
@@ -120,6 +123,14 @@ def framed_tree_hash(root: Path, relatives: Iterable[str]) -> str:
     return digest.hexdigest()
 
 
+def governance_input_sha256(root: Path, manifest: dict[str, Any]) -> str:
+    """Derive the evidence binding from the current governed source inputs."""
+    policy = manifest["input_identity"]
+    if policy.get("algorithm") != "sha256":
+        raise ValueError("completion governance input algorithm is not sha256")
+    return framed_tree_hash(root, policy["files"])
+
+
 def git_tracked_paths(root: Path) -> list[str] | None:
     result = command(["git", "ls-files", "-z"], root)
     if result.returncode != 0:
@@ -189,11 +200,34 @@ def validate_manifest(manifest: dict[str, Any]) -> list[Finding]:
         ))
     input_identity = manifest.get("input_identity", {})
     files = input_identity.get("files")
-    if (input_identity.get("algorithm") != "sha256" or not isinstance(files, list)
-            or not files or len(files) != len(set(files))
-            or not exact_sha256(input_identity.get("sha256"))):
+    if (not isinstance(input_identity, dict)
+            or set(input_identity) != {"algorithm", "files"}
+            or input_identity.get("algorithm") != "sha256"
+            or not isinstance(files, list) or not files
+            or len(files) != len(set(files))
+            or any(not isinstance(value, str) or not value for value in files)):
         findings.append(finding("TM-COMP-MANIFEST-INPUTS", "contract",
                                 "governed input identity is incomplete or ambiguous"))
+    if not isinstance(manifest.get("completion_items"), str) \
+            or not manifest["completion_items"]:
+        findings.append(finding("TM-COMP-MANIFEST-CHECKLIST", "contract",
+                                "completion item catalog path is missing"))
+    authorities = manifest.get("authorities")
+    if not isinstance(authorities, list):
+        findings.append(finding("TM-COMP-MANIFEST-AUTHORITY", "contract",
+                                "completion authority inventory is missing"))
+    else:
+        xtp_rows = [row for row in authorities if isinstance(row, dict)
+                    and row.get("id") == "exact-xtp-artifact"]
+        expected_define = [{"format": "uint32-c", "name": "XR_XTP_SCHEMA_VERSION"}]
+        if (xtp_rows and (len(xtp_rows) != 1
+                or xtp_rows[0].get("derived_defines") != expected_define
+                or any("XR_XTP_SCHEMA_VERSION" in pattern
+                       for pattern in xtp_rows[0].get("required_regex", [])))):
+            findings.append(finding(
+                "TM-COMP-MANIFEST-XTP-SCHEMA", "contract",
+                "XTP schema authority must be derived from its exact source define",
+            ))
     rules = manifest.get("residue_scan", {}).get("rules")
     if not isinstance(rules, list) or not rules:
         findings.append(finding("TM-COMP-MANIFEST-RULES", "contract",
@@ -247,6 +281,67 @@ def validate_manifest(manifest: dict[str, Any]) -> list[Finding]:
             findings.append(finding("TM-COMP-MANIFEST-INSTALLED", "contract",
                                     "installed public-header inventory is not exact"))
     return findings
+
+
+def validate_completion_item_catalog(data: dict[str, Any]) -> list[Finding]:
+    if (set(data) != {"catalog", "items", "schema"}
+            or data.get("catalog") != COMPLETION_ITEM_CATALOG
+            or data.get("schema") != COMPLETION_ITEM_SCHEMA):
+        return [finding("TM-COMP-CHECKLIST-SCHEMA", "completion",
+                        "completion item catalog schema is not exact")]
+    items = data.get("items")
+    if not isinstance(items, list) or len(items) != COMPLETION_ITEM_COUNT:
+        count = len(items) if isinstance(items, list) else 0
+        return [finding("TM-COMP-CHECKLIST-COUNT", "completion",
+                        f"completion item catalog must contain exactly "
+                        f"{COMPLETION_ITEM_COUNT} items", abs(COMPLETION_ITEM_COUNT - count) or 1)]
+    expected_ids = [f"TM-COMP-ITEM-{index:03d}"
+                    for index in range(1, COMPLETION_ITEM_COUNT + 1)]
+    observed_ids: list[Any] = []
+    findings: list[Finding] = []
+    for item in items:
+        if (not isinstance(item, dict)
+                or set(item) != {"domain", "id", "requirement"}):
+            findings.append(finding("TM-COMP-CHECKLIST-ROW", "completion",
+                                    "completion item row fields are not exact"))
+            continue
+        observed_ids.append(item["id"])
+        if (not isinstance(item["domain"], str) or not item["domain"]
+                or not isinstance(item["requirement"], str) or not item["requirement"]):
+            findings.append(finding("TM-COMP-CHECKLIST-ROW", "completion",
+                                    f"completion item {item['id']} is incomplete"))
+    if observed_ids != expected_ids:
+        findings.append(finding("TM-COMP-CHECKLIST-IDS", "completion",
+                                "completion item IDs are missing, duplicated, or out of order",
+                                samples=tuple(str(value)
+                                              for value in observed_ids[:MAX_SAMPLES])))
+    return findings
+
+
+def completion_item_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
+    relative = manifest.get("completion_items")
+    if not isinstance(relative, str) or not relative:
+        return [finding("TM-COMP-CHECKLIST-MISSING", "completion",
+                        "completion item catalog is not configured")]
+    path = root / relative
+    if not path.is_file():
+        return [finding("TM-COMP-CHECKLIST-MISSING", "completion",
+                        f"completion item catalog is missing: {relative}")]
+    try:
+        return validate_completion_item_catalog(read_json(path))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [finding("TM-COMP-CHECKLIST-PARSE", "completion", str(error))]
+
+
+def completion_item_ids(root: Path, manifest: dict[str, Any]) -> list[str]:
+    try:
+        data = read_json(root / manifest["completion_items"])
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return []
+    items = data.get("items")
+    if not isinstance(items, list):
+        return []
+    return [str(item.get("id")) for item in items if isinstance(item, dict)]
 
 
 def semantic_authority_reference_findings(
@@ -453,19 +548,11 @@ def semantic_authority_findings(root: Path, manifest: dict[str, Any]) -> list[Fi
 
 def authority_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
-    input_policy = manifest.get("input_identity", {})
-    files = input_policy.get("files", [])
     try:
-        actual = framed_tree_hash(root, files)
+        governance_input_sha256(root, manifest)
     except (OSError, TypeError) as error:
         findings.append(finding("TM-COMP-INPUT-MISSING", "contract",
                                 f"cannot hash governed completion inputs: {error}"))
-    else:
-        if actual != input_policy.get("sha256"):
-            findings.append(finding("TM-COMP-INPUT-DRIFT", "contract",
-                                    "governed completion input hash does not match current sources",
-                                    samples=(f"expected={input_policy.get('sha256')}",
-                                             f"actual={actual}")))
     for row in manifest.get("authorities", []):
         relative = row.get("path", "")
         path = root / relative
@@ -480,6 +567,24 @@ def authority_findings(root: Path, manifest: dict[str, Any]) -> list[Finding]:
             findings.append(finding("TM-COMP-AUTHORITY-CONTRACT", "authority",
                                     f"authority {row.get('id')} lost required fail-closed anchors",
                                     len(missing), missing))
+        for spec in row.get("derived_defines", []):
+            if (not isinstance(spec, dict)
+                    or spec.get("format") != "uint32-c"
+                    or not isinstance(spec.get("name"), str) or not spec["name"]):
+                findings.append(finding("TM-COMP-AUTHORITY-DERIVED", "authority",
+                                        f"authority {row.get('id')} has an invalid derived define"))
+                continue
+            name = re.escape(spec["name"])
+            values = re.findall(
+                rf"^#define\s+{name}\s+UINT32_C\((\d+)\)\s*$", text, re.MULTILINE
+            )
+            if len(values) != 1 or int(values[0]) < 1:
+                findings.append(finding(
+                    "TM-COMP-AUTHORITY-DERIVED", "authority",
+                    f"authority {row.get('id')} must expose one exact positive "
+                    f"{spec['name']} source define",
+                    samples=tuple(values),
+                ))
     baseline_path = root / "contracts/target-machine/baseline-manifest.json"
     if not baseline_path.is_file():
         findings.append(finding("TM-COMP-BASELINE-MISSING", "baseline",
@@ -1229,7 +1334,7 @@ def load_completion_evidence(root: Path, evidence_root: Path, manifest: dict[str
                              identity: dict[str, str]) -> list[Finding]:
     findings: list[Finding] = []
     required = manifest["evidence"]["required_files"]
-    input_sha256 = manifest["input_identity"]["sha256"]
+    input_sha256 = governance_input_sha256(root, manifest)
     loaded: dict[str, tuple[dict[str, Any], set[str]]] = {}
     for kind, relative in sorted(required.items()):
         path = evidence_root / relative
@@ -1270,6 +1375,7 @@ def audit(root: Path, manifest: dict[str, Any], evidence_root: Path) -> dict[str
     identity, identity_rows = repository_identity(root)
     findings.extend(identity_rows)
     findings.extend(authority_findings(root, manifest))
+    findings.extend(completion_item_findings(root, manifest))
     findings.extend(semantic_authority_findings(root, manifest))
     findings.extend(source_residue_findings(root, manifest))
     findings.extend(terminal_inventory_findings(root, manifest))
@@ -1280,11 +1386,19 @@ def audit(root: Path, manifest: dict[str, Any], evidence_root: Path) -> dict[str
     summary: dict[str, int] = {}
     for row in findings:
         summary[row.surface] = summary.get(row.surface, 0) + row.count
+    item_ids = completion_item_ids(root, manifest)
+    qualified_items = len(item_ids) if not findings else 0
     return {
         "checker": CHECKER,
         "ok": not findings,
         "identity": identity,
+        "governance_input_sha256": governance_input_sha256(root, manifest),
         "evidence_root": str(evidence_root),
+        "completion_items": {
+            "qualified": qualified_items,
+            "total": COMPLETION_ITEM_COUNT,
+            "ids": item_ids,
+        },
         "summary": summary,
         "findings": [row.as_dict() for row in findings],
     }
@@ -1297,6 +1411,10 @@ def print_human(report: dict[str, Any]) -> None:
     if identity:
         print(f"  source_commit={identity.get('source_commit', '<unknown>')}")
         print(f"  repository_sha256={identity.get('repository_sha256', '<unknown>')}")
+    items = report.get("completion_items", {})
+    print(f"  completion_items={items.get('qualified', 0)}/{items.get('total', 0)}")
+    if report.get("governance_input_sha256"):
+        print(f"  governance_input_sha256={report['governance_input_sha256']}")
     if report["summary"]:
         print("  residue/evidence summary:")
         for surface, count in sorted(report["summary"].items()):
@@ -1351,12 +1469,39 @@ def self_test(manifest_path: Path) -> int:
         if manifest_errors:
             raise AssertionError(f"manifest invalid: {manifest_errors}")
         results: list[str] = []
+        source_root = manifest_path.parents[2]
+        catalog = read_json(source_root / manifest["completion_items"])
+        catalog_errors = validate_completion_item_catalog(catalog)
+        if catalog_errors:
+            raise AssertionError(f"completion item catalog invalid: {catalog_errors}")
+        broken_catalog = copy.deepcopy(catalog)
+        broken_catalog["items"].pop()
+        expect_mutation(results, "completion-item-count",
+                        validate_completion_item_catalog(broken_catalog),
+                        "TM-COMP-CHECKLIST-COUNT")
+        broken_catalog = copy.deepcopy(catalog)
+        broken_catalog["items"][1]["id"] = broken_catalog["items"][0]["id"]
+        expect_mutation(results, "completion-item-id",
+                        validate_completion_item_catalog(broken_catalog),
+                        "TM-COMP-CHECKLIST-IDS")
         broken_manifest = copy.deepcopy(manifest)
         broken_manifest["installed"]["required_public_headers"].append(
             broken_manifest["installed"]["required_public_headers"][0]
         )
         expect_mutation(results, "installed-manifest", validate_manifest(broken_manifest),
                         "TM-COMP-MANIFEST-INSTALLED")
+        broken_manifest = copy.deepcopy(manifest)
+        xtp = next(row for row in broken_manifest["authorities"]
+                   if row["id"] == "exact-xtp-artifact")
+        xtp.pop("derived_defines")
+        xtp["required_regex"].append(
+            "#define\\s+XR_XTP_SCHEMA_VERSION\\s+UINT32_C\\(46\\)"
+        )
+        expect_mutation(results, "xtp-schema-manifest", validate_manifest(broken_manifest),
+                        "TM-COMP-MANIFEST-XTP-SCHEMA")
+        live_authority = authority_findings(source_root, manifest)
+        if any(row.code == "TM-COMP-AUTHORITY-DERIVED" for row in live_authority):
+            raise AssertionError("source-derived XTP schema authority rejected")
         with tempfile.TemporaryDirectory(prefix="xray-completion-governance-") as directory:
             root = Path(directory)
             lf_root = root / "identity-lf"
@@ -1369,6 +1514,46 @@ def self_test(manifest_path: Path) -> int:
                     crlf_root, ["source.c"]):
                 raise AssertionError("framed source identity depends on checkout line endings")
             results.append("framed-tree-eol->canonical")
+            input_manifest = {"input_identity": {
+                "algorithm": "sha256", "files": ["source.c"],
+            }}
+            before = governance_input_sha256(lf_root, input_manifest)
+            (lf_root / "source.c").write_bytes(b"first\nchanged\n")
+            after = governance_input_sha256(lf_root, input_manifest)
+            if before == after:
+                raise AssertionError("governance input identity ignored source content")
+            results.append("governance-input-content->derived")
+            schema_root = root / "schema-authority"
+            schema_path = schema_root / "src/plan/format/xr_xtp_schema.h"
+            schema_path.parent.mkdir(parents=True)
+            schema_path.write_text(
+                "#define XR_XTP_SCHEMA_VERSION UINT32_C(48)\n"
+                "#define XR_XTP_MAX_ARTIFACT_SIZE 1\n"
+                "void xr_xtp_decode_candidate(void);\n",
+                encoding="utf-8",
+            )
+            schema_manifest = {
+                "input_identity": {
+                    "algorithm": "sha256",
+                    "files": ["src/plan/format/xr_xtp_schema.h"],
+                },
+                "authorities": [copy.deepcopy(next(
+                    row for row in manifest["authorities"]
+                    if row["id"] == "exact-xtp-artifact"
+                ))],
+            }
+            clean_schema = authority_findings(schema_root, schema_manifest)
+            if any(row.code == "TM-COMP-AUTHORITY-DERIVED" for row in clean_schema):
+                raise AssertionError("clean source-derived XTP schema fixture rejected")
+            schema_path.write_text(
+                "#define XR_XTP_SCHEMA_VERSION UINT32_C(48u)\n"
+                "#define XR_XTP_MAX_ARTIFACT_SIZE 1\n"
+                "void xr_xtp_decode_candidate(void);\n",
+                encoding="utf-8",
+            )
+            expect_mutation(results, "xtp-schema-source",
+                            authority_findings(schema_root, schema_manifest),
+                            "TM-COMP-AUTHORITY-DERIVED")
             for relative in manifest["residue_scan"]["roots"]:
                 path = root / relative
                 if Path(relative).suffix:
@@ -1796,8 +1981,10 @@ def self_test(manifest_path: Path) -> int:
                 inventory_root, inventory_manifest), "TM-COMP-INVENTORY-LEGACY-VM")
 
         required_labels = {
+            "completion-item-count", "completion-item-id", "xtp-schema-manifest",
+            "xtp-schema-source",
             "xrc-source", "vm-include", "opcode-build", "tagged-frame", "xaot-plan",
-            "framed-tree-eol",
+            "framed-tree-eol", "governance-input-content",
             "semantic-authority-row", "semantic-authority-anchor",
             "identity-log", "dependency-graph", "symbol", "installed-manifest",
             "installed-header", "installed", "installed-sdk", "runtime",

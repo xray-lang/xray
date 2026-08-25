@@ -317,10 +317,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
     require_ninja_build(build)
     file_api_ok, file_api_details = request_cmake_codemodel(root, build)
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
     command = canonical_command(root, build, output, owner)
     platform = platform_identity(build)
@@ -339,7 +336,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         logs_dir.mkdir()
         graphs: dict[str, dict[str, Any]] = {}
         raw_logs: list[dict[str, Any]] = []
-        passed = actual_governance == governance_hash and build.is_dir()
+        passed = build.is_dir()
         for name in GRAPH_KINDS:
             if name == "cmake-codemodel" and not file_api_ok:
                 ok, count, text = False, 0, file_api_details

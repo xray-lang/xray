@@ -85,7 +85,7 @@ def write_bundle(root: Path, assembly: Path, lanes: dict[str, str],
         "assembler": assembler.ASSEMBLER,
         "source_commit": identity["source_commit"],
         "repository_sha256": identity["repository_sha256"],
-        "governance_input_sha256": governance["input_identity"]["sha256"],
+        "governance_input_sha256": completion.governance_input_sha256(root, governance),
         "lanes": lanes,
     }
     path = assembly / "bundle.json"

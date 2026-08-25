@@ -87,15 +87,16 @@ def initialize(root: Path, local_command: str | None = None) -> dict[str, Any]:
     run(["git", "add", "."], root)
     run(["git", "commit", "-m", "fixture"], root)
     policy = {
-        "schema": 2, "checker": "target-machine-completion-governance/2",
+        "schema": 3, "checker": "target-machine-completion-governance/3",
+        "completion_items": "contracts/target-machine/completion-items.json",
+        "semantic_authority_manifest":
+            "contracts/target-machine/semantic-authority-manifest.json",
         "policy": {"accepted_evidence_status": ["passed", "unsupported"],
                    "compatibility_or_fallback": "forbidden",
                    "missing_or_unclassified": "error", "residue_count": 0,
                    "self_certifying_write": "forbidden",
                    "skip_or_allowlist": "forbidden"},
-        "input_identity": {"algorithm": "sha256", "files": ["CMakeLists.txt"],
-                           "sha256": assembler.completion.framed_tree_hash(
-                               root, ["CMakeLists.txt"])},
+        "input_identity": {"algorithm": "sha256", "files": ["CMakeLists.txt"]},
         "authorities": [{"id": "fixture", "path": "src/authority.h",
                          "required_regex": ["FIXTURE"]}],
         "residue_scan": {"definition_paths": [], "roots": ["src"],
@@ -145,7 +146,8 @@ def write_result(root: Path, results: Path, policy: dict[str, Any],
         "row_id": "TM-MATRIX-FIXTURE", "status": "passed",
         "source_commit": identity["source_commit"],
         "repository_sha256": identity["repository_sha256"],
-        "governance_input_sha256": policy["input_identity"]["sha256"],
+        "governance_input_sha256":
+            assembler.completion.governance_input_sha256(root, policy),
         "policy_sha256": assembler.sha256_file(matrix_path),
         "command": collector.exact_row_command(fixture["command"]),
         "target": fixture["target"], "provider": fixture["provider"],
@@ -192,7 +194,8 @@ def validate_raw(path: Path, root: Path, policy: dict[str, Any],
     identity = collector.repository_identity(root)
     if raw["source_commit"] != identity["source_commit"] or \
        raw["repository_sha256"] != identity["repository_sha256"] or \
-       raw["governance_input_sha256"] != policy["input_identity"]["sha256"]:
+       raw["governance_input_sha256"] != \
+       assembler.completion.governance_input_sha256(root, policy):
         raise AssertionError("raw matrix manifest identity is stale")
     for log in raw["logs"]:
         retained = path.parent / log["path"]

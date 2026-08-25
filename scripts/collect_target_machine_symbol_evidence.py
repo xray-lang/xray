@@ -98,10 +98,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
     if completion.validate_manifest(governance):
         raise CollectionError("completion governance manifest is invalid")
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace(
         "+00:00", "Z"
     )
@@ -125,7 +122,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         binaries: list[dict[str, Any]] = []
         raw_logs: list[dict[str, Any]] = []
         required = governance["installed"]["required_deliverables"]
-        passed = actual_governance == governance_hash and set(required) == set(TARGET_FILES)
+        passed = set(required) == set(TARGET_FILES)
         per_row_pass: list[bool] = []
         for name in required:
             source = artifact_path(build, name)

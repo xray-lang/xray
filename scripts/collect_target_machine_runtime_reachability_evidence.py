@@ -166,10 +166,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         raise CollectionError("runtime reachability lane authority is not exact")
     compiler = require_ninja_build(build)
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     binary = artifact(build, "xray$EXE")
     writer = artifact(build, "tests/unit/test_xtp_format$EXE")
     runtime_link = artifact(build, "tests/unit/test_typed_frame_runtime_archive$EXE")
@@ -322,7 +319,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         lanes: dict[str, dict[str, Any]] = {}
         raw_logs: list[dict[str, Any]] = []
         activation_before_verify = 0
-        all_ok = actual_governance == governance_hash
+        all_ok = True
         for name in sorted(EXPECTED_RESULTS):
             commands, records, ok, activation_count, detail = lane_inputs[name]
             activation_before_verify += activation_count

@@ -193,10 +193,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
     if completion.validate_manifest(governance):
         raise CollectionError("completion governance manifest is invalid")
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     if output.exists() or output.is_symlink():
         raise CollectionError("raw evidence package already exists; collection never overwrites")
     generation = executable(build, "tests/unit/test_runtime_generation")
@@ -286,7 +283,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
             if identity_path.is_file() else (logs / "runtime-identities.json").write_text(
                 "runtime identity output missing\n", encoding="utf-8"
             )
-        passed = product_passed and actual_governance == governance_hash
+        passed = product_passed
         status = "passed" if passed else "failed"
         exit_code = 0 if passed else 1
         generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace(

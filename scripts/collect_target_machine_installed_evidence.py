@@ -225,10 +225,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         raise CollectionError("completion governance manifest is invalid")
     compiler = require_ninja_build(build)
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     generated_at = datetime.datetime.now(datetime.timezone.utc).isoformat().replace(
         "+00:00", "Z"
     )
@@ -296,8 +293,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
         inventory_log.write_text("\n".join(inventory_lines) + "\n", encoding="utf-8")
 
         passed = (
-            actual_governance == governance_hash
-            and empty_code == 0 and replay_code == 0 and bool(replay_rows)
+            empty_code == 0 and replay_code == 0 and bool(replay_rows)
             and no_work and not hazards and not absent_deliverables
             and not absent_headers and residue_count == 0 and payload_exact
             and sdk_exact
@@ -309,8 +305,7 @@ def collect(root: Path, build: Path, output: Path, owner: str) -> int:
             replay_code == 0 and no_work,
             not hazards and not absent_deliverables and not absent_headers
             and residue_count == 0 and payload_exact
-            and sdk_exact
-            and actual_governance == governance_hash,
+            and sdk_exact,
         )
         raw_logs: list[dict[str, Any]] = []
         for relative, path, ok in (

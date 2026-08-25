@@ -1,0 +1,371 @@
+{
+  "catalog": "target-machine-completion-items/1",
+  "items": [
+    {
+      "domain": "architecture-contracts",
+      "id": "TM-COMP-ITEM-001",
+      "requirement": "Authoritative language specifications cover compilation, execution, artifacts, embedding, debugging, coroutines, ownership, and capabilities."
+    },
+    {
+      "domain": "architecture-contracts",
+      "id": "TM-COMP-ITEM-002",
+      "requirement": "Exactly one governing architecture exists and translations do not introduce alternate decisions."
+    },
+    {
+      "domain": "architecture-contracts",
+      "id": "TM-COMP-ITEM-003",
+      "requirement": "Frozen contracts cover semantic plans, target plans, artifacts, ownership, coroutines, executor conformance, runtime ABI, generation, and performance."
+    },
+    {
+      "domain": "architecture-contracts",
+      "id": "TM-COMP-ITEM-004",
+      "requirement": "Every changed contract anchor and its digest are updated atomically and pass contract verification."
+    },
+    {
+      "domain": "architecture-contracts",
+      "id": "TM-COMP-ITEM-005",
+      "requirement": "Historical design records are non-governing while valid historical test and commit evidence remains auditable."
+    },
+    {
+      "domain": "architecture-contracts",
+      "id": "TM-COMP-ITEM-006",
+      "requirement": "Current architecture surfaces no longer present early bytecode, dual semantic lowering, universal executable bytecode, or JIT as the product architecture."
+    },
+    {
+      "domain": "compiler-deletion",
+      "id": "TM-COMP-ITEM-007",
+      "requirement": "Early VM emission and mode-specific legality or pipeline ownership are absent."
+    },
+    {
+      "domain": "compiler-deletion",
+      "id": "TM-COMP-ITEM-008",
+      "requirement": "Durable plans contain no target or compiler process pointers."
+    },
+    {
+      "domain": "compiler-deletion",
+      "id": "TM-COMP-ITEM-009",
+      "requirement": "Backends do not reconstruct ownership, suspension, layout, or call decisions."
+    },
+    {
+      "domain": "compiler-deletion",
+      "id": "TM-COMP-ITEM-010",
+      "requirement": "Missing plan facts fail closed without fallback."
+    },
+    {
+      "domain": "aot-deletion",
+      "id": "TM-COMP-ITEM-011",
+      "requirement": "Legacy Xaot value-representation and function-ABI owners are absent."
+    },
+    {
+      "domain": "aot-deletion",
+      "id": "TM-COMP-ITEM-012",
+      "requirement": "AOT owns no private semantic tags or object behavior."
+    },
+    {
+      "domain": "aot-deletion",
+      "id": "TM-COMP-ITEM-013",
+      "requirement": "C emission performs no semantic, type, name, shape, or spelling inference."
+    },
+    {
+      "domain": "aot-deletion",
+      "id": "TM-COMP-ITEM-014",
+      "requirement": "Generic lowering cannot hide a missing native plan behind a fallback."
+    },
+    {
+      "domain": "vm-artifact-deletion",
+      "id": "TM-COMP-ITEM-015",
+      "requirement": "Default tagged registers, tagged call frames, and VM-only place representations are absent."
+    },
+    {
+      "domain": "vm-artifact-deletion",
+      "id": "TM-COMP-ITEM-016",
+      "requirement": "Legacy opcodes, dispatchers, prototypes, chunks, serializers, and loaders are absent."
+    },
+    {
+      "domain": "vm-artifact-deletion",
+      "id": "TM-COMP-ITEM-017",
+      "requirement": "Legacy XRC source, build, cache, install, example, and test routes are absent."
+    },
+    {
+      "domain": "vm-artifact-deletion",
+      "id": "TM-COMP-ITEM-018",
+      "requirement": "Unsupported execution cannot be converted into a null result."
+    },
+    {
+      "domain": "vm-artifact-deletion",
+      "id": "TM-COMP-ITEM-019",
+      "requirement": "Coroutine execution retains no hidden semantic VM stack."
+    },
+    {
+      "domain": "vm-artifact-deletion",
+      "id": "TM-COMP-ITEM-020",
+      "requirement": "The VM owns no operation semantics or name-based dispatch."
+    },
+    {
+      "domain": "runtime-boundary-deletion",
+      "id": "TM-COMP-ITEM-021",
+      "requirement": "Header, layout, destructor, and extent formulas each have one owner."
+    },
+    {
+      "domain": "runtime-boundary-deletion",
+      "id": "TM-COMP-ITEM-022",
+      "requirement": "Overlapping bridge, clone, and rebox implementations are absent."
+    },
+    {
+      "domain": "runtime-boundary-deletion",
+      "id": "TM-COMP-ITEM-023",
+      "requirement": "Arbitrary runtime graph sharing or migration paths are absent."
+    },
+    {
+      "domain": "runtime-boundary-deletion",
+      "id": "TM-COMP-ITEM-024",
+      "requirement": "Runtime-only products have no compiler dependency or source-evaluation API."
+    },
+    {
+      "domain": "runtime-boundary-deletion",
+      "id": "TM-COMP-ITEM-025",
+      "requirement": "Legacy aliases, loaders, translators, and compatibility entry points are absent."
+    },
+    {
+      "domain": "runtime-boundary-deletion",
+      "id": "TM-COMP-ITEM-026",
+      "requirement": "Stale generation callbacks and destructor paths are absent."
+    },
+    {
+      "domain": "test-doc-install-deletion",
+      "id": "TM-COMP-ITEM-027",
+      "requirement": "High-risk parity tests have independent oracles."
+    },
+    {
+      "domain": "test-doc-install-deletion",
+      "id": "TM-COMP-ITEM-028",
+      "requirement": "VM-only feature matrices are absent."
+    },
+    {
+      "domain": "test-doc-install-deletion",
+      "id": "TM-COMP-ITEM-029",
+      "requirement": "Current public surfaces contain no universal bytecode promises or obsolete architecture diagrams."
+    },
+    {
+      "domain": "test-doc-install-deletion",
+      "id": "TM-COMP-ITEM-030",
+      "requirement": "Installed packages contain no retired headers, libraries, symbols, or cache directories."
+    },
+    {
+      "domain": "test-doc-install-deletion",
+      "id": "TM-COMP-ITEM-031",
+      "requirement": "Stale implementation targets are not presented as active architecture."
+    },
+    {
+      "domain": "test-doc-install-deletion",
+      "id": "TM-COMP-ITEM-032",
+      "requirement": "No known failure is masked by a skip, fallback, allowlist, or timeout exception."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-033",
+      "requirement": "Semantic, ownership, target, coroutine, and artifact verifiers have audited implementation independence."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-034",
+      "requirement": "Verifier normal and adversarial ladders satisfy hard time, memory, count, and worklist budgets."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-035",
+      "requirement": "Every invariant family has measured mutation coverage."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-036",
+      "requirement": "XSM and XTP decoders pass fuzzing and sanitizer gates with zero activation before verification."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-037",
+      "requirement": "Concurrency stress covers publication, final release, weak references, cancellation, waiters, generation changes, entry swaps, domain detach, and destruction."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-038",
+      "requirement": "Capability manifests state the exact OS and runtime enforcement boundary without claiming the compiler is a sandbox."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-039",
+      "requirement": "The trusted computing base explicitly inventories verifiers, typed execution, runtime kernels, enabled refinements, native emission, providers, and unsafe FFI."
+    },
+    {
+      "domain": "verifier-security",
+      "id": "TM-COMP-ITEM-040",
+      "requirement": "The runtime ownership oracle declares its exact dynamic coverage boundary."
+    },
+    {
+      "domain": "semantic-target-executor",
+      "id": "TM-COMP-ITEM-041",
+      "requirement": "One mandatory semantic pipeline serves every supported execution route."
+    },
+    {
+      "domain": "semantic-target-executor",
+      "id": "TM-COMP-ITEM-042",
+      "requirement": "SemanticPlan and TargetPlan are immutable and independently verified before consumption."
+    },
+    {
+      "domain": "semantic-target-executor",
+      "id": "TM-COMP-ITEM-043",
+      "requirement": "VM and AOT consume the same plan fingerprint and pass symmetric conformance."
+    },
+    {
+      "domain": "semantic-target-executor",
+      "id": "TM-COMP-ITEM-044",
+      "requirement": "C emission consumes target facts and contains no analyzer semantics."
+    },
+    {
+      "domain": "semantic-target-executor",
+      "id": "TM-COMP-ITEM-045",
+      "requirement": "No legacy bytecode or public API compatibility path remains."
+    },
+    {
+      "domain": "representation-ownership",
+      "id": "TM-COMP-ITEM-046",
+      "requirement": "Typed execution does not default to DynValue and register representation is distinct from memory representation."
+    },
+    {
+      "domain": "representation-ownership",
+      "id": "TM-COMP-ITEM-047",
+      "requirement": "Materialized ABI, tags, layout, and extent have one canonical authority."
+    },
+    {
+      "domain": "representation-ownership",
+      "id": "TM-COMP-ITEM-048",
+      "requirement": "Ownership, exact balance, return provenance, roots, and cleanup are complete on every path."
+    },
+    {
+      "domain": "representation-ownership",
+      "id": "TM-COMP-ITEM-049",
+      "requirement": "AOT reference-count elimination proofs agree with runtime lifecycle oracles."
+    },
+    {
+      "domain": "representation-ownership",
+      "id": "TM-COMP-ITEM-050",
+      "requirement": "Generation unload cannot leave callable stale code."
+    },
+    {
+      "domain": "coroutine-semantics",
+      "id": "TM-COMP-ITEM-051",
+      "requirement": "Coroutine lowering is fully stackless with no hidden VM stack."
+    },
+    {
+      "domain": "coroutine-semantics",
+      "id": "TM-COMP-ITEM-052",
+      "requirement": "Deterministic and multiworker scheduling satisfy one frozen contract."
+    },
+    {
+      "domain": "coroutine-semantics",
+      "id": "TM-COMP-ITEM-053",
+      "requirement": "Each operation and complex kernel family has one semantic owner with no name dispatch."
+    },
+    {
+      "domain": "artifact-generation",
+      "id": "TM-COMP-ITEM-054",
+      "requirement": "XSM and XTP artifacts are deterministic and malformed input fails closed."
+    },
+    {
+      "domain": "artifact-generation",
+      "id": "TM-COMP-ITEM-055",
+      "requirement": "Runtime-only artifacts link and run without compiler or toolchain dependencies."
+    },
+    {
+      "domain": "artifact-generation",
+      "id": "TM-COMP-ITEM-056",
+      "requirement": "Typed and generic host calls consume the same call plan."
+    },
+    {
+      "domain": "artifact-generation",
+      "id": "TM-COMP-ITEM-057",
+      "requirement": "Target, provider, schema, capability, and fingerprint mismatches are rejected before activation."
+    },
+    {
+      "domain": "artifact-generation",
+      "id": "TM-COMP-ITEM-058",
+      "requirement": "Generation activation, drain, rollback, and unload pass retained stress evidence."
+    },
+    {
+      "domain": "quality-performance",
+      "id": "TM-COMP-ITEM-059",
+      "requirement": "Sanitizer, fuzz, model, contract, portability, matrix, and performance gates all qualify."
+    },
+    {
+      "domain": "quality-performance",
+      "id": "TM-COMP-ITEM-060",
+      "requirement": "Architecture, symbols, plan coverage, legacy residue, and dual-owner residue are terminal zero."
+    },
+    {
+      "domain": "quality-performance",
+      "id": "TM-COMP-ITEM-061",
+      "requirement": "No unresolved known bug is hidden by a skip, fallback, allowlist, or compatibility route."
+    },
+    {
+      "domain": "publication",
+      "id": "TM-COMP-ITEM-062",
+      "requirement": "A machine-readable final manifest maps every completion item to evidence, command, result, and source identity."
+    },
+    {
+      "domain": "publication",
+      "id": "TM-COMP-ITEM-063",
+      "requirement": "Implementation identities and supported boundaries are synchronized across governed project surfaces."
+    },
+    {
+      "domain": "publication",
+      "id": "TM-COMP-ITEM-064",
+      "requirement": "Critical matrix and residue gates are replayed from an independent clean worktree before terminal publication."
+    },
+    {
+      "domain": "publication",
+      "id": "TM-COMP-ITEM-065",
+      "requirement": "Evidence distinguishes local, continuous-integration, and real-platform qualification from production release."
+    },
+    {
+      "domain": "publication",
+      "id": "TM-COMP-ITEM-066",
+      "requirement": "Integration-only install products and temporary caches are removed while governed benchmark, fuzz, and mutation artifacts remain auditable."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-067",
+      "requirement": "Every mandatory deletion inventory is terminal zero."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-068",
+      "requirement": "Every required completion assertion has current machine-verifiable evidence."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-069",
+      "requirement": "All prerequisite target-machine capabilities qualify with no deferred compatibility or fallback debt."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-070",
+      "requirement": "The full supported matrix passes positive activation and negative mismatch lanes."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-071",
+      "requirement": "Specifications, contracts, source, build, install, and runtime expose one architecture truth."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-072",
+      "requirement": "The final evidence package reproduces from its exact clean source identity."
+    },
+    {
+      "domain": "terminal-closure",
+      "id": "TM-COMP-ITEM-073",
+      "requirement": "The unified target-machine status is published as complete only after all preceding items qualify."
+    }
+  ],
+  "schema": 1
+}

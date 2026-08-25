@@ -370,10 +370,7 @@ def collect(root: Path, results: Path, output: Path, owner: str) -> int:
     if completion.validate_manifest(governance):
         raise CollectionError("completion governance manifest is invalid")
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     policy_path = root / governance["matrix"]["policy"]
     policy = assembler.read_object(policy_path)
     rows = validate_policy(policy, governance)
@@ -399,7 +396,7 @@ def collect(root: Path, results: Path, output: Path, owner: str) -> int:
         evidence_rows: list[dict[str, Any]] = []
         raw_logs: list[dict[str, Any]] = []
         qualifying = set(governance["matrix"]["qualifying_tiers"])
-        all_ok = actual_governance == governance_hash
+        all_ok = True
         for row in rows:
             dimensions = {name: row[name]
                           for name in governance["matrix"]["required_dimensions"]}

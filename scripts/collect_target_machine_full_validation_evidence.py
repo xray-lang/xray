@@ -297,10 +297,7 @@ def collect(root: Path, build: Path, output: Path, owner: str,
     if output.exists() or output.is_symlink():
         raise CollectionError("raw evidence package already exists; collection never overwrites")
     identity = repository_identity(root)
-    governance_hash = governance["input_identity"]["sha256"]
-    actual_governance = completion.framed_tree_hash(
-        root, governance["input_identity"]["files"]
-    )
+    governance_hash = completion.governance_input_sha256(root, governance)
     output.parent.mkdir(parents=True, exist_ok=True)
     lock = output.with_name(f".{output.name}.collect-lock")
     try:
@@ -363,8 +360,7 @@ def collect(root: Path, build: Path, output: Path, owner: str,
             })
 
         all_ok = (
-            actual_governance == governance_hash
-            and baseline_ok and discovery_ok
+            baseline_ok and discovery_ok
             and all(row["status"] == "passed" for row in lanes)
         )
         status = "passed" if all_ok else "failed"
