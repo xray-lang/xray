@@ -8,7 +8,7 @@
  * xr_c_emission_plan.c - Immutable TargetPlan-backed C emission plan
  */
 
-#include "xr_c_emission_plan.h"
+#include "xr_c_emission_plan_internal.h"
 #include "xr_c_emission_rule_runtime.h"
 #include "../xaot_layout_gen.h"
 #include "../xr_target_aggregate_c_projection.h"
@@ -66,24 +66,6 @@
 #define XR_C_STRING_SLICE_RANGE_SYMBOL "xrt_string_slice_range"
 
 #include "xr_c_emission_rule_rows.inc.c"
-
-struct XrCEmissionPlan {
-    XrCValueEmissionView *values;
-    uint32_t value_count;
-    XrCCallArgumentEmissionView *call_arguments;
-    uint32_t call_argument_count;
-    XrCRecipeArgumentView *recipe_arguments;
-    uint32_t recipe_argument_count;
-    XrCCleanupEmissionView *cleanups;
-    uint32_t cleanup_count;
-    XrCFunctionAbiEmissionView *function_abis;
-    uint32_t function_abi_count;
-    uint32_t schema_version;
-    XrFingerprint target_fingerprint;
-    XrFingerprint profile_fingerprint;
-    XrFingerprint fingerprint;
-    bool verified;
-};
 
 static bool emission_error(char *error, size_t error_size, const char *code, const char *detail) {
     if (error && error_size)
@@ -3697,7 +3679,9 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
         (!plan->call_argument_count && plan->call_arguments) ||
         (plan->recipe_argument_count && !plan->recipe_arguments) ||
         (!plan->recipe_argument_count && plan->recipe_arguments) ||
-        (plan->cleanup_count && !plan->cleanups) || (!plan->cleanup_count && plan->cleanups))
+        (plan->cleanup_count && !plan->cleanups) || (!plan->cleanup_count && plan->cleanups) ||
+        (plan->function_abi_count && !plan->function_abis) ||
+        (!plan->function_abi_count && plan->function_abis))
         return false;
     uint32_t next_argument = 0;
     for (uint32_t i = 0; i < plan->value_count; i++) {
@@ -3909,7 +3893,9 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         (!plan->call_argument_count && plan->call_arguments) ||
         (plan->recipe_argument_count && !plan->recipe_arguments) ||
         (!plan->recipe_argument_count && plan->recipe_arguments) ||
-        (plan->cleanup_count && !plan->cleanups) || (!plan->cleanup_count && plan->cleanups))
+        (plan->cleanup_count && !plan->cleanups) || (!plan->cleanup_count && plan->cleanups) ||
+        (plan->function_abi_count && !plan->function_abis) ||
+        (!plan->function_abi_count && plan->function_abis))
         return emission_error(error, error_size, "XR_TARGET_1001", "C emission schema is invalid");
 
     uint32_t value_count = 0;
@@ -5506,6 +5492,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             }
         }
         plan->function_abi_count = abi_index;
+        if (!abi_index) {
+            xr_free(plan->function_abis);
+            plan->function_abis = NULL;
+        }
     }
     compute_fingerprint(plan, &plan->fingerprint);
     if (!xr_c_emission_plan_verify(plan, target_plan, expected_profile_fingerprint, error,

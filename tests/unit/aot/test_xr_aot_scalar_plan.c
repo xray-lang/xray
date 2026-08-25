@@ -8,7 +8,7 @@
  * test_xr_aot_scalar_plan.c - Scalar TargetPlan and C emission boundary tests
  */
 
-#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan_internal.h"
 #ifdef XAOT_REP_H
 #error "C value emission plan must not include the legacy XaotValueRep model"
 #endif
@@ -39,26 +39,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Complete the otherwise opaque type only in this mutation test translation
- * unit. Production consumers receive read-only row views. */
-struct XrCEmissionPlan {
-    XrCValueEmissionView *values;
-    uint32_t value_count;
-    XrCCallArgumentEmissionView *call_arguments;
-    uint32_t call_argument_count;
-    XrCRecipeArgumentView *recipe_arguments;
-    uint32_t recipe_argument_count;
-    XrCCleanupEmissionView *cleanups;
-    uint32_t cleanup_count;
-    XrCFunctionAbiEmissionView *function_abis;
-    uint32_t function_abi_count;
-    uint32_t schema_version;
-    XrFingerprint target_fingerprint;
-    XrFingerprint profile_fingerprint;
-    XrFingerprint fingerprint;
-    bool verified;
-};
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \

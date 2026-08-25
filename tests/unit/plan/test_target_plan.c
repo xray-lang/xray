@@ -24,14 +24,13 @@
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_capability.h"
-#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan_internal.h"
 #include "../../../src/aot/refine/xr_aot_representation_refinement.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/plan/target/xr_target_plan_internal.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/plan/target/xr_target_instruction_verify.h"
 #include "../../../src/plan/target/xr_target_verify.h"
-#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
 #include "../../../src/aot/emit_c/xr_c_emission_rule_ids_gen.h"
 #include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/object/xarray.h"
@@ -44,25 +43,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Complete the opaque type only to exercise fail-closed verifier mutations. */
-struct XrCEmissionPlan {
-    XrCValueEmissionView *values;
-    uint32_t value_count;
-    XrCCallArgumentEmissionView *call_arguments;
-    uint32_t call_argument_count;
-    XrCRecipeArgumentView *recipe_arguments;
-    uint32_t recipe_argument_count;
-    XrCCleanupEmissionView *cleanups;
-    uint32_t cleanup_count;
-    XrCFunctionAbiEmissionView *function_abis;
-    uint32_t function_abi_count;
-    uint32_t schema_version;
-    XrFingerprint target_fingerprint;
-    XrFingerprint profile_fingerprint;
-    XrFingerprint fingerprint;
-    bool verified;
-};
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \

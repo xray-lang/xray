@@ -41,7 +41,7 @@
 #include "../../../src/aot/refine/xr_aot_refinement.h"
 #include "../../../src/aot/refine/xr_aot_tail_call_conformance.h"
 #include "../../../src/aot/refine/xr_aot_representation_refinement.h"
-#include "../../../src/aot/emit_c/xr_c_emission_plan.h"
+#include "../../../src/aot/emit_c/xr_c_emission_plan_internal.h"
 #ifdef XAOT_BUNDLE_H
 #error "refinement public API must not expose the legacy XaotBundle"
 #endif
@@ -69,23 +69,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Complete the public opaque projection only for fail-closed mutation tests. */
-struct XrCEmissionPlan {
-    XrCValueEmissionView *values;
-    uint32_t value_count;
-    XrCCallArgumentEmissionView *call_arguments;
-    uint32_t call_argument_count;
-    XrCRecipeArgumentView *recipe_arguments;
-    uint32_t recipe_argument_count;
-    XrCCleanupEmissionView *cleanups;
-    uint32_t cleanup_count;
-    uint32_t schema_version;
-    XrFingerprint target_fingerprint;
-    XrFingerprint profile_fingerprint;
-    XrFingerprint fingerprint;
-    bool verified;
-};
 
 #define REQUIRE(condition)                                                                         \
     do {                                                                                           \
@@ -2103,6 +2086,10 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
         fixture.target_plan,
         xr_target_profile_fingerprint(fixture.target_profile),
         &emission, error, sizeof(error)));
+    XrCFunctionAbiEmissionView *owned_function_abis =
+        emission->function_abis;
+    uint32_t owned_function_abi_count = emission->function_abi_count;
+    REQUIRE(owned_function_abis != NULL && owned_function_abi_count != 0);
     XrCValueEmissionView emission_value = {0};
     REQUIRE(xr_c_emission_plan_value_view(emission, load_value,
                                           &emission_value, error,
@@ -2201,12 +2188,26 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
         xr_target_profile_fingerprint(fixture.target_profile), error,
         sizeof(error)));
     emission->target_fingerprint.bytes[0] ^= 1u;
+    emission->function_abis = NULL;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->function_abis = owned_function_abis;
+    emission->function_abi_count = 0;
+    REQUIRE(!xr_c_emission_plan_verify(
+        emission, fixture.target_plan,
+        xr_target_profile_fingerprint(fixture.target_profile), error,
+        sizeof(error)));
+    emission->function_abi_count = owned_function_abi_count;
     emission->fingerprint.bytes[0] ^= 1u;
     REQUIRE(!xr_c_emission_plan_verify(
         emission, fixture.target_plan,
         xr_target_profile_fingerprint(fixture.target_profile), error,
         sizeof(error)));
     emission->fingerprint.bytes[0] ^= 1u;
+    REQUIRE(emission->function_abis == owned_function_abis &&
+            emission->function_abi_count == owned_function_abi_count);
     REQUIRE(xr_c_emission_plan_verify(
         emission, fixture.target_plan,
         xr_target_profile_fingerprint(fixture.target_profile), error,
