@@ -5459,7 +5459,18 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     XiValue *callee = v->args[0];
     if (xicgen_emit_stdlib_import_call(ctx, out, f, v))
         return;
-    CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, callee);
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status =
+        cg_direct_i64_call_view(ctx, f, v, &direct_i64);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    CgStaticFunctionCall static_call =
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
+            ? cg_static_function_call(direct_i64.callee,
+                                      cg_module_prefix_for_func(ctx, direct_i64.callee))
+            : cg_resolve_static_function_call(ctx, f, callee);
     const XiFunc *target = static_call.func;
     const char *call_prefix = static_call.prefix;
     const XiClassData *shared_class_data = xicgen_shared_class_data(ctx, callee);

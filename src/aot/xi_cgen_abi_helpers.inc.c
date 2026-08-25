@@ -1248,6 +1248,21 @@ static const XaotBoundaryStep *cg_value_boundary_step(XiCgenCtx *ctx, const XiFu
 static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FILE *out,
                                                              const XiFunc *f, const XiValue *call,
                                                              const XiFunc *target) {
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status =
+        cg_direct_i64_call_view(ctx, f, call, &direct_i64);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID)
+        return NULL;
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+        XrRep result_rep = cg_value_plan_storage_rep(ctx, call);
+        if (direct_i64.callee != target || cg_func_return_abi_rep(ctx, target) != XR_REP_I64 ||
+            result_rep != XR_REP_I64) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: direct-i64 return disagrees with TargetPlan emission\n");
+            ctx->error = true;
+        }
+        return NULL;
+    }
     const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
     const XaotValuePlan *call_plan;
     XrRep actual_rep;
@@ -1355,6 +1370,27 @@ static bool emit_cfn_value_rawptr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
 static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *call, const XiFunc *target,
                                           uint16_t arg_index, const XiValue *arg) {
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status =
+        cg_direct_i64_call_view(ctx, f, call, &direct_i64);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+        XrRep argument_rep = cg_value_plan_storage_rep(ctx, arg);
+        if (direct_i64.callee != target || direct_i64.argument_value != arg || arg_index != 0 ||
+            cg_func_param_abi_rep(ctx, target, 0) != XR_REP_I64 ||
+            argument_rep != XR_REP_I64) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: direct-i64 argument disagrees with TargetPlan emission\n");
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
+        return;
+    }
     const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
     const XaotValuePlan *arg_plan;
     const XaotAbiSlot *slot;

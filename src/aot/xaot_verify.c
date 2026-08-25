@@ -9,6 +9,7 @@
  */
 
 #include "xaot_verify.h"
+#include "xaot_boundary.h"
 #include "xaot_prepare.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
@@ -7234,10 +7235,24 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
     return true;
 }
 
-static bool verify_abi_plan(const XaotFuncPlan *plan, char *errbuf, size_t errbuf_len) {
+static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, char *errbuf,
+                            size_t errbuf_len) {
     uint16_t pi;
     if (!plan || !plan->func)
         return set_error(errbuf, errbuf_len, "AOT function plan has no Xi function");
+    if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN) {
+        XaotFuncAbi empty = {0};
+        if (memcmp(&plan->abi, &empty, sizeof(empty)) != 0)
+            return set_error(errbuf, errbuf_len,
+                             "TargetPlan-owned i64 function retains legacy AOT ABI state");
+        if (xaot_boundary_direct_i64_abi_status(bundle, plan->func, errbuf, errbuf_len) !=
+            XAOT_DIRECT_I64_TARGET_FOUND)
+            return set_error(errbuf, errbuf_len,
+                             "TargetPlan-owned i64 function authority is invalid");
+        return true;
+    }
+    if (plan->abi_authority != XAOT_FUNC_ABI_AUTHORITY_LEGACY)
+        return set_error(errbuf, errbuf_len, "AOT function ABI authority is unknown");
     uint16_t expected_nparams = (uint16_t) (plan->func->nparams + (plan->func->is_vararg ? 1 : 0));
     if (plan->abi.nparams != expected_nparams)
         return set_error(errbuf, errbuf_len, "AOT function ABI parameter count mismatch");
@@ -7458,6 +7473,21 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
         return true;
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
+        bundle, func, call, &direct_i64, errbuf, errbuf_len);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID)
+        return false;
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+        if (xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG, func,
+                                              call, direct_i64.argument_value, direct_i64.callee,
+                                              0) ||
+            xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, func,
+                                              call, NULL, direct_i64.callee, UINT16_MAX))
+            return set_error(errbuf, errbuf_len,
+                             "TargetPlan-owned direct-i64 call retains legacy boundary steps");
+        return true;
+    }
     target = xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
     if (!target)
         return true;
@@ -7511,7 +7541,8 @@ static bool verify_func_boundaries_recursive(const XaotBundle *bundle, const XiF
     plan = xaot_bundle_find_func_plan(bundle, func);
     if (!plan)
         return set_error(errbuf, errbuf_len, "Xi function has no AOT function plan");
-    if (plan->abi.boundary_reason != XAOT_BOUNDARY_NONE &&
+    if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_LEGACY &&
+        plan->abi.boundary_reason != XAOT_BOUNDARY_NONE &&
         !xaot_bundle_find_boundary_step(bundle, XAOT_BOUNDARY_STEP_FUNC_ABI, func, NULL, NULL))
         return set_error(errbuf, errbuf_len, "AOT function ABI boundary has no step");
 
@@ -7833,7 +7864,7 @@ XR_FUNC bool xaot_verify_bundle(const XaotBundle *bundle, char *errbuf, size_t e
         return set_error(errbuf, errbuf_len, "AOT transfer plan count does not match IR");
 
     for (fi = 0; fi < bundle->nfunc_plans; fi++) {
-        if (!verify_abi_plan(&bundle->func_plans[fi], errbuf, errbuf_len))
+        if (!verify_abi_plan(bundle, &bundle->func_plans[fi], errbuf, errbuf_len))
             return false;
     }
     for (fi = 0; fi < bundle->nvalue_plans; fi++) {

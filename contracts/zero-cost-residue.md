@@ -104,6 +104,13 @@ TargetPlan array-member call identify the mutation, CGen emits the raw reserve
 effect as a statement; missing or stale authority fails closed instead of
 recovering the operation from selector text or mutable Xi types.
 
+For the covered direct-local closed-i64 Task 283 boundary, the generated call
+statement uses the exact TargetPlan-selected native i64 signature and direct C
+symbol. That statement contains no tagged box/unbox traffic (R5) and no dynamic
+runtime call (R1). This is a boundary claim only: a function or module-init that
+still has an uncovered inbound edge retains its legacy ABI owner and any
+separately required closure materialization until that family is migrated.
+
 Static cleanup registration and execution add no residue category and consume
 no allowance. A non-suspending `defer { ... }` is lowered as ordinary
 control-flow regions and may leave only the residue of operations written in
@@ -122,6 +129,6 @@ failure is a null result with no error allocation or pending-error traffic.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c 3f6c651a034cb9c06502652914442d43ff589bc98ca6a99e341e1903bcd6460b
+anchor-sha256: src/aot/xi_cgen.c df530c5e7026282624e7989cf2ac2823d79d8fe353ccd09419212b38b3bb7a83
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c ddf3b8d501ef8beb8999c06970d6ac2b178e11f6ff38ac28cb4c8570a7d4182c
 anchor-sha256: src/app/cli/xcmd_verify.c 25c38ae1b1081368f5acb29436f9aa49f906b24620c0951cc314e2a07d9416de

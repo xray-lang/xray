@@ -8,6 +8,21 @@
  * xi_cgen_call_resolve.inc.c - AOT static function call resolution helpers
  */
 
+static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const XiFunc *current,
+                                                         const XiValue *call,
+                                                         XaotDirectI64TargetView *out) {
+    char error[256] = {0};
+    XaotDirectI64TargetStatus status = xaot_boundary_direct_i64_call_view(
+        cg_ctx_aot_bundle(ctx), current, call, out, error, sizeof(error));
+    if (status == XAOT_DIRECT_I64_TARGET_INVALID) {
+        fprintf(stderr, "[xi_cgen] ERROR: %s\n",
+                error[0] ? error : "invalid direct-i64 TargetPlan call authority");
+        if (ctx)
+            ctx->error = true;
+    }
+    return status;
+}
+
 static bool cg_import_entry_matches_ref(const XiCgenCtx *ctx, const CgImportEntry *imp,
                                         const XiImportRef *ref, const char *member_name) {
     if (!ctx || !imp || !ref || !member_name || !imp->member_name)
@@ -204,6 +219,14 @@ static const XiFunc *cg_resolve_local_shared_function(XiCgenCtx *ctx, const XiFu
 static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, const XiFunc *current,
                                                             const XiValue *callee) {
     if (!callee)
+        return cg_no_static_function_call();
+
+    /* A covered caller may resolve a call only with the complete call row.
+     * A bare callee value is insufficient authority, so the legacy shape
+     * resolver is deliberately unreachable for this execution family. */
+    XaotDirectI64TargetStatus direct_i64 = xaot_boundary_direct_i64_function_status(
+        cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
+    if (direct_i64 != XAOT_DIRECT_I64_TARGET_UNCOVERED)
         return cg_no_static_function_call();
 
     if ((callee->op == XI_BOX || callee->op == XI_UNBOX || xi_copy_is_identity_alias(callee) ||

@@ -56,12 +56,22 @@ typedef struct XaotFuncPlan {
      * resolver state.  Other effect dimensions remain owned by global
      * evidence, so this row has one unambiguous purpose. */
     uint8_t may_suspend;
+    /* Functions admitted to a migrated execution family consume their
+     * immutable TargetPlan ABI projection directly.  Their legacy XaotFuncAbi
+     * remains all-zero and is verifier-forbidden; other execution families
+     * keep the legacy owner until their own atomic cutover. */
+    uint8_t abi_authority;
     /* 1-based index into extern_decls.  Zero means this function is not a
      * used foreign declaration.  Keeping the identity on the function plan
      * makes every call/declaration emitter consume the same prepare fact. */
     uint32_t extern_decl_id;
     XaotFuncAbi abi;
 } XaotFuncPlan;
+
+enum {
+    XAOT_FUNC_ABI_AUTHORITY_LEGACY = 0,
+    XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN = 1,
+};
 
 typedef enum XaotCallingConvention {
     XAOT_CALL_CONV_C = 0,

@@ -22,6 +22,7 @@
 #include "emit_c/xr_c_emission_rule_ids_gen.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "xaot_bundle.h"
+#include "xaot_boundary.h"
 #include "xaot_callable.h"
 #include "xaot_link.h"
 #include "xaot_class_native.h"
@@ -14431,11 +14432,20 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         changed |= cg_func_reach_mark_edge(ctx, data ? data->combine_func : NULL);
     }
 
-    if (bundle && (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT))
-        changed |= cg_func_reach_mark_edge(
-            ctx, xaot_boundary_resolve_direct_call_target(bundle, owner, v, NULL));
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status = XAOT_DIRECT_I64_TARGET_UNCOVERED;
+    if (bundle && (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT)) {
+        direct_i64_status =
+            cg_direct_i64_call_view(ctx, owner, v, &direct_i64);
+        if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
+            changed |= cg_func_reach_mark_edge(ctx, direct_i64.callee);
+        else if (direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED)
+            changed |= cg_func_reach_mark_edge(
+                ctx, xaot_boundary_resolve_direct_call_target(bundle, owner, v, NULL));
+    }
 
-    if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1) {
+    if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1 &&
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED) {
         CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, owner, v->args[0]);
         changed |= cg_func_reach_mark_edge(ctx, call.func);
         const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;

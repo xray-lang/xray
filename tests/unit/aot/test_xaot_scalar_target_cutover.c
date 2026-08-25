@@ -8,6 +8,7 @@
  * test_xaot_scalar_target_cutover.c - TargetPlan scalar row cutover tests
  */
 
+#include "../../../src/aot/xaot_boundary.h"
 #include "../../../src/aot/xaot_prepare.h"
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/base/xmalloc.h"
@@ -70,6 +71,13 @@ static XrType scalar_int = {
     .id = 27001,
     .scalar_rep = XR_NATIVE_I64,
     .frozen = true,
+};
+
+static XrType scalar_i64_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 27006,
+    .frozen = true,
+    .function = {.return_type = &scalar_int, .throw_effect = XR_FN_EFFECT_NO_THROW},
 };
 
 static XrType scalar_string = {
@@ -749,6 +757,86 @@ static void test_corrupt_bound_plan_and_scalar_residue_fail_closed(void) {
     cutover_bundle_free(&residue);
 }
 
+static void test_direct_i64_target_view_is_bound_and_fail_closed(void) {
+    XiFunc *root = xi_func_new("direct_i64_root", &scalar_int);
+    XiFunc *child = xi_func_new("direct_i64_child", &scalar_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+
+    child->nparams = child->min_params = 1;
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    REQUIRE(child->params != NULL);
+    child->params[0] = xi_param(child, child_entry, 0, &scalar_int);
+    REQUIRE(child->params[0] != NULL);
+    xi_block_set_return(child_entry, child->params[0]);
+
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &scalar_i64_function, 0);
+    XiValue *argument = xi_const_int(root, root_entry, 41, &scalar_int);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &scalar_int, 2);
+    REQUIRE(closure != NULL && argument != NULL && call != NULL);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    call->args[0] = closure;
+    call->args[1] = argument;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule module = {
+        .path = "direct-i64-aot-fixture.xr",
+        .name = "direct_i64_aot_fixture",
+        .init = root,
+    };
+    REQUIRE(xi_module_set_identity(
+        &module, "memory-module-v1:id=25:direct-i64-aot-fixture-v1"));
+    root->module = &module;
+    char error[512] = {0};
+    bool semantic_built = xr_semantic_plan_build_and_attach(root, error, sizeof(error));
+    if (!semantic_built)
+        fprintf(stderr, "direct-i64 AOT semantic fixture failed: %s\n", error);
+    REQUIRE(semantic_built);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target = NULL;
+    REQUIRE(profile != NULL &&
+            xr_target_plan_build(root->semantic_plan, profile, &target, error, sizeof(error)));
+
+    XiModule *modules[] = {&module};
+    XaotBundle bundle = {0};
+    REQUIRE(xaot_bundle_init(&bundle, modules, 1, 0));
+    REQUIRE(xaot_bundle_set_target_plan(&bundle, 0, target));
+    XaotDirectI64TargetView view = {0};
+    REQUIRE(xaot_boundary_direct_i64_call_view(&bundle, root, call, &view, error,
+                                               sizeof(error)) ==
+            XAOT_DIRECT_I64_TARGET_FOUND);
+    REQUIRE(view.target_plan == target && view.callee == child && view.argument_value == argument &&
+            view.call != NULL && view.argument != NULL && view.call_instruction != NULL);
+    REQUIRE(xaot_boundary_resolve_direct_call_target(&bundle, root, call, NULL) == NULL);
+
+    target->fingerprint.bytes[0] ^= 1u;
+    memset(&view, 0, sizeof(view));
+    REQUIRE(xaot_boundary_direct_i64_call_view(&bundle, root, call, &view, error,
+                                               sizeof(error)) ==
+            XAOT_DIRECT_I64_TARGET_INVALID);
+    REQUIRE(xaot_boundary_resolve_direct_call_target(&bundle, root, call, NULL) == NULL);
+    REQUIRE(!xaot_prepare_bundle(&bundle, NULL));
+    REQUIRE(bundle.nfunc_plans == 0 && bundle.nvalue_plans == 0);
+    target->fingerprint.bytes[0] ^= 1u;
+
+    xaot_bundle_free(&bundle);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    root->module = NULL;
+    xi_func_free(root);
+}
+
 static XiValue *append_rep_adapter(CutoverModule *module, XiValue *source,
                                    uint16_t op, XiBackendValueOrigin origin,
                                    XrRep rep) {
@@ -1002,6 +1090,7 @@ int main(void) {
     test_plan_dump_accepts_eliminated_target_values_only();
     test_plan_dump_preserves_exact_enum_ordinal_authority();
     test_corrupt_bound_plan_and_scalar_residue_fail_closed();
+    test_direct_i64_target_view_is_bound_and_fail_closed();
     test_exact_rep_adapter_family_and_mutations();
     test_transfer_value_authority_is_exact_and_independent();
     puts("test_xaot_scalar_target_cutover: ok");

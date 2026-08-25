@@ -245,6 +245,13 @@ static uint32_t callable_func_value_count(const XiFunc *func) {
 
 static const XiFunc *callable_resolve_direct_target(const XaotBundle *bundle, const XiFunc *owner,
                                                     const XiValue *call) {
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
+        bundle, owner, call, &direct_i64, NULL, 0);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
+        return direct_i64.callee;
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID)
+        return NULL;
     uint16_t first_arg = 0;
     uint16_t first_param = 0;
     const XiFunc *target =

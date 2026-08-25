@@ -10,13 +10,278 @@
 
 #include "xaot_boundary.h"
 #include "xaot_bundle.h"
+#include "refine/xr_aot_scalar_value.h"
 #include "../ir/xi_module.h"
+#include <stdio.h>
 #include <string.h>
 
 static const XiImportRef *module_import_ref_for_value(const XaotBundle *bundle,
                                                       const XiFunc *current, const XiValue *value);
 static const XiClassData *resolve_imported_class(const XaotBundle *bundle, const XiImportRef *ref,
                                                  const XiModule **owner_out);
+
+static XaotDirectI64TargetStatus direct_i64_error(char *errbuf, size_t errbuf_len,
+                                                  const char *message) {
+    if (errbuf && errbuf_len > 0)
+        snprintf(errbuf, errbuf_len, "%s", message ? message : "invalid direct-i64 TargetPlan");
+    return XAOT_DIRECT_I64_TARGET_INVALID;
+}
+
+static void direct_i64_find_function(const XiFunc *function, const XrSemanticPlan *semantic,
+                                     uint32_t semantic_function, const XiFunc **match,
+                                     uint32_t *match_count) {
+    if (!function || !match || !match_count)
+        return;
+    if (function->semantic_plan == semantic &&
+        function->semantic_plan_function_index == semantic_function) {
+        *match = function;
+        (*match_count)++;
+    }
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        direct_i64_find_function(function->children[i], semantic, semantic_function, match,
+                                 match_count);
+}
+
+static bool direct_i64_machine_rep(const XrTargetPlan *target, uint16_t rep) {
+    const XrTargetMachineRepRecord *machine = xr_target_plan_machine_rep(target, rep);
+    return machine && machine->kind == XR_MACHINE_REP_I64 &&
+           machine->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+}
+
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
+    const XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+    const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len) {
+    if (target_out)
+        *target_out = NULL;
+    if (function_out)
+        *function_out = NULL;
+    if (!bundle || !function || !function->semantic_plan ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+        return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+
+    const XrTargetPlan *target = xaot_bundle_target_plan_for_func(bundle, function);
+    if (!target || xr_target_plan_semantic_plan(target) != function->semantic_plan ||
+        xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
+        !xr_target_plan_is_verified(target) || !xr_target_plan_fingerprint_is_intact(target))
+        return direct_i64_error(errbuf, errbuf_len,
+                                "direct-i64 function has corrupt TargetPlan authority");
+
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(target, &function_count);
+    uint32_t index = function->semantic_plan_function_index;
+    if (!functions || index >= function_count || functions[index].id != index ||
+        functions[index].semantic_function != index)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "direct-i64 function has no exact TargetPlan function row");
+    if (xr_target_plan_function_execution_family_mask(target, index) !=
+        XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
+        return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+
+    if (target_out)
+        *target_out = target;
+    if (function_out)
+        *function_out = &functions[index];
+    return XAOT_DIRECT_I64_TARGET_FOUND;
+}
+
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
+    const XaotBundle *bundle, const XiFunc *function, char *errbuf, size_t errbuf_len) {
+    const XrTargetPlan *target = NULL;
+    const XrTargetFunctionRecord *function_row = NULL;
+    XaotDirectI64TargetStatus status = xaot_boundary_direct_i64_function_status(
+        bundle, function, &target, &function_row, errbuf, errbuf_len);
+    if (status != XAOT_DIRECT_I64_TARGET_FOUND)
+        return status;
+
+    /* A function can relinquish its legacy ABI only when every inbound edge
+     * is itself an executable closed-i64 call row.  A module initializer may
+     * call an otherwise closed helper while also performing unsupported work;
+     * that helper keeps its legacy ABI until the initializer family migrates. */
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].callee_function != function_row->semantic_function)
+            continue;
+        if (calls[i].target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+            calls[i].calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+            xr_target_plan_function_execution_family_mask(target, calls[i].caller_function) !=
+                XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
+            return XAOT_DIRECT_I64_TARGET_UNCOVERED;
+        uint32_t instruction_count = 0;
+        const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
+            target, calls[i].caller_function, &instruction_count);
+        uint32_t matches = 0;
+        for (uint32_t instruction = 0; instructions && instruction < instruction_count;
+             instruction++) {
+            if (instructions[instruction].opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+                instructions[instruction].immediate_bits == calls[i].id)
+                matches++;
+        }
+        if (matches != 1)
+            return direct_i64_error(errbuf, errbuf_len,
+                                    "direct-i64 inbound instruction authority is inexact");
+    }
+    return XAOT_DIRECT_I64_TARGET_FOUND;
+}
+
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
+    const XaotBundle *bundle, const XiFunc *caller, const XiValue *call,
+    XaotDirectI64TargetView *out, char *errbuf, size_t errbuf_len) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!bundle || !caller || !call || !out)
+        return direct_i64_error(errbuf, errbuf_len, "direct-i64 call view input is incomplete");
+
+    const XrTargetPlan *target = NULL;
+    const XrTargetFunctionRecord *caller_row = NULL;
+    XaotDirectI64TargetStatus status = xaot_boundary_direct_i64_function_status(
+        bundle, caller, &target, &caller_row, errbuf, errbuf_len);
+    if (status != XAOT_DIRECT_I64_TARGET_FOUND)
+        return status;
+    if (call->op != XI_CALL || call->nargs != 2 || !call->args || !call->args[1])
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 call has invalid live binding");
+
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t argument_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t argument_value = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_aot_scalar_semantic_value_id(target, caller, call, &semantic_function,
+                                         &semantic_value, errbuf, errbuf_len) ||
+        !xr_aot_scalar_semantic_value_id(target, caller, call->args[1], &argument_function,
+                                         &argument_value, errbuf, errbuf_len) ||
+        semantic_function != caller_row->semantic_function ||
+        argument_function != semantic_function)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 call lacks exact semantic value identity");
+
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->function != semantic_function ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (operation)
+            return direct_i64_error(errbuf, errbuf_len,
+                                    "covered direct-i64 call semantic operation is ambiguous");
+        operation = candidate;
+        operation_index = i;
+    }
+    if (!operation)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 call has no semantic operation");
+
+    const XrTargetCallRecord *target_call = NULL;
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation != operation_index)
+            continue;
+        if (target_call)
+            return direct_i64_error(errbuf, errbuf_len,
+                                    "covered direct-i64 TargetPlan call is ambiguous");
+        target_call = &calls[i];
+    }
+    if (!target_call || target_call->caller_function != semantic_function ||
+        target_call->result_value != semantic_value || target_call->argument_count != 1 ||
+        target_call->adapter_count != 0 ||
+        target_call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        target_call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        target_call->result_mode != XR_TARGET_CALL_VALUE ||
+        target_call->result_ownership != XR_TARGET_CALL_NONE ||
+        target_call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        target_call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        target_call->result_slot == XR_TARGET_INSTRUCTION_SLOT_NONE ||
+        !direct_i64_machine_rep(target, target_call->result_register_rep) ||
+        !direct_i64_machine_rep(target, target_call->result_memory_rep))
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 TargetPlan call row is inexact");
+
+    const XrSemanticCallTargetRecord *semantic_target =
+        xr_semantic_plan_call_target(semantic, target_call->semantic_call_target);
+    if (!semantic_target || semantic_target->operation != operation_index ||
+        semantic_target->function != target_call->callee_function ||
+        semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 callee identity is inexact");
+
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(target, &function_count);
+    if (!functions || target_call->callee_function >= function_count ||
+        functions[target_call->callee_function].id != target_call->callee_function ||
+        functions[target_call->callee_function].semantic_function != target_call->callee_function ||
+        xr_target_plan_function_execution_family_mask(target, target_call->callee_function) !=
+            XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 callee function row is inexact");
+
+    uint32_t argument_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target, &argument_count);
+    if (!arguments || target_call->argument_begin >= argument_count)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 argument row is missing");
+    const XrTargetCallArgumentRecord *argument = &arguments[target_call->argument_begin];
+    if (argument->call != target_call->id || argument->ordinal != 0 ||
+        argument->semantic_value != argument_value || argument->mode != XR_TARGET_CALL_VALUE ||
+        argument->ownership != XR_TARGET_CALL_CONSUME ||
+        argument->transfer_mode != XR_TRANSFER_SHARE || argument->flags != 0 ||
+        argument->caller_slot == XR_TARGET_INSTRUCTION_SLOT_NONE ||
+        argument->callee_slot == XR_TARGET_INSTRUCTION_SLOT_NONE ||
+        !direct_i64_machine_rep(target, argument->register_rep) ||
+        !direct_i64_machine_rep(target, argument->memory_rep) ||
+        !direct_i64_machine_rep(target, argument->callee_register_rep) ||
+        !direct_i64_machine_rep(target, argument->callee_memory_rep))
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 argument representation is inexact");
+
+    const XiFunc *callee = NULL;
+    uint32_t callee_count = 0;
+    for (uint32_t i = 0; i < bundle->nmodules; i++) {
+        const XiModule *module = bundle->modules ? bundle->modules[i] : NULL;
+        if (module && module->init && module->init->semantic_plan == semantic)
+            direct_i64_find_function(module->init, semantic, target_call->callee_function, &callee,
+                                     &callee_count);
+    }
+    if (!callee || callee_count != 1)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 Xi callee identity is not unique");
+
+    const XrTargetInstructionRecord *call_instruction = NULL;
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
+        target, semantic_function, &instruction_count);
+    for (uint32_t i = 0; instructions && i < instruction_count; i++) {
+        if (instructions[i].opcode != XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+            instructions[i].immediate_bits != target_call->id)
+            continue;
+        if (call_instruction)
+            return direct_i64_error(errbuf, errbuf_len,
+                                    "covered direct-i64 instruction row is ambiguous");
+        call_instruction = &instructions[i];
+    }
+    if (!call_instruction || call_instruction->function != semantic_function ||
+        call_instruction->result_slot != target_call->result_slot ||
+        call_instruction->operand_count != 0 ||
+        call_instruction->operand_slots[0] != XR_TARGET_INSTRUCTION_SLOT_NONE ||
+        call_instruction->operand_slots[1] != XR_TARGET_INSTRUCTION_SLOT_NONE)
+        return direct_i64_error(errbuf, errbuf_len,
+                                "covered direct-i64 instruction row is inexact");
+
+    out->target_plan = target;
+    out->caller_function = caller_row;
+    out->callee_function = &functions[target_call->callee_function];
+    out->call = target_call;
+    out->argument = argument;
+    out->call_instruction = call_instruction;
+    out->callee = callee;
+    out->argument_value = call->args[1];
+    out->target_fingerprint = xr_target_plan_fingerprint(target);
+    return XAOT_DIRECT_I64_TARGET_FOUND;
+}
 
 static const XiFunc *boundary_find_constructor(const XiFunc *parent,
                                                const XiClassData *class_data) {
@@ -537,6 +802,13 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
     if (first_arg_out)
         *first_arg_out = 0;
     if (!bundle || !current || !call)
+        return NULL;
+    /* Covered closed-i64 calls have a single TargetPlan owner.  Returning no
+     * legacy answer here makes any missed consumer fail closed instead of
+     * silently reconstructing the callee from a closure/name shape. */
+    XaotDirectI64TargetStatus direct_i64 = xaot_boundary_direct_i64_function_status(
+        bundle, current, NULL, NULL, NULL, 0);
+    if (direct_i64 != XAOT_DIRECT_I64_TARGET_UNCOVERED)
         return NULL;
     if (call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) {
         /* Module-member call: args[0] is the imported namespace object, not a

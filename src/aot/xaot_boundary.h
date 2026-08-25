@@ -14,6 +14,7 @@
 #include "xaot_rep.h"
 #include "../ir/xi.h"
 #include "../base/xdefs.h"
+#include "../plan/target/xr_target_plan.h"
 #include <stdint.h>
 
 typedef enum XaotBoundaryReason {
@@ -57,6 +58,46 @@ XR_FUNC const char *xaot_boundary_reason_name(XaotBoundaryReason reason);
 XR_FUNC const char *xaot_boundary_step_kind_name(XaotBoundaryStepKind kind);
 
 struct XaotBundle;
+
+/* Borrowed, non-owning projection of one verified closed-i64 direct call.
+ * Every pointer remains owned by the bound TargetPlan or Xi module.  The view
+ * is valid only while target_fingerprint still matches that plan; it is never
+ * cached or serialized. */
+typedef struct XaotDirectI64TargetView {
+    const XrTargetPlan *target_plan;
+    const XrTargetFunctionRecord *caller_function;
+    const XrTargetFunctionRecord *callee_function;
+    const XrTargetCallRecord *call;
+    const XrTargetCallArgumentRecord *argument;
+    const XrTargetInstructionRecord *call_instruction;
+    const XiFunc *callee;
+    const XiValue *argument_value;
+    XrFingerprint target_fingerprint;
+} XaotDirectI64TargetView;
+
+typedef enum XaotDirectI64TargetStatus {
+    XAOT_DIRECT_I64_TARGET_UNCOVERED = 0,
+    XAOT_DIRECT_I64_TARGET_FOUND,
+    XAOT_DIRECT_I64_TARGET_INVALID,
+} XaotDirectI64TargetStatus;
+
+/* Classifies a function from its verified TargetPlan execution row only. */
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
+    const struct XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+    const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len);
+
+/* Narrows execution coverage to functions whose every inbound ABI edge is
+ * also covered, so the legacy XaotFuncAbi owner can be omitted atomically. */
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
+    const struct XaotBundle *bundle, const XiFunc *function, char *errbuf, size_t errbuf_len);
+
+/* Resolves one covered call exclusively through verified TargetPlan identities
+ * and rows.  INVALID is fail-closed and must never fall through to a legacy
+ * name, closure-shape, or function-body resolver. */
+XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
+    const struct XaotBundle *bundle, const XiFunc *caller, const XiValue *call,
+    XaotDirectI64TargetView *out, char *errbuf, size_t errbuf_len);
+
 /* Resolves the statically-known callee of a direct call, when there is one.
  * `*first_arg_out` receives the index of the first call operand that maps to
  * a target ABI parameter: 1 for XI_CALL (args[0] is the callee) and for

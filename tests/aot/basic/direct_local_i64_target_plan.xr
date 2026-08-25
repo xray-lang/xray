@@ -1,0 +1,9 @@
+fn add1(value: i64) -> i64 {
+    return value + 1
+}
+
+fn root() -> i64 {
+    return add1(41)
+}
+
+print(root())

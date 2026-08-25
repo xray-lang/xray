@@ -1297,6 +1297,72 @@ static void test_driver_requires_exact_typed_entry_authority(void) {
     passed++;
 }
 
+static bool span_contains(const char *begin, const char *end, const char *needle) {
+    const char *match = begin && end && needle ? strstr(begin, needle) : NULL;
+    return match && match < end;
+}
+
+static const char *find_function_definition(const char *source, const char *name_fragment) {
+    const char *cursor = source;
+    while (cursor && (cursor = strstr(cursor, name_fragment)) != NULL) {
+        const char *line_end = strchr(cursor, '\n');
+        const char *body = strstr(cursor, ") {");
+        if (body && (!line_end || body < line_end))
+            return cursor;
+        cursor++;
+    }
+    return NULL;
+}
+
+static void test_driver_direct_i64_call_consumes_target_plan(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-direct-i64-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(source_path,
+                                "fn add1(value: i64) -> i64 { return value + 1 }\n"
+                                "fn root() -> i64 { return add1(41) }\n"
+                                "print(root())\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_plan_dump = true;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.n_sources == 1 && result.sources && result.sources[0].c_source);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=add1", "abi_owner=target-plan"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "abi_owner=legacy"));
+
+    const char *source = result.sources[0].c_source;
+    const char *root = find_function_definition(source, "_root_");
+    const char *root_end = root ? strstr(root, "\n}\n") : NULL;
+    ASSERT_TRUE(root != NULL && root_end != NULL);
+    const char *call_site = root ? strstr(root, "_add1_") : NULL;
+    const char *call_line_end = call_site ? strchr(call_site, '\n') : NULL;
+    ASSERT_TRUE(call_site != NULL && call_site < root_end && call_line_end != NULL &&
+                call_line_end <= root_end &&
+                span_contains(call_site, call_line_end, "(NULL, INT64_C(41))"));
+    ASSERT_TRUE(!span_contains(call_site, call_line_end, "XrValue") &&
+                !span_contains(call_site, call_line_end, "_boxed") &&
+                !span_contains(call_site, call_line_end, "XR_FROM_INT") &&
+                !span_contains(call_site, call_line_end, "XR_TO_INT") &&
+                !span_contains(call_site, call_line_end, "xrt_call"));
+    ASSERT_TRUE(!span_contains(root, root_end, "_boxed") &&
+                !span_contains(root, root_end, "XR_FROM_INT") &&
+                !span_contains(root, root_end, "XR_TO_INT") &&
+                !span_contains(root, root_end, "xrt_call"));
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 int main(void) {
     const char *filter = getenv("XRAY_TEST_FILTER");
     if (filter && strcmp(filter, "target_plan_cache") == 0) {
@@ -1314,6 +1380,11 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
+    if (filter && strcmp(filter, "direct_i64_target_plan") == 0) {
+        test_driver_direct_i64_call_consumes_target_plan();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
     test_driver_dumps_subject_bound_local_evidence();
@@ -1327,6 +1398,7 @@ int main(void) {
     test_driver_auto_discovers_multiple_package_summary_payloads();
     test_driver_auto_discovers_package_dependency_summary_payload();
     test_driver_requires_exact_typed_entry_authority();
+    test_driver_direct_i64_call_consumes_target_plan();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }

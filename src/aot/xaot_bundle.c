@@ -8096,13 +8096,16 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
                                                 &backend_adapters);
 
         fprintf(out,
-                "function %u name=%s module=%u semantic_function=%u depth=%u abi=%s "
+                "function %u name=%s module=%u semantic_function=%u depth=%u abi_owner=%s abi=%s "
                 "boundary=%s params=%u "
                 "ret=%s/%s/%s may_suspend=%u captures=%u blocks=%u values=%u body=%u "
                 "reachable=%u target_values=%u legacy_values=%u "
                 "backend_adapters=%u\n",
                 order_index, safe_str(func ? func->name : NULL), plan->module_index,
                 func->semantic_plan_function_index, (unsigned) plan->depth,
+                plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN
+                    ? "target-plan"
+                    : "legacy",
                 xaot_abi_kind_name(abi->kind), xaot_boundary_reason_name(abi->boundary_reason),
                 (unsigned) abi->nparams, safe_str(abi->ret.c_type),
                 xaot_value_kind_name(abi->ret.rep.kind), rep_name(abi->ret.rep.rep),

@@ -5360,6 +5360,15 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
                 return false;
             if (source_export)
                 continue;
+            XaotDirectI64TargetView direct_i64 = {0};
+            XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
+                bundle, func, call, &direct_i64, NULL, 0);
+            if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
+                bundle->error_msg = "AOT direct-i64 place seed has invalid TargetPlan authority";
+                return false;
+            }
+            if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
+                continue;
             const XiFunc *target =
                 xaot_boundary_resolve_direct_call_target(bundle, func, call, &first_arg);
             const XaotFuncPlan *target_plan =
@@ -5455,6 +5464,15 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
         return true;
+    XaotDirectI64TargetView direct_i64 = {0};
+    XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
+        bundle, caller_plan->func, call, &direct_i64, NULL, 0);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
+        bundle->error_msg = "AOT direct-i64 call has invalid TargetPlan authority";
+        return false;
+    }
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
+        return true;
     target = xaot_boundary_resolve_direct_call_target(bundle, caller_plan->func, call, &first_arg);
     if (!target)
         return true;
@@ -5498,7 +5516,8 @@ static bool prepare_func_boundary_steps(XaotBundle *bundle, const XaotFuncPlan *
     if (!bundle || !func_plan || !func_plan->func)
         return false;
 
-    if (func_plan->abi.boundary_reason != XAOT_BOUNDARY_NONE) {
+    if (func_plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_LEGACY &&
+        func_plan->abi.boundary_reason != XAOT_BOUNDARY_NONE) {
         XaotBoundaryStep *step =
             xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_FUNC_ABI, func_plan->func,
                                           NULL, NULL, func_plan->abi.boundary_reason);
@@ -5705,13 +5724,25 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     }
     if (!prepare_func_type_plans(bundle, func))
         return false;
-    if (!xaot_abi_build_func(&plan->abi, bundle, func, is_module_init)) {
-        bundle->error_msg = "failed to build AOT function ABI";
+    XaotDirectI64TargetStatus direct_i64_status =
+        xaot_boundary_direct_i64_abi_status(bundle, func, NULL, 0);
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
+        bundle->error_msg = "AOT function has invalid direct-i64 TargetPlan authority";
         return false;
+    }
+    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+        plan->abi_authority = XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN;
+    } else {
+        plan->abi_authority = XAOT_FUNC_ABI_AUTHORITY_LEGACY;
+        if (!xaot_abi_build_func(&plan->abi, bundle, func, is_module_init)) {
+            bundle->error_msg = "failed to build AOT function ABI";
+            return false;
+        }
     }
 
     bundle->stats.functions_total++;
-    if (plan->abi.kind == XAOT_ABI_NATIVE)
+    if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN ||
+        plan->abi.kind == XAOT_ABI_NATIVE)
         bundle->stats.functions_native_abi++;
     else if (plan->abi.kind == XAOT_ABI_CORO)
         bundle->stats.functions_coro_abi++;
