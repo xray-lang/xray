@@ -10,6 +10,7 @@
 
 #include "xmodule_resolver.h"
 #include "xlockfile.h"
+#include "xsemver.h"
 #include "../base/xchecks.h"
 #include "../base/xdefs.h"
 #include "../base/xfileio.h"
@@ -356,10 +357,10 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
                           strncmp(locked->checksum, "sha256:", 7) == 0;
     for (size_t i = 7; checksum_valid && i < 71; i++)
         checksum_valid = isxdigit((unsigned char) locked->checksum[i]) != 0;
-    if (!locked || !locked->version || !locked->version[0] || !checksum_valid) {
+    if (!locked || !locked->version || !xr_semver_is_valid(locked->version) || !checksum_valid) {
         if (err_buf)
-            *err_buf = make_error("package '%s' requires an exact checksummed xray.lock entry",
-                                  specifier);
+            *err_buf =
+                make_error("package '%s' requires an exact checksummed xray.lock entry", specifier);
         return -1;
     }
     const char *version = locked->version;
@@ -372,6 +373,27 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
     if (!home) {
         if (err_buf)
             *err_buf = make_error("HOME not set; cannot locate package '%s'", specifier);
+        return -1;
+    }
+
+    char archive_path[XR_PATH_MAX];
+    int archive_length = snprintf(archive_path, sizeof(archive_path),
+                                  "%s/.xray/cache/%s-%s-%s.tar.gz", home, owner, name, version);
+    if (archive_length < 0 || (size_t) archive_length >= sizeof(archive_path)) {
+        if (err_buf)
+            *err_buf = make_error("package '%s' checksum authority path is too long", specifier);
+        return -1;
+    }
+    if (!xr_fs_is_file(archive_path)) {
+        if (err_buf)
+            *err_buf = make_error(
+                "package '%s' exact archive is unavailable for checksum verification", specifier);
+        return -1;
+    }
+    if (!xr_lockfile_verify_checksum(archive_path, locked->checksum)) {
+        if (err_buf)
+            *err_buf =
+                make_error("package '%s' checksum does not match its cached archive", specifier);
         return -1;
     }
 

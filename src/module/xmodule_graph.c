@@ -14,6 +14,7 @@
  */
 
 #include "xmodule_graph.h"
+#include "xsemver.h"
 #include "xmodule.h"
 #include "xstdlib_embedded.h"
 #include "../base/xchecks.h"
@@ -215,6 +216,58 @@ XR_FUNC int xr_module_graph_find_source(const XrModuleGraph *g, const char *sour
             return i;
     }
     return -1;
+}
+
+XR_FUNC int xr_module_graph_find_named_dependency(const XrModuleGraph *g, const char *importer_path,
+                                                  const char *specifier) {
+    if (!g || !importer_path || !specifier || !specifier[0])
+        return -1;
+    int importer = xr_module_graph_find_source(g, importer_path);
+    if (importer < 0 || importer >= g->spec_count)
+        return -1;
+
+    const XrModuleSpec *owner = &g->specs[importer];
+    int match = -1;
+    size_t specifier_length = strlen(specifier);
+    for (int edge = 0; edge < owner->dep_count; edge++) {
+        int dependency = owner->dep_indices[edge];
+        if (dependency < 0 || dependency >= g->spec_count)
+            return -1;
+        const XrModuleSpec *candidate = &g->specs[dependency];
+        const char *coordinate = candidate->authority.namespace_id;
+        bool matches =
+            candidate->kind == XR_MOD_STDLIB && coordinate && strcmp(coordinate, specifier) == 0;
+        if (!matches && candidate->kind == XR_MOD_PACKAGE && coordinate) {
+            size_t coordinate_length = strlen(coordinate);
+            matches = coordinate_length > specifier_length + 1u &&
+                      strncmp(coordinate, specifier, specifier_length) == 0 &&
+                      coordinate[specifier_length] == '@' &&
+                      xr_semver_is_valid(coordinate + specifier_length + 1u);
+        }
+        if (!matches)
+            continue;
+        XrModuleIdentityKind identity_kind = 0;
+        char *expected_canonical = NULL;
+        bool canonical_matches =
+            candidate->logical_path &&
+            xr_module_identity_from_logical(&candidate->authority, candidate->logical_path,
+                                            &expected_canonical) &&
+            candidate->canonical && strcmp(expected_canonical, candidate->canonical) == 0;
+        xr_free(expected_canonical);
+        if (!canonical_matches || !xr_module_identity_authority_valid(&candidate->authority) ||
+            !xr_module_identity_valid(candidate->canonical, &identity_kind) ||
+            (candidate->kind == XR_MOD_STDLIB &&
+             (candidate->authority.kind != XR_MODULE_IDENTITY_STDLIB ||
+              identity_kind != XR_MODULE_IDENTITY_STDLIB)) ||
+            (candidate->kind == XR_MOD_PACKAGE &&
+             (candidate->authority.kind != XR_MODULE_IDENTITY_PACKAGE ||
+              identity_kind != XR_MODULE_IDENTITY_PACKAGE)))
+            return -1;
+        if (match >= 0)
+            return -1;
+        match = dependency;
+    }
+    return match;
 }
 
 /* ========== BFS Build ========== */

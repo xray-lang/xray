@@ -14,10 +14,13 @@
 #include "analysis/xglobal_producer.h"
 #include "ir/xi.h"
 #include "ir/xi_module.h"
+#include "module/xmodule.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_identity.h"
 #include "module/xmodule_resolver.h"
 #include "module/xlockfile.h"
+#include "toolchain/xcompiler_session.h"
+#include "xray_vm.h"
 #include <string.h>
 
 static void require_identity(const XrModuleIdentityAuthority *authority, const char *source,
@@ -385,6 +388,147 @@ TEST(package_with_malformed_checksum_fails_closed) {
     xr_module_resolver_free(resolver);
 }
 
+TEST(named_package_edge_requires_exact_unambiguous_identity) {
+    int dependencies[2] = {1, 2};
+    XrModuleSpec specs[3] = {0};
+    specs[0].source_path = "C:/checkout/app/main.xr";
+    specs[0].dep_indices = dependencies;
+    specs[0].dep_count = 1;
+    specs[1].canonical =
+        "module-id-v1:kind=7:package:namespace=15:acme/json@2.4.1:path=11:src/main.xr";
+    specs[1].logical_path = "src/main.xr";
+    specs[1].source_path = "C:/cache/acme/json/2.4.1/src/main.xr";
+    specs[1].kind = XR_MOD_PACKAGE;
+    specs[1].authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PACKAGE,
+        .namespace_id = "acme/json@2.4.1",
+        .physical_root = "C:/cache/acme/json/2.4.1",
+    };
+    XrModuleGraph graph = {.specs = specs, .spec_count = 2};
+
+    ASSERT_EQ_INT(xr_module_graph_find_named_dependency(&graph, specs[0].source_path, "acme/json"),
+                  1);
+    specs[1].authority.namespace_id = "acme/json@2.4.2";
+    ASSERT_EQ_INT(xr_module_graph_find_named_dependency(&graph, specs[0].source_path, "acme/json"),
+                  -1);
+    specs[1].authority.namespace_id = "acme/json@2.4.1";
+
+    specs[2] = specs[1];
+    specs[2].canonical =
+        "module-id-v1:kind=7:package:namespace=15:acme/json@2.5.0:path=11:src/main.xr";
+    specs[2].authority.namespace_id = "acme/json@2.5.0";
+    specs[2].authority.physical_root = "C:/cache/acme/json/2.5.0";
+    specs[2].source_path = "C:/cache/acme/json/2.5.0/src/main.xr";
+    specs[0].dep_count = 2;
+    graph.spec_count = 3;
+    ASSERT_EQ_INT(xr_module_graph_find_named_dependency(&graph, specs[0].source_path, "acme/json"),
+                  -1);
+}
+
+TEST(active_graph_named_import_never_falls_back_to_shared_resolver) {
+    char entry_path[4096];
+    char stdlib_root[4096];
+    char base64_path[4096];
+    ASSERT_TRUE(snprintf(entry_path, sizeof(entry_path),
+                         "%s/tests/unit/module/test_module_identity.c",
+                         XRAY_TEST_SOURCE_DIR) > 0);
+    ASSERT_TRUE(snprintf(stdlib_root, sizeof(stdlib_root), "%s/stdlib",
+                         XRAY_TEST_SOURCE_DIR) > 0);
+    ASSERT_TRUE(snprintf(base64_path, sizeof(base64_path), "%s/base64/base64.xr",
+                         stdlib_root) > 0);
+
+    XrHashMap *native_factories = xr_hashmap_new();
+    ASSERT_NOT_NULL(native_factories);
+    ASSERT_TRUE(xr_hashmap_set(native_factories, "base64", (void *) 1));
+    XrModuleResolverConfig resolver_config = {
+        .native_factories = native_factories,
+        .stdlib_path = stdlib_root,
+    };
+    XrModuleResolver *shared_fixture = xr_module_resolver_new(&resolver_config);
+    ASSERT_NOT_NULL(shared_fixture);
+    XrModuleId shared_id;
+    char *error = NULL;
+    ASSERT_EQ_INT(xr_module_resolver_resolve(shared_fixture, "base64", entry_path, NULL,
+                                             &shared_id, &error),
+                  0);
+    ASSERT_NULL(error);
+    ASSERT_NOT_NULL(shared_id.source_path);
+
+    const char *old_stdlib_path = getenv("XRAY_STDLIB_PATH");
+    char *saved_stdlib_path = old_stdlib_path ? xr_strdup(old_stdlib_path) : NULL;
+    ASSERT_EQ_INT(xr_test_setenv("XRAY_STDLIB_PATH", stdlib_root, 1), 0);
+    XrVMConfig config = {.script_file = entry_path};
+    XrVMRuntime *isolate = xray_vm_new_full(&config);
+    ASSERT_NOT_NULL(isolate);
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
+    ASSERT_NOT_NULL(session);
+
+    XrModuleIdentityAuthority entry_authority = {
+        .kind = XR_MODULE_IDENTITY_SCRIPT,
+        .physical_root = XRAY_TEST_SOURCE_DIR,
+    };
+    XrModuleIdentityAuthority base64_authority = {
+        .kind = XR_MODULE_IDENTITY_STDLIB,
+        .namespace_id = "base64",
+        .physical_root = stdlib_root,
+    };
+    char *entry_canonical = NULL;
+    char *entry_logical = NULL;
+    char *base64_canonical = NULL;
+    char *base64_logical = NULL;
+    ASSERT_TRUE(xr_module_identity_from_source(&entry_authority, entry_path, &entry_canonical,
+                                               &entry_logical));
+    ASSERT_TRUE(xr_module_identity_from_source(&base64_authority, base64_path,
+                                               &base64_canonical, &base64_logical));
+
+    int dependencies[2] = {1, 2};
+    XrModuleSpec specs[3] = {0};
+    specs[0].canonical = entry_canonical;
+    specs[0].logical_path = entry_logical;
+    specs[0].source_path = entry_path;
+    specs[0].kind = XR_MOD_FILE;
+    specs[0].authority = entry_authority;
+    specs[0].dep_indices = dependencies;
+    specs[0].dep_count = 1;
+    specs[1].canonical = base64_canonical;
+    specs[1].logical_path = base64_logical;
+    specs[1].source_path = base64_path;
+    specs[1].kind = XR_MOD_STDLIB;
+    specs[1].authority = base64_authority;
+    XrModuleGraph graph = {.specs = specs, .spec_count = 2};
+    xr_compiler_session_set_module_graph(session, &graph);
+
+    char *resolved = xr_module_resolve_path(isolate, "base64");
+    ASSERT_NOT_NULL(resolved);
+    ASSERT_STR_EQ(resolved, base64_path);
+    xr_free(resolved);
+
+    specs[1].authority.namespace_id = "base64-mutated";
+    ASSERT_NULL(xr_module_resolve_path(isolate, "base64"));
+    specs[1].authority.namespace_id = "base64";
+
+    specs[2] = specs[1];
+    specs[0].dep_count = 2;
+    graph.spec_count = 3;
+    ASSERT_NULL(xr_module_resolve_path(isolate, "base64"));
+
+    xr_compiler_session_set_module_graph(session, NULL);
+    xr_module_id_cleanup(&shared_id);
+    xr_module_resolver_free(shared_fixture);
+    xr_hashmap_free(native_factories);
+    xr_free(entry_canonical);
+    xr_free(entry_logical);
+    xr_free(base64_canonical);
+    xr_free(base64_logical);
+    xray_vm_delete(isolate);
+    if (saved_stdlib_path) {
+        ASSERT_EQ_INT(xr_test_setenv("XRAY_STDLIB_PATH", saved_stdlib_path, 1), 0);
+        xr_free(saved_stdlib_path);
+    } else {
+        ASSERT_EQ_INT(xr_test_unsetenv("XRAY_STDLIB_PATH"), 0);
+    }
+}
+
 TEST(absolute_import_fails_closed) {
     XrModuleResolverConfig config = {0};
     XrModuleResolver *resolver = xr_module_resolver_new(&config);
@@ -419,6 +563,8 @@ RUN_TEST(xi_and_global_evidence_reject_untyped_identity_mutations);
 RUN_TEST(source_content_fingerprint_is_domain_and_length_framed);
 RUN_TEST(package_without_exact_lock_fails_closed);
 RUN_TEST(package_with_malformed_checksum_fails_closed);
+RUN_TEST(named_package_edge_requires_exact_unambiguous_identity);
+RUN_TEST(active_graph_named_import_never_falls_back_to_shared_resolver);
 RUN_TEST(absolute_import_fails_closed);
 
 TEST_MAIN_END()

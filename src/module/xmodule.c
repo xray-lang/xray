@@ -644,7 +644,9 @@ static const char *get_importer_path(XrVMRuntime *isolate) {
  * The physical path is used only to select a live graph node; it never becomes
  * durable identity text. Ambiguous or graphless lookups fail closed. */
 static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *registry,
-                                                   const char *locator) {
+                                                   const char *locator, bool *claimed_out) {
+    if (claimed_out)
+        *claimed_out = false;
     if (!registry || !registry->compiler_session || !locator || !locator[0])
         return NULL;
     const XrModuleGraph *graph =
@@ -652,35 +654,75 @@ static const XrModuleSpec *module_spec_for_locator(const XrModuleRegistry *regis
     if (!graph)
         return NULL;
     const XrModuleSpec *match = NULL;
+    bool invalid_match = false;
     char *locator_realpath = xr_realpath(locator);
     for (int i = 0; i < graph->spec_count; i++) {
         const XrModuleSpec *spec = &graph->specs[i];
-        if (!spec->source_path || !spec->canonical ||
-            !xr_module_identity_authority_valid(&spec->authority))
-            continue;
-        bool matches = strcmp(spec->canonical, locator) == 0 ||
-                       strcmp(spec->source_path, locator) == 0;
-        if (!matches && locator_realpath) {
+        bool matches = (spec->canonical && strcmp(spec->canonical, locator) == 0) ||
+                       (spec->source_path && strcmp(spec->source_path, locator) == 0);
+        if (!matches && locator_realpath && spec->source_path) {
             char *spec_realpath = xr_realpath(spec->source_path);
             matches = spec_realpath && strcmp(spec_realpath, locator_realpath) == 0;
             xr_free(spec_realpath);
         }
         if (!matches)
             continue;
+        if (claimed_out)
+            *claimed_out = true;
+        if (!spec->source_path || !spec->canonical ||
+            !xr_module_identity_authority_valid(&spec->authority)) {
+            invalid_match = true;
+            continue;
+        }
         if (match && strcmp(match->canonical, spec->canonical) != 0) {
-            xr_free(locator_realpath);
-            return NULL;
+            invalid_match = true;
+            continue;
         }
         match = spec;
     }
     xr_free(locator_realpath);
-    return match;
+    return invalid_match ? NULL : match;
 }
 
 static const XrModuleIdentityAuthority *module_authority_for_source(
     const XrModuleRegistry *registry, const char *source_path) {
-    const XrModuleSpec *spec = module_spec_for_locator(registry, source_path);
+    const XrModuleSpec *spec = module_spec_for_locator(registry, source_path, NULL);
     return spec ? &spec->authority : NULL;
+}
+
+typedef enum {
+    XR_NAMED_IMPORT_UNHANDLED = 0,
+    XR_NAMED_IMPORT_FOUND,
+    XR_NAMED_IMPORT_CLAIMED_INVALID,
+} XrNamedImportResult;
+
+/* An active graph owns every named import from one of its modules. Package
+ * source spelling omits the locked version, so only the unique exact edge may
+ * supply it. A claimed invalid import must never fall back to another resolver. */
+static XrNamedImportResult module_spec_for_named_import(
+    const XrModuleRegistry *registry, const char *importer, const char *specifier,
+    const XrModuleSpec **out_spec) {
+    if (out_spec)
+        *out_spec = NULL;
+    if (!registry || !registry->compiler_session || !importer || !specifier || !specifier[0] ||
+        specifier[0] == '.')
+        return XR_NAMED_IMPORT_UNHANDLED;
+    const XrModuleGraph *graph = xr_compiler_session_module_graph(registry->compiler_session);
+    if (!graph)
+        return XR_NAMED_IMPORT_UNHANDLED;
+    bool importer_claimed = false;
+    const XrModuleSpec *owner =
+        module_spec_for_locator(registry, importer, &importer_claimed);
+    if (!importer_claimed)
+        return XR_NAMED_IMPORT_UNHANDLED;
+    if (!owner)
+        return XR_NAMED_IMPORT_CLAIMED_INVALID;
+    int dependency = xr_module_graph_find_named_dependency(graph, owner->source_path, specifier);
+    if (dependency < 0 || dependency >= graph->spec_count || !graph->specs[dependency].source_path)
+        return XR_NAMED_IMPORT_CLAIMED_INVALID;
+    if (out_spec)
+        *out_spec = &graph->specs[dependency];
+    return XR_NAMED_IMPORT_FOUND;
 }
 
 static const XrBytecodeModule *find_embedded_module(const XrModuleRegistry *registry,
@@ -756,9 +798,16 @@ char *xr_module_resolve_path(XrVMRuntime *isolate, const char *module_name) {
     /* Compiler-owned import operands may already carry the graph's typed
      * identity or its physical I/O locator. Route both through the active
      * graph instead of reinterpreting either as a source-language specifier. */
-    const XrModuleSpec *resolved_spec = module_spec_for_locator(registry, module_name);
+    const XrModuleSpec *resolved_spec = module_spec_for_locator(registry, module_name, NULL);
     if (resolved_spec)
         return xr_strdup(resolved_spec->source_path);
+
+    XrNamedImportResult named_result =
+        module_spec_for_named_import(registry, importer, module_name, &resolved_spec);
+    if (named_result == XR_NAMED_IMPORT_FOUND)
+        return xr_strdup(resolved_spec->source_path);
+    if (named_result == XR_NAMED_IMPORT_CLAIMED_INVALID)
+        return NULL;
 
     XrModuleResolver *resolver = ensure_resolver(registry);
     if (!resolver)

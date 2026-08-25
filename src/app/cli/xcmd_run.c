@@ -15,6 +15,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
+#include "xcli_graph_authority.h"
 #include "../../api/xisolate_profile.h"
 
 #include "xray.h"
@@ -400,29 +401,26 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
     xr_module_system_init_with_script(iso, file);
 
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
-    XrProject *project = NULL;
-    char project_root[XR_CLI_PATH_MAX];
-    if (xr_cli_find_project_root(file, project_root, sizeof(project_root))) {
-        project = xr_project_load(NULL, project_root);
-        if (project && !project->initialized) {
-            fprintf(stderr, "Error: %s\n",
-                    project->native_plan && project->native_plan->error
-                        ? project->native_plan->error
-                        : "invalid xray.toml project configuration");
-            xr_project_free(project);
-            xray_vm_delete(iso);
-            return XR_CLI_EXIT_FAIL;
-        }
-        if (project && project->native_plan &&
-            project->native_plan->vm_policy == XR_NATIVE_VM_UNSUPPORTED) {
-            fprintf(stderr, "Error: native package '%s' does not support the VM backend\n",
-                    project->native_plan->name ? project->native_plan->name : "?");
-            xr_project_free(project);
-            xray_vm_delete(iso);
-            return XR_CLI_EXIT_FAIL;
-        }
-        xr_compiler_session_set_native_package_plan(session, project ? project->native_plan : NULL);
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
+    XrCliGraphAuthority graph_authority = {0};
+    char authority_error[512] = {0};
+    if (!xr_cli_graph_authority_open(&graph_authority, registry, file,
+                                     authority_error, sizeof(authority_error))) {
+        fprintf(stderr, "Error: %s\n",
+                authority_error[0] ? authority_error : "cannot establish module authority");
+        xray_vm_delete(iso);
+        return XR_CLI_EXIT_FAIL;
     }
+    XrProject *project = graph_authority.project;
+    if (project && project->native_plan &&
+        project->native_plan->vm_policy == XR_NATIVE_VM_UNSUPPORTED) {
+        fprintf(stderr, "Error: native package '%s' does not support the VM backend\n",
+                project->native_plan->name ? project->native_plan->name : "?");
+        xr_cli_graph_authority_close(&graph_authority);
+        xray_vm_delete(iso);
+        return XR_CLI_EXIT_FAIL;
+    }
+    xr_compiler_session_set_native_package_plan(session, project ? project->native_plan : NULL);
     // Graph export symbols point at analyzer-owned semantic symbols.
     XrModuleGraph *active_graph = NULL;
     XaAnalyzer *active_graph_analyzer = NULL;
@@ -430,38 +428,14 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
 
     /* Pre-flight: build module graph, detect cycles, analyze cross-module types */
     {
-        XrModuleRegistry *registry = xr_isolate_get_module_registry(iso);
-        XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
+        XrModuleResolver *resolver = graph_authority.resolver;
         if (resolver) {
-            XrModuleIdentityAuthority entry_authority = {0};
-            char *script_root = NULL;
-            if (project) {
-                entry_authority = (XrModuleIdentityAuthority) {
-                    .kind = XR_MODULE_IDENTITY_PROJECT,
-                    .namespace_id = project->name,
-                    .physical_root = project->root,
-                };
-            } else if (!xr_module_identity_script_authority_from_source(
-                           file, &entry_authority, &script_root)) {
-                fprintf(stderr, "Error: cannot establish script module identity authority\n");
-                xr_project_free(project);
-                xray_vm_delete(iso);
-                return XR_CLI_EXIT_FAIL;
-            }
-            if (!xr_module_identity_authority_valid(&entry_authority)) {
-                fprintf(stderr, "Error: invalid project/script module identity authority\n");
-                xr_free(script_root);
-                xr_project_free(project);
-                xray_vm_delete(iso);
-                return XR_CLI_EXIT_FAIL;
-            }
             XrModuleGraph *graph =
                 xr_module_graph_new(xr_compiler_session_current_for_isolate(iso), resolver);
             if (graph) {
                 char *err = NULL;
-                int graph_rc = xr_module_graph_build(graph, file, &entry_authority, &err);
-                xr_free(script_root);
-                script_root = NULL;
+                int graph_rc =
+                    xr_module_graph_build(graph, file, &graph_authority.entry_authority, &err);
                 if (graph_rc == 0) {
                     xr_module_graph_topological_sort(graph);
                     if (graph->has_cycle) {
@@ -469,7 +443,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 graph->cycle_desc ? graph->cycle_desc
                                                   : "circular dependency detected");
                         xr_module_graph_free(graph);
-                        xr_project_free(project);
+                        xr_cli_graph_authority_close(&graph_authority);
                         xray_vm_delete(iso);
                         return XR_CLI_EXIT_FAIL;
                     }
@@ -485,7 +459,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                         if (!analyzer) {
                             fprintf(stderr, "Error: cannot create analyzer for module graph\n");
                             xr_module_graph_free(graph);
-                            xr_project_free(project);
+                            xr_cli_graph_authority_close(&graph_authority);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
                         }
@@ -517,7 +491,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                                 xa_analyzer_set_graph(analyzer, NULL);
                                 xa_analyzer_free(analyzer);
                                 xr_module_graph_free(graph);
-                                xr_project_free(project);
+                                xr_cli_graph_authority_close(&graph_authority);
                                 xray_vm_delete(iso);
                                 return XR_CLI_EXIT_FAIL;
                             }
@@ -546,7 +520,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                             }
                             xr_free(err);
                             xr_module_graph_free(graph);
-                            xr_project_free(project);
+                            xr_cli_graph_authority_close(&graph_authority);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
                         }
@@ -561,14 +535,16 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                         if (!xr_module_graph_preload(iso, graph, &mod_table)) {
                             xr_free(err);
                             xr_compiler_session_set_module_graph(session, NULL);
-                            xa_analyzer_set_graph(active_graph_analyzer, NULL);
-                            xa_analyzer_free(active_graph_analyzer);
+                            if (active_graph_analyzer) {
+                                xa_analyzer_set_graph(active_graph_analyzer, NULL);
+                                xa_analyzer_free(active_graph_analyzer);
+                            }
                             active_graph_analyzer = NULL;
                             xr_module_graph_free(active_graph);
                             active_graph = NULL;
                             (void) xr_compiler_session_operation_fail(
                                 &graph_operation, XR_COMPILER_SESSION_OPERATION_FATAL);
-                            xr_project_free(project);
+                            xr_cli_graph_authority_close(&graph_authority);
                             xray_vm_delete(iso);
                             return XR_CLI_EXIT_FAIL;
                         }
@@ -576,18 +552,19 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
                         registry->module_table_count = graph->topo_count;
                         graph = NULL;
                     }
+                } else {
+                    fprintf(stderr, "Error: %s\n", err ? err : "module graph build failed");
                 }
                 xr_free(err);
                 if (graph)
                     xr_module_graph_free(graph);
             }
-            xr_free(script_root);
         }
     }
 
     if (!active_graph) {
         fprintf(stderr, "Error: failed to build authoritative module graph\n");
-        xr_project_free(project);
+        xr_cli_graph_authority_close(&graph_authority);
         xray_vm_delete(iso);
         return XR_CLI_EXIT_FAIL;
     }
@@ -615,7 +592,7 @@ XR_FUNC int cmd_run(const XrCliInvocation *inv) {
         result = -1;
 
     xr_compiler_session_set_native_package_plan(session, NULL);
-    xr_project_free(project);
+    xr_cli_graph_authority_close(&graph_authority);
     xray_vm_delete(iso);
 
     return (result != 0) ? XR_CLI_EXIT_FAIL : XR_CLI_EXIT_OK;

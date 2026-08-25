@@ -15,6 +15,7 @@
 #include "xcli.h"
 #include "xcli_spec.h"
 #include "xcli_fs.h"
+#include "xcli_graph_authority.h"
 #include "../../api/xisolate_profile.h"
 #include "xray.h"
 #include "xray_vm.h"
@@ -122,31 +123,30 @@ static int check_directory(XrVMRuntime *X, XaAnalyzer *analyzer, const char *pat
 static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *entry_path,
                             int verbose) {
     XrModuleRegistry *registry = xr_isolate_get_module_registry(X);
-    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
-    if (!resolver) {
-        fprintf(stderr, "Error: cannot create module resolver\n");
+    XrCliGraphAuthority graph_authority = {0};
+    char authority_error[512] = {0};
+    if (!xr_cli_graph_authority_open(&graph_authority, registry, entry_path, authority_error,
+                                     sizeof(authority_error))) {
+        fprintf(stderr, "Error: %s\n",
+                authority_error[0] ? authority_error : "cannot establish module authority");
         return 1;
     }
 
     XrModuleGraph *graph =
-        xr_module_graph_new(xr_compiler_session_current_for_isolate(X), resolver);
+        xr_module_graph_new(xr_compiler_session_current_for_isolate(X), graph_authority.resolver);
     if (!graph) {
         fprintf(stderr, "Error: cannot create module graph\n");
+        xr_cli_graph_authority_close(&graph_authority);
         return 1;
     }
 
     char *err = NULL;
-    XrModuleIdentityAuthority authority = {0};
-    char *authority_root = NULL;
-    int rc = xr_module_identity_script_authority_from_source(entry_path, &authority,
-                                                              &authority_root)
-                 ? xr_module_graph_build(graph, entry_path, &authority, &err)
-                 : -1;
-    xr_free(authority_root);
+    int rc = xr_module_graph_build(graph, entry_path, &graph_authority.entry_authority, &err);
     if (rc != 0) {
         fprintf(stderr, "Error: %s\n", err ? err : "graph build failed");
         xr_free(err);
         xr_module_graph_free(graph);
+        xr_cli_graph_authority_close(&graph_authority);
         return 1;
     }
 
@@ -155,6 +155,7 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
         fprintf(stderr, "Error: %s\n",
                 graph->cycle_desc ? graph->cycle_desc : "circular dependency detected");
         xr_module_graph_free(graph);
+        xr_cli_graph_authority_close(&graph_authority);
         return 1;
     }
 
@@ -216,6 +217,7 @@ static int check_with_graph(XrVMRuntime *X, XaAnalyzer *analyzer, const char *en
         printf("\nChecked %d modules in dependency order\n", total);
 
     xr_module_graph_free(graph);
+    xr_cli_graph_authority_close(&graph_authority);
     return errors;
 }
 

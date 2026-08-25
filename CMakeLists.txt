@@ -3512,6 +3512,18 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME source_graph_authority_cli
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_source_graph_authority_tests.py
+                --binary $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(source_graph_authority_cli PROPERTIES
+        LABELS "cli;module;identity;package"
+        TIMEOUT 60
+    )
+
+    add_test(
         NAME target_artifact_cli_boundary
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli/run_target_artifact_boundary_tests.py

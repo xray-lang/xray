@@ -152,6 +152,10 @@ XR_FUNC int xr_module_graph_topological_sort(XrModuleGraph *g);
 XR_FUNC int xr_module_graph_find(const XrModuleGraph *g, const char *canonical);
 /* Physical-source lookup is local plumbing only; it is never a graph identity key. */
 XR_FUNC int xr_module_graph_find_source(const XrModuleGraph *g, const char *source_path);
+/* Resolve a named stdlib/package coordinate only through one exact importer
+ * edge already admitted by the graph resolver. Returns a spec index or -1. */
+XR_FUNC int xr_module_graph_find_named_dependency(const XrModuleGraph *g, const char *importer_path,
+                                                  const char *specifier);
 
 /* Initialize every dependency exactly once in topological order and return a
  * table indexed by topo position. The caller owns the table, but not its

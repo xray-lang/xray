@@ -811,6 +811,9 @@ if(NOT WIN32)
 endif()
 add_xray_unit_test(test_module_publication module/test_module_publication.c)
 add_xray_unit_test(test_module_identity module/test_module_identity.c)
+target_compile_definitions(test_module_identity PRIVATE
+    XRAY_TEST_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+)
 add_xray_unit_test(test_semver module/test_semver.c)
 add_xray_unit_test(test_lockfile module/test_lockfile.c)
 add_xray_unit_test(test_source_cache module/test_source_cache.c)
