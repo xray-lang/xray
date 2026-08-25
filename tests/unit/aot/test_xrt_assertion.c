@@ -124,13 +124,26 @@ static XrValue action_conflict(xrt_closure_t *closure) {
     xrt_throw_exc(xrt_exception_new_value(74, "panic", 5));
 }
 
+typedef XrValue (*TestActionEntry)(xrt_closure_t *);
+
+typedef struct TestActionDescriptor {
+    TestActionEntry entry;
+    XrAotCallableDesc callable;
+} TestActionDescriptor;
+
 static XrValue make_action(XrValue (*entry)(xrt_closure_t *)) {
-    static XrAotCallableDesc descriptors[4];
-    static unsigned descriptor_count;
-    XrAotCallableDesc *descriptor = &descriptors[descriptor_count++];
-    descriptor->target_id = descriptor_count;
-    descriptor->sync_entry = (void (*)(void)) entry;
-    return xrt_closure_new(descriptor, 0);
+    static const TestActionDescriptor descriptors[] = {
+        {action_normal_string, {1, 0, 0, (void (*)(void)) action_normal_string}},
+        {action_typed_error, {2, 0, 0, (void (*)(void)) action_typed_error}},
+        {action_panic, {3, 0, 0, (void (*)(void)) action_panic}},
+        {action_conflict, {4, 0, 0, (void (*)(void)) action_conflict}},
+    };
+    for (size_t i = 0; i < sizeof(descriptors) / sizeof(descriptors[0]); i++) {
+        if (descriptors[i].entry == entry)
+            return xrt_closure_new(&descriptors[i].callable, 0);
+    }
+    fprintf(stderr, "make_action: unregistered test action\n");
+    abort();
 }
 
 static XrValue catch_assertion_action(XrValue action,
