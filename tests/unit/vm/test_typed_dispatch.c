@@ -5,6 +5,7 @@
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_coro_lower.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -220,6 +221,21 @@ static void test_generated_instruction_contract(void) {
         XR_TARGET_INSTRUCTION_COUNT, first));
 }
 
+static bool build_typed_dispatch_semantic(XiFunc *root, XrSemanticPlan **out,
+                                          char *error, size_t error_size) {
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=30:typed-dispatch-unit-fixture-v1",
+        .path = "typed-dispatch-unit-fixture.xr",
+        .name = "typed_dispatch_unit_fixture",
+        .init = root,
+    };
+    REQUIRE(root != NULL && root->module == NULL);
+    root->module = &fixture_module;
+    bool built = xr_semantic_plan_build(root, out, error, error_size);
+    root->module = NULL;
+    return built;
+}
+
 static XrSemanticPlan *build_semantic(void) {
     XiFunc *function = xi_func_new("typed_dispatch_probe", &stub_int);
     REQUIRE(function != NULL);
@@ -253,7 +269,7 @@ static XrSemanticPlan *build_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -308,7 +324,7 @@ static XrSemanticPlan *build_direct_i64_call_semantic(bool divide_by_zero) {
 
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(root, &semantic, error, sizeof(error)));
     xi_func_free(root);
     return semantic;
 }
@@ -362,8 +378,8 @@ static XrSemanticPlan *build_deep_direct_i64_call_semantic(void) {
                         functions[function_count - 1u]->params[0]);
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(functions[0], &semantic, error,
-                                   sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(functions[0], &semantic, error,
+                                          sizeof(error)));
     xi_func_free(functions[0]);
     xr_free(blocks);
     xr_free(functions);
@@ -389,7 +405,7 @@ static XrSemanticPlan *build_unsupported_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -419,7 +435,7 @@ static XrSemanticPlan *build_scalar_with_unused_child_semantic(void) {
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(root, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(root, &semantic, error, sizeof(error)));
     xi_func_free(root);
     return semantic;
 }
@@ -450,7 +466,7 @@ static XrSemanticPlan *build_parameter_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -485,7 +501,7 @@ static XrSemanticPlan *build_shift_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -522,7 +538,7 @@ static XrSemanticPlan *build_opposed_pair_semantic(const char *name, XiOp op) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -562,7 +578,7 @@ static XrSemanticPlan *build_branch_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -604,7 +620,7 @@ static XrSemanticPlan *build_jump_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -653,8 +669,8 @@ static XrSemanticPlan *build_scalar_coroutine_semantic(bool divide_by_zero) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error,
-                                   sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error,
+                                          sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
@@ -700,7 +716,7 @@ static XrSemanticPlan *build_compare_semantic(const char *name, XiOp op) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    REQUIRE(build_typed_dispatch_semantic(function, &semantic, error, sizeof(error)));
     xi_func_free(function);
     return semantic;
 }
