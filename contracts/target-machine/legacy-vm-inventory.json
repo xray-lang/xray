@@ -18,7 +18,7 @@
   ],
   "generator": "target-machine-phase0/1",
   "legacy_artifact_symbols": [],
-  "opcode_count": 296,
+  "opcode_count": 297,
   "opcodes": [
     {
       "deletion_task": 276,
@@ -2725,7 +2725,7 @@
       "error_suspend_edges": "handler-specific",
       "family": "typed-operation",
       "observable_behavior": "description-in-xinstruction-table",
-      "opcode": "OP_ASSERT",
+      "opcode": "OP_ASSERTION",
       "operand_format": "FMT_ABC",
       "operand_roles": "KOP_SPECIAL",
       "ownership": "implicit-opcode-handler-contract",
@@ -2737,8 +2737,8 @@
       "error_suspend_edges": "handler-specific",
       "family": "typed-operation",
       "observable_behavior": "description-in-xinstruction-table",
-      "opcode": "OP_ASSERT_EQ",
-      "operand_format": "FMT_ABC",
+      "opcode": "OP_ASSERTION_FILE",
+      "operand_format": "FMT_ABx",
       "operand_roles": "KOP_SPECIAL",
       "ownership": "implicit-opcode-handler-contract",
       "tag_assumption": "XrValue-register-frame",
@@ -2749,8 +2749,20 @@
       "error_suspend_edges": "handler-specific",
       "family": "typed-operation",
       "observable_behavior": "description-in-xinstruction-table",
-      "opcode": "OP_ASSERT_NE",
-      "operand_format": "FMT_ABC",
+      "opcode": "OP_ASSERTION_SPAN_START",
+      "operand_format": "FMT_SPECIAL",
+      "operand_roles": "KOP_SPECIAL",
+      "ownership": "implicit-opcode-handler-contract",
+      "tag_assumption": "XrValue-register-frame",
+      "target_plan_mapping": "map-to-target-plan-op"
+    },
+    {
+      "deletion_task": 276,
+      "error_suspend_edges": "handler-specific",
+      "family": "typed-operation",
+      "observable_behavior": "description-in-xinstruction-table",
+      "opcode": "OP_ASSERTION_SPAN_END",
+      "operand_format": "FMT_SPECIAL",
       "operand_roles": "KOP_SPECIAL",
       "ownership": "implicit-opcode-handler-contract",
       "tag_assumption": "XrValue-register-frame",
@@ -3578,8 +3590,22 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "dd4116790bd2368570f6e38f8f6b3f0fe91033fd0abdc50b987a733db82f18d0",
+  "source_tree_fingerprint": "c72074bfe597061005ed640d581907e3ee531a4b7a1b3bd5a9ca3a1a9095411c",
   "tagged_frame_sites": [
+    {
+      "path": "src/vm/xr_typed_dispatch.c",
+      "pointer_names": [
+        "argument",
+        "value",
+        "value_arguments"
+      ]
+    },
+    {
+      "path": "src/vm/xr_typed_dispatch.h",
+      "pointer_names": [
+        "arguments"
+      ]
+    },
     {
       "path": "src/vm/xvm.c",
       "pointer_names": [
@@ -4097,6 +4123,16 @@
       "path": "src/runtime/value/xvalue.h",
       "pointer_names": [
         "v"
+      ]
+    },
+    {
+      "path": "src/runtime/value/xvalue_deep_eq.c",
+      "pointer_names": [
+        "entry_value",
+        "key",
+        "left_value",
+        "out",
+        "right_value"
       ]
     },
     {
