@@ -196,6 +196,14 @@ typedef struct XiSourceSpan {
     uint32_t end_column;
 } XiSourceSpan;
 
+typedef struct XiSourceLocator {
+    uint32_t kind;
+    XiSourceSpan span;
+} XiSourceLocator;
+
+/* Frozen PSC rows are addressed only by their canonical table index. */
+#define XI_PSC_ROW_NONE UINT32_MAX
+
 static inline bool xi_source_span_is_empty(XiSourceSpan span) {
     return span.start_line == 0 && span.start_column == 0 && span.end_line == 0 &&
            span.end_column == 0;
@@ -1195,7 +1203,9 @@ typedef struct XiValue {
     uint16_t nargs;                /* number of args */
     int16_t uses;                  /* use count (for DCE; -1 = not computed) */
     uint32_t line;                 /* source line number (0 = unknown) */
+    uint32_t source_kind;          /* pointer-free source node kind (0 = unavailable) */
     XiSourceSpan source_span;      /* exact source range; all zero when unavailable */
+    uint32_t psc_call_index;       /* frozen PSC call row, or XI_PSC_ROW_NONE */
     uint32_t xg_callsite_id;       /* stable XgCallsiteId for evidence-backed calls (0 = none) */
     uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
@@ -1299,7 +1309,9 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->call_return_ownership = src->call_return_ownership;
     dst->result_alias_operand = src->result_alias_operand;
     dst->line = src->line;
+    dst->source_kind = src->source_kind;
     dst->source_span = src->source_span;
+    dst->psc_call_index = src->psc_call_index;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->array_intrinsic_kind = src->array_intrinsic_kind;
@@ -1736,6 +1748,8 @@ typedef struct XiFunc {
     const char *name;                  /* function name (debug, not owned) */
     const char *source_file;           /* source path for VM/DAP debug hooks (not owned) */
     XiSourceSpan lowering_source_span; /* temporary AST range inherited by new Xi values */
+    uint32_t psc_function_index;        /* frozen PSC function row, or XI_PSC_ROW_NONE */
+    XiSourceLocator psc_declaration_locator; /* exact pointer-free declaration locator */
     struct XrType *return_type;        /* return type (from analyzer) */
     uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
     uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */

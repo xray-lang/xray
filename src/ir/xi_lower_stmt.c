@@ -4031,7 +4031,8 @@ static void lower_return(XiLower *l, AstNode *node) {
                                    strcmp((const char *) val->aux, "constructor") == 0;
         if (is_direct_call && !is_constructor_call && val && val->op == XI_CALL_METHOD) {
             val->flags |= XI_FLAG_TAIL;
-        } else if (is_direct_call && val && val->op == XI_CALL) {
+        } else if (is_direct_call && val && val->op == XI_CALL &&
+                   val->psc_call_index == XI_PSC_ROW_NONE) {
             bool is_self = xi_call_targets_own_frame(val->op, val->aux_int);
             bool callee_is_func = val->nargs >= 1 && val->args[0] && val->args[0]->type &&
                                   val->args[0]->type->kind == XR_KIND_FUNCTION;

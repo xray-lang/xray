@@ -146,6 +146,9 @@ typedef struct XrProgramSemanticCallRecord {
 XR_FUNC bool xr_program_semantic_closure_create(
     const XrProgramSemanticClosureLimits *limits, XrFingerprint policy_fingerprint,
     XrProgramSemanticClosure **out, char *error, size_t error_size);
+/* Retaining mutable or unverified authority is forbidden. */
+XR_FUNC XrProgramSemanticClosure *
+xr_program_semantic_closure_retain(XrProgramSemanticClosure *closure);
 XR_FUNC void xr_program_semantic_closure_free(XrProgramSemanticClosure *closure);
 
 XR_FUNC bool xr_program_semantic_closure_add_module(

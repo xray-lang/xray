@@ -395,7 +395,7 @@ static bool check_bindings(const char *source, const char *label) {
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     xa_typed_program_free(typed.program);
 #ifdef _WIN32
     freopen("CON", "w", stderr);

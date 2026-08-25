@@ -124,7 +124,7 @@ static bool run_scaling_case(size_t payload_length, ScalingResult *result) {
         xr_compiler_session_pop_arena(&scope);
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (func)
         count_xi_values(func, payload_length, result);
 

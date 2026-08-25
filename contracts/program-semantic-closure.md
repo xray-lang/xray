@@ -51,11 +51,11 @@ admission may be inferred from these rows.
    aggregate fingerprint, and generation identity. A frozen closure with a
    mutated state, row, fingerprint, or generation identity is rejected.
 7. This schema has no artifact codec and no executor consumer. Adding a
-   serialization format, cache certificate, Xi/SemanticPlan reference, or
+   serialization format, cache certificate, SemanticPlan interpretation, or
    aggregate ABI decision requires a separately frozen authority and independent
    validation; none may treat this foundation as implicit Target admission. The
-   sole target reader admitted here is the bounded scalar CallDecision authority
-   described below; it does not make PSC fingerprints self-describing.
+   bounded scalar CallDecision and Xi binding described below are the only
+   admitted readers; neither makes PSC fingerprints self-describing.
 8. The first source-backed producer is deliberately bounded to one memory
    module containing exactly two sealed, non-generic, non-suspending language
    functions and one direct `i64 -> i64` call. Analyzer publication owns a
@@ -105,13 +105,40 @@ admission may be inferred from these rows.
     cleanup, error channel, suspension point, or capability. Its independent
     verifier re-resolves the PSC call and functions, rechecks the target and
     generation bindings, reconstructs the exact semantic contracts, and
-    independently recomputes the decision fingerprint. This authority is not
-    consumed by Xi, VM, AOT, C emission, or the existing TargetPlan builder.
+   independently recomputes the decision fingerprint. This authority is
+   consumed only by the bounded Xi binding below. VM, AOT, C emission, and the
+   existing TargetPlan builder do not consume it.
 14. The bounded source-backed producer is created by a compiler session, module
     resolver, module graph, and analyzer. Parsing and source-graph construction
     require that compiler authority, not an installed VM header, VM handle, or
     runtime constructor. The producer test owns and destroys each compiler-side
     object directly while retaining the analyzer/graph teardown proof above.
+15. A frozen and independently verified closure starts with one reference and
+    may be retained by additional compiler-stage owners. Retain rejects mutable,
+    failed, unverified, released, and reference-saturated closures. Free drops
+    one reference and destroys the pointer-free rows only when the last owner is
+    released. XiModule holds one ordinary closure reference together with its
+    own heap copy of the sealed pointer-free CallDecision; failed transfer does
+    not consume or partially install either authority.
+16. The bounded analyzer authority activates a closed Xi lowering lane only
+    when the current compiler session supplies the exact independently verified
+    TargetProfile. Lowering joins function declarations and the call
+    mechanically by the complete PSC source locators before any generic, name,
+    member, body, or shape resolver. XiFunc stores only the complete pointer-free
+    declaration locator and a 32-bit PSC function-row index; the Xi call stores
+    only its complete pointer-free call locator and a 32-bit PSC call-row index.
+    No wide stable identity or dynamic-row pointer is copied into Xi.
+17. The independent Xi scalar verifier resolves every stored row index back
+    through PSC, checks exact declaration and call locators, caller, callee,
+    callsite, GenerationClosureId, CallDecision, target profile, and nullary or
+    unary `i64` contracts, and requires the callee preserve-call policy. The Xi
+    call retains the generic conservative CALL effects and carries no unmodeled
+    tail contract. Verification runs immediately after authority transfer and
+    again on the post-close, post-ARC, post-optimization graph before
+    SemanticPlan construction. Missing profile, locator drift, row mutation,
+    decision drift, added execution contracts, or unsupported family shape fail
+    closed without fallback, alias, compatibility API, TargetPlan, or
+    scalar-only certificate.
 
 ## Digest anchors
 
@@ -131,18 +158,31 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c ca5b60beaebf1
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 481f30070bf6d5ae7ff279dad94e1f518568d028d07a07cb2113a949f4e94375
 anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h c7da8686d42b22e56e353eca73730bd888b7f3a9c2042d152c69b10476bc7971
 anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c faff8c7a575f560bcb82159f5d98f5200a4220ca66a5fe3059f867086a4cbb66
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 0bded1054e812c13bc4cdb4a6af2291df0e30215b7cf056d2c9ea882b5d5d05d
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 6d4079b9c940eaa12c0e98d5bb0e4c12d0bda9a2e38103c065f1c3ac7a032aa0
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 6eca8b58a5294d0164c8ef3bc219862be8f65c024bc77ceb0dd158ec53037a64
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 3d9173321c2e19de24894403dab4763cdb59ccb2e19dfaeebbc60eb8cde1119f
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 4706d79f3acc1345f7183e9d04ddb590c80506995fa2c108f071abfe50bc2931
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 040ced3d57b22a96bec7d590301893e0ebb30f44e96926f44b15fe678142eab1
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 626fca9a624892525d95af3b716c0d57e4ddfc0f128a579ab42dca0ac20177b8
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece99304f2de817381b6e4051b2b66fd7b336bb1c66d493
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 764bee44083ff3b6622cf5a57051fc5ac558e1bdde899522274be7e4e0049b41
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 9d20284c377a6be00d4154193e1160dfde87389cc141fa7cb41d55d6a9bc28a0
+anchor-sha256: src/ir/xi.h 79ece671a55f114ab3334071c9e21d3a72a00a80b0945772ecd103b402756ce3
+anchor-sha256: src/ir/xi.c a45b2e1879eccceaad63284d61826c142e962dcf34e22a0200fb54d9cf2080c6
+anchor-sha256: src/ir/xi_module.h 3a75eb103bad44f42812614fb926fa726c550583d4f0edf1165bc7a3b4d7cdcd
+anchor-sha256: src/ir/xi_lower.h fcd45df9157610149721205e7f630506797e53d67d07c75febd4de77efd2b4d3
+anchor-sha256: src/ir/xi_lower.c 5f7177c244562b8a23ab8cc36d5cf82c638e86b6574783f0da45a2f0a3985baa
+anchor-sha256: src/ir/xi_lower_expr.c 0307e72180774953f1e9f8c26910f7eaa536b34e38e261e3783c0d554d4e0d60
+anchor-sha256: src/ir/xi_lower_stmt.c 16c87830bf9473823d2718143eb94c42cd56f6d189e9bec879b1c724d398deee
+anchor-sha256: src/ir/xi_pipeline.c bbbd49d7ee58919fdd5fd62b9677a4bbf4d41e7c0b39a26de8527a2adf8c2cb4
+anchor-sha256: src/ir/xi_scalar_program.h 9f5b268f34bdbe3c5b1425896f477764d55ee63cba15895b36cedbabdcf76920
+anchor-sha256: src/ir/xi_scalar_program.c 30967d4cee90d940df14a3a16e165e1f291d08b42767ea6147de8d4b12df21b2
+anchor-sha256: src/ir/xi_scalar_program_verify.c 0016797f0c03d325bd5c8289e9d6983fe2b98f182540c52e5b1a20d61f786769
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 31d918226ca8f369f61f1b0b6a73d6e1585a7854eeba5d0f3c7b993fc5d94bcb
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 5752882ed5842dff1006a349f79e114e33a9ccb6e1378cdfd612811fddd2ab87
 anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c 8c5f8e46818ad8d8892b39c67f017f1fe9189d2600bc734767625473c5deec43
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c 4bbb43d8d3e3296d02b62ff1669ebdeb6ea5018f3b181dd8297922046ebf3c94
-anchor-sha256: tests/unit/CMakeLists.txt b261f26ec677a898f7025049e613dae623adad66884b47031b9700598c29a073
+anchor-sha256: tests/unit/ir/test_xi_scalar_program.c 2442cae2e0eec2f60f6d4e3552f1af1c976470cbe35a241671493ca51c83a9d1
+anchor-sha256: tests/unit/ir/test_xi_pipeline.c 50ac5c7e7db637fcb20bc928024be4e8a263790e833d0fa98f7cd2bafc5f652c
+anchor-sha256: tests/unit/CMakeLists.txt 42e546f6288d61ae5cf9724504cebe9e474cc42fc53d961e9f62002cf3efb341

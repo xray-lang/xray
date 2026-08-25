@@ -13,6 +13,7 @@
  */
 
 #include "xi.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
 #include "xi_evidence.h"
 #include "xi_loop.h"
 #include "xi_module.h"
@@ -259,6 +260,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     f->view_return_param = -1;
     f->arc_return_ownership.param_index = -1;
     f->semantic_plan_function_index = XR_SEMANTIC_INDEX_NONE;
+    f->psc_function_index = XI_PSC_ROW_NONE;
     f->stage = XI_STAGE_RAW;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
@@ -436,7 +438,9 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
     v->line = 0;
+    v->source_kind = 0;
     v->source_span = source_span;
+    v->psc_call_index = XI_PSC_ROW_NONE;
     v->xg_callsite_id = 0;
     v->xa_intrinsic_id = 0;
     v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_NONE;
@@ -780,6 +784,10 @@ XR_FUNC bool xi_module_set_identity(XiModule *mod, const char *identity) {
 XR_FUNC void xi_module_free(XiModule *mod) {
     if (!mod)
         return;
+    xr_free(mod->scalar_call_decision);
+    mod->scalar_call_decision = NULL;
+    xr_program_semantic_closure_free(mod->program_semantic_closure);
+    mod->program_semantic_closure = NULL;
     xr_free(mod->identity);
     xr_free(mod->functions);
     xr_free(mod->exports);

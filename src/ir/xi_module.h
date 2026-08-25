@@ -17,6 +17,9 @@
 
 #include "xi.h"
 
+struct XrProgramSemanticClosure;
+struct XrScalarCallDecision;
+
 /* ========== Module Metadata ========== */
 
 /* Import binding classification. */
@@ -86,6 +89,11 @@ typedef struct XiModule {
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */
     uint16_t nclosure_metas;
+    /* Frozen target-neutral authority reference and its pointer-free scalar
+     * decision. XiModule owns this reference and the decision allocation for
+     * the Xi lifetime; other compiler stages may retain the same PSC. */
+    struct XrProgramSemanticClosure *program_semantic_closure;
+    struct XrScalarCallDecision *scalar_call_decision;
 } XiModule;
 
 /* Allocate a new XiModule. Caller owns the returned pointer. */

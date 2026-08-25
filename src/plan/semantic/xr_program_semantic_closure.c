@@ -98,7 +98,7 @@ static XrStableId derive_type_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    /* PSC v2 preserves the already-published v1 semantic row identities. */
+    /* PSC v3 preserves the already-published v1 semantic row identities. */
     hash_u32(&context, UINT32_C(1));
     hash_fingerprint(&context, policy_fingerprint);
     hash_stable_id(&context, input->module_identity);
@@ -245,6 +245,7 @@ bool xr_program_semantic_closure_create(const XrProgramSemanticClosureLimits *li
     if (!closure)
         return fail(error, error_size, "XR_EXEC_5003",
                     "program semantic closure allocation failed");
+    atomic_init(&closure->references, 1);
     closure->schema = XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION;
     closure->limits = *limits;
     closure->policy_fingerprint = policy_fingerprint;
@@ -253,8 +254,26 @@ bool xr_program_semantic_closure_create(const XrProgramSemanticClosureLimits *li
     return true;
 }
 
+XrProgramSemanticClosure *
+xr_program_semantic_closure_retain(XrProgramSemanticClosure *closure) {
+    if (!closure || closure->state != XR_PROGRAM_SEMANTIC_CLOSURE_FROZEN ||
+        !closure->verified)
+        return NULL;
+    uint_least32_t references =
+        atomic_load_explicit(&closure->references, memory_order_relaxed);
+    while (references != 0 && references != UINT_LEAST32_MAX) {
+        if (atomic_compare_exchange_weak_explicit(
+                &closure->references, &references, references + 1u,
+                memory_order_relaxed, memory_order_relaxed))
+            return closure;
+    }
+    return NULL;
+}
+
 void xr_program_semantic_closure_free(XrProgramSemanticClosure *closure) {
     if (!closure)
+        return;
+    if (atomic_fetch_sub_explicit(&closure->references, 1, memory_order_acq_rel) != 1)
         return;
     xr_free(closure->modules);
     xr_free(closure->dependencies);

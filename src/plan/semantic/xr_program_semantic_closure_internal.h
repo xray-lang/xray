@@ -12,6 +12,7 @@
 #define XR_PROGRAM_SEMANTIC_CLOSURE_INTERNAL_H
 
 #include "xr_program_semantic_closure.h"
+#include <stdatomic.h>
 
 typedef enum XrProgramSemanticClosureState {
     XR_PROGRAM_SEMANTIC_CLOSURE_COLLECTING = 0,
@@ -21,6 +22,7 @@ typedef enum XrProgramSemanticClosureState {
 } XrProgramSemanticClosureState;
 
 struct XrProgramSemanticClosure {
+    atomic_uint_least32_t references;
     uint32_t schema;
     uint8_t state;
     uint8_t verified;

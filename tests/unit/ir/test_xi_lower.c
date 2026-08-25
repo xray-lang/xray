@@ -98,7 +98,7 @@ static XiFunc *lower_source(const char *source) {
     if (has_canon_scope)
         xr_compiler_session_pop_arena(&canon_scope);
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, NULL, 0);
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (!typed.program) {
         fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
                 xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");
@@ -178,7 +178,7 @@ static XiFunc *lower_source_with_global_evidence_ex(const char *source, XgGlobal
         xr_compiler_session_pop_arena(&canon_scope);
 
     XaTypedProgramPublishResult typed = xa_typed_program_publish(analyzer, program, out_ev, 1);
-    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false) : NULL;
+    XiFunc *func = typed.program ? xi_lower_program(typed.program, g_iso, false, NULL) : NULL;
     if (!typed.program) {
         fprintf(stderr, "  TYPED PROGRAM REJECTED (%s): %s\n",
                 xa_typed_program_reason_name(typed.reason), typed.detail ? typed.detail : "");

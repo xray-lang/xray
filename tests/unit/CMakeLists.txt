@@ -338,6 +338,9 @@ add_test(NAME test_program_semantic_call_locator
     COMMAND $<TARGET_FILE:test_program_semantic_closure>)
 set_tests_properties(test_program_semantic_call_locator PROPERTIES
     LABELS "semantic;program-closure;task-283")
+add_xray_unit_test(test_xi_scalar_program ir/test_xi_scalar_program.c)
+set_tests_properties(test_xi_scalar_program PROPERTIES
+    LABELS "ir;semantic;target-machine;ownership;task-283")
 add_executable(test_semantic_type_admission plan/test_semantic_type_admission.c)
 target_include_directories(test_semantic_type_admission PRIVATE ${XRAY_COMMON_INCLUDES})
 add_test(NAME test_semantic_type_admission COMMAND $<TARGET_FILE:test_semantic_type_admission>)

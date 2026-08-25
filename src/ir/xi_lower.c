@@ -14,6 +14,7 @@
 #include "xi_lower.h"
 #include "xi_lower_internal.h"
 #include "xi.h"
+#include "xi_scalar_program.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -853,6 +854,7 @@ XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
     child->global_evidence = parent->global_evidence;
     child->xg_module_id = parent->xg_module_id;
     child->typed_program = parent->typed_program;
+    child->scalar_program = parent->scalar_program;
 }
 
 static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module_id) {
@@ -1644,6 +1646,23 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
+    if (l.scalar_program) {
+        XiSourceLocator locator = {
+            .kind = (uint32_t) func_node->type,
+            .span = {
+                .start_line = func_node->line > 0 ? (uint32_t) func_node->line : 0,
+                .start_column = func_node->column > 0 ? (uint32_t) func_node->column : 0,
+                .end_line = func_node->end_line > 0 ? (uint32_t) func_node->end_line : 0,
+                .end_column = func_node->end_column > 0 ? (uint32_t) func_node->end_column : 0,
+            },
+        };
+        if (!xi_scalar_program_bind_function(l.func, l.scalar_program, locator,
+                                             NULL, 0)) {
+            xi_func_free(l.func);
+            xi_lower_cleanup(&l);
+            return NULL;
+        }
+    }
     /* Function-level generics have a canonical erased body and therefore a
      * real callable ABI.  Only bodies nested in an uninstantiated generic
      * owner are templates: those mention the owner's open type parameters and
@@ -2712,7 +2731,8 @@ static bool xi_lower_seed_repl_slot(XiLower *l, const XrReplSymbol *symbol, int 
 }
 
 XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
-                                 bool repl_mode) {
+                                 bool repl_mode,
+                                 const XiScalarProgramInput *scalar_program) {
     XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
     XR_CHECK(xa_typed_program_is_verified(program),
              "xi_lower_program: typed program is unverified");
@@ -2723,10 +2743,15 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     uint32_t module_id = xa_typed_program_module_id(program);
     XR_CHECK(program_node != NULL, "xi_lower_program: typed syntax is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_program: semantic database is NULL");
+    if (scalar_program &&
+        (repl_mode || !xi_scalar_program_input_is_consistent(scalar_program,
+                                                              NULL, 0)))
+        return NULL;
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
     l.typed_program = program;
+    l.scalar_program = scalar_program;
     l.is_program = true;
     l.repl_mode = repl_mode;
     l.global_evidence = global_evidence;
@@ -2834,8 +2859,14 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
          * forward/nested references), and this runs before escape analysis. */
         xi_lower_rewrite_generator_calls(l.func);
         build_module_metadata(&l);
-        finalize_capture_metadata(l.func);
-        xi_func_compute_effects(l.func);
+        if (l.scalar_program &&
+            (!l.func->module || !xi_scalar_program_finalize(
+                                    l.func, l.scalar_program, NULL, 0)))
+            l.had_error = true;
+        if (!l.had_error) {
+            finalize_capture_metadata(l.func);
+            xi_func_compute_effects(l.func);
+        }
     }
 
     XiFunc *result = NULL;
@@ -2843,6 +2874,8 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         result = l.func;
         xi_lower_assert_var_ids(&l, result);
     }
+    if (!result && scalar_program)
+        xi_func_free(l.func);
     xi_lower_cleanup(&l);
     return result;
 }

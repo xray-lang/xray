@@ -32,8 +32,11 @@
 #include "xi_stage.h"
 #include "xi_value_query.h"
 #include "xi_module.h"
+#include "xi_scalar_program.h"
 #include "../analysis/xglobal_summary.h"
 #include "../plan/semantic/xr_semantic_builder.h"
+#include "../plan/target/xr_target_profile.h"
+#include "../frontend/analyzer/xa_program_semantic_closure.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast.h"
@@ -863,6 +866,33 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
         goto fail;
 
+    /* SemanticPlan consumes the post-close/ARC/optimization Xi graph. Recheck
+     * every retained PSC row and decision at that exact boundary so a clone,
+     * rewrite, or metadata loss cannot be hidden by the earlier lowering-time
+     * verification. */
+    if (ir->module &&
+        (ir->module->program_semantic_closure ||
+         ir->module->scalar_call_decision)) {
+        XrCompilerSession *scalar_session =
+            xr_compiler_session_current_for_isolate(X);
+        const XrTargetProfile *scalar_profile =
+            scalar_session
+                ? xr_compiler_session_target_profile(scalar_session)
+                : NULL;
+        if (!scalar_profile ||
+            !xi_scalar_program_verify(ir->module, scalar_profile,
+                                      transition_error,
+                                      sizeof(transition_error))) {
+            xi_pipeline_set_error(
+                &res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN,
+                XI_VERIFY_STRUCTURE, ir, NULL, NULL,
+                transition_error[0]
+                    ? transition_error
+                    : "post-optimization PSC/CallDecision to Xi verification failed");
+            goto fail;
+        }
+    }
+
     if (xi_env_is_enabled("XRAY_XI_SEMANTIC_DUMP")) {
         fprintf(stderr, "=== Xi IR consumed by SemanticPlan ===\n");
         xi_func_dump(ir, stderr);
@@ -1127,10 +1157,71 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         xa_analyzer_pop_file_scope(analyzer, &file_scope);
         return gate;
     }
-    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode);
+
+    XrProgramSemanticClosure *scalar_closure = NULL;
+    XrScalarCallDecision scalar_decision = {0};
+    XiScalarProgramInput scalar_input = {0};
+    const XiScalarProgramInput *scalar_input_ptr = NULL;
+    const XrTargetProfile *target_profile = NULL;
+    char scalar_error[512] = {0};
+    if (xa_typed_program_scalar_authority(typed.program)) {
+        target_profile =
+            session ? xr_compiler_session_target_profile(session) : NULL;
+        if (!target_profile ||
+            !xr_target_profile_verify(target_profile, scalar_error,
+                                      sizeof(scalar_error)) ||
+            !xa_typed_program_build_scalar_closure(
+                typed.program, &scalar_closure, scalar_error,
+                sizeof(scalar_error)) ||
+            !xr_scalar_call_decision_build(
+                scalar_closure,
+                xr_program_semantic_closure_generation_id(scalar_closure),
+                target_profile, &scalar_decision, scalar_error,
+                sizeof(scalar_error)) ||
+            !xr_scalar_call_decision_verify(
+                &scalar_decision, scalar_closure, target_profile, scalar_error,
+                sizeof(scalar_error))) {
+            xr_program_semantic_closure_free(scalar_closure);
+            xa_typed_program_free(typed.program);
+            xa_analyzer_pop_file_scope(analyzer, &file_scope);
+            xi_pipeline_set_error(
+                &gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+                scalar_error[0]
+                    ? scalar_error
+                    : "bounded scalar compilation requires an exact compiler-session target profile");
+            return gate;
+        }
+        scalar_input = (XiScalarProgramInput) {
+            .closure = scalar_closure,
+            .decision = &scalar_decision,
+        };
+        scalar_input_ptr = &scalar_input;
+    }
+
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode,
+                                  scalar_input_ptr);
+    if (ir && scalar_input_ptr &&
+        (!ir->module || !xi_module_take_scalar_program(
+                            ir->module, &scalar_closure, &scalar_decision,
+                            scalar_error, sizeof(scalar_error)) ||
+         !xi_scalar_program_verify(ir->module, target_profile, scalar_error,
+                                   sizeof(scalar_error)))) {
+        xi_func_free(ir);
+        ir = NULL;
+        xi_pipeline_set_error(
+            &gate, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_VERIFY_RAW,
+            XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+            scalar_error[0] ? scalar_error
+                            : "PSC/CallDecision to Xi verification failed");
+    }
+    xr_program_semantic_closure_free(scalar_closure);
     xa_typed_program_free(typed.program);
 
     xa_analyzer_pop_file_scope(analyzer, &file_scope);
+
+    if (gate.status != XI_PIPE_OK)
+        return gate;
 
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);

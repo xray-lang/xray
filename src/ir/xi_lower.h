@@ -145,6 +145,8 @@ typedef struct XiCleanupScope {
     XiValue *active_try;
 } XiCleanupScope;
 
+struct XiScalarProgramInput;
+
 /* ========== Lowering Context ========== */
 
 typedef struct XiLower {
@@ -154,6 +156,7 @@ typedef struct XiLower {
     /* Semantic analysis context (type queries) */
     struct XaAnalyzer *analyzer;
     const struct XaTypedProgram *typed_program;
+    const struct XiScalarProgramInput *scalar_program;
     struct XrVMRuntime *isolate;
 
     /* Braun SSA variable tracking.
@@ -302,6 +305,7 @@ XR_FUNC XiFunc *xi_lower_func(const struct XaTypedProgram *program, struct XrVMR
  * The AST must be canonicalized (xr_canon_program) before lowering.
  */
 XR_FUNC XiFunc *xi_lower_program(const struct XaTypedProgram *program, struct XrVMRuntime *isolate,
-                                 bool repl_mode);
+                                 bool repl_mode,
+                                 const struct XiScalarProgramInput *scalar_program);
 
 #endif  // XI_LOWER_H

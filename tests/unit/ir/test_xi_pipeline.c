@@ -7,11 +7,15 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_pipeline.h"
+#include "../../../src/ir/xi_scalar_program.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/frontend/parser/xparse.h"
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../src/module/xmodule_graph.h"
+#include "../../../src/module/xmodule_resolver.h"
+#include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
 
@@ -85,6 +89,73 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
     XrProto *proto = res.proto;
     xi_pipeline_result_free(&res);
     return proto;
+}
+
+typedef struct XiPipelineScalarFixture {
+    XrModuleResolver *resolver;
+    XrModuleGraph *graph;
+    XrModuleSpec *spec;
+    XaAnalyzer *analyzer;
+} XiPipelineScalarFixture;
+
+static bool xi_pipeline_scalar_fixture_analyze(
+    XiPipelineScalarFixture *fixture, XrCompilerSession *session,
+    const char *namespace_id) {
+    static const char source[] =
+        "fn add1(value: i64) -> i64 { return value + 1 }\n"
+        "fn root() -> i64 { return add1(41) }\n";
+    memset(fixture, 0, sizeof(*fixture));
+    XrModuleResolverConfig resolver_config = {0};
+    fixture->resolver = xr_module_resolver_new(&resolver_config);
+    if (!fixture->resolver)
+        return false;
+    fixture->graph = xr_module_graph_new(session, fixture->resolver);
+    if (!fixture->graph)
+        return false;
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = namespace_id,
+    };
+    char *error = NULL;
+    if (xr_module_graph_build_source(fixture->graph, &authority, source,
+                                     &error) != 0) {
+        xr_free(error);
+        return false;
+    }
+    xr_free(error);
+    if (xr_module_graph_topological_sort(fixture->graph) != 0 ||
+        fixture->graph->has_cycle || fixture->graph->spec_count != 1 ||
+        fixture->graph->entry_index < 0)
+        return false;
+    fixture->spec =
+        &fixture->graph->specs[fixture->graph->entry_index];
+    fixture->analyzer = xa_analyzer_new(session);
+    if (!fixture->analyzer)
+        return false;
+    xa_analyzer_set_graph(fixture->analyzer, fixture->graph);
+    xa_analyzer_analyze(fixture->analyzer, "scalar-binding.xr",
+                        fixture->spec->ast);
+    int diagnostic_count = 0;
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(
+             fixture->analyzer, &diagnostic_count);
+         diag; diag = diag->next) {
+        if (diag->severity == XR_DIAG_SEV_ERROR)
+            return false;
+    }
+    XrHashMap *exports = NULL;
+    if (!xa_analyzer_collect_export_symbols_checked(
+            fixture->analyzer, fixture->spec->ast, &exports))
+        return false;
+    fixture->spec->status = XR_MODSPEC_ANALYZED;
+    return true;
+}
+
+static void xi_pipeline_scalar_fixture_cleanup(
+    XiPipelineScalarFixture *fixture) {
+    xa_analyzer_free(fixture->analyzer);
+    xr_module_graph_free(fixture->graph);
+    xr_module_resolver_free(fixture->resolver);
+    memset(fixture, 0, sizeof(*fixture));
 }
 
 /* Check that the proto contains at least one instruction with the given opcode */
@@ -835,6 +906,63 @@ TEST(stress_budget_truncation_still_valid) {
 
 /* ========== Pipeline Status API ========== */
 
+TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
+    XrCompilerSession *original_session =
+        xr_compiler_session_current_for_isolate(g_iso);
+    assert(original_session != NULL);
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    assert(xr_compiler_session_target_profile(session) == NULL);
+    assert(xr_compiler_session_attach_isolate(g_iso, session) ==
+           original_session);
+    XiPipelineConfig config = xi_pipeline_default_config();
+    config.run_emit = false;
+    config.run_canonicalize = false;
+    config.source_file = "scalar-binding.xr";
+    config.module_identity =
+        "memory-module-v1:id=20:xi-scalar-binding-v1";
+
+    XiPipelineScalarFixture missing_profile;
+    assert(xi_pipeline_scalar_fixture_analyze(
+        &missing_profile, session, "xi-scalar-pipeline-missing-profile"));
+    XiPipelineResult rejected = xi_pipeline_compile_program(
+        missing_profile.spec->ast, missing_profile.analyzer, g_iso, &config);
+    assert(rejected.status == XI_PIPE_ERR_INTERNAL);
+    assert(rejected.error.stage == XI_PIPE_STAGE_LOWER);
+    assert(strstr(rejected.error.detail, "target profile") != NULL);
+    assert(rejected.ir == NULL && rejected.proto == NULL);
+    xi_pipeline_result_free(&rejected);
+    xi_pipeline_scalar_fixture_cleanup(&missing_profile);
+
+    char error[512] = {0};
+    XrTargetProfile *profile = NULL;
+    assert(xr_target_profile_build_native_hosted(&profile, error,
+                                                 sizeof(error)));
+    assert(xr_compiler_session_set_target_profile(session, profile));
+
+    XiPipelineScalarFixture exact_profile;
+    assert(xi_pipeline_scalar_fixture_analyze(
+        &exact_profile, session, "xi-scalar-pipeline-exact-profile"));
+    XiPipelineResult accepted = xi_pipeline_compile_program(
+        exact_profile.spec->ast, exact_profile.analyzer, g_iso, &config);
+    if (accepted.status != XI_PIPE_OK)
+        fprintf(stderr, "scalar pipeline failed at %s: %s\n",
+                xi_pipeline_stage_str(accepted.error.stage),
+                accepted.error.detail);
+    assert(accepted.status == XI_PIPE_OK);
+    assert(accepted.ir != NULL && accepted.ir->module != NULL);
+    assert(accepted.ir->module->program_semantic_closure != NULL);
+    assert(accepted.ir->module->scalar_call_decision != NULL);
+    assert(xi_scalar_program_verify(accepted.ir->module, profile, error,
+                                    sizeof(error)));
+    xi_pipeline_result_free(&accepted);
+    xi_pipeline_scalar_fixture_cleanup(&exact_profile);
+    xr_target_profile_free(profile);
+    assert(xr_compiler_session_attach_isolate(g_iso, original_session) ==
+           session);
+    xr_compiler_session_delete(session);
+}
+
 TEST(e2e_analyzer_error_stops_before_lowering) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
     XaAnalyzer *analyzer = xa_analyzer_new(session);
@@ -892,6 +1020,10 @@ int main(void) {
     printf("=== Xi Pipeline E2E Tests ===\n\n");
 
     setup();
+
+    /* The first pipeline KAT installs the exact session profile consumed by
+     * every later source compilation in this process. */
+    run_e2e_scalar_authority_requires_and_uses_session_profile();
 
     /* Constants & arithmetic */
     run_e2e_simple_const();
