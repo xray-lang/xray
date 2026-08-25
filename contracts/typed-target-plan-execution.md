@@ -1,6 +1,6 @@
 # Typed TargetPlan execution contract
 
-TargetPlan schema 46 may carry a canonical per-function instruction table and
+TargetPlan schema 47 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -12,6 +12,14 @@ jumps, or two-way branches, and whose operations are entirely in the supported
 family, or the exact source-class tagged `Array.push` call family described
 below. Every other function emits zero rows; no partial group or fallback is
 allowed.
+
+The bounded leaf-value aggregate direct-call family currently stops at target
+representation authority. SemanticPlan 41 program bindings project one
+target-profile-derived aggregate layout, caller/callee value and slot rows, one
+`VALUE/READ` argument, and a caller-storage result with no adapter or ownership
+transfer. The independent verifier reconstructs those joins without a legacy
+shape helper, Xi inference, or source-name switch. No aggregate instruction group
+is emitted, so this TargetPlan slice does not authorize typed VM or AOT execution.
 
 The scalar representation boundary separately recognizes an exact unaliased
 SemanticPlan `Ptr` or `MutPtr` as TargetPlan `RAW_PTR`: its size and alignment
@@ -130,7 +138,7 @@ executable family caps parameters at 64 so that density is proved without
 allocating.
 
 Instruction rows participate in the TargetPlan fingerprint as exact 32-byte
-canonical rows. XTP schema 42 preserves the bounded sequential compact stream
+canonical rows. XTP schema 47 preserves the bounded sequential compact stream
 introduced by v34; its directory entry carries the expanded row count, compact byte
 length, `COMPACT` flag, and zero row size. Canonical ULEB128 and signed ZigZag
 payloads plus the format-only superinstruction registry are the sole wire
@@ -248,8 +256,8 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 46 is a hard cutover from v45 and every earlier TargetPlan
-schema. It requires SemanticPlan schema 39 and its compact 225-row Xi operation registry.
+TargetPlan schema 47 is a hard cutover from v46 and every earlier TargetPlan
+schema. It requires SemanticPlan schema 41 and its exact generated Xi operation registry.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
 bounded `Iterator<(K,V)>.hasNext()`/`next()` continuations; selector spelling
@@ -259,7 +267,7 @@ changed the instruction opcode carrier to an unsigned
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
 authority consumed by the builder, verifier, artifact renderer, and dispatcher.
-XTP schema 42 preserves the compact instruction stream introduced by v34,
+XTP schema 47 preserves the compact instruction stream introduced by v34,
 appends the exact 144-byte entry-expectation section after all prior tables,
 widens each coroutine state with its function-local resume-instruction
 authority, and preserves the exact lifecycle root-map, root-slot, and cleanup
@@ -570,10 +578,10 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
 anchor-sha256: src/plan/target/xr_target_plan.c 9e7140184ca04bab125144d1f4559ac87a42172eefcf22eb434f33ac8101edff
-anchor-sha256: src/plan/target/xr_target_builder.c cebbc76efed9d03bf3f911200396a6f1231a848c895ed327abc07c0380651468
+anchor-sha256: src/plan/target/xr_target_builder.c 8f434de0d26912a061eea36db017a6d7d00fbc0316bf308a72cfb96eecff29cd
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 93d4b68bee1aade849af677e8ee0d5fd2160bc068646a1db184052435acd9a26
-anchor-sha256: src/plan/target/xr_target_verify.c 7a5d4806c35afcc0241306bf97fcafd1a629ea6097664ffc6ec0518951415ece
+anchor-sha256: src/plan/target/xr_target_verify.c 1bcf31ecc57296ff4057216035a831a67b076cd6e0a9968e13846dab30dd94a1
 anchor-sha256: src/plan/format/xr_xtp_schema.h a53c1f1c5481784af7636d49e554e92d11055ad701e6727ad5961a4dfdf2100b
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29

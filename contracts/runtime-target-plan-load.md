@@ -59,6 +59,15 @@ roots, or general module activation.
    non-root, null-zero lifecycle. The independent verifier re-parses the frozen
    type identity and rejects incomplete or mutated representation facts; no Xi
    type, name, or legacy plan can authorize it. The
+   aggregate family admits the bounded leaf-value direct-local family only
+   through SemanticPlan 41 program provenance and typed type, field, function,
+   and call bindings. It derives field geometry from the verified target profile
+   and declaration ordinals, binds caller and callee to one trivial aggregate
+   representation, and records the return in caller storage with no adapter or
+   ownership transfer. Builder and independent verifier reconstruct the joins
+   separately; a missing binding, shape-helper fallback, Xi guess, or source-name
+   special case is not load authority. This projection grants no aggregate VM or
+   AOT execution family. The
    closure-storage family covers
    only an exact no-capture heap closure's outer `XrValue` slot as
    dynamic/owned/tagged storage. It does not authorize the closure object body,
@@ -249,14 +258,12 @@ roots, or general module activation.
    authority. Builder and verifier derive that judgement independently from
    SemanticPlan, while String and other reference-capable children continue to
    fail closed at this element-indexing boundary.
-5. Runtime loading accepts only an XTP v46 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v47 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V46 is a breaking hard cutover from
-   v45 and all earlier XTP schemas. It requires SemanticPlan schema 39 and
-   TargetPlan schema 46 after freezing tagged-container storage and the exact
-   tagged-reference boundary identity alongside standard-library/module identities,
-   rune-to-String result storage, and String-runes result layout; no compatibility
-   alias is accepted. It
+   independent TargetPlan verification. V47 is a breaking hard cutover from
+   v46 and all earlier XTP schemas. It requires SemanticPlan schema 41 and
+   TargetPlan schema 47, including exact PSC v4 provenance and typed program
+   bindings; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
    expectation section and preserves the compact instruction stream introduced
    by v34. It additionally carries exact Array HOF result/callback authority,
@@ -397,8 +404,8 @@ anchor-sha256: src/plan/target/xr_target_profile.h 2e37c59739b459a24a1ec455fbbb8
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
 anchor-sha256: src/plan/target/xr_target_plan.c 9e7140184ca04bab125144d1f4559ac87a42172eefcf22eb434f33ac8101edff
-anchor-sha256: src/plan/target/xr_target_builder.c cebbc76efed9d03bf3f911200396a6f1231a848c895ed327abc07c0380651468
-anchor-sha256: src/plan/target/xr_target_verify.c 7a5d4806c35afcc0241306bf97fcafd1a629ea6097664ffc6ec0518951415ece
+anchor-sha256: src/plan/target/xr_target_builder.c 8f434de0d26912a061eea36db017a6d7d00fbc0316bf308a72cfb96eecff29cd
+anchor-sha256: src/plan/target/xr_target_verify.c 1bcf31ecc57296ff4057216035a831a67b076cd6e0a9968e13846dab30dd94a1
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c f0978e9727c181e5686bd0aea15e214d5dba687ce090d13b19d1830e005bcd2c

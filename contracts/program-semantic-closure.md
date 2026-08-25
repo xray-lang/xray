@@ -129,6 +129,19 @@ projection defined below; they never imply TargetPlan admission on their own.
     C-emission, execution-output, container, coroutine, cross-module, or public
     ABI authority. Those capabilities require later verified slices and may not
     recover missing facts from names, function bodies, tags, or legacy readers.
+19. The first TargetPlan consumer admits only the exact leaf-aggregate family
+    from the public SemanticPlan program provenance and type, field, function,
+    and call bindings. It projects those rows into the existing TargetPlan
+    schema rather than creating an aggregate-only plan. Layout is derived from
+    the verified target profile and declaration ordinals; the canonical native
+    `Pair<i64,i64>` case is 16-byte size, 8-byte alignment, and field offsets 0
+    and 8. The direct-local argument is `VALUE/READ`, caller and callee use one
+    aggregate representation, and the result uses caller storage with no
+    ownership transfer or adapter. The independent Target verifier reconstructs
+    every program-to-semantic-to-target join. Missing or mutated bindings fail
+    closed and cannot fall back to a SemanticPlan shape helper, Xi operation,
+    source name, or function body. This projection still grants no VM, AOT, or
+    C-emission execution authority.
 
 ## Digest anchors
 
@@ -187,6 +200,6 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c a02d1f10431993c9efd64538f1eb
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 706228d7e49b9283705f21f9ed94e3f72cff3d701e47804bc2c581dabcb00943
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c f4a28da20e97d6d3f0bc0d4a42370f43b41c10dd565b8d21c511517a1b0d20d2
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 221d59aebb5f95968f52fd928b38c019677226b2f761fd7f06011a23095bef92
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 1626ab33972df02d651bda9d2133b41128dd6633caffa0fc9df9ca58a316c721
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
