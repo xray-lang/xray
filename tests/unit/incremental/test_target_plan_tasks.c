@@ -12,6 +12,7 @@
 #include "base/xmalloc.h"
 #include "incremental/xr_target_plan_tasks.h"
 #include "ir/xi.h"
+#include "ir/xi_module.h"
 #include "os/os_dir.h"
 #include "os/os_fs.h"
 #include "os/os_temp.h"
@@ -26,6 +27,8 @@
 #define TASK_COUNT 8u
 
 static XrType task_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static const char kTaskModuleIdentity[] =
+    "memory-module-v1:id=31:parallel-target-plan-fixture-v1";
 
 static XrSemanticPlan *build_semantic(uint32_t ordinal) {
     char name[48];
@@ -33,6 +36,12 @@ static XrSemanticPlan *build_semantic(uint32_t ordinal) {
     XiFunc *function = xi_func_new(name, &task_int);
     if (!function)
         return NULL;
+    function->module = xi_module_new("fixture/target_plan_tasks.xr", name, function);
+    if (!function->module ||
+        !xi_module_set_identity(function->module, kTaskModuleIdentity)) {
+        xi_func_free(function);
+        return NULL;
+    }
     XiBlock *entry = xi_block_new(function);
     XiValue *constant = entry ? xi_const_int(function, entry, ordinal, &task_int)
                               : NULL;
