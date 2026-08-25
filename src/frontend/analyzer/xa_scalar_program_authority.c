@@ -18,6 +18,7 @@
 #include "../../base/xsha256.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_identity.h"
+#include "../../plan/semantic/xr_scalar_call_semantics.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include <string.h>
 
@@ -189,21 +190,19 @@ static bool signature_fingerprint(const XaSymbol *symbol, XrFingerprint *out) {
         type->function.type_param_count != 0 ||
         !exact_i64(type->function.return_type, &return_id))
         return false;
-    XrSHA256Context context;
-    hash_begin(&context, "xray-language-scalar-function-signature-v1");
-    hash_u32(&context, (uint32_t) type->function.param_count);
-    hash_u32(&context, (uint32_t) type->function.min_params);
-    hash_u8(&context, (uint8_t) type->function.throw_effect);
     for (int i = 0; i < type->function.param_count; i++) {
         XrExactScalarId param_id = XR_EXACT_SCALAR_NONE;
         if (!exact_i64(type->function.params[i].type, &param_id) ||
             type->function.params[i].mode != XR_PARAM_READ)
             return false;
-        hash_u32(&context, (uint32_t) param_id);
-        hash_u8(&context, (uint8_t) type->function.params[i].mode);
     }
-    hash_u32(&context, (uint32_t) return_id);
-    *out = finish_fingerprint(&context);
+    XrScalarI64FunctionContract contract;
+    if (!xr_scalar_i64_function_contract(
+            type->function.param_count == 0 ? XR_SCALAR_I64_FUNCTION_NULLARY
+                                            : XR_SCALAR_I64_FUNCTION_UNARY,
+            &contract))
+        return false;
+    *out = contract.signature_fingerprint;
     return true;
 }
 
@@ -230,18 +229,11 @@ static bool effect_fingerprint(const XaAnalyzer *analyzer, const XaSymbol *symbo
         links->alloc_state != XA_ALLOC_PROVEN_NONE ||
         links->alloc_reason_bits != XA_ALLOC_REASON_NONE)
         return false;
-    XrSHA256Context context;
-    hash_begin(&context, "xray-language-scalar-effect-contract-v1");
-    hash_u32(&context, (uint32_t) effect->completeness);
-    hash_u32(&context, effect->semantic_effects);
-    hash_u32(&context, effect->unknown_semantic_effects);
-    hash_u32(&context, (uint32_t) effect->error_set_completeness);
-    hash_u32(&context, effect->escaping.count);
-    hash_u32(&context, (uint32_t) memory->completeness);
-    hash_u32(&context, memory->root_count);
-    hash_u32(&context, (uint32_t) links->alloc_state);
-    hash_u32(&context, links->alloc_reason_bits);
-    *out = finish_fingerprint(&context);
+    XrScalarI64FunctionContract contract;
+    if (!xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_NULLARY,
+                                         &contract))
+        return false;
+    *out = contract.effect_fingerprint;
     return true;
 }
 
@@ -346,12 +338,19 @@ static XrStableId callsite_identity(const XaScalarModuleAuthority *module,
 }
 
 static XrFingerprint call_contract(const XaScalarFunctionAuthority *callee) {
-    XrSHA256Context context;
-    hash_begin(&context, "xray-source-scalar-call-contract-v1");
-    hash_fingerprint(&context, callee->signature_fingerprint);
-    hash_fingerprint(&context, callee->effect_fingerprint);
-    hash_u64(&context, callee->capability_mask);
-    return finish_fingerprint(&context);
+    XrScalarI64FunctionContract contract;
+    XrFingerprint result = {{0}};
+    if (!callee || !xr_scalar_i64_function_contract(
+                       XR_SCALAR_I64_FUNCTION_UNARY, &contract) ||
+        memcmp(contract.signature_fingerprint.bytes,
+               callee->signature_fingerprint.bytes,
+               sizeof(contract.signature_fingerprint.bytes)) != 0 ||
+        memcmp(contract.effect_fingerprint.bytes, callee->effect_fingerprint.bytes,
+               sizeof(contract.effect_fingerprint.bytes)) != 0 ||
+        callee->capability_mask != 0 ||
+        !xr_scalar_i64_call_contract(&contract, &result))
+        return (XrFingerprint) {{0}};
+    return result;
 }
 
 static XrFingerprint authority_fingerprint(const XaScalarProgramAuthority *authority) {

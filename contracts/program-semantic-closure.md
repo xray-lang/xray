@@ -38,10 +38,11 @@ admission may be inferred from these rows.
    aggregate fingerprint, and generation identity. A frozen closure with a
    mutated state, row, fingerprint, or generation identity is rejected.
 7. This schema has no artifact codec and no executor consumer. Adding a
-   serialization format, cache certificate, Xi/SemanticPlan reference, target
-   reader, or aggregate ABI decision requires a separately frozen authority and
-   independent validation; none may treat this foundation as implicit Target
-   admission.
+   serialization format, cache certificate, Xi/SemanticPlan reference, or
+   aggregate ABI decision requires a separately frozen authority and independent
+   validation; none may treat this foundation as implicit Target admission. The
+   sole target reader admitted here is the bounded scalar CallDecision authority
+   described below; it does not make PSC fingerprints self-describing.
 8. The first source-backed producer is deliberately bounded to one memory
    module containing exactly two sealed, non-generic, non-suspending language
    functions and one direct `i64 -> i64` call. Analyzer publication owns a
@@ -64,9 +65,35 @@ admission may be inferred from these rows.
     the plan-owned builder. It does not consult the live analyzer, graph, AST,
     semantic revision, Xi, or Target state; projection remains deterministic
     after those publication inputs are destroyed.
+11. Sealed nullary `i64` and unary `i64 -> i64` language signatures, their
+    complete no-throw/no-suspend/no-allocation effect contract, and the direct
+    call-contract fingerprint have one target-neutral semantic owner. Analyzer
+    publication validates live source facts before invoking that owner, and the
+    independent analyzer verifier invokes the same semantic owner rather than
+    maintaining a second fingerprint formula. Opaque PSC fingerprint bytes are
+    evidence coordinates, not permission to infer a scalar contract.
+12. The bounded scalar CallDecision builder accepts only a verified PSC with
+    one module, two functions, one direct call, no dependency or concrete type,
+    one nullary entry caller, and one unary callee. Both functions must match the
+    exact semantic owner, have zero capabilities, and bind the exact direct-call
+    contract. The caller-supplied GenerationClosureId and the verified
+    TargetProfile fingerprint are frozen into the decision. Stale generations,
+    profiles, opaque signatures, opaque call contracts, and capability growth
+    fail closed.
+13. A scalar CallDecision is a sealed, pointer-free value. It reuses the
+    TargetPlan taxonomy for `DIRECT_LOCAL` convention and target kind, `I64`
+    machine representation, by-value call mode, and no ownership action. It
+    additionally freezes the TargetProfile native ABI, `STATIC_DIRECT` entry
+    policy, and register-only argument/result slots, with no entry cell, adapter,
+    cleanup, error channel, suspension point, or capability. Its independent
+    verifier re-resolves the PSC call and functions, rechecks the target and
+    generation bindings, reconstructs the exact semantic contracts, and
+    independently recomputes the decision fingerprint. This authority is not
+    consumed by Xi, VM, AOT, C emission, or the existing TargetPlan builder.
 
 ## Digest anchors
 
+anchor-sha256: CMakeLists.txt 5ae971f2233b55857a288bbce020d3ac1ee2384f9b2bd798df20f59f782e8d49
 anchor-sha256: src/module/xmodule_graph.h 63cbeb6f425310bcf8daf72e827481d5fe594ed3a3ef4db4f0931ecb1bbc2672
 anchor-sha256: src/module/xmodule_graph.c 0bf67850a8d8cc4043fb7ce91356934a45f90d2f2dadac34014a4a15407ef623
 anchor-sha256: src/frontend/parser/xparse_decl.c 956af54b931477adfe03b61de2271af8951a2241a9e0fa8ec8875855be2a5b06
@@ -77,16 +104,22 @@ anchor-sha256: src/frontend/analyzer/xa_typed_program.h 8b9899bc1d3e8746463fc038
 anchor-sha256: src/frontend/analyzer/xa_typed_program.c 2505aed722c398fb3e1ee451171c6172f845b5da7c3206b1fb33f594b27f4167
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.h beff336ef272509ea3a8a136b1cb85a53ef6dcb47730b1121e56e83b738741a4
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26adf137848c56d923d52b7bd85439105bcae1a48de736f989fc64685bcea17
-anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c b7b68856147bafce68c7ecc024d217d59f739a2a742c2f9d169668a92f489227
-anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c f80f807ed2c0fb215a4c1a6f95fcd8b40e7f4cb04403b46c1327c300824c821d
+anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c c59b0f93a36a5825d927972e9c5ad0e9927ead954b401772885e2e5e101c1ccb
+anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 481f30070bf6d5ae7ff279dad94e1f518568d028d07a07cb2113a949f4e94375
 anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h c7da8686d42b22e56e353eca73730bd888b7f3a9c2042d152c69b10476bc7971
 anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 9a749faa39f26e89e8fc5a610b57ea11cd41da6b9113aff188002c930c73dff8
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 96469d5046d5eeeb6d5d24c71eed77f47a42b291549fd8df2810e4164f979259
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 6d4079b9c940eaa12c0e98d5bb0e4c12d0bda9a2e38103c065f1c3ac7a032aa0
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 509a0ad8ffd0fdb87bf5ac4456cf41335db7b48bcaf74c645e45b97fb206c9ed
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 14d93b8218d406127b36469ba6efc3c36a30c1465fe3302d58e4888341482532
+anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
+anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece99304f2de817381b6e4051b2b66fd7b336bb1c66d493
+anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
+anchor-sha256: src/plan/target/xr_scalar_call_decision.c 764bee44083ff3b6622cf5a57051fc5ac558e1bdde899522274be7e4e0049b41
+anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 9d20284c377a6be00d4154193e1160dfde87389cc141fa7cb41d55d6a9bc28a0
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c f7af9b0276b5ee725f601997ad67cb53a81adbfb712338610d9a030df30c9c2e
-anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c b0acbbc5d52a9f918d36d7b8eb0178a7fdbf243952bf2b557760a8388294ca99
+anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 7a4e39c9a670e0c2200dcba87613393c153ff671f13778255933dc9328549138
+anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c 6aa6c44965c51c97f778a6ce44459ce2ad2e7003da66bd6b2487d582a210b2e8
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c 4bbb43d8d3e3296d02b62ff1669ebdeb6ea5018f3b181dd8297922046ebf3c94
-anchor-sha256: tests/unit/CMakeLists.txt 1f044b7514241420a77d585abb9aff1892327c6307818d494a8d23922a355997
+anchor-sha256: tests/unit/CMakeLists.txt 9503ab3bae8086a98da8094d96a4a2d42f49a0a5b981edb572e8aee744af30bb

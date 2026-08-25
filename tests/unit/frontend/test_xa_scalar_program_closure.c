@@ -22,6 +22,7 @@
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
 #include "plan/semantic/xr_program_semantic_closure.h"
+#include "plan/semantic/xr_scalar_call_semantics.h"
 #include "runtime/xisolate_api.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray_vm.h"
@@ -158,14 +159,32 @@ TEST(source_backed_scalar_snapshot_builds_verified_closure) {
     ASSERT_EQ_UINT(xr_program_semantic_closure_type_count(closure), 0);
     ASSERT_EQ_UINT(xr_program_semantic_closure_function_count(closure), 2);
     ASSERT_EQ_UINT(xr_program_semantic_closure_call_count(closure), 1);
+    XrScalarI64FunctionContract nullary;
+    XrScalarI64FunctionContract unary;
+    XrFingerprint direct_call;
+    ASSERT_TRUE(xr_scalar_i64_function_contract(
+        XR_SCALAR_I64_FUNCTION_NULLARY, &nullary));
+    ASSERT_TRUE(xr_scalar_i64_function_contract(
+        XR_SCALAR_I64_FUNCTION_UNARY, &unary));
+    ASSERT_TRUE(xr_scalar_i64_call_contract(&unary, &direct_call));
     uint32_t roots = 0;
     for (uint32_t i = 0; i < 2; i++) {
         const XrProgramSemanticFunctionRecord *row =
             xr_program_semantic_closure_function(closure, i);
-        roots += (row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
+        bool entry =
+            (row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
+        const XrScalarI64FunctionContract *expected = entry ? &nullary : &unary;
+        roots += entry;
         ASSERT_EQ_UINT(row->capability_mask, 0);
+        ASSERT_TRUE(fingerprint_equal(row->signature_fingerprint,
+                                      expected->signature_fingerprint));
+        ASSERT_TRUE(fingerprint_equal(row->effect_fingerprint,
+                                      expected->effect_fingerprint));
     }
     ASSERT_EQ_UINT(roots, 1);
+    ASSERT_TRUE(fingerprint_equal(
+        xr_program_semantic_closure_call(closure, 0)->contract_fingerprint,
+        direct_call));
     xr_program_semantic_closure_free(closure);
     fixture_cleanup(&fixture);
 }

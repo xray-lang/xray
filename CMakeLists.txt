@@ -1327,6 +1327,8 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/format/xr_xtp_instruction_stream.c
     src/plan/format/xr_xtp_rows.c
     src/plan/target/xr_target_builder.c
+    src/plan/target/xr_scalar_call_decision.c
+    src/plan/target/xr_scalar_call_decision_verify.c
     src/plan/target/xr_target_entry_abi.c
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_plan.c

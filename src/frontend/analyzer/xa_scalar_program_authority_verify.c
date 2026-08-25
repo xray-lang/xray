@@ -9,12 +9,9 @@
  */
 
 #include "xa_scalar_program_authority_internal.h"
-#include "xa_alloc_effect.h"
-#include "xa_effect_db.h"
 #include "../parser/xast_types.h"
 #include "../../base/xsha256.h"
-#include "../../runtime/value/xtype.h"
-#include "../../shared/xr_exact_scalar_registry.h"
+#include "../../plan/semantic/xr_scalar_call_semantics.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -154,32 +151,21 @@ static XrFingerprint expected_export_fingerprint(XrStableId module) {
 }
 
 static XrFingerprint expected_signature(uint8_t parameter_count) {
-    XrSHA256Context context;
-    begin_digest(&context, "xray-language-scalar-function-signature-v1");
-    put_u32(&context, parameter_count);
-    put_u32(&context, parameter_count);
-    put_u8(&context, (uint8_t) XR_FN_EFFECT_NO_THROW);
-    if (parameter_count == 1) {
-        put_u32(&context, (uint32_t) XR_EXACT_SCALAR_I64);
-        put_u8(&context, (uint8_t) XR_PARAM_READ);
-    }
-    put_u32(&context, (uint32_t) XR_EXACT_SCALAR_I64);
-    return finish_fingerprint(&context);
+    XrScalarI64FunctionContract contract;
+    if (!xr_scalar_i64_function_contract(
+            parameter_count == 0 ? XR_SCALAR_I64_FUNCTION_NULLARY
+                                 : XR_SCALAR_I64_FUNCTION_UNARY,
+            &contract))
+        return (XrFingerprint) {{0}};
+    return contract.signature_fingerprint;
 }
 
 static XrFingerprint expected_effect(void) {
-    XrSHA256Context context;
-    begin_digest(&context, "xray-language-scalar-effect-contract-v1");
-    put_u32(&context, (uint32_t) XA_EFFECT_COMPLETE);
-    put_u32(&context, 0); /* semantic effects */
-    put_u32(&context, 0); /* unknown semantic effects */
-    put_u32(&context, (uint32_t) XA_EFFECT_COMPLETE);
-    put_u32(&context, 0); /* escaping errors */
-    put_u32(&context, (uint32_t) XA_EFFECT_COMPLETE);
-    put_u32(&context, 0); /* memory roots */
-    put_u32(&context, (uint32_t) XA_ALLOC_PROVEN_NONE);
-    put_u32(&context, 0); /* allocation reasons */
-    return finish_fingerprint(&context);
+    XrScalarI64FunctionContract contract;
+    if (!xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_NULLARY,
+                                         &contract))
+        return (XrFingerprint) {{0}};
+    return contract.effect_fingerprint;
 }
 
 static XrStableId expected_declaration(const XaScalarProgramAuthority *authority,
@@ -214,12 +200,18 @@ static XrStableId expected_callsite(const XaScalarProgramAuthority *authority) {
 }
 
 static XrFingerprint expected_call_contract(const XaScalarFunctionAuthority *callee) {
-    XrSHA256Context context;
-    begin_digest(&context, "xray-source-scalar-call-contract-v1");
-    put_fingerprint(&context, callee->signature_fingerprint);
-    put_fingerprint(&context, callee->effect_fingerprint);
-    put_u64(&context, callee->capability_mask);
-    return finish_fingerprint(&context);
+    XrScalarI64FunctionContract contract;
+    XrFingerprint result = {{0}};
+    if (!callee || !xr_scalar_i64_function_contract(
+                       XR_SCALAR_I64_FUNCTION_UNARY, &contract) ||
+        !equal_fingerprint(callee->signature_fingerprint,
+                           contract.signature_fingerprint) ||
+        !equal_fingerprint(callee->effect_fingerprint,
+                           contract.effect_fingerprint) ||
+        callee->capability_mask != 0 ||
+        !xr_scalar_i64_call_contract(&contract, &result))
+        return (XrFingerprint) {{0}};
+    return result;
 }
 
 static XrFingerprint expected_authority_fingerprint(

@@ -218,6 +218,8 @@ add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 add_xray_unit_test(test_xa_typed_program frontend/test_xa_typed_program.c)
 add_xray_unit_test(test_xa_scalar_program_closure frontend/test_xa_scalar_program_closure.c)
+add_xray_unit_test(test_scalar_call_decision plan/test_scalar_call_decision.c)
+target_sources(test_scalar_call_decision PRIVATE plan/target_profile_test_fixture.c)
 # Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.
 add_xray_unit_test(test_ast_side_table frontend/test_ast_side_table.c)
 add_xray_unit_test(test_symbol_binding frontend/test_symbol_binding.c)

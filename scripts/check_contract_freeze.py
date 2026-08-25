@@ -596,6 +596,7 @@ CONTRACT_SPECS = (
     ContractSpec(
         "program-semantic-closure.md",
         (
+            "CMakeLists.txt",
             "src/module/xmodule_graph.h",
             "src/module/xmodule_graph.c",
             "src/frontend/parser/xparse_decl.c",
@@ -614,7 +615,13 @@ CONTRACT_SPECS = (
             "src/plan/semantic/xr_program_semantic_closure_internal.h",
             "src/plan/semantic/xr_program_semantic_closure.c",
             "src/plan/semantic/xr_program_semantic_closure_verify.c",
+            "src/plan/semantic/xr_scalar_call_semantics.h",
+            "src/plan/semantic/xr_scalar_call_semantics.c",
+            "src/plan/target/xr_scalar_call_decision.h",
+            "src/plan/target/xr_scalar_call_decision.c",
+            "src/plan/target/xr_scalar_call_decision_verify.c",
             "tests/unit/plan/test_program_semantic_closure.c",
+            "tests/unit/plan/test_scalar_call_decision.c",
             "tests/unit/frontend/test_xa_scalar_program_closure.c",
             "tests/unit/frontend/test_parser.c",
             "tests/unit/module/test_module_identity.c",
