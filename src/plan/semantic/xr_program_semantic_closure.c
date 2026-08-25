@@ -153,6 +153,10 @@ static bool locator_is_valid(XrProgramSemanticSourceLocator locator) {
             locator.end_column > locator.start_column);
 }
 
+static bool function_locator_is_valid(XrProgramSemanticSourceLocator locator) {
+    return locator_is_valid(locator);
+}
+
 static XrStableId derive_source_callsite_identity(
     const XrProgramSemanticModuleRecord *module,
     const XrProgramSemanticFunctionRecord *caller,
@@ -364,6 +368,7 @@ bool xr_program_semantic_closure_add_function(
         stable_id_is_zero(input->module_identity) ||
         stable_id_is_zero(input->declaration_identity) ||
         stable_id_is_zero(input->concrete_instance_identity) ||
+        !function_locator_is_valid(input->declaration_locator) ||
         fingerprint_is_zero(input->signature_fingerprint) ||
         fingerprint_is_zero(input->effect_fingerprint) ||
         (input->flags & ~(XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY |
@@ -381,6 +386,11 @@ bool xr_program_semantic_closure_add_function(
                              input->concrete_instance_identity)))
             return fail(error, error_size, "XR_SEM_0019",
                         "concrete function authority is duplicated or conflicting");
+        if (stable_id_equal(row->module_identity, input->module_identity) &&
+            locator_equal(row->declaration_locator,
+                          input->declaration_locator))
+            return fail(error, error_size, "XR_SEM_0019",
+                        "concrete function declaration locator is duplicated");
     }
     if (closure->function_count == closure->function_capacity &&
         !grow_table((void **) &closure->functions, &closure->function_capacity,
@@ -392,6 +402,7 @@ bool xr_program_semantic_closure_add_function(
         .module_identity = input->module_identity,
         .declaration_identity = input->declaration_identity,
         .concrete_instance_identity = input->concrete_instance_identity,
+        .declaration_locator = input->declaration_locator,
         .signature_fingerprint = input->signature_fingerprint,
         .effect_fingerprint = input->effect_fingerprint,
         .capability_mask = input->capability_mask,
@@ -512,7 +523,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v2\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v3\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -546,6 +557,11 @@ static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
         hash_stable_id(&context, closure->functions[i].module_identity);
         hash_stable_id(&context, closure->functions[i].declaration_identity);
         hash_stable_id(&context, closure->functions[i].concrete_instance_identity);
+        hash_u32(&context, closure->functions[i].declaration_locator.kind);
+        hash_u32(&context, closure->functions[i].declaration_locator.start_line);
+        hash_u32(&context, closure->functions[i].declaration_locator.start_column);
+        hash_u32(&context, closure->functions[i].declaration_locator.end_line);
+        hash_u32(&context, closure->functions[i].declaration_locator.end_column);
         hash_fingerprint(&context, closure->functions[i].signature_fingerprint);
         hash_fingerprint(&context, closure->functions[i].effect_fingerprint);
         hash_u64(&context, closure->functions[i].capability_mask);

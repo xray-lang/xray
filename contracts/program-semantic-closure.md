@@ -21,9 +21,12 @@ admission may be inferred from these rows.
    finalized effects, and capability mask. Non-generic instances still require
    an explicit canonical non-generic instance identity. Dense indexes,
    insertion order, target profiles, layouts, and ABI facts never enter these
-   identities. Schema v2 preserves the published v1 type, function, and call
-   row identity frames; adding source coordinates changes the closed-world
-   evidence, not an existing semantic row identity algorithm.
+   identities. Schema v3 preserves the published v1 type, function, and call
+   row identity frames; adding source locators changes the closed-world
+   evidence, not an existing semantic row identity algorithm. Each concrete
+   function also carries one nonzero-kind, complete 1-indexed, exclusive-end
+   declaration locator that is unique within its source module. PSC validates
+   locator structure but does not interpret producer-specific kind values.
 4. A resolved-call row binds the complete policy and one stable callsite to
    exact present caller and callee function identities and a complete
    call-contract fingerprint. It also carries the source-backed call kind and
@@ -35,12 +38,14 @@ admission may be inferred from these rows.
    required, multiple canonical roots are allowed, and every concrete function
    and module is reachable from the root set.
 5. Freeze hashes the canonical rows, schema, and complete policy fingerprint.
-   The v2 closure fingerprint includes every framed call locator coordinate.
+   The v3 closure fingerprint includes every framed function-declaration and
+   call locator coordinate.
    `XrGenerationClosureId` is a distinct domain-separated digest of that full
    closure fingerprint. Zero identities, incomplete fingerprints, duplicate
-   locators within one source module, empty or out-of-range coordinates,
-   non-exclusive ends, locator/callsite mismatches, unknown flags, cycles,
-   unreachable rows, and exhausted hard budgets fail closed.
+   function-declaration or call locators within one source module, empty or
+   out-of-range coordinates, non-exclusive ends, locator/callsite mismatches,
+   unknown flags, cycles, unreachable rows, and exhausted hard budgets fail
+   closed.
 6. The verifier is implemented independently from the builder. It reconstructs
    every derived row identity, canonical order, dependency and call closure,
    aggregate fingerprint, and generation identity. A frozen closure with a
@@ -62,8 +67,9 @@ admission may be inferred from these rows.
 9. Source content has one full domain- and length-framed fingerprint owner.
    Function and callsite identities bind that full fingerprint, exact stable
    module and declaration/instance identities, and complete exclusive-end
-   source spans. The PSC bridge mechanically copies the call kind and all four
-   source coordinates from its verified owned snapshot; the plan does not
+   source spans. The PSC bridge mechanically copies each function-declaration
+   locator and the call locator, including kind and all four source coordinates,
+   from its verified owned snapshot; the plan does not
    retain an AST node, node id, name, path, or analyzer reference. Node ids,
    dense table indexes, names, filesystem paths,
    analyzer pointers, target representations, and ABI selections never enter
@@ -124,19 +130,19 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c ca5b60beaebf14416a86beb8c2543a0326eea7cbfe780f8742f8f7717b31d2e4
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 481f30070bf6d5ae7ff279dad94e1f518568d028d07a07cb2113a949f4e94375
 anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h c7da8686d42b22e56e353eca73730bd888b7f3a9c2042d152c69b10476bc7971
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c d1fdf148b90eabd9c6886a95e4bfd989b14aaa79307d9208911ec26773bf11f4
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h dd0f69a1474df3c0ba39e99616bea9e4ad7f3179dabada54f52f4b75276b37dc
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c faff8c7a575f560bcb82159f5d98f5200a4220ca66a5fe3059f867086a4cbb66
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 0bded1054e812c13bc4cdb4a6af2291df0e30215b7cf056d2c9ea882b5d5d05d
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 6d4079b9c940eaa12c0e98d5bb0e4c12d0bda9a2e38103c065f1c3ac7a032aa0
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 75ff2412441d50321d7db4845442bd45d0e2fc3935d045bbf0033873794ad730
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 09ab51b95e275bd1fdbb909299dac5988e27a36447194ed112c0962207c7b107
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 6eca8b58a5294d0164c8ef3bc219862be8f65c024bc77ceb0dd158ec53037a64
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 626fca9a624892525d95af3b716c0d57e4ddfc0f128a579ab42dca0ac20177b8
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece99304f2de817381b6e4051b2b66fd7b336bb1c66d493
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 764bee44083ff3b6622cf5a57051fc5ac558e1bdde899522274be7e4e0049b41
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 9d20284c377a6be00d4154193e1160dfde87389cc141fa7cb41d55d6a9bc28a0
-anchor-sha256: tests/unit/plan/test_program_semantic_closure.c c3949a858b045cd1d85d400854fec0265323f2ca066f2026c179bef9706e3de8
-anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 66562a3b5415bc5dcfa8b25efe7e0e9cc5df299344653abcf7c1f6f22a3c40e9
-anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c e2e9d44244740b34bdd93116d7beabb66720ddb5c848ef6d0955584687e8294e
+anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 31d918226ca8f369f61f1b0b6a73d6e1585a7854eeba5d0f3c7b993fc5d94bcb
+anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 5752882ed5842dff1006a349f79e114e33a9ccb6e1378cdfd612811fddd2ab87
+anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c 8c5f8e46818ad8d8892b39c67f017f1fe9189d2600bc734767625473c5deec43
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c 4bbb43d8d3e3296d02b62ff1669ebdeb6ea5018f3b181dd8297922046ebf3c94
 anchor-sha256: tests/unit/CMakeLists.txt b261f26ec677a898f7025049e613dae623adad66884b47031b9700598c29a073

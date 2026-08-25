@@ -175,6 +175,27 @@ TEST(source_backed_scalar_snapshot_builds_verified_closure) {
             (row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
         const XrScalarI64FunctionContract *expected = entry ? &nullary : &unary;
         roots += entry;
+        const XaScalarFunctionAuthority *source_function = NULL;
+        for (uint32_t j = 0; j < XA_SCALAR_PROGRAM_FUNCTION_COUNT; j++) {
+            const XaScalarFunctionAuthority *candidate =
+                xa_scalar_program_authority_function(authority, j);
+            if (candidate &&
+                memcmp(candidate->declaration_identity.bytes,
+                       row->declaration_identity.bytes,
+                       sizeof(row->declaration_identity.bytes)) == 0)
+                source_function = candidate;
+        }
+        ASSERT_NOT_NULL(source_function);
+        ASSERT_EQ_UINT(row->declaration_locator.kind,
+                       source_function->declaration_span.kind);
+        ASSERT_EQ_UINT(row->declaration_locator.start_line,
+                       source_function->declaration_span.start_line);
+        ASSERT_EQ_UINT(row->declaration_locator.start_column,
+                       source_function->declaration_span.start_column);
+        ASSERT_EQ_UINT(row->declaration_locator.end_line,
+                       source_function->declaration_span.end_line);
+        ASSERT_EQ_UINT(row->declaration_locator.end_column,
+                       source_function->declaration_span.end_column);
         ASSERT_EQ_UINT(row->capability_mask, 0);
         ASSERT_TRUE(fingerprint_equal(row->signature_fingerprint,
                                       expected->signature_fingerprint));

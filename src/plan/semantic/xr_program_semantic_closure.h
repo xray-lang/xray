@@ -24,7 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(2)
+#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(3)
 
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES UINT32_C(256)
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES UINT32_C(4096)
@@ -71,17 +71,6 @@ typedef enum XrProgramSemanticFunctionFlag {
     XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED = 1u << 1,
 } XrProgramSemanticFunctionFlag;
 
-typedef struct XrProgramSemanticFunctionInput {
-    XrStableId module_identity;
-    XrStableId declaration_identity;
-    XrStableId concrete_instance_identity;
-    XrFingerprint signature_fingerprint;
-    XrFingerprint effect_fingerprint;
-    uint64_t capability_mask;
-    uint8_t flags;
-    uint8_t reserved[7];
-} XrProgramSemanticFunctionInput;
-
 typedef struct XrProgramSemanticSourceLocator {
     /* Coordinates are 1-indexed and the end point is exclusive. */
     uint32_t kind;
@@ -90,6 +79,18 @@ typedef struct XrProgramSemanticSourceLocator {
     uint32_t end_line;
     uint32_t end_column;
 } XrProgramSemanticSourceLocator;
+
+typedef struct XrProgramSemanticFunctionInput {
+    XrStableId module_identity;
+    XrStableId declaration_identity;
+    XrStableId concrete_instance_identity;
+    XrProgramSemanticSourceLocator declaration_locator;
+    XrFingerprint signature_fingerprint;
+    XrFingerprint effect_fingerprint;
+    uint64_t capability_mask;
+    uint8_t flags;
+    uint8_t reserved[7];
+} XrProgramSemanticFunctionInput;
 
 typedef struct XrProgramSemanticCallInput {
     XrStableId callsite_identity;
@@ -125,6 +126,7 @@ typedef struct XrProgramSemanticFunctionRecord {
     XrStableId module_identity;
     XrStableId declaration_identity;
     XrStableId concrete_instance_identity;
+    XrProgramSemanticSourceLocator declaration_locator;
     XrFingerprint signature_fingerprint;
     XrFingerprint effect_fingerprint;
     uint64_t capability_mask;

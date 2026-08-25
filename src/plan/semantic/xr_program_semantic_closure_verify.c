@@ -156,6 +156,11 @@ static bool verifier_locator_valid(XrProgramSemanticSourceLocator locator) {
             locator.end_column > locator.start_column);
 }
 
+static bool verifier_function_locator_valid(
+    XrProgramSemanticSourceLocator locator) {
+    return verifier_locator_valid(locator);
+}
+
 static bool verifier_locator_equal(XrProgramSemanticSourceLocator left,
                                    XrProgramSemanticSourceLocator right) {
     return left.kind == right.kind && left.start_line == right.start_line &&
@@ -293,6 +298,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure,
         const XrProgramSemanticFunctionRecord *row = &closure->functions[i];
         if (verifier_stable_id_zero(row->declaration_identity) ||
             verifier_stable_id_zero(row->concrete_instance_identity) ||
+            !verifier_function_locator_valid(row->declaration_locator) ||
             verifier_fingerprint_zero(row->signature_fingerprint) ||
             verifier_fingerprint_zero(row->effect_fingerprint) ||
             find_module(closure, row->module_identity) < 0 ||
@@ -313,6 +319,14 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure,
                                    row->concrete_instance_identity))
                 return reject(error, error_size, "XR_SEM_0019",
                               "concrete function declaration is duplicated");
+        for (uint32_t j = 0; j < i; j++)
+            if (verifier_id_equal(closure->functions[j].module_identity,
+                                  row->module_identity) &&
+                verifier_locator_equal(
+                    closure->functions[j].declaration_locator,
+                    row->declaration_locator))
+                return reject(error, error_size, "XR_SEM_0019",
+                              "concrete function declaration locator is duplicated");
         if (row->flags != 0)
             roots++;
     }
@@ -533,7 +547,7 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure,
 
 static void verifier_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                          XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v2\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v3\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -567,6 +581,16 @@ static void verifier_closure_fingerprint(const XrProgramSemanticClosure *closure
         verifier_hash_id(&context, closure->functions[i].module_identity);
         verifier_hash_id(&context, closure->functions[i].declaration_identity);
         verifier_hash_id(&context, closure->functions[i].concrete_instance_identity);
+        verifier_hash_u32(&context,
+                          closure->functions[i].declaration_locator.kind);
+        verifier_hash_u32(&context,
+                          closure->functions[i].declaration_locator.start_line);
+        verifier_hash_u32(&context,
+                          closure->functions[i].declaration_locator.start_column);
+        verifier_hash_u32(&context,
+                          closure->functions[i].declaration_locator.end_line);
+        verifier_hash_u32(&context,
+                          closure->functions[i].declaration_locator.end_column);
         verifier_hash_fingerprint(&context, closure->functions[i].signature_fingerprint);
         verifier_hash_fingerprint(&context, closure->functions[i].effect_fingerprint);
         verifier_hash_u64(&context, closure->functions[i].capability_mask);

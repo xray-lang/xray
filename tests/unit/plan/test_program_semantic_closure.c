@@ -38,6 +38,8 @@ typedef struct ClosureFixtureOptions {
     bool include_cycle;
     bool include_orphan;
     bool alternate_locator;
+    bool alternate_function_locator;
+    bool same_module_functions;
     const char *policy;
 } ClosureFixtureOptions;
 
@@ -175,15 +177,30 @@ static XrProgramSemanticClosure *build_fixture(ClosureFixtureOptions options,
         .module_identity = ids->app_module,
         .declaration_identity = stable_id("declaration:psc-app:main"),
         .concrete_instance_identity = stable_id("instance:psc-app:main<>"),
+        .declaration_locator = {
+            .kind = 57,
+            .start_line = 1,
+            .start_column = options.alternate_function_locator ? 2u : 1u,
+            .end_line = 3,
+            .end_column = 2,
+        },
         .signature_fingerprint = fingerprint("fn():i64"),
         .effect_fingerprint = fingerprint("effect:no-suspend:no-throw"),
         .capability_mask = UINT64_C(1),
         .flags = XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY,
     };
     XrProgramSemanticFunctionInput helper = {
-        .module_identity = ids->library_module,
+        .module_identity = options.same_module_functions ? ids->app_module
+                                                         : ids->library_module,
         .declaration_identity = stable_id("declaration:psc-library:helper"),
         .concrete_instance_identity = stable_id("instance:psc-library:helper<>"),
+        .declaration_locator = {
+            .kind = 57,
+            .start_line = 5,
+            .start_column = 1,
+            .end_line = 7,
+            .end_column = 2,
+        },
         .signature_fingerprint = fingerprint("fn():i64"),
         .effect_fingerprint = fingerprint("effect:no-suspend:no-throw"),
         .capability_mask = UINT64_C(1),
@@ -206,6 +223,8 @@ static XrProgramSemanticClosure *build_fixture(ClosureFixtureOptions options,
         orphan.module_identity = ids->app_module;
         orphan.declaration_identity = stable_id("declaration:psc-app:orphan");
         orphan.concrete_instance_identity = stable_id("instance:psc-app:orphan<>");
+        orphan.declaration_locator.start_line = 12;
+        orphan.declaration_locator.end_line = 14;
         orphan.flags = 0;
         if (!xr_program_semantic_closure_add_function(closure, &orphan, &ignored,
                                                       error, error_size))
@@ -237,7 +256,7 @@ failed:
 }
 
 static void test_deterministic_closed_world_identity(void) {
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(2));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(3));
     char error[256] = {0};
     ClosureFixtureIds first_ids = {0};
     ClosureFixtureIds second_ids = {0};
@@ -289,20 +308,34 @@ static void test_deterministic_closed_world_identity(void) {
     };
     REQUIRE(memcmp(first_ids.call.bytes, v1_call_identity,
                    sizeof(v1_call_identity)) == 0);
-    static const uint8_t v2_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
-        0x13, 0x6d, 0x11, 0x1f, 0x18, 0xed, 0xa9, 0x42,
-        0x1d, 0x09, 0xf6, 0x23, 0x92, 0x31, 0x5b, 0x6e,
-        0x38, 0xfe, 0x5d, 0x6c, 0x57, 0x45, 0x62, 0xae,
-        0x31, 0xa4, 0x95, 0xea, 0x2b, 0x38, 0x1a, 0x4d,
+    static const uint8_t v1_entry_function_identity[XR_STABLE_ID_BYTES] = {
+        0x7a, 0xb5, 0x11, 0x47, 0x91, 0xda, 0x29, 0xe4,
+        0xd0, 0xb1, 0x7f, 0x6a, 0x85, 0xe6, 0xb0, 0xca,
     };
-    static const uint8_t v2_generation_id[XR_STABLE_ID_BYTES] = {
-        0xbd, 0xec, 0x3e, 0xcf, 0x96, 0x97, 0x58, 0xe1,
-        0x34, 0x8c, 0xf4, 0x8b, 0xef, 0xe6, 0x99, 0x3f,
+    static const uint8_t v1_helper_function_identity[XR_STABLE_ID_BYTES] = {
+        0x14, 0x41, 0x70, 0x6f, 0xaa, 0x3e, 0x0a, 0x2d,
+        0xc4, 0x03, 0xa2, 0x9a, 0xca, 0x57, 0x4a, 0x84,
     };
+    static const uint8_t v3_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
+        0xae, 0x65, 0x66, 0xbc, 0xf0, 0xb2, 0xc1, 0x8a,
+        0x99, 0x1f, 0xf2, 0x6a, 0x74, 0xda, 0xff, 0xd4,
+        0x1e, 0x7f, 0x40, 0xf9, 0x22, 0xbd, 0xe4, 0x59,
+        0xe7, 0x5f, 0x53, 0x9e, 0x77, 0x53, 0xbb, 0x22,
+    };
+    static const uint8_t v3_generation_id[XR_STABLE_ID_BYTES] = {
+        0x7e, 0x24, 0xe3, 0xa8, 0x35, 0x9a, 0xb4, 0xe7,
+        0xb2, 0xbc, 0xf4, 0x9e, 0xbf, 0x18, 0xd2, 0x0c,
+    };
+    REQUIRE(memcmp(first_ids.entry_function.bytes,
+                   v1_entry_function_identity,
+                   sizeof(v1_entry_function_identity)) == 0);
+    REQUIRE(memcmp(first_ids.helper_function.bytes,
+                   v1_helper_function_identity,
+                   sizeof(v1_helper_function_identity)) == 0);
     REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes,
-                   v2_closure_fingerprint, sizeof(v2_closure_fingerprint)) == 0);
+                   v3_closure_fingerprint, sizeof(v3_closure_fingerprint)) == 0);
     REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes,
-                   v2_generation_id, sizeof(v2_generation_id)) == 0);
+                   v3_generation_id, sizeof(v3_generation_id)) == 0);
 
     ClosureFixtureIds alternate_locator_ids = {0};
     XrProgramSemanticClosure *alternate_locator =
@@ -322,6 +355,29 @@ static void test_deterministic_closed_world_identity(void) {
         xr_program_semantic_closure_generation_id(first),
         xr_program_semantic_closure_generation_id(alternate_locator)));
     xr_program_semantic_closure_free(alternate_locator);
+
+    ClosureFixtureIds alternate_function_locator_ids = {0};
+    XrProgramSemanticClosure *alternate_function_locator =
+        build_fixture((ClosureFixtureOptions) {
+                          .include_dependency = true,
+                          .alternate_function_locator = true,
+                          .policy = "policy-v1",
+                      },
+                      &alternate_function_locator_ids, error, sizeof(error));
+    REQUIRE(alternate_function_locator != NULL);
+    REQUIRE(xr_program_semantic_closure_freeze(
+        alternate_function_locator, error, sizeof(error)));
+    REQUIRE(memcmp(first_ids.entry_function.bytes,
+                   alternate_function_locator_ids.entry_function.bytes,
+                   XR_STABLE_ID_BYTES) == 0);
+    REQUIRE(memcmp(first_ids.call.bytes,
+                   alternate_function_locator_ids.call.bytes,
+                   XR_STABLE_ID_BYTES) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes,
+                   xr_program_semantic_closure_fingerprint(
+                       alternate_function_locator).bytes,
+                   XR_FINGERPRINT_BYTES) != 0);
+    xr_program_semantic_closure_free(alternate_function_locator);
 
     ClosureFixtureIds other_policy_ids = {0};
     XrProgramSemanticClosure *other_policy =
@@ -441,6 +497,13 @@ static void test_budgets_and_duplicate_coordinates_fail_closed(void) {
         .module_identity = app.module_identity,
         .declaration_identity = stable_id("declaration:budget-app:map"),
         .concrete_instance_identity = stable_id("instance:budget-app:map<i64>"),
+        .declaration_locator = {
+            .kind = 57,
+            .start_line = 20,
+            .start_column = 1,
+            .end_line = 22,
+            .end_column = 2,
+        },
         .signature_fingerprint = fingerprint("fn(i64):i64"),
         .effect_fingerprint = fingerprint("effect:pure"),
         .flags = XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY,
@@ -448,6 +511,8 @@ static void test_budgets_and_duplicate_coordinates_fail_closed(void) {
     XrProgramSemanticFunctionInput map_string = map_i64;
     map_string.concrete_instance_identity = stable_id("instance:budget-app:map<String>");
     map_string.signature_fingerprint = fingerprint("fn(String):String");
+    map_string.declaration_locator.start_line = 24;
+    map_string.declaration_locator.end_line = 26;
     map_string.flags = XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED;
     XrStableId function_i64;
     XrStableId function_string;
@@ -464,6 +529,21 @@ static void test_budgets_and_duplicate_coordinates_fail_closed(void) {
     invalid_reserved.reserved[0] = 1u;
     REQUIRE(!xr_program_semantic_closure_add_function(
         closure, &invalid_reserved, &function_i64, error, sizeof(error)));
+
+    XrProgramSemanticFunctionInput invalid_locator = map_i64;
+    invalid_locator.concrete_instance_identity =
+        stable_id("instance:budget-app:map<i32>");
+    invalid_locator.declaration_locator.kind = 0;
+    REQUIRE(!xr_program_semantic_closure_add_function(
+        closure, &invalid_locator, &function_i64, error, sizeof(error)));
+
+    XrProgramSemanticFunctionInput duplicate_locator = map_i64;
+    duplicate_locator.declaration_identity =
+        stable_id("declaration:budget-app:reduce");
+    duplicate_locator.concrete_instance_identity =
+        stable_id("instance:budget-app:reduce<i64>");
+    REQUIRE(!xr_program_semantic_closure_add_function(
+        closure, &duplicate_locator, &function_i64, error, sizeof(error)));
     REQUIRE(xr_program_semantic_closure_freeze(closure, error, sizeof(error)));
     REQUIRE(xr_program_semantic_closure_type_count(closure) == 2);
     REQUIRE(xr_program_semantic_closure_function_count(closure) == 2);
@@ -500,6 +580,27 @@ static void test_independent_verifier_rejects_hostile_mutations(void) {
     closure->functions[0].effect_fingerprint.bytes[0] ^= 1u;
     REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
     REQUIRE(strstr(error, "XR_SEM_0013") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    closure->functions[0].declaration_locator.kind = 0;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "function identity") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    ClosureFixtureIds same_module_ids = {0};
+    closure = build_fixture((ClosureFixtureOptions) {
+                                .include_dependency = true,
+                                .same_module_functions = true,
+                                .policy = "policy-v1",
+                            },
+                            &same_module_ids, error, sizeof(error));
+    REQUIRE(closure != NULL);
+    REQUIRE(xr_program_semantic_closure_freeze(closure, error, sizeof(error)));
+    closure->functions[1].declaration_locator =
+        closure->functions[0].declaration_locator;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "declaration locator is duplicated") != NULL);
     xr_program_semantic_closure_free(closure);
 
     closure = fresh_frozen_fixture();
