@@ -571,6 +571,17 @@ CONTRACT_SPECS = (
         ),
     ),
     ContractSpec(
+        "program-semantic-closure.md",
+        (
+            "src/plan/semantic/xr_program_semantic_closure.h",
+            "src/plan/semantic/xr_program_semantic_closure_internal.h",
+            "src/plan/semantic/xr_program_semantic_closure.c",
+            "src/plan/semantic/xr_program_semantic_closure_verify.c",
+            "tests/unit/plan/test_program_semantic_closure.c",
+            "tests/unit/CMakeLists.txt",
+        ),
+    ),
+    ContractSpec(
         "runtime-generation-lifecycle.md",
         (
             "include/xray_runtime_generation.h",
