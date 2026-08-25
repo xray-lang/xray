@@ -164,13 +164,18 @@ bool xi_scalar_program_verify(const XiModule *module,
                               const XrTargetProfile *target_profile,
                               char *error, size_t error_size) {
     if (!module || !module->program_semantic_closure ||
-        !module->scalar_call_decision || !target_profile || !module->init ||
+        !module->scalar_call_decision || !module->scalar_target_profile ||
+        !target_profile || !module->init ||
         !xr_program_semantic_closure_verify(
             module->program_semantic_closure, NULL, 0) ||
+        !xr_target_profile_verify(module->scalar_target_profile, NULL, 0) ||
         !xr_target_profile_verify(target_profile, NULL, 0) ||
+        !xr_target_profile_require_exact(module->scalar_target_profile,
+                                         target_profile, NULL, 0) ||
         !xr_scalar_call_decision_verify(
             module->scalar_call_decision,
-            module->program_semantic_closure, target_profile, NULL, 0))
+            module->program_semantic_closure,
+            module->scalar_target_profile, NULL, 0))
         return verify_fail(error, error_size,
                            "Xi scalar verification requires exact authorities");
     const XrProgramSemanticClosure *closure =

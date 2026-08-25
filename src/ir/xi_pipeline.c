@@ -1204,7 +1204,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (ir && scalar_input_ptr &&
         (!ir->module || !xi_module_take_scalar_program(
                             ir->module, &scalar_closure, &scalar_decision,
-                            scalar_error, sizeof(scalar_error)) ||
+                            target_profile, scalar_error, sizeof(scalar_error)) ||
          !xi_scalar_program_verify(ir->module, target_profile, scalar_error,
                                    sizeof(scalar_error)))) {
         xi_func_free(ir);

@@ -94,6 +94,11 @@ struct XrSemanticPlan {
     uint32_t metadata_capacity;
     XrSemanticStringPool strings;
     XrOwnershipCertificate *ownership;
+    XrSemanticProgramProvenance program_provenance;
+    XrSemanticProgramFunctionBinding *program_function_bindings;
+    uint32_t program_function_binding_count;
+    XrSemanticProgramCallBinding *program_call_bindings;
+    uint32_t program_call_binding_count;
 };
 
 XR_FUNC XrSemanticPlan *xr_semantic_plan_create(void);
@@ -104,5 +109,12 @@ XR_FUNC void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, Xr
 XR_FUNC bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_size);
 XR_FUNC void xr_semantic_plan_set_ownership(XrSemanticPlan *plan,
                                             XrOwnershipCertificate *ownership);
+XR_FUNC bool xr_semantic_plan_set_program_provenance(
+    XrSemanticPlan *plan,
+    const XrSemanticProgramProvenance *provenance,
+    const XrSemanticProgramFunctionBinding *function_bindings,
+    uint32_t function_binding_count,
+    const XrSemanticProgramCallBinding *call_bindings,
+    uint32_t call_binding_count);
 
 #endif  // XR_SEMANTIC_PLAN_INTERNAL_H

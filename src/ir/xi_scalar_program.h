@@ -45,7 +45,9 @@ XR_FUNC bool xi_scalar_program_finalize(
  * copy of the pointer-free decision. Failure changes neither owner. */
 XR_FUNC bool xi_module_take_scalar_program(
     XiModule *module, XrProgramSemanticClosure **closure,
-    const XrScalarCallDecision *decision, char *error, size_t error_size);
+    const XrScalarCallDecision *decision,
+    const struct XrTargetProfile *target_profile, char *error,
+    size_t error_size);
 
 /* Independent post-transfer verification. */
 XR_FUNC bool xi_scalar_program_verify(

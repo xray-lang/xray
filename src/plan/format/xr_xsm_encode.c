@@ -41,6 +41,46 @@ static void encode_counts(XrXsmWriter *writer, const XrSemanticPlan *plan) {
     xr_xsm_put_u32(writer, plan->ownership->event_count);
     xr_xsm_put_u32(writer, plan->ownership->edge_state_count);
     xr_xsm_put_u32(writer, plan->ownership->loop_invariant_count);
+    xr_xsm_put_u32(writer, plan->program_function_binding_count);
+    xr_xsm_put_u32(writer, plan->program_call_binding_count);
+}
+
+static void encode_program_provenance(XrXsmWriter *writer,
+                                      const XrSemanticPlan *plan) {
+    const XrSemanticProgramProvenance *provenance =
+        &plan->program_provenance;
+    xr_xsm_put_u32(writer, provenance->schema);
+    xr_xsm_put_u32(writer, provenance->program_schema);
+    xr_xsm_put_u32(writer, provenance->function_count);
+    xr_xsm_put_u32(writer, provenance->call_count);
+    xr_xsm_put_bytes(writer, provenance->program_fingerprint.bytes,
+                     sizeof(provenance->program_fingerprint.bytes));
+    xr_xsm_put_bytes(writer, provenance->generation_identity.bytes,
+                     sizeof(provenance->generation_identity.bytes));
+    for (uint32_t i = 0; i < plan->program_function_binding_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            &plan->program_function_bindings[i];
+        xr_xsm_put_bytes(writer, binding->program_function.bytes,
+                         sizeof(binding->program_function.bytes));
+        xr_xsm_put_u32(writer, binding->semantic_function);
+        xr_xsm_put_u32(writer, binding->program_row);
+    }
+    for (uint32_t i = 0; i < plan->program_call_binding_count; i++) {
+        const XrSemanticProgramCallBinding *binding =
+            &plan->program_call_bindings[i];
+        xr_xsm_put_bytes(writer, binding->program_call.bytes,
+                         sizeof(binding->program_call.bytes));
+        xr_xsm_put_bytes(writer, binding->callsite.bytes,
+                         sizeof(binding->callsite.bytes));
+        xr_xsm_put_bytes(writer, binding->caller_program_function.bytes,
+                         sizeof(binding->caller_program_function.bytes));
+        xr_xsm_put_bytes(writer, binding->callee_program_function.bytes,
+                         sizeof(binding->callee_program_function.bytes));
+        xr_xsm_put_u32(writer, binding->operation);
+        xr_xsm_put_u32(writer, binding->program_row);
+        xr_xsm_put_u32(writer, binding->target_function);
+        xr_xsm_put_u32(writer, binding->reserved);
+    }
 }
 
 static void encode_source_methods(XrXsmWriter *writer, const XrSemanticPlan *plan) {
@@ -420,6 +460,7 @@ bool xr_xsm_encode(const XrSemanticPlan *plan, uint8_t **bytes, size_t *size, ch
         return false;
     XrXsmWriter payload = {.limit = XR_XSM_MAX_PAYLOAD_SIZE};
     encode_counts(&payload, plan);
+    encode_program_provenance(&payload, plan);
     encode_entities(&payload, plan);
     encode_source_classes(&payload, plan);
     encode_source_methods(&payload, plan);

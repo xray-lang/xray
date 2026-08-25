@@ -3768,32 +3768,56 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         return report(error, error_size, "XR_SEM_0019",
                       "call-target verifier cannot allocate shared-store index");
     uint32_t cursor = 0;
+    uint32_t program_cursor = 0;
     for (uint32_t operation = 0; operation < plan->operation_count; operation++) {
-        uint32_t direct_function = resolve_frozen_direct_call_target(
-            plan, definitions, graph, &stores, value_count, operation);
+        const XrSemanticProgramCallBinding *program_binding =
+            program_cursor < plan->program_call_binding_count &&
+                    plan->program_call_bindings[program_cursor].operation == operation
+                ? &plan->program_call_bindings[program_cursor]
+                : NULL;
+        bool program_bound = program_binding != NULL;
+        uint32_t direct_function =
+            program_bound
+                ? program_binding->target_function
+                : resolve_frozen_direct_call_target(
+                      plan, definitions, graph, &stores, value_count,
+                      operation);
         const char *native_module = NULL;
         const char *native_member = NULL;
-        bool native_yieldable = resolve_frozen_native_yieldable_target(
-            plan, definitions, value_count, operation, &native_module, &native_member);
+        bool native_yieldable =
+            !program_bound && resolve_frozen_native_yieldable_target(
+                                  plan, definitions, value_count, operation,
+                                  &native_module, &native_member);
         const char *source_module = NULL;
         const char *source_selector = NULL;
-        bool source_namespace = resolve_frozen_source_namespace_target(
-            plan, definitions, value_count, &stores, operation, &source_module, &source_selector);
+        bool source_namespace =
+            !program_bound && resolve_frozen_source_namespace_target(
+                                  plan, definitions, value_count, &stores,
+                                  operation, &source_module, &source_selector);
         const char *native_namespace_module = NULL;
         const char *native_namespace_selector = NULL;
-        bool native_namespace = resolve_frozen_native_namespace_yieldable_target(
-            plan, definitions, value_count, &stores, operation, &native_namespace_module,
-            &native_namespace_selector);
+        bool native_namespace =
+            !program_bound &&
+            resolve_frozen_native_namespace_yieldable_target(
+                plan, definitions, value_count, &stores, operation,
+                &native_namespace_module, &native_namespace_selector);
         uint32_t builtin_instance_type = XR_SEMANTIC_INDEX_NONE;
-        const char *builtin_instance = resolve_frozen_builtin_instance_yieldable_target(
-            plan, operation, &builtin_instance_type);
+        const char *builtin_instance =
+            program_bound
+                ? NULL
+                : resolve_frozen_builtin_instance_yieldable_target(
+                      plan, operation, &builtin_instance_type);
         uint32_t indirect_type =
-            resolve_frozen_indirect_callable_type(plan, definitions, value_count, operation);
+            program_bound
+                ? XR_SEMANTIC_INDEX_NONE
+                : resolve_frozen_indirect_callable_type(
+                      plan, definitions, value_count, operation);
         uint32_t source_instance_function = XR_SEMANTIC_INDEX_NONE;
         uint32_t source_instance_type = XR_SEMANTIC_INDEX_NONE;
         uint32_t source_instance_class = XR_SEMANTIC_INDEX_NONE;
         const XrSemanticOperationRecord *source_call = &plan->operations[operation];
-        if (source_call->opcode == XI_CALL_METHOD && (source_call->semantic_immediate & 1) == 0 &&
+        if (!program_bound && source_call->opcode == XI_CALL_METHOD &&
+            (source_call->semantic_immediate & 1) == 0 &&
             source_call->metadata_count == 1 && source_call->operand_count > 0 &&
             source_call->function < plan->function_count) {
             const XrSemanticOperandRecord *receiver = &plan->operands[source_call->operand_begin];
@@ -3826,7 +3850,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             cursor < plan->call_target_count && plan->call_targets[cursor].operation == operation
                 ? &plan->call_targets[cursor]
                 : NULL;
-        if (source_instance_function == XR_SEMANTIC_INDEX_NONE &&
+        if (!program_bound &&
+            source_instance_function == XR_SEMANTIC_INDEX_NONE &&
             source_call->opcode == XI_CALL_METHOD && (source_call->semantic_immediate & 1) == 0 &&
             source_call->metadata_count == 1 && source_call->operand_count > 0 &&
             source_call->function < plan->function_count) {
@@ -3874,11 +3899,20 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         /* Re-derived from the frozen plan through the shared class-shape
          * judgement, never read back from the row being checked. */
         uint32_t class_construction =
-            xr_semantic_class_construction_source_class(plan, source_call);
+            program_bound
+                ? XR_SEMANTIC_INDEX_NONE
+                : xr_semantic_class_construction_source_class(plan,
+                                                              source_call);
         bool imported_class_result =
-            source_namespace && source_call->opcode == XI_CALL &&
+            !program_bound && source_namespace &&
+            source_call->opcode == XI_CALL &&
             xr_semantic_external_class_instance_type_is_exact(
                 xr_semantic_plan_type(plan, source_call->result_type));
+        if (program_bound && !target) {
+            xr_free(stores.rows);
+            return report(error, error_size, "XR_SEM_0019",
+                          "bound program call has no call-target authority");
+        }
         if ((direct_function != XR_SEMANTIC_INDEX_NONE || native_yieldable ||
              indirect_type != XR_SEMANTIC_INDEX_NONE || native_namespace || builtin_instance ||
              source_instance_function != XR_SEMANTIC_INDEX_NONE ||
@@ -3975,6 +4009,7 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                                plan->functions[source_instance_function].id) &&
             target->callable_type == source_instance_type;
         bool open_source_instance_shape =
+            !program_bound &&
             target->kind == XR_SEM_CALL_TARGET_SOURCE_INSTANCE_METHOD_OPEN &&
             source_call->opcode == XI_CALL_METHOD && (source_call->semantic_immediate & 1) == 0 &&
             source_call->metadata_count == 1 && source_call->operand_count > 0 &&
@@ -3988,7 +4023,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             plan->types[target->callable_type].source_class == XR_SEMANTIC_INDEX_NONE &&
             !stable_id_zero(plan->types[target->callable_type].source_class_identity);
         bool class_construction_shape =
-            class_construction != XR_SEMANTIC_INDEX_NONE && !source_namespace &&
+            !program_bound && class_construction != XR_SEMANTIC_INDEX_NONE &&
+            !source_namespace &&
             !native_namespace && !builtin_instance && direct_function == XR_SEMANTIC_INDEX_NONE &&
             !native_yieldable && indirect_type == XR_SEMANTIC_INDEX_NONE &&
             source_instance_function == XR_SEMANTIC_INDEX_NONE &&
@@ -4001,7 +4037,8 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         const XrSemanticTypeRecord *imported_result_type =
             xr_semantic_plan_type(plan, source_call->result_type);
         bool imported_class_construction_shape =
-            source_namespace && source_call->opcode == XI_CALL && source_selector &&
+            !program_bound && source_namespace &&
+            source_call->opcode == XI_CALL && source_selector &&
             source_selector[0] != '\0' &&
             target->kind == XR_SEM_CALL_TARGET_SOURCE_CLASS_CONSTRUCTOR &&
             target->function == XR_SEMANTIC_INDEX_NONE &&
@@ -4146,10 +4183,133 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                           "call-target stable identity is not canonical");
         }
         cursor++;
+        if (program_bound)
+            program_cursor++;
     }
     xr_free(stores.rows);
-    return cursor == plan->call_target_count ||
+    return (cursor == plan->call_target_count &&
+            program_cursor == plan->program_call_binding_count) ||
            report(error, error_size, "XR_SEM_0019", "unprovable call-target authority is present");
+}
+
+static bool fingerprint_zero(XrFingerprint fingerprint) {
+    XrFingerprint zero = {{0}};
+    return xr_fingerprint_equal(fingerprint, zero);
+}
+
+static const XrSemanticProgramFunctionBinding *
+program_function_binding_for_semantic(const XrSemanticPlan *plan,
+                                      uint32_t semantic_function) {
+    uint32_t lower = 0;
+    uint32_t upper = plan ? plan->program_function_binding_count : 0;
+    while (lower < upper) {
+        uint32_t middle = lower + (upper - lower) / 2;
+        const XrSemanticProgramFunctionBinding *binding =
+            &plan->program_function_bindings[middle];
+        if (binding->semantic_function < semantic_function)
+            lower = middle + 1;
+        else
+            upper = middle;
+    }
+    return lower < (plan ? plan->program_function_binding_count : 0) &&
+                   plan->program_function_bindings[lower].semantic_function ==
+                       semantic_function
+               ? &plan->program_function_bindings[lower]
+               : NULL;
+}
+
+static bool verify_program_provenance_layout(const XrSemanticPlan *plan,
+                                             char *error,
+                                             size_t error_size) {
+    XrSemanticProgramProvenance zero = {0};
+    bool present = plan->program_provenance.schema != 0 ||
+                   plan->program_function_bindings ||
+                   plan->program_function_binding_count != 0 ||
+                   plan->program_call_bindings ||
+                   plan->program_call_binding_count != 0;
+    if (!present)
+        return memcmp(&plan->program_provenance, &zero, sizeof(zero)) == 0;
+    const XrSemanticProgramProvenance *provenance =
+        &plan->program_provenance;
+    if (provenance->schema !=
+            XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+        provenance->program_schema == 0 ||
+        fingerprint_zero(provenance->program_fingerprint) ||
+        fingerprint_zero(provenance->generation_identity) ||
+        provenance->function_count !=
+            plan->program_function_binding_count ||
+        provenance->call_count != plan->program_call_binding_count ||
+        provenance->function_count > plan->function_count ||
+        provenance->call_count > plan->operation_count ||
+        (provenance->function_count &&
+         !plan->program_function_bindings) ||
+        (provenance->call_count && !plan->program_call_bindings))
+        return report(error, error_size, "XR_SEM_0019",
+                      "program provenance row layout is incomplete");
+    uint8_t *seen_function_rows =
+        provenance->function_count
+            ? (uint8_t *) xr_calloc(provenance->function_count, 1)
+            : NULL;
+    uint8_t *seen_call_rows =
+        provenance->call_count
+            ? (uint8_t *) xr_calloc(provenance->call_count, 1)
+            : NULL;
+    if ((provenance->function_count && !seen_function_rows) ||
+        (provenance->call_count && !seen_call_rows)) {
+        xr_free(seen_function_rows);
+        xr_free(seen_call_rows);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "program provenance verification allocation failed");
+    }
+    bool valid = true;
+    for (uint32_t i = 0; valid && i < provenance->function_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            &plan->program_function_bindings[i];
+        valid = binding->semantic_function < plan->function_count &&
+                binding->program_row < provenance->function_count &&
+                !seen_function_rows[binding->program_row] &&
+                !stable_id_zero(binding->program_function) &&
+                (i == 0 ||
+                 plan->program_function_bindings[i - 1].semantic_function <
+                     binding->semantic_function);
+        if (valid)
+            seen_function_rows[binding->program_row] = 1;
+    }
+    for (uint32_t i = 0; valid && i < provenance->call_count; i++) {
+        const XrSemanticProgramCallBinding *binding =
+            &plan->program_call_bindings[i];
+        const XrSemanticOperationRecord *operation =
+            binding->operation < plan->operation_count
+                ? &plan->operations[binding->operation]
+                : NULL;
+        const XrSemanticProgramFunctionBinding *caller =
+            operation ? program_function_binding_for_semantic(
+                            plan, operation->function)
+                      : NULL;
+        const XrSemanticProgramFunctionBinding *callee =
+            program_function_binding_for_semantic(plan,
+                                                  binding->target_function);
+        valid = operation && operation->opcode == XI_CALL &&
+                binding->program_row < provenance->call_count &&
+                !seen_call_rows[binding->program_row] &&
+                binding->target_function < plan->function_count &&
+                binding->reserved == 0 &&
+                !stable_id_zero(binding->program_call) &&
+                !stable_id_zero(binding->callsite) && caller && callee &&
+                xr_stable_id_equal(caller->program_function,
+                                   binding->caller_program_function) &&
+                xr_stable_id_equal(callee->program_function,
+                                   binding->callee_program_function) &&
+                (i == 0 ||
+                 plan->program_call_bindings[i - 1].operation <
+                     binding->operation);
+        if (valid)
+            seen_call_rows[binding->program_row] = 1;
+    }
+    xr_free(seen_function_rows);
+    xr_free(seen_call_rows);
+    return valid || report(error, error_size, "XR_SEM_0019",
+                           "program provenance binding is invalid");
 }
 
 static bool operation_is_static_suspend(const XrSemanticOperationRecord *operation) {
@@ -5002,6 +5162,8 @@ bool xr_semantic_plan_verify(const XrSemanticPlan *plan, char *error, size_t err
         !xr_fingerprint_equal(plan->stdlib_registry_fingerprint, current_stdlib_registry))
         return report(error, error_size, "XR_SEM_0017",
                       "SemanticPlan registry authority is missing or incompatible");
+    if (!verify_program_provenance_layout(plan, error, error_size))
+        return false;
     if (plan->type_count > 1000000u || plan->source_class_count > 100000u ||
         plan->source_method_count > 100000u || plan->function_count > 100000u ||
         plan->block_count > 2000000u || plan->operation_count > 10000000u ||

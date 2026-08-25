@@ -216,23 +216,35 @@ bool xi_scalar_program_finalize(XiFunc *root,
 bool xi_module_take_scalar_program(XiModule *module,
                                    XrProgramSemanticClosure **closure,
                                    const XrScalarCallDecision *decision,
+                                   const XrTargetProfile *target_profile,
                                    char *error, size_t error_size) {
-    if (!module || !closure || !*closure || !decision ||
-        module->program_semantic_closure || module->scalar_call_decision) {
+    if (!module || !closure || !*closure || !decision || !target_profile ||
+        module->program_semantic_closure || module->scalar_call_decision ||
+        module->scalar_target_profile) {
         return scalar_fail(error, error_size,
                            "Xi scalar authority ownership transfer is invalid");
     }
     XiScalarProgramInput input = {*closure, decision};
-    if (!xi_scalar_program_input_is_consistent(&input, error, error_size))
+    if (!xi_scalar_program_input_is_consistent(&input, error, error_size) ||
+        !xr_scalar_call_decision_verify(decision, *closure, target_profile,
+                                        error, error_size))
         return false;
     XrScalarCallDecision *owned =
         (XrScalarCallDecision *) xr_malloc(sizeof(*owned));
     if (!owned)
         return scalar_fail(error, error_size,
                            "Xi scalar decision ownership allocation failed");
+    XrTargetProfile *retained_profile =
+        xr_target_profile_retain((XrTargetProfile *) target_profile);
+    if (!retained_profile) {
+        xr_free(owned);
+        return scalar_fail(error, error_size,
+                           "Xi scalar target profile retention failed");
+    }
     *owned = *decision;
     module->program_semantic_closure = *closure;
     module->scalar_call_decision = owned;
+    module->scalar_target_profile = retained_profile;
     *closure = NULL;
     return true;
 }

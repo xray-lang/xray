@@ -54,8 +54,9 @@ admission may be inferred from these rows.
    serialization format, cache certificate, SemanticPlan interpretation, or
    aggregate ABI decision requires a separately frozen authority and independent
    validation; none may treat this foundation as implicit Target admission. The
-   bounded scalar CallDecision and Xi binding described below are the only
-   admitted readers; neither makes PSC fingerprints self-describing.
+   bounded scalar CallDecision, Xi binding, and SemanticPlan construction proof
+   described below are the only admitted readers; none makes PSC fingerprints
+   self-describing.
 8. The first source-backed producer is deliberately bounded to one memory
    module containing exactly two sealed, non-generic, non-suspending language
    functions and one direct `i64 -> i64` call. Analyzer publication owns a
@@ -106,8 +107,8 @@ admission may be inferred from these rows.
     verifier re-resolves the PSC call and functions, rechecks the target and
     generation bindings, reconstructs the exact semantic contracts, and
    independently recomputes the decision fingerprint. This authority is
-   consumed only by the bounded Xi binding below. VM, AOT, C emission, and the
-   existing TargetPlan builder do not consume it.
+   consumed only by the bounded Xi and SemanticPlan bindings below. VM, AOT, C
+   emission, and the existing TargetPlan builder do not consume it.
 14. The bounded source-backed producer is created by a compiler session, module
     resolver, module graph, and analyzer. Parsing and source-graph construction
     require that compiler authority, not an installed VM header, VM handle, or
@@ -117,9 +118,11 @@ admission may be inferred from these rows.
     may be retained by additional compiler-stage owners. Retain rejects mutable,
     failed, unverified, released, and reference-saturated closures. Free drops
     one reference and destroys the pointer-free rows only when the last owner is
-    released. XiModule holds one ordinary closure reference together with its
-    own heap copy of the sealed pointer-free CallDecision; failed transfer does
-    not consume or partially install either authority.
+   released. XiModule holds one ordinary closure reference together with its
+   own heap copy of the sealed pointer-free CallDecision and one reference to
+   the exact frozen TargetProfile used to verify it. Failed transfer does not
+   consume or partially install any authority, and module destruction releases
+   all three owned values exactly once.
 16. The bounded analyzer authority activates a closed Xi lowering lane only
     when the current compiler session supplies the exact independently verified
     TargetProfile. Lowering joins function declarations and the call
@@ -139,6 +142,30 @@ admission may be inferred from these rows.
     decision drift, added execution contracts, or unsupported family shape fail
     closed without fallback, alias, compatibility API, TargetPlan, or
     scalar-only certificate.
+18. The generic SemanticPlan builder admits this bounded family only from the
+    independently verified XiModule authority triple. PSC, CallDecision, and
+    TargetProfile are typed external construction inputs; the target-neutral
+    plan retains no compiler pointer, target profile, decision bytes, callback,
+    or opaque metadata. Instead schema 40 freezes pointer-free PSC schema,
+    fingerprint, GenerationClosureId, stable function/call identities, PSC row
+    indexes, semantic function/operation indexes, and the direct-local target.
+    Every field is serialized by XSM, included in the SemanticPlan fingerprint,
+    and checked by the generic verifier. Function bindings are ordered by
+    semantic function and call bindings by semantic operation; PSC row indexes
+    form exact, duplicate-free domains.
+    The covered `XI_CALL` resolves caller and callee only through its Xi row
+    indexes, PSC identities, and CallDecision; source exports and all generic
+    direct, native, namespace, indirect, class, method, name, and body resolvers
+    are bypassed for that operation. Missing, duplicate, ambiguous, or
+    mismatched rows fail closed.
+    A separate verifier consumes the external typed authorities and rechecks
+    the Xi graph, PSC closure fingerprint and GCI, decision, exact TargetProfile,
+    serialized provenance, SemanticPlan fingerprint, function and parameter
+    shapes, operation/value coordinates, and the unique direct-local call-target
+    row. XSM decode and round-trip preserve the same pointer-free provenance and
+    generic verification remains sufficient after XiModule destruction. This
+    slice adds no TargetPlan, VM, AOT, or C-emission consumer; generic unbound
+    call families retain their existing resolver.
 
 ## Digest anchors
 
@@ -164,25 +191,37 @@ anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 040ced3d57b22a96b
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 626fca9a624892525d95af3b716c0d57e4ddfc0f128a579ab42dca0ac20177b8
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece99304f2de817381b6e4051b2b66fd7b336bb1c66d493
+anchor-sha256: src/plan/format/xr_xsm_decode.c 06a7d32656f16bd4eedfdd9dcbcb02288c1d4640f44e6ca971e45773990307de
+anchor-sha256: src/plan/format/xr_xsm_encode.c 9319a82c86ab2c9a2497421495839e4035d676ee167edf1d37eed4b7c9e92d38
+anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c 5ce9c529691a34e7ea0af843e20ce2418b5df8c4dcaf587f0614f7bd3296d2ae
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 0eef55790a8ae23e21ff100d638ffa98c8fefb8c7032edd7bf733f81895a8c5e
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c 055762048b5c69444636112658475a041a3f8e5c788f7d44431eb533fbb04011
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 7a79fc5acd10e00336b248c830c70cfbdedb0028f341c1efa4719f480ea76c3b
+anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h 5b2ae3086afb01f923a603dba8d80aca4cbc82b28c7c0088987d34ef35acd3a0
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c b4857e7dd5e58779f928c27ad8f07f98f27359753910d7692a9b66a8e1e8813f
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 764bee44083ff3b6622cf5a57051fc5ac558e1bdde899522274be7e4e0049b41
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 9d20284c377a6be00d4154193e1160dfde87389cc141fa7cb41d55d6a9bc28a0
 anchor-sha256: src/ir/xi.h 79ece671a55f114ab3334071c9e21d3a72a00a80b0945772ecd103b402756ce3
-anchor-sha256: src/ir/xi.c a45b2e1879eccceaad63284d61826c142e962dcf34e22a0200fb54d9cf2080c6
-anchor-sha256: src/ir/xi_module.h 3a75eb103bad44f42812614fb926fa726c550583d4f0edf1165bc7a3b4d7cdcd
+anchor-sha256: src/ir/xi.c 04f5ca922145c0ef0761e5cf54cc826fa93403c183cfb84e6b3a24975d3c9d3a
+anchor-sha256: src/ir/xi_module.h 42e5334390ec007c6af9e1eb69f43ee5a5cc7935677dfaa787ff0d2a786bc8ad
 anchor-sha256: src/ir/xi_lower.h fcd45df9157610149721205e7f630506797e53d67d07c75febd4de77efd2b4d3
 anchor-sha256: src/ir/xi_lower.c 5f7177c244562b8a23ab8cc36d5cf82c638e86b6574783f0da45a2f0a3985baa
 anchor-sha256: src/ir/xi_lower_expr.c 0307e72180774953f1e9f8c26910f7eaa536b34e38e261e3783c0d554d4e0d60
 anchor-sha256: src/ir/xi_lower_stmt.c 16c87830bf9473823d2718143eb94c42cd56f6d189e9bec879b1c724d398deee
-anchor-sha256: src/ir/xi_pipeline.c bbbd49d7ee58919fdd5fd62b9677a4bbf4d41e7c0b39a26de8527a2adf8c2cb4
-anchor-sha256: src/ir/xi_scalar_program.h 9f5b268f34bdbe3c5b1425896f477764d55ee63cba15895b36cedbabdcf76920
-anchor-sha256: src/ir/xi_scalar_program.c 30967d4cee90d940df14a3a16e165e1f291d08b42767ea6147de8d4b12df21b2
-anchor-sha256: src/ir/xi_scalar_program_verify.c 0016797f0c03d325bd5c8289e9d6983fe2b98f182540c52e5b1a20d61f786769
+anchor-sha256: src/ir/xi_pipeline.c 0693ff7ff7825f346db7d53fefaed1d792e182f501de442d085e7d41d8549cd6
+anchor-sha256: src/ir/xi_scalar_program.h a213e7babc4cc683ad394fdb0a7b456fb0b2efc89078ad063e6af624ace63505
+anchor-sha256: src/ir/xi_scalar_program.c 1013a8766707acd2998da9f5bd11927b1f3c3ee31b0106a9f6ee8f5922d65e50
+anchor-sha256: src/ir/xi_scalar_program_verify.c 07318cf7896c87a6c68af9a501416b2c2224a8aaf461526a67e959d65a0272d5
+anchor-sha256: src/ir/xi_scalar_semantic_plan.h a96e42e0bce85201022ea35aca86267eab106c830793113e2b94f5d369da9cfc
+anchor-sha256: src/ir/xi_scalar_semantic_plan.c 350d8248e7c821b1c5a93a11824c09d9a9d6986ee3476448f13d78b31ccd9b20
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 31d918226ca8f369f61f1b0b6a73d6e1585a7854eeba5d0f3c7b993fc5d94bcb
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 5752882ed5842dff1006a349f79e114e33a9ccb6e1378cdfd612811fddd2ab87
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 39f0eaad5b9ee680975076c62a56a1bbf0a169b09e430ef319d3673242f76a0e
 anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c 8c5f8e46818ad8d8892b39c67f017f1fe9189d2600bc734767625473c5deec43
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c 4bbb43d8d3e3296d02b62ff1669ebdeb6ea5018f3b181dd8297922046ebf3c94
-anchor-sha256: tests/unit/ir/test_xi_scalar_program.c 8464eb6b350b9f2dcc1ce2c58e4633a28fe2e4e47158bdddde20f13b668af142
+anchor-sha256: tests/unit/ir/test_xi_scalar_program.c e2a914535c4787f09691124b0b9a0e1f95a218b1b060aa3ea598af30156da0f8
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c d2b3608b8e446464fa9611256c84d0b0e34237d48ae782c17c0f86588fb54e48
 anchor-sha256: tests/unit/CMakeLists.txt 42e546f6288d61ae5cf9724504cebe9e474cc42fc53d961e9f62002cf3efb341

@@ -454,6 +454,48 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, constant->float_bits);
         hash_string(&ctx, constant->string);
     }
+    if (plan->program_provenance.schema != 0) {
+        static const uint8_t provenance_domain[] =
+            "xray-semantic-program-provenance-v1";
+        const XrSemanticProgramProvenance *provenance =
+            &plan->program_provenance;
+        hash_bytes(&ctx, provenance_domain,
+                   sizeof(provenance_domain) - 1);
+        hash_u64(&ctx, provenance->schema);
+        hash_u64(&ctx, provenance->program_schema);
+        hash_u64(&ctx, provenance->function_count);
+        hash_u64(&ctx, provenance->call_count);
+        hash_bytes(&ctx, provenance->program_fingerprint.bytes,
+                   sizeof(provenance->program_fingerprint.bytes));
+        hash_bytes(&ctx, provenance->generation_identity.bytes,
+                   sizeof(provenance->generation_identity.bytes));
+        hash_u64(&ctx, plan->program_function_binding_count);
+        for (uint32_t i = 0; i < plan->program_function_binding_count; i++) {
+            const XrSemanticProgramFunctionBinding *binding =
+                &plan->program_function_bindings[i];
+            hash_bytes(&ctx, binding->program_function.bytes,
+                       sizeof(binding->program_function.bytes));
+            hash_u64(&ctx, binding->semantic_function);
+            hash_u64(&ctx, binding->program_row);
+        }
+        hash_u64(&ctx, plan->program_call_binding_count);
+        for (uint32_t i = 0; i < plan->program_call_binding_count; i++) {
+            const XrSemanticProgramCallBinding *binding =
+                &plan->program_call_bindings[i];
+            hash_bytes(&ctx, binding->program_call.bytes,
+                       sizeof(binding->program_call.bytes));
+            hash_bytes(&ctx, binding->callsite.bytes,
+                       sizeof(binding->callsite.bytes));
+            hash_bytes(&ctx, binding->caller_program_function.bytes,
+                       sizeof(binding->caller_program_function.bytes));
+            hash_bytes(&ctx, binding->callee_program_function.bytes,
+                       sizeof(binding->callee_program_function.bytes));
+            hash_u64(&ctx, binding->operation);
+            hash_u64(&ctx, binding->program_row);
+            hash_u64(&ctx, binding->target_function);
+            hash_u64(&ctx, binding->reserved);
+        }
+    }
     if (plan->ownership) {
         hash_u64(&ctx, plan->ownership->owner_count);
         hash_u64(&ctx, plan->ownership->event_count);
@@ -550,6 +592,56 @@ void xr_semantic_plan_set_ownership(XrSemanticPlan *plan, XrOwnershipCertificate
     plan->ownership = ownership;
 }
 
+bool xr_semantic_plan_set_program_provenance(
+    XrSemanticPlan *plan,
+    const XrSemanticProgramProvenance *provenance,
+    const XrSemanticProgramFunctionBinding *function_bindings,
+    uint32_t function_binding_count,
+    const XrSemanticProgramCallBinding *call_bindings,
+    uint32_t call_binding_count) {
+    if (!plan || plan->frozen || !provenance ||
+        provenance->schema !=
+            XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+        provenance->function_count != function_binding_count ||
+        provenance->call_count != call_binding_count ||
+        (function_binding_count != 0 && !function_bindings) ||
+        (call_binding_count != 0 && !call_bindings) ||
+        plan->program_provenance.schema != 0 ||
+        plan->program_function_bindings ||
+        plan->program_function_binding_count != 0 ||
+        plan->program_call_bindings ||
+        plan->program_call_binding_count != 0)
+        return false;
+    XrSemanticProgramFunctionBinding *function_copy =
+        function_binding_count
+            ? (XrSemanticProgramFunctionBinding *) xr_malloc(
+                  (size_t) function_binding_count * sizeof(*function_copy))
+            : NULL;
+    XrSemanticProgramCallBinding *call_copy =
+        call_binding_count
+            ? (XrSemanticProgramCallBinding *) xr_malloc(
+                  (size_t) call_binding_count * sizeof(*call_copy))
+            : NULL;
+    if ((function_binding_count && !function_copy) ||
+        (call_binding_count && !call_copy)) {
+        xr_free(function_copy);
+        xr_free(call_copy);
+        return false;
+    }
+    if (function_binding_count)
+        memcpy(function_copy, function_bindings,
+               (size_t) function_binding_count * sizeof(*function_copy));
+    if (call_binding_count)
+        memcpy(call_copy, call_bindings,
+               (size_t) call_binding_count * sizeof(*call_copy));
+    plan->program_provenance = *provenance;
+    plan->program_function_bindings = function_copy;
+    plan->program_function_binding_count = function_binding_count;
+    plan->program_call_bindings = call_copy;
+    plan->program_call_binding_count = call_binding_count;
+    return true;
+}
+
 bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t error_size) {
     if (!plan || plan->frozen) {
         set_error(error, error_size, "XR_SEM_0004", "semantic plan is null or already frozen");
@@ -619,6 +711,8 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->predecessors);
     xr_free(plan->operands);
     xr_free(plan->metadata);
+    xr_free(plan->program_function_bindings);
+    xr_free(plan->program_call_bindings);
     xr_ownership_certificate_free(plan->ownership);
     xr_free(plan);
 }

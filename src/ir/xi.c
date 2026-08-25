@@ -14,6 +14,7 @@
 
 #include "xi.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
+#include "../plan/target/xr_target_profile.h"
 #include "xi_evidence.h"
 #include "xi_loop.h"
 #include "xi_module.h"
@@ -786,6 +787,8 @@ XR_FUNC void xi_module_free(XiModule *mod) {
         return;
     xr_free(mod->scalar_call_decision);
     mod->scalar_call_decision = NULL;
+    xr_target_profile_free(mod->scalar_target_profile);
+    mod->scalar_target_profile = NULL;
     xr_program_semantic_closure_free(mod->program_semantic_closure);
     mod->program_semantic_closure = NULL;
     xr_free(mod->identity);

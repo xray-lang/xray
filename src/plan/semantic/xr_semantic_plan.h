@@ -24,6 +24,7 @@
 #include <stdio.h>
 
 #define XR_SEMANTIC_INDEX_NONE UINT32_MAX
+#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(1)
 
 typedef struct XrSemanticPlan XrSemanticPlan;
 typedef struct XrOwnershipCertificate XrOwnershipCertificate;
@@ -548,6 +549,35 @@ typedef struct XrSemanticCallTargetRecord {
     uint8_t kind;
     uint8_t reserved[3];
 } XrSemanticCallTargetRecord;
+
+/* Pointer-free provenance for program-semantic rows consumed during Xi to
+ * SemanticPlan construction. These records are target-neutral plan facts and
+ * participate in the plan fingerprint. */
+typedef struct XrSemanticProgramProvenance {
+    uint32_t schema;
+    uint32_t program_schema;
+    uint32_t function_count;
+    uint32_t call_count;
+    XrFingerprint program_fingerprint;
+    XrFingerprint generation_identity;
+} XrSemanticProgramProvenance;
+
+typedef struct XrSemanticProgramFunctionBinding {
+    XrStableId program_function;
+    uint32_t semantic_function;
+    uint32_t program_row;
+} XrSemanticProgramFunctionBinding;
+
+typedef struct XrSemanticProgramCallBinding {
+    XrStableId program_call;
+    XrStableId callsite;
+    XrStableId caller_program_function;
+    XrStableId callee_program_function;
+    uint32_t operation;
+    uint32_t program_row;
+    uint32_t target_function;
+    uint32_t reserved;
+} XrSemanticProgramCallBinding;
 
 /* Exact source-module dependency.  The fingerprint is a content address, not
  * a suspendability assertion: consumers must present the matching verified

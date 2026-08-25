@@ -11,13 +11,19 @@
 #include "../test_framework.h"
 
 #include "base/xmalloc.h"
+#include "base/xsha256.h"
 #include "frontend/analyzer/xa_program_semantic_closure.h"
 #include "frontend/analyzer/xa_typed_program.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "ir/xi_lower.h"
 #include "ir/xi_scalar_program.h"
+#include "ir/xi_scalar_semantic_plan.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
+#include "plan/semantic/xr_semantic_builder.h"
+#include "plan/semantic/xr_semantic_plan_internal.h"
+#include "plan/semantic/xr_semantic_verify.h"
+#include "plan/format/xr_xsm_schema.h"
 #include "plan/target/xr_target_profile.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
 #include "toolchain/xcompiler_session.h"
@@ -130,6 +136,14 @@ static XiValue *find_bound_call(XiFunc *function) {
     return NULL;
 }
 
+static void mark_tree_optimized(XiFunc *function) {
+    if (!function)
+        return;
+    function->stage = XI_STAGE_OPTIMIZED;
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        mark_tree_optimized(function->children[i]);
+}
+
 static bool build_authorities(
     ScalarFixture *fixture, XrTargetProfile *profile,
     XrProgramSemanticClosure **closure, XrScalarCallDecision *decision,
@@ -175,7 +189,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_take_scalar_program(
-        root->module, &closure, &decision, error, sizeof(error)));
+        root->module, &closure, &decision, profile, error, sizeof(error)));
     ASSERT_NULL(closure);
     bool verified = xi_scalar_program_verify(root->module, profile, error,
                                              sizeof(error));
@@ -232,17 +246,138 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_TRUE(xi_scalar_program_verify(root->module, profile, error,
                                          sizeof(error)));
 
+    mark_tree_optimized(root);
+    ASSERT_TRUE(xi_module_set_identity(
+        root->module,
+        "memory-module-v1:id=26:xi-scalar-semantic-plan-v1"));
+    XrSemanticPlan *semantic = NULL;
+    bool semantic_built = xr_semantic_plan_build(
+        root, &semantic, error, sizeof(error));
+    if (!semantic_built)
+        fprintf(stderr, "Scalar SemanticPlan build failed: %s\n", error);
+    ASSERT_TRUE(semantic_built);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_TRUE(xi_scalar_semantic_plan_verify(
+        root, semantic, profile, error, sizeof(error)));
+    ASSERT_EQ_UINT(xr_semantic_plan_function_count(semantic), 3);
+    ASSERT_EQ_UINT(xr_semantic_plan_call_target_count(semantic), 1);
+    XrFingerprint retained_fingerprint =
+        xr_program_semantic_closure_fingerprint(retained);
+    XrGenerationClosureId retained_generation =
+        xr_program_semantic_closure_generation_id(retained);
+    ASSERT_EQ_UINT(semantic->program_provenance.schema,
+                   XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION);
+    ASSERT_EQ_UINT(semantic->program_provenance.program_schema,
+                   xr_program_semantic_closure_schema(retained));
+    ASSERT_EQ_UINT(semantic->program_function_binding_count, 2);
+    ASSERT_EQ_UINT(semantic->program_call_binding_count, 1);
+    ASSERT_TRUE(xr_fingerprint_equal(
+        semantic->program_provenance.program_fingerprint,
+        retained_fingerprint));
+    ASSERT_TRUE(memcmp(semantic->program_provenance.generation_identity.bytes,
+                       retained_generation.bytes,
+                       sizeof(retained_generation.bytes)) == 0);
+
+    uint32_t saved_target =
+        semantic->program_call_bindings[0].target_function;
+    semantic->program_call_bindings[0].target_function =
+        XR_SEMANTIC_INDEX_NONE;
+    ASSERT_FALSE(xi_scalar_semantic_plan_verify(
+        root, semantic, profile, error, sizeof(error)));
+    semantic->program_call_bindings[0].target_function = saved_target;
+    semantic->program_provenance.program_fingerprint.bytes[0] ^=
+        UINT8_C(0x80);
+    ASSERT_FALSE(xi_scalar_semantic_plan_verify(
+        root, semantic, profile, error, sizeof(error)));
+    semantic->program_provenance.program_fingerprint.bytes[0] ^=
+        UINT8_C(0x80);
+    uint32_t saved_provenance_schema = semantic->program_provenance.schema;
+    semantic->program_provenance.schema = 0;
+    ASSERT_FALSE(xi_scalar_semantic_plan_verify(
+        root, semantic, profile, error, sizeof(error)));
+    semantic->program_provenance.schema = saved_provenance_schema;
+    ASSERT_TRUE(xi_scalar_semantic_plan_verify(
+        root, semantic, profile, error, sizeof(error)));
+    XrFingerprint saved_plan_fingerprint = semantic->fingerprint;
+    semantic->program_call_bindings[0].reserved = 1;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    semantic->program_call_bindings[0].reserved = 0;
+    semantic->fingerprint = saved_plan_fingerprint;
+
+    uint8_t *encoded = NULL;
+    size_t encoded_size = 0;
+    ASSERT_TRUE(xr_xsm_encode(semantic, &encoded, &encoded_size, error,
+                              sizeof(error)));
+    XrSemanticPlan *decoded = NULL;
+    ASSERT_TRUE(xr_xsm_decode(encoded, encoded_size, &decoded, error,
+                              sizeof(error)));
+    ASSERT_TRUE(decoded != NULL &&
+                decoded->program_function_binding_count == 2 &&
+                decoded->program_call_binding_count == 1 &&
+                xr_fingerprint_equal(
+                    xr_semantic_plan_fingerprint(decoded),
+                    xr_semantic_plan_fingerprint(semantic)));
+    uint8_t *roundtrip = NULL;
+    size_t roundtrip_size = 0;
+    ASSERT_TRUE(xr_xsm_encode(decoded, &roundtrip, &roundtrip_size, error,
+                              sizeof(error)));
+    ASSERT_EQ_UINT(roundtrip_size, encoded_size);
+    ASSERT_TRUE(memcmp(roundtrip, encoded, encoded_size) == 0);
+    xr_free(roundtrip);
+    xr_semantic_plan_free(decoded);
+
+    ASSERT_TRUE(encoded_size > XR_XSM_HEADER_SIZE + 303u);
+    uint8_t *hostile = (uint8_t *) xr_malloc(encoded_size);
+    ASSERT_NOT_NULL(hostile);
+    memcpy(hostile, encoded, encoded_size);
+    semantic->program_call_bindings[0].reserved = 1;
+    XrFingerprint hostile_fingerprint;
+    xr_semantic_plan_compute_fingerprint(semantic, &hostile_fingerprint);
+    semantic->program_call_bindings[0].reserved = 0;
+    hostile[XR_XSM_HEADER_SIZE + 300u] = UINT8_C(1);
+    memcpy(hostile + XR_XSM_HEADER_SIZE - XR_FINGERPRINT_BYTES,
+           hostile_fingerprint.bytes, sizeof(hostile_fingerprint.bytes));
+    xr_sha256(hostile + XR_XSM_HEADER_SIZE,
+              encoded_size - XR_XSM_HEADER_SIZE, hostile + 24u);
+    decoded = NULL;
+    ASSERT_FALSE(xr_xsm_decode(hostile, encoded_size, &decoded, error,
+                               sizeof(error)));
+    ASSERT_NULL(decoded);
+    xr_free(hostile);
+
+    hostile = (uint8_t *) xr_malloc(encoded_size);
+    ASSERT_NOT_NULL(hostile);
+    memcpy(hostile, encoded, encoded_size);
+    semantic->program_provenance.schema = 0;
+    xr_semantic_plan_compute_fingerprint(semantic, &hostile_fingerprint);
+    semantic->program_provenance.schema = saved_provenance_schema;
+    memset(hostile + XR_XSM_HEADER_SIZE + 96u, 0, sizeof(uint32_t));
+    memcpy(hostile + XR_XSM_HEADER_SIZE - XR_FINGERPRINT_BYTES,
+           hostile_fingerprint.bytes, sizeof(hostile_fingerprint.bytes));
+    xr_sha256(hostile + XR_XSM_HEADER_SIZE,
+              encoded_size - XR_XSM_HEADER_SIZE, hostile + 24u);
+    decoded = NULL;
+    ASSERT_FALSE(xr_xsm_decode(hostile, encoded_size, &decoded, error,
+                               sizeof(error)));
+    ASSERT_NULL(decoded);
+    xr_free(hostile);
+    xr_free(encoded);
+
     XrProgramSemanticClosure *second = NULL;
     XrScalarCallDecision second_decision = {0};
     ASSERT_TRUE(build_authorities(&fixture, profile, &second,
                                   &second_decision, error, sizeof(error)));
     XrProgramSemanticClosure *second_owner = second;
     ASSERT_FALSE(xi_module_take_scalar_program(
-        root->module, &second, &second_decision, error, sizeof(error)));
+        root->module, &second, &second_decision, profile, error,
+        sizeof(error)));
     ASSERT_TRUE(second == second_owner);
     xr_program_semantic_closure_free(second);
 
     xi_func_free(root);
+    ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    xr_semantic_plan_free(semantic);
     ASSERT_TRUE(xr_program_semantic_closure_verify(retained, error,
                                                    sizeof(error)));
     xr_program_semantic_closure_free(retained);
