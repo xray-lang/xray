@@ -362,6 +362,27 @@ static XrType tagged_string_array = {
     .container = {.element_type = &scalar_string},
 };
 
+static XrClassInfo source_fill_class_info = {.name = "FinalRefinementWorker"};
+
+static XrType source_fill_instance = {
+    .kind = XR_KIND_INSTANCE,
+    .id = 181,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .instance = {
+        .class_name = "FinalRefinementWorker",
+        .class_ref = &source_fill_class_info,
+    },
+};
+
+static XrType source_fill_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 182,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &source_fill_instance},
+};
+
 static XrFunctionParam array_hof_unary_int_params[] = {
     {.type = &scalar_int, .mode = XR_PARAM_READ},
 };
@@ -4407,6 +4428,174 @@ static void test_array_fill_scalar_authority_is_exact_and_fail_closed(void) {
     xi_func_free(function);
 }
 
+static void test_source_class_array_fill_refinement_is_exact_and_fail_closed(void) {
+    XiFunc *function = xi_func_new("source_class_array_fill_refinement", &scalar_unit);
+    REQUIRE(function != NULL);
+    XiModule *module = xi_module_new("fixture/source_class_array_fill_refinement.xr",
+                                     "source_class_array_fill_refinement", function);
+    REQUIRE(module != NULL &&
+            xi_module_set_identity(
+                module, "memory-module-v1:id=37:source-class-array-fill-refinement-v1"));
+    function->module = module;
+    XiClassData declaration = {
+        .class_info = &source_fill_class_info,
+        .class_name = "FinalRefinementWorker",
+        .explicit_final = true,
+        .needs_runtime_type = true,
+    };
+    module->classes = (XiClassData **) xr_malloc(sizeof(*module->classes));
+    REQUIRE(module->classes != NULL);
+    module->classes[0] = &declaration;
+    module->nclasses = 1;
+
+    XiBlock *entry = xi_block_new(function);
+    REQUIRE(entry != NULL);
+    function->nparams = function->min_params = 2;
+    function->params = (XiValue **) xr_calloc(2, sizeof(*function->params));
+    REQUIRE(function->params != NULL);
+    function->params[0] = xi_param(function, entry, 0, &source_fill_array);
+    function->params[1] = xi_param(function, entry, 1, &source_fill_instance);
+    REQUIRE(function->params[0] != NULL && function->params[1] != NULL);
+    function->arc_borrow_sig =
+        (XiBorrowSig *) xi_func_arena_alloc(function, (uint32_t) sizeof(*function->arc_borrow_sig));
+    REQUIRE(function->arc_borrow_sig != NULL);
+    function->arc_borrow_sig->nparams = 2;
+    function->arc_borrow_sig->param_own[0] = XI_OWN_BORROWED;
+    function->arc_borrow_sig->param_own[1] = XI_OWN_OWNED;
+    function->arc_borrow_sig->valid = true;
+
+    XiValue *start = xi_const_int(function, entry, 1, &scalar_int);
+    XiValue *end = xi_const_int(function, entry, 3, &scalar_int);
+    XiValue *fill = xi_value_new(function, entry, XI_CALL_METHOD, &source_fill_array, 4);
+    REQUIRE(start != NULL && end != NULL && fill != NULL);
+    fill->args[0] = function->params[0];
+    fill->args[1] = function->params[1];
+    fill->args[2] = start;
+    fill->args[3] = end;
+    fill->aux = (void *) "fill";
+    fill->aux_int = (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+    fill->result_alias_operand = 0;
+    xi_block_set_return(entry, NULL);
+
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = build_attached_target_plan(function, &profile);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (candidate && candidate->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
+            candidate->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1) {
+            REQUIRE(operation == NULL);
+            operation = candidate;
+            operation_index = i;
+        }
+    }
+    REQUIRE(operation != NULL && operation->operand_count == 4);
+    XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; i < target->calls_count; i++)
+        if (target->calls[i].semantic_operation == operation_index) {
+            REQUIRE(call == NULL);
+            call = &target->calls[i];
+        }
+    REQUIRE(call != NULL && call->argument_count == 4 &&
+            call->calling_convention == XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR &&
+            call->target_kind == XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR &&
+            call->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    REQUIRE(operands && operation->operand_begin + 4u <= operand_count);
+    XrTargetCallArgumentRecord *arguments = &target->call_arguments[call->argument_begin];
+    for (uint16_t ordinal = 0; ordinal < 4; ordinal++) {
+        const XrTargetCallArgumentRecord *argument = &arguments[ordinal];
+        REQUIRE(argument->ordinal == ordinal &&
+                argument->semantic_value ==
+                    operands[operation->operand_begin + ordinal].value &&
+                argument->ownership ==
+                    (ordinal == 0 ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_CONSUME) &&
+                argument->array_element_storage ==
+                    (ordinal == 1 ? XR_TARGET_ARRAY_STORAGE_TAGGED
+                                  : XR_TARGET_ARRAY_STORAGE_NONE) &&
+                target->machine_reps[argument->register_rep].kind ==
+                    (ordinal < 2 ? XR_MACHINE_REP_DYN_VALUE : XR_MACHINE_REP_I64));
+    }
+    const XrTargetValueRepRecord *result_binding =
+        xr_target_plan_value_rep(target, operation->result_value);
+    const XrTargetMachineRepRecord *result_rep =
+        result_binding ? xr_target_plan_machine_rep(target, result_binding->register_rep) : NULL;
+    const XrTargetSlotRecord *result_slot =
+        result_binding && result_binding->slot < target->slots_count
+            ? &target->slots[result_binding->slot]
+            : NULL;
+    const XrTargetLayoutRecord *result_layout = NULL;
+    for (uint32_t i = 0; i < target->layouts_count; i++)
+        if (target->layouts[i].semantic_type == operation->result_type)
+            result_layout = &target->layouts[i];
+    REQUIRE(result_binding && result_rep && result_slot && result_layout &&
+            result_rep->kind == XR_MACHINE_REP_DYN_VALUE &&
+            result_rep->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            result_rep->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            result_slot->semantic_operation == operation_index &&
+            result_slot->root_kind == XR_TARGET_ROOT_DYNAMIC &&
+            result_slot->ownership == XR_TARGET_OWNERSHIP_OWNED &&
+            result_layout->kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            result_layout->array_element_storage == XR_TARGET_ARRAY_STORAGE_TAGGED);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    REQUIRE(xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &refinement, &diag));
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
+    REQUIRE(refinement != NULL && view.frozen && view.verified && view.record_count == 0);
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(function->params[0]->rep == XR_REP_TAGGED &&
+            function->params[1]->rep == XR_REP_TAGGED && start->rep == XR_REP_I64 &&
+            end->rep == XR_REP_I64 && fill->rep == XR_REP_TAGGED &&
+            xr_aot_representation_materialization_verify(
+                &view, function, target, &policy, &diag));
+
+    XiValue *saved_element = fill->args[1];
+    fill->args[1] = start;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
+    fill->args[1] = saved_element;
+
+    XiValue *saved_start = fill->args[2];
+    fill->args[2] = end;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    fill->args[2] = saved_start;
+
+    int64_t saved_method = fill->aux_int;
+    fill->aux_int = (int64_t) XI_METHOD_SYMBOL_PUSH << 1;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY ||
+            diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    fill->aux_int = saved_method;
+
+    XrRep saved_rep = function->params[1]->rep;
+    function->params[1]->rep = XR_REP_I64;
+    REQUIRE(!xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_REPRESENTATION ||
+            diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE ||
+            diag.issue == XR_AOT_REFINEMENT_USE_SITE);
+    function->params[1]->rep = saved_rep;
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &view, function, target, &policy, &diag));
+
+    xr_aot_refinement_plan_free(refinement);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(function);
+}
+
 static XrTargetPlan *build_array_hof_refinement_fixture(
     uint8_t kind, XiFunc **out_function, XrTargetProfile **out_profile) {
     bool reduce = kind == XR_TARGET_ARRAY_HOF_REDUCE;
@@ -4712,6 +4901,11 @@ static void test_string_concat_cleanup_materialization_is_exact(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "source-class-array-fill-refinement") == 0) {
+        test_source_class_array_fill_refinement_is_exact_and_fail_closed();
+        puts("Source-class Array.fill AOT refinement tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "tagged-string-array-copy-refinement") == 0) {
         test_tagged_string_array_copy_refinement_is_exact();
         puts("Tagged String Array copy AOT refinement tests passed");
@@ -4756,6 +4950,7 @@ int main(int argc, char **argv) {
     test_scalar_array_allocation_storage_is_exact_and_fail_closed();
     test_array_intrinsic_index_storage_is_exact_and_fail_closed();
     test_array_fill_scalar_authority_is_exact_and_fail_closed();
+    test_source_class_array_fill_refinement_is_exact_and_fail_closed();
     test_array_hof_refinement_is_exact_and_fail_closed();
     test_string_concat_cleanup_materialization_is_exact();
     test_enum_descriptor_adapter_refuses_without_layout_family();

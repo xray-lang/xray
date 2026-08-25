@@ -24,6 +24,7 @@
 #include "../../plan/semantic/xr_semantic_range_slice_shape.h"
 #include "../../plan/semantic/xr_semantic_graph.h"
 #include "../../plan/semantic/xr_semantic_allocation_shape.h"
+#include "../../plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../plan/semantic/xr_semantic_class_shape.h"
 #include "../../plan/semantic/xr_semantic_cleanup_shape.h"
@@ -1488,6 +1489,108 @@ static bool aot_array_fill_scalar_is_exact(const XrSemanticPlan *semantic,
         *fill_value = fill->value;
     if (target_storage)
         *target_storage = storage;
+    return true;
+}
+
+typedef struct AotSourceClassArrayFillAuthority {
+    uint32_t operation;
+    uint32_t receiver;
+    uint32_t element;
+    uint32_t start;
+    uint32_t end;
+    uint32_t receiver_type;
+    uint32_t element_type;
+} AotSourceClassArrayFillAuthority;
+
+/* Rebuild the one reference-capable Array.fill shape from frozen semantic
+ * rows.  The exact generated method id and the shared member-shape row jointly
+ * identify the operation; no live selector, opcode-only rule, or element-tag
+ * guess participates. */
+static bool aot_source_class_array_fill_semantic_is_exact(
+    const XrSemanticPlan *semantic, uint32_t operation_index,
+    AotSourceClassArrayFillAuthority *out) {
+    const XrSemanticOperationRecord *operation =
+        semantic ? xr_semantic_plan_operation(semantic, operation_index) : NULL;
+    uint32_t operand_count = 0, metadata_count = 0, child_count = 0;
+    const XrSemanticOperandRecord *operands =
+        semantic ? xr_semantic_plan_operands(semantic, &operand_count) : NULL;
+    const char *const *metadata =
+        semantic ? xr_semantic_plan_metadata(semantic, &metadata_count) : NULL;
+    const uint32_t *children =
+        semantic ? xr_semantic_plan_type_children(semantic, &child_count) : NULL;
+    if (!semantic || !operation || !operands || !metadata || !children ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR ||
+        operation->opcode != XI_CALL_METHOD || operation->operand_count != 4 ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        operation->metadata_count != 1 || operation->metadata_begin >= metadata_count ||
+        operation->semantic_immediate != (int64_t) XI_METHOD_SYMBOL_FILL << 1 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL_METHOD) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL_METHOD) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL_METHOD) ||
+        operation->array_element_storage != XR_ELEM_ANY)
+        return false;
+    const XrArrayMemberShape *shape =
+        xr_array_member_shape(metadata[operation->metadata_begin], operation->operand_count);
+    const XrSemanticOperandRecord *rows = &operands[operation->operand_begin];
+    const XrSemanticTypeRecord *array = xr_semantic_plan_type(semantic, rows[0].type);
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(semantic, operation->function);
+    if (!shape || shape->element_operand != 1 ||
+        shape->element_access != XR_ARRAY_MEMBER_ELEMENT_ACCESS_STORE ||
+        shape->reference_action != XR_ARRAY_MEMBER_REFERENCE_CONSUME_INTO_STORAGE ||
+        shape->reference_drop != XR_ARRAY_MEMBER_REFERENCE_DROP_RELEASE_ON_ERASE_OR_DESTROY ||
+        !function || !xr_semantic_array_type_row_is_exact(array) ||
+        array->child_begin >= child_count)
+        return false;
+    uint32_t element_type_index = children[array->child_begin];
+    const XrSemanticTypeRecord *element_type =
+        xr_semantic_plan_type(semantic, element_type_index);
+    bool exact_result =
+        operation->result_type == rows[0].type && operation->result_alias_operand == 0 &&
+        ((operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
+          operation->return_provenance == XR_SEM_RETURN_BORROWED_PARAM &&
+          operation->return_parameter == 0 && operation->return_complete == 1) ||
+         (operation->result_ownership == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT &&
+          operation->return_provenance == XR_SEM_RETURN_NONE &&
+          operation->return_parameter == -1 && operation->return_complete == 0));
+    if (!element_type || !exact_result ||
+        xr_semantic_class_instance_type_source_class(semantic, element_type) ==
+            XR_SEMANTIC_INDEX_NONE ||
+        rows[0].role != XR_SEM_OPERAND_RECEIVER || rows[0].parameter != -1 ||
+        rows[0].flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        rows[0].ownership_action != XR_SEM_OPERAND_BORROW ||
+        rows[0].transfer_mode != XR_TRANSFER_SHARE)
+        return false;
+    for (uint16_t ordinal = 1; ordinal < operation->operand_count; ordinal++) {
+        const XrSemanticTypeRecord *argument_type =
+            xr_semantic_plan_type(semantic, rows[ordinal].type);
+        if (!xr_semantic_array_member_argument_is_exact(
+                shape, &rows[ordinal], argument_type, ordinal, element_type_index) ||
+            rows[ordinal].transfer_mode != XR_TRANSFER_SHARE)
+            return false;
+    }
+    for (uint16_t ordinal = 0; ordinal < operation->operand_count; ordinal++)
+        if (rows[ordinal].value < function->value_begin ||
+            rows[ordinal].value >= function->value_begin + function->value_count)
+            return false;
+    if (operation->result_value < function->value_begin ||
+        operation->result_value >= function->value_begin + function->value_count)
+        return false;
+    if (out)
+        *out = (AotSourceClassArrayFillAuthority) {
+            .operation = operation_index,
+            .receiver = rows[0].value,
+            .element = rows[1].value,
+            .start = rows[2].value,
+            .end = rows[3].value,
+            .receiver_type = rows[0].type,
+            .element_type = element_type_index,
+        };
     return true;
 }
 
@@ -5683,6 +5786,135 @@ static bool oracle_dynamic_source_class_parameter_storage(const VerifyAuthority 
     return true;
 }
 
+/* The refinement baseline has already run the independent TargetPlan and
+ * profile verifiers.  This consumer therefore does not restate their ABI,
+ * layout, slot, or stable-id contracts.  It only joins the verified call row
+ * and its ordered argument partition to the exact semantic values and machine
+ * representations that the live Xi operation must materialize. */
+static bool aot_source_class_array_fill_binding_is_exact(
+    const VerifyAuthority *ctx, uint32_t operation_index,
+    AotSourceClassArrayFillAuthority *out) {
+    AotSourceClassArrayFillAuthority shape = {0};
+    if (!ctx || operation_index >= ctx->operation_count ||
+        !aot_source_class_array_fill_semantic_is_exact(ctx->semantic, operation_index, &shape))
+        return false;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(ctx->semantic, operation_index);
+    uint32_t call_index = ctx->call_by_operation[operation_index];
+    uint32_t call_count = 0, argument_count = 0;
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(ctx->target_plan, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(ctx->target_plan, &argument_count);
+    const XrTargetCallRecord *call =
+        calls && call_index < call_count ? &calls[call_index] : NULL;
+    const XrTargetValueRepRecord *result =
+        xr_target_plan_value_rep(ctx->target_plan, operation->result_value);
+    const XrTargetMachineRepRecord *result_register =
+        result ? xr_target_plan_machine_rep(ctx->target_plan, result->register_rep) : NULL;
+    const XrTargetMachineRepRecord *result_memory =
+        result ? xr_target_plan_machine_rep(ctx->target_plan, result->memory_rep) : NULL;
+    if (!operation || !call || !arguments || !result || !result_register || !result_memory ||
+        call->id != call_index ||
+        call->semantic_operation != operation_index ||
+        call->result_value != operation->result_value || call->result_slot != result->slot ||
+        call->result_register_rep != result->register_rep ||
+        call->result_memory_rep != result->memory_rep ||
+        call->argument_count != 4 ||
+        call->argument_begin > argument_count ||
+        call->argument_count > argument_count - call->argument_begin ||
+        call->adapter_count != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_ARRAY_MEMBER_SCALAR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_ARRAY_MEMBER_SCALAR ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_TAGGED ||
+        result_register->kind != XR_MACHINE_REP_DYN_VALUE ||
+        result_memory->kind != XR_MACHINE_REP_DYN_VALUE ||
+        result_register->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        result_memory->root_kind != XR_TARGET_ROOT_DYNAMIC ||
+        result_register->ownership != XR_TARGET_OWNERSHIP_OWNED ||
+        result_memory->ownership != XR_TARGET_OWNERSHIP_OWNED)
+        return false;
+
+    uint32_t semantic_operand_count = 0;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(ctx->semantic, &semantic_operand_count);
+    for (uint16_t ordinal = 0; ordinal < 4; ordinal++) {
+        uint32_t semantic_operand = operation->operand_begin + ordinal;
+        if (!semantic_operands || semantic_operand >= semantic_operand_count)
+            return false;
+        const XrSemanticOperandRecord *operand = &semantic_operands[semantic_operand];
+        const XrTargetValueRepRecord *caller =
+            xr_target_plan_value_rep(ctx->target_plan, operand->value);
+        const XrTargetMachineRepRecord *caller_register =
+            caller ? xr_target_plan_machine_rep(ctx->target_plan, caller->register_rep) : NULL;
+        const XrTargetMachineRepRecord *caller_memory =
+            caller ? xr_target_plan_machine_rep(ctx->target_plan, caller->memory_rep) : NULL;
+        const XrTargetCallArgumentRecord *argument =
+            &arguments[call->argument_begin + ordinal];
+        XrRep storage = XR_REP_VOID;
+        uint16_t machine = XR_MACHINE_REP_COUNT;
+        bool exact_storage =
+            ordinal == 0
+                ? oracle_array_tagged_carrier_storage(ctx, operand->value, &storage, &machine)
+            : ordinal == 1
+                ? (oracle_dynamic_source_class_parameter_storage(
+                       ctx, operand->value, &storage, &machine) ||
+                   oracle_dynamic_source_class_instance_storage(
+                       ctx, operand->value, &storage, &machine))
+                : oracle_machine_storage(ctx, operand->value, &storage, &machine);
+        uint32_t expected_value = ordinal == 0   ? shape.receiver
+                                  : ordinal == 1 ? shape.element
+                                  : ordinal == 2 ? shape.start
+                                                 : shape.end;
+        uint16_t expected_machine = ordinal < 2 ? XR_MACHINE_REP_DYN_VALUE
+                                                : XR_MACHINE_REP_I64;
+        XrRep expected_storage = ordinal < 2 ? XR_REP_TAGGED : XR_REP_I64;
+        if (!caller || !caller_register || !caller_memory ||
+            !exact_storage || operand->value != expected_value ||
+            storage != expected_storage || machine != expected_machine ||
+            argument->call != call_index || argument->semantic_operand != semantic_operand ||
+            argument->semantic_value != expected_value ||
+            argument->callee_parameter != XR_SEMANTIC_INDEX_NONE ||
+            argument->caller_slot != caller->slot ||
+            argument->callee_slot != XR_SEMANTIC_INDEX_NONE ||
+            argument->register_rep != caller->register_rep ||
+            argument->memory_rep != caller->memory_rep ||
+            argument->callee_register_rep != caller->register_rep ||
+            argument->callee_memory_rep != caller->memory_rep ||
+            argument->ordinal != ordinal || argument->mode != XR_TARGET_CALL_VALUE ||
+            argument->ownership !=
+                (ordinal == 0 ? XR_TARGET_CALL_BORROW : XR_TARGET_CALL_CONSUME) ||
+            argument->array_element_storage !=
+                (ordinal == 1 ? XR_TARGET_ARRAY_STORAGE_TAGGED
+                              : XR_TARGET_ARRAY_STORAGE_NONE) ||
+            caller_register->kind != expected_machine ||
+            caller_memory->kind != expected_machine)
+            return false;
+    }
+    if (out)
+        *out = shape;
+    return true;
+}
+
+static bool oracle_dynamic_source_class_array_fill_result_storage(
+    const VerifyAuthority *ctx, uint32_t semantic_value, XrRep *out_storage,
+    uint16_t *out_machine_kind) {
+    if (!ctx || semantic_value >= ctx->value_count || !out_storage || !out_machine_kind)
+        return false;
+    uint32_t operation_index = ctx->operation_by_value[semantic_value];
+    AotSourceClassArrayFillAuthority shape = {0};
+    if (operation_index >= ctx->operation_count ||
+        !aot_source_class_array_fill_binding_is_exact(ctx, operation_index, &shape))
+        return false;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(ctx->semantic, operation_index);
+    if (!operation || operation->result_value != semantic_value)
+        return false;
+    *out_storage = XR_REP_TAGGED;
+    *out_machine_kind = XR_MACHINE_REP_DYN_VALUE;
+    return true;
+}
+
 static bool aot_u8_slice_type_is_exact(const XrSemanticPlan *semantic, uint32_t type_index,
                                        uint32_t *out_element_type) {
     const XrSemanticTypeRecord *type =
@@ -7857,6 +8089,14 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                                                            out_machine_kind);
             break;
         case XI_CALL_METHOD:
+            if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
+                operation->operand_count == 4 &&
+                operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1)
+                /* This exact family owns its dynamic result.  A malformed row
+                 * must not fall through to the type-shaped dynamic binding
+                 * below and acquire a second, weaker owner. */
+                return oracle_dynamic_source_class_array_fill_result_storage(
+                    ctx, semantic_value, out_storage, out_machine_kind);
             if (operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_HOF)
                 return oracle_array_hof_result_storage(ctx, semantic_value, out_storage,
                                                        out_machine_kind);
@@ -8551,6 +8791,23 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                  * one, so the demand could not be met at all. The bound is
                  * native on both sides, which leaves nothing to adapt. */
                 *out_storage = XR_REP_I64;
+                return true;
+            }
+            if (operation->opcode == XI_CALL_METHOD &&
+                operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
+                operation->operand_count == 4 &&
+                operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1) {
+                AotSourceClassArrayFillAuthority shape = {0};
+                if (operand_index >= 4 ||
+                    !aot_source_class_array_fill_binding_is_exact(ctx, operation_index, &shape))
+                    return false;
+                uint32_t expected = operand_index == 0   ? shape.receiver
+                                    : operand_index == 1 ? shape.element
+                                    : operand_index == 2 ? shape.start
+                                                         : shape.end;
+                if (source_value != expected)
+                    return false;
+                *out_storage = operand_index < 2 ? XR_REP_TAGGED : XR_REP_I64;
                 return true;
             }
             if (operation->opcode == XI_CALL_METHOD &&
@@ -9743,6 +10000,37 @@ static bool verify_exact_dynamic_storage_materialization(const XrAotRefinementPl
             operation->operand_count > operand_count - operation->operand_begin) {
             valid = false;
             break;
+        }
+        bool source_class_array_fill_candidate =
+            operation->opcode == XI_CALL_METHOD &&
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_MEMBER_SCALAR &&
+            operation->operand_count == 4 &&
+            operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_FILL << 1;
+        if (source_class_array_fill_candidate) {
+            AotSourceClassArrayFillAuthority shape = {0};
+            uint32_t local_value = operation->result_value - semantic_function->value_begin;
+            bool exact = aot_source_class_array_fill_binding_is_exact(&ctx, i, &shape) && user &&
+                         materialized_operation_shape_matches(operation, user, local_value) &&
+                         user->nargs == 4 && user->args && user->rep == XR_REP_TAGGED &&
+                         user->array_element_storage == XR_ELEM_ANY;
+            const uint32_t expected_values[4] = {
+                shape.receiver, shape.element, shape.start, shape.end};
+            for (uint16_t ordinal = 0; exact && ordinal < 4; ordinal++) {
+                const XiValue *source = expected_values[ordinal] < ctx.value_count
+                                            ? ctx.live_by_value[expected_values[ordinal]]
+                                            : NULL;
+                const XrSemanticOperandRecord *operand =
+                    &operands[operation->operand_begin + ordinal];
+                exact = source && user->args[ordinal] == source &&
+                        source_type_matches(
+                            source->type, xr_semantic_plan_type(ctx.semantic, operand->type)) &&
+                        source->rep == (ordinal < 2 ? XR_REP_TAGGED : XR_REP_I64);
+            }
+            if (!exact) {
+                set_diag(diag, XR_AOT_REFINEMENT_USE_SITE, i, shape.element, i);
+                valid = false;
+                break;
+            }
         }
         for (uint16_t a = 0; valid && a < operation->operand_count; a++) {
             uint32_t source_value = operands[operation->operand_begin + a].value;

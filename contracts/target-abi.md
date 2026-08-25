@@ -209,10 +209,17 @@ array-member family owns exactly the four-operand
 `Array<source-class>.fill(value, start, end)` call: its selector and numeric
 method identity, exact source-class element, tagged consume boundary, borrowed
 receiver, and two trivial i64 bounds are frozen and independently rebuilt.
-Shorter reference fill forms and other container methods remain unavailable.
-This Target slice grants no representation-refinement, C-emission, or VM
-execution recipe for source-class range fill; those layers must continue to
-fail closed until a later family owns them.
+Representation refinement consumes that exact four-argument identity only
+after TargetPlan and profile verification, then mechanically joins the
+verified result binding and ordered argument partition to the semantic values,
+dynamic carriers, ownership, and native i64 representations it materializes.
+It does not restate Target ABI, layout, or stable-id verification; its live
+materialization verifier separately binds the frozen values to the Xi edges
+and representations. The generic method-use and dynamic-result rules do not
+own this family and cannot admit a malformed range-fill row. Shorter reference
+fill forms and other container methods remain unavailable. This slice grants
+no C-emission or VM execution recipe for source-class range fill; those layers
+must continue to fail closed until a later family owns them.
 For exact `String.runes()`, schema 30 owns the borrowed String receiver, owned
 `Iterator<rune>` dynamic result, exact Target call identity, fixed
 `xrt_string_runes` symbol, slot, layout, and extent. Refinement independently
@@ -659,11 +666,11 @@ anchor-sha256: src/aot/xaot_prepare.c b025cbd2f99f6069b8ef142d840f09a1c2c1f996d4
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c 787a6bef6b2498164b08005832d5299ab8f54f2b62e15b5802d1c2bc1bf50992
 anchor-sha256: src/aot/xaot_verify.c b02e1be0c00c291d36de9f7eb62bcf2f00a7851a3e0aaf65f09edf76c769b154
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 82a663ecb49eea10f176ad4e119af74d1d64ba7530344c5c64016bb4ca57f3a6
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 8f07ec51d856e4c8b6f8f47f4c51721bb73d7ddf6c94979d1adc509b03946766
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 092c181dd8674dc8ca75f8328f4e457d1c20a1fb2aa713ad685c428838e49e2d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 90da67e8d99f712bb5e4dc0dfb290092a5db6c60decead1ab7ca989fd6116877
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c f85589af2fa95c2fca2acd21eb80ef2aeaf636b800ee72947e58c2ea5eb5ae47
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 0bb6b5995c89f5e7a8071cf20b7bc69a6adddbb3f626c2eeda539617e61363fd
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 0d084e51d37fe1303cf0e13aac560e90399209cea8bd42cba9d54fd823f54ed0
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 9a6cf43eba7f80398e5587caecc975669d37fa7ff75034dbf2e450259e73bf4f
