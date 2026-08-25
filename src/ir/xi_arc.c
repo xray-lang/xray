@@ -1032,6 +1032,13 @@ XR_FUNC uint8_t xi_arc_value_result_ownership(const XiFunc *function, const XiVa
     if (value->result_alias_operand >= 0 &&
         (uint16_t) value->result_alias_operand < value->nargs && value->args) {
         const XiValue *source = value->args[value->result_alias_operand];
+        if (source && source->op == XI_PARAM) {
+            uint8_t parameter_ownership = xi_arc_parameter_ownership(function, source);
+            if (parameter_ownership == XI_OWN_BORROWED)
+                return XI_GEN_RESULT_OWNERSHIP_BORROWED;
+            if (parameter_ownership == XI_OWN_OWNED)
+                return XI_GEN_RESULT_OWNERSHIP_OWNED;
+        }
         uint8_t source_ownership = xi_arc_value_result_ownership(function, source);
         if (source_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED ||
             source_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED)
