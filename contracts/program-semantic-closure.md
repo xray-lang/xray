@@ -184,5 +184,5 @@ anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c 8c5f8e46818a
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c 4bbb43d8d3e3296d02b62ff1669ebdeb6ea5018f3b181dd8297922046ebf3c94
 anchor-sha256: tests/unit/ir/test_xi_scalar_program.c 8464eb6b350b9f2dcc1ce2c58e4633a28fe2e4e47158bdddde20f13b668af142
-anchor-sha256: tests/unit/ir/test_xi_pipeline.c 5c362c2293dde9b3863b7e4c7f659409bef37b3a1b295344f9561f92a6d45998
+anchor-sha256: tests/unit/ir/test_xi_pipeline.c a05089ccf7471f13fb7a04d9f0d55403cfadcaece34e740a3c4c7aaf19bf5208
 anchor-sha256: tests/unit/CMakeLists.txt 42e546f6288d61ae5cf9724504cebe9e474cc42fc53d961e9f62002cf3efb341

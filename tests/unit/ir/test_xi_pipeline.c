@@ -638,10 +638,10 @@ TEST(e2e_string_concat) {
                                 "var c = a + b\nprint(c)",
                                 NULL);
     assert(p != NULL);
-    /* Xi pipeline uses STRBUF optimization for typed string concat,
-     * or falls back to ADD when types are unknown. Accept either. */
-    assert((has_opcode(p, OP_ADD) || has_opcode(p, OP_STRBUF_FINISH)) &&
-           "string concat uses ADD or STRBUF");
+    /* Canonical typed string concatenation lowers to XI_STR_CONCAT. Two parts
+     * fit the VM emitter's bounded range form, so the bytecode shape is exact. */
+    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 &&
+           "two-part string concat uses one STR_CONCAT_N");
     xr_instruction_unit_free(p);
 }
 
