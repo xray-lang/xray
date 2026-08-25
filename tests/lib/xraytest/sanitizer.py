@@ -89,6 +89,21 @@ def configured_generator(build_dir: Path) -> str | None:
     return None
 
 
+def resolve_compiler_command(command: str) -> str:
+    """Resolve a compiler driver without making a standard Windows LLVM
+    installation depend on a process-global PATH mutation.
+    """
+    resolved = shutil.which(command)
+    if resolved:
+        return resolved
+    program_files = os.environ.get("ProgramFiles")
+    if platform.IS_WINDOWS and program_files:
+        candidate = Path(program_files) / "LLVM" / "bin" / platform.exe_name(command)
+        if candidate.is_file():
+            return str(candidate)
+    return command
+
+
 def verify_configured(build_dir: Path, required_flag: str) -> str | None:
     """None when the tree really has the sanitizer on, else an error message.
 
@@ -217,8 +232,8 @@ def configure(spec: BuildSpec, project_dir: Path, jobs: int,
     argv = [
         "cmake", "-S", project_dir, "-B", build_dir, "-G", "Ninja",
         f"-DCMAKE_BUILD_TYPE={spec.build_type}",
-        f"-DCMAKE_C_COMPILER={spec.c_compiler}",
-        f"-DCMAKE_CXX_COMPILER={spec.cxx_compiler}",
+        f"-DCMAKE_C_COMPILER={resolve_compiler_command(spec.c_compiler)}",
+        f"-DCMAKE_CXX_COMPILER={resolve_compiler_command(spec.cxx_compiler)}",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     ]
     argv.extend(f"-D{flag}" for flag in spec.sanitizer_flags)

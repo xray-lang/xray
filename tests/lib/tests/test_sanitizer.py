@@ -14,6 +14,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from _support import bootstrap_xraytest
 
@@ -104,6 +105,21 @@ class CacheInspectionTest(unittest.TestCase):
         spec = sanitizer.BuildSpec(build_dir=self.build,
                                    sanitizer_flags=("ENABLE_ASAN=ON",))
         self.assertEqual(spec.verification_targets(), ("ENABLE_ASAN=ON",))
+
+    def test_compiler_command_uses_path_resolution(self):
+        with mock.patch.object(sanitizer.shutil, "which", return_value="C:/tools/clang.exe"):
+            self.assertEqual(sanitizer.resolve_compiler_command("clang"),
+                             "C:/tools/clang.exe")
+
+    def test_compiler_command_finds_standard_windows_llvm(self):
+        llvm_bin = self.build / "LLVM" / "bin"
+        llvm_bin.mkdir(parents=True)
+        compiler = llvm_bin / "clang.exe"
+        compiler.write_text("binary\n", encoding="utf-8")
+        with (mock.patch.object(sanitizer.shutil, "which", return_value=None),
+              mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
+            self.assertEqual(Path(sanitizer.resolve_compiler_command("clang")), compiler)
 
 
 class StaleSourceTest(unittest.TestCase):
