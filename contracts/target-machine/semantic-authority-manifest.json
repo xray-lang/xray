@@ -78,7 +78,7 @@
       ],
       "stable_identity": {
         "kind": "exact-u32",
-        "value": 39
+        "value": 40
       },
       "trust_boundary": "XSM and XTP readers reject a semantic schema mismatch before a decoded plan can be verified, frozen or activated"
     }
