@@ -56,50 +56,6 @@ static XrProto *eval_repl(XrCompilerSession *session, XrVMRuntime *isolate, cons
     return NULL;
 }
 
-TEST(product_isolate_profiles_install_exact_native_authority) {
-    static const XrIsolateProfile profiles[] = {
-        XR_ISOLATE_PROFILE_RUN,
-        XR_ISOLATE_PROFILE_EVAL,
-        XR_ISOLATE_PROFILE_TEST,
-        XR_ISOLATE_PROFILE_REPL,
-    };
-    XrTargetProfile *expected = NULL;
-    char error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &expected, error, sizeof(error)));
-    for (size_t i = 0; i < sizeof(profiles) / sizeof(profiles[0]); i++) {
-        XrVMRuntime *isolate = xr_isolate_profile_new(profiles[i]);
-        ASSERT_NOT_NULL(isolate);
-        XrCompilerSession *session =
-            xr_compiler_session_current_for_isolate(isolate);
-        ASSERT_NOT_NULL(session);
-        ASSERT_TRUE(xr_target_profile_require_exact(
-            expected, xr_compiler_session_target_profile(session), error,
-            sizeof(error)));
-        xray_vm_delete(isolate);
-    }
-    xr_target_profile_free(expected);
-}
-
-TEST(repl_eval_rejects_session_without_target_profile) {
-    XrVMRuntime *isolate = make_repl_iso();
-    ASSERT_NOT_NULL(isolate);
-    XrCompilerSessionConfig config = {
-        .vm_host = isolate,
-        .source_file = "<missing-target-profile>",
-        .repl_mode = true,
-    };
-    XrCompilerSession *session = xr_compiler_session_new(&config);
-    ASSERT_NOT_NULL(session);
-    ASSERT_NULL(xr_compiler_session_target_profile(session));
-    XrReplEvalResult result = xr_repl_eval(
-        session, isolate, "1 + 2\n", &k_repl_memory_authority);
-    ASSERT_EQ(XR_REPL_EVAL_COMPILE_ERROR, result.status);
-    ASSERT_NULL(result.proto);
-    xr_compiler_session_delete(session);
-    xray_vm_delete(isolate);
-}
-
 /* Find a symbol by name; returns -1 if not present. */
 static int find_symbol(const XrReplSymbolTable *t, const char *name) {
     if (!t)
@@ -128,15 +84,52 @@ static void read_tmp_output(FILE *out, char *buf, size_t cap) {
  * pipeline switch (Phase 2) — they prove the runtime store is sound
  * before anything starts emitting OP_GETGLOBAL / OP_SETGLOBAL. */
 
-TEST(globals_dict_initialized_with_isolate) {
-    /* Every isolate constructed through the standard path must have
-     * a non-NULL globals dict ready for use right after init.  This
-     * is the structural invariant the new opcodes rely on. */
+TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
+    static const XrIsolateProfile profiles[] = {
+        XR_ISOLATE_PROFILE_REPL,
+        XR_ISOLATE_PROFILE_RUN,
+        XR_ISOLATE_PROFILE_EVAL,
+        XR_ISOLATE_PROFILE_TEST,
+    };
+    XrTargetProfile *expected = NULL;
+    char error[256] = {0};
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
+        &expected, error, sizeof(error)));
+
     XrVMRuntime *iso = make_repl_iso();
-    ASSERT_NOT_NULL(iso);
-    ASSERT_NOT_NULL(iso->vm.globals);
-    ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 0);
-    xray_vm_delete(iso);
+    for (size_t i = 0; i < sizeof(profiles) / sizeof(profiles[0]); i++) {
+        if (i != 0)
+            iso = xr_isolate_profile_new(profiles[i]);
+        ASSERT_NOT_NULL(iso);
+        ASSERT_NOT_NULL(iso->vm.globals);
+        ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 0);
+
+        XrCompilerSession *installed_session =
+            xr_compiler_session_current_for_isolate(iso);
+        ASSERT_NOT_NULL(installed_session);
+        ASSERT_TRUE(xr_target_profile_require_exact(
+            expected, xr_compiler_session_target_profile(installed_session),
+            error, sizeof(error)));
+
+        if (i == 0) {
+            XrCompilerSessionConfig config = {
+                .vm_host = iso,
+                .source_file = "<missing-target-profile>",
+                .repl_mode = true,
+            };
+            XrCompilerSession *missing_session =
+                xr_compiler_session_new(&config);
+            ASSERT_NOT_NULL(missing_session);
+            ASSERT_NULL(xr_compiler_session_target_profile(missing_session));
+            XrReplEvalResult result = xr_repl_eval(
+                missing_session, iso, "1 + 2\n", &k_repl_memory_authority);
+            ASSERT_EQ(XR_REPL_EVAL_COMPILE_ERROR, result.status);
+            ASSERT_NULL(result.proto);
+            xr_compiler_session_delete(missing_session);
+        }
+        xray_vm_delete(iso);
+    }
+    xr_target_profile_free(expected);
 }
 
 TEST(globals_dict_set_get_round_trip) {
@@ -938,9 +931,7 @@ TEST(repl_print_type_simple_expression) {
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Globals Dict");
-RUN_TEST(globals_dict_initialized_with_isolate);
-RUN_TEST(product_isolate_profiles_install_exact_native_authority);
-RUN_TEST(repl_eval_rejects_session_without_target_profile);
+RUN_TEST(product_profiles_install_exact_authority_and_reject_missing_profile);
 RUN_TEST(globals_dict_set_get_round_trip);
 RUN_TEST(globals_dict_overwrite_keeps_count);
 RUN_TEST(globals_dict_missing_key_returns_null);

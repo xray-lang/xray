@@ -35,9 +35,7 @@ void xr_isolate_profile_params(XrIsolateProfile profile, XrVMConfig *out) {
 
 /* ========== Create ========== */
 
-static bool install_native_hosted_profile(XrVMRuntime *isolate) {
-    XrCompilerSession *session =
-        xr_compiler_session_current_for_isolate(isolate);
+static bool install_native_hosted_profile(XrCompilerSession *session) {
     XrTargetProfile *profile = NULL;
     char error[256] = {0};
     if (!session || !xr_runtime_target_profile_build_native_hosted(
@@ -64,7 +62,8 @@ XrVMRuntime *xr_isolate_profile_create(const XrVMConfig *params) {
     XrVMRuntime *iso = xray_vm_new_full(params);
     if (!iso) {
         fprintf(stderr, "xray: failed to create isolate\n");
-    } else if (!install_native_hosted_profile(iso)) {
+    } else if (!install_native_hosted_profile(
+                   xr_compiler_session_current_for_isolate(iso))) {
         xray_vm_delete(iso);
         iso = NULL;
     }
