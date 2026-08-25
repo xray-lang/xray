@@ -2056,14 +2056,7 @@ static void test_direct_local_shared_callee_storage_is_exact_and_fail_closed(voi
             register_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
             memory_rep->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
             register_rep->root_kind == XR_TARGET_ROOT_DYNAMIC);
-    REQUIRE(binding->slot < fixture.target_plan->slots_count);
-    const XrTargetSlotRecord *slot =
-        &fixture.target_plan->slots[binding->slot];
-    REQUIRE(slot->semantic_value == load_value &&
-            slot->semantic_operation == load_operation &&
-            slot->role == XR_TARGET_SLOT_TEMPORARY &&
-            slot->ownership == XR_TARGET_OWNERSHIP_BORROWED &&
-            slot->root_kind == XR_TARGET_ROOT_DYNAMIC);
+    REQUIRE(binding->slot == XR_SEMANTIC_INDEX_NONE);
 
     REQUIRE(fixture.target_plan->calls_count == 1);
     XrTargetCallRecord saved_call = fixture.target_plan->calls[0];

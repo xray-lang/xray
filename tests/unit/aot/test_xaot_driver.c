@@ -1336,6 +1336,11 @@ static void test_driver_direct_i64_call_consumes_target_plan(void) {
     ASSERT_TRUE(result.plan_dump != NULL);
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=add1", "abi_owner=target-plan"));
     ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "abi_owner=legacy"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED", "authority=target"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "value v1 op=GET_SHARED",
+                                   "slot=4294967295"));
+    ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=root", "value=v1"));
 
     const char *source = result.sources[0].c_source;
     const char *root = find_function_definition(source, "_root_");

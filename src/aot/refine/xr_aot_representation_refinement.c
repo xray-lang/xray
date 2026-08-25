@@ -7538,6 +7538,21 @@ static bool oracle_direct_local_callee_use(const VerifyAuthority *ctx, uint32_t 
            match->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
 }
 
+/* An exact direct-local callee is resolution authority, not a runtime value,
+ * when TargetPlan deliberately assigns it no slot. Its identity is consumed
+ * by the verified call row, so representation refinement must not invent a
+ * carrier that the executable plan cannot read. */
+static bool oracle_resolution_only_direct_callee_use(const VerifyAuthority *ctx,
+                                                     uint32_t operation_index,
+                                                     uint16_t operand_index,
+                                                     uint32_t source_value) {
+    const XrTargetValueRepRecord *binding =
+        ctx ? xr_target_plan_value_rep(ctx->target_plan, source_value) : NULL;
+    return binding && binding->semantic_value == source_value &&
+           binding->slot == XR_SEMANTIC_INDEX_NONE &&
+           oracle_direct_local_callee_use(ctx, operation_index, operand_index, source_value);
+}
+
 static bool oracle_direct_local_go_callee_use(const VerifyAuthority *ctx, uint32_t operation_index,
                                               uint16_t operand_index, uint32_t source_value) {
     const XrSemanticOperationRecord *operation =
@@ -9575,6 +9590,8 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_USE_SITE, ctx->record_count, source_value, i);
                 return false;
             }
+            if (oracle_resolution_only_direct_callee_use(oracle, i, a, source_value))
+                continue;
             bool has_definition =
                 oracle_definition_storage(oracle, source_value, &input_storage, &ignored_machine);
             bool has_use =
@@ -10648,6 +10665,9 @@ static bool verify_exact_semantic_coverage(VerifyAuthority *ctx) {
         for (uint16_t a = 0; a < operation->operand_count; a++) {
             uint32_t source_value = operands[operation->operand_begin + a].value;
             XrRep output_storage = XR_REP_TAGGED;
+            if (source_value < ctx->value_count &&
+                oracle_resolution_only_direct_callee_use(ctx, i, a, source_value))
+                continue;
             if (source_value >= ctx->value_count ||
                 !oracle_use_storage(ctx, i, a, source_value, &output_storage)) {
                 rep_trace_refusal(ctx, "the use-site oracle, replayed by the verifier",
