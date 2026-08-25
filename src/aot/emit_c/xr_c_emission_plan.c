@@ -216,20 +216,40 @@ static bool declared_scalar_c_rep(const XrSemanticTypeRecord *type, XrCValueRep 
     if (!type || !out || !c_type || (type->flags & XR_SEM_TYPE_NULLABLE) != 0)
         return false;
     uint8_t native = type->scalar_rep;
-    if (native == XR_SCALAR_REP_NONE) {
-        switch (type->kind) {
-            case XR_KIND_INT:
+    switch (type->kind) {
+        case XR_KIND_INT:
+            if (native == XR_SCALAR_REP_NONE)
                 native = XR_NATIVE_I64;
-                break;
-            case XR_KIND_FLOAT:
+            switch ((XrNativeType) native) {
+                case XR_NATIVE_I8:
+                case XR_NATIVE_U8:
+                case XR_NATIVE_I16:
+                case XR_NATIVE_U16:
+                case XR_NATIVE_I32:
+                case XR_NATIVE_U32:
+                case XR_NATIVE_I64:
+                case XR_NATIVE_U64:
+                case XR_NATIVE_ISIZE:
+                case XR_NATIVE_USIZE:
+                    break;
+                default:
+                    return false;
+            }
+            break;
+        case XR_KIND_FLOAT:
+            if (native == XR_SCALAR_REP_NONE)
                 native = XR_NATIVE_F64;
-                break;
-            case XR_KIND_BOOL:
-                native = XR_NATIVE_BOOL;
-                break;
-            default:
+            if (native != XR_NATIVE_F32 && native != XR_NATIVE_F64)
                 return false;
-        }
+            break;
+        case XR_KIND_BOOL:
+            if (native == XR_SCALAR_REP_NONE)
+                native = XR_NATIVE_BOOL;
+            if (native != XR_NATIVE_BOOL)
+                return false;
+            break;
+        default:
+            return false;
     }
     switch ((XrNativeType) native) {
         case XR_NATIVE_I8:

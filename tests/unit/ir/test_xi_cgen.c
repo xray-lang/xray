@@ -1940,7 +1940,14 @@ TEST(cgen_forward_use_predeclarations_have_no_dead_initializers) {
 
 TEST(cgen_trivial_span_value_clone_shares_immutable_c_local) {
     XrType int_type = {.kind = XR_KIND_INT, .id = 921, .scalar_rep = XR_NATIVE_I64, .frozen = true};
-    XrType span_type = {.kind = XR_KIND_SLICE, .id = 922, .frozen = true};
+    /* The aggregate kind must dominate incidental zero-valued scalar metadata
+     * when an uncalled function states its own C boundary. */
+    XrType span_type = {
+        .kind = XR_KIND_SLICE,
+        .id = 922,
+        .scalar_rep = XR_NATIVE_I64,
+        .frozen = true,
+    };
     span_type.container.element_type = &int_type;
     XiFunc *ir = xi_func_new("manual_c_span_clone", &span_type);
     TEST_REQUIRE(ir != NULL, "manual C-span-clone function allocated");
