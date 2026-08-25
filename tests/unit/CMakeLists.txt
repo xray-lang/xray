@@ -334,6 +334,10 @@ add_xray_unit_test(test_xi_arc_verify ir/test_xi_arc_verify.c)
 add_xray_unit_test(test_xi_source_move_verify ir/test_xi_source_move_verify.c)
 add_xray_unit_test(test_semantic_plan plan/test_semantic_plan.c)
 add_xray_unit_test(test_program_semantic_closure plan/test_program_semantic_closure.c)
+add_test(NAME test_program_semantic_call_locator
+    COMMAND $<TARGET_FILE:test_program_semantic_closure>)
+set_tests_properties(test_program_semantic_call_locator PROPERTIES
+    LABELS "semantic;program-closure;task-283")
 add_executable(test_semantic_type_admission plan/test_semantic_type_admission.c)
 target_include_directories(test_semantic_type_admission PRIVATE ${XRAY_COMMON_INCLUDES})
 add_test(NAME test_semantic_type_admission COMMAND $<TARGET_FILE:test_semantic_type_admission>)

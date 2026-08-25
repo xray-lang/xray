@@ -24,7 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(1)
+#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(2)
 
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES UINT32_C(256)
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES UINT32_C(4096)
@@ -82,8 +82,18 @@ typedef struct XrProgramSemanticFunctionInput {
     uint8_t reserved[7];
 } XrProgramSemanticFunctionInput;
 
+typedef struct XrProgramSemanticSourceLocator {
+    /* Coordinates are 1-indexed and the end point is exclusive. */
+    uint32_t kind;
+    uint32_t start_line;
+    uint32_t start_column;
+    uint32_t end_line;
+    uint32_t end_column;
+} XrProgramSemanticSourceLocator;
+
 typedef struct XrProgramSemanticCallInput {
     XrStableId callsite_identity;
+    XrProgramSemanticSourceLocator locator;
     XrStableId caller_function;
     XrStableId callee_function;
     XrFingerprint contract_fingerprint;
@@ -125,6 +135,7 @@ typedef struct XrProgramSemanticFunctionRecord {
 typedef struct XrProgramSemanticCallRecord {
     XrStableId id;
     XrStableId callsite_identity;
+    XrProgramSemanticSourceLocator locator;
     XrStableId caller_function;
     XrStableId callee_function;
     XrFingerprint contract_fingerprint;

@@ -15,6 +15,7 @@
 #include "xr_program_semantic_closure_internal.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -69,6 +70,23 @@ static void verifier_hash_fingerprint(XrSHA256Context *context, XrFingerprint fi
     xr_sha256_update(context, fingerprint.bytes, sizeof(fingerprint.bytes));
 }
 
+static void verifier_hash_framed_bytes(XrSHA256Context *context,
+                                       const uint8_t *bytes, size_t size) {
+    verifier_hash_u64(context, (uint64_t) size);
+    if (size)
+        xr_sha256_update(context, bytes, size);
+}
+
+static void verifier_hash_framed_id(XrSHA256Context *context, XrStableId id) {
+    verifier_hash_framed_bytes(context, id.bytes, sizeof(id.bytes));
+}
+
+static void verifier_hash_framed_fingerprint(XrSHA256Context *context,
+                                             XrFingerprint fingerprint) {
+    verifier_hash_framed_bytes(context, fingerprint.bytes,
+                               sizeof(fingerprint.bytes));
+}
+
 static XrStableId verifier_finish_id(XrSHA256Context *context) {
     uint8_t digest[XR_FINGERPRINT_BYTES];
     XrStableId id;
@@ -83,7 +101,8 @@ static XrStableId verifier_type_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    /* Independently preserve the published v1 semantic row identity frame. */
+    verifier_hash_u32(&context, UINT32_C(1));
     verifier_hash_fingerprint(&context, policy_fingerprint);
     verifier_hash_id(&context, row->module_identity);
     verifier_hash_id(&context, row->declaration_identity);
@@ -99,7 +118,7 @@ static XrStableId verifier_function_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_u32(&context, UINT32_C(1));
     verifier_hash_fingerprint(&context, policy_fingerprint);
     verifier_hash_id(&context, row->module_identity);
     verifier_hash_id(&context, row->declaration_identity);
@@ -116,12 +135,51 @@ static XrStableId verifier_call_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_u32(&context, UINT32_C(1));
     verifier_hash_fingerprint(&context, policy_fingerprint);
     verifier_hash_id(&context, row->callsite_identity);
     verifier_hash_id(&context, row->caller_function);
     verifier_hash_id(&context, row->callee_function);
     verifier_hash_fingerprint(&context, row->contract_fingerprint);
+    return verifier_finish_id(&context);
+}
+
+static bool verifier_locator_valid(XrProgramSemanticSourceLocator locator) {
+    if (locator.kind == 0 || locator.kind > INT32_MAX || locator.start_line == 0 ||
+        locator.start_line > INT32_MAX || locator.start_column == 0 ||
+        locator.start_column > INT32_MAX || locator.end_line == 0 ||
+        locator.end_line > INT32_MAX || locator.end_column == 0 ||
+        locator.end_column > INT32_MAX)
+        return false;
+    return locator.end_line > locator.start_line ||
+           (locator.end_line == locator.start_line &&
+            locator.end_column > locator.start_column);
+}
+
+static bool verifier_locator_equal(XrProgramSemanticSourceLocator left,
+                                   XrProgramSemanticSourceLocator right) {
+    return left.kind == right.kind && left.start_line == right.start_line &&
+           left.start_column == right.start_column && left.end_line == right.end_line &&
+           left.end_column == right.end_column;
+}
+
+static XrStableId verifier_source_callsite_identity(
+    const XrProgramSemanticModuleRecord *module,
+    const XrProgramSemanticFunctionRecord *caller,
+    XrProgramSemanticSourceLocator locator) {
+    static const uint8_t domain[] = "xray-source-scalar-callsite-v1";
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    verifier_hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    verifier_hash_u32(&context, UINT32_C(1));
+    verifier_hash_framed_fingerprint(&context, module->source_fingerprint);
+    verifier_hash_framed_id(&context, module->module_identity);
+    verifier_hash_framed_id(&context, caller->declaration_identity);
+    verifier_hash_u32(&context, locator.kind);
+    verifier_hash_u32(&context, locator.start_line);
+    verifier_hash_u32(&context, locator.start_column);
+    verifier_hash_u32(&context, locator.end_line);
+    verifier_hash_u32(&context, locator.end_column);
     return verifier_finish_id(&context);
 }
 
@@ -269,18 +327,42 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure,
         int caller = find_function(closure, row->caller_function);
         int callee = find_function(closure, row->callee_function);
         if (verifier_stable_id_zero(row->callsite_identity) ||
-            verifier_fingerprint_zero(row->contract_fingerprint) || caller < 0 || callee < 0 ||
+            verifier_fingerprint_zero(row->contract_fingerprint) ||
+            !verifier_locator_valid(row->locator) || caller < 0 || callee < 0 ||
             !verifier_id_equal(row->id,
-                               verifier_call_identity(closure->policy_fingerprint, row)) ||
-            (i && verifier_id_compare(closure->calls[i - 1u].id, row->id) >= 0))
+                               verifier_call_identity(closure->policy_fingerprint, row)))
             return reject(error, error_size, "XR_SEM_0013",
                           "resolved call identity is incomplete or non-canonical");
-        for (uint32_t j = 0; j < i; j++)
+        const XrProgramSemanticFunctionRecord *caller_row =
+            &closure->functions[(uint32_t) caller];
+        int caller_module_index = find_module(closure, caller_row->module_identity);
+        if (caller_module_index < 0 ||
+            !verifier_id_equal(
+                row->callsite_identity,
+                verifier_source_callsite_identity(
+                    &closure->modules[(uint32_t) caller_module_index], caller_row,
+                    row->locator)))
+            return reject(error, error_size, "XR_SEM_0019",
+                          "resolved call locator does not match its stable callsite");
+        for (uint32_t j = 0; j < i; j++) {
+            int previous_caller =
+                find_function(closure, closure->calls[j].caller_function);
+            if (previous_caller >= 0 &&
+                verifier_id_equal(
+                    closure->functions[(uint32_t) previous_caller].module_identity,
+                    caller_row->module_identity) &&
+                verifier_locator_equal(closure->calls[j].locator, row->locator))
+                return reject(error, error_size, "XR_SEM_0019",
+                              "resolved call source locator is duplicated");
             if (verifier_id_equal(closure->calls[j].callsite_identity,
                                   row->callsite_identity))
                 return reject(error, error_size, "XR_SEM_0019",
                               "resolved callsite identity is duplicated");
-        XrStableId caller_module = closure->functions[(uint32_t) caller].module_identity;
+        }
+        if (i && verifier_id_compare(closure->calls[i - 1u].id, row->id) >= 0)
+            return reject(error, error_size, "XR_SEM_0013",
+                          "resolved call identity is incomplete or non-canonical");
+        XrStableId caller_module = caller_row->module_identity;
         XrStableId callee_module = closure->functions[(uint32_t) callee].module_identity;
         if (!verifier_id_equal(caller_module, callee_module) &&
             !has_direct_dependency(closure, caller_module, callee_module))
@@ -451,7 +533,7 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure,
 
 static void verifier_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                          XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v1\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v2\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -493,6 +575,11 @@ static void verifier_closure_fingerprint(const XrProgramSemanticClosure *closure
     for (uint32_t i = 0; i < closure->call_count; i++) {
         verifier_hash_id(&context, closure->calls[i].id);
         verifier_hash_id(&context, closure->calls[i].callsite_identity);
+        verifier_hash_u32(&context, closure->calls[i].locator.kind);
+        verifier_hash_u32(&context, closure->calls[i].locator.start_line);
+        verifier_hash_u32(&context, closure->calls[i].locator.start_column);
+        verifier_hash_u32(&context, closure->calls[i].locator.end_line);
+        verifier_hash_u32(&context, closure->calls[i].locator.end_column);
         verifier_hash_id(&context, closure->calls[i].caller_function);
         verifier_hash_id(&context, closure->calls[i].callee_function);
         verifier_hash_fingerprint(&context, closure->calls[i].contract_fingerprint);

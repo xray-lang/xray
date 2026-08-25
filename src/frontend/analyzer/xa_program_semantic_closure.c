@@ -106,6 +106,13 @@ bool xa_typed_program_build_scalar_closure(const XaTypedProgram *typed_program,
     if (ok) {
         XrProgramSemanticCallInput input = {
             .callsite_identity = call->callsite_identity,
+            .locator = {
+                .kind = call->callsite_span.kind,
+                .start_line = call->callsite_span.start_line,
+                .start_column = call->callsite_span.start_column,
+                .end_line = call->callsite_span.end_line,
+                .end_column = call->callsite_span.end_column,
+            },
             .caller_function = function_ids[caller],
             .callee_function = function_ids[callee],
             .contract_fingerprint = call->contract_fingerprint,

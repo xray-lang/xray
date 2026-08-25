@@ -37,6 +37,7 @@ typedef struct ClosureFixtureOptions {
     bool include_dependency;
     bool include_cycle;
     bool include_orphan;
+    bool alternate_locator;
     const char *policy;
 } ClosureFixtureOptions;
 
@@ -51,6 +52,52 @@ static XrStableId stable_id(const char *key) {
     XrFingerprint digest;
     REQUIRE(xr_stable_id_from_key(key, &value, &digest));
     return value;
+}
+
+static void hash_u32(XrSHA256Context *context, uint32_t value) {
+    uint8_t bytes[4];
+    for (uint32_t i = 0; i < sizeof(bytes); i++)
+        bytes[i] = (uint8_t) (value >> (i * 8u));
+    xr_sha256_update(context, bytes, sizeof(bytes));
+}
+
+static void hash_u64(XrSHA256Context *context, uint64_t value) {
+    uint8_t bytes[8];
+    for (uint32_t i = 0; i < sizeof(bytes); i++)
+        bytes[i] = (uint8_t) (value >> (i * 8u));
+    xr_sha256_update(context, bytes, sizeof(bytes));
+}
+
+static void hash_framed(XrSHA256Context *context, const uint8_t *bytes,
+                        size_t size) {
+    hash_u64(context, (uint64_t) size);
+    xr_sha256_update(context, bytes, size);
+}
+
+static XrStableId source_callsite_identity(
+    const XrProgramSemanticModuleInput *module, XrStableId caller_declaration,
+    XrProgramSemanticSourceLocator locator) {
+    static const uint8_t domain[] = "xray-source-scalar-callsite-v1";
+    XrSHA256Context context;
+    uint8_t digest[XR_FINGERPRINT_BYTES];
+    XrStableId result;
+    xr_sha256_init(&context);
+    hash_framed(&context, domain, sizeof(domain) - 1u);
+    hash_u32(&context, UINT32_C(1));
+    hash_framed(&context, module->source_fingerprint.bytes,
+                sizeof(module->source_fingerprint.bytes));
+    hash_framed(&context, module->module_identity.bytes,
+                sizeof(module->module_identity.bytes));
+    hash_framed(&context, caller_declaration.bytes,
+                sizeof(caller_declaration.bytes));
+    hash_u32(&context, locator.kind);
+    hash_u32(&context, locator.start_line);
+    hash_u32(&context, locator.start_column);
+    hash_u32(&context, locator.end_line);
+    hash_u32(&context, locator.end_column);
+    xr_sha256_final(&context, digest);
+    memcpy(result.bytes, digest, sizeof(result.bytes));
+    return result;
 }
 
 static XrProgramSemanticClosureLimits ordinary_limits(void) {
@@ -164,8 +211,17 @@ static XrProgramSemanticClosure *build_fixture(ClosureFixtureOptions options,
                                                       error, error_size))
             goto failed;
     }
+    XrProgramSemanticSourceLocator locator = {
+        .kind = 41,
+        .start_line = 10,
+        .start_column = options.alternate_locator ? 6u : 5u,
+        .end_line = 10,
+        .end_column = 20,
+    };
     XrProgramSemanticCallInput call = {
-        .callsite_identity = stable_id("callsite:psc-app:main:0"),
+        .callsite_identity = source_callsite_identity(
+            &app, entry.declaration_identity, locator),
+        .locator = locator,
         .caller_function = ids->entry_function,
         .callee_function = ids->helper_function,
         .contract_fingerprint = fingerprint("direct-call:fn():i64:no-suspend"),
@@ -181,6 +237,7 @@ failed:
 }
 
 static void test_deterministic_closed_world_identity(void) {
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(2));
     char error[256] = {0};
     ClosureFixtureIds first_ids = {0};
     ClosureFixtureIds second_ids = {0};
@@ -226,6 +283,45 @@ static void test_deterministic_closed_world_identity(void) {
         xr_program_semantic_closure_generation_id(second)));
     REQUIRE(memcmp(first_ids.pair_type.bytes, second_ids.pair_type.bytes,
                    XR_STABLE_ID_BYTES) == 0);
+    static const uint8_t v1_call_identity[XR_STABLE_ID_BYTES] = {
+        0xc0, 0x4a, 0xda, 0x85, 0x5d, 0xc3, 0x3c, 0x0f,
+        0xe6, 0xb8, 0x92, 0xe4, 0x83, 0x96, 0x29, 0xb0,
+    };
+    REQUIRE(memcmp(first_ids.call.bytes, v1_call_identity,
+                   sizeof(v1_call_identity)) == 0);
+    static const uint8_t v2_closure_fingerprint[XR_FINGERPRINT_BYTES] = {
+        0x13, 0x6d, 0x11, 0x1f, 0x18, 0xed, 0xa9, 0x42,
+        0x1d, 0x09, 0xf6, 0x23, 0x92, 0x31, 0x5b, 0x6e,
+        0x38, 0xfe, 0x5d, 0x6c, 0x57, 0x45, 0x62, 0xae,
+        0x31, 0xa4, 0x95, 0xea, 0x2b, 0x38, 0x1a, 0x4d,
+    };
+    static const uint8_t v2_generation_id[XR_STABLE_ID_BYTES] = {
+        0xbd, 0xec, 0x3e, 0xcf, 0x96, 0x97, 0x58, 0xe1,
+        0x34, 0x8c, 0xf4, 0x8b, 0xef, 0xe6, 0x99, 0x3f,
+    };
+    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes,
+                   v2_closure_fingerprint, sizeof(v2_closure_fingerprint)) == 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_generation_id(first).bytes,
+                   v2_generation_id, sizeof(v2_generation_id)) == 0);
+
+    ClosureFixtureIds alternate_locator_ids = {0};
+    XrProgramSemanticClosure *alternate_locator =
+        build_fixture((ClosureFixtureOptions) {.include_dependency = true,
+                                               .alternate_locator = true,
+                                               .policy = "policy-v1"},
+                      &alternate_locator_ids, error, sizeof(error));
+    REQUIRE(alternate_locator != NULL);
+    REQUIRE(xr_program_semantic_closure_freeze(alternate_locator, error,
+                                               sizeof(error)));
+    REQUIRE(memcmp(first_ids.call.bytes, alternate_locator_ids.call.bytes,
+                   XR_STABLE_ID_BYTES) != 0);
+    REQUIRE(memcmp(xr_program_semantic_closure_fingerprint(first).bytes,
+                   xr_program_semantic_closure_fingerprint(alternate_locator).bytes,
+                   XR_FINGERPRINT_BYTES) != 0);
+    REQUIRE(!xr_generation_closure_id_equal(
+        xr_program_semantic_closure_generation_id(first),
+        xr_program_semantic_closure_generation_id(alternate_locator)));
+    xr_program_semantic_closure_free(alternate_locator);
 
     ClosureFixtureIds other_policy_ids = {0};
     XrProgramSemanticClosure *other_policy =
@@ -407,9 +503,48 @@ static void test_independent_verifier_rejects_hostile_mutations(void) {
     xr_program_semantic_closure_free(closure);
 
     closure = fresh_frozen_fixture();
-    closure->modules[0].source_fingerprint.bytes[0] ^= 1u;
+    closure->modules[0].export_fingerprint.bytes[0] ^= 1u;
     REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
     REQUIRE(strstr(error, "fingerprint does not match its rows") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    closure->calls[0].locator.kind = 0;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "resolved call identity") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    closure->calls[0].locator.start_line = UINT32_MAX;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "resolved call identity") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    closure->calls[0].locator.end_line = closure->calls[0].locator.start_line;
+    closure->calls[0].locator.end_column = closure->calls[0].locator.start_column;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "resolved call identity") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    closure->calls[0].locator.kind++;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "locator does not match") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    closure->calls[0].locator.start_column++;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "locator does not match") != NULL);
+    xr_program_semantic_closure_free(closure);
+
+    closure = fresh_frozen_fixture();
+    REQUIRE(closure->call_capacity >= 2);
+    closure->calls[1] = closure->calls[0];
+    closure->call_count = 2;
+    REQUIRE(!xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    REQUIRE(strstr(error, "source locator is duplicated") != NULL);
     xr_program_semantic_closure_free(closure);
 
     closure = fresh_frozen_fixture();

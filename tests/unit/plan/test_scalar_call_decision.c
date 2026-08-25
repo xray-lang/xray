@@ -45,6 +45,48 @@ static XrStableId stable_id(const char *text) {
     return result;
 }
 
+static void locator_hash_u32(XrSHA256Context *context, uint32_t value) {
+    uint8_t bytes[4];
+    for (uint32_t i = 0; i < sizeof(bytes); i++)
+        bytes[i] = (uint8_t) (value >> (i * 8u));
+    xr_sha256_update(context, bytes, sizeof(bytes));
+}
+
+static void locator_hash_framed(XrSHA256Context *context,
+                                const uint8_t *bytes, size_t size) {
+    uint8_t length[8];
+    for (uint32_t i = 0; i < sizeof(length); i++)
+        length[i] = (uint8_t) ((uint64_t) size >> (i * 8u));
+    xr_sha256_update(context, length, sizeof(length));
+    xr_sha256_update(context, bytes, size);
+}
+
+static XrStableId source_callsite_identity(
+    const XrProgramSemanticModuleInput *module, XrStableId caller_declaration,
+    XrProgramSemanticSourceLocator locator) {
+    static const uint8_t domain[] = "xray-source-scalar-callsite-v1";
+    XrSHA256Context context;
+    uint8_t digest[XR_FINGERPRINT_BYTES];
+    XrStableId result;
+    xr_sha256_init(&context);
+    locator_hash_framed(&context, domain, sizeof(domain) - 1u);
+    locator_hash_u32(&context, UINT32_C(1));
+    locator_hash_framed(&context, module->source_fingerprint.bytes,
+                        sizeof(module->source_fingerprint.bytes));
+    locator_hash_framed(&context, module->module_identity.bytes,
+                        sizeof(module->module_identity.bytes));
+    locator_hash_framed(&context, caller_declaration.bytes,
+                        sizeof(caller_declaration.bytes));
+    locator_hash_u32(&context, locator.kind);
+    locator_hash_u32(&context, locator.start_line);
+    locator_hash_u32(&context, locator.start_column);
+    locator_hash_u32(&context, locator.end_line);
+    locator_hash_u32(&context, locator.end_column);
+    xr_sha256_final(&context, digest);
+    memcpy(result.bytes, digest, sizeof(result.bytes));
+    return result;
+}
+
 static XrProgramSemanticClosure *build_closure(FixtureMutation mutation) {
     XrProgramSemanticClosureLimits limits = {
         .max_modules = 1,
@@ -102,8 +144,17 @@ static XrProgramSemanticClosure *build_closure(FixtureMutation mutation) {
     REQUIRE(xr_scalar_i64_call_contract(&unary, &call_contract));
     if (mutation == FIXTURE_OPAQUE_CALL_CONTRACT)
         call_contract = fingerprint("opaque-direct-call-contract");
+    XrProgramSemanticSourceLocator locator = {
+        .kind = 41,
+        .start_line = 3,
+        .start_column = 12,
+        .end_line = 3,
+        .end_column = 24,
+    };
     XrProgramSemanticCallInput call = {
-        .callsite_identity = stable_id("callsite:scalar-call:entry:callee"),
+        .callsite_identity = source_callsite_identity(
+            &module_input, caller.declaration_identity, locator),
+        .locator = locator,
         .caller_function = caller_id,
         .callee_function = callee_id,
         .contract_fingerprint = call_contract,

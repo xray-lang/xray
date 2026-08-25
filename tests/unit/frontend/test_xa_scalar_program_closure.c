@@ -185,6 +185,24 @@ TEST(source_backed_scalar_snapshot_builds_verified_closure) {
     ASSERT_TRUE(fingerprint_equal(
         xr_program_semantic_closure_call(closure, 0)->contract_fingerprint,
         direct_call));
+    const XaScalarCallAuthority *source_call =
+        xa_scalar_program_authority_call(authority);
+    const XrProgramSemanticCallRecord *projected_call =
+        xr_program_semantic_closure_call(closure, 0);
+    ASSERT_NOT_NULL(source_call);
+    ASSERT_EQ_UINT(projected_call->locator.kind, source_call->callsite_span.kind);
+    ASSERT_EQ_UINT(projected_call->locator.start_line,
+                   source_call->callsite_span.start_line);
+    ASSERT_EQ_UINT(projected_call->locator.start_column,
+                   source_call->callsite_span.start_column);
+    ASSERT_EQ_UINT(projected_call->locator.end_line,
+                   source_call->callsite_span.end_line);
+    ASSERT_EQ_UINT(projected_call->locator.end_column,
+                   source_call->callsite_span.end_column);
+    ASSERT_TRUE(projected_call->locator.end_line > projected_call->locator.start_line ||
+                (projected_call->locator.end_line == projected_call->locator.start_line &&
+                 projected_call->locator.end_column >
+                     projected_call->locator.start_column));
     xr_program_semantic_closure_free(closure);
     fixture_cleanup(&fixture);
 }

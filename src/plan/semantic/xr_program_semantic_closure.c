@@ -68,6 +68,22 @@ static void hash_fingerprint(XrSHA256Context *context, XrFingerprint fingerprint
     xr_sha256_update(context, fingerprint.bytes, sizeof(fingerprint.bytes));
 }
 
+static void hash_framed_bytes(XrSHA256Context *context, const uint8_t *bytes,
+                              size_t size) {
+    hash_u64(context, (uint64_t) size);
+    if (size)
+        xr_sha256_update(context, bytes, size);
+}
+
+static void hash_framed_id(XrSHA256Context *context, XrStableId id) {
+    hash_framed_bytes(context, id.bytes, sizeof(id.bytes));
+}
+
+static void hash_framed_fingerprint(XrSHA256Context *context,
+                                    XrFingerprint fingerprint) {
+    hash_framed_bytes(context, fingerprint.bytes, sizeof(fingerprint.bytes));
+}
+
 static XrStableId finish_stable_id(XrSHA256Context *context) {
     uint8_t digest[XR_FINGERPRINT_BYTES];
     XrStableId id;
@@ -82,7 +98,8 @@ static XrStableId derive_type_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    /* PSC v2 preserves the already-published v1 semantic row identities. */
+    hash_u32(&context, UINT32_C(1));
     hash_fingerprint(&context, policy_fingerprint);
     hash_stable_id(&context, input->module_identity);
     hash_stable_id(&context, input->declaration_identity);
@@ -98,7 +115,7 @@ static XrStableId derive_function_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    hash_u32(&context, UINT32_C(1));
     hash_fingerprint(&context, policy_fingerprint);
     hash_stable_id(&context, input->module_identity);
     hash_stable_id(&context, input->declaration_identity);
@@ -115,13 +132,68 @@ static XrStableId derive_call_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    hash_u32(&context, UINT32_C(1));
     hash_fingerprint(&context, policy_fingerprint);
     hash_stable_id(&context, input->callsite_identity);
     hash_stable_id(&context, input->caller_function);
     hash_stable_id(&context, input->callee_function);
     hash_fingerprint(&context, input->contract_fingerprint);
     return finish_stable_id(&context);
+}
+
+static bool locator_is_valid(XrProgramSemanticSourceLocator locator) {
+    if (locator.kind == 0 || locator.kind > INT32_MAX || locator.start_line == 0 ||
+        locator.start_line > INT32_MAX || locator.start_column == 0 ||
+        locator.start_column > INT32_MAX || locator.end_line == 0 ||
+        locator.end_line > INT32_MAX || locator.end_column == 0 ||
+        locator.end_column > INT32_MAX)
+        return false;
+    return locator.end_line > locator.start_line ||
+           (locator.end_line == locator.start_line &&
+            locator.end_column > locator.start_column);
+}
+
+static XrStableId derive_source_callsite_identity(
+    const XrProgramSemanticModuleRecord *module,
+    const XrProgramSemanticFunctionRecord *caller,
+    XrProgramSemanticSourceLocator locator) {
+    static const uint8_t domain[] = "xray-source-scalar-callsite-v1";
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    hash_u32(&context, UINT32_C(1));
+    hash_framed_fingerprint(&context, module->source_fingerprint);
+    hash_framed_id(&context, module->module_identity);
+    hash_framed_id(&context, caller->declaration_identity);
+    hash_u32(&context, locator.kind);
+    hash_u32(&context, locator.start_line);
+    hash_u32(&context, locator.start_column);
+    hash_u32(&context, locator.end_line);
+    hash_u32(&context, locator.end_column);
+    return finish_stable_id(&context);
+}
+
+static const XrProgramSemanticFunctionRecord *find_function_record(
+    const XrProgramSemanticClosure *closure, XrStableId id) {
+    for (uint32_t i = 0; i < closure->function_count; i++)
+        if (stable_id_equal(closure->functions[i].id, id))
+            return &closure->functions[i];
+    return NULL;
+}
+
+static const XrProgramSemanticModuleRecord *find_module_record(
+    const XrProgramSemanticClosure *closure, XrStableId id) {
+    for (uint32_t i = 0; i < closure->module_count; i++)
+        if (stable_id_equal(closure->modules[i].module_identity, id))
+            return &closure->modules[i];
+    return NULL;
+}
+
+static bool locator_equal(XrProgramSemanticSourceLocator left,
+                          XrProgramSemanticSourceLocator right) {
+    return left.kind == right.kind && left.start_line == right.start_line &&
+           left.start_column == right.start_column && left.end_line == right.end_line &&
+           left.end_column == right.end_column;
 }
 
 static bool limits_are_valid(const XrProgramSemanticClosureLimits *limits) {
@@ -338,16 +410,35 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
     if (!collecting(closure) || !input || !call_identity ||
         stable_id_is_zero(input->callsite_identity) ||
         stable_id_is_zero(input->caller_function) ||
-        stable_id_is_zero(input->callee_function) ||
+        stable_id_is_zero(input->callee_function) || !locator_is_valid(input->locator) ||
         fingerprint_is_zero(input->contract_fingerprint))
         return fail(error, error_size, "XR_SEM_0019", "resolved call authority is incomplete");
+    const XrProgramSemanticFunctionRecord *caller =
+        find_function_record(closure, input->caller_function);
+    const XrProgramSemanticFunctionRecord *callee =
+        find_function_record(closure, input->callee_function);
+    const XrProgramSemanticModuleRecord *module =
+        caller ? find_module_record(closure, caller->module_identity) : NULL;
+    if (!caller || !callee || !module ||
+        !stable_id_equal(input->callsite_identity,
+                         derive_source_callsite_identity(module, caller,
+                                                         input->locator)))
+        return fail(error, error_size, "XR_SEM_0019",
+                    "resolved call locator does not match its stable callsite");
     XrStableId id = derive_call_identity(closure->policy_fingerprint, input);
     for (uint32_t i = 0; i < closure->call_count; i++) {
         const XrProgramSemanticCallRecord *row = &closure->calls[i];
+        const XrProgramSemanticFunctionRecord *existing_caller =
+            find_function_record(closure, row->caller_function);
         if (stable_id_equal(row->id, id) ||
             stable_id_equal(row->callsite_identity, input->callsite_identity))
             return fail(error, error_size, "XR_SEM_0019",
                         "resolved call authority is duplicated or conflicting");
+        if (existing_caller &&
+            stable_id_equal(existing_caller->module_identity, caller->module_identity) &&
+            locator_equal(row->locator, input->locator))
+            return fail(error, error_size, "XR_SEM_0019",
+                        "resolved call source locator is duplicated");
     }
     if (closure->call_count == closure->call_capacity &&
         !grow_table((void **) &closure->calls, &closure->call_capacity,
@@ -356,6 +447,7 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
     closure->calls[closure->call_count++] = (XrProgramSemanticCallRecord) {
         .id = id,
         .callsite_identity = input->callsite_identity,
+        .locator = input->locator,
         .caller_function = input->caller_function,
         .callee_function = input->callee_function,
         .contract_fingerprint = input->contract_fingerprint,
@@ -420,7 +512,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v1\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v2\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -462,6 +554,11 @@ static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
     for (uint32_t i = 0; i < closure->call_count; i++) {
         hash_stable_id(&context, closure->calls[i].id);
         hash_stable_id(&context, closure->calls[i].callsite_identity);
+        hash_u32(&context, closure->calls[i].locator.kind);
+        hash_u32(&context, closure->calls[i].locator.start_line);
+        hash_u32(&context, closure->calls[i].locator.start_column);
+        hash_u32(&context, closure->calls[i].locator.end_line);
+        hash_u32(&context, closure->calls[i].locator.end_column);
         hash_stable_id(&context, closure->calls[i].caller_function);
         hash_stable_id(&context, closure->calls[i].callee_function);
         hash_fingerprint(&context, closure->calls[i].contract_fingerprint);
