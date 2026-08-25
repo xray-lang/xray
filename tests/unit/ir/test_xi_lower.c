@@ -7,6 +7,7 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_ops_gen.h"
 #include "../../../src/ir/xi_lower.h"
 #include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
