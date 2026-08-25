@@ -25,6 +25,7 @@
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
+#include "../../../src/ir/xi_value_query.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan.h"
@@ -1043,6 +1044,7 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
     XrModuleGraph *graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
     XaAnalyzer *analyzer = NULL;
     XiFunc *ir = NULL;
+    XiModule **graph_modules = NULL;
     if (!graph)
         goto cleanup;
 
@@ -1099,9 +1101,20 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
     }
 
     XrModuleSpec *entry = &graph->specs[graph->entry_index];
+    /* This helper compiles only the entry module. A zeroed topo array still
+     * lets the production resolver close named native imports: an absent
+     * source module is then an exact native-registry lookup, while a graph
+     * source dependency has no XiModule pointer and remains fail-closed. */
+    graph_modules = (XiModule **) xr_calloc((size_t) graph->topo_count,
+                                            sizeof(*graph_modules));
+    if (!graph_modules)
+        goto cleanup;
     cfg.module_identity = entry->canonical;
     cfg.source_file = entry->source_path;
     cfg.run_emit = false;
+    cfg.module_graph = graph;
+    cfg.graph_modules = graph_modules;
+    cfg.graph_module_count = graph->topo_count;
     XiPipelineResult result = xi_pipeline_compile_program(entry->ast, analyzer, g_iso, &cfg);
     if (result.status != XI_PIPE_OK) {
         fprintf(stderr, "  PIPELINE FAILED: %s%s%s\n", xi_pipe_status_str(result.status),
@@ -1114,6 +1127,7 @@ static XiFunc *compile_to_ir_with_module_graph_config(const char *source, XiPipe
     xi_pipeline_result_free(&result);
 
 cleanup:
+    xr_free(graph_modules);
     if (analyzer) {
         xa_analyzer_set_graph(analyzer, NULL);
         xa_analyzer_free(analyzer);
@@ -2684,36 +2698,113 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
     xi_func_free(ir);
 }
 
-TEST(cgen_static_module_namespace_receivers_emit_no_shared_locals) {
+TEST(cgen_static_os_module_namespace_fields_emit_no_shared_locals) {
     const char *src = "import os\n"
-                      "import time\n"
                       "fn describe() -> string { return os.platform + os.arch }\n"
-                      "fn stamp() -> i64 { return time.nanos() }\n"
-                      "print(describe())\n"
-                      "print(stamp() >= 0)\n";
+                      "print(describe())\n";
     XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "static module namespace fixture should compile");
+    TEST_REQUIRE(ir != NULL, "static os module namespace fixture should compile");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL && !had_error, "static module namespace fixture should generate");
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "static os module namespace fixture should generate");
 
     const char *describe = find_static_function_definition(code, "test_describe_");
-    const char *stamp = find_static_function_definition(code, "test_stamp_");
-    TEST_REQUIRE(describe != NULL && stamp != NULL, "static namespace functions should emit");
+    TEST_REQUIRE(describe != NULL, "static os namespace function should emit");
     const char *describe_end = next_static_after(describe);
-    const char *stamp_end = next_static_after(stamp);
     TEST_REQUIRE(count_between(describe, describe_end, " = xrt_shared_") == 0,
                  "direct os field loads must not materialize their module namespace");
-    TEST_REQUIRE(count_between(stamp, stamp_end, " = xrt_shared_") == 0,
-                 "direct time calls must not materialize their module namespace");
     TEST_REQUIRE(contains_between(describe, describe_end, "xrt_os_platform()") &&
                      contains_between(describe, describe_end, "xrt_os_arch()"),
                  "os field helpers must remain emitted");
+
+    printf("  Generated direct os module namespace %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
+    const char *src = "import time\n"
+                      "fn stamp() -> i64 { return time.nanos() }\n"
+                      "print(stamp() >= 0)\n";
+    XiFunc *ir = compile_to_ir_with_module_graph(src);
+    TEST_REQUIRE(ir != NULL, "native time module namespace fixture should compile");
+
+    const XiValue *nanos_call = NULL;
+    for (uint16_t f = 0; f < ir->nchildren; f++) {
+        const XiFunc *function = ir->children[f];
+        for (uint32_t b = 0; function && b < function->nblocks; b++) {
+            const XiBlock *block = function->blocks[b];
+            for (uint32_t v = 0; block && v < block->nvalues; v++) {
+                const XiValue *candidate = block->values[v];
+                if (candidate && candidate->op == XI_CALL_METHOD && candidate->aux &&
+                    strcmp((const char *) candidate->aux, "nanos") == 0) {
+                    TEST_REQUIRE(nanos_call == NULL,
+                                 "native time fixture has one nanos callsite");
+                    nanos_call = candidate;
+                }
+            }
+        }
+    }
+    const XiImportRef *time_ref =
+        nanos_call && nanos_call->nargs > 0
+            ? xi_value_import_ref(nanos_call->block->func, nanos_call->args[0])
+            : NULL;
+    TEST_REQUIRE(time_ref && xi_import_ref_is_native_stdlib(time_ref) &&
+                     strcmp(time_ref->module_path, "time") == 0,
+                 "source resolver grounds the exact native time module identity");
+
+    uint32_t native_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (!operation ||
+            operation->intrinsic_kind != XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL)
+            continue;
+        TEST_REQUIRE(native_operation == XR_SEMANTIC_INDEX_NONE,
+                     "SemanticPlan publishes one native scalar call authority");
+        native_operation = i;
+    }
+    TEST_REQUIRE(native_operation != XR_SEMANTIC_INDEX_NONE,
+                 "SemanticPlan publishes exact time.nanos scalar authority");
+
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target = NULL;
+    char target_error[512] = {0};
+    TEST_REQUIRE(profile &&
+                     xr_target_plan_build(ir->semantic_plan, profile, &target, target_error,
+                                          sizeof(target_error)),
+                 "TargetPlan accepts exact time.nanos scalar authority");
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    uint32_t native_calls = 0;
+    for (uint32_t i = 0; calls && i < call_count; i++) {
+        if (calls[i].semantic_operation == native_operation &&
+            calls[i].target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR &&
+            calls[i].calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR)
+            native_calls++;
+    }
+    TEST_REQUIRE(native_calls == 1,
+                 "TargetPlan publishes one exact native module scalar call row");
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error,
+                 "native time module namespace fixture should generate");
+    const char *stamp = find_static_function_definition(code, "test_stamp_");
+    TEST_REQUIRE(stamp != NULL, "native time namespace function should emit");
+    const char *stamp_end = next_static_after(stamp);
+    TEST_REQUIRE(count_between(stamp, stamp_end, " = xrt_shared_") == 0,
+                 "direct time call must not materialize its module namespace");
     TEST_REQUIRE(contains_between(stamp, stamp_end, "xrt_time_nanos()"),
                  "time helper call must remain emitted");
 
-    printf("  Generated direct module namespaces %zu bytes of C code\n", strlen(code));
+    printf("  Generated exact native time module scalar call %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -14663,7 +14754,8 @@ int main(int argc, char **argv) {
     run_cgen_dead_native_box_without_source_storage_is_elided();
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
-    run_cgen_static_module_namespace_receivers_emit_no_shared_locals();
+    run_cgen_native_time_module_scalar_call_emits_no_shared_local();
+    run_cgen_static_os_module_namespace_fields_emit_no_shared_locals();
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();
     run_cgen_string_runes_consumes_immutable_emission_recipe();
