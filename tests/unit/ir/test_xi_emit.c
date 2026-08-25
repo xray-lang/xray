@@ -1253,7 +1253,7 @@ TEST(emit_addk_large_const) {
 /* ========== New Op Coverage ========== */
 
 TEST(emit_str_concat) {
-    /* STR_CONCAT with 2 parts -> STRBUF_NEW + 2*STRBUF_APPEND + STRBUF_FINISH */
+    /* Two parts fit the bounded range form exactly. */
     XiFunc *f = make_func("concat", &stub_string);
     XiBlock *entry = f->entry;
 
@@ -1261,61 +1261,59 @@ TEST(emit_str_concat) {
     XiValue *s2 = xi_const_str(f, entry, " world", &stub_string);
 
     XiValue *v = xi_value_new(f, entry, XI_STR_CONCAT, &stub_string, 2);
-    assert(v != NULL);
+    TEST_REQUIRE(v != NULL);
     v->args[0] = s1;
     v->args[1] = s2;
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
     XiEmitStatus s = xi_emit(f, NULL, &proto);
-    assert(s == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(s == XI_EMIT_OK && proto != NULL);
 
-    /* Verify sequence: STRBUF_NEW, STRBUF_APPEND, STRBUF_APPEND, STRBUF_FINISH */
-    bool found_new = false, found_append = false, found_finish = false;
+    int concat_count = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
-        OpCode op = GET_OPCODE(PROTO_CODE(proto, i));
-        if (op == OP_STRBUF_NEW)
-            found_new = true;
-        if (op == OP_STRBUF_APPEND)
-            found_append = true;
-        if (op == OP_STRBUF_FINISH)
-            found_finish = true;
+        XrInstruction inst = PROTO_CODE(proto, i);
+        OpCode op = GET_OPCODE(inst);
+        if (op == OP_STR_CONCAT_N) {
+            concat_count++;
+            TEST_REQUIRE(GETARG_C(inst) == 2);
+        }
     }
-    assert(found_new && "should have STRBUF_NEW");
-    assert(found_append && "should have STRBUF_APPEND");
-    assert(found_finish && "should have STRBUF_FINISH");
+    TEST_REQUIRE(concat_count == 1);
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
 }
 
-TEST(emit_str_concat_uint64_formats_before_append) {
+TEST(emit_str_concat_uint64_formats_before_range_concat) {
     XiFunc *f = make_func("concat_u64", &stub_string);
     XiBlock *entry = f->entry;
 
     XiValue *prefix = xi_const_str(f, entry, "u=", &stub_string);
     XiValue *u = xi_param(f, entry, 0, &stub_uint64);
     XiValue *v = xi_value_new(f, entry, XI_STR_CONCAT, &stub_string, 2);
-    assert(v != NULL);
+    TEST_REQUIRE(v != NULL);
     v->args[0] = prefix;
     v->args[1] = u;
     xi_block_set_return(entry, v);
 
     XrProto *proto = NULL;
     XiEmitStatus s = xi_emit(f, NULL, &proto);
-    assert(s == XI_EMIT_OK && proto != NULL);
+    TEST_REQUIRE(s == XI_EMIT_OK && proto != NULL);
 
     bool found_tostring_u64 = false;
-    bool found_append = false;
+    int concat_count = 0;
     for (int i = 0; i < PROTO_CODE_COUNT(proto); i++) {
         XrInstruction inst = PROTO_CODE(proto, i);
         if (GET_OPCODE(inst) == OP_TOSTRING && GETARG_C(inst) == 3)
             found_tostring_u64 = true;
-        if (GET_OPCODE(inst) == OP_STRBUF_APPEND)
-            found_append = true;
+        if (GET_OPCODE(inst) == OP_STR_CONCAT_N) {
+            concat_count++;
+            TEST_REQUIRE(GETARG_C(inst) == 2);
+        }
     }
-    assert(found_tostring_u64 && "u64 concat part should be formatted before append");
-    assert(found_append && "concat should still use StringBuilder append sequence");
+    TEST_REQUIRE(found_tostring_u64);
+    TEST_REQUIRE(concat_count == 1);
 
     xr_instruction_unit_free(proto);
     xi_func_free(f);
@@ -1690,7 +1688,7 @@ int main(void) {
 
     /* New op coverage */
     run_emit_str_concat();
-    run_emit_str_concat_uint64_formats_before_append();
+    run_emit_str_concat_uint64_formats_before_range_concat();
     run_emit_closure_new();
     run_emit_set_new();
     run_emit_is_check();

@@ -661,9 +661,8 @@ TEST(e2e_map_literal) {
 TEST(e2e_template_string) {
     XrProto *p = compile_source("var x = \"world\"\nvar s = \"hello ${x}\"\nprint(s)", NULL);
     assert(p != NULL);
-    assert(has_opcode(p, OP_STRBUF_NEW) && "template uses STRBUF pipeline");
-    assert(has_opcode(p, OP_STRBUF_APPEND));
-    assert(has_opcode(p, OP_STRBUF_FINISH));
+    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 &&
+           "two-part template uses one STR_CONCAT_N");
     xr_instruction_unit_free(p);
 }
 
