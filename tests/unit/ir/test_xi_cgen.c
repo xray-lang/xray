@@ -2278,6 +2278,9 @@ TEST(cgen_shared_string_constant_emits_immediate_without_local) {
 
     XiModule *mod = xi_module_new("test.xr", "test", ir);
     TEST_REQUIRE(mod != NULL, "manual shared-literal module allocated");
+    TEST_REQUIRE(xi_module_set_identity(
+                     mod, "memory-module-v1:id=32:manual-shared-literal-fixture-v1"),
+                 "manual shared-literal module identity published");
     mod->nslots = 1;
     ir->module = mod;
 
@@ -2477,8 +2480,8 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
                        semantic_hex);
     TEST_REQUIRE(strcmp(
                      semantic_hex,
-                     "6c151e049402b107324bfaa00cf0ce032dd6f0fbd9ef2b35e4a2e677a763531d") == 0,
-                 "native unsigned interpolation preserves the frozen SemanticPlan v34 KAT");
+                     "2c8996046d7c9540f212e6e270b3c8dc8d7c0f9b1442591feaa2b3a3201b6f43") == 0,
+                 "native unsigned interpolation preserves the frozen SemanticPlan v39 KAT");
 
     XiFunc *label = NULL;
     for (uint16_t i = 0; i < ir->nchildren; i++) {
