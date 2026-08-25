@@ -106,7 +106,11 @@ typedef enum XaIntrinsicLowering {
     XA_INTRINSIC_LOWERING_STRING_BYTE_SLICE_VIEW,
     XA_INTRINSIC_LOWERING_ARRAY_RESERVE,
     XA_INTRINSIC_LOWERING_SCALAR_PARSE,
+    XA_INTRINSIC_LOWERING_STRING_BUILDER_APPEND,
 } XaIntrinsicLowering;
+
+/* This projection is shared with pointer-free SemanticPlan verification. */
+#define XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER "append"
 
 typedef enum XaIntrinsicEffectContract {
     XA_INTRINSIC_EFFECT_PURE = 0,

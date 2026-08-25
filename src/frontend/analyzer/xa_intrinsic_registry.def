@@ -374,3 +374,10 @@ XA_INTRINSIC(F64_PARSE, 6005, "core.f64.parse", CORE, SCALAR_PARSE, MAY_THROW, M
              1, STATIC_RECEIVER, NONE, 0, F64, 1)
 XA_INTRINSIC(F64_TRY_PARSE, 6006, "core.f64.tryParse", CORE, SCALAR_PARSE, PURE, NO_ALLOC, SAFE, 1,
              1, STATIC_RECEIVER, NONE, 0, F64, 1)
+
+/* StringBuilder.append is a compiler-owned mutating receiver operation.  Its
+ * stable identity and method symbol survive lowering so semantic planning does
+ * not recover the operation from selector text or isolate-local interning. */
+XA_INTRINSIC(STRING_BUILDER_APPEND, 6007,
+             "core.StringBuilder." XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER, CORE,
+             STRING_BUILDER_APPEND, WRITE_ONLY, MAY_ALLOC, SAFE, 1, 1, NONE, NONE, 0, NONE, 0)

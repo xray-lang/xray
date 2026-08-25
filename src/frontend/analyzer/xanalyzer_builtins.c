@@ -801,6 +801,8 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
     // StringBuilder methods
     if (xr_type_is_builtin_named_class(container_type, "StringBuilder")) {
         switch (sym) {
+            case SYMBOL_APPEND:
+                return xr_type_new_stringbuilder(X);
             case SYMBOL_TOSTRING:
                 return xr_type_new_string(NULL);
             case SYMBOL_CLEAR:
@@ -808,9 +810,6 @@ XrType *xa_builtin_get_method_return_type(XrVMRuntime *X, XrType *container_type
             default:
                 break;
         }
-        // "append" is not a builtin symbol, handle separately
-        if (strcmp(method_name, "append") == 0)
-            return xr_type_new_stringbuilder(X);
     }
 
     return NULL;

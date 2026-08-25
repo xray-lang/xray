@@ -8,6 +8,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_lower.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/analysis/xglobal_producer.h"
 #include "../../../src/analysis/xglobal_summary.h"
@@ -22,6 +23,9 @@
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
+#include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
+#include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/toolchain/xcompiler_session.h"
 #include "../../../include/xray_vm.h"
 
@@ -401,6 +405,46 @@ static XiValue *func_tree_find_method(XiFunc *f, const char *name) {
             return v;
     }
     return NULL;
+}
+
+static uint32_t func_tree_count_intrinsic_method(XiFunc *f, const char *name,
+                                                 XaIntrinsicId intrinsic_id) {
+    if (!f || !name)
+        return 0;
+    uint32_t count = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_CALL_METHOD && v->aux &&
+                strcmp((const char *) v->aux, name) == 0 &&
+                v->xa_intrinsic_id == intrinsic_id)
+                count++;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        count += func_tree_count_intrinsic_method(f->children[i], name, intrinsic_id);
+    return count;
+}
+
+static XrSemanticOperationRecord *semantic_find_intrinsic_operation(XrSemanticPlan *plan,
+                                                                   XaIntrinsicId intrinsic_id) {
+    for (uint32_t i = 0; plan && i < plan->operation_count; i++) {
+        if (plan->operations[i].evidence[1] == intrinsic_id)
+            return &plan->operations[i];
+    }
+    return NULL;
+}
+
+static void func_tree_mark_optimized_for_semantic_fixture(XiFunc *f) {
+    if (!f)
+        return;
+    f->stage = XI_STAGE_OPTIMIZED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        func_tree_mark_optimized_for_semantic_fixture(f->children[i]);
 }
 
 static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
@@ -927,6 +971,78 @@ TEST(user_method_named_fetch_add_remains_ordinary_call) {
            "a user declaration with the same spelling must remain an ordinary method call");
     assert(!func_tree_has_op(f, XI_ATOMIC_RMW) &&
            "Atomic semantics must come from resolved receiver identity, never method spelling");
+    xi_func_free(f);
+}
+
+TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
+    XiFunc *f = lower_source("fn build() -> string {\n"
+                             "  var builder = StringBuilder()\n"
+                             "  builder.append(\"x\")\n"
+                             "  builder.append('中')\n"
+                             "  return builder.toString()\n"
+                             "}\n");
+    assert(f != NULL);
+    assert(func_tree_count_intrinsic_method(
+               f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 2 &&
+           "every builtin StringBuilder.append call must carry one stable intrinsic identity");
+    XiValue *append = func_tree_find_method(f, "append");
+    assert(append && append->aux_int == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
+           append->result_alias_operand == 0 && append->xg_capacity_op_id != XG_NO_ID &&
+           "append lowering must publish exact method, alias, and capacity evidence");
+
+    char error[512] = {0};
+    XrSemanticPlan *plan = NULL;
+    func_tree_mark_optimized_for_semantic_fixture(f);
+    XiModule fixture = {
+        .identity = "memory-module-v1:id=32:string-builder-append-fixture-v1",
+        .path = "string-builder-append-fixture.xr",
+        .name = "string_builder_append_fixture",
+        .init = f,
+    };
+    XiModule *saved_module = f->module;
+    f->module = &fixture;
+    bool built = xr_semantic_plan_build(f, &plan, error, sizeof(error));
+    f->module = saved_module;
+    if (!built)
+        fprintf(stderr, "StringBuilder.append SemanticPlan build failed: %s\n", error);
+    assert(built && plan != NULL);
+    XrSemanticOperationRecord *operation =
+        semantic_find_intrinsic_operation(plan, XA_INTRINSIC_STRING_BUILDER_APPEND);
+    assert(operation &&
+           (operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_STRING ||
+            operation->intrinsic_kind == XR_SEM_INTRINSIC_STRINGBUILDER_APPEND_RUNE) &&
+           operation->semantic_immediate == ((int64_t) XI_METHOD_SYMBOL_APPEND << 1) &&
+           "SemanticPlan must consume the exact append producer marker");
+    uint32_t saved_intrinsic = operation->evidence[1];
+    operation->evidence[1] = XA_INTRINSIC_NONE;
+    memset(error, 0, sizeof(error));
+    assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
+           strstr(error, "XR_SEM_0019") != NULL &&
+           "SemanticPlan must reject a missing append producer identity");
+    operation->evidence[1] = saved_intrinsic;
+    int64_t saved_immediate = operation->semantic_immediate;
+    operation->semantic_immediate = ((int64_t) XI_METHOD_SYMBOL_PUSH << 1);
+    memset(error, 0, sizeof(error));
+    assert(!xr_semantic_plan_verify(plan, error, sizeof(error)) &&
+           strstr(error, "XR_SEM_0019") != NULL &&
+           "SemanticPlan must reject a mismatched append method identity");
+    operation->semantic_immediate = saved_immediate;
+    assert(xr_semantic_plan_verify(plan, error, sizeof(error)));
+    xr_semantic_plan_free(plan);
+    xi_func_free(f);
+}
+
+TEST(user_method_named_append_remains_ordinary_call) {
+    XiFunc *f = lower_source("class Writer {\n"
+                             "  append(value: string) -> string { return value }\n"
+                             "}\n"
+                             "fn use(writer: Writer) -> string {\n"
+                             "  return writer.append(\"x\")\n"
+                             "}\n");
+    assert(f != NULL);
+    XiValue *append = func_tree_find_method(f, "append");
+    assert(append != NULL && append->xa_intrinsic_id == XA_INTRINSIC_NONE &&
+           "a user declaration with the same spelling must remain an ordinary method call");
     xi_func_free(f);
 }
 
@@ -3285,6 +3401,8 @@ int main(void) {
     run_scalar_parse_lowering_separates_typed_error_and_optional_flows();
     run_atomic_methods_lower_to_nothrow_canonical_ops();
     run_user_method_named_fetch_add_remains_ordinary_call();
+    run_string_builder_append_lowers_with_stable_intrinsic_identity();
+    run_user_method_named_append_remains_ordinary_call();
     run_exact_integer_bit_methods_lower_to_typed_semantic_ops();
     run_codegen_controls_lower_to_first_class_semantic_ops();
     run_throw_stmt();

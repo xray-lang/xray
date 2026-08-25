@@ -8,6 +8,7 @@
 
 #include "xa_intrinsic_registry.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/symbol/xsymbol_table.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 
 #include <stdio.h>
@@ -98,6 +99,9 @@ XaIntrinsicId xa_intrinsic_compiler_receiver_method(const XrType *receiver,
         return XA_INTRINSIC_NONE;
     if (receiver->kind == XR_KIND_STRING && strcmp(member_name, "bytes") == 0)
         return XA_INTRINSIC_STRING_BYTE_SLICE_VIEW;
+    if (xr_type_is_builtin_named_class(receiver, "StringBuilder") &&
+        xr_builtin_symbol_from_name(member_name) == SYMBOL_APPEND)
+        return XA_INTRINSIC_STRING_BUILDER_APPEND;
     const XrExactScalarDesc *scalar =
         (receiver->kind == XR_KIND_INT || receiver->kind == XR_KIND_FLOAT)
             ? xr_exact_scalar_by_native_type(receiver->scalar_rep)

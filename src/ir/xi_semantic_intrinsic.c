@@ -126,6 +126,8 @@ XiOp xi_semantic_intrinsic_op(const XaIntrinsicDesc *desc) {
             return XI_CALL_BUILTIN;
         case XA_INTRINSIC_LOWERING_SCALAR_PARSE:
             return XI_CONVERT;
+        case XA_INTRINSIC_LOWERING_STRING_BUILDER_APPEND:
+            return XI_CALL_METHOD;
         case XA_INTRINSIC_LOWERING_NONE:
             return XI_OP_COUNT;
     }
@@ -343,6 +345,21 @@ bool xi_semantic_intrinsic_verify_value(const XiValue *value, XiStage stage, cha
                 return set_error(error, error_size,
                                  "canonical Array.reserve intrinsic id %u has invalid receiver "
                                  "contract",
+                                 value->xa_intrinsic_id);
+        } else if (desc->id == XA_INTRINSIC_STRING_BUILDER_APPEND) {
+            if (value->op != XI_CALL_METHOD || value->nargs != 2 || !value->args ||
+                !value->args[0] || !value->args[0]->type || !value->args[1] ||
+                !value->args[1]->type || !value->type ||
+                !xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") ||
+                !xr_type_is_builtin_named_class(value->type, "StringBuilder") ||
+                !xr_type_equals(value->type, value->args[0]->type) ||
+                value->result_alias_operand != 0 || value->aux_kind != XI_AUX_KIND_NONE ||
+                value->aux_int != (int64_t) XI_METHOD_SYMBOL_APPEND << 1 || !value->aux ||
+                strcmp((const char *) value->aux,
+                       XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) != 0)
+                return set_error(error, error_size,
+                                 "canonical StringBuilder.append intrinsic id %u has invalid "
+                                 "receiver contract",
                                  value->xa_intrinsic_id);
         } else if (desc->lowering == XA_INTRINSIC_LOWERING_SCALAR_PARSE) {
             bool integer = desc->id == XA_INTRINSIC_I64_PARSE ||

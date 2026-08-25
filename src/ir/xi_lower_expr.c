@@ -6257,8 +6257,6 @@ static void lower_take_sequence_call_evidence(XiLower *l, const AstNode *node,
         if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
                                                   XA_BUILTIN_RECEIVER_METHOD_ARRAY_PUSH))
             capacity_kind = XG_CAPACITY_PUSH;
-        else if (strcmp(member->name, "append") == 0 && call->arg_count >= 1)
-            capacity_kind = XG_CAPACITY_APPEND;
         else if (strcmp(member->name, "extend") == 0 && call->arg_count >= 1)
             capacity_kind = XG_CAPACITY_EXTEND;
         else if (xi_lower_receiver_method_call_matches(receiver_type, member->name, call->arg_count,
@@ -6580,6 +6578,30 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
         XiSequenceEvidenceIds sequence_ids;
         XiSequenceEvidenceKinds sequence_kinds = {
             .capacity_op_kind = XG_CAPACITY_RESERVE,
+        };
+        xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
+                                            &sequence_ids);
+        xi_lower_apply_sequence_evidence_ids(value, &sequence_ids);
+    } else if (desc->id == XA_INTRINSIC_STRING_BUILDER_APPEND) {
+        const char *member_name = xa_intrinsic_source_member(desc);
+        if (args.count != 1 || !member_name ||
+            !xr_type_is_builtin_named_class(receiver->type, "StringBuilder") ||
+            !xr_type_is_builtin_named_class(result_type, "StringBuilder") ||
+            !xr_type_equals(result_type, receiver->type)) {
+            l->had_error = true;
+            return NULL;
+        }
+        value->aux = (void *) arena_strdup(l->func, member_name);
+        if (!value->aux) {
+            l->had_error = true;
+            return NULL;
+        }
+        value->aux_int = (int64_t) XI_METHOD_SYMBOL_APPEND << 1;
+        value->result_alias_operand = 0;
+        value->call_return_ownership = lower_call_return_ownership(l, call, receiver);
+        XiSequenceEvidenceIds sequence_ids;
+        XiSequenceEvidenceKinds sequence_kinds = {
+            .capacity_op_kind = XG_CAPACITY_APPEND,
         };
         xi_lower_take_sequence_evidence_ids(l, (uint32_t) node->line, sequence_kinds,
                                             &sequence_ids);

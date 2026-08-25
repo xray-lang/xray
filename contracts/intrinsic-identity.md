@@ -41,10 +41,17 @@ reinterpretation identities without reassigning the existing registry.
     conversion is a different semantic family. The receiver type plus the
     stable intrinsic ID selects parsing; a selector spelling, retired scalar
     alias, or backend helper name cannot recover that authority.
+12. `StringBuilder.append` has stable compiler intrinsic identity `6007` and
+    stable method symbol `253`. Analyzer binding selects that identity only for
+    the builtin `StringBuilder` receiver. Xi and SemanticPlan carry and verify
+    both numeric identities; `append` text is diagnostic metadata projected
+    from the registry and a user method with the same spelling remains ordinary.
 
 ## Digest anchors
 
-anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def bee99f50bb75e1e501a17c813c5ba93f125fd9ba2111930c9ef7d7ac34cc2b49
+anchor-sha256: src/frontend/analyzer/xa_intrinsic_registry.def 2a2b5b90b2c739a55ea51207c67ab2c613396d3e3686ce0c913a1bd79ee91865
+anchor-sha256: src/ir/xi_method_sym.def 0ec1ca5390eb9be96b1a1fcfbf932787a39d6af810630f88c360538451359702
+anchor-sha256: src/ir/xi_semantic_intrinsic.c 20a45ccefbdbda7fe02cae622bc6f64187e080ec761b288a77764473a8e86068
 anchor-sha256: src/shared/xr_core_intrinsic.def d40802b53e3333eee9cd18fbbf9680e79c9ae5dd903770f799e0ef69c1805baa
 anchor-sha256: contracts/capability-deletions.tsv 0ce3ca872d9dafa777f75f8540cc92244edb082615b9733534e418afe2d40449
 anchor-sha256: scripts/check_branch_hint_surface_residue.py 1e1950f0e6bcd58b96d56b35bf8230e95b32ee0915cf62ad10ce5b70589b99aa

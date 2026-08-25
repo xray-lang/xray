@@ -3248,8 +3248,12 @@ static bool semantic_string_builder_type_exact(const XrSemanticTypeRecord *type)
 
 static bool xi_string_builder_append_rune_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
-           value->args[1] && value->aux && strcmp((const char *) value->aux, "append") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           value->args[1] && value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+           value->aux &&
+           strcmp((const char *) value->aux,
+                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
            xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
            value->args[1]->type && value->args[1]->type->kind == XR_KIND_RUNE &&
            xr_type_is_builtin_named_class(value->type, "StringBuilder");
@@ -3265,8 +3269,12 @@ static bool xi_string_builder_to_string_exact(const XiValue *value) {
 
 static bool xi_string_builder_append_string_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && value->nargs == 2 && value->args[0] &&
-           value->args[1] && value->aux && strcmp((const char *) value->aux, "append") == 0 &&
-           value->aux_kind == XI_AUX_KIND_NONE && value->aux_int > 0 && (value->aux_int & 1) == 0 &&
+           value->args[1] && value->xa_intrinsic_id == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+           value->aux &&
+           strcmp((const char *) value->aux,
+                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
+           value->aux_kind == XI_AUX_KIND_NONE &&
+           value->aux_int == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
            xr_type_is_builtin_named_class(value->args[0]->type, "StringBuilder") &&
            value->args[1]->type && value->args[1]->type->kind == XR_KIND_STRING &&
            xr_type_is_builtin_named_class(value->type, "StringBuilder");
@@ -3290,7 +3298,10 @@ static bool semantic_string_builder_append_rune_exact(const XrSemanticBuildConte
            argument_type->kind == XR_KIND_RUNE && argument_type->builtin_type == XR_TID_NULL &&
            argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
            argument_type->flags == 0 &&
-           strcmp(ctx->plan->metadata[record->metadata_begin], "append") == 0 &&
+           record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
+           record->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+           strcmp(ctx->plan->metadata[record->metadata_begin],
+                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&
@@ -3337,7 +3348,10 @@ static bool semantic_string_builder_append_string_exact(const XrSemanticBuildCon
            argument_type->child_count == 0 && argument_type->scalar_rep == XR_SCALAR_REP_NONE &&
            argument_type->flags == (XR_SEM_TYPE_REFERENCE_CAPABLE | XR_SEM_TYPE_OWNERSHIP_ROOT) &&
            record->result_type == receiver->type &&
-           strcmp(ctx->plan->metadata[record->metadata_begin], "append") == 0 &&
+           record->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
+           record->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND &&
+           strcmp(ctx->plan->metadata[record->metadata_begin],
+                  XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
            receiver->role == XR_SEM_OPERAND_RECEIVER && receiver->parameter == -1 &&
            receiver->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            argument->role == XR_SEM_OPERAND_ARGUMENT && argument->parameter == 0 &&

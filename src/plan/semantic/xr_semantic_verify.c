@@ -1752,8 +1752,10 @@ static bool verify_string_builder_append_rune(const XrSemanticPlan *plan,
             ? plan->metadata[operation->metadata_begin]
             : NULL;
     bool exact =
-        operation->opcode == XI_CALL_METHOD && operation->semantic_immediate > 0 &&
-        (operation->semantic_immediate & 1) == 0 && selector && strcmp(selector, "append") == 0 &&
+        operation->opcode == XI_CALL_METHOD &&
+        operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
+        operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND && selector &&
+        strcmp(selector, XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
         receiver && argument && semantic_type_is_exact_string_builder(receiver_type) &&
         operation->result_type == receiver->type && argument_type &&
         argument_type->kind == XR_KIND_RUNE && argument_type->builtin_type == XR_TID_NULL &&
@@ -2648,7 +2650,10 @@ static bool verify_string_builder_append_string(const XrSemanticPlan *plan,
             ? plan->metadata[operation->metadata_begin]
             : NULL;
     bool exact =
-        operation->opcode == XI_CALL_METHOD && selector && strcmp(selector, "append") == 0 &&
+        operation->opcode == XI_CALL_METHOD &&
+        operation->semantic_immediate == (int64_t) XI_METHOD_SYMBOL_APPEND << 1 &&
+        operation->evidence[1] == XA_INTRINSIC_STRING_BUILDER_APPEND && selector &&
+        strcmp(selector, XA_INTRINSIC_STRING_BUILDER_APPEND_SOURCE_MEMBER) == 0 &&
         receiver && argument && semantic_type_is_exact_string_builder(receiver_type) &&
         argument_type && argument_type->kind == XR_KIND_STRING &&
         operation->result_type == receiver->type && receiver->role == XR_SEM_OPERAND_RECEIVER &&
