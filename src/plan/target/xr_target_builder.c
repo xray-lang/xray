@@ -428,14 +428,16 @@ static void target_trace_operation(const XrSemanticPlan *plan, uint32_t operatio
                 operation->source_line);
     fprintf(stderr,
             "[target]     result                       value %u, semantic type %u, ownership %u, "
-            "alias operand %d\n",
+            "alias operand %d, provenance %u, parameter %d, complete %u\n",
             operation->result_value, operation->result_type, operation->result_ownership,
-            operation->result_alias_operand);
+            operation->result_alias_operand, operation->return_provenance,
+            operation->return_parameter, operation->return_complete);
     fprintf(stderr,
             "[target]     op facts                     intrinsic %u, immediate %lld, effects "
-            "0x%08x, import resolution %u, auxiliary %u\n",
+            "0x%08x, flags 0x%08x, ownership use %u, import resolution %u, auxiliary %u\n",
             operation->intrinsic_kind, (long long) operation->semantic_immediate,
-            operation->effects, operation->import_resolution, operation->auxiliary_kind);
+            operation->effects, operation->flags, operation->ownership_use,
+            operation->import_resolution, operation->auxiliary_kind);
     uint32_t metadata_count = 0;
     const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
     for (uint32_t i = 0; i < operation->metadata_count; i++) {
