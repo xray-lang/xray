@@ -14,6 +14,7 @@
 #include "xanalyzer_symbol.h"
 #include "../parser/xast.h"
 #include "../parser/xast_nodes.h"
+#include "../parser/xast_walk.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
 #include "../../module/xmodule_graph.h"

@@ -16,6 +16,7 @@
 #include "frontend/analyzer/xanalyzer.h"
 #include "frontend/parser/xast.h"
 #include "frontend/parser/xast_nodes.h"
+#include "frontend/parser/xast_walk.h"
 #include "frontend/parser/xparse.h"
 #include "base/xmalloc.h"
 #include "module/xmodule.h"
