@@ -14,6 +14,7 @@
 #include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
+#include "../../../src/module/xmodule_identity.h"
 #include "../../../src/module/xmodule_resolver.h"
 #include "../../../src/plan/target/xr_target_profile.h"
 #include "../../../src/runtime/abi/xr_runtime_target_profile.h"
@@ -30,6 +31,21 @@
 #endif
 
 /* ========== Test Infrastructure ========== */
+
+#define PIPELINE_TEST_REQUIRE(condition)                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "pipeline test assertion failed: %s (%s:%d)\n", #condition, __FILE__, \
+                    __LINE__);                                                                     \
+            abort();                                                                               \
+        }                                                                                          \
+    } while (0)
+
+/* Pipeline assertions and their helper calls must remain active in Release. */
+#ifdef NDEBUG
+#undef assert
+#define assert(condition) PIPELINE_TEST_REQUIRE(condition)
+#endif
 
 static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
@@ -49,10 +65,24 @@ static void teardown(void) {
     }
 }
 
+static char *compile_source_module_identity(void) {
+    XrModuleIdentityAuthority authority = {
+        .kind = XR_MODULE_IDENTITY_MEMORY,
+        .namespace_id = "xi-pipeline-fixture",
+    };
+    char *identity = NULL;
+    if (!xr_module_identity_from_logical(&authority, NULL, &identity) ||
+        !xr_module_identity_valid(identity, NULL)) {
+        xr_free(identity);
+        return NULL;
+    }
+    return identity;
+}
+
 /* Compile source through the full pipeline, return proto.
  * Caller must free both proto and result. */
 static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
-    assert(g_iso != NULL);
+    PIPELINE_TEST_REQUIRE(g_iso != NULL);
 
     /* Create analyzer first — its type pool must be active during parsing
      * so the parser can create type annotations (function types, etc.). */
@@ -75,7 +105,19 @@ static XrProto *compile_source(const char *source, XiPipelineConfig *cfg) {
      * this in-memory fixture equivalent to a real file compilation. */
     XiPipelineConfig effective = cfg ? *cfg : xi_pipeline_default_config();
     effective.source_file = "test.xr";
+    char *fixture_identity = NULL;
+    if (!effective.module_identity) {
+        fixture_identity = compile_source_module_identity();
+        if (!fixture_identity) {
+            fprintf(stderr, "  MODULE IDENTITY FAILED for: %s\n", source);
+            xa_analyzer_free(analyzer);
+            xr_program_destroy(program);
+            return NULL;
+        }
+        effective.module_identity = fixture_identity;
+    }
     XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &effective);
+    xr_free(fixture_identity);
 
     xa_analyzer_free(analyzer);
     xr_program_destroy(program);
@@ -189,17 +231,6 @@ static int count_opcode(const XrProto *proto, OpCode op) {
         tests_passed++;                                                                            \
     }                                                                                              \
     static void test_##name(void)
-
-/* Unlike assert(), this KAT guard remains active in Release builds and never
- * erases authority-producing calls through NDEBUG. */
-#define SCALAR_KAT_REQUIRE(condition)                                                              \
-    do {                                                                                           \
-        if (!(condition)) {                                                                        \
-            fprintf(stderr, "scalar authority KAT failed: %s (%s:%d)\n", #condition, __FILE__,    \
-                    __LINE__);                                                                     \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
 
 /* ========== Constant & Arithmetic Tests ========== */
 
@@ -921,13 +952,13 @@ TEST(stress_budget_truncation_still_valid) {
 TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
     XrCompilerSession *original_session =
         xr_compiler_session_current_for_isolate(g_iso);
-    SCALAR_KAT_REQUIRE(original_session != NULL);
+    PIPELINE_TEST_REQUIRE(original_session != NULL);
     XrCompilerSessionConfig session_config = {0};
     XrCompilerSession *session = xr_compiler_session_new(&session_config);
-    SCALAR_KAT_REQUIRE(session != NULL);
-    SCALAR_KAT_REQUIRE(xr_compiler_session_target_profile(session) == NULL);
-    SCALAR_KAT_REQUIRE(xr_compiler_session_attach_isolate(g_iso, session) ==
-                       original_session);
+    PIPELINE_TEST_REQUIRE(session != NULL);
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_target_profile(session) == NULL);
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, session) ==
+                          original_session);
     XiPipelineConfig config = xi_pipeline_default_config();
     config.run_emit = false;
     config.run_canonicalize = false;
@@ -936,26 +967,26 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
         "memory-module-v1:id=20:xi-scalar-binding-v1";
 
     XiPipelineScalarFixture missing_profile = {0};
-    SCALAR_KAT_REQUIRE(xi_pipeline_scalar_fixture_analyze(
+    PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(
         &missing_profile, session, "xi-scalar-pipeline-missing-profile"));
     XiPipelineResult rejected = xi_pipeline_compile_program(
         missing_profile.spec->ast, missing_profile.analyzer, g_iso, &config);
-    SCALAR_KAT_REQUIRE(rejected.status == XI_PIPE_ERR_INTERNAL);
-    SCALAR_KAT_REQUIRE(rejected.error.stage == XI_PIPE_STAGE_LOWER);
-    SCALAR_KAT_REQUIRE(strstr(rejected.error.detail, "target profile") != NULL);
-    SCALAR_KAT_REQUIRE(rejected.ir == NULL && rejected.proto == NULL);
+    PIPELINE_TEST_REQUIRE(rejected.status == XI_PIPE_ERR_INTERNAL);
+    PIPELINE_TEST_REQUIRE(rejected.error.stage == XI_PIPE_STAGE_LOWER);
+    PIPELINE_TEST_REQUIRE(strstr(rejected.error.detail, "target profile") != NULL);
+    PIPELINE_TEST_REQUIRE(rejected.ir == NULL && rejected.proto == NULL);
     xi_pipeline_result_free(&rejected);
     xi_pipeline_scalar_fixture_cleanup(&missing_profile);
 
     char error[512] = {0};
     XrTargetProfile *profile = NULL;
-    SCALAR_KAT_REQUIRE(xr_runtime_target_profile_build_native_hosted(
+    PIPELINE_TEST_REQUIRE(xr_runtime_target_profile_build_native_hosted(
         &profile, error, sizeof(error)));
-    SCALAR_KAT_REQUIRE(xr_compiler_session_set_target_profile(session,
-                                                              profile));
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session,
+                                                                 profile));
 
     XiPipelineScalarFixture exact_profile = {0};
-    SCALAR_KAT_REQUIRE(xi_pipeline_scalar_fixture_analyze(
+    PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(
         &exact_profile, session, "xi-scalar-pipeline-exact-profile"));
     XiPipelineResult accepted = xi_pipeline_compile_program(
         exact_profile.spec->ast, exact_profile.analyzer, g_iso, &config);
@@ -963,16 +994,16 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
         fprintf(stderr, "scalar pipeline failed at %s: %s\n",
                 xi_pipeline_stage_str(accepted.error.stage),
                 accepted.error.detail);
-    SCALAR_KAT_REQUIRE(accepted.status == XI_PIPE_OK);
-    SCALAR_KAT_REQUIRE(accepted.ir != NULL && accepted.ir->module != NULL);
-    SCALAR_KAT_REQUIRE(accepted.ir->module->program_semantic_closure != NULL);
-    SCALAR_KAT_REQUIRE(accepted.ir->module->scalar_call_decision != NULL);
-    SCALAR_KAT_REQUIRE(xi_scalar_program_verify(accepted.ir->module, profile,
-                                                error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(accepted.status == XI_PIPE_OK);
+    PIPELINE_TEST_REQUIRE(accepted.ir != NULL && accepted.ir->module != NULL);
+    PIPELINE_TEST_REQUIRE(accepted.ir->module->program_semantic_closure != NULL);
+    PIPELINE_TEST_REQUIRE(accepted.ir->module->scalar_call_decision != NULL);
+    PIPELINE_TEST_REQUIRE(xi_scalar_program_verify(accepted.ir->module, profile,
+                                                   error, sizeof(error)));
     xi_pipeline_result_free(&accepted);
     xi_pipeline_scalar_fixture_cleanup(&exact_profile);
     xr_target_profile_free(profile);
-    SCALAR_KAT_REQUIRE(
+    PIPELINE_TEST_REQUIRE(
         xr_compiler_session_attach_isolate(g_iso, original_session) == session);
     xr_compiler_session_delete(session);
 }
