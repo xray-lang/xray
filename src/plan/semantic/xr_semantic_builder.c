@@ -2020,6 +2020,16 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     return true;
 }
 
+static bool call_has_coroutine_state(const XiFunc *caller, const XiValue *call) {
+    const XiCoroPlan *coro = caller ? caller->coro_plan : NULL;
+    if (!coro || !call)
+        return false;
+    for (uint32_t state = 0; state < coro->nstates; state++)
+        if (coro->points[state].op == call && coro->points[state].kind == XI_CORO_SUSP_CALL)
+            return true;
+    return false;
+}
+
 /* The three import-resolution questions are asked through the same shared
  * predicates the IR coroutine analysis asks, so the layers cannot drift on
  * which references carry call-target authority. */
@@ -3036,7 +3046,9 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         function < 0 && !native_yieldable && value->op == XI_CALL && value->args[0] &&
         value->args[0]->type && value->args[0]->type->kind == XR_KIND_FUNCTION && indirect_callee &&
         indirect_callee->op != XI_IMPORT_REF && indirect_callee->op != XI_GET_BUILTIN &&
-        indirect_callee->op != XI_GET_SHARED && indirect_callee->op != XI_CLOSURE_NEW &&
+        (indirect_callee->op != XI_GET_SHARED ||
+         call_has_coroutine_state(ctx->functions[caller].source, value)) &&
+        indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
     if (function < 0 && !native_yieldable && !indirect_callable)
         return append_source_class_constructor_call_target(ctx, value, operation);

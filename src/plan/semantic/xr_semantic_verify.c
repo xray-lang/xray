@@ -3057,6 +3057,16 @@ static bool resolve_frozen_native_yieldable_target(const XrSemanticPlan *plan,
 /* This proof deliberately stops at the open function-value boundary. It says
  * nothing about the members of the target set and therefore cannot authorize
  * execution; it only freezes the conservative coroutine-state obligation. */
+static bool frozen_operation_has_coroutine_state(const XrSemanticPlan *plan,
+                                                 uint32_t operation) {
+    for (uint32_t entity = 0; entity < plan->entity_count; entity++)
+        if (plan->entities[entity].kind == XR_SEM_ENTITY_COROUTINE_STATE &&
+            plan->entities[entity].subject_kind == XR_SEM_ENTITY_SUBJECT_OPERATION &&
+            plan->entities[entity].subject == operation)
+            return true;
+    return false;
+}
+
 static uint32_t resolve_frozen_indirect_callable_type(const XrSemanticPlan *plan,
                                                       const uint32_t *definitions,
                                                       uint32_t value_count,
@@ -3089,8 +3099,12 @@ static uint32_t resolve_frozen_indirect_callable_type(const XrSemanticPlan *plan
             value = plan->operands[producer->operand_begin].value;
             continue;
         }
+        if (producer->opcode == XI_GET_SHARED)
+            return frozen_operation_has_coroutine_state(plan, operation_index)
+                       ? callee->type
+                       : XR_SEMANTIC_INDEX_NONE;
         if (producer->opcode == XI_IMPORT_REF || producer->opcode == XI_GET_BUILTIN ||
-            producer->opcode == XI_GET_SHARED || producer->opcode == XI_CLOSURE_NEW ||
+            producer->opcode == XI_CLOSURE_NEW ||
             (producer->opcode == XI_STACK_ALLOC && producer->semantic_immediate == XI_CLOSURE_NEW))
             return XR_SEMANTIC_INDEX_NONE;
         return callee->type;

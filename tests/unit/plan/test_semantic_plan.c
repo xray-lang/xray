@@ -1274,7 +1274,8 @@ static XrSemanticPlan *build_shared_direct_call_target_plan(void) {
     return plan;
 }
 
-static XrSemanticPlan *build_ambiguous_shared_call_target_plan(bool sibling_store) {
+static XrSemanticPlan *build_ambiguous_shared_call_target_plan(bool sibling_store,
+                                                               bool publish_state) {
     XiFunc *root = xi_func_new("ambiguous_shared_root", &stub_int);
     XiFunc *caller = xi_func_new("ambiguous_shared_caller", &stub_int);
     XiFunc *owner = sibling_store ? xi_func_new("ambiguous_shared_sibling", &stub_int) : root;
@@ -1334,6 +1335,17 @@ static XrSemanticPlan *build_ambiguous_shared_call_target_plan(bool sibling_stor
     if (sibling_store)
         xi_block_set_return(owner_entry, owner_result);
     xi_block_set_return(target_entry, target_result);
+    XiCoroSuspendPoint caller_point = {
+        .state_id = 1,
+        .op = call,
+        .kind = XI_CORO_SUSP_CALL,
+    };
+    XiCoroPlan caller_coro = {
+        .is_coroutine = true,
+        .nstates = 1,
+        .points = &caller_point,
+    };
+    caller->coro_plan = publish_state ? &caller_coro : NULL;
     root->stage = caller->stage = owner->stage = target->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
@@ -2281,11 +2293,11 @@ static void test_immutable_owned_snapshot(void) {
     xr_fingerprint_hex(registry_fingerprint, registry_hex);
     xr_fingerprint_hex(xr_semantic_plan_fingerprint(plan), semantic_hex);
     REQUIRE(strcmp(XR_SEMANTIC_OWNER_REGISTRY_FINGERPRINT,
-                   "871b39e8344afb9058975e13cfa1acf4017d3895b3c3d5b2a1cc807f9b1bf85a") == 0);
+                   "beef5da6a8564c74d8d4550a46608dff5c3fda7c6b1a6b427b29896c00f22c1b") == 0);
     REQUIRE(strcmp(registry_hex,
                    "231e10790b9df9401eee940bad753624bfdd04efff79c061d2898c3988bf04e6") == 0);
     REQUIRE(strcmp(semantic_hex,
-                   "45e3c4d4ad546172bcfed328a0d1e030224293d4072f82ccaac26ba4913f9339") == 0);
+                   "cc75e34455beb5193c63cef5c5ce38ef0911a3d95947711950f5748dcbe281eb") == 0);
     REQUIRE(xr_fingerprint_equal(registry_fingerprint,
                                  xr_semantic_plan_operation_registry_fingerprint(plan)));
     REQUIRE(xr_semantic_plan_function_count(plan) == 1);
@@ -2988,9 +3000,9 @@ static void test_source_export_call_target_authority(void) {
     xr_stable_id_hex(plan->dependencies[0].id, dependency_id);
     xr_stable_id_hex(dependency->source_exports[0].id, export_id);
     xr_stable_id_hex(target->id, target_id);
-    REQUIRE(strcmp(dependency_id, "02bf23d9d2a6ae74c7fe0ac65a472495") == 0);
+    REQUIRE(strcmp(dependency_id, "2c3e006c21af76ee29858f45d7e9e0ce") == 0);
     REQUIRE(strcmp(export_id, "b6d5881f5ed7b0e05ecfc91c01eb1b24") == 0);
-    REQUIRE(strcmp(target_id, "d49a4ef5fde11f5f53f35611dde3b52f") == 0);
+    REQUIRE(strcmp(target_id, "0112dc8944ba9097bf61847d1094eac3") == 0);
     const XrSemanticPlan *dependencies[] = {dependency};
     char error[512] = {0};
     REQUIRE(xr_semantic_plan_verify_module_set(plan, dependencies, 1, error, sizeof(error)));
@@ -3639,16 +3651,30 @@ static void test_shared_direct_call_target_authority(void) {
     plan->call_target_count = saved_count;
     xr_semantic_plan_free(plan);
 
-    XrSemanticPlan *duplicate = build_ambiguous_shared_call_target_plan(false);
+    XrSemanticPlan *duplicate = build_ambiguous_shared_call_target_plan(false, false);
     REQUIRE(xr_semantic_plan_call_target_count(duplicate) == 0);
     forge_direct_call_target(duplicate, 1, 2);
     expect_verify_failure(duplicate, "XR_SEM_0019");
     xr_semantic_plan_free(duplicate);
-    XrSemanticPlan *sibling = build_ambiguous_shared_call_target_plan(true);
+    XrSemanticPlan *sibling = build_ambiguous_shared_call_target_plan(true, false);
     REQUIRE(xr_semantic_plan_call_target_count(sibling) == 0);
     forge_direct_call_target(sibling, 1, 3);
     expect_verify_failure(sibling, "XR_SEM_0019");
     xr_semantic_plan_free(sibling);
+    XrSemanticPlan *dynamic = build_ambiguous_shared_call_target_plan(false, true);
+    REQUIRE(dynamic->call_target_count == 1);
+    REQUIRE(dynamic->call_targets[0].kind == XR_SEM_CALL_TARGET_INDIRECT_CALLABLE);
+    REQUIRE(dynamic->call_targets[0].callable_type < dynamic->type_count &&
+            dynamic->types[dynamic->call_targets[0].callable_type].kind == XR_KIND_FUNCTION);
+    uint32_t saved_dynamic_count = dynamic->call_target_count;
+    dynamic->call_target_count = 0;
+    expect_verify_failure(dynamic, "XR_SEM_0019");
+    dynamic->call_target_count = saved_dynamic_count;
+    uint32_t saved_dynamic_type = dynamic->call_targets[0].callable_type;
+    dynamic->call_targets[0].callable_type = XR_SEMANTIC_INDEX_NONE;
+    expect_verify_failure(dynamic, "XR_SEM_0019");
+    dynamic->call_targets[0].callable_type = saved_dynamic_type;
+    xr_semantic_plan_free(dynamic);
     XrSemanticPlan *late = build_unordered_shared_call_target_plan(false);
     REQUIRE(xr_semantic_plan_call_target_count(late) == 0);
     forge_direct_call_target(late, 0, 1);

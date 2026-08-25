@@ -1,5 +1,5 @@
 /*
- * test_xi_compare.c - Dual-path comparison: legacy codegen vs Xi IR pipeline
+ * test_xi_compare.c - Production compiler wrapper vs direct Xi pipeline
  *
  * Compiles the same source through both paths and compares:
  *   1. Both succeed (no crash, no error)
@@ -36,7 +36,6 @@
 static XrVMRuntime *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
-static int tests_skipped = 0;
 
 /* Set by CHECK/REQUIRE when the running test violates an expectation;
  * cleared before each test by the TEST macro. */
@@ -89,6 +88,15 @@ static void setup(void) {
     if (!g_iso) {
         XrVMConfig p = {0};
         g_iso = xray_vm_new_full(&p);
+        XrCompilerSession *session = xr_compiler_session_current_for_isolate(g_iso);
+        const XrCompileUnitIdentity identity = {
+            .kind = XR_COMPILE_UNIT_MEMORY,
+            .module_identity = "memory-module-v1:id=21:xi-compare-fixture-v1",
+        };
+        if (!session || !xr_compiler_session_set_compile_unit_identity(session, &identity)) {
+            fprintf(stderr, "failed to install Xi comparison module identity\n");
+            abort();
+        }
     }
 }
 
@@ -105,8 +113,8 @@ static void teardown(void) {
 
 /* ========== Compilation Helpers ========== */
 
-/* Compile via legacy codegen path */
-static XrProto *compile_legacy(const char *source) {
+/* Compile through the production compiler wrapper. */
+static XrProto *compile_wrapper(const char *source) {
     XR_DCHECK(g_iso != NULL, "isolate must be initialized");
 
     /* Create context first — its analyzer installs the current type pool
@@ -117,7 +125,7 @@ static XrProto *compile_legacy(const char *source) {
         return NULL;
     /* xr_compile passes ctx->source_file to the analyzer as the file being
      * analyzed, and file identity selects the nominal owner that declaration
-     * analysis records for enums.  Leaving it NULL makes the legacy path
+     * analysis records for enums.  Leaving it NULL makes the wrapper path
      * analyze an unnamed file while the Xi path below names it, so the two
      * paths disagree about enum ownership.  Name both the same. */
     ctx->source_file = "compare.xr";
@@ -132,7 +140,7 @@ static XrProto *compile_legacy(const char *source) {
         return NULL;
     }
 
-    /* Re-enter the parse arena: legacy codegen desugars some AST nodes
+    /* Re-enter the parse arena: the production wrapper desugars some AST nodes
      * (e.g. for-in, match) which calls ast_alloc and needs the arena. */
     XrCompilerSessionScope ast_scope;
     bool has_ast_scope = program->type == AST_PROGRAM && program->as.program.arena &&
@@ -171,6 +179,7 @@ static XrProto *compile_xi(const char *source) {
     xa_analyzer_analyze(analyzer, "compare.xr", program);
 
     XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.module_identity = "memory-module-v1:id=21:xi-compare-fixture-v1";
     XiPipelineResult res = xi_pipeline_compile_program(program, analyzer, g_iso, &cfg);
 
     xa_analyzer_free(analyzer);
@@ -258,7 +267,7 @@ static char *execute_and_capture(XrProto *proto, int *out_rc) {
      * that wrapper.  Without this, xr_execute rejects every proto with
      * "bytecode has no verified entry plan" before running a single
      * instruction.  Deriving per path is also the honest comparison: the
-     * plan is scanned out of the emitted opcodes, so legacy and Xi each get
+     * plan is scanned out of the emitted opcodes, so the wrapper and direct Xi paths each get
      * the plan their own bytecode earns. */
     if (!xr_entry_plan_derive(proto))
         return NULL;
@@ -330,9 +339,9 @@ static void dump_opcodes(const char *label, const XrProto *proto) {
 }
 
 /* Compare two protos, return similarity score 0.0-1.0 */
-static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verbose) {
+static double compare_protos(const XrProto *wrapper, const XrProto *xi, bool verbose) {
     int hist_l[256], hist_x[256];
-    build_histogram(legacy, hist_l);
+    build_histogram(wrapper, hist_l);
     build_histogram(xi, hist_x);
 
     /* Jaccard-like similarity on opcode counts */
@@ -350,18 +359,18 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verb
     double similarity = union_total > 0 ? (double) intersection / union_total : 1.0;
 
     if (verbose) {
-        dump_opcodes("legacy", legacy);
+        dump_opcodes("wrapper", wrapper);
         dump_opcodes("xi    ", xi);
         fprintf(stderr,
-                "  similarity=%.2f  legacy_insts=%d  xi_insts=%d"
-                "  legacy_stack=%d  xi_stack=%d\n",
-                similarity, PROTO_CODE_COUNT(legacy), PROTO_CODE_COUNT(xi), legacy->maxstacksize,
+                "  similarity=%.2f  wrapper_insts=%d  xi_insts=%d"
+                "  wrapper_stack=%d  xi_stack=%d\n",
+                similarity, PROTO_CODE_COUNT(wrapper), PROTO_CODE_COUNT(xi), wrapper->maxstacksize,
                 xi->maxstacksize);
 
         /* Show opcode differences */
         for (int i = 0; i < 256; i++) {
             if (hist_l[i] != hist_x[i] && (hist_l[i] > 0 || hist_x[i] > 0)) {
-                fprintf(stderr, "    %-20s legacy=%d  xi=%d\n", xr_opcode_name((OpCode) i),
+                fprintf(stderr, "    %-20s wrapper=%d  xi=%d\n", xr_opcode_name((OpCode) i),
                         hist_l[i], hist_x[i]);
             }
         }
@@ -393,12 +402,6 @@ static double compare_protos(const XrProto *legacy, const XrProto *xi, bool verb
     }                                                                                              \
     static void test_##name(void)
 
-#define SKIP(name, reason)                                                                         \
-    static void run_##name(void) {                                                                 \
-        printf("--- " #name " --- SKIP: " reason "\n");                                            \
-        tests_skipped++;                                                                           \
-    }
-
 /* ========== Dual-path comparison helper ========== */
 
 typedef struct {
@@ -411,25 +414,18 @@ typedef struct {
 } CompareSpec;
 
 static void run_compare(CompareSpec spec) {
-    XrProto *p_legacy = compile_legacy(spec.source);
-    REQUIRE(p_legacy != NULL, "legacy codegen returned NULL for '%s'", spec.label);
+    XrProto *p_wrapper = compile_wrapper(spec.source);
+    REQUIRE(p_wrapper != NULL, "compiler wrapper returned NULL for '%s'", spec.label);
+    REQUIRE(spec.expect_xi_success, "comparison fallback is forbidden for '%s'", spec.label);
 
     XrProto *p_xi = compile_xi(spec.source);
-
-    if (!spec.expect_xi_success) {
-        /* Xi pipeline may fail for unsupported features */
-        if (p_xi == NULL) {
-            fprintf(stderr, "  (Xi pipeline not yet supported — OK)\n");
-            xr_instruction_unit_free(p_legacy);
-            return;
-        }
-    } else if (p_xi == NULL) {
-        xr_instruction_unit_free(p_legacy);
+    if (p_xi == NULL) {
+        xr_instruction_unit_free(p_wrapper);
         REQUIRE(false, "Xi pipeline returned NULL for '%s'", spec.label);
     }
 
     /* Both succeeded — compare */
-    double sim = compare_protos(p_legacy, p_xi, true);
+    double sim = compare_protos(p_wrapper, p_xi, true);
     fprintf(stderr, "  → similarity = %.2f (min=%.2f)\n", sim, spec.min_similarity);
 
     if (sim < spec.min_similarity) {
@@ -437,56 +433,58 @@ static void run_compare(CompareSpec spec) {
     }
 
     /* Both must produce at least one instruction and contain a RETURN */
-    int lc = PROTO_CODE_COUNT(p_legacy);
+    int lc = PROTO_CODE_COUNT(p_wrapper);
     int xc = PROTO_CODE_COUNT(p_xi);
-    CHECK(lc > 0, "legacy produced no instructions for '%s'", spec.label);
+    CHECK(lc > 0, "compiler wrapper produced no instructions for '%s'", spec.label);
     CHECK(xc > 0, "xi produced no instructions for '%s'", spec.label);
 
-    bool legacy_has_ret = false, xi_has_ret = false;
+    bool wrapper_has_ret = false, xi_has_ret = false;
     for (int i = 0; i < lc; i++) {
-        OpCode op = GET_OPCODE(PROTO_CODE(p_legacy, i));
+        OpCode op = GET_OPCODE(PROTO_CODE(p_wrapper, i));
         if (op == OP_RETURN || op == OP_RETURN0 || op == OP_RETURN1)
-            legacy_has_ret = true;
+            wrapper_has_ret = true;
     }
     for (int i = 0; i < xc; i++) {
         OpCode op = GET_OPCODE(PROTO_CODE(p_xi, i));
         if (op == OP_RETURN || op == OP_RETURN0 || op == OP_RETURN1)
             xi_has_ret = true;
     }
-    CHECK(legacy_has_ret, "legacy contains no RETURN for '%s'", spec.label);
+    CHECK(wrapper_has_ret, "compiler wrapper contains no RETURN for '%s'", spec.label);
     CHECK(xi_has_ret, "xi contains no RETURN for '%s'", spec.label);
 
     /* Execution output comparison */
     if (spec.check_exec) {
         int rc_l = -1, rc_x = -1;
-        char *out_l = execute_and_capture(p_legacy, &rc_l);
+        char *out_l = execute_and_capture(p_wrapper, &rc_l);
         char *out_x = execute_and_capture(p_xi, &rc_x);
 
         /* A failed capture used to log "skipped" and fall through to PASS,
          * which is how this comparison stayed dead for so long.  Treat it as
          * the failure it is. */
-        CHECK(out_l && out_x, "execution capture failed for '%s' (legacy=%s xi=%s)", spec.label,
+        CHECK(out_l && out_x, "execution capture failed for '%s' (wrapper=%s xi=%s)", spec.label,
               out_l ? "ok" : "fail", out_x ? "ok" : "fail");
 
         if (out_l && out_x) {
             bool match = (strcmp(out_l, out_x) == 0);
-            fprintf(stderr, "  exec: rc=%d/%d legacy=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
+            fprintf(stderr, "  exec: rc=%d/%d wrapper=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
                     match ? "MATCH" : "MISMATCH");
-            CHECK(match, "execution output differs for '%s': legacy=[%s] xi=[%s]", spec.label,
+            CHECK(match, "execution output differs for '%s': wrapper=[%s] xi=[%s]", spec.label,
                   out_l, out_x);
         }
 
-        CHECK(rc_l == rc_x, "execution status differs for '%s': legacy=%d xi=%d", spec.label, rc_l,
+        CHECK(rc_l == rc_x, "execution status differs for '%s': wrapper=%d xi=%d", spec.label, rc_l,
               rc_x);
         if (spec.expect_runtime_failure) {
-            CHECK(rc_l != 0, "legacy execution unexpectedly succeeded for '%s'", spec.label);
+            CHECK(rc_l != 0, "compiler wrapper execution unexpectedly succeeded for '%s'",
+                  spec.label);
             CHECK(rc_x != 0, "xi execution unexpectedly succeeded for '%s'", spec.label);
         } else {
             /* Equal output is only meaningful if the code actually ran: two
              * failed runs both produce "".  Require success from both paths,
              * so a regression that stops execution cannot masquerade as a
              * match. */
-            CHECK(rc_l == 0, "legacy execution failed (rc=%d) for '%s'", rc_l, spec.label);
+            CHECK(rc_l == 0, "compiler wrapper execution failed (rc=%d) for '%s'", rc_l,
+                  spec.label);
             CHECK(rc_x == 0, "xi execution failed (rc=%d) for '%s'", rc_x, spec.label);
         }
 
@@ -500,10 +498,10 @@ static void run_compare(CompareSpec spec) {
         /* GC-managed closures created by xr_execute still reference these
          * protos; freeing now would be a use-after-free on the next GC scan.
          * Defer until after isolate teardown destroys the GC heap. */
-        defer_proto_free(p_legacy);
+        defer_proto_free(p_wrapper);
         defer_proto_free(p_xi);
     } else {
-        xr_instruction_unit_free(p_legacy);
+        xr_instruction_unit_free(p_wrapper);
         xr_instruction_unit_free(p_xi);
     }
 }
@@ -550,12 +548,12 @@ typedef struct {
 } FusionSpec;
 
 static void run_fusion(FusionSpec spec) {
-    XrProto *p_legacy = compile_legacy(spec.source);
-    REQUIRE(p_legacy != NULL, "legacy codegen returned NULL for '%s'", spec.label);
+    XrProto *p_wrapper = compile_wrapper(spec.source);
+    REQUIRE(p_wrapper != NULL, "compiler wrapper returned NULL for '%s'", spec.label);
 
     XrProto *p_xi = compile_xi(spec.source);
     if (p_xi == NULL) {
-        xr_instruction_unit_free(p_legacy);
+        xr_instruction_unit_free(p_wrapper);
         REQUIRE(false, "Xi pipeline returned NULL for '%s'", spec.label);
     }
 
@@ -566,18 +564,18 @@ static void run_fusion(FusionSpec spec) {
 
     if (spec.check_exec) {
         int rc_l = -1, rc_x = -1;
-        char *out_l = execute_and_capture(p_legacy, &rc_l);
+        char *out_l = execute_and_capture(p_wrapper, &rc_l);
         char *out_x = execute_and_capture(p_xi, &rc_x);
-        CHECK(out_l && out_x, "execution capture failed for '%s' (legacy=%s xi=%s)", spec.label,
+        CHECK(out_l && out_x, "execution capture failed for '%s' (wrapper=%s xi=%s)", spec.label,
               out_l ? "ok" : "fail", out_x ? "ok" : "fail");
         if (out_l && out_x) {
             bool match = (strcmp(out_l, out_x) == 0);
-            fprintf(stderr, "  exec: rc=%d/%d legacy=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
+            fprintf(stderr, "  exec: rc=%d/%d wrapper=[%s] xi=[%s] %s\n", rc_l, rc_x, out_l, out_x,
                     match ? "MATCH" : "MISMATCH");
-            CHECK(match, "execution output differs for '%s': legacy=[%s] xi=[%s]", spec.label,
+            CHECK(match, "execution output differs for '%s': wrapper=[%s] xi=[%s]", spec.label,
                   out_l, out_x);
         }
-        CHECK(rc_l == 0, "legacy execution failed (rc=%d) for '%s'", rc_l, spec.label);
+        CHECK(rc_l == 0, "compiler wrapper execution failed (rc=%d) for '%s'", rc_l, spec.label);
         CHECK(rc_x == 0, "xi execution failed (rc=%d) for '%s'", rc_x, spec.label);
         if (out_l)
             xr_free(out_l);
@@ -586,10 +584,10 @@ static void run_fusion(FusionSpec spec) {
     }
 
     if (spec.check_exec) {
-        defer_proto_free(p_legacy);
+        defer_proto_free(p_wrapper);
         defer_proto_free(p_xi);
     } else {
-        xr_instruction_unit_free(p_legacy);
+        xr_instruction_unit_free(p_wrapper);
         xr_instruction_unit_free(p_xi);
     }
 }
@@ -1360,7 +1358,7 @@ TEST(cmp_as_safe_mismatch) {
 }
 
 TEST(cmp_as_unsafe_mismatch) {
-    /* as (unsafe cast) -> type mismatch -> throw (both legacy and Xi throw) */
+    /* as (unsafe cast) -> type mismatch -> throw on both compilation routes */
     run_compare((CompareSpec) {
         .source = "var x: JSON.Value = \"hello\"\n"
                   "var y = x as i64\n"
@@ -1555,7 +1553,7 @@ TEST(cmp_nested_for_in) {
 TEST(cmp_for_in_string) {
     run_compare((CompareSpec) {
         .source = "var count = 0\n"
-                  "for (c in \"hello\") {\n"
+                  "for (c in \"hello\".runes()) {\n"
                   "    count += 1\n"
                   "}\n"
                   "print(count)",
@@ -1939,20 +1937,6 @@ TEST(cmp_nested_closure) {
     });
 }
 
-TEST(cmp_string_for_in) {
-    run_compare((CompareSpec) {
-        .source = "var count = 0\n"
-                  "for (ch in \"hello\") {\n"
-                  "    count += 1\n"
-                  "}\n"
-                  "print(count)",
-        .label = "for-in string char count",
-        .expect_xi_success = true,
-        .min_similarity = 0.1,
-        .check_exec = true,
-    });
-}
-
 /* ========== Destructuring / Multi-assign / Collection Tests ========== */
 
 TEST(cmp_destructure_array) {
@@ -2081,7 +2065,7 @@ TEST(cmp_yield_basic) {
 TEST(cmp_chan_new_unbuf) {
     /* Channel() creates an unbuffered channel; just type-check */
     run_compare((CompareSpec) {
-        .source = "const ch = Channel()\nprint(typeName(ch))",
+        .source = "const ch: Channel<i64> = Channel()\nprint(typeName(ch))",
         .label = "Channel() -> unbuffered channel construction",
         .expect_xi_success = true,
         .min_similarity = 0.1,
@@ -2393,15 +2377,13 @@ TEST(fusion_lei_branch) {
 
 static void print_summary(void) {
     printf("\n=== %d/%d Xi Compare tests passed", tests_passed, tests_passed + tests_failed);
-    if (tests_skipped > 0)
-        printf(" (%d skipped)", tests_skipped);
     printf(" ===\n");
 }
 
 /* ========== Main ========== */
 
 int main(void) {
-    printf("=== Xi Compare: Legacy vs Xi Pipeline ===\n\n");
+    printf("=== Xi Compare: Compiler Wrapper vs Direct Pipeline ===\n\n");
 
     setup();
 
@@ -2616,7 +2598,6 @@ int main(void) {
 
     /* Misc patterns */
     run_cmp_nested_closure();
-    run_cmp_string_for_in();
 
     /* Destructuring / multi-assign / collections */
     run_cmp_destructure_array();

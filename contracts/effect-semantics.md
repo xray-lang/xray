@@ -453,6 +453,14 @@ effects names nothing. There is no local-shared-slot or function-export
 fallback for an imported class. The target grounds no coroutine-state
 expectation of its own.
 
+An unresolved function-typed callee loaded through a shared slot is published
+as `INDIRECT_CALLABLE` only when coroutine lowering has frozen that exact call
+as a suspend point. The builder reads the live coroutine plan; the independent
+verifier reads the serialized coroutine-state entity and the callable operand
+type. Synchronous shared callable loads therefore do not acquire invented
+suspension, while a missing target, removed state, or mismatched callable type
+fails closed.
+
 ## Digest anchors
 
 anchor-sha256: src/frontend/analyzer/xa_effect_db.h 3f8e0952e2b25291fa4aaeb96baa05197f789c4292db2ec2291da407d9724b01
@@ -480,7 +488,7 @@ anchor-sha256: src/frontend/analyzer/xanalyzer.h 0443efb5ad92c5909124f402c6c68ee
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c b1db77577543719d2734235357eb1abcf47dd4c8265acf856ef8153f7028832b
 anchor-sha256: src/plan/format/xr_xsm_encode.c d091aa2e885f3384d3ef4f41d8d915cd820ce2147f729b4ea3c513df10a86c31
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 65d8113d30b6d31d4166c1135b03798a45ac69766dc3b463c7197aa9ed350cb5
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c ddf0b70a96d1740de60a027aa8588002c5a9f5e66248360638c28b4bfb60b65b
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
@@ -495,10 +503,10 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h 559143b2fe272bdac489c45b4411f8d9075cac07db14b76a3d62181efdac7276
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c 4ca9a01bb6ab6d9a1c43d17e346362b3e19565941e08a3a8d58a62adbd536410
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 9e459eff49bbe199d58dd4b63b8e27490fc6968e96a0b7227eb9c54ca98dba97
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 57a985f481b5a751ae5e098e4ff95739daafe383e1e7953314d48866af36eed3
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 15fff7c8f42b44a1822b628c7de0bde3dc996f48b694ead0a4d8d8e917541f5d
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
 anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1
