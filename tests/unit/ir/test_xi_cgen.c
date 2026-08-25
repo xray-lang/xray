@@ -26,6 +26,7 @@
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/ir/xi_stage.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_semantic_panic_info_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan.h"
 #include "../../../src/plan/semantic/xr_semantic_string_shape.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -2649,10 +2650,23 @@ TEST(cgen_native_unsigned_interpolation_consumes_inner_without_box_local) {
 }
 
 TEST(cgen_panicinfo_constructor_token_emits_no_local) {
-    const char *src = "fn requireValue(value: i64?) -> i64 { return value! }\n"
+    const char *src = "fn requireValue(value: i64) -> i64 {\n"
+                      "    return match (value) { 1 -> value }\n"
+                      "}\n"
                       "print(requireValue(1))\n";
     XiFunc *ir = compile_to_ir(src);
     TEST_REQUIRE(ir != NULL, "PanicInfo token fixture should compile");
+    TEST_REQUIRE(test_prepare_backend_ir(ir), "PanicInfo token fixture reached Backend");
+    uint32_t exact_constructor_count = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(ir->semantic_plan); i++) {
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(ir->semantic_plan, i);
+        if (xr_semantic_panic_info_constructor_with_receiver_is_exact(
+                ir->semantic_plan, operation, NULL))
+            exact_constructor_count++;
+    }
+    TEST_REQUIRE(exact_constructor_count == 1,
+                 "PanicInfo fixture preserves its frozen reserved-receiver call identity");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
