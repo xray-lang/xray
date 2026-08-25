@@ -599,6 +599,7 @@ CONTRACT_SPECS = (
             "CMakeLists.txt",
             "src/module/xmodule_graph.h",
             "src/module/xmodule_graph.c",
+            "src/frontend/parser/xparse.c",
             "src/frontend/parser/xparse_decl.c",
             "src/frontend/analyzer/xanalyzer.h",
             "src/frontend/analyzer/xanalyzer.c",

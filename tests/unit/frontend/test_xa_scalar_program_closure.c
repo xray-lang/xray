@@ -23,9 +23,7 @@
 #include "module/xmodule_resolver.h"
 #include "plan/semantic/xr_program_semantic_closure.h"
 #include "plan/semantic/xr_scalar_call_semantics.h"
-#include "runtime/xisolate_api.h"
 #include "toolchain/xcompiler_session.h"
-#include "xray_vm.h"
 #include <string.h>
 
 static const char kScalarSource[] =
@@ -39,28 +37,29 @@ typedef struct ScalarFixture {
     XaTypedProgram *typed;
 } ScalarFixture;
 
-static XrVMRuntime *g_isolate;
+static XrModuleResolver *g_resolver;
 static XrCompilerSession *g_session;
 
 static void setup(void) {
-    XrVMConfig config = {0};
-    g_isolate = xray_vm_new_full(&config);
-    g_session = xr_compiler_session_current_for_isolate(g_isolate);
+    XrCompilerSessionConfig session_config = {0};
+    XrModuleResolverConfig resolver_config = {0};
+    g_session = xr_compiler_session_new(&session_config);
     ASSERT_NOT_NULL(g_session);
+    g_resolver = xr_module_resolver_new(&resolver_config);
+    ASSERT_NOT_NULL(g_resolver);
 }
 
 static void teardown(void) {
-    xray_vm_delete(g_isolate);
-    g_isolate = NULL;
+    xr_module_resolver_free(g_resolver);
+    xr_compiler_session_delete(g_session);
+    g_resolver = NULL;
     g_session = NULL;
 }
 
 static bool fixture_analyze(ScalarFixture *fixture, const char *source,
                             const char *namespace_id) {
     memset(fixture, 0, sizeof(*fixture));
-    XrModuleRegistry *registry = xr_isolate_get_module_registry(g_isolate);
-    XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
-    fixture->graph = xr_module_graph_new(g_session, resolver);
+    fixture->graph = xr_module_graph_new(g_session, g_resolver);
     if (!fixture->graph)
         return false;
     XrModuleIdentityAuthority authority = {
@@ -244,6 +243,15 @@ TEST(snapshot_projects_after_analyzer_and_graph_teardown) {
     xa_typed_program_free(typed);
 }
 
+TEST(compiler_only_graph_refuses_runtime_preload) {
+    ScalarFixture fixture;
+    ASSERT_TRUE(fixture_analyze(&fixture, kScalarSource, "psc-scalar-no-runtime"));
+    XrModule **modules = NULL;
+    ASSERT_FALSE(xr_module_graph_preload(NULL, fixture.graph, &modules));
+    ASSERT_NULL(modules);
+    fixture_cleanup(&fixture);
+}
+
 TEST(call_authority_mutations_fail_independent_verification) {
     ScalarFixture fixture;
     ASSERT_TRUE(fixture_analyze(&fixture, kScalarSource, "psc-scalar-mutation"));
@@ -334,6 +342,7 @@ RUN_TEST_SUITE("source-backed scalar program closure");
 RUN_TEST(source_backed_scalar_snapshot_builds_verified_closure);
 RUN_TEST(published_snapshot_is_pointer_free_and_ignores_node_ids);
 RUN_TEST(snapshot_projects_after_analyzer_and_graph_teardown);
+RUN_TEST(compiler_only_graph_refuses_runtime_preload);
 RUN_TEST(call_authority_mutations_fail_independent_verification);
 RUN_TEST(incomplete_or_ambiguous_source_authority_fails_closed);
 RUN_TEST(resolved_target_mismatch_does_not_publish_scalar_authority);

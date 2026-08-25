@@ -65,10 +65,6 @@ XR_FUNC XrModuleGraph *xr_module_graph_new(XrCompilerSession *compiler_session,
     XR_DCHECK(resolver != NULL, "xr_module_graph_new: NULL resolver");
     if (!compiler_session || !resolver)
         return NULL;
-    XrVMRuntime *X = xr_compiler_session_vm_host(compiler_session);
-    XR_DCHECK(X != NULL, "xr_module_graph_new: compiler session has no VM host");
-    if (!X)
-        return NULL;
     XrModuleGraph *g = xr_calloc(1, sizeof(XrModuleGraph));
     if (!g)
         return NULL;
@@ -82,7 +78,7 @@ XR_FUNC XrModuleGraph *xr_module_graph_new(XrCompilerSession *compiler_session,
     g->id_index = xr_hashmap_new();
     g->resolver = resolver;
     g->compiler_session = compiler_session;
-    g->X = X;
+    g->X = xr_compiler_session_vm_host(compiler_session);
     g->entry_index = -1;
     return g;
 }

@@ -107,7 +107,7 @@ typedef struct XrModuleGraph {
     /* Compiler session used for parsing graph sources. */
     struct XrCompilerSession *compiler_session;
 
-    /* VM host for AST factories while parser/analyzer migration is in progress. */
+    /* Optional VM host association; compiler-only graphs leave this NULL. */
     struct XrVMRuntime *X;
 
     /* Entry module index */

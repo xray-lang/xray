@@ -1208,8 +1208,6 @@ void xr_parser_init(Parser *parser, XrCompilerSession *session, const char *sour
 static void xr_parser_init_internal(Parser *parser, XrCompilerSession *session, const char *source,
                                     const char *source_file, XrArena *arena, bool collect_trivia) {
     XR_CHECK(session != NULL, "xr_parser_init: NULL compiler session");
-    XR_CHECK(xr_compiler_session_vm_host(session) != NULL,
-             "xr_parser_init: compiler session has no VM host");
     parser->compiler_session = session;
     if (parser->compiler_session && arena) {
         xr_compiler_session_set_current_arena(parser->compiler_session, arena);
@@ -1299,8 +1297,6 @@ AstNode *xr_parse_with_source(XrCompilerSession *session, const char *source,
 static AstNode *xr_parse_program(XrCompilerSession *session, const char *source,
                                  const char *source_file, bool expr_value_observed) {
     XR_DCHECK(session != NULL, "xr_parse_program: NULL compiler session");
-    XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
-              "xr_parse_program: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_program: NULL source");
 
     XrCompilerSessionScope parse_scope;
@@ -1377,8 +1373,6 @@ static AstNode *xr_parse_program(XrCompilerSession *session, const char *source,
 AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
                               const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_with_trivia: NULL compiler session");
-    XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
-              "xr_parse_with_trivia: compiler session has no VM host");
     XrCompilerSessionScope parse_scope;
     XrArena *arena = xr_parse_setup_arena(session, source_file, &parse_scope);
 
@@ -1481,8 +1475,6 @@ AstNode *xr_parse_with_trivia(XrCompilerSession *session, const char *source,
 AstNode *xr_parse_expression_string(XrCompilerSession *session, const char *source,
                                     const char *source_file) {
     XR_DCHECK(session != NULL, "xr_parse_expression_string: NULL compiler session");
-    XR_DCHECK(xr_compiler_session_vm_host(session) != NULL,
-              "xr_parse_expression_string: compiler session has no VM host");
     XR_DCHECK(source != NULL, "xr_parse_expression_string: NULL source");
 
     XrCompilerSessionScope parse_scope;

@@ -90,12 +90,18 @@ admission may be inferred from these rows.
     generation bindings, reconstructs the exact semantic contracts, and
     independently recomputes the decision fingerprint. This authority is not
     consumed by Xi, VM, AOT, C emission, or the existing TargetPlan builder.
+14. The bounded source-backed producer is created by a compiler session, module
+    resolver, module graph, and analyzer. Parsing and source-graph construction
+    require that compiler authority, not an installed VM header, VM handle, or
+    runtime constructor. The producer test owns and destroys each compiler-side
+    object directly while retaining the analyzer/graph teardown proof above.
 
 ## Digest anchors
 
 anchor-sha256: CMakeLists.txt 5ae971f2233b55857a288bbce020d3ac1ee2384f9b2bd798df20f59f782e8d49
-anchor-sha256: src/module/xmodule_graph.h 63cbeb6f425310bcf8daf72e827481d5fe594ed3a3ef4db4f0931ecb1bbc2672
-anchor-sha256: src/module/xmodule_graph.c 0bf67850a8d8cc4043fb7ce91356934a45f90d2f2dadac34014a4a15407ef623
+anchor-sha256: src/module/xmodule_graph.h eee9a6baf1b55b99df35751b634eb7cc8ca7f367762f0f8be61eb9e0d80de00b
+anchor-sha256: src/module/xmodule_graph.c a568f09394bbb820944df12da1199fe9ba09e685fb525c5108274eda7ed9c921
+anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365
 anchor-sha256: src/frontend/parser/xparse_decl.c 956af54b931477adfe03b61de2271af8951a2241a9e0fa8ec8875855be2a5b06
 anchor-sha256: src/frontend/analyzer/xanalyzer.h c12244d5565e4e0ceb65177b8bf24f08c7161b6145d6c5d41fe4555d03f74988
 anchor-sha256: src/frontend/analyzer/xanalyzer.c ea9243e7fae24e07022423822848abf3060ddb444b86202e96f221d7e3f8bd61
@@ -119,7 +125,7 @@ anchor-sha256: src/plan/target/xr_scalar_call_decision.c 764bee44083ff3b6622cf5a
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 9d20284c377a6be00d4154193e1160dfde87389cc141fa7cb41d55d6a9bc28a0
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c f7af9b0276b5ee725f601997ad67cb53a81adbfb712338610d9a030df30c9c2e
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 7a4e39c9a670e0c2200dcba87613393c153ff671f13778255933dc9328549138
-anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c 6aa6c44965c51c97f778a6ce44459ce2ad2e7003da66bd6b2487d582a210b2e8
+anchor-sha256: tests/unit/frontend/test_xa_scalar_program_closure.c bea19a127ef16c4b75a8dd8c41a0f876dd1bfb0ea0555c4748b2516325189e62
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c 4bbb43d8d3e3296d02b62ff1669ebdeb6ea5018f3b181dd8297922046ebf3c94
 anchor-sha256: tests/unit/CMakeLists.txt 9503ab3bae8086a98da8094d96a4a2d42f49a0a5b981edb572e8aee744af30bb
