@@ -19,6 +19,7 @@
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
 #include "plan/target/xr_target_profile.h"
+#include "runtime/abi/xr_runtime_target_profile.h"
 #include "toolchain/xcompiler_session.h"
 #include <string.h>
 
@@ -155,7 +156,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
 
     char error[512] = {0};
     XrTargetProfile *profile = NULL;
-    ASSERT_TRUE(xr_target_profile_build_native_hosted(
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
         &profile, error, sizeof(error)));
     XrProgramSemanticClosure *closure = NULL;
     XrScalarCallDecision decision = {0};
