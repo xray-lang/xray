@@ -17,6 +17,7 @@
 #include "../../../src/plan/semantic/xr_semantic_array_type_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_array_member_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_container_copy_shape.h"
+#include "../../../src/plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
 #include "../../../src/plan/semantic/xr_semantic_verify.h"
 #include "../../../src/plan/ownership/xr_ownership_certificate_internal.h"
@@ -4565,6 +4566,66 @@ static XrSemanticPlan *build_direct_local_aggregate_call(void) {
     return plan;
 }
 
+static XrSemanticPlan *build_direct_local_managed_aggregate_argument(void) {
+    const char *field_names[2] = {"label", "count"};
+    XrType *field_types[2] = {&stub_exact_string, &stub_int};
+    XrType aggregate = {
+        .kind = XR_KIND_STRUCT_OBJECT,
+        .id = 146,
+        .frozen = true,
+        .scalar_rep = XR_SCALAR_REP_NONE,
+        .object =
+            {
+                .field_names = field_names,
+                .field_types = field_types,
+                .field_count = 2,
+            },
+    };
+    XiFunc *root = xi_func_new("target_managed_aggregate_root", &stub_int);
+    XiFunc *child = xi_func_new("target_managed_aggregate_child", &stub_int);
+    REQUIRE(root != NULL && child != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    REQUIRE(root_entry != NULL && child_entry != NULL);
+    root->nparams = root->min_params = 1;
+    child->nparams = child->min_params = 1;
+    root->params = (XiValue **) xr_calloc(1, sizeof(*root->params));
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    REQUIRE(root->params != NULL && child->params != NULL);
+    root->params[0] = xi_param(root, root_entry, 0, &aggregate);
+    child->params[0] = xi_param(child, child_entry, 0, &aggregate);
+    REQUIRE(root->params[0] != NULL && child->params[0] != NULL);
+    root->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    child->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    set_single_parameter_ownership(root, XI_OWN_BORROWED);
+    set_single_parameter_ownership(child, XI_OWN_BORROWED);
+    XiValue *child_result = xi_const_int(child, child_entry, 7, &stub_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+    root->children = (XiFunc **) xr_calloc(1, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->nchildren = root->children_cap = 1;
+    child->parent_func = root;
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(closure != NULL && call != NULL);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    call->args[0] = closure;
+    call->args[1] = root->params[0];
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = XI_STAGE_OPTIMIZED;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = build_target_unit_fixture_semantic(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "managed aggregate semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
+    xi_func_free(root);
+    return plan;
+}
+
 static void test_unknown_call_target_fails_closed(void) {
     XrSemanticPlan *semantic = build_struct_and_named_aggregate_semantic(true);
     XrTargetProfile *profile = build_profile(0);
@@ -5454,6 +5515,75 @@ static void test_direct_local_future_storage_fails_closed(void) {
     REQUIRE(!xr_target_plan_build(aggregate, profile, &plan, error, sizeof(error)));
     REQUIRE(plan == NULL && strncmp(error, "XR_TARGET_1003", 14) == 0);
     xr_semantic_plan_free(aggregate);
+    xr_target_profile_free(profile);
+}
+
+static void test_direct_local_managed_aggregate_precursor_fails_closed(void) {
+    XrSemanticPlan *semantic = build_direct_local_managed_aggregate_argument();
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *operation =
+        target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    const XrSemanticFunctionRecord *callee =
+        target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    XrSemanticManagedAggregateArgumentShape shape;
+    REQUIRE(target && target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL && operation && callee &&
+            xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+                semantic, operation, callee, 0, &shape));
+    REQUIRE(shape.semantic_type != XR_SEMANTIC_INDEX_NONE && shape.field_count == 2 &&
+            shape.managed_field_count == 1 && xr_semantic_plan_verify(semantic, NULL, 0));
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    REQUIRE(!xr_target_plan_build(semantic, profile, &plan, error, sizeof(error)));
+    REQUIRE(plan == NULL &&
+            strstr(error, "direct-local managed aggregate needs frozen clone, drop, root, and "
+                          "generation authority") != NULL);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_direct_local_managed_aggregate_argument();
+    target = xr_semantic_plan_call_target(semantic, 0);
+    operation = target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    callee = target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    REQUIRE(xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+        semantic, operation, callee, 0, &shape));
+    XrSemanticParameterRecord *parameter = &semantic->parameters[shape.parameter];
+    parameter->ownership = XI_OWN_OWNED;
+    REQUIRE(!xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+        semantic, operation, callee, 0, &shape));
+    error[0] = '\0';
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)) &&
+            strncmp(error, "XR_SEM_", 7) == 0);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_direct_local_managed_aggregate_argument();
+    target = xr_semantic_plan_call_target(semantic, 0);
+    operation = target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    callee = target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    REQUIRE(xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+        semantic, operation, callee, 0, &shape));
+    XrSemanticOperandRecord *operand = &semantic->operands[shape.operand];
+    operand->ownership_action = XR_SEM_OPERAND_CONSUME;
+    REQUIRE(!xr_semantic_plan_verify(semantic, error, sizeof(error)) &&
+            strstr(error, "XR_SEM_0019") != NULL);
+    xr_semantic_plan_free(semantic);
+
+    semantic = build_direct_local_managed_aggregate_argument();
+    target = xr_semantic_plan_call_target(semantic, 0);
+    operation = target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    callee = target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+    REQUIRE(xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+        semantic, operation, callee, 0, &shape));
+    parameter = &semantic->parameters[shape.parameter];
+    uint32_t saved_child = semantic->type_children[semantic->types[parameter->type].child_begin];
+    semantic->type_children[semantic->types[parameter->type].child_begin] =
+        semantic->types[parameter->type].child_begin == saved_child ? saved_child + 1u : 0u;
+    REQUIRE(!xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+        semantic, operation, callee, 0, &shape));
+    semantic->type_children[semantic->types[parameter->type].child_begin] = saved_child;
+    REQUIRE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+
+    xr_semantic_plan_free(semantic);
     xr_target_profile_free(profile);
 }
 
@@ -8283,6 +8413,11 @@ int main(int argc, char **argv) {
         puts("Direct-local source-class Array ref authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "direct-local-managed-aggregate-precursor") == 0) {
+        test_direct_local_managed_aggregate_precursor_fails_closed();
+        puts("Direct-local managed aggregate precursor tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "coroutine-lifecycle-authority") == 0) {
         test_owned_string_coroutine_lifecycle_authority();
         test_large_coroutine_lifecycle_projection_is_bounded();
@@ -8417,6 +8552,7 @@ int main(int argc, char **argv) {
     test_direct_local_call_adapter_family();
     test_direct_local_class_argument_authority();
     test_direct_local_source_class_array_ref_authority();
+    test_direct_local_managed_aggregate_precursor_fails_closed();
     test_source_instance_method_target_fails_closed();
     test_open_source_instance_method_target_fails_closed();
     test_coroutine_state_call_family();

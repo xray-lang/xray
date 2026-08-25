@@ -17,10 +17,12 @@
 #include "xr_semantic_builtin_identity_shape.h"
 #include "xr_semantic_class_shape.h"
 #include "xr_semantic_coroutine_lifecycle_shape.h"
+#include "xr_semantic_enum_shape.h"
 #include "xr_semantic_graph.h"
 #include "xr_semantic_ops.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_string_runes_shape.h"
+#include "xr_semantic_string_shape.h"
 #include "xr_semantic_iterator_rune_has_next_shape.h"
 #include "xr_semantic_iterator_rune_next_shape.h"
 #include "xr_semantic_map_entry_iterator_shape.h"
@@ -3595,6 +3597,169 @@ static bool verify_source_export_rows(const XrSemanticPlan *plan, const uint32_t
     return true;
 }
 
+static int verify_aggregate_type_kind(const XrSemanticTypeRecord *type) {
+    if (!type)
+        return -1;
+    if ((type->flags & XR_SEM_TYPE_NULLABLE) != 0)
+        return 0;
+    if (type->kind == XR_KIND_TUPLE || type->kind == XR_KIND_FIXED_ARRAY)
+        return type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1;
+    if (type->kind == XR_KIND_STRUCT_OBJECT)
+        return (type->flags & XR_SEM_TYPE_VALUE) == 0
+                   ? 0
+                   : (type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1);
+    if (type->kind == XR_KIND_INSTANCE)
+        return (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) == 0
+                   ? 0
+                   : (type->scalar_rep == XR_SCALAR_REP_NONE ? 1 : -1);
+    return 0;
+}
+
+static bool verify_source_structural_shape_is_exact(const XrSemanticPlan *plan,
+                                                    uint32_t semantic_type) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    if (!plan || !type || type->kind != XR_KIND_STRUCT_OBJECT ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || type->child_count == 0 ||
+        type->aggregate_extent != type->child_count ||
+        (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_BORROW_VIEW |
+                        XR_SEM_TYPE_AGGREGATE_EXACT)) != 0 ||
+        type->child_count > 64u)
+        return false;
+    uint32_t type_entity = XR_SEMANTIC_INDEX_NONE;
+    uint32_t shape_entity = XR_SEMANTIC_INDEX_NONE;
+    uint64_t field_mask = 0;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_TYPE ||
+            entity->subject != semantic_type)
+            continue;
+        if (entity->kind == XR_SEM_ENTITY_TYPE_INSTANTIATION) {
+            if (type_entity != XR_SEMANTIC_INDEX_NONE)
+                return false;
+            type_entity = i;
+        } else if (entity->kind == XR_SEM_ENTITY_SHAPE) {
+            if (shape_entity != XR_SEMANTIC_INDEX_NONE)
+                return false;
+            shape_entity = i;
+        }
+    }
+    if (type_entity == XR_SEMANTIC_INDEX_NONE || shape_entity == XR_SEMANTIC_INDEX_NONE ||
+        plan->entities[shape_entity].parent != type_entity)
+        return false;
+    for (uint32_t i = 0; i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind != XR_SEM_ENTITY_FIELD || entity->parent != shape_entity)
+            continue;
+        if (entity->subject_kind != XR_SEM_ENTITY_SUBJECT_TYPE ||
+            entity->subject != semantic_type || entity->ordinal >= type->child_count ||
+            (field_mask & (UINT64_C(1) << entity->ordinal)) != 0)
+            return false;
+        field_mask |= UINT64_C(1) << entity->ordinal;
+    }
+    return field_mask == (type->child_count == 64u
+                              ? UINT64_MAX
+                              : (UINT64_C(1) << type->child_count) - UINT64_C(1));
+}
+
+/* Independent reconstruction of the managed-field aggregate precursor. This
+ * deliberately does not call xr_semantic_managed_aggregate_field_graph(): the
+ * builder-side normalized view and this verifier must disagree if either one
+ * starts admitting another leaf, recursion rule, or field geometry. */
+static bool verify_managed_aggregate_field_graph(const XrSemanticPlan *plan,
+                                                 uint32_t semantic_type, uint32_t *stack,
+                                                 uint32_t depth, uint32_t *managed_fields) {
+    const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, semantic_type);
+    if (!plan || !type || !stack || !managed_fields || depth >= 64u)
+        return false;
+    if (xr_semantic_tagged_string_type_is_exact(type) ||
+        xr_semantic_adt_enum_type_is_exact(type)) {
+        if (*managed_fields == UINT32_MAX)
+            return false;
+        (*managed_fields)++;
+        return true;
+    }
+    if (xr_semantic_unit_enum_type_is_exact(type))
+        return true;
+    switch ((XrTypeKind) type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_RUNE:
+            return (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_REFERENCE_CAPABLE |
+                                   XR_SEM_TYPE_BORROW_VIEW | XR_SEM_TYPE_AGGREGATE_EXACT)) == 0;
+        default:
+            break;
+    }
+    if (verify_aggregate_type_kind(type) != 1 &&
+        !verify_source_structural_shape_is_exact(plan, semantic_type))
+        return false;
+    for (uint32_t i = 0; i < depth; i++)
+        if (stack[i] == semantic_type)
+            return false;
+    if (!plan->type_children || type->child_begin > plan->type_child_count ||
+        type->child_count > plan->type_child_count - type->child_begin ||
+        (type->kind == XR_KIND_FIXED_ARRAY
+             ? (type->child_count != 1 || type->aggregate_extent == 0)
+             : type->aggregate_extent != type->child_count))
+        return false;
+    stack[depth] = semantic_type;
+    uint32_t repetitions = type->kind == XR_KIND_FIXED_ARRAY ? type->aggregate_extent : 1u;
+    uint32_t dependencies = type->kind == XR_KIND_FIXED_ARRAY ? 1u : type->child_count;
+    for (uint32_t repetition = 0; repetition < repetitions; repetition++)
+        for (uint32_t i = 0; i < dependencies; i++)
+            if (!verify_managed_aggregate_field_graph(
+                    plan, plan->type_children[type->child_begin + i], stack, depth + 1u,
+                    managed_fields))
+                return false;
+    return true;
+}
+
+static bool verify_direct_local_managed_aggregate_boundaries(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    const XrSemanticFunctionRecord *callee, char *error, size_t error_size) {
+    if (!plan || !operation || !callee ||
+        (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
+        operation->operand_count != (uint16_t) (callee->parameter_count + 1u))
+        return report(error, error_size, "XR_SEM_0019",
+                      "direct-local managed aggregate call shape is incomplete");
+    for (uint32_t ordinal = 0; ordinal < callee->parameter_count; ordinal++) {
+        uint32_t parameter_index = callee->parameter_begin + ordinal;
+        uint32_t operand_index = operation->operand_begin + ordinal + 1u;
+        const XrSemanticParameterRecord *parameter =
+            xr_semantic_plan_parameter(plan, parameter_index);
+        const XrSemanticOperandRecord *operand =
+            operand_index < plan->operand_count ? &plan->operands[operand_index] : NULL;
+        if (!parameter || parameter->mode != XR_PARAM_READ ||
+            parameter->ownership != XI_OWN_BORROWED ||
+            parameter->transfer_mode != XR_TRANSFER_SHARE)
+            continue;
+        uint32_t stack[64] = {0};
+        uint32_t managed_fields = 0;
+        if (!verify_managed_aggregate_field_graph(plan, parameter->type, stack, 0,
+                                                  &managed_fields) ||
+            managed_fields == 0)
+            continue;
+        if (parameter->function >= plan->function_count ||
+            &plan->functions[parameter->function] != callee || parameter->ordinal != ordinal ||
+            !operand || parameter->type != operand->type || parameter->mode != XR_PARAM_READ ||
+            parameter->ownership != XI_OWN_BORROWED ||
+            parameter->transfer_mode != XR_TRANSFER_SHARE ||
+            (parameter->flags & (uint8_t) ~XR_SEM_PARAMETER_REQUIRED) != 0 ||
+            parameter->reserved != 0 || operand->role != XR_SEM_OPERAND_ARGUMENT ||
+            operand->parameter != (int16_t) ordinal ||
+            operand->parameter_mode != XR_PARAM_READ ||
+            operand->transfer_mode != XR_TRANSFER_SHARE ||
+            operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+            operand->access != XR_CALL_ARG_PLAIN || operand->origin != XI_PLACE_ORIGIN_NONE ||
+            operand->lifetime != XI_PLACE_LIFETIME_NONE ||
+            operand->escape != XI_PLACE_ESCAPE_NONE ||
+            operand->flags != XR_SEM_OPERAND_CALL_CONTRACT)
+            return report(error, error_size, "XR_SEM_0019",
+                          "direct-local managed aggregate borrow authority is inconsistent");
+    }
+    return true;
+}
+
 static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *definitions,
                                 const XrSemanticGraph *graph, uint32_t value_count, char *error,
                                 size_t error_size) {
@@ -3846,6 +4011,12 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
             !stable_id_zero(target->export_identity) &&
             target->callable_type == source_call->result_type &&
             xr_semantic_external_class_instance_type_is_exact(imported_result_type);
+        if (direct && !verify_direct_local_managed_aggregate_boundaries(
+                          plan, source_call, &plan->functions[target->function], error,
+                          error_size)) {
+            xr_free(stores.rows);
+            return false;
+        }
         if ((!direct && !native && !source_shape && !indirect && !native_namespace_shape &&
              !builtin_instance_shape && !source_instance_shape && !open_source_instance_shape &&
              !class_construction_shape && !imported_class_construction_shape) ||

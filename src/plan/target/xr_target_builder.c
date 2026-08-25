@@ -9854,6 +9854,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             operand->ownership_action ==
                 (string_callee_owns ? XR_SEM_OPERAND_CONSUME : XR_SEM_OPERAND_BORROW) &&
             operand->transfer_mode == XR_TRANSFER_SHARE;
+        XrSemanticManagedAggregateArgumentShape managed_aggregate_shape;
+        bool exact_managed_aggregate =
+            !method && xr_semantic_direct_local_managed_aggregate_argument_is_exact(
+                           plan, operation, callee, ordinal, &managed_aggregate_shape);
         /* The receiver sits at parameter 0 and is spelled as a receiver, not
          * an argument, and it names no argument ordinal of its own. Every
          * later operand states the argument ordinal it fills, counted without
@@ -9933,6 +9937,8 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                 target_trace_judgement("argument is an exact tagged reference", exact_tagged_ref);
                 target_trace_judgement("argument is an exact Array by value", exact_array_value);
                 target_trace_judgement("argument is an exact String by value", exact_string_value);
+                target_trace_judgement("argument is an exact managed aggregate precursor",
+                                       exact_managed_aggregate);
                 if (parameter && !exact_tagged_ref) {
                     fprintf(stderr,
                             "[target]   everything but an Array by reference travels the plain "
@@ -9964,6 +9970,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                             "operand[0] is the callee.\n",
                             ordinal, ordinal + 1u);
             }
+            if (exact_managed_aggregate)
+                return fail(error, error_size, "XR_TARGET_1003",
+                            "direct-local managed aggregate needs frozen clone, drop, root, and "
+                            "generation authority");
             return fail(error, error_size, "XR_TARGET_1003",
                         "direct-local argument contract needs unsupported storage or ownership");
         }
