@@ -180,8 +180,12 @@ class ReuseGuardTest(unittest.TestCase):
     def _cache(self, text):
         (self.build / "CMakeCache.txt").write_text(text, encoding="utf-8")
 
+    def _complete_ninja_tree(self):
+        (self.build / "build.ninja").write_text("# generated\n", encoding="utf-8")
+
     def test_tree_with_sanitizer_off_is_not_reused(self):
         self._cache("CMAKE_GENERATOR:INTERNAL=Ninja\nENABLE_TSAN:BOOL=OFF\n")
+        self._complete_ninja_tree()
         spec = sanitizer.BuildSpec(build_dir=self.build,
                                    sanitizer_flags=("ENABLE_TSAN=ON",))
         # ninja may be absent in this environment; either way the tree must be
@@ -193,15 +197,26 @@ class ReuseGuardTest(unittest.TestCase):
 
     def test_matching_tree_is_reused(self):
         self._cache("CMAKE_GENERATOR:INTERNAL=Ninja\nENABLE_TSAN:BOOL=ON\n")
+        self._complete_ninja_tree()
         spec = sanitizer.BuildSpec(build_dir=self.build,
                                    sanitizer_flags=("ENABLE_TSAN=ON",))
         self.assertTrue(sanitizer.configure(spec, Path(self.tmp), 1, 5, self._log))
         self.assertIn("reusing existing configuration", " ".join(self.messages))
 
+    def test_incomplete_ninja_tree_is_not_reused(self):
+        self._cache("CMAKE_GENERATOR:INTERNAL=Ninja\nENABLE_TSAN:BOOL=ON\n")
+        spec = sanitizer.BuildSpec(build_dir=self.build,
+                                   sanitizer_flags=("ENABLE_TSAN=ON",))
+        sanitizer.configure(spec, Path(self.tmp), 1, 5, self._log)
+        joined = " ".join(self.messages)
+        self.assertNotIn("reusing existing configuration", joined)
+        self.assertIn("has no build.ninja", joined)
+
     def test_partial_flag_match_is_not_reused(self):
         # ASan on but UBSan off must still reconfigure: the lane asserts both.
         self._cache("CMAKE_GENERATOR:INTERNAL=Ninja\n"
                     "ENABLE_ASAN:BOOL=ON\nENABLE_UBSAN:BOOL=OFF\n")
+        self._complete_ninja_tree()
         spec = sanitizer.BuildSpec(build_dir=self.build,
                                    sanitizer_flags=("ENABLE_ASAN=ON", "ENABLE_UBSAN=ON"))
         sanitizer.configure(spec, Path(self.tmp), 1, 5, self._log)

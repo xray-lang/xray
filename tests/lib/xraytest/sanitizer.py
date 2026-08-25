@@ -181,6 +181,15 @@ def configure(spec: BuildSpec, project_dir: Path, jobs: int,
         shutil.rmtree(build_dir, ignore_errors=True)
         generator = None
 
+    # CMake writes the cache before it finishes generating build.ninja. An
+    # interrupted configure therefore looks like a matching Ninja tree but
+    # cannot be built. Reconfigure that incomplete tree instead of treating
+    # the cache alone as reusable authority.
+    if generator == "Ninja" and not (build_dir / "build.ninja").is_file():
+        log(f"{build_dir} has no build.ninja; reconfiguring incomplete Ninja tree")
+        shutil.rmtree(build_dir, ignore_errors=True)
+        generator = None
+
     # Reuse requires the sanitizer flags to match too, not just the generator.
     # A tree left behind by an interrupted or differently-configured run can be
     # a perfectly good Ninja tree with the sanitizer OFF; reusing it would build
