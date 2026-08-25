@@ -18,6 +18,7 @@
 #include "module/xmodule_identity.h"
 #include "module/xmodule_resolver.h"
 #include "module/xlockfile.h"
+#include <string.h>
 
 static void require_identity(const XrModuleIdentityAuthority *authority, const char *source,
                              const char *expected_identity, const char *expected_logical) {
@@ -303,12 +304,13 @@ TEST(xi_and_global_evidence_reject_untyped_identity_mutations) {
     ASSERT_TRUE(xi_module_set_identity(module, "memory-module-v1:id=5:probe"));
 
     static const char source[] = "export const answer = 42\n";
-    uint64_t content_hash = xr_hash_bytes64(source, strlen(source));
+    XrFingerprint content_fingerprint;
+    xr_module_source_fingerprint(source, &content_fingerprint);
     XrModuleSpec embedded = {
         .canonical = "stdlib-module-v1:module=5:probe:path=14:probe/probe.xr",
         .source_path = "<embedded stdlib>/probe/probe.xr",
         .kind = XR_MOD_STDLIB,
-        .source_content_hash = content_hash,
+        .source_content_fingerprint = content_fingerprint,
     };
     XrModuleSpec dev = embedded;
     dev.source_path = "D:/relocated/stdlib/probe/probe.xr";
@@ -318,7 +320,7 @@ TEST(xi_and_global_evidence_reject_untyped_identity_mutations) {
     ASSERT_TRUE(xg_module_summary_from_module_spec(&dev_summary, 1, &dev));
     ASSERT_EQ_UINT(embedded_summary.canonical_hash, dev_summary.canonical_hash);
     ASSERT_EQ_UINT(embedded_summary.source_hash, dev_summary.source_hash);
-    dev.source_content_hash++;
+    dev.source_content_fingerprint.bytes[0] ^= UINT8_C(0x80);
     ASSERT_TRUE(xg_module_summary_from_module_spec(&dev_summary, 1, &dev));
     ASSERT_TRUE(embedded_summary.source_hash != dev_summary.source_hash);
     dev.canonical = "probe";
@@ -327,6 +329,23 @@ TEST(xi_and_global_evidence_reject_untyped_identity_mutations) {
     root->module = NULL;
     xi_module_free(module);
     xi_func_free(root);
+}
+
+TEST(source_content_fingerprint_is_domain_and_length_framed) {
+    static const uint8_t expected[XR_FINGERPRINT_BYTES] = {
+        0x3b, 0x83, 0xd6, 0x74, 0xc4, 0x51, 0xd6, 0x0d,
+        0x16, 0xeb, 0xb0, 0x7f, 0xcc, 0x87, 0xe1, 0x23,
+        0x54, 0x36, 0x8f, 0x6a, 0xd2, 0x68, 0x2b, 0x6d,
+        0x1a, 0x6b, 0x8a, 0xb7, 0x38, 0x7e, 0x66, 0x3c,
+    };
+    XrFingerprint fingerprint;
+    xr_module_source_fingerprint("export const answer = 42\n", &fingerprint);
+    ASSERT_EQ_INT(memcmp(fingerprint.bytes, expected, sizeof(expected)), 0);
+
+    XrFingerprint different_length;
+    xr_module_source_fingerprint("export const answer = 42", &different_length);
+    ASSERT_TRUE(memcmp(fingerprint.bytes, different_length.bytes,
+                       sizeof(fingerprint.bytes)) != 0);
 }
 
 TEST(package_without_exact_lock_fails_closed) {
@@ -397,6 +416,7 @@ RUN_TEST(memory_graph_rejects_missing_or_raw_eval_identity_before_publication);
 RUN_TEST(durable_identity_parser_rejects_raw_and_ambiguous_text);
 RUN_TEST(resolver_publishes_typed_stdlib_identity);
 RUN_TEST(xi_and_global_evidence_reject_untyped_identity_mutations);
+RUN_TEST(source_content_fingerprint_is_domain_and_length_framed);
 RUN_TEST(package_without_exact_lock_fails_closed);
 RUN_TEST(package_with_malformed_checksum_fails_closed);
 RUN_TEST(absolute_import_fails_closed);

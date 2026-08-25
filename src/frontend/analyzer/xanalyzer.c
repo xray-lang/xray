@@ -1125,6 +1125,12 @@ XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name) {
     return best;
 }
 
+XaSymbol *xa_analyzer_symbol_by_id(XaAnalyzer *analyzer, uint32_t symbol_id) {
+    if (!analyzer || !analyzer->symbols_by_id || symbol_id == 0)
+        return NULL;
+    return (XaSymbol *) xr_intmap_get((XrIntMap *) analyzer->symbols_by_id, symbol_id);
+}
+
 XaSymbol *xa_analyzer_import_export_symbol(XaAnalyzer *analyzer, const XaSymbol *source) {
     if (!analyzer || !source)
         return NULL;

@@ -22,6 +22,7 @@
 #include "../base/xhash.h"
 #include "../base/xlog.h"
 #include "../base/xmalloc.h"
+#include "../base/xsha256.h"
 #include "../frontend/parser/xast.h"
 #include "../frontend/parser/xparse.h"
 #include "../os/os_fs.h"
@@ -38,6 +39,23 @@ extern void xr_program_destroy(struct AstNode *ast);
 #define GRAPH_INITIAL_CAP 16
 #define GRAPH_MAX_MODULES 1024
 #define GRAPH_EMBEDDED_STDLIB_PREFIX "<embedded stdlib>/"
+
+void xr_module_source_fingerprint(const char *source, XrFingerprint *out) {
+    if (!out)
+        return;
+    static const uint8_t domain[] = "xray-module-source-v1\0";
+    XrSHA256Context context;
+    uint64_t length = source ? (uint64_t) strlen(source) : 0;
+    uint8_t length_bytes[8];
+    for (uint32_t i = 0; i < sizeof(length_bytes); i++)
+        length_bytes[i] = (uint8_t) (length >> (i * 8u));
+    xr_sha256_init(&context);
+    xr_sha256_update(&context, domain, sizeof(domain) - 1u);
+    xr_sha256_update(&context, length_bytes, sizeof(length_bytes));
+    if (length)
+        xr_sha256_update(&context, (const uint8_t *) source, (size_t) length);
+    xr_sha256_final(&context, out->bytes);
+}
 
 /* ========== Lifecycle ========== */
 
@@ -363,9 +381,7 @@ static int graph_build_from_entry(XrModuleGraph *g, const char *entry_canonical,
         }
 
         struct AstNode *ast = xr_parse_with_source(g->compiler_session, source, spec->source_path);
-        spec->source_content_hash = xr_hash_bytes64(source, strlen(source));
-        if (spec->source_content_hash == 0)
-            spec->source_content_hash = 1;
+        xr_module_source_fingerprint(source, &spec->source_content_fingerprint);
         xr_free(owned_source);
 
         if (!ast) {

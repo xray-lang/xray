@@ -885,6 +885,10 @@ TEST(parser_call_expr) {
     AstNode *expr = stmt->as.expr_stmt;
     ASSERT_EQ_INT(expr->type, AST_CALL_EXPR);
     ASSERT_EQ_INT(expr->as.call_expr.arg_count, 3);
+    ASSERT_EQ_INT(expr->line, 1);
+    ASSERT_EQ_INT(expr->column, 1);
+    ASSERT_EQ_INT(expr->end_line, 1);
+    ASSERT_EQ_INT(expr->end_column, 13);
     teardown();
 }
 

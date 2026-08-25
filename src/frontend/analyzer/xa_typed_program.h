@@ -23,6 +23,7 @@ struct XaResolvedCall;
 struct XaSymbol;
 struct XaEffectSummary;
 struct XaMemoryEffectSummary;
+struct XaScalarProgramAuthority;
 struct XaOwnershipCandidateProof;
 struct XaFinalMoveProof;
 struct XaAllocationInstancePlan;
@@ -36,6 +37,7 @@ typedef enum XaTypedProgramReason {
     XA_TYPED_PROGRAM_REASON_RECOVERY_POISON,
     XA_TYPED_PROGRAM_REASON_STALE_REVISION,
     XA_TYPED_PROGRAM_REASON_OWNERSHIP_PROOF,
+    XA_TYPED_PROGRAM_REASON_SCALAR_AUTHORITY,
     XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE,
 } XaTypedProgramReason;
 
@@ -61,6 +63,10 @@ XR_FUNC struct XaAnalyzer *xa_typed_program_semantics(const XaTypedProgram *prog
 XR_FUNC const struct XgGlobalEvidence *
 xa_typed_program_global_evidence(const XaTypedProgram *program);
 XR_FUNC uint32_t xa_typed_program_module_id(const XaTypedProgram *program);
+/* Optional bounded authority copied during publication. NULL means the typed
+ * program is outside the deliberately narrow scalar closed-world family. */
+XR_FUNC const struct XaScalarProgramAuthority *
+xa_typed_program_scalar_authority(const XaTypedProgram *program);
 XR_FUNC const struct XaResolvedCall *
 xa_typed_program_resolved_call(const XaTypedProgram *program, const struct AstNode *call_node);
 XR_FUNC bool xa_typed_program_conversion(const XaTypedProgram *program,

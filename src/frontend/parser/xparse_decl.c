@@ -895,7 +895,8 @@ bool xr_is_construct_only_type_name(const char *name) {
 
 AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     XR_DCHECK(parser != NULL, "parse_call_expr: NULL parser");
-    int line = parser->previous.line;
+    int line = callee && callee->line > 0 ? callee->line : parser->previous.line;
+    int column = callee && callee->column > 0 ? callee->column : parser->previous.column;
 
     /* `a?.b.c()` — the call continues an optional chain, so it becomes the
      * chain's method-call link and short-circuits with it (spec §3.6), exactly
@@ -922,6 +923,8 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
+    int end_line = parser->previous.line;
+    int end_column = parser->previous.column + parser->previous.length;
 
     // `Map()` / `Array()` / `Channel(n)` etc. construct built-in heap types.
     if (callee && callee->type == AST_VARIABLE &&
@@ -930,8 +933,14 @@ AstNode *xr_parse_call_expr(Parser *parser, AstNode *callee) {
                                arg_accesses, arg_count, NULL, 0, line);
     }
 
-    return xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses, arg_count,
-                            line);
+    AstNode *call = xr_ast_call_expr(parser->compiler_session, callee, arguments, arg_accesses,
+                                     arg_count, line);
+    if (call) {
+        call->column = column;
+        call->end_line = end_line;
+        call->end_column = end_column;
+    }
+    return call;
 }
 
 /* ========== Array Parsing ========== */

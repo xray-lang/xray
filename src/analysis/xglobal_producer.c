@@ -10601,7 +10601,8 @@ static uint64_t fold_graph_module_source(uint64_t h, uint64_t module_id, const X
         return h;
     if (spec->canonical)
         h = fold_bytes(h, spec->canonical, strlen(spec->canonical));
-    h = fold_u64(h, spec->source_content_hash);
+    h = fold_bytes(h, spec->source_content_fingerprint.bytes,
+                   sizeof(spec->source_content_fingerprint.bytes));
     return h;
 }
 
@@ -10623,7 +10624,8 @@ static uint64_t module_source_hash(const XrModuleSpec *spec) {
     h = fold_u64(h, (uint64_t) spec->kind);
     if (spec->canonical)
         h = fold_bytes(h, spec->canonical, strlen(spec->canonical));
-    h = fold_u64(h, spec->source_content_hash);
+    h = fold_bytes(h, spec->source_content_fingerprint.bytes,
+                   sizeof(spec->source_content_fingerprint.bytes));
     return h ? h : 1;
 }
 

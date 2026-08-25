@@ -342,6 +342,9 @@ XR_FUNC XaSymbol *xa_analyzer_lookup_in_scope(XaAnalyzer *analyzer, const char *
 XR_FUNC XaSymbol *xa_analyzer_lookup_at(XaAnalyzer *analyzer, const char *file, uint32_t line,
                                         uint32_t column);
 XR_FUNC XaSymbol *xa_analyzer_lookup_deep(XaAnalyzer *analyzer, const char *name);
+/* Resolve one analyzer-local binding identity without consulting spelling or
+ * another analyzer's process-local id space. */
+XR_FUNC XaSymbol *xa_analyzer_symbol_by_id(XaAnalyzer *analyzer, uint32_t symbol_id);
 
 /* Return `source` when it already belongs to `analyzer`; otherwise return a
  * cached analyzer-owned symbol with a fresh local id and re-interned export

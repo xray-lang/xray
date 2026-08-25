@@ -568,6 +568,29 @@ static const XaResolvedCall *xa_record_resolved_intrinsic_call(XaInferContext *c
     return xa_analyzer_get_resolved_call(ctx->analyzer, node);
 }
 
+static const XaResolvedCall *xa_record_resolved_source_function_call(
+    XaInferContext *ctx, AstNode *node, const AstNode *callee, const XaSymbol *target) {
+    if (!ctx || !ctx->analyzer || !ctx->analyzer->resolved_call_table || !node || !callee ||
+        callee->type != AST_VARIABLE || callee->as.variable.symbol_id == 0 || !target ||
+        target->id != callee->as.variable.symbol_id || target->kind != XA_SYM_FUNCTION ||
+        target->is_builtin || target->is_imported || target->links.summary_owner != ctx->analyzer ||
+        !target->links.function_decl_node ||
+        target->links.function_decl_node->type != AST_FUNCTION_DECL ||
+        target->links.function_decl_node->as.function_decl.symbol_id != target->id)
+        return NULL;
+    XaResolvedCall resolved = {
+        .source_node_id = node->node_id,
+        .target_symbol_id = target->id,
+        .intrinsic_id = XA_INTRINSIC_NONE,
+        .reason = XA_RESOLVED_CALL_REASON_RESOLVED,
+        .flags = ctx->unsafe_depth > 0 ? XA_RESOLVED_CALL_FLAG_UNSAFE_SCOPE
+                                      : XA_RESOLVED_CALL_FLAG_NONE,
+    };
+    xa_resolved_call_table_set((XaResolvedCallTable *) ctx->analyzer->resolved_call_table, node,
+                               &resolved);
+    return xa_analyzer_get_resolved_call(ctx->analyzer, node);
+}
+
 static bool xa_codegen_opaque_type_supported(const XrType *type) {
     if (!type || type->is_nullable)
         return false;
@@ -8385,6 +8408,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (optional_function_call && final_type && !XR_TYPE_IS_UNKNOWN(final_type))
         final_type = xr_type_make_nullable(ctx->analyzer->isolate,
                                            xr_type_copy(ctx->analyzer->isolate, final_type));
+    if (!resolved_intrinsic)
+        (void) xa_record_resolved_source_function_call(ctx, node, call->callee, fn_sym);
     xr_free(effective_arg_types);
     xr_free(effective_arg_symbol_ids);
     xr_free(effective_arg_root_ids);

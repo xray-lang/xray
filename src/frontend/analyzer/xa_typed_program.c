@@ -8,10 +8,12 @@
 
 #include "xa_typed_program.h"
 #include "xa_node_table.h"
+#include "xa_scalar_program_authority.h"
 #include "xanalyzer.h"
 #include "xanalyzer_symbol.h"
 #include "../parser/xast_nodes.h"
 #include "../../base/xmalloc.h"
+#include "../../module/xmodule_graph.h"
 
 struct XaTypedProgram {
     const struct AstNode *syntax;
@@ -19,10 +21,27 @@ struct XaTypedProgram {
     const struct XgGlobalEvidence *global_evidence;
     uint64_t semantic_revision;
     uint32_t module_id;
+    XaScalarProgramAuthority *scalar_authority;
     XaNodeConversionEntry *conversions;
     uint32_t conversion_count;
     bool verified;
 };
+
+static const XrModuleSpec *find_module_spec(const struct XaAnalyzer *analyzer,
+                                            const struct AstNode *syntax) {
+    const XrModuleGraph *graph = analyzer ? analyzer->graph : NULL;
+    const XrModuleSpec *found = NULL;
+    if (!graph || !syntax)
+        return NULL;
+    for (int i = 0; i < graph->spec_count; i++) {
+        if (graph->specs[i].ast != syntax)
+            continue;
+        if (found)
+            return NULL;
+        found = &graph->specs[i];
+    }
+    return found;
+}
 
 static XaDiagnostic *first_error(struct XaAnalyzer *analyzer) {
     int count = 0;
@@ -134,12 +153,29 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     program->global_evidence = global_evidence;
     program->semantic_revision = analyzer->semantic_revision;
     program->module_id = module_id;
+    const XrModuleSpec *module_spec = find_module_spec(analyzer, syntax);
     if (!xa_node_table_snapshot_conversions((const XaNodeTable *) analyzer->node_table,
                                             &program->conversions,
                                             &program->conversion_count)) {
         xr_free(program);
         result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
         result.detail = "conversion snapshot allocation failed (AnalysisResourceFailure)";
+        return result;
+    }
+    XaScalarProgramAuthorityStatus scalar_status = xa_scalar_program_authority_publish(
+        analyzer, syntax, module_spec, &program->scalar_authority);
+    if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_INVALID) {
+        xr_free(program->conversions);
+        xr_free(program);
+        result.reason = XA_TYPED_PROGRAM_REASON_SCALAR_AUTHORITY;
+        result.detail = "matched scalar program has incomplete or inconsistent authority";
+        return result;
+    }
+    if (scalar_status == XA_SCALAR_PROGRAM_AUTHORITY_RESOURCE_FAILURE) {
+        xr_free(program->conversions);
+        xr_free(program);
+        result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
+        result.detail = "scalar authority allocation failed (AnalysisResourceFailure)";
         return result;
     }
     program->verified = true;
@@ -151,6 +187,7 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
 void xa_typed_program_free(XaTypedProgram *program) {
     if (!program)
         return;
+    xa_scalar_program_authority_free(program->scalar_authority);
     xr_free(program->conversions);
     xr_free(program);
 }
@@ -182,6 +219,11 @@ const struct XgGlobalEvidence *xa_typed_program_global_evidence(const XaTypedPro
 
 uint32_t xa_typed_program_module_id(const XaTypedProgram *program) {
     return program ? program->module_id : 0;
+}
+
+const XaScalarProgramAuthority *xa_typed_program_scalar_authority(
+    const XaTypedProgram *program) {
+    return xa_typed_program_is_verified(program) ? program->scalar_authority : NULL;
 }
 
 const struct XaResolvedCall *xa_typed_program_resolved_call(const XaTypedProgram *program,
@@ -266,6 +308,8 @@ const char *xa_typed_program_reason_name(XaTypedProgramReason reason) {
             return "stale_revision";
         case XA_TYPED_PROGRAM_REASON_OWNERSHIP_PROOF:
             return "ownership_proof";
+        case XA_TYPED_PROGRAM_REASON_SCALAR_AUTHORITY:
+            return "scalar_authority";
         case XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE:
             return "analysis_resource_failure";
     }

@@ -217,6 +217,7 @@ add_xray_unit_test(test_fmt_roundtrip frontend/test_fmt_roundtrip.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 add_xray_unit_test(test_xa_typed_program frontend/test_xa_typed_program.c)
+add_xray_unit_test(test_xa_scalar_program_closure frontend/test_xa_scalar_program_closure.c)
 # Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.
 add_xray_unit_test(test_ast_side_table frontend/test_ast_side_table.c)
 add_xray_unit_test(test_symbol_binding frontend/test_symbol_binding.c)

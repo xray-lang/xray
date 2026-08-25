@@ -18,6 +18,7 @@
 
 #include "../base/xdefs.h"
 #include "../base/xhashmap.h"
+#include "../base/xstable_id.h"
 #include "xmodule_resolver.h"
 
 #include <stdbool.h>
@@ -50,7 +51,7 @@ typedef struct XrModuleSpec {
     XrModuleKind kind;    /* stdlib / file / package */
     XrModuleIdentityAuthority authority; /* Owned typed authority */
     bool embedded_source; /* source_path is a diagnostic-only embedded stdlib path */
-    uint64_t source_content_hash; /* Source bytes only; never a physical locator */
+    XrFingerprint source_content_fingerprint; /* Full source bytes; never a locator */
     XrModSpecStatus status;
 
     struct AstNode *ast; /* Parsed AST (owned; freed via xr_program_destroy) */
@@ -119,6 +120,10 @@ typedef struct XrModuleGraph {
  * The compiler session is borrowed and used for parsing source files. */
 XR_FUNC XrModuleGraph *xr_module_graph_new(struct XrCompilerSession *compiler_session,
                                            XrModuleResolver *resolver);
+
+/* Single source-content identity owner. The digest is domain-framed and
+ * length-framed; callers must not substitute a plain content hash. */
+XR_FUNC void xr_module_source_fingerprint(const char *source, XrFingerprint *out);
 
 /* Free the graph and all owned specs/ASTs. */
 XR_FUNC void xr_module_graph_free(XrModuleGraph *g);
