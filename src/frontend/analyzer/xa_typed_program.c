@@ -9,11 +9,13 @@
 #include "xa_typed_program.h"
 #include "xa_node_table.h"
 #include "xa_scalar_program_authority.h"
+#include "xa_program_semantic_closure.h"
 #include "xanalyzer.h"
 #include "xanalyzer_symbol.h"
 #include "../parser/xast_nodes.h"
 #include "../../base/xmalloc.h"
 #include "../../module/xmodule_graph.h"
+#include "../../plan/semantic/xr_source_semantic_identity.h"
 
 struct XaTypedProgram {
     const struct AstNode *syntax;
@@ -21,7 +23,10 @@ struct XaTypedProgram {
     const struct XgGlobalEvidence *global_evidence;
     uint64_t semantic_revision;
     uint32_t module_id;
+    XrProgramSemanticModuleInput source_module_authority;
+    bool source_module_authority_present;
     XaScalarProgramAuthority *scalar_authority;
+    XrProgramSemanticClosure *program_semantic_closure;
     XaNodeConversionEntry *conversions;
     uint32_t conversion_count;
     bool verified;
@@ -154,9 +159,13 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     program->semantic_revision = analyzer->semantic_revision;
     program->module_id = module_id;
     const XrModuleSpec *module_spec = find_module_spec(analyzer, syntax);
+    program->source_module_authority_present =
+        module_spec && module_spec->ast == syntax && module_spec->canonical &&
+        xr_source_semantic_module_authority(module_spec->canonical,
+                                            module_spec->source_content_fingerprint,
+                                            &program->source_module_authority, NULL);
     if (!xa_node_table_snapshot_conversions((const XaNodeTable *) analyzer->node_table,
-                                            &program->conversions,
-                                            &program->conversion_count)) {
+                                            &program->conversions, &program->conversion_count)) {
         xr_free(program);
         result.reason = XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE;
         result.detail = "conversion snapshot allocation failed (AnalysisResourceFailure)";
@@ -178,6 +187,26 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
         result.detail = "scalar authority allocation failed (AnalysisResourceFailure)";
         return result;
     }
+    if (!program->scalar_authority) {
+        char closure_error[256] = {0};
+        XaProgramSemanticClosurePublishStatus closure_status =
+            xa_program_semantic_closure_publish_leaf_aggregate(
+                analyzer, syntax, module_spec, &program->program_semantic_closure, closure_error,
+                sizeof(closure_error));
+        if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||
+            closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
+            xr_free(program->conversions);
+            xr_free(program);
+            result.reason = closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
+                                ? XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE
+                                : XA_TYPED_PROGRAM_REASON_PROGRAM_SEMANTIC_CLOSURE;
+            result.detail =
+                closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
+                    ? "program closure allocation failed (AnalysisResourceFailure)"
+                    : "matched program closure has incomplete or inconsistent authority";
+            return result;
+        }
+    }
     program->verified = true;
     result.program = program;
     result.reason = XA_TYPED_PROGRAM_REASON_NONE;
@@ -188,6 +217,7 @@ void xa_typed_program_free(XaTypedProgram *program) {
     if (!program)
         return;
     xa_scalar_program_authority_free(program->scalar_authority);
+    xr_program_semantic_closure_free(program->program_semantic_closure);
     xr_free(program->conversions);
     xr_free(program);
 }
@@ -221,9 +251,20 @@ uint32_t xa_typed_program_module_id(const XaTypedProgram *program) {
     return program ? program->module_id : 0;
 }
 
-const XaScalarProgramAuthority *xa_typed_program_scalar_authority(
-    const XaTypedProgram *program) {
+const XaScalarProgramAuthority *xa_typed_program_scalar_authority(const XaTypedProgram *program) {
     return xa_typed_program_is_verified(program) ? program->scalar_authority : NULL;
+}
+
+const XrProgramSemanticModuleInput *
+xa_typed_program_source_module_authority(const XaTypedProgram *program) {
+    return xa_typed_program_is_verified(program) && program->source_module_authority_present
+               ? &program->source_module_authority
+               : NULL;
+}
+
+const XrProgramSemanticClosure *
+xa_typed_program_program_semantic_closure(const XaTypedProgram *program) {
+    return xa_typed_program_is_verified(program) ? program->program_semantic_closure : NULL;
 }
 
 const struct XaResolvedCall *xa_typed_program_resolved_call(const XaTypedProgram *program,
@@ -310,6 +351,8 @@ const char *xa_typed_program_reason_name(XaTypedProgramReason reason) {
             return "ownership_proof";
         case XA_TYPED_PROGRAM_REASON_SCALAR_AUTHORITY:
             return "scalar_authority";
+        case XA_TYPED_PROGRAM_REASON_PROGRAM_SEMANTIC_CLOSURE:
+            return "program_semantic_closure";
         case XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE:
             return "analysis_resource_failure";
     }

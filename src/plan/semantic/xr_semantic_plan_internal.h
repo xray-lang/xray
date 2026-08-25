@@ -95,6 +95,10 @@ struct XrSemanticPlan {
     XrSemanticStringPool strings;
     XrOwnershipCertificate *ownership;
     XrSemanticProgramProvenance program_provenance;
+    XrSemanticProgramTypeBinding *program_type_bindings;
+    uint32_t program_type_binding_count;
+    XrSemanticProgramTypeFieldBinding *program_type_field_bindings;
+    uint32_t program_type_field_binding_count;
     XrSemanticProgramFunctionBinding *program_function_bindings;
     uint32_t program_function_binding_count;
     XrSemanticProgramCallBinding *program_call_bindings;
@@ -110,11 +114,10 @@ XR_FUNC bool xr_semantic_plan_freeze(XrSemanticPlan *plan, char *error, size_t e
 XR_FUNC void xr_semantic_plan_set_ownership(XrSemanticPlan *plan,
                                             XrOwnershipCertificate *ownership);
 XR_FUNC bool xr_semantic_plan_set_program_provenance(
-    XrSemanticPlan *plan,
-    const XrSemanticProgramProvenance *provenance,
-    const XrSemanticProgramFunctionBinding *function_bindings,
-    uint32_t function_binding_count,
-    const XrSemanticProgramCallBinding *call_bindings,
-    uint32_t call_binding_count);
+    XrSemanticPlan *plan, const XrSemanticProgramProvenance *provenance,
+    const XrSemanticProgramTypeBinding *type_bindings, uint32_t type_binding_count,
+    const XrSemanticProgramTypeFieldBinding *type_field_bindings, uint32_t type_field_binding_count,
+    const XrSemanticProgramFunctionBinding *function_bindings, uint32_t function_binding_count,
+    const XrSemanticProgramCallBinding *call_bindings, uint32_t call_binding_count);
 
 #endif  // XR_SEMANTIC_PLAN_INTERNAL_H

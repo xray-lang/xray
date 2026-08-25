@@ -10,6 +10,7 @@
 
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_ops.h"
+#include "xr_program_semantic_closure.h"
 #include "../../ir/xi.h"
 #include "../../stdlib/xstdlib_metadata.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
@@ -37,12 +38,11 @@ bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *opera
                                           XrAssertionPlan *out) {
     if (!operation || !out || operation->opcode != XI_ASSERTION ||
         operation->auxiliary_kind != XI_AUX_KIND_ASSERTION_PLAN ||
-        operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION ||
-        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_ASSERTION || operation->metadata_count != 0 ||
+        operation->semantic_immediate != 0 ||
         operation->callable_function != XR_SEMANTIC_INDEX_NONE || !operation->source_file ||
         !operation->source_file[0] ||
-        operation->evidence[XR_SEM_ASSERT_EVIDENCE_SCHEMA] !=
-            XR_ASSERTION_PLAN_SCHEMA_VERSION)
+        operation->evidence[XR_SEM_ASSERT_EVIDENCE_SCHEMA] != XR_ASSERTION_PLAN_SCHEMA_VERSION)
         return false;
     XrLocation source = {
         .file = operation->source_file,
@@ -54,10 +54,8 @@ bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *opera
     if (operation->operand_count > UINT16_MAX ||
         xr_assertion_plan_build(
             (XrCoreBuiltinId) operation->evidence[XR_SEM_ASSERT_EVIDENCE_BUILTIN_ID],
-            operation->operand_count, source,
-            operation->evidence[XR_SEM_ASSERT_EVIDENCE_TARGET],
-            operation->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES], out) !=
-            XR_ASSERTION_PLAN_OK)
+            operation->operand_count, source, operation->evidence[XR_SEM_ASSERT_EVIDENCE_TARGET],
+            operation->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES], out) != XR_ASSERTION_PLAN_OK)
         return false;
     return out->kind == operation->evidence[XR_SEM_ASSERT_EVIDENCE_KIND] &&
            out->expected_failure_channel ==
@@ -280,6 +278,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, function->source_kind);
         hash_u64(&ctx, function->flags);
         hash_u64(&ctx, function->is_module_initializer);
+        hash_u64(&ctx, function->carries_coroutine_ops);
     }
     for (uint32_t i = 0; i < plan->parameter_count; i++) {
         const XrSemanticParameterRecord *parameter = &plan->parameters[i];
@@ -455,37 +454,64 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_string(&ctx, constant->string);
     }
     if (plan->program_provenance.schema != 0) {
-        static const uint8_t provenance_domain[] =
-            "xray-semantic-program-provenance-v1";
-        const XrSemanticProgramProvenance *provenance =
-            &plan->program_provenance;
-        hash_bytes(&ctx, provenance_domain,
-                   sizeof(provenance_domain) - 1);
+        static const uint8_t provenance_domain[] = "xray-semantic-program-provenance-v2";
+        const XrSemanticProgramProvenance *provenance = &plan->program_provenance;
+        hash_bytes(&ctx, provenance_domain, sizeof(provenance_domain) - 1);
         hash_u64(&ctx, provenance->schema);
         hash_u64(&ctx, provenance->program_schema);
+        hash_u64(&ctx, provenance->program_family);
+        hash_u64(&ctx, provenance->type_count);
+        hash_u64(&ctx, provenance->type_field_count);
         hash_u64(&ctx, provenance->function_count);
         hash_u64(&ctx, provenance->call_count);
+        hash_u64(&ctx, provenance->reserved);
         hash_bytes(&ctx, provenance->program_fingerprint.bytes,
                    sizeof(provenance->program_fingerprint.bytes));
         hash_bytes(&ctx, provenance->generation_identity.bytes,
                    sizeof(provenance->generation_identity.bytes));
+        hash_u64(&ctx, plan->program_type_binding_count);
+        for (uint32_t i = 0; i < plan->program_type_binding_count; i++) {
+            const XrSemanticProgramTypeBinding *binding = &plan->program_type_bindings[i];
+            hash_bytes(&ctx, binding->program_type.bytes, sizeof(binding->program_type.bytes));
+            hash_bytes(&ctx, binding->source_class_identity.bytes,
+                       sizeof(binding->source_class_identity.bytes));
+            hash_u64(&ctx, binding->semantic_type);
+            hash_u64(&ctx, binding->program_row);
+            hash_u64(&ctx, binding->field_begin);
+            hash_u64(&ctx, binding->field_count);
+            hash_u64(&ctx, binding->kind);
+            hash_u64(&ctx, binding->exact_scalar);
+            hash_u64(&ctx, binding->flags);
+            hash_u64(&ctx, binding->reserved);
+        }
+        hash_u64(&ctx, plan->program_type_field_binding_count);
+        for (uint32_t i = 0; i < plan->program_type_field_binding_count; i++) {
+            const XrSemanticProgramTypeFieldBinding *binding =
+                &plan->program_type_field_bindings[i];
+            hash_bytes(&ctx, binding->program_owner_type.bytes,
+                       sizeof(binding->program_owner_type.bytes));
+            hash_bytes(&ctx, binding->program_field_type.bytes,
+                       sizeof(binding->program_field_type.bytes));
+            hash_u64(&ctx, binding->owner_program_row);
+            hash_u64(&ctx, binding->field_program_row);
+            hash_u64(&ctx, binding->semantic_field_type);
+            hash_u64(&ctx, binding->declaration_ordinal);
+        }
         hash_u64(&ctx, plan->program_function_binding_count);
         for (uint32_t i = 0; i < plan->program_function_binding_count; i++) {
-            const XrSemanticProgramFunctionBinding *binding =
-                &plan->program_function_bindings[i];
+            const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[i];
             hash_bytes(&ctx, binding->program_function.bytes,
                        sizeof(binding->program_function.bytes));
             hash_u64(&ctx, binding->semantic_function);
             hash_u64(&ctx, binding->program_row);
+            hash_u64(&ctx, binding->flags);
+            hash_bytes(&ctx, binding->reserved, sizeof(binding->reserved));
         }
         hash_u64(&ctx, plan->program_call_binding_count);
         for (uint32_t i = 0; i < plan->program_call_binding_count; i++) {
-            const XrSemanticProgramCallBinding *binding =
-                &plan->program_call_bindings[i];
-            hash_bytes(&ctx, binding->program_call.bytes,
-                       sizeof(binding->program_call.bytes));
-            hash_bytes(&ctx, binding->callsite.bytes,
-                       sizeof(binding->callsite.bytes));
+            const XrSemanticProgramCallBinding *binding = &plan->program_call_bindings[i];
+            hash_bytes(&ctx, binding->program_call.bytes, sizeof(binding->program_call.bytes));
+            hash_bytes(&ctx, binding->callsite.bytes, sizeof(binding->callsite.bytes));
             hash_bytes(&ctx, binding->caller_program_function.bytes,
                        sizeof(binding->caller_program_function.bytes));
             hash_bytes(&ctx, binding->callee_program_function.bytes,
@@ -593,48 +619,82 @@ void xr_semantic_plan_set_ownership(XrSemanticPlan *plan, XrOwnershipCertificate
 }
 
 bool xr_semantic_plan_set_program_provenance(
-    XrSemanticPlan *plan,
-    const XrSemanticProgramProvenance *provenance,
-    const XrSemanticProgramFunctionBinding *function_bindings,
-    uint32_t function_binding_count,
-    const XrSemanticProgramCallBinding *call_bindings,
-    uint32_t call_binding_count) {
+    XrSemanticPlan *plan, const XrSemanticProgramProvenance *provenance,
+    const XrSemanticProgramTypeBinding *type_bindings, uint32_t type_binding_count,
+    const XrSemanticProgramTypeFieldBinding *type_field_bindings, uint32_t type_field_binding_count,
+    const XrSemanticProgramFunctionBinding *function_bindings, uint32_t function_binding_count,
+    const XrSemanticProgramCallBinding *call_bindings, uint32_t call_binding_count) {
     if (!plan || plan->frozen || !provenance ||
-        provenance->schema !=
-            XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+        provenance->schema != XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+        provenance->program_schema != XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
+        provenance->type_count != type_binding_count ||
+        provenance->type_field_count != type_field_binding_count ||
         provenance->function_count != function_binding_count ||
-        provenance->call_count != call_binding_count ||
+        provenance->call_count != call_binding_count || provenance->reserved != 0 ||
+        type_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPES ||
+        type_field_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPE_FIELDS ||
+        function_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_FUNCTIONS ||
+        call_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS ||
+        type_binding_count > plan->type_count ||
+        type_field_binding_count > plan->type_child_count ||
+        function_binding_count > plan->function_count ||
+        call_binding_count > plan->operation_count ||
+        (type_binding_count &&
+         sizeof(XrSemanticProgramTypeBinding) > SIZE_MAX / type_binding_count) ||
+        (type_field_binding_count &&
+         sizeof(XrSemanticProgramTypeFieldBinding) > SIZE_MAX / type_field_binding_count) ||
+        (function_binding_count &&
+         sizeof(XrSemanticProgramFunctionBinding) > SIZE_MAX / function_binding_count) ||
+        (call_binding_count &&
+         sizeof(XrSemanticProgramCallBinding) > SIZE_MAX / call_binding_count) ||
+        (type_binding_count != 0 && !type_bindings) ||
+        (type_field_binding_count != 0 && !type_field_bindings) ||
         (function_binding_count != 0 && !function_bindings) ||
-        (call_binding_count != 0 && !call_bindings) ||
-        plan->program_provenance.schema != 0 ||
-        plan->program_function_bindings ||
-        plan->program_function_binding_count != 0 ||
-        plan->program_call_bindings ||
-        plan->program_call_binding_count != 0)
+        (call_binding_count != 0 && !call_bindings) || plan->program_provenance.schema != 0 ||
+        plan->program_type_bindings || plan->program_type_binding_count != 0 ||
+        plan->program_type_field_bindings || plan->program_type_field_binding_count != 0 ||
+        plan->program_function_bindings || plan->program_function_binding_count != 0 ||
+        plan->program_call_bindings || plan->program_call_binding_count != 0)
         return false;
+    XrSemanticProgramTypeBinding *type_copy =
+        type_binding_count ? (XrSemanticProgramTypeBinding *) xr_malloc(
+                                 (size_t) type_binding_count * sizeof(*type_copy))
+                           : NULL;
     XrSemanticProgramFunctionBinding *function_copy =
-        function_binding_count
-            ? (XrSemanticProgramFunctionBinding *) xr_malloc(
-                  (size_t) function_binding_count * sizeof(*function_copy))
-            : NULL;
+        function_binding_count ? (XrSemanticProgramFunctionBinding *) xr_malloc(
+                                     (size_t) function_binding_count * sizeof(*function_copy))
+                               : NULL;
+    XrSemanticProgramTypeFieldBinding *type_field_copy =
+        type_field_binding_count ? (XrSemanticProgramTypeFieldBinding *) xr_malloc(
+                                       (size_t) type_field_binding_count * sizeof(*type_field_copy))
+                                 : NULL;
     XrSemanticProgramCallBinding *call_copy =
-        call_binding_count
-            ? (XrSemanticProgramCallBinding *) xr_malloc(
-                  (size_t) call_binding_count * sizeof(*call_copy))
-            : NULL;
-    if ((function_binding_count && !function_copy) ||
-        (call_binding_count && !call_copy)) {
+        call_binding_count ? (XrSemanticProgramCallBinding *) xr_malloc(
+                                 (size_t) call_binding_count * sizeof(*call_copy))
+                           : NULL;
+    if ((type_binding_count && !type_copy) || (type_field_binding_count && !type_field_copy) ||
+        (function_binding_count && !function_copy) || (call_binding_count && !call_copy)) {
+        xr_free(type_copy);
+        xr_free(type_field_copy);
         xr_free(function_copy);
         xr_free(call_copy);
         return false;
     }
+    if (type_binding_count)
+        memcpy(type_copy, type_bindings, (size_t) type_binding_count * sizeof(*type_copy));
+    if (type_field_binding_count)
+        memcpy(type_field_copy, type_field_bindings,
+               (size_t) type_field_binding_count * sizeof(*type_field_copy));
     if (function_binding_count)
         memcpy(function_copy, function_bindings,
                (size_t) function_binding_count * sizeof(*function_copy));
     if (call_binding_count)
-        memcpy(call_copy, call_bindings,
-               (size_t) call_binding_count * sizeof(*call_copy));
+        memcpy(call_copy, call_bindings, (size_t) call_binding_count * sizeof(*call_copy));
     plan->program_provenance = *provenance;
+    plan->program_type_bindings = type_copy;
+    plan->program_type_binding_count = type_binding_count;
+    plan->program_type_field_bindings = type_field_copy;
+    plan->program_type_field_binding_count = type_field_binding_count;
     plan->program_function_bindings = function_copy;
     plan->program_function_binding_count = function_binding_count;
     plan->program_call_bindings = call_copy;
@@ -711,6 +771,8 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->predecessors);
     xr_free(plan->operands);
     xr_free(plan->metadata);
+    xr_free(plan->program_type_bindings);
+    xr_free(plan->program_type_field_bindings);
     xr_free(plan->program_function_bindings);
     xr_free(plan->program_call_bindings);
     xr_ownership_certificate_free(plan->ownership);
@@ -763,6 +825,12 @@ XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_source_export_count, source_export_count
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_edge_count, edge_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_constant_count, constant_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_entity_count, entity_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_type_binding_count, program_type_binding_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_type_field_binding_count,
+                       program_type_field_binding_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_function_binding_count,
+                       program_function_binding_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_call_binding_count, program_call_binding_count)
 #undef XR_PLAN_COUNT_ACCESSOR
 
 #define XR_PLAN_RECORD_ACCESSOR(name, type, field, count_field)                                    \
@@ -792,7 +860,90 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_edge, XrSemanticEdgeRecord, edges, edge
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, constants,
                         constant_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_entity, XrSemanticEntityRecord, entities, entity_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_type_binding, XrSemanticProgramTypeBinding,
+                        program_type_bindings, program_type_binding_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_type_field_binding,
+                        XrSemanticProgramTypeFieldBinding, program_type_field_bindings,
+                        program_type_field_binding_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_function_binding, XrSemanticProgramFunctionBinding,
+                        program_function_bindings, program_function_binding_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_call_binding, XrSemanticProgramCallBinding,
+                        program_call_bindings, program_call_binding_count)
 #undef XR_PLAN_RECORD_ACCESSOR
+
+const XrSemanticProgramProvenance *xr_semantic_plan_program_provenance(const XrSemanticPlan *plan) {
+    return plan && plan->program_provenance.schema != 0 ? &plan->program_provenance : NULL;
+}
+
+const XrSemanticProgramTypeBinding *
+xr_semantic_plan_program_type_for_row(const XrSemanticPlan *plan, uint32_t program_row) {
+    const XrSemanticProgramTypeBinding *match = NULL;
+    for (uint32_t i = 0; plan && i < plan->program_type_binding_count; i++) {
+        const XrSemanticProgramTypeBinding *candidate = &plan->program_type_bindings[i];
+        if (candidate->program_row != program_row)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+const XrSemanticProgramTypeBinding *
+xr_semantic_plan_program_type_for_semantic_type(const XrSemanticPlan *plan,
+                                                uint32_t semantic_type) {
+    uint32_t lower = 0;
+    uint32_t upper = plan ? plan->program_type_binding_count : 0;
+    while (lower < upper) {
+        uint32_t middle = lower + (upper - lower) / 2u;
+        const XrSemanticProgramTypeBinding *binding = &plan->program_type_bindings[middle];
+        if (binding->semantic_type < semantic_type)
+            lower = middle + 1u;
+        else
+            upper = middle;
+    }
+    return lower < (plan ? plan->program_type_binding_count : 0) &&
+                   plan->program_type_bindings[lower].semantic_type == semantic_type
+               ? &plan->program_type_bindings[lower]
+               : NULL;
+}
+
+const XrSemanticProgramFunctionBinding *
+xr_semantic_plan_program_function_for_semantic_function(const XrSemanticPlan *plan,
+                                                        uint32_t semantic_function) {
+    uint32_t lower = 0;
+    uint32_t upper = plan ? plan->program_function_binding_count : 0;
+    while (lower < upper) {
+        uint32_t middle = lower + (upper - lower) / 2u;
+        const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[middle];
+        if (binding->semantic_function < semantic_function)
+            lower = middle + 1u;
+        else
+            upper = middle;
+    }
+    return lower < (plan ? plan->program_function_binding_count : 0) &&
+                   plan->program_function_bindings[lower].semantic_function == semantic_function
+               ? &plan->program_function_bindings[lower]
+               : NULL;
+}
+
+const XrSemanticProgramCallBinding *
+xr_semantic_plan_program_call_for_operation(const XrSemanticPlan *plan, uint32_t operation) {
+    uint32_t lower = 0;
+    uint32_t upper = plan ? plan->program_call_binding_count : 0;
+    while (lower < upper) {
+        uint32_t middle = lower + (upper - lower) / 2u;
+        const XrSemanticProgramCallBinding *binding = &plan->program_call_bindings[middle];
+        if (binding->operation < operation)
+            lower = middle + 1u;
+        else
+            upper = middle;
+    }
+    return lower < (plan ? plan->program_call_binding_count : 0) &&
+                   plan->program_call_bindings[lower].operation == operation
+               ? &plan->program_call_bindings[lower]
+               : NULL;
+}
 
 #define XR_PLAN_INDEX_ACCESSOR(name, field, count_field)                                           \
     const uint32_t *name(const XrSemanticPlan *plan, uint32_t *count) {                            \
@@ -926,8 +1077,8 @@ bool xr_semantic_plan_dump(const XrSemanticPlan *plan, FILE *out) {
         dump_id(out, record->source_enum_identity);
         fputs(" enum-key=", out);
         dump_text(out, record->source_enum_key);
-        fprintf(out, " enum-layout=%u enum-members=%u enum-flags=%u\n",
-                record->enum_layout_id, record->enum_member_count, record->enum_flags);
+        fprintf(out, " enum-layout=%u enum-members=%u enum-flags=%u\n", record->enum_layout_id,
+                record->enum_member_count, record->enum_flags);
     }
     for (uint32_t i = 0; i < plan->source_method_count; i++) {
         const XrSemanticSourceMethodRecord *record = &plan->source_methods[i];

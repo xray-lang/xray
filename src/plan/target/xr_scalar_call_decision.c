@@ -90,29 +90,24 @@ static XrFingerprint decision_fingerprint(const XrScalarCallDecision *decision) 
     put_u64(&context, decision->capability_mask);
     put_slot(&context, decision->argument);
     put_slot(&context, decision->result);
-    put_bytes(&context, decision->generation_id.bytes,
-              sizeof(decision->generation_id.bytes));
+    put_bytes(&context, decision->generation_id.bytes, sizeof(decision->generation_id.bytes));
     put_bytes(&context, decision->closure_fingerprint.bytes,
               sizeof(decision->closure_fingerprint.bytes));
     put_bytes(&context, decision->target_profile_fingerprint.bytes,
               sizeof(decision->target_profile_fingerprint.bytes));
-    put_bytes(&context, decision->call_identity.bytes,
-              sizeof(decision->call_identity.bytes));
+    put_bytes(&context, decision->call_identity.bytes, sizeof(decision->call_identity.bytes));
     put_bytes(&context, decision->callsite_identity.bytes,
               sizeof(decision->callsite_identity.bytes));
-    put_bytes(&context, decision->caller_function.bytes,
-              sizeof(decision->caller_function.bytes));
-    put_bytes(&context, decision->callee_function.bytes,
-              sizeof(decision->callee_function.bytes));
+    put_bytes(&context, decision->caller_function.bytes, sizeof(decision->caller_function.bytes));
+    put_bytes(&context, decision->callee_function.bytes, sizeof(decision->callee_function.bytes));
     xr_sha256_final(&context, result.bytes);
     return result;
 }
 
-static const XrProgramSemanticFunctionRecord *find_function(
-    const XrProgramSemanticClosure *closure, XrStableId id) {
+static const XrProgramSemanticFunctionRecord *find_function(const XrProgramSemanticClosure *closure,
+                                                            XrStableId id) {
     const XrProgramSemanticFunctionRecord *found = NULL;
-    for (uint32_t i = 0;
-         i < xr_program_semantic_closure_function_count(closure); i++) {
+    for (uint32_t i = 0; i < xr_program_semantic_closure_function_count(closure); i++) {
         const XrProgramSemanticFunctionRecord *row =
             xr_program_semantic_closure_function(closure, i);
         if (!row || !id_equal(row->id, id))
@@ -128,10 +123,8 @@ static bool exact_function(const XrProgramSemanticFunctionRecord *row,
                            XrScalarI64FunctionShape shape, uint8_t flags) {
     XrScalarI64FunctionContract expected;
     return row && xr_scalar_i64_function_contract(shape, &expected) &&
-           fingerprint_equal(row->signature_fingerprint,
-                             expected.signature_fingerprint) &&
-           fingerprint_equal(row->effect_fingerprint,
-                             expected.effect_fingerprint) &&
+           fingerprint_equal(row->signature_fingerprint, expected.signature_fingerprint) &&
+           fingerprint_equal(row->effect_fingerprint, expected.effect_fingerprint) &&
            row->capability_mask == 0 && row->flags == flags;
 }
 
@@ -145,8 +138,7 @@ static bool exact_source_call(const XrProgramSemanticClosure *closure,
         xr_program_semantic_closure_function_count(closure) != 2 ||
         xr_program_semantic_closure_call_count(closure) != 1)
         return false;
-    const XrProgramSemanticCallRecord *call =
-        xr_program_semantic_closure_call(closure, 0);
+    const XrProgramSemanticCallRecord *call = xr_program_semantic_closure_call(closure, 0);
     const XrProgramSemanticFunctionRecord *caller =
         call ? find_function(closure, call->caller_function) : NULL;
     const XrProgramSemanticFunctionRecord *callee =
@@ -158,8 +150,7 @@ static bool exact_source_call(const XrProgramSemanticClosure *closure,
                         XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) ||
         !exact_function(callee, XR_SCALAR_I64_FUNCTION_UNARY, 0) ||
         !id_equal(caller->module_identity, callee->module_identity) ||
-        !xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_UNARY,
-                                         &callee_contract) ||
+        !xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_UNARY, &callee_contract) ||
         !xr_scalar_i64_call_contract(&callee_contract, &expected_call) ||
         !fingerprint_equal(call->contract_fingerprint, expected_call))
         return false;
@@ -169,27 +160,24 @@ static bool exact_source_call(const XrProgramSemanticClosure *closure,
 
 bool xr_scalar_call_decision_build(const XrProgramSemanticClosure *closure,
                                    XrGenerationClosureId expected_generation,
-                                   const XrTargetProfile *target_profile,
-                                   XrScalarCallDecision *out, char *error,
-                                   size_t error_size) {
+                                   const XrTargetProfile *target_profile, XrScalarCallDecision *out,
+                                   char *error, size_t error_size) {
     if (out)
         memset(out, 0, sizeof(*out));
     if (!out || !closure || !target_profile ||
+        xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL ||
         !xr_program_semantic_closure_verify(closure, error, error_size) ||
         !xr_target_profile_verify(target_profile, error, error_size))
-        return fail(error, error_size,
-                    "scalar call decision requires verified authorities");
-    XrGenerationClosureId generation =
-        xr_program_semantic_closure_generation_id(closure);
+        return fail(error, error_size, "scalar call decision requires verified authorities");
+    XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(closure);
     if (!xr_generation_closure_id_equal(generation, expected_generation))
         return fail(error, error_size, "generation closure identity is stale");
     const XrProgramSemanticCallRecord *call = NULL;
     if (!exact_source_call(closure, &call))
-        return fail(error, error_size,
-                    "program closure is not the sealed direct i64 call family");
+        return fail(error, error_size, "program closure is not the sealed direct i64 call family");
 
-    const XrTargetMachineFacts *machine =
-        xr_target_profile_machine_facts(target_profile);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(target_profile);
     if (!machine || machine->native_abi <= XR_TARGET_ABI_NONE ||
         machine->native_abi >= XR_TARGET_ABI_COUNT)
         return fail(error, error_size, "target native ABI is invalid");
@@ -202,23 +190,20 @@ bool xr_scalar_call_decision_build(const XrProgramSemanticClosure *closure,
         .entry_policy = XR_SCALAR_CALL_ENTRY_STATIC_DIRECT,
         .argument_count = 1,
         .result_count = 1,
-        .argument = {XR_MACHINE_REP_I64, XR_TARGET_CALL_VALUE,
-                     XR_TARGET_CALL_NONE, XR_SCALAR_CALL_SLOT_REGISTER_ONLY},
-        .result = {XR_MACHINE_REP_I64, XR_TARGET_CALL_VALUE,
-                   XR_TARGET_CALL_NONE, XR_SCALAR_CALL_SLOT_REGISTER_ONLY},
+        .argument = {XR_MACHINE_REP_I64, XR_TARGET_CALL_VALUE, XR_TARGET_CALL_NONE,
+                     XR_SCALAR_CALL_SLOT_REGISTER_ONLY},
+        .result = {XR_MACHINE_REP_I64, XR_TARGET_CALL_VALUE, XR_TARGET_CALL_NONE,
+                   XR_SCALAR_CALL_SLOT_REGISTER_ONLY},
         .generation_id = generation,
-        .closure_fingerprint =
-            xr_program_semantic_closure_fingerprint(closure),
-        .target_profile_fingerprint =
-            xr_target_profile_fingerprint(target_profile),
+        .closure_fingerprint = xr_program_semantic_closure_fingerprint(closure),
+        .target_profile_fingerprint = xr_target_profile_fingerprint(target_profile),
         .call_identity = call->id,
         .callsite_identity = call->callsite_identity,
         .caller_function = call->caller_function,
         .callee_function = call->callee_function,
     };
     out->fingerprint = decision_fingerprint(out);
-    if (!xr_scalar_call_decision_verify(out, closure, target_profile, error,
-                                        error_size)) {
+    if (!xr_scalar_call_decision_verify(out, closure, target_profile, error, error_size)) {
         memset(out, 0, sizeof(*out));
         return false;
     }

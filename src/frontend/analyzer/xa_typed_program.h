@@ -12,6 +12,7 @@
 #define XA_TYPED_PROGRAM_H
 
 #include "../../base/xdefs.h"
+#include "../../plan/semantic/xr_program_semantic_closure.h"
 #include "../../shared/xr_conversion.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -38,6 +39,7 @@ typedef enum XaTypedProgramReason {
     XA_TYPED_PROGRAM_REASON_STALE_REVISION,
     XA_TYPED_PROGRAM_REASON_OWNERSHIP_PROOF,
     XA_TYPED_PROGRAM_REASON_SCALAR_AUTHORITY,
+    XA_TYPED_PROGRAM_REASON_PROGRAM_SEMANTIC_CLOSURE,
     XA_TYPED_PROGRAM_REASON_ANALYSIS_RESOURCE_FAILURE,
 } XaTypedProgramReason;
 
@@ -63,14 +65,23 @@ XR_FUNC struct XaAnalyzer *xa_typed_program_semantics(const XaTypedProgram *prog
 XR_FUNC const struct XgGlobalEvidence *
 xa_typed_program_global_evidence(const XaTypedProgram *program);
 XR_FUNC uint32_t xa_typed_program_module_id(const XaTypedProgram *program);
+/* Pointer-free source authority captured with the immutable typed snapshot.
+ * A program-semantic
+ * Xi lane requires an exact match with the PSC module row. */
+XR_FUNC const XrProgramSemanticModuleInput *
+xa_typed_program_source_module_authority(const XaTypedProgram *program);
 /* Optional bounded authority copied during publication. NULL means the typed
  * program is outside the deliberately narrow scalar closed-world family. */
 XR_FUNC const struct XaScalarProgramAuthority *
 xa_typed_program_scalar_authority(const XaTypedProgram *program);
+/* Optional frozen PSC published for a non-scalar structural family. The
+ * TypedProgram owns this
+ * borrowed reference. */
+XR_FUNC const struct XrProgramSemanticClosure *
+xa_typed_program_program_semantic_closure(const XaTypedProgram *program);
 XR_FUNC const struct XaResolvedCall *
 xa_typed_program_resolved_call(const XaTypedProgram *program, const struct AstNode *call_node);
-XR_FUNC bool xa_typed_program_conversion(const XaTypedProgram *program,
-                                         const struct AstNode *node,
+XR_FUNC bool xa_typed_program_conversion(const XaTypedProgram *program, const struct AstNode *node,
                                          XrConversionWitness *out_witness);
 XR_FUNC const struct XaEffectSummary *
 xa_typed_program_effect_summary(const XaTypedProgram *program, const struct XaSymbol *symbol);

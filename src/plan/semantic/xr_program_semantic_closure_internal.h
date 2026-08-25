@@ -24,9 +24,11 @@ typedef enum XrProgramSemanticClosureState {
 struct XrProgramSemanticClosure {
     atomic_uint_least32_t references;
     uint32_t schema;
+    uint32_t family;
     uint8_t state;
     uint8_t verified;
-    uint8_t reserved[2];
+    uint8_t failure_kind;
+    uint8_t reserved;
     XrProgramSemanticClosureLimits limits;
     XrFingerprint policy_fingerprint;
     XrFingerprint fingerprint;
@@ -40,9 +42,15 @@ struct XrProgramSemanticClosure {
     XrProgramSemanticTypeRecord *types;
     uint32_t type_count;
     uint32_t type_capacity;
+    XrProgramSemanticTypeFieldRecord *type_fields;
+    uint32_t type_field_count;
+    uint32_t type_field_capacity;
     XrProgramSemanticFunctionRecord *functions;
     uint32_t function_count;
     uint32_t function_capacity;
+    XrProgramSemanticFunctionParameterRecord *function_parameters;
+    uint32_t function_parameter_count;
+    uint32_t function_parameter_capacity;
     XrProgramSemanticCallRecord *calls;
     uint32_t call_count;
     uint32_t call_capacity;

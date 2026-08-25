@@ -671,11 +671,11 @@ typedef enum {
     XI_END_TRY, /* end try-catch region */
 
     /* Builtin calls: compile-time recognized functions */
-    XI_ASSERTION,     /* args follow typed XrAssertionPlan in aux */
-    XI_TYPEID,        /* args[0]=value; result=int XrTypeId */
-    XI_TYPENAME,      /* args[0]=value; result=string typename */
-    XI_LEN,           /* args[0]=Lengthable value */
-    XI_GET_BUILTIN,   /* aux=name_string; aux_int=global_index; loads runtime global */
+    XI_ASSERTION,   /* args follow typed XrAssertionPlan in aux */
+    XI_TYPEID,      /* args[0]=value; result=int XrTypeId */
+    XI_TYPENAME,    /* args[0]=value; result=string typename */
+    XI_LEN,         /* args[0]=Lengthable value */
+    XI_GET_BUILTIN, /* aux=name_string; aux_int=global_index; loads runtime global */
 
     /* Cross-module import reference (resolved at cgen time).
      * aux = XiImportRef* (module_path + member_name).
@@ -897,6 +897,8 @@ typedef struct XiClassData {
         *generic_origin_name; /* Original generic class name (e.g. "Box"), NULL if not mono */
     const char *display_name; /* User-visible name (e.g. "Box"), NULL = same as class_name */
     const char *source_file;  /* arena copy of declaration source path (NULL if unavailable) */
+    XiSourceLocator source_locator;           /* pointer-free declaration authority */
+    uint32_t psc_type_index;                  /* frozen PSC type row, or XI_PSC_ROW_NONE */
     const char **instance_field_names;        /* declared non-static field names, arena-owned */
     struct XrType **instance_field_types;     /* resolved types parallel to instance_field_names */
     uint32_t *instance_field_source_node_ids; /* evidence-stable IDs parallel to field names */
@@ -1206,6 +1208,7 @@ typedef struct XiValue {
     uint32_t source_kind;          /* pointer-free source node kind (0 = unavailable) */
     XiSourceSpan source_span;      /* exact source range; all zero when unavailable */
     uint32_t psc_call_index;       /* frozen PSC call row, or XI_PSC_ROW_NONE */
+    uint32_t psc_type_index;       /* frozen PSC type row, or XI_PSC_ROW_NONE */
     uint32_t xg_callsite_id;       /* stable XgCallsiteId for evidence-backed calls (0 = none) */
     uint32_t xa_intrinsic_id;      /* stable XaIntrinsicId for canonical semantic operations */
     uint8_t array_intrinsic_kind;  /* XiArrayIntrinsicKind, or NONE */
@@ -1312,6 +1315,7 @@ static inline void xi_value_copy_metadata(XiValue *dst, const XiValue *src) {
     dst->source_kind = src->source_kind;
     dst->source_span = src->source_span;
     dst->psc_call_index = src->psc_call_index;
+    dst->psc_type_index = src->psc_type_index;
     dst->xg_callsite_id = src->xg_callsite_id;
     dst->xa_intrinsic_id = src->xa_intrinsic_id;
     dst->array_intrinsic_kind = src->array_intrinsic_kind;
@@ -1745,12 +1749,13 @@ typedef enum XiInlinePolicy {
 } XiInlinePolicy;
 
 typedef struct XiFunc {
-    const char *name;                  /* function name (debug, not owned) */
-    const char *source_file;           /* source path for VM/DAP debug hooks (not owned) */
-    XiSourceSpan lowering_source_span; /* temporary AST range inherited by new Xi values */
-    uint32_t psc_function_index;        /* frozen PSC function row, or XI_PSC_ROW_NONE */
+    const char *name;                        /* function name (debug, not owned) */
+    const char *source_file;                 /* source path for VM/DAP debug hooks (not owned) */
+    XiSourceSpan lowering_source_span;       /* temporary AST range inherited by new Xi values */
+    uint32_t psc_function_index;             /* frozen PSC function row, or XI_PSC_ROW_NONE */
+    uint32_t psc_return_type_index;          /* frozen PSC return type row, or XI_PSC_ROW_NONE */
     XiSourceLocator psc_declaration_locator; /* exact pointer-free declaration locator */
-    struct XrType *return_type;        /* return type (from analyzer) */
+    struct XrType *return_type;              /* return type (from analyzer) */
     uint32_t xg_body_func_id;   /* stable global-evidence XgFuncId for this body (0 = none) */
     uint8_t view_return_source; /* XrViewReturnSourceKind symbolic return template */
     int16_t view_return_param;  /* valid only for PARAM */

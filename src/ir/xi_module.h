@@ -16,6 +16,7 @@
 #define XI_MODULE_H
 
 #include "xi.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
 
 struct XrProgramSemanticClosure;
 struct XrScalarCallDecision;
@@ -65,7 +66,7 @@ typedef struct XiEnumData {
 /* Per-module compilation unit: holds init function and explicit metadata.
  * All metadata is produced during lowering; no post-hoc IR scanning. */
 typedef struct XiModule {
-    char *identity;      /* durable module identity (owned) */
+    char *identity;     /* durable module identity (owned) */
     const char *path;   /* source file path */
     const char *name;   /* C-safe identifier (e.g. "math_lib") */
     XiFunc *init;       /* module init function (top-level) */
@@ -90,6 +91,11 @@ typedef struct XiModule {
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */
     uint16_t nclosure_metas;
+    /* Pointer-free source identity copied from the immutable TypedProgram.
+     * This binds an
+     * attached PSC to the module that was actually lowered. */
+    XrProgramSemanticModuleInput source_semantic_module;
+    bool source_semantic_module_present;
     /* Frozen target-neutral authority reference, pointer-free scalar
      * decision, and exact target used to verify that decision. XiModule owns
      * these references for the Xi lifetime; later compiler stages may retain

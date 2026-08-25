@@ -32,12 +32,13 @@
 #include "../../base/xglobal_indices.h"
 #include "../../base/xmalloc.h"
 #include "../../frontend/analyzer/xa_intrinsic_registry.h"
+#include "../../frontend/analyzer/xanalyzer_symbol.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_arc.h"
 #include "../../ir/xi_coro_analyze.h"
 #include "../../ir/xi_module.h"
-#include "../../ir/xi_scalar_program.h"
-#include "../../ir/xi_scalar_semantic_plan.h"
+#include "../../ir/xi_program_semantic.h"
+#include "../../ir/xi_program_semantic_plan.h"
 #include "../../ir/xi_own.h"
 #include "../../ir/xi_builtin_map_entry_iterator_shape.h"
 #include "../../ir/xi_ops_gen.h"
@@ -46,6 +47,7 @@
 #include "../../runtime/value/xenum_layout.h"
 #include "../../runtime/class/xclass_info.h"
 #include "../../stdlib/xstdlib_metadata.h"
+#include "../../shared/xr_exact_scalar_registry.h"
 #include "xr_semantic_array_member_shape.h"
 #include "xr_semantic_panic_info_shape.h"
 #include <stdarg.h>
@@ -115,6 +117,10 @@ typedef struct XrSemanticBuildContext {
     const XrProgramSemanticClosure *program_closure;
     const XrScalarCallDecision *construction_decision;
     const XrTargetProfile *construction_target_profile;
+    XrSemanticProgramTypeBinding *program_type_bindings;
+    uint32_t program_type_binding_count;
+    XrSemanticProgramTypeFieldBinding *program_type_field_bindings;
+    uint32_t program_type_field_binding_count;
     XrSemanticProgramFunctionBinding *program_function_bindings;
     uint32_t program_function_binding_count;
     XrSemanticProgramCallBinding *program_call_bindings;
@@ -139,27 +145,30 @@ static bool fail(XrSemanticBuildContext *ctx, const char *code, const char *deta
 static bool xi_tree_has_program_binding(const XiFunc *function) {
     if (!function)
         return false;
-    if (function->psc_function_index != XI_PSC_ROW_NONE)
+    if (function->psc_function_index != XI_PSC_ROW_NONE ||
+        function->psc_return_type_index != XI_PSC_ROW_NONE)
         return true;
     for (uint32_t b = 0; b < function->nblocks; b++) {
         const XiBlock *block = function->blocks[b];
-        for (const XiPhi *phi = block ? block->phis : NULL; phi;
-             phi = phi->next)
-            if (phi->value.psc_call_index != XI_PSC_ROW_NONE)
+        for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next)
+            if (phi->value.psc_call_index != XI_PSC_ROW_NONE ||
+                phi->value.psc_type_index != XI_PSC_ROW_NONE)
                 return true;
         for (uint32_t i = 0; block && i < block->nvalues; i++)
-            if (block->values[i] &&
-                block->values[i]->psc_call_index != XI_PSC_ROW_NONE)
+            if (block->values[i] && (block->values[i]->psc_call_index != XI_PSC_ROW_NONE ||
+                                     block->values[i]->psc_type_index != XI_PSC_ROW_NONE))
                 return true;
     }
+    for (uint16_t p = 0; p < function->nparams; p++)
+        if (function->params[p] && function->params[p]->psc_type_index != XI_PSC_ROW_NONE)
+            return true;
     for (uint16_t i = 0; i < function->nchildren; i++)
         if (xi_tree_has_program_binding(function->children[i]))
             return true;
     return false;
 }
 
-static bool prepare_program_authority(XrSemanticBuildContext *ctx,
-                                      const XiFunc *root) {
+static bool prepare_program_authority(XrSemanticBuildContext *ctx, const XiFunc *root) {
     const XiModule *module = root ? root->module : NULL;
     bool closure = module && module->program_semantic_closure;
     bool decision = module && module->scalar_call_decision;
@@ -170,14 +179,20 @@ static bool prepare_program_authority(XrSemanticBuildContext *ctx,
                         "Xi program rows have no retained construction authority");
         return true;
     }
-    if (!closure || !decision || !profile || module->init != root ||
-        !xi_scalar_program_verify(module, module->scalar_target_profile,
-                                  ctx->error, ctx->error_size))
-        return fail(ctx, "XR_SEM_0019",
-                    "SemanticPlan construction authority is incomplete");
+    if (!closure || module->init != root)
+        return fail(ctx, "XR_SEM_0019", "SemanticPlan construction authority is incomplete");
+    XrProgramSemanticFamily family =
+        xr_program_semantic_closure_family(module->program_semantic_closure);
+    bool scalar = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
+    bool aggregate = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+    if ((!scalar && !aggregate) || (scalar && (!decision || !profile)) ||
+        (aggregate && (decision || profile)) ||
+        !xi_program_semantic_verify(module, scalar ? module->scalar_target_profile : NULL,
+                                    ctx->error, ctx->error_size))
+        return fail(ctx, "XR_SEM_0019", "SemanticPlan construction family is inconsistent");
     ctx->program_closure = module->program_semantic_closure;
-    ctx->construction_decision = module->scalar_call_decision;
-    ctx->construction_target_profile = module->scalar_target_profile;
+    ctx->construction_decision = scalar ? module->scalar_call_decision : NULL;
+    ctx->construction_target_profile = scalar ? module->scalar_target_profile : NULL;
     return true;
 }
 
@@ -507,6 +522,95 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
                               uint32_t record_index);
 static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *out);
 
+static bool merge_program_type_row(uint32_t candidate, uint32_t *match) {
+    if (candidate == XI_PSC_ROW_NONE)
+        return true;
+    if (*match != XI_PSC_ROW_NONE && *match != candidate)
+        return false;
+    *match = candidate;
+    return true;
+}
+
+static uint32_t program_type_row_for_source(const XrSemanticBuildContext *ctx, const XrType *type) {
+    uint32_t match = XI_PSC_ROW_NONE;
+    for (uint32_t f = 0; ctx && type && f < ctx->function_count; f++) {
+        const XiFunc *function = ctx->functions[f].source;
+        if (!function)
+            return XI_PSC_ROW_NONE;
+        if (function->return_type == type &&
+            !merge_program_type_row(function->psc_return_type_index, &match))
+            return XI_PSC_ROW_NONE;
+        for (uint16_t p = 0; p < function->nparams; p++)
+            if (function->params[p] && function->params[p]->type == type &&
+                !merge_program_type_row(function->params[p]->psc_type_index, &match))
+                return XI_PSC_ROW_NONE;
+        for (uint32_t b = 0; b < function->nblocks; b++) {
+            const XiBlock *block = function->blocks[b];
+            for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next)
+                if (phi->value.type == type &&
+                    !merge_program_type_row(phi->value.psc_type_index, &match))
+                    return XI_PSC_ROW_NONE;
+            for (uint32_t v = 0; block && v < block->nvalues; v++)
+                if (block->values[v] && block->values[v]->type == type &&
+                    !merge_program_type_row(block->values[v]->psc_type_index, &match))
+                    return XI_PSC_ROW_NONE;
+        }
+    }
+    return match;
+}
+
+static uint32_t program_type_row_for_id(const XrProgramSemanticClosure *closure,
+                                        XrStableId identity) {
+    uint32_t match = XI_PSC_ROW_NONE;
+    for (uint32_t i = 0; closure && i < xr_program_semantic_closure_type_count(closure); i++) {
+        const XrProgramSemanticTypeRecord *row = xr_program_semantic_closure_type(closure, i);
+        if (!row || !xr_stable_id_equal(row->id, identity))
+            continue;
+        if (match != XI_PSC_ROW_NONE)
+            return XI_PSC_ROW_NONE;
+        match = i;
+    }
+    return match;
+}
+
+static uint32_t semantic_type_for_program_row(const XrSemanticBuildContext *ctx,
+                                              uint32_t program_row) {
+    const XrProgramSemanticTypeRecord *program_type =
+        ctx && ctx->program_closure
+            ? xr_program_semantic_closure_type(ctx->program_closure, program_row)
+            : NULL;
+    if (!program_type)
+        return XR_SEMANTIC_INDEX_NONE;
+    if (program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR) {
+        const XrExactScalarDesc *scalar =
+            xr_exact_scalar_by_id((XrExactScalarId) program_type->exact_scalar);
+        uint32_t match = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t i = 0; scalar && i < ctx->plan->type_count; i++) {
+            const XrSemanticTypeRecord *type = &ctx->plan->types[i];
+            if (!((scalar->family == XR_EXACT_SCALAR_FAMILY_INTEGER && type->kind == XR_KIND_INT) ||
+                  (scalar->family == XR_EXACT_SCALAR_FAMILY_FLOAT &&
+                   type->kind == XR_KIND_FLOAT)) ||
+                type->scalar_rep != scalar->native_type ||
+                (type->flags & (XR_SEM_TYPE_NULLABLE | XR_SEM_TYPE_CONST | XR_SEM_TYPE_LITERAL)) !=
+                    0)
+                continue;
+            if (match != XR_SEMANTIC_INDEX_NONE)
+                return XR_SEMANTIC_INDEX_NONE;
+            match = i;
+        }
+        return match;
+    }
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; ctx && i < ctx->type_count; i++) {
+        if (program_type_row_for_source(ctx, ctx->types[i].source) != program_row)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE && match != ctx->types[i].index)
+            return XR_SEMANTIC_INDEX_NONE;
+        match = ctx->types[i].index;
+    }
+    return match;
+}
+
 static const XiClassData *value_aggregate_class_data(const XrSemanticBuildContext *ctx,
                                                      const XrType *type) {
     if (!ctx || !type || type->kind != XR_KIND_INSTANCE || !type->instance.class_ref ||
@@ -577,11 +681,161 @@ static const XiClassData *value_aggregate_data_for_type(const XrSemanticBuildCon
     return match;
 }
 
+static const XrProgramSemanticTypeRecord *
+program_aggregate_for_semantic_type(const XrSemanticBuildContext *ctx, uint32_t semantic_type,
+                                    uint32_t *program_row_out) {
+    uint32_t match = XI_PSC_ROW_NONE;
+    const XrProgramSemanticTypeRecord *row = NULL;
+    for (uint32_t i = 0; ctx && ctx->program_closure && i < ctx->type_count; i++) {
+        if (ctx->types[i].index != semantic_type)
+            continue;
+        uint32_t candidate = program_type_row_for_source(ctx, ctx->types[i].source);
+        if (candidate == XI_PSC_ROW_NONE)
+            continue;
+        const XrProgramSemanticTypeRecord *candidate_row =
+            xr_program_semantic_closure_type(ctx->program_closure, candidate);
+        if (!candidate_row || candidate_row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE)
+            continue;
+        if (match != XI_PSC_ROW_NONE && match != candidate)
+            return NULL;
+        match = candidate;
+        row = candidate_row;
+    }
+    if (program_row_out)
+        *program_row_out = match;
+    return row;
+}
+
+static bool program_aggregate_source_is_exact(const XrSemanticBuildContext *ctx,
+                                              const XrType *source,
+                                              const XrProgramSemanticTypeRecord *aggregate) {
+    if (!ctx || !ctx->program_closure || !source || !aggregate ||
+        aggregate->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
+        source->kind != XR_KIND_INSTANCE || source->is_nullable || source->is_const ||
+        source->is_literal || source->instance.type_arg_count != 0 || !source->instance.class_ref)
+        return false;
+    const XrClassInfo *info = source->instance.class_ref;
+    if (!info->struct_layout || info->is_overlay_union || info->base || info->base_name ||
+        info->interface_count != 0 || info->method_count != 0 || info->field_count <= 0 ||
+        (uint32_t) info->field_count != aggregate->field_count || !info->fields)
+        return false;
+    for (uint32_t field = 0; field < aggregate->field_count; field++) {
+        const XrProgramSemanticTypeFieldRecord *field_row = xr_program_semantic_closure_type_field(
+            ctx->program_closure, aggregate->field_begin + field);
+        uint32_t child_program =
+            field_row ? program_type_row_for_id(ctx->program_closure, field_row->field_type)
+                      : XI_PSC_ROW_NONE;
+        const XrProgramSemanticTypeRecord *child =
+            child_program != XI_PSC_ROW_NONE
+                ? xr_program_semantic_closure_type(ctx->program_closure, child_program)
+                : NULL;
+        const XrExactScalarDesc *scalar =
+            child && child->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR
+                ? xr_exact_scalar_by_id((XrExactScalarId) child->exact_scalar)
+                : NULL;
+        const XaSymbol *source_field = info->fields[field];
+        const XrType *source_field_type = source_field ? source_field->links.type : NULL;
+        if (!field_row || field_row->declaration_ordinal != field || !scalar || !source_field ||
+            source_field->is_static || source_field->is_weak || !source_field_type ||
+            !((scalar->family == XR_EXACT_SCALAR_FAMILY_INTEGER &&
+               source_field_type->kind == XR_KIND_INT) ||
+              (scalar->family == XR_EXACT_SCALAR_FAMILY_FLOAT &&
+               source_field_type->kind == XR_KIND_FLOAT)) ||
+            source_field_type->scalar_rep != scalar->native_type ||
+            source_field_type->is_nullable || source_field_type->is_const ||
+            source_field_type->is_literal)
+            return false;
+    }
+    return true;
+}
+
 static bool refine_value_aggregate_types(XrSemanticBuildContext *ctx) {
     for (uint32_t semantic_type = 0; semantic_type < ctx->plan->type_count; semantic_type++) {
         XrSemanticTypeRecord *record = &ctx->plan->types[semantic_type];
         if (record->kind != XR_KIND_INSTANCE || (record->flags & XR_SEM_TYPE_VALUE) == 0)
             continue;
+        const XrProgramSemanticTypeRecord *program_aggregate =
+            program_aggregate_for_semantic_type(ctx, semantic_type, NULL);
+        if (program_aggregate) {
+            const XrClassInfo *aggregate_info = NULL;
+            for (uint32_t i = 0; i < ctx->type_count; i++) {
+                if (ctx->types[i].index != semantic_type)
+                    continue;
+                const XrType *candidate = ctx->types[i].source;
+                if (!candidate || candidate->kind != XR_KIND_INSTANCE ||
+                    !candidate->instance.class_ref)
+                    continue;
+                if (!program_aggregate_source_is_exact(ctx, candidate, program_aggregate))
+                    return fail(ctx, "XR_SEM_0019",
+                                "program aggregate source type is inconsistent");
+                if (!aggregate_info)
+                    aggregate_info = candidate->instance.class_ref;
+            }
+            if (!aggregate_info || !aggregate_info->fields || aggregate_info->field_count <= 0 ||
+                (uint32_t) aggregate_info->field_count != program_aggregate->field_count)
+                return fail(ctx, "XR_SEM_0019", "program aggregate source fields are incomplete");
+            uint32_t *indices =
+                program_aggregate->field_count
+                    ? (uint32_t *) xr_malloc((size_t) program_aggregate->field_count *
+                                             sizeof(*indices))
+                    : NULL;
+            if (program_aggregate->field_count && !indices)
+                return fail(ctx, "XR_EXEC_5003", "program aggregate child allocation failed");
+            for (uint32_t field = 0; field < program_aggregate->field_count; field++) {
+                const XrProgramSemanticTypeFieldRecord *field_row =
+                    xr_program_semantic_closure_type_field(ctx->program_closure,
+                                                           program_aggregate->field_begin + field);
+                uint32_t child_program =
+                    field_row ? program_type_row_for_id(ctx->program_closure, field_row->field_type)
+                              : XI_PSC_ROW_NONE;
+                const XrProgramSemanticTypeRecord *child_row =
+                    child_program != XI_PSC_ROW_NONE
+                        ? xr_program_semantic_closure_type(ctx->program_closure, child_program)
+                        : NULL;
+                const XaSymbol *source_field = aggregate_info->fields[field];
+                const XrType *source_field_type = source_field ? source_field->links.type : NULL;
+                const XrExactScalarDesc *scalar =
+                    child_row && child_row->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR
+                        ? xr_exact_scalar_by_id((XrExactScalarId) child_row->exact_scalar)
+                        : NULL;
+                if (!scalar || !source_field_type || source_field->is_static ||
+                    source_field->is_weak || source_field_type->scalar_rep != scalar->native_type ||
+                    !((scalar->family == XR_EXACT_SCALAR_FAMILY_INTEGER &&
+                       source_field_type->kind == XR_KIND_INT) ||
+                      (scalar->family == XR_EXACT_SCALAR_FAMILY_FLOAT &&
+                       source_field_type->kind == XR_KIND_FLOAT)) ||
+                    source_field_type->is_nullable || source_field_type->is_const ||
+                    source_field_type->is_literal ||
+                    !add_type(ctx, source_field_type, &indices[field])) {
+                    xr_free(indices);
+                    return fail(ctx, "XR_SEM_0019", "program aggregate field type is inconsistent");
+                }
+                if (!field_row || field_row->declaration_ordinal != field ||
+                    indices[field] == XR_SEMANTIC_INDEX_NONE) {
+                    xr_free(indices);
+                    return fail(ctx, "XR_SEM_0019",
+                                "program aggregate child binding is incomplete");
+                }
+            }
+            record = &ctx->plan->types[semantic_type];
+            record->child_begin = ctx->plan->type_child_count;
+            record->child_count = (uint16_t) program_aggregate->field_count;
+            record->aggregate_extent = program_aggregate->field_count;
+            record->aggregate_align = 0;
+            record->builtin_type = XR_TID_NULL;
+            record->scalar_rep = XR_SCALAR_REP_NONE;
+            record->flags = XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT;
+            for (uint32_t field = 0; field < program_aggregate->field_count; field++) {
+                if (!append_u32(&ctx->plan->type_children, &ctx->plan->type_child_count,
+                                &ctx->plan->type_child_capacity, indices[field],
+                                XR_SEMANTIC_MAX_TYPES * 8u)) {
+                    xr_free(indices);
+                    return fail(ctx, "XR_EXEC_5003", "program aggregate child budget exhausted");
+                }
+            }
+            xr_free(indices);
+            continue;
+        }
         bool declared_aggregate = false;
         for (uint32_t i = 0; i < ctx->type_count; i++) {
             const XrType *source = ctx->types[i].source;
@@ -738,8 +992,20 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
             count = (uint32_t) type->instance.type_arg_count;
             break;
         case XR_KIND_INSTANCE: {
-            const XiClassData *data = value_aggregate_class_data(ctx, type);
-            count = data ? data->instance_field_count : (uint32_t) type->instance.type_arg_count;
+            uint32_t program_row = program_type_row_for_source(ctx, type);
+            const XrProgramSemanticTypeRecord *program_type =
+                ctx->program_closure && program_row != XI_PSC_ROW_NONE
+                    ? xr_program_semantic_closure_type(ctx->program_closure, program_row)
+                    : NULL;
+            const XiClassData *data =
+                program_type && program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE
+                    ? NULL
+                    : value_aggregate_class_data(ctx, type);
+            count =
+                program_type && program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE
+                    ? 0u
+                : data ? data->instance_field_count
+                       : (uint32_t) type->instance.type_arg_count;
             break;
         }
         case XR_KIND_FUNCTION:
@@ -820,7 +1086,15 @@ static bool add_type_children(XrSemanticBuildContext *ctx, const XrType *type,
             return fail(ctx, "XR_SEM_0012", "fixed-array type has an invalid exact extent");
         record->aggregate_extent = (uint32_t) type->fixed_array.length;
     } else if (type->kind == XR_KIND_INSTANCE) {
-        const XiClassData *aggregate = value_aggregate_class_data(ctx, type);
+        uint32_t program_row = program_type_row_for_source(ctx, type);
+        const XrProgramSemanticTypeRecord *program_type =
+            ctx->program_closure && program_row != XI_PSC_ROW_NONE
+                ? xr_program_semantic_closure_type(ctx->program_closure, program_row)
+                : NULL;
+        const XiClassData *aggregate =
+            program_type && program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE
+                ? NULL
+                : value_aggregate_class_data(ctx, type);
         if (aggregate) {
             record->aggregate_extent = aggregate->instance_field_count;
             record->aggregate_align = aggregate->struct_layout->explicit_align;
@@ -1002,7 +1276,7 @@ static int function_index(const XrSemanticBuildContext *ctx, const XiFunc *funct
 }
 
 static bool module_stable_identity(XrSemanticBuildContext *ctx, const XiFunc *root,
-                                    XrStableId *module_id, const char **module_path_out) {
+                                   XrStableId *module_id, const char **module_path_out) {
     const char *identity = root && root->module ? root->module->identity : NULL;
     const char *module_name =
         root->module && root->module->name ? root->module->name : (root->name ? root->name : "");
@@ -1018,11 +1292,11 @@ static bool module_stable_identity(XrSemanticBuildContext *ctx, const XiFunc *ro
                            XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_PACKAGE) &&
         text_append_component(&package_key, frozen_identity) &&
         xr_stable_id_from_key(package_key.data, &package_id, &digest) &&
-        text_append_format(&module_key, "entity-v1:schema=%u:kind=%u:parent=",
-                           XR_SEMANTIC_SCHEMA_VERSION, (unsigned) XR_SEM_ENTITY_MODULE) &&
+        text_append_format(&module_key,
+                           "entity-v1:schema=%u:kind=%u:parent=", XR_SEMANTIC_SCHEMA_VERSION,
+                           (unsigned) XR_SEM_ENTITY_MODULE) &&
         text_append_stable_id(&module_key, package_id) && text_append(&module_key, ":name=") &&
-        text_append_component(&module_key, module_name) &&
-        text_append(&module_key, ":identity=") &&
+        text_append_component(&module_key, module_name) && text_append(&module_key, ":identity=") &&
         text_append_component(&module_key, frozen_identity) &&
         xr_stable_id_from_key(module_key.data, module_id, &digest);
     text_dispose(&package_key);
@@ -1356,13 +1630,26 @@ static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t funct
         record->mode = source->params[p]->param_mode;
         record->ownership = xi_arc_parameter_ownership(source, source->params[p]);
         record->transfer_mode = source->params[p]->transfer_mode;
+        const XrProgramSemanticTypeRecord *program_parameter_type =
+            ctx->program_closure && source->params[p]->psc_type_index != XI_PSC_ROW_NONE
+                ? xr_program_semantic_closure_type(ctx->program_closure,
+                                                   source->params[p]->psc_type_index)
+                : NULL;
+        bool program_leaf_value =
+            program_parameter_type &&
+            program_parameter_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
+        if (program_leaf_value) {
+            record->ownership = XI_OWN_NONE;
+            record->transfer_mode = XR_TRANSFER_SHARE;
+        }
         record->flags =
             (uint8_t) ((p < source->min_params ? XR_SEM_PARAMETER_REQUIRED : 0u) |
                        (source->is_vararg && p == source->nparams ? XR_SEM_PARAMETER_VARIADIC
                                                                   : 0u) |
                        (source->receiver_borrowed && p == 0 ? XR_SEM_PARAMETER_RECEIVER_BORROWED
                                                             : 0u) |
-                       ((source->params[p]->lowering_flags & XI_LOWERING_FLAG_PARAM_READ_PLACE) != 0
+                       (!program_leaf_value && (source->params[p]->lowering_flags &
+                                                XI_LOWERING_FLAG_PARAM_READ_PLACE) != 0
                             ? XR_SEM_PARAMETER_READ_PLACE
                             : 0u));
         ctx->plan->parameter_count++;
@@ -1622,8 +1909,8 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             const char *module_path = import_ref->module_path ? import_ref->module_path : "";
             if (classify_import_resolution(import_ref) == XR_SEM_IMPORT_RESOLUTION_SOURCE_MODULE &&
                 import_ref->resolved_module && import_ref->resolved_module->identity) {
-                module_path = xr_semantic_plan_copy_string(
-                    ctx->plan, import_ref->resolved_module->identity);
+                module_path =
+                    xr_semantic_plan_copy_string(ctx->plan, import_ref->resolved_module->identity);
                 if (!module_path)
                     return fail(ctx, "XR_SEM_0019",
                                 "source import module path identity is incomplete");
@@ -1640,8 +1927,7 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
                 const XiModuleExport *candidate = &module->exports[i];
                 bool function_export = candidate->function && !candidate->class_data;
                 bool class_export = candidate->class_data && !candidate->function;
-                if (candidate->shared_slot != value->aux_int ||
-                    (!function_export && !class_export))
+                if (candidate->shared_slot != value->aux_int || (!function_export && !class_export))
                     continue;
                 if (match)
                     return fail(ctx, "XR_SEM_0019", "source export shared slot is ambiguous");
@@ -1650,15 +1936,16 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
             if (match) {
                 bool ambiguous = false;
                 const XiValue *store = indexed_root_shared_store(ctx, value->aux_int, &ambiguous);
-                const XiValue *stored = store && store == value && !ambiguous && store->nargs == 1 &&
+                const XiValue *stored = store && store == value && !ambiguous &&
+                                                store->nargs == 1 &&
                                                 root_store_precedes_activation(owner, store)
                                             ? strip_identity_copies(owner, store->args[0])
                                             : NULL;
                 int function = match->function && stored
                                    ? resolve_closure_binding(ctx, owner, store->args[0])
                                    : -1;
-                bool exact_function = function >= 0 &&
-                                      ctx->functions[function].source == match->function;
+                bool exact_function =
+                    function >= 0 && ctx->functions[function].source == match->function;
                 uint32_t source_class = XR_SEMANTIC_INDEX_NONE;
                 for (uint32_t c = 0; match->class_data && module && c < module->nclasses; c++) {
                     if (module->classes[c] != match->class_data)
@@ -1677,9 +1964,10 @@ static bool add_operation_metadata(XrSemanticBuildContext *ctx, const XiValue *v
                 if (!exact_function && !exact_class)
                     match = NULL;
             }
-            return !match || (add_metadata(ctx, record, match->function ? "source-export-v1"
-                                                                       : "source-class-export-v1") &&
-                              add_metadata(ctx, record, match->name));
+            return !match ||
+                   (add_metadata(ctx, record,
+                                 match->function ? "source-export-v1" : "source-class-export-v1") &&
+                    add_metadata(ctx, record, match->name));
         }
         case XI_AGG_NEW: {
             const XiClassData *aggregate = value_aggregate_class_data(ctx, value->type);
@@ -2045,57 +2333,48 @@ static int resolve_direct_local_callee(const XrSemanticBuildContext *ctx, const 
     return resolve_direct_local_callee_depth(ctx, caller, callee, 0u);
 }
 
-static bool program_direct_local_callee(
-    XrSemanticBuildContext *ctx, uint32_t caller, const XiValue *call,
-    uint32_t *callee) {
+static bool program_direct_local_callee(XrSemanticBuildContext *ctx, uint32_t caller,
+                                        const XiValue *call, uint32_t *callee) {
     if (callee)
         *callee = XR_SEMANTIC_INDEX_NONE;
-    if (!ctx || !ctx->program_closure || !ctx->construction_decision ||
-        !callee || caller >= ctx->function_count || !call ||
+    if (!ctx || !ctx->program_closure || !callee || caller >= ctx->function_count || !call ||
         call->op != XI_CALL || call->psc_call_index == XI_PSC_ROW_NONE)
-        return fail(ctx, "XR_SEM_0019",
-                    "program call has no exact SemanticPlan input row");
+        return fail(ctx, "XR_SEM_0019", "program call has no exact SemanticPlan input row");
     const XrProgramSemanticCallRecord *call_row =
-        xr_program_semantic_closure_call(ctx->program_closure,
-                                         call->psc_call_index);
+        xr_program_semantic_closure_call(ctx->program_closure, call->psc_call_index);
     const XiFunc *caller_function = ctx->functions[caller].source;
     const XrProgramSemanticFunctionRecord *caller_row =
-        caller_function &&
-                caller_function->psc_function_index != XI_PSC_ROW_NONE
-            ? xr_program_semantic_closure_function(
-                  ctx->program_closure,
-                  caller_function->psc_function_index)
+        caller_function && caller_function->psc_function_index != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_function(ctx->program_closure,
+                                                   caller_function->psc_function_index)
             : NULL;
     if (!call_row || !caller_row ||
-        !xr_stable_id_equal(call_row->id,
-                            ctx->construction_decision->call_identity) ||
         !xr_stable_id_equal(call_row->caller_function, caller_row->id) ||
-        !xr_stable_id_equal(call_row->caller_function,
-                            ctx->construction_decision->caller_function) ||
-        !xr_stable_id_equal(call_row->callee_function,
-                            ctx->construction_decision->callee_function))
-        return fail(ctx, "XR_SEM_0019",
-                    "program call row disagrees with its sealed decision");
+        (ctx->construction_decision &&
+         (!xr_stable_id_equal(call_row->id, ctx->construction_decision->call_identity) ||
+          !xr_stable_id_equal(call_row->callsite_identity,
+                              ctx->construction_decision->callsite_identity) ||
+          !xr_stable_id_equal(call_row->caller_function,
+                              ctx->construction_decision->caller_function) ||
+          !xr_stable_id_equal(call_row->callee_function,
+                              ctx->construction_decision->callee_function))))
+        return fail(ctx, "XR_SEM_0019", "program call row disagrees with its sealed decision");
     uint32_t match = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0; i < ctx->function_count; i++) {
         const XiFunc *candidate = ctx->functions[i].source;
         const XrProgramSemanticFunctionRecord *candidate_row =
             candidate && candidate->psc_function_index != XI_PSC_ROW_NONE
-                ? xr_program_semantic_closure_function(
-                      ctx->program_closure, candidate->psc_function_index)
+                ? xr_program_semantic_closure_function(ctx->program_closure,
+                                                       candidate->psc_function_index)
                 : NULL;
-        if (!candidate_row ||
-            !xr_stable_id_equal(candidate_row->id,
-                                call_row->callee_function))
+        if (!candidate_row || !xr_stable_id_equal(candidate_row->id, call_row->callee_function))
             continue;
         if (match != XR_SEMANTIC_INDEX_NONE)
-            return fail(ctx, "XR_SEM_0019",
-                        "program callee row is ambiguous in SemanticPlan");
+            return fail(ctx, "XR_SEM_0019", "program callee row is ambiguous in SemanticPlan");
         match = i;
     }
     if (match == XR_SEMANTIC_INDEX_NONE)
-        return fail(ctx, "XR_SEM_0019",
-                    "program callee row is missing from SemanticPlan");
+        return fail(ctx, "XR_SEM_0019", "program callee row is missing from SemanticPlan");
     *callee = match;
     return true;
 }
@@ -2254,22 +2533,23 @@ static bool build_source_exports(XrSemanticBuildContext *ctx, const XiFunc *root
         memset(record, 0, sizeof(*record));
         record->name = xr_semantic_plan_copy_string(ctx->plan, source_export->name);
         record->exported_entity = exact_function ? ctx->plan->functions[function].id
-                                                  : ctx->plan->source_classes[source_class].id;
+                                                 : ctx->plan->source_classes[source_class].id;
         record->function = exact_function ? (uint32_t) function : XR_SEMANTIC_INDEX_NONE;
         record->source_class = exact_class ? source_class : XR_SEMANTIC_INDEX_NONE;
         record->shared_slot = source_export->shared_slot;
-        record->kind = exact_function ? XR_SEM_SOURCE_EXPORT_FUNCTION
-                                      : XR_SEM_SOURCE_EXPORT_SOURCE_CLASS;
+        record->kind =
+            exact_function ? XR_SEM_SOURCE_EXPORT_FUNCTION : XR_SEM_SOURCE_EXPORT_SOURCE_CLASS;
         XrTextBuilder key = {0};
         bool valid = record->name &&
-                     text_append_format(&key, exact_function ? "source-export-v1:schema=%u:name="
-                                                             : "source-class-export-v1:schema=%u:name=",
+                     text_append_format(&key,
+                                        exact_function ? "source-export-v1:schema=%u:name="
+                                                       : "source-class-export-v1:schema=%u:name=",
                                         XR_SEMANTIC_SCHEMA_VERSION) &&
                      text_append_component(&key, record->name) &&
                      text_append(&key, exact_function ? ":function=" : ":source-class=") &&
-                     text_append_stable_id(&key, exact_function
-                                                     ? ctx->plan->functions[function].id
-                                                     : ctx->plan->source_classes[source_class].id) &&
+                     text_append_stable_id(
+                         &key, exact_function ? ctx->plan->functions[function].id
+                                              : ctx->plan->source_classes[source_class].id) &&
                      text_append_format(&key, ":slot=%u", record->shared_slot);
         if (valid)
             record->canonical_key = xr_semantic_plan_copy_string(ctx->plan, key.data);
@@ -2554,11 +2834,9 @@ static const XiImportRef *resolve_source_imported_class_callee(
     bool dependency_present = false;
     for (uint32_t i = 0; i < ctx->dependency_module_count; i++)
         dependency_present |= ctx->dependency_modules[i] == ref->resolved_module;
-    const XiClassData *class_data =
-        ref->resolved_module->slot_classes[ref->resolved_shared_slot];
+    const XiClassData *class_data = ref->resolved_module->slot_classes[ref->resolved_shared_slot];
     const XiModuleExport *module_export = NULL;
-    for (uint16_t i = 0; dependency_present && class_data &&
-                         i < ref->resolved_module->nexports;
+    for (uint16_t i = 0; dependency_present && class_data && i < ref->resolved_module->nexports;
          i++) {
         const XiModuleExport *candidate = &ref->resolved_module->exports[i];
         if (!candidate->name || strcmp(candidate->name, ref->member_name) != 0 ||
@@ -2574,20 +2852,19 @@ static const XiImportRef *resolve_source_imported_class_callee(
     uint32_t source_export_index = XR_SEMANTIC_INDEX_NONE;
     const XrSemanticSourceExportRecord *source_export =
         find_source_export(dependency_plan, ref->member_name, &source_export_index);
-    uint32_t source_class = xr_semantic_source_class_export_source_class(dependency_plan,
-                                                                         source_export);
+    uint32_t source_class =
+        xr_semantic_source_class_export_source_class(dependency_plan, source_export);
     const XrSemanticSourceClassRecord *semantic_class =
         xr_semantic_plan_source_class(dependency_plan, source_class);
     if (!dependency_present || !class_data || !module_export || !dependency_plan ||
         !xr_semantic_plan_is_verified(dependency_plan) || !source_export ||
         source_export->kind != XR_SEM_SOURCE_EXPORT_SOURCE_CLASS ||
         source_export->function != XR_SEMANTIC_INDEX_NONE ||
-        source_export->source_class != source_class ||
-        !semantic_class ||
+        source_export->source_class != source_class || !semantic_class ||
         !xr_stable_id_equal(source_export->exported_entity, semantic_class->id) ||
         source_class >= ref->resolved_module->nclasses ||
-        ref->resolved_module->classes[source_class] != class_data ||
-        !class_data->class_name || strcmp(class_data->class_name, semantic_class->name) != 0)
+        ref->resolved_module->classes[source_class] != class_data || !class_data->class_name ||
+        strcmp(class_data->class_name, semantic_class->name) != 0)
         return NULL;
     if (dependency_plan_out)
         *dependency_plan_out = dependency_plan;
@@ -3003,8 +3280,7 @@ static bool append_source_export_call_target(XrSemanticBuildContext *ctx, const 
  * freezes the exact dependency class export and constructor body; treating its
  * import binding as a local class slot would erase the module boundary. */
 static bool append_source_class_constructor_call_target(XrSemanticBuildContext *ctx,
-                                                        const XiValue *value,
-                                                        uint32_t operation) {
+                                                        const XiValue *value, uint32_t operation) {
     const XrSemanticOperationRecord *call = &ctx->plan->operations[operation];
     uint32_t source_class = xr_semantic_class_construction_source_class(ctx->plan, call);
     uint32_t dependency = XR_SEMANTIC_INDEX_NONE;
@@ -3013,29 +3289,26 @@ static bool append_source_class_constructor_call_target(XrSemanticBuildContext *
     uint32_t constructor = XR_SEMANTIC_INDEX_NONE;
     const XrSemanticPlan *dependency_plan = NULL;
     const XrSemanticSourceExportRecord *exported = NULL;
-    const XiFunc *caller = call->function < ctx->plan->function_count
-                               ? ctx->functions[call->function].source
-                               : NULL;
+    const XiFunc *caller =
+        call->function < ctx->plan->function_count ? ctx->functions[call->function].source : NULL;
     const XiImportRef *import_ref = NULL;
     if (source_class == XR_SEMANTIC_INDEX_NONE && value && value->nargs > 0 &&
         xi_value_is_constructor_call(value)) {
-        import_ref = resolve_source_imported_class_callee(
-            ctx, caller, value->args[0], &dependency_plan, &exported, &source_export,
-            &imported_source_class);
+        import_ref =
+            resolve_source_imported_class_callee(ctx, caller, value->args[0], &dependency_plan,
+                                                 &exported, &source_export, &imported_source_class);
         XrSemanticDependencyRecord preview = {
             .module_path = import_ref ? import_ref->resolved_module->identity : NULL,
         };
         if (import_ref && xr_semantic_imported_class_construction_source_class(
-                              ctx->plan, dependency_plan, &preview, exported, call,
-                              &constructor) != imported_source_class)
+                              ctx->plan, dependency_plan, &preview, exported, call, &constructor) !=
+                              imported_source_class)
             import_ref = NULL;
         if (import_ref && !append_dependency(ctx, import_ref->resolved_module, &dependency))
-            return fail(ctx, "XR_SEM_0019",
-                        "imported source class dependency is incomplete");
-        if (import_ref &&
-            xr_semantic_imported_class_construction_source_class(
-                ctx->plan, dependency_plan, &ctx->plan->dependencies[dependency], exported, call,
-                &constructor) != imported_source_class)
+            return fail(ctx, "XR_SEM_0019", "imported source class dependency is incomplete");
+        if (import_ref && xr_semantic_imported_class_construction_source_class(
+                              ctx->plan, dependency_plan, &ctx->plan->dependencies[dependency],
+                              exported, call, &constructor) != imported_source_class)
             import_ref = NULL;
     }
     bool imported = import_ref != NULL;
@@ -3075,10 +3348,10 @@ static bool append_source_class_constructor_call_target(XrSemanticBuildContext *
                     &key, "call-target-v10:schema=%u:operation=", XR_SEMANTIC_SCHEMA_VERSION) &&
                 text_append_stable_id(&key, call->id) && text_append(&key, ":dependency=") &&
                 text_append_stable_id(&key, ctx->plan->dependencies[dependency].id) &&
-                text_append(&key, ":class-export=") &&
-                text_append_stable_id(&key, exported->id) && text_append(&key, ":source-class=") &&
-                text_append_stable_id(
-                    &key, dependency_plan->source_classes[imported_source_class].id) &&
+                text_append(&key, ":class-export=") && text_append_stable_id(&key, exported->id) &&
+                text_append(&key, ":source-class=") &&
+                text_append_stable_id(&key,
+                                      dependency_plan->source_classes[imported_source_class].id) &&
                 text_append(&key, ":constructor=") &&
                 (xr_stable_id_equal(record->callee_function, zero)
                      ? text_append(&key, "none")
@@ -3125,16 +3398,14 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
         return true;
     uint32_t before = ctx->plan->call_target_count;
     uint32_t caller = ctx->plan->operations[operation].function;
-    bool program_bound = ctx->program_closure != NULL &&
-                         value->psc_call_index != XI_PSC_ROW_NONE;
+    bool program_bound = ctx->program_closure != NULL && value->psc_call_index != XI_PSC_ROW_NONE;
     if (!program_bound) {
         if (!append_source_export_call_target(ctx, value, operation))
             return false;
         if (ctx->plan->call_target_count != before)
             return true;
     } else if (value->op != XI_CALL) {
-        return fail(ctx, "XR_SEM_0019",
-                    "program row binds a non-direct call operation");
+        return fail(ctx, "XR_SEM_0019", "program row binds a non-direct call operation");
     }
     /* A call on its own activation carries no callee value to resolve: the
      * shared judgement reads the whole target out of the immediate, and the
@@ -3142,39 +3413,32 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
      * ordinary direct-local row, so a self-call is admitted on exactly the
      * signature, argument and result terms any other local call must meet. */
     uint32_t program_function = XR_SEMANTIC_INDEX_NONE;
-    if (program_bound &&
-        !program_direct_local_callee(ctx, caller, value, &program_function))
+    if (program_bound && !program_direct_local_callee(ctx, caller, value, &program_function))
         return false;
-    int function =
-        program_bound
-            ? (int) program_function
-            : (xi_call_targets_own_frame(value->op, value->aux_int)
-                   ? (int) caller
-                   : resolve_direct_local_callee(
-                         ctx, ctx->functions[caller].source, value->args[0]));
+    int function = program_bound ? (int) program_function
+                                 : (xi_call_targets_own_frame(value->op, value->aux_int)
+                                        ? (int) caller
+                                        : resolve_direct_local_callee(
+                                              ctx, ctx->functions[caller].source, value->args[0]));
     const char *native_module = NULL;
     const char *native_member = NULL;
-    bool native_yieldable =
-        !program_bound && function < 0 &&
-        resolve_native_yieldable_callee(ctx->functions[caller].source, value,
-                                        &native_module, &native_member);
-    const XiValue *indirect_callee =
-        program_bound ? NULL : value->args[0];
-    while (!program_bound && indirect_callee &&
-           xi_copy_is_identity_alias(indirect_callee) &&
+    bool native_yieldable = !program_bound && function < 0 &&
+                            resolve_native_yieldable_callee(ctx->functions[caller].source, value,
+                                                            &native_module, &native_member);
+    const XiValue *indirect_callee = program_bound ? NULL : value->args[0];
+    while (!program_bound && indirect_callee && xi_copy_is_identity_alias(indirect_callee) &&
            indirect_callee->nargs == 1)
         indirect_callee = indirect_callee->args[0];
     bool indirect_callable =
-        !program_bound && function < 0 && !native_yieldable &&
-        value->op == XI_CALL && value->args[0] &&
-        value->args[0]->type && value->args[0]->type->kind == XR_KIND_FUNCTION && indirect_callee &&
-        indirect_callee->op != XI_IMPORT_REF && indirect_callee->op != XI_GET_BUILTIN &&
+        !program_bound && function < 0 && !native_yieldable && value->op == XI_CALL &&
+        value->args[0] && value->args[0]->type && value->args[0]->type->kind == XR_KIND_FUNCTION &&
+        indirect_callee && indirect_callee->op != XI_IMPORT_REF &&
+        indirect_callee->op != XI_GET_BUILTIN &&
         (indirect_callee->op != XI_GET_SHARED ||
          call_has_coroutine_state(ctx->functions[caller].source, value)) &&
         indirect_callee->op != XI_CLOSURE_NEW &&
         !(indirect_callee->op == XI_STACK_ALLOC && indirect_callee->aux_int == XI_CLOSURE_NEW);
-    if (!program_bound && function < 0 && !native_yieldable &&
-        !indirect_callable)
+    if (!program_bound && function < 0 && !native_yieldable && !indirect_callable)
         return append_source_class_constructor_call_target(ctx, value, operation);
     if (ctx->plan->call_target_count >= XR_SEMANTIC_MAX_CALL_TARGETS ||
         !reserve_array((void **) &ctx->plan->call_targets, &ctx->plan->call_target_capacity,
@@ -3294,8 +3558,8 @@ static bool xi_rune_to_uint32_exact(const XiValue *value) {
     const XiValue *receiver = value && value->nargs == 1 ? value->args[0] : NULL;
     return value && value->op == XI_CALL_METHOD && receiver &&
            value->aux_kind == XI_AUX_KIND_NONE &&
-           value->aux_int == (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1 &&
-           receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
+           value->aux_int == (int64_t) XI_METHOD_SYMBOL_TO_UINT32 << 1 && receiver->type &&
+           receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_INT && !value->type->is_nullable &&
            value->type->scalar_rep == XR_NATIVE_U32;
 }
@@ -3307,8 +3571,8 @@ static bool xi_rune_to_string_exact(const XiValue *value) {
     return value && value->op == XI_CALL_METHOD && receiver && value->aux &&
            strcmp((const char *) value->aux, "toString") == 0 &&
            value->aux_kind == XI_AUX_KIND_NONE &&
-           value->aux_int == (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1 &&
-           receiver->type && receiver->type->kind == XR_KIND_RUNE && value->type &&
+           value->aux_int == (int64_t) XI_METHOD_SYMBOL_TOSTRING << 1 && receiver->type &&
+           receiver->type->kind == XR_KIND_RUNE && value->type &&
            value->type->kind == XR_KIND_STRING && !value->type->is_nullable &&
            xi_iterator_rune_source_exact(receiver);
 }
@@ -3378,9 +3642,10 @@ static bool xi_string_builder_to_string_exact(const XiValue *value) {
            value->type->kind == XR_KIND_STRING;
 }
 
-static bool semantic_string_builder_append_common_exact(
-    const XrSemanticBuildContext *ctx, const XrSemanticOperationRecord *record,
-    const XrSemanticTypeRecord **out_argument_type) {
+static bool
+semantic_string_builder_append_common_exact(const XrSemanticBuildContext *ctx,
+                                            const XrSemanticOperationRecord *record,
+                                            const XrSemanticTypeRecord **out_argument_type) {
     if (out_argument_type)
         *out_argument_type = NULL;
     if (!ctx || !record || record->operand_count != 2 ||
@@ -3394,21 +3659,21 @@ static bool semantic_string_builder_append_common_exact(
         receiver->type < ctx->plan->type_count ? &ctx->plan->types[receiver->type] : NULL;
     const XrSemanticTypeRecord *argument_type =
         argument->type < ctx->plan->type_count ? &ctx->plan->types[argument->type] : NULL;
-    const XrSemanticFunctionRecord *function =
-        record->function < ctx->plan->function_count ? &ctx->plan->functions[record->function]
-                                                    : NULL;
+    const XrSemanticFunctionRecord *function = record->function < ctx->plan->function_count
+                                                   ? &ctx->plan->functions[record->function]
+                                                   : NULL;
     bool result_exact =
         (record->result_ownership == XI_GEN_RESULT_OWNERSHIP_OWNED &&
          record->return_parameter == -1 &&
          ((record->return_provenance == XR_SEM_RETURN_OWNED && record->return_complete == 1) ||
           (record->return_provenance == XR_SEM_RETURN_NONE && record->return_complete == 0))) ||
         (record->result_ownership == XI_GEN_RESULT_OWNERSHIP_BORROWED &&
-         (((record->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
-            record->return_parameter == -1) ||
-           (record->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
-            record->return_parameter >= 0 &&
-            (uint16_t) record->return_parameter < function->parameter_count)) &&
-          record->return_complete == 1) ||
+             (((record->return_provenance == XR_SEM_RETURN_BORROWED_STATIC &&
+                record->return_parameter == -1) ||
+               (record->return_provenance == XR_SEM_RETURN_BORROWED_PARAM && function &&
+                record->return_parameter >= 0 &&
+                (uint16_t) record->return_parameter < function->parameter_count)) &&
+              record->return_complete == 1) ||
          (record->return_provenance == XR_SEM_RETURN_NONE && record->return_parameter == -1 &&
           record->return_complete == 0));
     bool exact =
@@ -3800,8 +4065,7 @@ static bool semantic_array_member_reference_contract_exact(
     if (semantic_operand >= ctx->plan->operand_count)
         return false;
     const XrSemanticOperandRecord *element = &ctx->plan->operands[semantic_operand];
-    return element->type == element_type_index &&
-           element->role == XR_SEM_OPERAND_ARGUMENT &&
+    return element->type == element_type_index && element->role == XR_SEM_OPERAND_ARGUMENT &&
            element->parameter == (int16_t) (shape->element_operand - 1u) &&
            element->flags == XR_SEM_OPERAND_CALL_CONTRACT &&
            element->ownership_action == XR_SEM_OPERAND_CONSUME;
@@ -4208,6 +4472,13 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->parameter_mode = value->param_mode;
     if (value->op == XI_PARAM)
         record->parameter_ownership = xi_arc_parameter_ownership(function, value);
+    if (ctx->program_closure && value->op == XI_PARAM && value->psc_type_index != XI_PSC_ROW_NONE) {
+        const XrProgramSemanticTypeRecord *program_parameter_type =
+            xr_program_semantic_closure_type(ctx->program_closure, value->psc_type_index);
+        if (program_parameter_type &&
+            program_parameter_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE)
+            record->parameter_ownership = XI_OWN_NONE;
+    }
     record->flags = value->flags;
     XiReturnOwnership value_ownership = xi_arc_value_return_ownership(function, value);
     record->result_alias_operand = xi_arc_value_alias_operand(function, value);
@@ -4217,6 +4488,15 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;
     record->return_complete = value_ownership.complete ? 1u : 0u;
+    if (ctx->program_closure && value->op == XI_CALL && value->psc_call_index != XI_PSC_ROW_NONE &&
+        xr_program_semantic_closure_family(ctx->program_closure) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+        record->result_ownership = XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
+        record->parameter_ownership = XI_OWN_NONE;
+        record->return_parameter = -1;
+        record->return_provenance = XR_SEM_RETURN_NONE;
+        record->return_complete = 0;
+    }
     if (value->op == XI_ASSERTION) {
         const XrAssertionPlan *plan = xi_assertion_plan(value);
         if (!plan || !xr_assertion_plan_validate(plan) || plan->arity != value->nargs ||
@@ -4231,13 +4511,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
         record->evidence[XR_SEM_ASSERT_EVIDENCE_SCHEMA] = plan->schema_version;
         record->evidence[XR_SEM_ASSERT_EVIDENCE_BUILTIN_ID] = plan->builtin_id;
         record->evidence[XR_SEM_ASSERT_EVIDENCE_KIND] = plan->kind;
-        record->evidence[XR_SEM_ASSERT_EVIDENCE_FAILURE_CHANNEL] =
-            plan->expected_failure_channel;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_FAILURE_CHANNEL] = plan->expected_failure_channel;
         record->evidence[XR_SEM_ASSERT_EVIDENCE_FLOW_RULE] = plan->flow_rule;
         record->evidence[XR_SEM_ASSERT_EVIDENCE_EQUALITY] = plan->equality_authority;
         record->evidence[XR_SEM_ASSERT_EVIDENCE_TARGET] = plan->target;
-        record->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES] =
-            plan->required_capabilities;
+        record->evidence[XR_SEM_ASSERT_EVIDENCE_CAPABILITIES] = plan->required_capabilities;
     }
     if (value->xa_intrinsic_id == XA_INTRINSIC_STRING_BYTE_SLICE_VIEW) {
         const XiViewEvidence *view = &value->view_evidence;
@@ -4432,16 +4710,16 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     }
     const XrType *array_allocation_element =
         value->type && XR_TYPE_IS_ARRAY(value->type) ? value->type->container.element_type : NULL;
-    bool array_allocation_scalar = value->array_element_storage > XR_ELEM_ANY &&
-                                   value->array_element_storage < XR_ELEM_RAWPTR;
+    bool array_allocation_scalar =
+        value->array_element_storage > XR_ELEM_ANY && value->array_element_storage < XR_ELEM_RAWPTR;
     bool array_allocation_source_class =
         value->array_element_storage == XR_ELEM_ANY &&
         source_class_for_type(ctx, array_allocation_element) != XR_SEMANTIC_INDEX_NONE;
-    bool array_allocation_exact =
-        value->op == XI_ARRAY_NEW && value->type && XR_TYPE_IS_ARRAY(value->type) &&
-        array_allocation_element && value->nargs == 1 && value->args[0] &&
-        value->args[0]->type && XR_TYPE_IS_INT(value->args[0]->type) &&
-        (array_allocation_scalar || array_allocation_source_class);
+    bool array_allocation_exact = value->op == XI_ARRAY_NEW && value->type &&
+                                  XR_TYPE_IS_ARRAY(value->type) && array_allocation_element &&
+                                  value->nargs == 1 && value->args[0] && value->args[0]->type &&
+                                  XR_TYPE_IS_INT(value->args[0]->type) &&
+                                  (array_allocation_scalar || array_allocation_source_class);
     if (array_allocation_exact) {
         record->array_element_storage = value->array_element_storage;
         record->semantic_immediate = 0;
@@ -4523,61 +4801,132 @@ static bool build_blocks_and_operations(XrSemanticBuildContext *ctx) {
     return true;
 }
 
+static int compare_program_type_bindings(const void *left, const void *right) {
+    const XrSemanticProgramTypeBinding *a = (const XrSemanticProgramTypeBinding *) left;
+    const XrSemanticProgramTypeBinding *b = (const XrSemanticProgramTypeBinding *) right;
+    return a->semantic_type < b->semantic_type ? -1 : a->semantic_type > b->semantic_type ? 1 : 0;
+}
+
 static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
     if (!ctx->program_closure)
         return true;
-    uint32_t function_count =
-        xr_program_semantic_closure_function_count(ctx->program_closure);
-    uint32_t call_count =
-        xr_program_semantic_closure_call_count(ctx->program_closure);
+    uint32_t function_count = xr_program_semantic_closure_function_count(ctx->program_closure);
+    uint32_t call_count = xr_program_semantic_closure_call_count(ctx->program_closure);
+    uint32_t type_count = xr_program_semantic_closure_type_count(ctx->program_closure);
+    uint32_t type_field_count = xr_program_semantic_closure_type_field_count(ctx->program_closure);
+    ctx->program_type_bindings = type_count ? (XrSemanticProgramTypeBinding *) xr_calloc(
+                                                  type_count, sizeof(*ctx->program_type_bindings))
+                                            : NULL;
+    ctx->program_type_field_bindings =
+        type_field_count ? (XrSemanticProgramTypeFieldBinding *) xr_calloc(
+                               type_field_count, sizeof(*ctx->program_type_field_bindings))
+                         : NULL;
     ctx->program_function_bindings =
-        function_count
-            ? (XrSemanticProgramFunctionBinding *) xr_malloc(
-                  (size_t) function_count *
-                  sizeof(*ctx->program_function_bindings))
-            : NULL;
+        function_count ? (XrSemanticProgramFunctionBinding *) xr_malloc(
+                             (size_t) function_count * sizeof(*ctx->program_function_bindings))
+                       : NULL;
     ctx->program_call_bindings =
-        call_count
-            ? (XrSemanticProgramCallBinding *) xr_malloc(
-                  (size_t) call_count *
-                  sizeof(*ctx->program_call_bindings))
-            : NULL;
-    if ((function_count && !ctx->program_function_bindings) ||
+        call_count ? (XrSemanticProgramCallBinding *) xr_malloc((size_t) call_count *
+                                                                sizeof(*ctx->program_call_bindings))
+                   : NULL;
+    if ((type_count && !ctx->program_type_bindings) ||
+        (type_field_count && !ctx->program_type_field_bindings) ||
+        (function_count && !ctx->program_function_bindings) ||
         (call_count && !ctx->program_call_bindings))
-        return fail(ctx, "XR_EXEC_5003",
-                    "program authority row allocation failed");
+        return fail(ctx, "XR_EXEC_5003", "program authority row allocation failed");
+    for (uint32_t program_row = 0; program_row < type_count; program_row++) {
+        const XrProgramSemanticTypeRecord *row =
+            xr_program_semantic_closure_type(ctx->program_closure, program_row);
+        uint32_t semantic = semantic_type_for_program_row(ctx, program_row);
+        if (!row || semantic == XR_SEMANTIC_INDEX_NONE || semantic >= ctx->plan->type_count)
+            return fail(ctx, "XR_SEM_0019", "program type binding table is incomplete");
+        XrSemanticProgramTypeBinding *binding =
+            &ctx->program_type_bindings[ctx->program_type_binding_count++];
+        *binding = (XrSemanticProgramTypeBinding) {
+            .program_type = row->id,
+            .source_class_identity = row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE
+                                         ? ctx->plan->types[semantic].source_class_identity
+                                         : (XrStableId) {{0}},
+            .semantic_type = semantic,
+            .program_row = program_row,
+            .field_begin = ctx->program_type_field_binding_count,
+            .field_count = row->field_count,
+            .kind = row->kind,
+            .exact_scalar = row->exact_scalar,
+            .flags = row->flags,
+        };
+        for (uint32_t field = 0; field < row->field_count; field++) {
+            const XrProgramSemanticTypeFieldRecord *field_row =
+                xr_program_semantic_closure_type_field(ctx->program_closure,
+                                                       row->field_begin + field);
+            uint32_t child_program =
+                field_row ? program_type_row_for_id(ctx->program_closure, field_row->field_type)
+                          : XI_PSC_ROW_NONE;
+            uint32_t child_semantic = child_program != XI_PSC_ROW_NONE
+                                          ? semantic_type_for_program_row(ctx, child_program)
+                                          : XR_SEMANTIC_INDEX_NONE;
+            if (!field_row || child_program == XI_PSC_ROW_NONE ||
+                child_semantic == XR_SEMANTIC_INDEX_NONE ||
+                ctx->program_type_field_binding_count >= type_field_count)
+                return fail(ctx, "XR_SEM_0019", "program type field binding is incomplete");
+            ctx->program_type_field_bindings[ctx->program_type_field_binding_count++] =
+                (XrSemanticProgramTypeFieldBinding) {
+                    .program_owner_type = row->id,
+                    .program_field_type = field_row->field_type,
+                    .owner_program_row = program_row,
+                    .field_program_row = child_program,
+                    .semantic_field_type = child_semantic,
+                    .declaration_ordinal = field_row->declaration_ordinal,
+                };
+        }
+    }
+    if (ctx->program_type_binding_count != type_count ||
+        ctx->program_type_field_binding_count != type_field_count)
+        return fail(ctx, "XR_SEM_0019", "program type provenance coverage is incomplete");
+    if (type_count > 1u)
+        qsort(ctx->program_type_bindings, type_count, sizeof(*ctx->program_type_bindings),
+              compare_program_type_bindings);
     for (uint32_t i = 0; i < ctx->function_count; i++) {
         const XiFunc *source = ctx->functions[i].source;
         if (source->psc_function_index == XI_PSC_ROW_NONE)
             continue;
         const XrProgramSemanticFunctionRecord *row =
-            xr_program_semantic_closure_function(
-                ctx->program_closure, source->psc_function_index);
+            xr_program_semantic_closure_function(ctx->program_closure, source->psc_function_index);
         if (!row || ctx->program_function_binding_count >= function_count)
-            return fail(ctx, "XR_SEM_0019",
-                        "program function binding is not canonical");
+            return fail(ctx, "XR_SEM_0019", "program function binding is not canonical");
+        if (xr_program_semantic_closure_family(ctx->program_closure) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+            /* The verified PSC row is the narrow proof that this function
+             * returns a
+             * headerless pointer-free leaf value.  Project NONE at
+             * the program
+             * binding owner; do not weaken global instance RC or
+             * copy semantics. */
+            ctx->plan->functions[i].return_parameter = -1;
+            ctx->plan->functions[i].return_provenance = XR_SEM_RETURN_NONE;
+        }
         ctx->program_function_bindings[ctx->program_function_binding_count++] =
             (XrSemanticProgramFunctionBinding) {
-                row->id, i, source->psc_function_index};
+                .program_function = row->id,
+                .semantic_function = i,
+                .program_row = source->psc_function_index,
+                .flags = row->flags,
+            };
     }
     if (ctx->program_function_binding_count != function_count)
-        return fail(ctx, "XR_SEM_0019",
-                    "program function binding table is incomplete");
+        return fail(ctx, "XR_SEM_0019", "program function binding table is incomplete");
     uint32_t operation = 0;
     for (uint32_t f = 0; f < ctx->function_count; f++) {
         const XiFunc *function = ctx->functions[f].source;
         for (uint32_t b = 0; b < function->nblocks; b++) {
             const XiBlock *block = function->blocks[b];
-            for (const XiPhi *phi = block ? block->phis : NULL; phi;
-                 phi = phi->next) {
+            for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next) {
                 if (operation >= ctx->plan->operation_count ||
                     ctx->plan->operations[operation].result_value !=
                         value_ref(ctx, function, &phi->value))
-                    return fail(ctx, "XR_SEM_0019",
-                                "program operation rows are not canonical");
+                    return fail(ctx, "XR_SEM_0019", "program operation rows are not canonical");
                 if (phi->value.psc_call_index != XI_PSC_ROW_NONE)
-                    return fail(ctx, "XR_SEM_0019",
-                                "program call cannot bind a phi row");
+                    return fail(ctx, "XR_SEM_0019", "program call cannot bind a phi row");
                 operation++;
             }
             for (uint32_t v = 0; block && v < block->nvalues; v++) {
@@ -4585,57 +4934,75 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                 if (!value || operation >= ctx->plan->operation_count ||
                     ctx->plan->operations[operation].result_value !=
                         value_ref(ctx, function, value))
-                    return fail(ctx, "XR_SEM_0019",
-                                "program operation rows are not canonical");
+                    return fail(ctx, "XR_SEM_0019", "program operation rows are not canonical");
                 if (value->psc_call_index != XI_PSC_ROW_NONE) {
-                    const XrProgramSemanticCallRecord *row =
-                        xr_program_semantic_closure_call(
-                            ctx->program_closure, value->psc_call_index);
+                    const XrProgramSemanticCallRecord *row = xr_program_semantic_closure_call(
+                        ctx->program_closure, value->psc_call_index);
                     uint32_t target = XR_SEMANTIC_INDEX_NONE;
                     if (!row || ctx->program_call_binding_count >= call_count ||
                         !program_direct_local_callee(ctx, f, value, &target))
                         return false;
                     ctx->program_call_bindings[ctx->program_call_binding_count++] =
-                        (XrSemanticProgramCallBinding) {
-                            row->id,
-                            row->callsite_identity,
-                            row->caller_function,
-                            row->callee_function,
-                            operation,
-                            value->psc_call_index,
-                            target,
-                            0};
+                        (XrSemanticProgramCallBinding) {row->id,
+                                                        row->callsite_identity,
+                                                        row->caller_function,
+                                                        row->callee_function,
+                                                        operation,
+                                                        value->psc_call_index,
+                                                        target,
+                                                        0};
                 }
                 operation++;
             }
         }
     }
-    return (operation == ctx->plan->operation_count &&
-            ctx->program_call_binding_count == call_count) ||
-           fail(ctx, "XR_SEM_0019",
-                "program operation binding table is incomplete");
+    if (operation != ctx->plan->operation_count || ctx->program_call_binding_count != call_count)
+        return fail(ctx, "XR_SEM_0019", "program operation binding table is incomplete");
+    if (xr_program_semantic_closure_family(ctx->program_closure) ==
+        XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+        for (uint32_t i = 0; i < ctx->program_function_binding_count; i++) {
+            uint32_t semantic = ctx->program_function_bindings[i].semantic_function;
+            if (semantic >= ctx->plan->function_count ||
+                ctx->plan->functions[semantic].return_provenance != XR_SEM_RETURN_NONE)
+                return fail(ctx, "XR_SEM_0019",
+                            "leaf function return projection was not installed");
+        }
+    }
+    return true;
 }
 
 static bool install_program_provenance(XrSemanticBuildContext *ctx) {
     if (!ctx->program_closure)
         return true;
+    if (xr_program_semantic_closure_family(ctx->program_closure) ==
+        XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+        for (uint32_t i = 0; i < ctx->program_function_binding_count; i++) {
+            uint32_t semantic = ctx->program_function_bindings[i].semantic_function;
+            if (semantic >= ctx->plan->function_count ||
+                ctx->plan->functions[semantic].return_parameter != -1 ||
+                ctx->plan->functions[semantic].return_provenance != XR_SEM_RETURN_NONE)
+                return fail(ctx, "XR_SEM_0019", "leaf function return projection was not retained");
+        }
+    }
     XrGenerationClosureId generation =
         xr_program_semantic_closure_generation_id(ctx->program_closure);
     XrSemanticProgramProvenance provenance = {
-        XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION,
-        xr_program_semantic_closure_schema(ctx->program_closure),
-        ctx->program_function_binding_count,
-        ctx->program_call_binding_count,
-        xr_program_semantic_closure_fingerprint(ctx->program_closure),
-        {{0}}};
-    memcpy(provenance.generation_identity.bytes, generation.bytes,
-           sizeof(generation.bytes));
+        .schema = XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION,
+        .program_schema = xr_program_semantic_closure_schema(ctx->program_closure),
+        .program_family = xr_program_semantic_closure_family(ctx->program_closure),
+        .type_count = ctx->program_type_binding_count,
+        .type_field_count = ctx->program_type_field_binding_count,
+        .function_count = ctx->program_function_binding_count,
+        .call_count = ctx->program_call_binding_count,
+        .program_fingerprint = xr_program_semantic_closure_fingerprint(ctx->program_closure),
+    };
+    memcpy(provenance.generation_identity.bytes, generation.bytes, sizeof(generation.bytes));
     if (!xr_semantic_plan_set_program_provenance(
-            ctx->plan, &provenance, ctx->program_function_bindings,
-            ctx->program_function_binding_count, ctx->program_call_bindings,
-            ctx->program_call_binding_count))
-        return fail(ctx, "XR_EXEC_5003",
-                    "program provenance installation failed");
+            ctx->plan, &provenance, ctx->program_type_bindings, ctx->program_type_binding_count,
+            ctx->program_type_field_bindings, ctx->program_type_field_binding_count,
+            ctx->program_function_bindings, ctx->program_function_binding_count,
+            ctx->program_call_bindings, ctx->program_call_binding_count))
+        return fail(ctx, "XR_EXEC_5003", "program provenance installation failed");
     return true;
 }
 
@@ -4827,10 +5194,8 @@ static bool build_module_entities(XrSemanticBuildContext *ctx, const XiFunc *roo
     const char *module_identity = root->module ? root->module->identity : NULL;
     XrTextBuilder key = {0};
     bool valid = xr_module_identity_valid(module_identity, NULL) &&
-                 begin_entity_key(ctx, &key, XR_SEM_ENTITY_PACKAGE,
-                                  XR_SEMANTIC_INDEX_NONE) &&
-                 text_append(&key, ":authority=") &&
-                 text_append_component(&key, module_identity);
+                 begin_entity_key(ctx, &key, XR_SEM_ENTITY_PACKAGE, XR_SEMANTIC_INDEX_NONE) &&
+                 text_append(&key, ":authority=") && text_append_component(&key, module_identity);
     if (!valid ||
         !append_entity(ctx, XR_SEM_ENTITY_PACKAGE, XR_SEM_ENTITY_SUBJECT_NONE,
                        XR_SEMANTIC_INDEX_NONE, 0, XR_SEMANTIC_INDEX_NONE, &key, package_out)) {
@@ -4839,7 +5204,7 @@ static bool build_module_entities(XrSemanticBuildContext *ctx, const XiFunc *roo
     }
     text_dispose(&key);
     valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_MODULE, *package_out) &&
-             text_append(&key, ":name=") && text_append_component(&key, module_name) &&
+            text_append(&key, ":name=") && text_append_component(&key, module_name) &&
             text_append(&key, ":identity=") && text_append_component(&key, module_identity);
     if (!valid || !append_entity(ctx, XR_SEM_ENTITY_MODULE, XR_SEM_ENTITY_SUBJECT_NONE,
                                  XR_SEMANTIC_INDEX_NONE, 0, *package_out, &key, module_out)) {
@@ -4875,25 +5240,32 @@ static bool build_type_entities(XrSemanticBuildContext *ctx, uint32_t module) {
             return fail(ctx, "XR_SEM_0019", "structural-shape identity is incomplete");
         }
         text_dispose(&key);
+        const XrProgramSemanticTypeRecord *program_aggregate =
+            program_aggregate_for_semantic_type(ctx, i, NULL);
         const XrType *source = source_type_for_index(ctx, i);
-        const XiClassData *aggregate = (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0
-                                           ? value_aggregate_data_for_type(ctx, i, &source)
-                                           : NULL;
-        if (!source ||
+        const XiClassData *aggregate =
+            !program_aggregate && (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0
+                ? value_aggregate_data_for_type(ctx, i, &source)
+                : NULL;
+        if ((!program_aggregate && !source) ||
             (source->kind == XR_KIND_STRUCT_OBJECT &&
              (source->object.field_count < 0 ||
               (source->object.field_count > 0 && !source->object.field_names))) ||
-            (source->kind == XR_KIND_INSTANCE && !aggregate))
+            (!program_aggregate && source->kind == XR_KIND_INSTANCE && !aggregate))
             return fail(ctx, "XR_SEM_0019", "structural-shape field facts are unavailable");
         for (uint16_t field = 0; field < type->child_count; field++) {
             uint32_t child = ctx->plan->type_children[type->child_begin + field];
-            const char *field_name = source->kind == XR_KIND_STRUCT_OBJECT
-                                         ? source->object.field_names[field]
-                                         : aggregate->instance_field_names[field];
-            valid = begin_entity_key(ctx, &key, XR_SEM_ENTITY_FIELD, shape) &&
-                    text_append_format(&key, ":ordinal=%u:name=", field) &&
-                    text_append_component(&key, field_name) && text_append(&key, ":type=") &&
-                    text_append_stable_id(&key, ctx->plan->types[child].id);
+            valid =
+                begin_entity_key(ctx, &key, XR_SEM_ENTITY_FIELD, shape) &&
+                text_append_format(&key, ":ordinal=%u", field) &&
+                (!program_aggregate
+                     ? text_append(&key, ":name=") &&
+                           text_append_component(&key, source->kind == XR_KIND_STRUCT_OBJECT
+                                                           ? source->object.field_names[field]
+                                                           : aggregate->instance_field_names[field])
+                     : true) &&
+                text_append(&key, ":type=") &&
+                text_append_stable_id(&key, ctx->plan->types[child].id);
             if (!valid || !append_entity(ctx, XR_SEM_ENTITY_FIELD, XR_SEM_ENTITY_SUBJECT_TYPE, i,
                                          field, shape, &key, NULL)) {
                 text_dispose(&key);
@@ -5496,8 +5868,7 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
     if (!xr_ownership_certificate_build(ctx.plan, &ownership, error, error_size))
         goto failure;
     xr_semantic_plan_set_ownership(ctx.plan, ownership);
-    if (!build_semantic_entities(&ctx, root) ||
-        !install_program_provenance(&ctx))
+    if (!build_semantic_entities(&ctx, root) || !install_program_provenance(&ctx))
         goto failure;
     if (!xr_semantic_plan_freeze(ctx.plan, error, error_size))
         goto failure;
@@ -5508,9 +5879,8 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
                   ctx.plan->dependency_plan_count, error, error_size))
         goto failure;
     if (ctx.program_closure &&
-        !xi_scalar_semantic_plan_verify(
-            root, ctx.plan, ctx.construction_target_profile, error,
-            error_size))
+        !xi_program_semantic_plan_verify(root, ctx.plan, ctx.construction_target_profile, error,
+                                         error_size))
         goto failure;
     ctx.plan->verified = true;
     ctx.plan->module_set_verified = ctx.plan->dependency_count != 0;
@@ -5524,6 +5894,8 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
     xr_free(ctx.functions);
     xr_free(ctx.root_shared_stores);
     xr_free(ctx.root_shared_store_ambiguous);
+    xr_free(ctx.program_type_bindings);
+    xr_free(ctx.program_type_field_bindings);
     xr_free(ctx.program_function_bindings);
     xr_free(ctx.program_call_bindings);
     for (uint32_t i = 0; i < ctx.suspendability_count; i++)
@@ -5537,6 +5909,8 @@ failure:
     xr_free(ctx.functions);
     xr_free(ctx.root_shared_stores);
     xr_free(ctx.root_shared_store_ambiguous);
+    xr_free(ctx.program_type_bindings);
+    xr_free(ctx.program_type_field_bindings);
     xr_free(ctx.program_function_bindings);
     xr_free(ctx.program_call_bindings);
     for (uint32_t i = 0; i < ctx.suspendability_count; i++)

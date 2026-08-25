@@ -145,7 +145,7 @@ typedef struct XiCleanupScope {
     XiValue *active_try;
 } XiCleanupScope;
 
-struct XiScalarProgramInput;
+struct XiProgramSemanticInput;
 
 /* ========== Lowering Context ========== */
 
@@ -156,7 +156,7 @@ typedef struct XiLower {
     /* Semantic analysis context (type queries) */
     struct XaAnalyzer *analyzer;
     const struct XaTypedProgram *typed_program;
-    const struct XiScalarProgramInput *scalar_program;
+    const struct XiProgramSemanticInput *program_semantics;
     struct XrVMRuntime *isolate;
 
     /* Braun SSA variable tracking.
@@ -306,6 +306,6 @@ XR_FUNC XiFunc *xi_lower_func(const struct XaTypedProgram *program, struct XrVMR
  */
 XR_FUNC XiFunc *xi_lower_program(const struct XaTypedProgram *program, struct XrVMRuntime *isolate,
                                  bool repl_mode,
-                                 const struct XiScalarProgramInput *scalar_program);
+                                 const struct XiProgramSemanticInput *program_semantics);
 
 #endif  // XI_LOWER_H

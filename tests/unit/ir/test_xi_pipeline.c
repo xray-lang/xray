@@ -7,7 +7,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_pipeline.h"
-#include "../../../src/ir/xi_scalar_program.h"
+#include "../../../src/ir/xi_program_semantic.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/frontend/parser/xparse.h"
@@ -35,7 +35,7 @@
 #define PIPELINE_TEST_REQUIRE(condition)                                                           \
     do {                                                                                           \
         if (!(condition)) {                                                                        \
-            fprintf(stderr, "pipeline test assertion failed: %s (%s:%d)\n", #condition, __FILE__, \
+            fprintf(stderr, "pipeline test assertion failed: %s (%s:%d)\n", #condition, __FILE__,  \
                     __LINE__);                                                                     \
             abort();                                                                               \
         }                                                                                          \
@@ -141,12 +141,11 @@ typedef struct XiPipelineScalarFixture {
     XaAnalyzer *analyzer;
 } XiPipelineScalarFixture;
 
-static bool xi_pipeline_scalar_fixture_analyze(
-    XiPipelineScalarFixture *fixture, XrCompilerSession *session,
-    const char *namespace_id) {
-    static const char source[] =
-        "fn add1(value: i64) -> i64 { return value + 1 }\n"
-        "fn root() -> i64 { return add1(41) }\n";
+static bool xi_pipeline_scalar_fixture_analyze(XiPipelineScalarFixture *fixture,
+                                               XrCompilerSession *session,
+                                               const char *namespace_id) {
+    static const char source[] = "fn add1(value: i64) -> i64 { return value + 1 }\n"
+                                 "fn root() -> i64 { return add1(41) }\n";
     memset(fixture, 0, sizeof(*fixture));
     XrModuleResolverConfig resolver_config = {0};
     fixture->resolver = xr_module_resolver_new(&resolver_config);
@@ -160,41 +159,35 @@ static bool xi_pipeline_scalar_fixture_analyze(
         .namespace_id = namespace_id,
     };
     char *error = NULL;
-    if (xr_module_graph_build_source(fixture->graph, &authority, source,
-                                     &error) != 0) {
+    if (xr_module_graph_build_source(fixture->graph, &authority, source, &error) != 0) {
         xr_free(error);
         return false;
     }
     xr_free(error);
-    if (xr_module_graph_topological_sort(fixture->graph) != 0 ||
-        fixture->graph->has_cycle || fixture->graph->spec_count != 1 ||
-        fixture->graph->entry_index < 0)
+    if (xr_module_graph_topological_sort(fixture->graph) != 0 || fixture->graph->has_cycle ||
+        fixture->graph->spec_count != 1 || fixture->graph->entry_index < 0)
         return false;
-    fixture->spec =
-        &fixture->graph->specs[fixture->graph->entry_index];
+    fixture->spec = &fixture->graph->specs[fixture->graph->entry_index];
     fixture->analyzer = xa_analyzer_new(session);
     if (!fixture->analyzer)
         return false;
     xa_analyzer_set_graph(fixture->analyzer, fixture->graph);
-    xa_analyzer_analyze(fixture->analyzer, "scalar-binding.xr",
-                        fixture->spec->ast);
+    xa_analyzer_analyze(fixture->analyzer, "scalar-binding.xr", fixture->spec->ast);
     int diagnostic_count = 0;
-    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(
-             fixture->analyzer, &diagnostic_count);
+    for (XaDiagnostic *diag = xa_analyzer_get_diagnostics(fixture->analyzer, &diagnostic_count);
          diag; diag = diag->next) {
         if (diag->severity == XR_DIAG_SEV_ERROR)
             return false;
     }
     XrHashMap *exports = NULL;
-    if (!xa_analyzer_collect_export_symbols_checked(
-            fixture->analyzer, fixture->spec->ast, &exports))
+    if (!xa_analyzer_collect_export_symbols_checked(fixture->analyzer, fixture->spec->ast,
+                                                    &exports))
         return false;
     fixture->spec->status = XR_MODSPEC_ANALYZED;
     return true;
 }
 
-static void xi_pipeline_scalar_fixture_cleanup(
-    XiPipelineScalarFixture *fixture) {
+static void xi_pipeline_scalar_fixture_cleanup(XiPipelineScalarFixture *fixture) {
     xa_analyzer_free(fixture->analyzer);
     xr_module_graph_free(fixture->graph);
     xr_module_resolver_free(fixture->resolver);
@@ -640,8 +633,7 @@ TEST(e2e_string_concat) {
     assert(p != NULL);
     /* Canonical typed string concatenation lowers to XI_STR_CONCAT. Two parts
      * fit the VM emitter's bounded range form, so the bytecode shape is exact. */
-    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 &&
-           "two-part string concat uses one STR_CONCAT_N");
+    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 && "two-part string concat uses one STR_CONCAT_N");
     xr_instruction_unit_free(p);
 }
 
@@ -661,8 +653,7 @@ TEST(e2e_map_literal) {
 TEST(e2e_template_string) {
     XrProto *p = compile_source("var x = \"world\"\nvar s = \"hello ${x}\"\nprint(s)", NULL);
     assert(p != NULL);
-    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 &&
-           "two-part template uses one STR_CONCAT_N");
+    assert(count_opcode(p, OP_STR_CONCAT_N) == 1 && "two-part template uses one STR_CONCAT_N");
     xr_instruction_unit_free(p);
 }
 
@@ -949,25 +940,22 @@ TEST(stress_budget_truncation_still_valid) {
 /* ========== Pipeline Status API ========== */
 
 TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
-    XrCompilerSession *original_session =
-        xr_compiler_session_current_for_isolate(g_iso);
+    XrCompilerSession *original_session = xr_compiler_session_current_for_isolate(g_iso);
     PIPELINE_TEST_REQUIRE(original_session != NULL);
     XrCompilerSessionConfig session_config = {0};
     XrCompilerSession *session = xr_compiler_session_new(&session_config);
     PIPELINE_TEST_REQUIRE(session != NULL);
     PIPELINE_TEST_REQUIRE(xr_compiler_session_target_profile(session) == NULL);
-    PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, session) ==
-                          original_session);
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, session) == original_session);
     XiPipelineConfig config = xi_pipeline_default_config();
     config.run_emit = false;
     config.run_canonicalize = false;
     config.source_file = "scalar-binding.xr";
-    config.module_identity =
-        "memory-module-v1:id=20:xi-scalar-binding-v1";
+    config.module_identity = "memory-module-v1:id=20:xi-scalar-binding-v1";
 
     XiPipelineScalarFixture missing_profile = {0};
-    PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(
-        &missing_profile, session, "xi-scalar-pipeline-missing-profile"));
+    PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(&missing_profile, session,
+                                                             "xi-scalar-pipeline-missing-profile"));
     XiPipelineResult rejected = xi_pipeline_compile_program(
         missing_profile.spec->ast, missing_profile.analyzer, g_iso, &config);
     PIPELINE_TEST_REQUIRE(rejected.status == XI_PIPE_ERR_INTERNAL);
@@ -979,31 +967,28 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
 
     char error[512] = {0};
     XrTargetProfile *profile = NULL;
-    PIPELINE_TEST_REQUIRE(xr_runtime_target_profile_build_native_hosted(
-        &profile, error, sizeof(error)));
-    PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session,
-                                                                 profile));
+    PIPELINE_TEST_REQUIRE(
+        xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_set_target_profile(session, profile));
 
     XiPipelineScalarFixture exact_profile = {0};
-    PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(
-        &exact_profile, session, "xi-scalar-pipeline-exact-profile"));
-    XiPipelineResult accepted = xi_pipeline_compile_program(
-        exact_profile.spec->ast, exact_profile.analyzer, g_iso, &config);
+    PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(&exact_profile, session,
+                                                             "xi-scalar-pipeline-exact-profile"));
+    XiPipelineResult accepted = xi_pipeline_compile_program(exact_profile.spec->ast,
+                                                            exact_profile.analyzer, g_iso, &config);
     if (accepted.status != XI_PIPE_OK)
         fprintf(stderr, "scalar pipeline failed at %s: %s\n",
-                xi_pipeline_stage_str(accepted.error.stage),
-                accepted.error.detail);
+                xi_pipeline_stage_str(accepted.error.stage), accepted.error.detail);
     PIPELINE_TEST_REQUIRE(accepted.status == XI_PIPE_OK);
     PIPELINE_TEST_REQUIRE(accepted.ir != NULL && accepted.ir->module != NULL);
     PIPELINE_TEST_REQUIRE(accepted.ir->module->program_semantic_closure != NULL);
     PIPELINE_TEST_REQUIRE(accepted.ir->module->scalar_call_decision != NULL);
-    PIPELINE_TEST_REQUIRE(xi_scalar_program_verify(accepted.ir->module, profile,
-                                                   error, sizeof(error)));
+    PIPELINE_TEST_REQUIRE(
+        xi_program_semantic_verify(accepted.ir->module, profile, error, sizeof(error)));
     xi_pipeline_result_free(&accepted);
     xi_pipeline_scalar_fixture_cleanup(&exact_profile);
     xr_target_profile_free(profile);
-    PIPELINE_TEST_REQUIRE(
-        xr_compiler_session_attach_isolate(g_iso, original_session) == session);
+    PIPELINE_TEST_REQUIRE(xr_compiler_session_attach_isolate(g_iso, original_session) == session);
     xr_compiler_session_delete(session);
 }
 
@@ -1045,13 +1030,12 @@ TEST(e2e_time_sleep_uses_dedicated_vm_suspend) {
 }
 
 TEST(e2e_generic_this_method_call_uses_frozen_member_identity) {
-    const char *source =
-        "class Router {\n"
-        "    add<T>(value: T) -> i64 { return this.addRoute(value) }\n"
-        "    addRoute<T>(value: T) -> i64 { return 7 }\n"
-        "}\n"
-        "var router = Router()\n"
-        "print(router.add(1))\n";
+    const char *source = "class Router {\n"
+                         "    add<T>(value: T) -> i64 { return this.addRoute(value) }\n"
+                         "    addRoute<T>(value: T) -> i64 { return 7 }\n"
+                         "}\n"
+                         "var router = Router()\n"
+                         "print(router.add(1))\n";
     XrProto *p = compile_source(source, NULL);
     assert(p != NULL);
     assert(has_opcode(p, OP_PRINT));

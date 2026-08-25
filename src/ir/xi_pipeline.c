@@ -32,7 +32,7 @@
 #include "xi_stage.h"
 #include "xi_value_query.h"
 #include "xi_module.h"
-#include "xi_scalar_program.h"
+#include "xi_program_semantic.h"
 #include "../analysis/xglobal_summary.h"
 #include "../plan/semantic/xr_semantic_builder.h"
 #include "../plan/target/xr_target_profile.h"
@@ -119,8 +119,7 @@ static const XiFunc *xi_pipeline_coro_find_func_tree(const XiFunc *func, XgFuncI
     return NULL;
 }
 
-static const XiFunc *xi_pipeline_coro_find_func(XiPipelineCoroResolverCtx *ctx,
-                                                XgFuncId func_id) {
+static const XiFunc *xi_pipeline_coro_find_func(XiPipelineCoroResolverCtx *ctx, XgFuncId func_id) {
     const XiFunc *match;
     if (!ctx || func_id == XG_NO_ID)
         return NULL;
@@ -139,10 +138,10 @@ static const XiFunc *xi_pipeline_coro_find_func(XiPipelineCoroResolverCtx *ctx,
 }
 
 static const XiFunc *xi_pipeline_coro_class_method(const XiModule *module,
-                                                    const XiClassData *class_data,
-                                                    const char *member, bool expect_static) {
-    if (!module || !module->init || !class_data || !class_data->methods ||
-        !class_data->child_idx || !member)
+                                                   const XiClassData *class_data,
+                                                   const char *member, bool expect_static) {
+    if (!module || !module->init || !class_data || !class_data->methods || !class_data->child_idx ||
+        !member)
         return NULL;
     for (uint16_t method_index = 0; method_index < class_data->nmethod; method_index++) {
         const XiClassMethod *method = &class_data->methods[method_index];
@@ -155,9 +154,9 @@ static const XiFunc *xi_pipeline_coro_class_method(const XiModule *module,
     return NULL;
 }
 
-static const XiClassData *xi_pipeline_coro_current_method_class(
-    const XiPipelineCoroResolverCtx *ctx, const XiFunc *current,
-    const XiModule **owner_module) {
+static const XiClassData *
+xi_pipeline_coro_current_method_class(const XiPipelineCoroResolverCtx *ctx, const XiFunc *current,
+                                      const XiModule **owner_module) {
     if (owner_module)
         *owner_module = NULL;
     if (!ctx || !ctx->cfg || !ctx->cfg->graph_modules || !current)
@@ -170,8 +169,7 @@ static const XiClassData *xi_pipeline_coro_current_method_class(
             const XiClassData *class_data = module->classes[class_index];
             if (!class_data || !class_data->methods || !class_data->child_idx)
                 continue;
-            for (uint16_t method_index = 0; method_index < class_data->nmethod;
-                 method_index++) {
+            for (uint16_t method_index = 0; method_index < class_data->nmethod; method_index++) {
                 uint16_t child_index = class_data->child_idx[method_index];
                 if (child_index >= module->init->nchildren ||
                     module->init->children[child_index] != current)
@@ -186,7 +184,7 @@ static const XiClassData *xi_pipeline_coro_current_method_class(
 }
 
 static const XiFunc *xi_pipeline_coro_resolve_callee(void *ud, const XiFunc *current,
-                                                      const XiValue *callee) {
+                                                     const XiValue *callee) {
     XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
     const XiImportRef *ref = xi_value_import_ref(current, callee);
     if (ref && ref->resolved_func)
@@ -199,8 +197,9 @@ static const XiFunc *xi_pipeline_coro_resolve_callee(void *ud, const XiFunc *cur
     return NULL;
 }
 
-static const XgCallsiteSummary *xi_pipeline_coro_callsite(
-    const XiPipelineCoroResolverCtx *ctx, const XiFunc *current, const XiValue *call) {
+static const XgCallsiteSummary *xi_pipeline_coro_callsite(const XiPipelineCoroResolverCtx *ctx,
+                                                          const XiFunc *current,
+                                                          const XiValue *call) {
     const XgCallsiteSummary *row;
     if (!ctx || !ctx->cfg || !ctx->cfg->global_evidence || !current || !call ||
         call->xg_callsite_id == XG_NO_ID)
@@ -216,8 +215,7 @@ static const XiFunc *xi_pipeline_coro_resolve_method(void *ud, const XiFunc *cur
                                                      const XiValue *call) {
     XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
     const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
-    const XiFunc *target =
-        row ? xi_pipeline_coro_find_func(ctx, row->static_target_func_id) : NULL;
+    const XiFunc *target = row ? xi_pipeline_coro_find_func(ctx, row->static_target_func_id) : NULL;
     if (target)
         return target;
 
@@ -228,8 +226,8 @@ static const XiFunc *xi_pipeline_coro_resolve_method(void *ud, const XiFunc *cur
      * already have detached their analyzer pointers, but XiClassData keeps the
      * same xg_class_id carried by the current receiver's class_ref. */
     if (!ctx || !ctx->cfg || !ctx->cfg->graph_modules || !call ||
-        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) ||
-        call->nargs < 1 || !call->args[0] || !call->aux)
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs < 1 ||
+        !call->args[0] || !call->aux)
         return NULL;
     const XiValue *receiver = call->args[0];
     while (xi_copy_is_identity_alias(receiver) && receiver->nargs > 0)
@@ -241,8 +239,7 @@ static const XiFunc *xi_pipeline_coro_resolve_method(void *ud, const XiFunc *cur
      * has an exact Xi identity: parameter zero of a function selected by one
      * frozen XiClassData member row.  Resolve a sibling method through that
      * row before consulting receiver layout metadata. */
-    if (current && current->params && current->nparams > 0 &&
-        receiver == current->params[0]) {
+    if (current && current->params && current->nparams > 0 && receiver == current->params[0]) {
         const XiModule *owner_module = NULL;
         const XiClassData *owner_class =
             xi_pipeline_coro_current_method_class(ctx, current, &owner_module);
@@ -267,8 +264,7 @@ static const XiFunc *xi_pipeline_coro_resolve_method(void *ud, const XiFunc *cur
         (receiver_type->kind != XR_KIND_INSTANCE && receiver_type->kind != XR_KIND_CLASS) ||
         !receiver_type->instance.class_ref || receiver_type->instance.class_ref->xg_class_id == 0)
         return NULL;
-    const XgClassId receiver_class_id =
-        (XgClassId) receiver_type->instance.class_ref->xg_class_id;
+    const XgClassId receiver_class_id = (XgClassId) receiver_type->instance.class_ref->xg_class_id;
     const bool expect_static = receiver_type->kind == XR_KIND_CLASS;
     for (int module_index = 0; module_index < ctx->cfg->graph_module_count; module_index++) {
         const XiModule *module = ctx->cfg->graph_modules[module_index];
@@ -309,17 +305,15 @@ static const XiValue *xi_pipeline_coro_unwrap_identity(const XiValue *value) {
 }
 
 static bool xi_pipeline_coro_is_sealed_builtin_constructor(const XiValue *call) {
-    if (!call || call->op != XI_CALL || call->nargs < 1 ||
-        !xi_value_is_constructor_call(call))
+    if (!call || call->op != XI_CALL || call->nargs < 1 || !xi_value_is_constructor_call(call))
         return false;
     const XiValue *callee = xi_pipeline_coro_unwrap_identity(call->args[0]);
-    return callee && callee->op == XI_GET_BUILTIN &&
-           callee->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
+    return callee && callee->op == XI_GET_BUILTIN && callee->aux_int > XR_GLOBAL_VAR_RESERVED0 &&
            callee->aux_int < XR_USER_GLOBALS_START;
 }
 
 static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
-                                                 const XiValue *call) {
+                                                const XiValue *call) {
     XiPipelineCoroResolverCtx *ctx = (XiPipelineCoroResolverCtx *) ud;
     const XgGlobalEvidence *evidence = ctx && ctx->cfg ? ctx->cfg->global_evidence : NULL;
     const XgCallsiteSummary *row = xi_pipeline_coro_callsite(ctx, current, call);
@@ -350,13 +344,11 @@ static int xi_pipeline_coro_call_suspendability(void *ud, const XiFunc *current,
         if (ref && ref->module_path && !ref->resolved_module && !ref->resolved_func) {
             if (call->op == XI_CALL && ref->member_name) {
                 member = ref->member_name;
-            } else if ((call->op == XI_CALL_METHOD ||
-                        call->op == XI_CALL_METHOD_DIRECT) &&
+            } else if ((call->op == XI_CALL_METHOD || call->op == XI_CALL_METHOD_DIRECT) &&
                        !ref->member_name && call->aux) {
                 member = (const char *) call->aux;
             }
-            if (member &&
-                xa_builtin_get_module_func_abi_signature(ref->module_path, member))
+            if (member && xa_builtin_get_module_func_abi_signature(ref->module_path, member))
                 return xi_import_ref_is_grounded_native(ref) &&
                                xa_builtin_module_func_is_yieldable(ref->module_path, member)
                            ? 1
@@ -842,9 +834,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
          * "no optimization" and then optimizes is worse than no level at
          * all -- it is the one setting a bisection starts from. */
         XiPipelineStats stats;
-        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(ir, cfg->opt_level, &stats,
-                                                           cfg->budget_ns,
-                                                           cfg->disabled_opt_passes);
+        XiOptResult opt = xi_opt_run_pipeline_ex_with_mask(
+            ir, cfg->opt_level, &stats, cfg->budget_ns, cfg->disabled_opt_passes);
         if (!opt.ok) {
             xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_OPTIMIZE,
                                   XI_VERIFY_OPT_INVARIANT, ir, NULL, opt.pass_name, opt.detail);
@@ -870,22 +861,17 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * every retained PSC row and decision at that exact boundary so a clone,
      * rewrite, or metadata loss cannot be hidden by the earlier lowering-time
      * verification. */
-    if (ir->module &&
-        (ir->module->program_semantic_closure ||
-         ir->module->scalar_call_decision)) {
-        XrCompilerSession *scalar_session =
-            xr_compiler_session_current_for_isolate(X);
-        const XrTargetProfile *scalar_profile =
-            scalar_session
-                ? xr_compiler_session_target_profile(scalar_session)
+    if (ir->module && (ir->module->program_semantic_closure || ir->module->scalar_call_decision)) {
+        XrCompilerSession *program_session = xr_compiler_session_current_for_isolate(X);
+        const XrTargetProfile *program_profile =
+            ir->module->scalar_call_decision && program_session
+                ? xr_compiler_session_target_profile(program_session)
                 : NULL;
-        if (!scalar_profile ||
-            !xi_scalar_program_verify(ir->module, scalar_profile,
-                                      transition_error,
-                                      sizeof(transition_error))) {
+        if (!xi_program_semantic_verify(ir->module, program_profile, transition_error,
+                                        sizeof(transition_error))) {
             xi_pipeline_set_error(
-                &res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN,
-                XI_VERIFY_STRUCTURE, ir, NULL, NULL,
+                &res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN, XI_VERIFY_STRUCTURE, ir,
+                NULL, NULL,
                 transition_error[0]
                     ? transition_error
                     : "post-optimization PSC/CallDecision to Xi verification failed");
@@ -899,12 +885,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
         fprintf(stderr, "=======================================\n");
     }
     uint32_t semantic_dependency_count =
-        cfg->graph_modules && cfg->graph_module_count > 0
-            ? (uint32_t) cfg->graph_module_count
-            : 0;
-    if (!xr_semantic_plan_build_and_attach_module_set(
-            ir, cfg->graph_modules, semantic_dependency_count,
-            transition_error, sizeof(transition_error))) {
+        cfg->graph_modules && cfg->graph_module_count > 0 ? (uint32_t) cfg->graph_module_count : 0;
+    if (!xr_semantic_plan_build_and_attach_module_set(ir, cfg->graph_modules,
+                                                      semantic_dependency_count, transition_error,
+                                                      sizeof(transition_error))) {
         xi_pipeline_set_error(&res, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_SEMANTIC_PLAN,
                               XI_VERIFY_STRUCTURE, ir, NULL, NULL, transition_error);
         goto fail;
@@ -1158,84 +1142,91 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         return gate;
     }
 
-    XrProgramSemanticClosure *scalar_closure = NULL;
+    XrProgramSemanticClosure *program_closure = NULL;
     XrScalarCallDecision scalar_decision = {0};
-    XiScalarProgramInput scalar_input = {0};
-    const XiScalarProgramInput *scalar_input_ptr = NULL;
+    XiProgramSemanticInput program_input = {0};
+    const XiProgramSemanticInput *program_input_ptr = NULL;
     const XrTargetProfile *target_profile = NULL;
     char scalar_error[512] = {0};
     if (xa_typed_program_scalar_authority(typed.program)) {
-        target_profile =
-            session ? xr_compiler_session_target_profile(session) : NULL;
+        target_profile = session ? xr_compiler_session_target_profile(session) : NULL;
         if (!target_profile ||
-            !xr_target_profile_verify(target_profile, scalar_error,
-                                      sizeof(scalar_error)) ||
-            !xa_typed_program_build_scalar_closure(
-                typed.program, &scalar_closure, scalar_error,
-                sizeof(scalar_error)) ||
+            !xr_target_profile_verify(target_profile, scalar_error, sizeof(scalar_error)) ||
+            !xa_typed_program_build_scalar_closure(typed.program, &program_closure, scalar_error,
+                                                   sizeof(scalar_error)) ||
             !xr_scalar_call_decision_build(
-                scalar_closure,
-                xr_program_semantic_closure_generation_id(scalar_closure),
-                target_profile, &scalar_decision, scalar_error,
-                sizeof(scalar_error)) ||
-            !xr_scalar_call_decision_verify(
-                &scalar_decision, scalar_closure, target_profile, scalar_error,
-                sizeof(scalar_error))) {
-            xr_program_semantic_closure_free(scalar_closure);
+                program_closure, xr_program_semantic_closure_generation_id(program_closure),
+                target_profile, &scalar_decision, scalar_error, sizeof(scalar_error)) ||
+            !xr_scalar_call_decision_verify(&scalar_decision, program_closure, target_profile,
+                                            scalar_error, sizeof(scalar_error))) {
+            xr_program_semantic_closure_free(program_closure);
             xa_typed_program_free(typed.program);
             xa_analyzer_pop_file_scope(analyzer, &file_scope);
-            xi_pipeline_set_error(
-                &gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
-                XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
-                scalar_error[0]
-                    ? scalar_error
-                    : "bounded scalar compilation requires an exact compiler-session target profile");
+            xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                                  XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+                                  scalar_error[0] ? scalar_error
+                                                  : "bounded scalar compilation requires an exact "
+                                                    "compiler-session target profile");
             return gate;
         }
-        scalar_input = (XiScalarProgramInput) {
-            .closure = scalar_closure,
+        program_input = (XiProgramSemanticInput) {
+            .closure = program_closure,
             .decision = &scalar_decision,
         };
-        scalar_input_ptr = &scalar_input;
+        program_input_ptr = &program_input;
+    } else {
+        const XrProgramSemanticClosure *published =
+            xa_typed_program_program_semantic_closure(typed.program);
+        if (published) {
+            program_closure =
+                xr_program_semantic_closure_retain((XrProgramSemanticClosure *) published);
+            if (!program_closure) {
+                xa_typed_program_free(typed.program);
+                xa_analyzer_pop_file_scope(analyzer, &file_scope);
+                xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
+                                      XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
+                                      "published PSC retention failed");
+                return gate;
+            }
+            program_input = (XiProgramSemanticInput) {
+                .closure = program_closure,
+            };
+            program_input_ptr = &program_input;
+        }
     }
 
-    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode,
-                                  scalar_input_ptr);
-    if (ir && scalar_input_ptr &&
-        (!ir->module || !xi_module_take_scalar_program(
-                            ir->module, &scalar_closure, &scalar_decision,
-                            target_profile, scalar_error, sizeof(scalar_error)) ||
-         !xi_scalar_program_verify(ir->module, target_profile, scalar_error,
-                                   sizeof(scalar_error)))) {
-        xi_func_free(ir);
-        ir = NULL;
-        xi_pipeline_set_error(
-            &gate, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_VERIFY_RAW,
-            XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
-            scalar_error[0] ? scalar_error
-                            : "PSC/CallDecision to Xi verification failed");
-    }
-    xr_program_semantic_closure_free(scalar_closure);
-    xa_typed_program_free(typed.program);
-
-    xa_analyzer_pop_file_scope(analyzer, &file_scope);
-
-    if (gate.status != XI_PIPE_OK)
-        return gate;
-
+    XiFunc *ir = xi_lower_program(typed.program, isolate, cfg->repl_mode, program_input_ptr);
     if (ir)
         xi_set_source_file_recursive(ir, cfg->source_file);
     if (ir && ir->module) {
         ir->module->path = cfg->source_file;
         if (!xi_module_set_identity(ir->module, cfg->module_identity)) {
             xi_func_free(ir);
-            memset(&gate, 0, sizeof(gate));
+            ir = NULL;
             xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
                                   XI_VERIFY_STRUCTURE, NULL, NULL, NULL,
                                   "module identity is missing or cannot be retained");
-            return gate;
         }
     }
+    if (ir && program_input_ptr &&
+        (!ir->module ||
+         !xi_module_take_program_semantics(ir->module, &program_closure, program_input.decision,
+                                           target_profile, scalar_error, sizeof(scalar_error)) ||
+         !xi_program_semantic_verify(ir->module, target_profile, scalar_error,
+                                     sizeof(scalar_error)))) {
+        xi_func_free(ir);
+        ir = NULL;
+        xi_pipeline_set_error(
+            &gate, XI_PIPE_ERR_VERIFY, XI_PIPE_STAGE_VERIFY_RAW, XI_VERIFY_STRUCTURE, NULL, NULL,
+            NULL, scalar_error[0] ? scalar_error : "PSC/CallDecision to Xi verification failed");
+    }
+    xr_program_semantic_closure_free(program_closure);
+    xa_typed_program_free(typed.program);
+
+    xa_analyzer_pop_file_scope(analyzer, &file_scope);
+
+    if (gate.status != XI_PIPE_OK)
+        return gate;
 
     return run_pipeline(ir, isolate, cfg);
 }

@@ -14,7 +14,7 @@
 #include "xi_lower.h"
 #include "xi_lower_internal.h"
 #include "xi.h"
-#include "xi_scalar_program.h"
+#include "xi_program_semantic.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -854,7 +854,7 @@ XR_FUNC void xi_lower_inherit_evidence(XiLower *child, const XiLower *parent) {
     child->global_evidence = parent->global_evidence;
     child->xg_module_id = parent->xg_module_id;
     child->typed_program = parent->typed_program;
-    child->scalar_program = parent->scalar_program;
+    child->program_semantics = parent->program_semantics;
 }
 
 static bool xi_lower_evidence_module_matches(const XiLower *l, XgModuleId module_id) {
@@ -1646,18 +1646,18 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     }
     l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
-    if (l.scalar_program) {
+    if (l.program_semantics) {
         XiSourceLocator locator = {
             .kind = (uint32_t) func_node->type,
-            .span = {
-                .start_line = func_node->line > 0 ? (uint32_t) func_node->line : 0,
-                .start_column = func_node->column > 0 ? (uint32_t) func_node->column : 0,
-                .end_line = func_node->end_line > 0 ? (uint32_t) func_node->end_line : 0,
-                .end_column = func_node->end_column > 0 ? (uint32_t) func_node->end_column : 0,
-            },
+            .span =
+                {
+                    .start_line = func_node->line > 0 ? (uint32_t) func_node->line : 0,
+                    .start_column = func_node->column > 0 ? (uint32_t) func_node->column : 0,
+                    .end_line = func_node->end_line > 0 ? (uint32_t) func_node->end_line : 0,
+                    .end_column = func_node->end_column > 0 ? (uint32_t) func_node->end_column : 0,
+                },
         };
-        if (!xi_scalar_program_bind_function(l.func, l.scalar_program, locator,
-                                             NULL, 0)) {
+        if (!xi_program_semantic_bind_function(l.func, l.program_semantics, locator, NULL, 0)) {
             xi_func_free(l.func);
             xi_lower_cleanup(&l);
             return NULL;
@@ -2605,6 +2605,12 @@ static void build_module_metadata(XiLower *l) {
     XiModule *mod = xi_module_new(NULL, NULL, f);
     if (!mod)
         return;
+    const XrProgramSemanticModuleInput *source_module =
+        xa_typed_program_source_module_authority(l->typed_program);
+    if (source_module) {
+        mod->source_semantic_module = *source_module;
+        mod->source_semantic_module_present = true;
+    }
 
     if (l->global_asm_count > 0) {
         mod->global_asm_templates =
@@ -2713,15 +2719,13 @@ static bool xi_lower_seed_repl_slot(XiLower *l, const XrReplSymbol *symbol, int 
         symbol->symbol_id == 0 || slot < 0 || !next_shared_start)
         return false;
     XaSymbol *authority = l->analyzer && l->analyzer->global_scope
-                              ? xa_scope_lookup_by_id(l->analyzer->global_scope,
-                                                      symbol->symbol_id)
+                              ? xa_scope_lookup_by_id(l->analyzer->global_scope, symbol->symbol_id)
                               : NULL;
     XrType *authority_type = authority ? xa_analyzer_get_type(l->analyzer, authority) : NULL;
     if (!authority || !authority->name || strcmp(authority->name, symbol->name->data) != 0 ||
         authority_type != symbol->type)
         return false;
-    int vid =
-        xi_lower_var_create(l, symbol->symbol_id, symbol->name->data, symbol->type);
+    int vid = xi_lower_var_create(l, symbol->symbol_id, symbol->name->data, symbol->type);
     if (vid < 0 || vid >= l->var_cap)
         return false;
     l->shared_map[vid] = (int16_t) slot;
@@ -2731,8 +2735,7 @@ static bool xi_lower_seed_repl_slot(XiLower *l, const XrReplSymbol *symbol, int 
 }
 
 XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRuntime *isolate,
-                                 bool repl_mode,
-                                 const XiScalarProgramInput *scalar_program) {
+                                 bool repl_mode, const XiProgramSemanticInput *program_semantics) {
     XR_CHECK(program != NULL, "xi_lower_program: typed program is NULL");
     XR_CHECK(xa_typed_program_is_verified(program),
              "xi_lower_program: typed program is unverified");
@@ -2743,15 +2746,14 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
     uint32_t module_id = xa_typed_program_module_id(program);
     XR_CHECK(program_node != NULL, "xi_lower_program: typed syntax is NULL");
     XR_CHECK(analyzer != NULL, "xi_lower_program: semantic database is NULL");
-    if (scalar_program &&
-        (repl_mode || !xi_scalar_program_input_is_consistent(scalar_program,
-                                                              NULL, 0)))
+    if (program_semantics &&
+        (repl_mode || !xi_program_semantic_input_is_consistent(program_semantics, NULL, 0)))
         return NULL;
 
     XiLower l;
     xi_lower_init(&l, analyzer, isolate);
     l.typed_program = program;
-    l.scalar_program = scalar_program;
+    l.program_semantics = program_semantics;
     l.is_program = true;
     l.repl_mode = repl_mode;
     l.global_evidence = global_evidence;
@@ -2790,8 +2792,7 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         }
         for (int i = 0; !l.had_error && i < repl_syms->result_count; i++) {
             int slot = repl_syms->count + i;
-            if (!xi_lower_seed_repl_slot(&l, &repl_syms->results[i], slot,
-                                         &next_shared_start)) {
+            if (!xi_lower_seed_repl_slot(&l, &repl_syms->results[i], slot, &next_shared_start)) {
                 l.had_error = true;
                 break;
             }
@@ -2859,9 +2860,8 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
          * forward/nested references), and this runs before escape analysis. */
         xi_lower_rewrite_generator_calls(l.func);
         build_module_metadata(&l);
-        if (l.scalar_program &&
-            (!l.func->module || !xi_scalar_program_finalize(
-                                    l.func, l.scalar_program, NULL, 0)))
+        if (l.program_semantics && (!l.func->module || !xi_program_semantic_finalize(
+                                                           l.func, l.program_semantics, NULL, 0)))
             l.had_error = true;
         if (!l.had_error) {
             finalize_capture_metadata(l.func);
@@ -2874,7 +2874,7 @@ XR_FUNC XiFunc *xi_lower_program(const XaTypedProgram *program, struct XrVMRunti
         result = l.func;
         xi_lower_assert_var_ids(&l, result);
     }
-    if (!result && scalar_program)
+    if (!result && program_semantics)
         xi_func_free(l.func);
     xi_lower_cleanup(&l);
     return result;

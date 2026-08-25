@@ -125,11 +125,9 @@ bool xi_value_clone_call_plan(XiFunc *f, XiValue *dst, const XiValue *src) {
 }
 
 bool xi_value_set_assertion_plan(XiFunc *f, XiValue *value, const XrAssertionPlan *plan) {
-    if (!f || !value || value->op != XI_ASSERTION || !plan ||
-        !xr_assertion_plan_validate(plan))
+    if (!f || !value || value->op != XI_ASSERTION || !plan || !xr_assertion_plan_validate(plan))
         return false;
-    XrAssertionPlan *owned =
-        (XrAssertionPlan *) xi_func_arena_alloc(f, (uint32_t) sizeof(*owned));
+    XrAssertionPlan *owned = (XrAssertionPlan *) xi_func_arena_alloc(f, (uint32_t) sizeof(*owned));
     if (!owned)
         return false;
     *owned = *plan;
@@ -262,6 +260,7 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
     f->arc_return_ownership.param_index = -1;
     f->semantic_plan_function_index = XR_SEMANTIC_INDEX_NONE;
     f->psc_function_index = XI_PSC_ROW_NONE;
+    f->psc_return_type_index = XI_PSC_ROW_NONE;
     f->stage = XI_STAGE_RAW;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
     /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
@@ -442,6 +441,7 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->source_kind = 0;
     v->source_span = source_span;
     v->psc_call_index = XI_PSC_ROW_NONE;
+    v->psc_type_index = XI_PSC_ROW_NONE;
     v->xg_callsite_id = 0;
     v->xa_intrinsic_id = 0;
     v->array_intrinsic_kind = XI_ARRAY_INTRINSIC_NONE;

@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 #define XR_SEMANTIC_INDEX_NONE UINT32_MAX
-#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(1)
+#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(2)
 
 typedef struct XrSemanticPlan XrSemanticPlan;
 typedef struct XrOwnershipCertificate XrOwnershipCertificate;
@@ -482,7 +482,7 @@ typedef struct XrSemanticOperationRecord {
 } XrSemanticOperationRecord;
 
 XR_FUNC bool xr_semantic_operation_assertion_plan(const XrSemanticOperationRecord *operation,
-                                                   XrAssertionPlan *out);
+                                                  XrAssertionPlan *out);
 
 typedef struct XrSemanticEdgeRecord {
     XrStableId id;
@@ -556,16 +556,44 @@ typedef struct XrSemanticCallTargetRecord {
 typedef struct XrSemanticProgramProvenance {
     uint32_t schema;
     uint32_t program_schema;
+    uint32_t program_family;
+    uint32_t type_count;
+    uint32_t type_field_count;
     uint32_t function_count;
     uint32_t call_count;
+    uint32_t reserved;
     XrFingerprint program_fingerprint;
-    XrFingerprint generation_identity;
+    XrStableId generation_identity;
 } XrSemanticProgramProvenance;
+
+typedef struct XrSemanticProgramTypeBinding {
+    XrStableId program_type;
+    XrStableId source_class_identity;
+    uint32_t semantic_type;
+    uint32_t program_row;
+    uint32_t field_begin;
+    uint32_t field_count;
+    uint8_t kind;
+    uint8_t exact_scalar;
+    uint8_t flags;
+    uint8_t reserved;
+} XrSemanticProgramTypeBinding;
+
+typedef struct XrSemanticProgramTypeFieldBinding {
+    XrStableId program_owner_type;
+    XrStableId program_field_type;
+    uint32_t owner_program_row;
+    uint32_t field_program_row;
+    uint32_t semantic_field_type;
+    uint32_t declaration_ordinal;
+} XrSemanticProgramTypeFieldBinding;
 
 typedef struct XrSemanticProgramFunctionBinding {
     XrStableId program_function;
     uint32_t semantic_function;
     uint32_t program_row;
+    uint8_t flags;
+    uint8_t reserved[3];
 } XrSemanticProgramFunctionBinding;
 
 typedef struct XrSemanticProgramCallBinding {
@@ -621,6 +649,29 @@ XR_FUNC uint32_t xr_semantic_plan_schema(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_operation_registry_fingerprint(const XrSemanticPlan *plan);
 XR_FUNC XrFingerprint xr_semantic_plan_stdlib_registry_fingerprint(const XrSemanticPlan *plan);
+XR_FUNC const XrSemanticProgramProvenance *
+xr_semantic_plan_program_provenance(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_program_type_binding_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_program_type_field_binding_count(const XrSemanticPlan *plan);
+XR_FUNC const XrSemanticProgramTypeBinding *
+xr_semantic_plan_program_type_binding(const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticProgramTypeFieldBinding *
+xr_semantic_plan_program_type_field_binding(const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticProgramTypeBinding *
+xr_semantic_plan_program_type_for_row(const XrSemanticPlan *plan, uint32_t program_row);
+XR_FUNC const XrSemanticProgramTypeBinding *
+xr_semantic_plan_program_type_for_semantic_type(const XrSemanticPlan *plan, uint32_t semantic_type);
+XR_FUNC size_t xr_semantic_plan_program_function_binding_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_program_call_binding_count(const XrSemanticPlan *plan);
+XR_FUNC const XrSemanticProgramFunctionBinding *
+xr_semantic_plan_program_function_binding(const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticProgramCallBinding *
+xr_semantic_plan_program_call_binding(const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticProgramFunctionBinding *
+xr_semantic_plan_program_function_for_semantic_function(const XrSemanticPlan *plan,
+                                                        uint32_t semantic_function);
+XR_FUNC const XrSemanticProgramCallBinding *
+xr_semantic_plan_program_call_for_operation(const XrSemanticPlan *plan, uint32_t operation);
 XR_FUNC size_t xr_semantic_plan_type_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_source_class_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_source_method_count(const XrSemanticPlan *plan);

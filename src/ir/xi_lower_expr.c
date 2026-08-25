@@ -18,7 +18,7 @@
 #include "xi_builtin_map_entry_iterator_shape.h"
 #include "xi_lower_expr_helpers.h"
 #include "xi_own.h"
-#include "xi_scalar_program.h"
+#include "xi_program_semantic.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -2260,8 +2260,8 @@ static bool lower_selected_enum_member_access(XiLower *l, AstNode *node, const X
             sel->result_type ? sel->result_type : xi_lower_node_type(l, node);
         if (enum_val->op == XI_GET_BUILTIN &&
             enum_val->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR) {
-            *out = xi_lower_number_parse_error_member_access(
-                l, enum_val, ma->name, result_type, (int) node->line);
+            *out = xi_lower_number_parse_error_member_access(l, enum_val, ma->name, result_type,
+                                                             (int) node->line);
             return true;
         }
         XiValue *value = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
@@ -2389,10 +2389,10 @@ static XiValue *lower_member_slot_load(XiLower *l, AstNode *node, XiValue *obj,
                                        struct XrType *result_type,
                                        XiSequenceEvidenceIds *sequence_ids) {
     MemberAccessNode *ma = &node->as.member_access;
-    if (obj && obj->op == XI_GET_BUILTIN &&
-        obj->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR && ma->name)
-        return xi_lower_number_parse_error_member_access(
-            l, obj, ma->name, result_type, (int) node->line);
+    if (obj && obj->op == XI_GET_BUILTIN && obj->aux_int == XR_GLOBAL_VAR_NUMBER_PARSE_ERROR &&
+        ma->name)
+        return xi_lower_number_parse_error_member_access(l, obj, ma->name, result_type,
+                                                         (int) node->line);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);
     if (!v)
         return NULL;
@@ -3909,8 +3909,8 @@ static XiValue *lower_core_assertion_call(XiLower *l, AstNode *node, CallExprNod
             return xi_const_null(l->func, l->cur_block, l->type_null);
         }
     }
-    XiValue *assertion = xi_value_new(l->func, l->cur_block, XI_ASSERTION, l->type_unit,
-                                      (uint16_t) call->arg_count);
+    XiValue *assertion =
+        xi_value_new(l->func, l->cur_block, XI_ASSERTION, l->type_unit, (uint16_t) call->arg_count);
     if (!assertion) {
         l->had_error = true;
         return xi_const_null(l->func, l->cur_block, l->type_null);
@@ -3921,7 +3921,7 @@ static XiValue *lower_core_assertion_call(XiLower *l, AstNode *node, CallExprNod
         l->had_error = true;
         return xi_const_null(l->func, l->cur_block, l->type_null);
     }
-    assertion->source_span = (XiSourceSpan){
+    assertion->source_span = (XiSourceSpan) {
         .start_line = source.line,
         .start_column = source.column,
         .end_line = source.end_line,
@@ -6463,8 +6463,7 @@ static XiValue *lower_resolved_intrinsic_call(XiLower *l, AstNode *node, CallExp
             return NULL;
         value->args[0] = argument;
         value->xa_intrinsic_id = (uint32_t) desc->id;
-        bool required = desc->id == XA_INTRINSIC_I64_PARSE ||
-                        desc->id == XA_INTRINSIC_F64_PARSE;
+        bool required = desc->id == XA_INTRINSIC_I64_PARSE || desc->id == XA_INTRINSIC_F64_PARSE;
         value->flags = required ? XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW : 0;
         value->line = (uint32_t) node->line;
         if (required)
@@ -6767,28 +6766,27 @@ static bool lower_scalar_i64_type_is_exact(const XrType *type) {
            type->scalar_rep == XR_NATIVE_I64;
 }
 
-/* A published scalar capability is a closed lowering lane. The source call is
- * joined to PSC before any generic/name/member resolver can observe it; every
- * mismatch therefore hard-fails instead of falling through to another call
- * implementation. */
-static XiValue *lower_scalar_program_call(XiLower *l, AstNode *node,
-                                          CallExprNode *call) {
+/* A published program capability is a closed lowering lane. The source call is
+ * joined to PSC
+ * before any generic/name/member resolver can observe it; every mismatch therefore hard-fails
+ * instead of falling through to another call implementation. */
+static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprNode *call) {
     XiSourceLocator locator = {
         .kind = node && node->type > 0 ? (uint32_t) node->type : 0,
-        .span = {
-            .start_line = node && node->line > 0 ? (uint32_t) node->line : 0,
-            .start_column = node && node->column > 0 ? (uint32_t) node->column : 0,
-            .end_line = node && node->end_line > 0 ? (uint32_t) node->end_line : 0,
-            .end_column = node && node->end_column > 0 ? (uint32_t) node->end_column : 0,
-        },
+        .span =
+            {
+                .start_line = node && node->line > 0 ? (uint32_t) node->line : 0,
+                .start_column = node && node->column > 0 ? (uint32_t) node->column : 0,
+                .end_line = node && node->end_line > 0 ? (uint32_t) node->end_line : 0,
+                .end_column = node && node->end_column > 0 ? (uint32_t) node->end_column : 0,
+            },
     };
     uint32_t call_index = XI_PSC_ROW_NONE;
-    if (!l || !l->scalar_program || !node || !call || !call->callee ||
-        !call->arguments || call->arg_count != 1 ||
-        call->default_arg_count != 0 || call->type_arg_count != 0 ||
+    if (!l || !l->program_semantics || !node || !call || !call->callee || !call->arguments ||
+        call->arg_count != 1 || call->default_arg_count != 0 || call->type_arg_count != 0 ||
         (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN) ||
-        !xi_scalar_program_find_call(l->func, l->scalar_program, locator,
-                                     &call_index, NULL, 0)) {
+        !xi_program_semantic_find_call(l->func, l->program_semantics, locator, &call_index, NULL,
+                                       0)) {
         if (l)
             l->had_error = true;
         return NULL;
@@ -6796,13 +6794,15 @@ static XiValue *lower_scalar_program_call(XiLower *l, AstNode *node,
     XiValue *callee = xi_lower_expr(l, call->callee);
     XiValue *argument = callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
     XrType *result_type = xi_lower_node_type(l, node);
-    if (!callee || !argument || !lower_scalar_i64_type_is_exact(argument->type) ||
-        !lower_scalar_i64_type_is_exact(result_type)) {
+    if (!callee || !argument || !argument->type || !result_type ||
+        XR_TYPE_IS_UNKNOWN(argument->type) || XR_TYPE_IS_ERROR(argument->type) ||
+        XR_TYPE_IS_UNKNOWN(result_type) || XR_TYPE_IS_ERROR(result_type) ||
+        (l->program_semantics->decision && (!lower_scalar_i64_type_is_exact(argument->type) ||
+                                            !lower_scalar_i64_type_is_exact(result_type)))) {
         l->had_error = true;
         return NULL;
     }
-    XiValue *value =
-        xi_value_new(l->func, l->cur_block, XI_CALL, result_type, 2);
+    XiValue *value = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, 2);
     if (!value) {
         l->had_error = true;
         return NULL;
@@ -6819,8 +6819,8 @@ static XiValue *lower_scalar_program_call(XiLower *l, AstNode *node,
 static XiValue *lower_call(XiLower *l, AstNode *node) {
     CallExprNode *call = &node->as.call_expr;
 
-    if (l && l->scalar_program)
-        return lower_scalar_program_call(l, node, call);
+    if (l && l->program_semantics)
+        return lower_program_semantic_call(l, node, call);
 
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *member = &call->callee->as.member_access;
@@ -7230,12 +7230,11 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                 return NULL;
         }
         XiMethodSymbolId method_symbol = (XiMethodSymbolId) xi_lower_method_symbol(l, ma->name);
-        bool exact_map_entry_iterator_has_next =
-            n == 0 && method_symbol == XI_METHOD_SYMBOL_HAS_NEXT &&
-            xi_map_entries_iterator_is_exact(recv);
-        bool exact_map_entry_iterator_next =
-            n == 0 && method_symbol == XI_METHOD_SYMBOL_NEXT &&
-            xi_map_entries_iterator_is_exact(recv);
+        bool exact_map_entry_iterator_has_next = n == 0 &&
+                                                 method_symbol == XI_METHOD_SYMBOL_HAS_NEXT &&
+                                                 xi_map_entries_iterator_is_exact(recv);
+        bool exact_map_entry_iterator_next = n == 0 && method_symbol == XI_METHOD_SYMBOL_NEXT &&
+                                             xi_map_entries_iterator_is_exact(recv);
         if (exact_map_entry_iterator_has_next) {
             result_type = l->type_bool;
         } else if (exact_map_entry_iterator_next) {
@@ -7794,8 +7793,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     if (call->callee && call->callee->type == AST_VARIABLE) {
         const char *fname = call->callee->as.variable.name;
         XrCoreBuiltinId core_builtin_id = lower_core_builtin_id(l, call->callee);
-        XiValue *core_assertion =
-            lower_core_assertion_call(l, node, call, core_builtin_id);
+        XiValue *core_assertion = lower_core_assertion_call(l, node, call, core_builtin_id);
         if (core_assertion)
             return core_assertion;
         const XaParallelCallPlan *analyzer_parallel_plan =

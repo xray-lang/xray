@@ -217,7 +217,7 @@ add_xray_unit_test(test_fmt_roundtrip frontend/test_fmt_roundtrip.c)
 add_xray_unit_test(test_analyzer_remove_file frontend/test_analyzer_remove_file.c)
 add_xray_unit_test(test_analyzer_incremental frontend/test_analyzer_incremental.c)
 add_xray_unit_test(test_xa_typed_program frontend/test_xa_typed_program.c)
-add_xray_unit_test(test_xa_scalar_program_closure frontend/test_xa_scalar_program_closure.c)
+add_xray_unit_test(test_xa_program_semantic_closure frontend/test_xa_program_semantic_closure.c)
 add_xray_unit_test(test_scalar_call_decision plan/test_scalar_call_decision.c)
 target_sources(test_scalar_call_decision PRIVATE plan/target_profile_test_fixture.c)
 # Phase 3.5: X-01 AstNode -> XrType side table acceptance tests.
@@ -338,8 +338,8 @@ add_test(NAME test_program_semantic_call_locator
     COMMAND $<TARGET_FILE:test_program_semantic_closure>)
 set_tests_properties(test_program_semantic_call_locator PROPERTIES
     LABELS "semantic;program-closure;task-283")
-add_xray_unit_test(test_xi_scalar_program ir/test_xi_scalar_program.c)
-set_tests_properties(test_xi_scalar_program PROPERTIES
+add_xray_unit_test(test_xi_program_semantic ir/test_xi_program_semantic.c)
+set_tests_properties(test_xi_program_semantic PROPERTIES
     LABELS "ir;semantic;target-machine;ownership;task-283")
 add_executable(test_semantic_type_admission plan/test_semantic_type_admission.c)
 target_include_directories(test_semantic_type_admission PRIVATE ${XRAY_COMMON_INCLUDES})

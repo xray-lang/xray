@@ -101,17 +101,16 @@ static XrStableId finish_id(XrSHA256Context *context) {
 }
 
 static bool valid_span(XaScalarSourceSpan span, uint32_t kind) {
-    if (span.kind != kind || span.start_line == 0 || span.start_column == 0 ||
-        span.end_line == 0 || span.end_column == 0)
+    if (span.kind != kind || span.start_line == 0 || span.start_column == 0 || span.end_line == 0 ||
+        span.end_column == 0)
         return false;
     return span.end_line > span.start_line ||
            (span.end_line == span.start_line && span.end_column > span.start_column);
 }
 
-static bool point_before_or_equal(uint32_t left_line, uint32_t left_column,
-                                  uint32_t right_line, uint32_t right_column) {
-    return left_line < right_line ||
-           (left_line == right_line && left_column <= right_column);
+static bool point_before_or_equal(uint32_t left_line, uint32_t left_column, uint32_t right_line,
+                                  uint32_t right_column) {
+    return left_line < right_line || (left_line == right_line && left_column <= right_column);
 }
 
 static bool span_contains(XaScalarSourceSpan outer, XaScalarSourceSpan inner) {
@@ -152,18 +151,16 @@ static XrFingerprint expected_export_fingerprint(XrStableId module) {
 
 static XrFingerprint expected_signature(uint8_t parameter_count) {
     XrScalarI64FunctionContract contract;
-    if (!xr_scalar_i64_function_contract(
-            parameter_count == 0 ? XR_SCALAR_I64_FUNCTION_NULLARY
-                                 : XR_SCALAR_I64_FUNCTION_UNARY,
-            &contract))
+    if (!xr_scalar_i64_function_contract(parameter_count == 0 ? XR_SCALAR_I64_FUNCTION_NULLARY
+                                                              : XR_SCALAR_I64_FUNCTION_UNARY,
+                                         &contract))
         return (XrFingerprint) {{0}};
     return contract.signature_fingerprint;
 }
 
 static XrFingerprint expected_effect(void) {
     XrScalarI64FunctionContract contract;
-    if (!xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_NULLARY,
-                                         &contract))
+    if (!xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_NULLARY, &contract))
         return (XrFingerprint) {{0}};
     return contract.effect_fingerprint;
 }
@@ -191,7 +188,7 @@ static XrStableId expected_instance(const XaScalarProgramAuthority *authority,
 
 static XrStableId expected_callsite(const XaScalarProgramAuthority *authority) {
     XrSHA256Context context;
-    begin_digest(&context, "xray-source-scalar-callsite-v1");
+    begin_digest(&context, "xray-source-program-callsite-v2");
     put_fingerprint(&context, authority->module.source_fingerprint);
     put_id(&context, authority->module.module_identity);
     put_id(&context, authority->call.caller_declaration_identity);
@@ -202,20 +199,15 @@ static XrStableId expected_callsite(const XaScalarProgramAuthority *authority) {
 static XrFingerprint expected_call_contract(const XaScalarFunctionAuthority *callee) {
     XrScalarI64FunctionContract contract;
     XrFingerprint result = {{0}};
-    if (!callee || !xr_scalar_i64_function_contract(
-                       XR_SCALAR_I64_FUNCTION_UNARY, &contract) ||
-        !equal_fingerprint(callee->signature_fingerprint,
-                           contract.signature_fingerprint) ||
-        !equal_fingerprint(callee->effect_fingerprint,
-                           contract.effect_fingerprint) ||
-        callee->capability_mask != 0 ||
-        !xr_scalar_i64_call_contract(&contract, &result))
+    if (!callee || !xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_UNARY, &contract) ||
+        !equal_fingerprint(callee->signature_fingerprint, contract.signature_fingerprint) ||
+        !equal_fingerprint(callee->effect_fingerprint, contract.effect_fingerprint) ||
+        callee->capability_mask != 0 || !xr_scalar_i64_call_contract(&contract, &result))
         return (XrFingerprint) {{0}};
     return result;
 }
 
-static XrFingerprint expected_authority_fingerprint(
-    const XaScalarProgramAuthority *authority) {
+static XrFingerprint expected_authority_fingerprint(const XaScalarProgramAuthority *authority) {
     XrSHA256Context context;
     begin_digest(&context, "xray-scalar-program-authority-freeze-v1");
     put_fingerprint(&context, authority->policy_fingerprint);
@@ -244,8 +236,8 @@ static XrFingerprint expected_authority_fingerprint(
     return finish_fingerprint(&context);
 }
 
-static const XaScalarFunctionAuthority *find_function(
-    const XaScalarProgramAuthority *authority, XrStableId declaration, XrStableId instance) {
+static const XaScalarFunctionAuthority *find_function(const XaScalarProgramAuthority *authority,
+                                                      XrStableId declaration, XrStableId instance) {
     const XaScalarFunctionAuthority *found = NULL;
     for (uint32_t i = 0; i < XA_SCALAR_PROGRAM_FUNCTION_COUNT; i++) {
         const XaScalarFunctionAuthority *row = &authority->functions[i];
@@ -259,11 +251,10 @@ static const XaScalarFunctionAuthority *find_function(
     return found;
 }
 
-bool xa_scalar_program_authority_verify(const XaScalarProgramAuthority *authority,
-                                        char *error, size_t error_size) {
+bool xa_scalar_program_authority_verify(const XaScalarProgramAuthority *authority, char *error,
+                                        size_t error_size) {
     if (!authority || authority->schema != XA_SCALAR_PROGRAM_AUTHORITY_SCHEMA ||
-        authority->verified != 1 || !zero_bytes(authority->reserved,
-                                                sizeof(authority->reserved)) ||
+        authority->verified != 1 || !zero_bytes(authority->reserved, sizeof(authority->reserved)) ||
         !equal_fingerprint(authority->policy_fingerprint, expected_policy()))
         return verify_fail(error, error_size, "scalar authority header is invalid");
     if (zero_bytes(authority->module.module_authority_fingerprint.bytes,
@@ -279,16 +270,14 @@ bool xa_scalar_program_authority_verify(const XaScalarProgramAuthority *authorit
     uint32_t roots = 0;
     for (uint32_t i = 0; i < XA_SCALAR_PROGRAM_FUNCTION_COUNT; i++) {
         const XaScalarFunctionAuthority *row = &authority->functions[i];
-        if (!valid_span(row->declaration_span, AST_FUNCTION_DECL) ||
-            row->parameter_count > 1 || row->capability_mask != 0 ||
-            (row->flags & ~XA_SCALAR_PROGRAM_FUNCTION_ENTRY) != 0 ||
+        if (!valid_span(row->declaration_span, AST_FUNCTION_DECL) || row->parameter_count > 1 ||
+            row->capability_mask != 0 || (row->flags & ~XA_SCALAR_PROGRAM_FUNCTION_ENTRY) != 0 ||
             !zero_bytes(row->reserved, sizeof(row->reserved)) ||
             !equal_fingerprint(row->signature_fingerprint,
                                expected_signature(row->parameter_count)) ||
             !equal_fingerprint(row->effect_fingerprint, expected_effect()) ||
             !equal_id(row->declaration_identity, expected_declaration(authority, row)) ||
-            !equal_id(row->concrete_instance_identity,
-                      expected_instance(authority, row)))
+            !equal_id(row->concrete_instance_identity, expected_instance(authority, row)))
             return verify_fail(error, error_size, "scalar function authority is invalid");
         roots += (row->flags & XA_SCALAR_PROGRAM_FUNCTION_ENTRY) != 0;
     }
@@ -307,17 +296,14 @@ bool xa_scalar_program_authority_verify(const XaScalarProgramAuthority *authorit
         find_function(authority, authority->call.callee_declaration_identity,
                       authority->call.callee_instance_identity);
     if (!caller || !callee || caller == callee || caller->parameter_count != 0 ||
-        callee->parameter_count != 1 ||
-        (caller->flags & XA_SCALAR_PROGRAM_FUNCTION_ENTRY) == 0 ||
+        callee->parameter_count != 1 || (caller->flags & XA_SCALAR_PROGRAM_FUNCTION_ENTRY) == 0 ||
         !valid_span(authority->call.callsite_span, AST_CALL_EXPR) ||
         !span_contains(caller->declaration_span, authority->call.callsite_span) ||
         !zero_bytes(authority->call.reserved, sizeof(authority->call.reserved)) ||
         !equal_id(authority->call.callsite_identity, expected_callsite(authority)) ||
-        !equal_fingerprint(authority->call.contract_fingerprint,
-                           expected_call_contract(callee)))
+        !equal_fingerprint(authority->call.contract_fingerprint, expected_call_contract(callee)))
         return verify_fail(error, error_size, "scalar direct-call authority is invalid");
-    if (!equal_fingerprint(authority->fingerprint,
-                           expected_authority_fingerprint(authority)))
+    if (!equal_fingerprint(authority->fingerprint, expected_authority_fingerprint(authority)))
         return verify_fail(error, error_size, "scalar authority fingerprint is invalid");
     return true;
 }

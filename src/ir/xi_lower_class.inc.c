@@ -865,6 +865,23 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     data->generic_origin_name = arena_strdup(l->func, cd->generic_origin_name);
     data->display_name = arena_strdup(l->func, cd->display_name);
     data->source_file = NULL;
+    memset(&data->source_locator, 0, sizeof(data->source_locator));
+    if (node->type > 0 && node->line > 0 && node->column > 0 && node->end_line > 0 &&
+        node->end_column > 0) {
+        XiSourceLocator source_locator = {
+            .kind = (uint32_t) node->type,
+            .span =
+                {
+                    (uint32_t) node->line,
+                    (uint32_t) node->column,
+                    (uint32_t) node->end_line,
+                    (uint32_t) node->end_column,
+                },
+        };
+        if (xi_source_span_is_complete(source_locator.span))
+            data->source_locator = source_locator;
+    }
+    data->psc_type_index = XI_PSC_ROW_NONE;
     data->instance_field_names = NULL;
     data->instance_field_source_node_ids = NULL;
     data->instance_field_defaults = NULL;

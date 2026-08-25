@@ -1,0 +1,636 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xi_program_semantic_plan.c - PSC-backed SemanticPlan verifier
+ */
+
+#include "xi_program_semantic_plan.h"
+#include "xi_module.h"
+#include "xi_ops_gen.h"
+#include "xi_own.h"
+#include "xi_program_semantic.h"
+#include "../plan/semantic/xr_semantic_plan_internal.h"
+#include "../plan/semantic/xr_semantic_verify.h"
+#include "../plan/target/xr_scalar_call_decision.h"
+#include "../plan/target/xr_target_profile.h"
+#include "../runtime/value/xtype.h"
+#include <stdio.h>
+#include <string.h>
+
+static bool semantic_scalar_fail(char *error, size_t error_size, const char *detail) {
+    if (error && error_size)
+        snprintf(error, error_size, "XR_SEM_0019: %s", detail);
+    return false;
+}
+
+static uint32_t semantic_function_for_program_row(const XrSemanticPlan *plan,
+                                                  uint32_t program_row) {
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; plan && i < plan->program_function_binding_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[i];
+        if (binding->program_row != program_row)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE)
+            return XR_SEMANTIC_INDEX_NONE;
+        match = binding->semantic_function;
+    }
+    return match;
+}
+
+static const XrSemanticProgramFunctionBinding *
+semantic_binding_for_program_row(const XrSemanticPlan *plan, uint32_t program_row) {
+    const XrSemanticProgramFunctionBinding *match = NULL;
+    for (uint32_t i = 0; plan && i < plan->program_function_binding_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[i];
+        if (binding->program_row != program_row)
+            continue;
+        if (match)
+            return NULL;
+        match = binding;
+    }
+    return match;
+}
+
+static bool semantic_function_is_exact(const XrSemanticPlan *plan, uint32_t index,
+                                       uint16_t parameter_count, uint32_t expected_type,
+                                       char *error, size_t error_size) {
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, index);
+    if (!function || function->return_type != expected_type || function->parent != 0 ||
+        function->parameter_count != parameter_count)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan function signature is not exact");
+    if (function->child_count != 0 || function->capture_count != 0 ||
+        function->capability_mask != 0 || function->semantic_effects != 0)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan function effect shape is not exact");
+    if (function->source_class != XR_SEMANTIC_INDEX_NONE ||
+        function->source_kind != XR_SEM_SOURCE_FUNCTION_NONE ||
+        function->source_member_ordinal != UINT16_MAX)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan function source binding is not exact");
+    if (function->flags != XR_SEM_FUNCTION_NOTHROW || function->is_module_initializer != 0 ||
+        function->carries_coroutine_ops != 0 || function->reserved != 0)
+        return semantic_scalar_fail(error, error_size, "SemanticPlan function flags are not exact");
+    if (function->return_parameter != -1 || function->return_provenance != XR_SEM_RETURN_NONE) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_SEM_0019: SemanticPlan function %u return ownership "
+                     "is not exact (parameter=%d provenance=%u)",
+                     index, function->return_parameter, function->return_provenance);
+        return false;
+    }
+    if (parameter_count == 0)
+        return true;
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(plan, function->parameter_begin);
+    if (!parameter || parameter->function != index || parameter->ordinal != 0 ||
+        parameter->type != expected_type || parameter->mode != XR_PARAM_READ)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan parameter identity is not exact");
+    if (parameter->ownership != XI_OWN_NONE)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan parameter ownership is not exact");
+    if (parameter->transfer_mode != XR_TRANSFER_SHARE)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan parameter transfer is not exact");
+    return (parameter->flags == XR_SEM_PARAMETER_REQUIRED && parameter->reserved == 0) ||
+           semantic_scalar_fail(error, error_size, "SemanticPlan parameter flags are not exact");
+}
+
+static bool semantic_initializer_is_exact(const XrSemanticPlan *plan, const XiFunc *root,
+                                          char *error, size_t error_size) {
+    const XrSemanticFunctionRecord *function = xr_semantic_plan_function(plan, 0);
+    uint8_t expected_flags =
+        root ? (uint8_t) ((root->error_effect_nothrow ? XR_SEM_FUNCTION_NOTHROW : 0u) |
+                          (root->contains_unsafe_op ? XR_SEM_FUNCTION_CONTAINS_UNSAFE : 0u) |
+                          (root->entry_type == 2 ? XR_SEM_FUNCTION_GENERATOR : 0u) |
+                          (root->is_extern ? XR_SEM_FUNCTION_EXTERN : 0u))
+             : 0u;
+    if (!root || !function || function->parent != XR_SEMANTIC_INDEX_NONE ||
+        function->parameter_count != 0 || function->child_count != root->nchildren ||
+        function->capture_count != 0)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan initializer hierarchy is not exact");
+    if (function->semantic_effects != root->semantic_effects ||
+        function->capability_mask != (root->requires_unsafe_at_call ? 1u : 0u) ||
+        function->flags != expected_flags || function->is_module_initializer != 1 ||
+        function->carries_coroutine_ops != 0 || function->reserved != 0)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan initializer effects are not exact");
+    if (function->source_class != XR_SEMANTIC_INDEX_NONE ||
+        function->source_member_ordinal != UINT16_MAX ||
+        function->source_kind != XR_SEM_SOURCE_FUNCTION_NONE)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan initializer source binding is not exact");
+    return (function->return_parameter == -1 &&
+            function->return_provenance == XR_SEM_RETURN_NONE) ||
+           semantic_scalar_fail(error, error_size,
+                                "SemanticPlan initializer return ownership is not exact");
+}
+
+static bool semantic_id_is_zero(XrStableId id) {
+    uint8_t combined = 0;
+    for (uint32_t i = 0; i < sizeof(id.bytes); i++)
+        combined |= id.bytes[i];
+    return combined == 0;
+}
+
+static bool semantic_key_take_literal(const char **cursor, const char *literal) {
+    size_t length = literal ? strlen(literal) : 0;
+    if (!cursor || !*cursor || !literal || strncmp(*cursor, literal, length) != 0)
+        return false;
+    *cursor += length;
+    return true;
+}
+
+static bool semantic_key_take_component(const char **cursor, const char *value) {
+    char length_text[32];
+    size_t length = value ? strlen(value) : 0;
+    int written = snprintf(length_text, sizeof(length_text), "%zu:", length);
+    if (written <= 0 || (size_t) written >= sizeof(length_text) ||
+        !semantic_key_take_literal(cursor, length_text) ||
+        strncmp(*cursor, value ? value : "", length) != 0)
+        return false;
+    *cursor += length;
+    return true;
+}
+
+static bool semantic_source_module_key_is_exact(const XrSemanticPlan *plan, const XiFunc *root,
+                                                XrStableId expected_module) {
+    const XiModule *module = root ? root->module : NULL;
+    const char *identity = module ? module->identity : NULL;
+    const char *name =
+        module && module->name ? module->name : (root && root->name ? root->name : "");
+    const XrSemanticEntityRecord *package = NULL;
+    const XrSemanticEntityRecord *module_entity = NULL;
+    uint32_t package_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; plan && i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind == XR_SEM_ENTITY_PACKAGE) {
+            if (package)
+                return false;
+            package = entity;
+            package_index = i;
+        } else if (entity->kind == XR_SEM_ENTITY_MODULE) {
+            if (module_entity)
+                return false;
+            module_entity = entity;
+        }
+    }
+    char package_prefix[96];
+    char module_prefix[96];
+    char package_id[XR_STABLE_ID_BYTES * 2u + 1u];
+    int package_prefix_length =
+        snprintf(package_prefix, sizeof(package_prefix),
+                 "entity-v1:schema=%u:kind=%u:parent=none:authority=", XR_SEMANTIC_SCHEMA_VERSION,
+                 (unsigned) XR_SEM_ENTITY_PACKAGE);
+    int module_prefix_length =
+        snprintf(module_prefix, sizeof(module_prefix),
+                 "entity-v1:schema=%u:kind=%u:parent=", XR_SEMANTIC_SCHEMA_VERSION,
+                 (unsigned) XR_SEM_ENTITY_MODULE);
+    if (!identity || !identity[0] || !package || !module_entity || !package->canonical_key ||
+        !module_entity->canonical_key || package_prefix_length <= 0 ||
+        (size_t) package_prefix_length >= sizeof(package_prefix) || module_prefix_length <= 0 ||
+        (size_t) module_prefix_length >= sizeof(module_prefix) ||
+        module_entity->parent != package_index ||
+        !xr_stable_id_equal(module_entity->id, expected_module))
+        return false;
+    const char *package_cursor = package->canonical_key;
+    if (!semantic_key_take_literal(&package_cursor, package_prefix) ||
+        !semantic_key_take_component(&package_cursor, identity) || package_cursor[0] != '\0')
+        return false;
+    xr_stable_id_hex(package->id, package_id);
+    const char *module_cursor = module_entity->canonical_key;
+    return semantic_key_take_literal(&module_cursor, module_prefix) &&
+           semantic_key_take_literal(&module_cursor, package_id) &&
+           semantic_key_take_literal(&module_cursor, ":name=") &&
+           semantic_key_take_component(&module_cursor, name) &&
+           semantic_key_take_literal(&module_cursor, ":identity=") &&
+           semantic_key_take_component(&module_cursor, identity) && module_cursor[0] == '\0';
+}
+
+static bool semantic_optional_text_is_exact(const char *frozen, const char *source) {
+    if (!source || !source[0])
+        return !frozen;
+    return frozen && strcmp(frozen, source) == 0;
+}
+
+static bool semantic_source_class_is_exact(const XrSemanticPlan *plan, const XiFunc *root,
+                                           const XiClassData *aggregate_source,
+                                           const XrSemanticSourceClassRecord *source_class) {
+    const XiModule *module = root ? root->module : NULL;
+    uint8_t expected_flags =
+        aggregate_source
+            ? (uint8_t) ((aggregate_source->explicit_final ? XR_SEM_SOURCE_CLASS_EXPLICIT_FINAL
+                                                           : 0u) |
+                         (aggregate_source->needs_runtime_type ? XR_SEM_SOURCE_CLASS_RUNTIME_TYPE
+                                                               : 0u) |
+                         ((aggregate_source->is_generic_skeleton ||
+                           aggregate_source->is_monomorphized ||
+                           aggregate_source->mono_type_arg_count != 0)
+                              ? XR_SEM_SOURCE_CLASS_GENERIC
+                              : 0u))
+            : 0u;
+    return module && aggregate_source && source_class &&
+           semantic_source_module_key_is_exact(plan, root, source_class->module) &&
+           source_class->module_path && module->identity &&
+           strcmp(source_class->module_path, module->identity) == 0 && source_class->name &&
+           aggregate_source->class_name &&
+           strcmp(source_class->name, aggregate_source->class_name) == 0 &&
+           semantic_optional_text_is_exact(source_class->super_name,
+                                           aggregate_source->super_name) &&
+           source_class->ordinal == 0 && source_class->method_count == aggregate_source->nmethod &&
+           source_class->flags == expected_flags && source_class->reserved == 0;
+}
+
+static bool semantic_i64_type_is_exact(const XrSemanticTypeRecord *type) {
+    return type && type->kind == XR_KIND_INT && type->builtin_type == XR_TID_NULL &&
+           type->child_count == 0 && type->aggregate_extent == 0 && type->aggregate_align == 0 &&
+           type->scalar_rep == XR_NATIVE_I64 && type->flags == 0;
+}
+
+static bool semantic_call_is_exact(const XrSemanticPlan *plan,
+                                   const XrProgramSemanticCallRecord *program_call, uint32_t caller,
+                                   uint32_t callee, uint32_t expected_type, const char *source_file,
+                                   char *error, size_t error_size) {
+    const XrSemanticProgramCallBinding *binding =
+        plan->program_call_binding_count == 1 ? &plan->program_call_bindings[0] : NULL;
+    if (!binding || binding->program_row != 0 || binding->target_function != callee ||
+        !xr_stable_id_equal(binding->program_call, program_call->id) ||
+        !xr_stable_id_equal(binding->callsite, program_call->callsite_identity) ||
+        !xr_stable_id_equal(binding->caller_program_function, program_call->caller_function) ||
+        !xr_stable_id_equal(binding->callee_program_function, program_call->callee_function))
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan program call binding is not exact");
+    uint32_t operation_index = binding->operation;
+    const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, operation_index);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticOperandRecord *callee_operand =
+        operation && operation->operand_count == 2 && operation->operand_begin <= operand_count &&
+                operation->operand_count <= operand_count - operation->operand_begin
+            ? &operands[operation->operand_begin]
+            : NULL;
+    const XrSemanticOperandRecord *argument = callee_operand ? callee_operand + 1 : NULL;
+    const XrSemanticTypeRecord *callee_type =
+        callee_operand ? xr_semantic_plan_type(plan, callee_operand->type) : NULL;
+    const XrSemanticFunctionRecord *caller_function = xr_semantic_plan_function(plan, caller);
+    const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);
+    uint8_t expected_argument_ownership =
+        provenance && provenance->program_family ==
+                          XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL
+            ? XR_SEM_OPERAND_BORROW
+            : XR_SEM_OPERAND_CONSUME;
+    uint32_t source_discriminator = 1;
+    if (operation && operation->source_file) {
+        for (uint32_t i = 0; i < operation_index; i++) {
+            const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+            if (candidate && candidate->source_file &&
+                strcmp(candidate->source_file, operation->source_file) == 0 &&
+                candidate->source_start_line == operation->source_start_line &&
+                candidate->source_start_column == operation->source_start_column &&
+                candidate->source_end_line == operation->source_end_line &&
+                candidate->source_end_column == operation->source_end_column)
+                source_discriminator++;
+        }
+    }
+    if (!program_call || !operation || !callee_operand || !argument || !caller_function ||
+        !callee_type || operation->function != caller || operation->opcode != XI_CALL ||
+        operation->result_value < caller_function->value_begin ||
+        operation->result_value - caller_function->value_begin >= caller_function->value_count ||
+        operation->result_type != expected_type || argument->type != expected_type ||
+        !source_file || !operation->source_file ||
+        strcmp(operation->source_file, source_file) != 0 ||
+        operation->source_line != program_call->locator.start_line ||
+        operation->source_start_line != program_call->locator.start_line ||
+        operation->source_start_column != program_call->locator.start_column ||
+        operation->source_end_line != program_call->locator.end_line ||
+        operation->source_end_column != program_call->locator.end_column ||
+        operation->source_discriminator != source_discriminator || operation->allocation_key ||
+        !semantic_id_is_zero(operation->allocation_id) ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->effects != xi_generated_op_effects(XI_CALL) ||
+        operation->flags != xi_generated_op_default_flags(XI_CALL) ||
+        operation->semantic_immediate != 0 || operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE || operation->evidence[0] != 0 ||
+        operation->evidence[1] != 0 || operation->evidence[2] != 0 || operation->evidence[3] != 0 ||
+        operation->evidence[4] != 0 || operation->evidence[5] != 0 || operation->evidence[6] != 0 ||
+        operation->evidence[7] != XR_SEMANTIC_INDEX_NONE || operation->metadata_count != 0 ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE ||
+        operation->ownership_use != xi_generated_op_own_use(XI_CALL) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        operation->transfer_mode != 0 || operation->parameter_mode != XR_PARAM_READ ||
+        operation->parameter_ownership != XI_OWN_NONE || operation->result_alias_operand != -1 ||
+        operation->return_parameter != -1 || operation->return_provenance != XR_SEM_RETURN_NONE ||
+        operation->return_complete != 0 || operation->view_source_value != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_element_type != XR_SEMANTIC_INDEX_NONE ||
+        operation->view_source_operand != -1 || operation->view_source_parameter != -1 ||
+        operation->view_origin != 0 || operation->view_capability != 0 ||
+        operation->view_lifetime != 0 || operation->view_complete != 0 ||
+        operation->array_element_storage != XR_ELEM_ANY || operation->reserved_view[0] != 0 ||
+        operation->reserved_view[1] != 0 || operation->array_hof_kind != XR_SEM_ARRAY_HOF_NONE ||
+        operation->array_result_element_storage != XR_ELEM_ANY ||
+        callee_operand->value < caller_function->value_begin ||
+        callee_operand->value - caller_function->value_begin >= caller_function->value_count ||
+        callee_type->kind != XR_KIND_FUNCTION || callee_operand->role != XR_SEM_OPERAND_CALLEE ||
+        callee_operand->parameter != -1 || callee_operand->flags != 0 ||
+        callee_operand->transfer_mode != XR_TRANSFER_SHARE ||
+        callee_operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+        callee_operand->parameter_mode != XR_PARAM_READ ||
+        callee_operand->access != XR_CALL_ARG_PLAIN || callee_operand->origin != 0 ||
+        callee_operand->lifetime != 0 || callee_operand->escape != 0 ||
+        argument->role != XR_SEM_OPERAND_ARGUMENT || argument->parameter != 0 ||
+        argument->flags != XR_SEM_OPERAND_CALL_CONTRACT ||
+        argument->transfer_mode != XR_TRANSFER_SHARE ||
+        argument->ownership_action != expected_argument_ownership ||
+        argument->parameter_mode != XR_PARAM_READ || argument->access != XR_CALL_ARG_PLAIN ||
+        argument->origin != 0 || argument->lifetime != 0 || argument->escape != 0)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan call/value rows are not exact");
+    if (xr_semantic_plan_call_target_count(plan) != 1)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan call target inventory is not exact");
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(plan, 0);
+    return (target && target->operation == operation_index && target->function == callee &&
+            target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
+            target->dependency == XR_SEMANTIC_INDEX_NONE &&
+            target->source_export == XR_SEMANTIC_INDEX_NONE &&
+            semantic_id_is_zero(target->export_identity) &&
+            semantic_id_is_zero(target->callee_function) &&
+            target->callable_type == XR_SEMANTIC_INDEX_NONE && target->reserved[0] == 0 &&
+            target->reserved[1] == 0 && target->reserved[2] == 0) ||
+           semantic_scalar_fail(error, error_size, "SemanticPlan direct call target is invalid");
+}
+
+static bool semantic_program_call_inventory_is_exact(const XrSemanticPlan *plan,
+                                                     const XrSemanticProgramCallBinding *binding,
+                                                     char *error, size_t error_size) {
+    uint32_t call_operations = 0;
+    for (uint32_t i = 0; i < xr_semantic_plan_operation_count(plan); i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(plan, i);
+        if (!operation)
+            return semantic_scalar_fail(error, error_size,
+                                        "SemanticPlan operation inventory is incomplete");
+        if (xi_generated_op_class(operation->opcode) != XI_GEN_CLASS_CALL)
+            continue;
+        call_operations++;
+        if (!binding || operation->opcode != XI_CALL || i != binding->operation)
+            return semantic_scalar_fail(error, error_size,
+                                        "SemanticPlan contains an unbound call operation");
+    }
+    return call_operations == 1 ||
+           semantic_scalar_fail(error, error_size, "SemanticPlan call inventory is not exact");
+}
+
+static bool verify_scalar_semantic_plan(const XiFunc *root, const XrSemanticPlan *plan,
+                                        const XrTargetProfile *target_profile, char *error,
+                                        size_t error_size) {
+    const XiModule *module = root ? root->module : NULL;
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    const XrTargetProfile *plan_profile = module ? module->scalar_target_profile : NULL;
+    const XrScalarCallDecision *decision = module ? module->scalar_call_decision : NULL;
+    if (!root || !module || module->init != root || !plan || !closure || !decision ||
+        !plan_profile || !target_profile)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan external authority is incomplete");
+    XrFingerprint closure_fingerprint = xr_program_semantic_closure_fingerprint(closure);
+    XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(closure);
+    if (!xr_target_profile_require_exact(plan_profile, target_profile, error, error_size) ||
+        !xi_program_semantic_verify(module, plan_profile, error, error_size) ||
+        !xr_scalar_call_decision_verify(decision, closure, plan_profile, error, error_size) ||
+        !xr_semantic_plan_verify(plan, error, error_size) ||
+        xr_semantic_plan_function_count(plan) != 3 ||
+        plan->program_provenance.schema != XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+        plan->program_provenance.program_schema != xr_program_semantic_closure_schema(closure) ||
+        plan->program_provenance.function_count != 2 || plan->program_provenance.call_count != 1 ||
+        plan->program_function_binding_count != 2 || plan->program_call_binding_count != 1 ||
+        !xr_fingerprint_equal(plan->program_provenance.program_fingerprint, closure_fingerprint) ||
+        memcmp(plan->program_provenance.generation_identity.bytes, generation.bytes,
+               sizeof(generation.bytes)) != 0)
+        return semantic_scalar_fail(error, error_size,
+                                    "SemanticPlan external authority provenance is invalid");
+    const XrProgramSemanticCallRecord *program_call = xr_program_semantic_closure_call(closure, 0);
+    const XrScalarCallDecision *sealed = decision;
+    uint32_t caller_program = XR_SEMANTIC_INDEX_NONE;
+    uint32_t callee_program = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < 2; i++) {
+        const XrProgramSemanticFunctionRecord *row =
+            xr_program_semantic_closure_function(closure, i);
+        if (row && xr_stable_id_equal(row->id, sealed->caller_function))
+            caller_program = i;
+        if (row && xr_stable_id_equal(row->id, sealed->callee_function))
+            callee_program = i;
+    }
+    uint32_t caller = semantic_function_for_program_row(plan, caller_program);
+    uint32_t callee = semantic_function_for_program_row(plan, callee_program);
+    const XrSemanticProgramFunctionBinding *caller_binding =
+        semantic_binding_for_program_row(plan, caller_program);
+    const XrSemanticProgramFunctionBinding *callee_binding =
+        semantic_binding_for_program_row(plan, callee_program);
+    const XrProgramSemanticFunctionRecord *caller_program_row =
+        xr_program_semantic_closure_function(closure, caller_program);
+    const XrProgramSemanticFunctionRecord *callee_program_row =
+        xr_program_semantic_closure_function(closure, callee_program);
+    const XrSemanticFunctionRecord *caller_semantic = xr_semantic_plan_function(plan, caller);
+    const XrSemanticFunctionRecord *callee_semantic = xr_semantic_plan_function(plan, callee);
+    uint32_t scalar_type = caller_semantic ? caller_semantic->return_type : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticTypeRecord *scalar_type_row = xr_semantic_plan_type(plan, scalar_type);
+    if (!program_call || caller_program == XR_SEMANTIC_INDEX_NONE ||
+        callee_program == XR_SEMANTIC_INDEX_NONE || caller == XR_SEMANTIC_INDEX_NONE ||
+        callee == XR_SEMANTIC_INDEX_NONE || !caller_binding || !callee_binding ||
+        !caller_program_row || !callee_program_row || !caller_semantic || !callee_semantic ||
+        !semantic_i64_type_is_exact(scalar_type_row) ||
+        callee_semantic->return_type != scalar_type ||
+        !xr_stable_id_equal(caller_binding->program_function, sealed->caller_function) ||
+        !xr_stable_id_equal(callee_binding->program_function, sealed->callee_function) ||
+        caller_binding->flags != caller_program_row->flags ||
+        callee_binding->flags != callee_program_row->flags || caller == callee ||
+        !semantic_function_is_exact(plan, caller, 0, scalar_type, error, error_size) ||
+        !semantic_function_is_exact(plan, callee, 1, scalar_type, error, error_size) ||
+        !semantic_initializer_is_exact(plan, root, error, error_size) ||
+        !semantic_call_is_exact(plan, program_call, caller, callee, scalar_type, module->identity,
+                                error, error_size))
+        return false;
+    for (uint16_t i = 0; i < module->nfuncs; i++) {
+        const XiFunc *function = module->functions[i];
+        uint32_t semantic = semantic_function_for_program_row(
+            plan, function ? function->psc_function_index : XI_PSC_ROW_NONE);
+        if (!function || semantic == XR_SEMANTIC_INDEX_NONE ||
+            (function->semantic_plan && function->semantic_plan != plan) ||
+            (function->semantic_plan && function->semantic_plan_function_index != semantic))
+            return semantic_scalar_fail(error, error_size,
+                                        "Xi and SemanticPlan function row bindings disagree");
+    }
+    return semantic_program_call_inventory_is_exact(plan, &plan->program_call_bindings[0], error,
+                                                    error_size);
+}
+
+static bool semantic_leaf_aggregate_plan_verify(const XiFunc *root, const XrSemanticPlan *plan,
+                                                char *error, size_t error_size) {
+    const XiModule *module = root ? root->module : NULL;
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    if (!root || !module || module->init != root || !closure || !plan || module->nfuncs != 2 ||
+        root->nchildren != 2 || xr_semantic_plan_function_count(plan) != 3 ||
+        xr_semantic_plan_source_class_count(plan) != 1 ||
+        xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        !xi_program_semantic_verify(module, NULL, error, error_size) ||
+        !xr_semantic_plan_verify(plan, error, error_size))
+        return semantic_scalar_fail(error, error_size,
+                                    "leaf aggregate SemanticPlan authorities are incomplete");
+    const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);
+    XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(closure);
+    if (!provenance || provenance->program_schema != xr_program_semantic_closure_schema(closure) ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        provenance->type_count != xr_program_semantic_closure_type_count(closure) ||
+        provenance->type_field_count != xr_program_semantic_closure_type_field_count(closure) ||
+        provenance->function_count != xr_program_semantic_closure_function_count(closure) ||
+        provenance->call_count != xr_program_semantic_closure_call_count(closure) ||
+        !xr_fingerprint_equal(provenance->program_fingerprint,
+                              xr_program_semantic_closure_fingerprint(closure)) ||
+        memcmp(provenance->generation_identity.bytes, generation.bytes, sizeof(generation.bytes)) !=
+            0)
+        return semantic_scalar_fail(error, error_size,
+                                    "leaf aggregate SemanticPlan provenance does not match PSC");
+    uint32_t aggregate_program = XI_PSC_ROW_NONE;
+    uint32_t aggregate_semantic = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t row = 0; row < provenance->type_count; row++) {
+        const XrProgramSemanticTypeRecord *program_type =
+            xr_program_semantic_closure_type(closure, row);
+        const XrSemanticProgramTypeBinding *binding =
+            xr_semantic_plan_program_type_for_row(plan, row);
+        const XrSemanticTypeRecord *semantic =
+            binding ? xr_semantic_plan_type(plan, binding->semantic_type) : NULL;
+        if (!program_type || !binding || !semantic ||
+            !xr_stable_id_equal(binding->program_type, program_type->id) ||
+            binding->kind != program_type->kind ||
+            binding->exact_scalar != program_type->exact_scalar ||
+            binding->flags != program_type->flags ||
+            binding->field_count != program_type->field_count ||
+            (program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR
+                 ? !semantic_id_is_zero(binding->source_class_identity)
+                 : !xr_stable_id_equal(binding->source_class_identity,
+                                       semantic->source_class_identity)))
+            return semantic_scalar_fail(
+                error, error_size, "leaf aggregate SemanticPlan type binding disagrees with PSC");
+        if (program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE) {
+            if (aggregate_program != XI_PSC_ROW_NONE)
+                return semantic_scalar_fail(error, error_size, "multiple aggregate type bindings");
+            aggregate_program = row;
+            aggregate_semantic = binding->semantic_type;
+        }
+        for (uint32_t field = 0; field < program_type->field_count; field++) {
+            const XrProgramSemanticTypeFieldRecord *program_field =
+                xr_program_semantic_closure_type_field(closure, program_type->field_begin + field);
+            const XrSemanticProgramTypeFieldBinding *semantic_field =
+                xr_semantic_plan_program_type_field_binding(plan, binding->field_begin + field);
+            if (!program_field || !semantic_field || semantic_field->owner_program_row != row ||
+                semantic_field->declaration_ordinal != field ||
+                !xr_stable_id_equal(semantic_field->program_owner_type, program_type->id) ||
+                !xr_stable_id_equal(semantic_field->program_field_type, program_field->field_type))
+                return semantic_scalar_fail(
+                    error, error_size,
+                    "leaf aggregate SemanticPlan field binding disagrees with PSC");
+        }
+    }
+    if (aggregate_program == XI_PSC_ROW_NONE || aggregate_semantic == XR_SEMANTIC_INDEX_NONE)
+        return semantic_scalar_fail(error, error_size, "aggregate type binding is missing");
+    const XrSemanticProgramTypeBinding *aggregate_binding =
+        xr_semantic_plan_program_type_for_row(plan, aggregate_program);
+    const XrSemanticTypeRecord *aggregate_type = xr_semantic_plan_type(plan, aggregate_semantic);
+    const XiClassData *aggregate_source =
+        module->nclasses == 1 && module->classes ? module->classes[0] : NULL;
+    const XrSemanticSourceClassRecord *source_class = xr_semantic_plan_source_class(plan, 0);
+    if (!aggregate_binding || !aggregate_type || !aggregate_source || !source_class ||
+        aggregate_source->psc_type_index != aggregate_program ||
+        aggregate_type->source_class != 0 ||
+        !xr_stable_id_equal(aggregate_type->source_class_identity, source_class->id) ||
+        !xr_stable_id_equal(aggregate_binding->source_class_identity, source_class->id) ||
+        !semantic_source_class_is_exact(plan, root, aggregate_source, source_class))
+        return semantic_scalar_fail(error, error_size,
+                                    "aggregate source declaration identity is not exact");
+    for (uint16_t i = 0; i < module->nfuncs; i++) {
+        const XiFunc *function = module->functions[i];
+        uint32_t semantic_function = semantic_function_for_program_row(
+            plan, function ? function->psc_function_index : XI_PSC_ROW_NONE);
+        const XrProgramSemanticFunctionRecord *program_function =
+            function ? xr_program_semantic_closure_function(closure, function->psc_function_index)
+                     : NULL;
+        const XrSemanticProgramFunctionBinding *function_binding =
+            function ? semantic_binding_for_program_row(plan, function->psc_function_index) : NULL;
+        const XrSemanticFunctionRecord *record = xr_semantic_plan_function(plan, semantic_function);
+        const XrSemanticParameterRecord *parameter =
+            record && record->parameter_count == 1
+                ? xr_semantic_plan_parameter(plan, record->parameter_begin)
+                : NULL;
+        if (!function || !program_function || !function_binding ||
+            semantic_function == XR_SEMANTIC_INDEX_NONE || !record)
+            return semantic_scalar_fail(error, error_size,
+                                        "aggregate function binding inventory is incomplete");
+        if (function->psc_return_type_index != aggregate_program ||
+            !xr_stable_id_equal(function_binding->program_function, program_function->id) ||
+            function_binding->flags != program_function->flags ||
+            record->return_type != aggregate_semantic ||
+            record->parameter_count != function->nparams)
+            return semantic_scalar_fail(error, error_size,
+                                        "Xi and SemanticPlan aggregate function bindings disagree");
+        if (!semantic_function_is_exact(plan, semantic_function, function->nparams,
+                                        aggregate_semantic, error, error_size))
+            return false;
+        if (function->nparams == 1 &&
+            (!function->params || function->params[0]->psc_type_index != aggregate_program ||
+             !parameter || parameter->type != aggregate_semantic))
+            return semantic_scalar_fail(error, error_size,
+                                        "aggregate parameter binding is not exact");
+    }
+    const XrProgramSemanticCallRecord *program_call = xr_program_semantic_closure_call(closure, 0);
+    const XrSemanticProgramCallBinding *call_binding =
+        plan->program_call_binding_count == 1 ? &plan->program_call_bindings[0] : NULL;
+    if (!program_call || !call_binding ||
+        !xr_stable_id_equal(call_binding->program_call, program_call->id) ||
+        !xr_stable_id_equal(call_binding->callsite, program_call->callsite_identity) ||
+        !xr_stable_id_equal(call_binding->caller_program_function, program_call->caller_function) ||
+        !xr_stable_id_equal(call_binding->callee_program_function, program_call->callee_function))
+        return semantic_scalar_fail(error, error_size,
+                                    "leaf aggregate SemanticPlan call binding is not exact");
+    const XrSemanticProgramFunctionBinding *caller_binding = NULL;
+    const XrSemanticProgramFunctionBinding *callee_binding = NULL;
+    for (uint32_t i = 0; i < plan->program_function_binding_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[i];
+        if (xr_stable_id_equal(binding->program_function, program_call->caller_function))
+            caller_binding = binding;
+        if (xr_stable_id_equal(binding->program_function, program_call->callee_function))
+            callee_binding = binding;
+    }
+    if (!caller_binding || !callee_binding ||
+        !semantic_initializer_is_exact(plan, root, error, error_size) ||
+        !semantic_call_is_exact(plan, program_call, caller_binding->semantic_function,
+                                callee_binding->semantic_function, aggregate_semantic,
+                                module->identity, error, error_size))
+        return false;
+    return semantic_program_call_inventory_is_exact(plan, call_binding, error, error_size);
+}
+
+bool xi_program_semantic_plan_verify(const XiFunc *root, const XrSemanticPlan *plan,
+                                     const XrTargetProfile *target_profile, char *error,
+                                     size_t error_size) {
+    const XiModule *module = root ? root->module : NULL;
+    XrProgramSemanticFamily family =
+        module && module->program_semantic_closure
+            ? xr_program_semantic_closure_family(module->program_semantic_closure)
+            : 0;
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL)
+        return verify_scalar_semantic_plan(root, plan, target_profile, error, error_size);
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+        if (target_profile)
+            return semantic_scalar_fail(error, error_size,
+                                        "aggregate SemanticPlan cannot consume a target profile");
+        return semantic_leaf_aggregate_plan_verify(root, plan, error, error_size);
+    }
+    return semantic_scalar_fail(error, error_size, "SemanticPlan program family is unsupported");
+}

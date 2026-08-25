@@ -20,6 +20,7 @@
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_identity.h"
 #include "../../plan/semantic/xr_scalar_call_semantics.h"
+#include "../../plan/semantic/xr_source_semantic_identity.h"
 #include "../../shared/xr_exact_scalar_registry.h"
 #include <string.h>
 
@@ -127,8 +128,8 @@ static XaScalarSourceSpan source_span(const AstNode *node) {
 }
 
 static bool span_valid(XaScalarSourceSpan span, uint32_t kind) {
-    if (span.kind != kind || span.start_line == 0 || span.start_column == 0 ||
-        span.end_line == 0 || span.end_column == 0)
+    if (span.kind != kind || span.start_line == 0 || span.start_column == 0 || span.end_line == 0 ||
+        span.end_column == 0)
         return false;
     return span.end_line > span.start_line ||
            (span.end_line == span.start_line && span.end_column > span.start_column);
@@ -143,29 +144,21 @@ static XrFingerprint scalar_policy(void) {
 }
 
 static bool module_authority(const XrModuleSpec *spec, XaScalarModuleAuthority *out) {
-    if (!spec || !out || spec->status != XR_MODSPEC_ANALYZED || !spec->ast ||
-        !spec->canonical || !xr_module_identity_valid(spec->canonical, NULL) ||
-        spec->export_symbols_invalid ||
+    if (!spec || !out || spec->status != XR_MODSPEC_ANALYZED || !spec->ast || !spec->canonical ||
+        !xr_module_identity_valid(spec->canonical, NULL) || spec->export_symbols_invalid ||
         bytes_zero(spec->source_content_fingerprint.bytes,
                    sizeof(spec->source_content_fingerprint.bytes)))
         return false;
-    XrSHA256Context context;
-    hash_begin(&context, "xray-source-module-authority-v1");
-    hash_text(&context, spec->canonical);
-    XrFingerprint full = finish_fingerprint(&context);
-
-    hash_begin(&context, "xray-source-module-identity-v1");
-    hash_fingerprint(&context, full);
-    XrStableId identity = finish_id(&context);
-
-    hash_begin(&context, "xray-source-module-empty-exports-v1");
-    hash_id(&context, identity);
-    hash_u32(&context, 0);
+    XrProgramSemanticModuleInput source;
+    XrFingerprint full;
+    if (!xr_source_semantic_module_authority(spec->canonical, spec->source_content_fingerprint,
+                                             &source, &full))
+        return false;
     *out = (XaScalarModuleAuthority) {
-        .module_identity = identity,
+        .module_identity = source.module_identity,
         .module_authority_fingerprint = full,
-        .source_fingerprint = spec->source_content_fingerprint,
-        .export_fingerprint = finish_fingerprint(&context),
+        .source_fingerprint = source.source_fingerprint,
+        .export_fingerprint = source.export_fingerprint,
     };
     return true;
 }
@@ -185,11 +178,10 @@ static bool signature_fingerprint(const XaSymbol *symbol, XrFingerprint *out) {
     const XrType *type = symbol ? symbol->links.type : NULL;
     XrExactScalarId return_id = XR_EXACT_SCALAR_NONE;
     if (!out || !type || type->kind != XR_KIND_FUNCTION || type->function.param_count < 0 ||
-        type->function.param_count > 1 ||
-        type->function.min_params != type->function.param_count || type->function.is_variadic ||
-        type->function.is_c_abi || type->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
-        type->function.type_param_count != 0 ||
-        !exact_i64(type->function.return_type, &return_id))
+        type->function.param_count > 1 || type->function.min_params != type->function.param_count ||
+        type->function.is_variadic || type->function.is_c_abi ||
+        type->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
+        type->function.type_param_count != 0 || !exact_i64(type->function.return_type, &return_id))
         return false;
     for (int i = 0; i < type->function.param_count; i++) {
         XrExactScalarId param_id = XR_EXACT_SCALAR_NONE;
@@ -198,10 +190,10 @@ static bool signature_fingerprint(const XaSymbol *symbol, XrFingerprint *out) {
             return false;
     }
     XrScalarI64FunctionContract contract;
-    if (!xr_scalar_i64_function_contract(
-            type->function.param_count == 0 ? XR_SCALAR_I64_FUNCTION_NULLARY
-                                            : XR_SCALAR_I64_FUNCTION_UNARY,
-            &contract))
+    if (!xr_scalar_i64_function_contract(type->function.param_count == 0
+                                             ? XR_SCALAR_I64_FUNCTION_NULLARY
+                                             : XR_SCALAR_I64_FUNCTION_UNARY,
+                                         &contract))
         return false;
     *out = contract.signature_fingerprint;
     return true;
@@ -231,16 +223,14 @@ static bool effect_fingerprint(const XaAnalyzer *analyzer, const XaSymbol *symbo
         links->alloc_reason_bits != XA_ALLOC_REASON_NONE)
         return false;
     XrScalarI64FunctionContract contract;
-    if (!xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_NULLARY,
-                                         &contract))
+    if (!xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_NULLARY, &contract))
         return false;
     *out = contract.effect_fingerprint;
     return true;
 }
 
 static XrStableId declaration_identity(const XaScalarModuleAuthority *module,
-                                       XaScalarSourceSpan span,
-                                       XrFingerprint signature) {
+                                       XaScalarSourceSpan span, XrFingerprint signature) {
     XrSHA256Context context;
     hash_begin(&context, "xray-source-scalar-function-declaration-v1");
     hash_id(&context, module->module_identity);
@@ -260,23 +250,20 @@ static XrStableId concrete_instance_identity(XrStableId module, XrStableId decla
     return finish_id(&context);
 }
 
-static bool function_fact(const XaAnalyzer *analyzer,
-                          const XaScalarModuleAuthority *module, const AstNode *node,
-                          XaScalarFunctionFact *out) {
-    const FunctionDeclNode *function = node && node->type == AST_FUNCTION_DECL
-                                           ? &node->as.function_decl
-                                           : NULL;
+static bool function_fact(const XaAnalyzer *analyzer, const XaScalarModuleAuthority *module,
+                          const AstNode *node, XaScalarFunctionFact *out) {
+    const FunctionDeclNode *function =
+        node && node->type == AST_FUNCTION_DECL ? &node->as.function_decl : NULL;
     XaSymbol *symbol = function && function->symbol_id
-                           ? xa_analyzer_symbol_by_id((XaAnalyzer *) analyzer,
-                                                      function->symbol_id)
+                           ? xa_analyzer_symbol_by_id((XaAnalyzer *) analyzer, function->symbol_id)
                            : NULL;
     XaScalarSourceSpan span = source_span(node);
-    if (!out || !function || !symbol || symbol->kind != XA_SYM_FUNCTION ||
-        symbol->is_builtin || symbol->is_imported || symbol->is_exported || symbol->parent ||
-        node->is_exported || symbol->links.summary_owner != analyzer ||
-        symbol->links.function_decl_node != node || symbol->id != function->symbol_id ||
-        function->type_param_count != 0 || function->is_generator || function->is_extern ||
-        !function->body || !span_valid(span, AST_FUNCTION_DECL))
+    if (!out || !function || !symbol || symbol->kind != XA_SYM_FUNCTION || symbol->is_builtin ||
+        symbol->is_imported || symbol->is_exported || symbol->parent || node->is_exported ||
+        symbol->links.summary_owner != analyzer || symbol->links.function_decl_node != node ||
+        symbol->id != function->symbol_id || function->type_param_count != 0 ||
+        function->is_generator || function->is_extern || !function->body ||
+        !span_valid(span, AST_FUNCTION_DECL))
         return false;
     XrFingerprint signature;
     XrFingerprint effect;
@@ -287,15 +274,16 @@ static bool function_fact(const XaAnalyzer *analyzer,
     *out = (XaScalarFunctionFact) {
         .node = node,
         .symbol = symbol,
-        .row = {
-            .declaration_identity = declaration,
-            .concrete_instance_identity = concrete_instance_identity(
-                module->module_identity, declaration, signature),
-            .signature_fingerprint = signature,
-            .effect_fingerprint = effect,
-            .declaration_span = span,
-            .parameter_count = (uint8_t) function->param_count,
-        },
+        .row =
+            {
+                .declaration_identity = declaration,
+                .concrete_instance_identity =
+                    concrete_instance_identity(module->module_identity, declaration, signature),
+                .signature_fingerprint = signature,
+                .effect_fingerprint = effect,
+                .declaration_span = span,
+                .parameter_count = (uint8_t) function->param_count,
+            },
     };
     return true;
 }
@@ -327,29 +315,25 @@ static bool scan_call_child(AstNode *child, void *context) {
     return !child || scan_calls(child, (XaScalarCallScan *) context);
 }
 
-static XrStableId callsite_identity(const XaScalarModuleAuthority *module,
-                                    XrStableId caller, XaScalarSourceSpan span) {
-    XrSHA256Context context;
-    hash_begin(&context, "xray-source-scalar-callsite-v1");
-    hash_fingerprint(&context, module->source_fingerprint);
-    hash_id(&context, module->module_identity);
-    hash_id(&context, caller);
-    hash_span(&context, span);
-    return finish_id(&context);
+static XrStableId callsite_identity(const XaScalarModuleAuthority *module, XrStableId caller,
+                                    XaScalarSourceSpan span) {
+    XrStableId identity = {{0}};
+    XrProgramSemanticSourceLocator locator = {span.kind, span.start_line, span.start_column,
+                                              span.end_line, span.end_column};
+    (void) xr_source_semantic_callsite_identity(module->source_fingerprint, module->module_identity,
+                                                caller, locator, &identity);
+    return identity;
 }
 
 static XrFingerprint call_contract(const XaScalarFunctionAuthority *callee) {
     XrScalarI64FunctionContract contract;
     XrFingerprint result = {{0}};
-    if (!callee || !xr_scalar_i64_function_contract(
-                       XR_SCALAR_I64_FUNCTION_UNARY, &contract) ||
-        memcmp(contract.signature_fingerprint.bytes,
-               callee->signature_fingerprint.bytes,
+    if (!callee || !xr_scalar_i64_function_contract(XR_SCALAR_I64_FUNCTION_UNARY, &contract) ||
+        memcmp(contract.signature_fingerprint.bytes, callee->signature_fingerprint.bytes,
                sizeof(contract.signature_fingerprint.bytes)) != 0 ||
         memcmp(contract.effect_fingerprint.bytes, callee->effect_fingerprint.bytes,
                sizeof(contract.effect_fingerprint.bytes)) != 0 ||
-        callee->capability_mask != 0 ||
-        !xr_scalar_i64_call_contract(&contract, &result))
+        callee->capability_mask != 0 || !xr_scalar_i64_call_contract(&contract, &result))
         return (XrFingerprint) {{0}};
     return result;
 }
@@ -391,9 +375,8 @@ static int function_index_for_symbol(const XaScalarFunctionFact facts[2], uint32
 }
 
 static XaSymbol *candidate_function_symbol(XaAnalyzer *analyzer, const AstNode *node) {
-    const FunctionDeclNode *function = node && node->type == AST_FUNCTION_DECL
-                                           ? &node->as.function_decl
-                                           : NULL;
+    const FunctionDeclNode *function =
+        node && node->type == AST_FUNCTION_DECL ? &node->as.function_decl : NULL;
     XaSymbol *symbol = function && function->symbol_id
                            ? xa_analyzer_symbol_by_id(analyzer, function->symbol_id)
                            : NULL;
@@ -420,9 +403,10 @@ static bool candidate_signature_semantics_complete(const XaSymbol *symbol) {
     return true;
 }
 
-XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
-    XaAnalyzer *analyzer, const AstNode *syntax, const XrModuleSpec *module_spec,
-    XaScalarProgramAuthority **out) {
+XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(XaAnalyzer *analyzer,
+                                                                   const AstNode *syntax,
+                                                                   const XrModuleSpec *module_spec,
+                                                                   XaScalarProgramAuthority **out) {
     if (out)
         *out = NULL;
     if (!out || !analyzer || !syntax)
@@ -434,8 +418,8 @@ XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
         syntax->as.program.statements[1]->type != AST_FUNCTION_DECL)
         return XA_SCALAR_PROGRAM_AUTHORITY_UNSUPPORTED;
 
-    const AstNode *function_nodes[2] = {
-        syntax->as.program.statements[0], syntax->as.program.statements[1]};
+    const AstNode *function_nodes[2] = {syntax->as.program.statements[0],
+                                        syntax->as.program.statements[1]};
     XaScalarCallScan scans[2] = {0};
     const AstNode *call = NULL;
     int caller = -1;
@@ -450,9 +434,9 @@ XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
         call = scans[i].call;
         caller = i;
     }
-    if (!call || caller < 0 || call->as.call_expr.arg_count != 1 ||
-        !call->as.call_expr.arguments || !call->as.call_expr.arguments[0] ||
-        !call->as.call_expr.callee || call->as.call_expr.callee->type != AST_VARIABLE ||
+    if (!call || caller < 0 || call->as.call_expr.arg_count != 1 || !call->as.call_expr.arguments ||
+        !call->as.call_expr.arguments[0] || !call->as.call_expr.callee ||
+        call->as.call_expr.callee->type != AST_VARIABLE ||
         function_nodes[caller]->as.function_decl.param_count != 0 ||
         function_nodes[1 - caller]->as.function_decl.param_count != 1)
         return XA_SCALAR_PROGRAM_AUTHORITY_UNSUPPORTED;
@@ -460,8 +444,7 @@ XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
     XaSymbol *candidate_symbols[2] = {0};
     for (int i = 0; i < 2; i++) {
         candidate_symbols[i] = candidate_function_symbol(analyzer, function_nodes[i]);
-        if (!candidate_symbols[i] ||
-            !candidate_signature_semantics_complete(candidate_symbols[i]))
+        if (!candidate_symbols[i] || !candidate_signature_semantics_complete(candidate_symbols[i]))
             return XA_SCALAR_PROGRAM_AUTHORITY_INVALID;
         XrFingerprint signature;
         if (function_nodes[i]->as.function_decl.type_param_count != 0 ||
@@ -496,17 +479,14 @@ XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
         return XA_SCALAR_PROGRAM_AUTHORITY_UNSUPPORTED;
     XrExactScalarId ignored = XR_EXACT_SCALAR_NONE;
     if (!exact_i64(xa_analyzer_get_node_type(analyzer, call), &ignored) ||
-        !exact_i64(xa_analyzer_get_node_type(analyzer, call->as.call_expr.arguments[0]),
-                   &ignored))
+        !exact_i64(xa_analyzer_get_node_type(analyzer, call->as.call_expr.arguments[0]), &ignored))
         return XA_SCALAR_PROGRAM_AUTHORITY_INVALID;
 
     facts[caller].row.flags = XA_SCALAR_PROGRAM_FUNCTION_ENTRY;
     if (equal_span(facts[0].row.declaration_span, facts[1].row.declaration_span) ||
-        compare_id(facts[0].row.declaration_identity,
-                   facts[1].row.declaration_identity) == 0)
+        compare_id(facts[0].row.declaration_identity, facts[1].row.declaration_identity) == 0)
         return XA_SCALAR_PROGRAM_AUTHORITY_INVALID;
-    if (compare_id(facts[0].row.declaration_identity,
-                   facts[1].row.declaration_identity) > 0) {
+    if (compare_id(facts[0].row.declaration_identity, facts[1].row.declaration_identity) > 0) {
         XaScalarFunctionFact swap = facts[0];
         facts[0] = facts[1];
         facts[1] = swap;
@@ -524,8 +504,8 @@ XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
     authority->functions[0] = facts[0].row;
     authority->functions[1] = facts[1].row;
     authority->call = (XaScalarCallAuthority) {
-        .callsite_identity = callsite_identity(
-            &module, facts[caller].row.declaration_identity, call_span),
+        .callsite_identity =
+            callsite_identity(&module, facts[caller].row.declaration_identity, call_span),
         .caller_declaration_identity = facts[caller].row.declaration_identity,
         .caller_instance_identity = facts[caller].row.concrete_instance_identity,
         .callee_declaration_identity = facts[callee].row.declaration_identity,
@@ -536,8 +516,7 @@ XaScalarProgramAuthorityStatus xa_scalar_program_authority_publish(
     authority->fingerprint = authority_fingerprint(authority);
     authority->verified = 1;
     char verify_error[128];
-    if (!xa_scalar_program_authority_verify(authority, verify_error,
-                                            sizeof(verify_error))) {
+    if (!xa_scalar_program_authority_verify(authority, verify_error, sizeof(verify_error))) {
         xa_scalar_program_authority_free(authority);
         return XA_SCALAR_PROGRAM_AUTHORITY_INVALID;
     }
@@ -552,31 +531,27 @@ void xa_scalar_program_authority_free(XaScalarProgramAuthority *authority) {
     xr_free(authority);
 }
 
-XrFingerprint xa_scalar_program_authority_policy(
-    const XaScalarProgramAuthority *authority) {
-    return authority && authority->verified ? authority->policy_fingerprint
-                                            : (XrFingerprint) {0};
+XrFingerprint xa_scalar_program_authority_policy(const XaScalarProgramAuthority *authority) {
+    return authority && authority->verified ? authority->policy_fingerprint : (XrFingerprint) {0};
 }
 
-XrFingerprint xa_scalar_program_authority_fingerprint(
-    const XaScalarProgramAuthority *authority) {
-    return authority && authority->verified ? authority->fingerprint
-                                            : (XrFingerprint) {0};
+XrFingerprint xa_scalar_program_authority_fingerprint(const XaScalarProgramAuthority *authority) {
+    return authority && authority->verified ? authority->fingerprint : (XrFingerprint) {0};
 }
 
-const XaScalarModuleAuthority *xa_scalar_program_authority_module(
-    const XaScalarProgramAuthority *authority) {
+const XaScalarModuleAuthority *
+xa_scalar_program_authority_module(const XaScalarProgramAuthority *authority) {
     return authority && authority->verified ? &authority->module : NULL;
 }
 
-const XaScalarFunctionAuthority *xa_scalar_program_authority_function(
-    const XaScalarProgramAuthority *authority, uint32_t index) {
+const XaScalarFunctionAuthority *
+xa_scalar_program_authority_function(const XaScalarProgramAuthority *authority, uint32_t index) {
     return authority && authority->verified && index < XA_SCALAR_PROGRAM_FUNCTION_COUNT
                ? &authority->functions[index]
                : NULL;
 }
 
-const XaScalarCallAuthority *xa_scalar_program_authority_call(
-    const XaScalarProgramAuthority *authority) {
+const XaScalarCallAuthority *
+xa_scalar_program_authority_call(const XaScalarProgramAuthority *authority) {
     return authority && authority->verified ? &authority->call : NULL;
 }
