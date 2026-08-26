@@ -116,6 +116,23 @@ verify_program_type(const XrProgramSemanticClosure *closure, uint32_t index) {
     return index == XI_PSC_ROW_NONE ? NULL : xr_program_semantic_closure_type(closure, index);
 }
 
+static const XrProgramSemanticTypeRecord *verify_find_type(
+    const XrProgramSemanticClosure *closure, XrStableId identity, uint32_t *index) {
+    const XrProgramSemanticTypeRecord *answer = NULL;
+    for (uint32_t i = 0; closure && i < xr_program_semantic_closure_type_count(closure); i++) {
+        const XrProgramSemanticTypeRecord *candidate =
+            xr_program_semantic_closure_type(closure, i);
+        if (!candidate || !verify_same_id(candidate->id, identity))
+            continue;
+        if (answer)
+            return NULL;
+        answer = candidate;
+        if (index)
+            *index = i;
+    }
+    return answer;
+}
+
 static bool verify_type_matches_program(const XrProgramSemanticClosure *closure,
                                         const XrProgramSemanticTypeRecord *row,
                                         const XrType *type) {
@@ -127,6 +144,24 @@ static bool verify_type_matches_program(const XrProgramSemanticClosure *closure,
                ((scalar->family == XR_EXACT_SCALAR_FAMILY_INTEGER && type->kind == XR_KIND_INT) ||
                 (scalar->family == XR_EXACT_SCALAR_FAMILY_FLOAT && type->kind == XR_KIND_FLOAT)) &&
                !type->is_value_type;
+    }
+    if (row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
+        if (xr_program_semantic_closure_family(closure) !=
+                XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
+            type->kind != XR_KIND_TUPLE || row->field_count != 6 ||
+            xr_type_tuple_count((XrType *) type) != (int) row->field_count)
+            return false;
+        for (uint32_t i = 0; i < row->field_count; i++) {
+            const XrProgramSemanticTypeFieldRecord *field =
+                xr_program_semantic_closure_type_field(closure, row->field_begin + i);
+            const XrProgramSemanticTypeRecord *child =
+                field ? verify_find_type(closure, field->field_type, NULL) : NULL;
+            XrType *member = xr_type_tuple_get((XrType *) type, (int) i);
+            if (!field || field->declaration_ordinal != i || !child || !member ||
+                !verify_type_matches_program(closure, child, member))
+                return false;
+        }
+        return true;
     }
     if (row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
         type->kind != XR_KIND_INSTANCE || type->instance.type_arg_count != 0 ||
@@ -200,7 +235,8 @@ static bool expected_program_type_row(const XiModule *module,
     uint32_t match = XI_PSC_ROW_NONE;
     for (uint32_t i = 0; closure && i < xr_program_semantic_closure_type_count(closure); i++) {
         const XrProgramSemanticTypeRecord *row = xr_program_semantic_closure_type(closure, i);
-        if (!row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR)
+        if (!row || (row->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR &&
+                     row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT))
             continue;
         if (!verify_type_matches_program(closure, row, type))
             continue;
@@ -460,6 +496,274 @@ static bool verify_leaf_aggregate_program(const XiModule *module, char *error, s
            verify_fail(error, error_size, "Xi aggregate call coverage is incomplete");
 }
 
+typedef struct XiProductFunctionState {
+    const XiFunc *function;
+    const XiValue *call;
+    const XiValue *construct;
+    const XiValue *projects[6];
+    uint32_t call_count;
+    uint32_t construct_count;
+    uint32_t project_count;
+} XiProductFunctionState;
+
+static const XiValue *verify_product_strip_copy(const XiValue *value) {
+    const XiValue *cursor = value;
+    while (cursor && cursor->op == XI_COPY && cursor->aux_int == XI_COPY_KIND_IDENTITY &&
+           cursor->nargs == 1 && cursor->args && cursor->args[0])
+        cursor = cursor->args[0];
+    return cursor;
+}
+
+static bool verify_product_proof_contract(const XiValue *value, uint16_t op) {
+    return value && value->op == op && value->flags == xi_op_default_effects(op) &&
+           !value->aux && value->aux_kind == XI_AUX_KIND_NONE && value->lowering_flags == 0 &&
+           !value->call_plan && value->xg_callsite_id == 0 && !value->error_region &&
+           value->transfer_mode == 0 && value->param_mode == XR_PARAM_READ &&
+           value->call_return_ownership.kind == XI_RETURN_OWNERSHIP_UNKNOWN &&
+           value->call_return_ownership.param_index == -1 &&
+           !value->call_return_ownership.complete && value->result_alias_operand == -1;
+}
+
+static bool verify_product_call_contract(const XiModule *module,
+                                         const XrProgramSemanticClosure *closure,
+                                         const XiFunc *owner, const XiFunc *callee,
+                                         const XiValue *value, uint32_t product_index) {
+    if (!value || value->op != XI_CALL || value->psc_call_index >= 2 || value->nargs != 1 ||
+        !value->args || !value->args[0] || value->psc_type_index != product_index ||
+        verify_physical_callee(module, value->args[0]) != callee ||
+        value->flags != xi_op_default_effects(XI_CALL) || value->aux_int != 0 ||
+        value->call_plan || value->xg_callsite_id != 0 || value->error_region ||
+        value->transfer_mode != 0 || value->param_mode != XR_PARAM_READ ||
+        value->call_return_ownership.kind != XI_RETURN_OWNERSHIP_UNKNOWN ||
+        value->call_return_ownership.param_index != -1 || value->call_return_ownership.complete ||
+        value->result_alias_operand != -1)
+        return false;
+    const XrProgramSemanticCallRecord *call =
+        xr_program_semantic_closure_call(closure, value->psc_call_index);
+    const XrProgramSemanticFunctionRecord *owner_row =
+        owner ? xr_program_semantic_closure_function(closure, owner->psc_function_index) : NULL;
+    XiSourceLocator locator = {.kind = value->source_kind, .span = value->source_span};
+    return call && owner_row && verify_same_id(owner_row->id, call->caller_function) &&
+           verify_locator_exact(locator, call->locator);
+}
+
+static bool verify_product_init_is_authority_free(const XiFunc *init, char *error,
+                                                  size_t error_size) {
+    for (uint32_t b = 0; init && b < init->nblocks; b++) {
+        const XiBlock *block = init->blocks[b];
+        if (!block)
+            return verify_fail(error, error_size,
+                               "Xi value-product init block inventory contains NULL");
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            if (phi->value.psc_call_index != XI_PSC_ROW_NONE ||
+                phi->value.op == XI_VALUE_PRODUCT_CONSTRUCT ||
+                phi->value.op == XI_VALUE_PRODUCT_PROJECT || phi->value.op == XI_TUPLE_NEW ||
+                phi->value.op == XI_TUPLE_GET)
+                return verify_fail(error, error_size,
+                                   "Xi module init retains value-product authority");
+        for (uint32_t v = 0; v < block->nvalues; v++) {
+            const XiValue *value = block->values[v];
+            if (!value || value->psc_call_index != XI_PSC_ROW_NONE ||
+                value->op == XI_VALUE_PRODUCT_CONSTRUCT ||
+                value->op == XI_VALUE_PRODUCT_PROJECT || value->op == XI_TUPLE_NEW ||
+                value->op == XI_TUPLE_GET)
+                return verify_fail(error, error_size,
+                                   "Xi module init retains value-product authority");
+        }
+    }
+    return true;
+}
+
+static bool verify_leaf_product_program(const XiModule *module, char *error, size_t error_size) {
+    const XrProgramSemanticClosure *closure = module->program_semantic_closure;
+    if (xr_program_semantic_closure_schema(closure) !=
+            XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
+        xr_program_semantic_closure_module_count(closure) != 1 ||
+        xr_program_semantic_closure_dependency_count(closure) != 0 ||
+        xr_program_semantic_closure_type_count(closure) != 3 ||
+        xr_program_semantic_closure_type_field_count(closure) != 6 ||
+        xr_program_semantic_closure_function_count(closure) != 3 ||
+        xr_program_semantic_closure_function_parameter_count(closure) != 0 ||
+        xr_program_semantic_closure_call_count(closure) != 2 || module->nclasses != 0 ||
+        module->nfuncs != 3 || !module->functions || !module->init ||
+        module->init->nchildren != 3 || module->init->psc_function_index != XI_PSC_ROW_NONE ||
+        module->init->psc_return_type_index != XI_PSC_ROW_NONE)
+        return verify_fail(error, error_size, "Xi value-product module inventory is not exact");
+
+    uint32_t product_index = XI_PSC_ROW_NONE;
+    const XrProgramSemanticTypeRecord *product = NULL;
+    uint32_t member_indices[6] = {XI_PSC_ROW_NONE, XI_PSC_ROW_NONE, XI_PSC_ROW_NONE,
+                                  XI_PSC_ROW_NONE, XI_PSC_ROW_NONE, XI_PSC_ROW_NONE};
+    for (uint32_t i = 0; i < 3; i++) {
+        const XrProgramSemanticTypeRecord *row = xr_program_semantic_closure_type(closure, i);
+        if (row && row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
+            if (product)
+                return verify_fail(error, error_size, "Xi value-product type row is ambiguous");
+            product = row;
+            product_index = i;
+        }
+    }
+    if (!product || product->field_count != 6)
+        return verify_fail(error, error_size, "Xi value-product type row is missing");
+    for (uint32_t i = 0; i < 6; i++) {
+        const XrProgramSemanticTypeFieldRecord *field =
+            xr_program_semantic_closure_type_field(closure, product->field_begin + i);
+        const XrProgramSemanticTypeRecord *member =
+            field ? verify_find_type(closure, field->field_type, &member_indices[i]) : NULL;
+        uint8_t expected_scalar = i == 2 ? XR_EXACT_SCALAR_U8 : XR_EXACT_SCALAR_I64;
+        if (!field || field->declaration_ordinal != i || !member ||
+            member->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+            member->exact_scalar != expected_scalar)
+            return verify_fail(error, error_size, "Xi value-product member authority is invalid");
+    }
+
+    const XrProgramSemanticCallRecord *call_rows[2] = {
+        xr_program_semantic_closure_call(closure, 0),
+        xr_program_semantic_closure_call(closure, 1),
+    };
+    if (!call_rows[0] || !call_rows[1] ||
+        !verify_same_id(call_rows[0]->callee_function, call_rows[1]->callee_function) ||
+        verify_same_id(call_rows[0]->caller_function, call_rows[1]->caller_function))
+        return verify_fail(error, error_size, "Xi value-product call joins are not canonical");
+
+    XiProductFunctionState states[3] = {0};
+    XiFunc *callee = NULL;
+    bool seen_rows[3] = {false, false, false};
+    for (uint16_t i = 0; i < module->nfuncs; i++) {
+        XiFunc *function = module->functions[i];
+        uint16_t child_matches = 0;
+        for (uint16_t child = 0; child < module->init->nchildren; child++)
+            child_matches += module->init->children[child] == function;
+        const XrProgramSemanticFunctionRecord *row =
+            function ? xr_program_semantic_closure_function(closure,
+                                                             function->psc_function_index)
+                     : NULL;
+        if (!function || function->psc_function_index >= 3 ||
+            seen_rows[function->psc_function_index] || child_matches != 1 || !row ||
+            function->parent_func != module->init || function->nchildren != 0 ||
+            function->nparams != 0 || function->psc_return_type_index != product_index ||
+            !verify_type_matches_program(closure, product, function->return_type) ||
+            !verify_locator_exact(function->psc_declaration_locator, row->declaration_locator) ||
+            (row->flags != 0 && row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY))
+            return verify_fail(error, error_size,
+                               "Xi value-product function inventory is not exact");
+        seen_rows[function->psc_function_index] = true;
+        states[i].function = function;
+        if (row->flags == 0) {
+            if (callee || function->inline_policy != XI_INLINE_PRESERVE_CALL ||
+                !verify_same_id(row->id, call_rows[0]->callee_function))
+                return verify_fail(error, error_size,
+                                   "Xi value-product callee join is not exact");
+            callee = function;
+        }
+    }
+    if (!callee || !seen_rows[0] || !seen_rows[1] || !seen_rows[2] ||
+        !verify_exact_type_metadata(module, closure, module->init, error, error_size) ||
+        !verify_product_init_is_authority_free(module->init, error, error_size))
+        return false;
+    for (uint16_t i = 0; i < 3; i++)
+        if (!verify_exact_type_metadata(module, closure, states[i].function, error, error_size))
+            return false;
+
+    bool seen_calls[2] = {false, false};
+    uint32_t total_calls = 0, total_constructs = 0, total_projects = 0;
+    for (uint16_t f = 0; f < 3; f++) {
+        XiProductFunctionState *state = &states[f];
+        const XrProgramSemanticFunctionRecord *function_row = xr_program_semantic_closure_function(
+            closure, state->function->psc_function_index);
+        for (uint32_t b = 0; b < state->function->nblocks; b++) {
+            const XiBlock *block = state->function->blocks[b];
+            if (!block)
+                return verify_fail(error, error_size,
+                                   "Xi value-product block inventory contains NULL");
+            for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+                if (phi->value.psc_call_index != XI_PSC_ROW_NONE)
+                    return verify_fail(error, error_size,
+                                       "Xi value-product phi carries a call row");
+            for (uint32_t v = 0; v < block->nvalues; v++) {
+                const XiValue *value = block->values[v];
+                if (!value)
+                    return verify_fail(error, error_size,
+                                       "Xi value-product value inventory contains NULL");
+                if (value->op == XI_TUPLE_NEW || value->op == XI_TUPLE_GET)
+                    return verify_fail(error, error_size,
+                                       "managed tuple operation retained product authority");
+                if (value->op == XI_CALL) {
+                    if (state->call || value->psc_call_index >= 2 ||
+                        seen_calls[value->psc_call_index] ||
+                        !verify_product_call_contract(module, closure, state->function, callee,
+                                                      value, product_index))
+                        return verify_fail(error, error_size,
+                                           "Xi value-product call binding is invalid");
+                    seen_calls[value->psc_call_index] = true;
+                    state->call = value;
+                    state->call_count++;
+                    total_calls++;
+                    continue;
+                }
+                if (value->psc_call_index != XI_PSC_ROW_NONE)
+                    return verify_fail(error, error_size,
+                                       "Xi value-product non-call carries a call row");
+                if (value->op == XI_VALUE_PRODUCT_CONSTRUCT) {
+                    state->construct_count++;
+                    total_constructs++;
+                    if (state->construct ||
+                        !verify_product_proof_contract(value, XI_VALUE_PRODUCT_CONSTRUCT) ||
+                        value->psc_type_index != product_index ||
+                        value->nargs != 6 || !value->args || value->aux_int != 6)
+                        return verify_fail(error, error_size,
+                                           "Xi value-product construction is invalid");
+                    for (uint32_t ordinal = 0; ordinal < 6; ordinal++)
+                        if (!value->args[ordinal] ||
+                            value->args[ordinal]->psc_type_index != member_indices[ordinal])
+                            return verify_fail(error, error_size,
+                                               "Xi value-product construction order is invalid");
+                    state->construct = value;
+                } else if (value->op == XI_VALUE_PRODUCT_PROJECT) {
+                    state->project_count++;
+                    total_projects++;
+                    if (!verify_product_proof_contract(value, XI_VALUE_PRODUCT_PROJECT) ||
+                        value->nargs != 1 || !value->args || !value->args[0] ||
+                        value->aux_int < 0 || value->aux_int >= 6)
+                        return verify_fail(error, error_size,
+                                           "Xi value-product projection ordinal is invalid");
+                    uint32_t ordinal = (uint32_t) value->aux_int;
+                    if (state->projects[ordinal] ||
+                        value->psc_type_index != member_indices[ordinal])
+                        return verify_fail(error, error_size,
+                                           "Xi value-product projection member is invalid");
+                    state->projects[ordinal] = value;
+                }
+            }
+        }
+        bool entry = function_row &&
+                     function_row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
+        if (!state->construct || state->construct_count != 1 ||
+            (entry && (state->call_count != 1 || state->project_count != 6)) ||
+            (!entry && (state->call_count != 0 || state->project_count != 0)))
+            return verify_fail(error, error_size,
+                               "Xi value-product function shape is incomplete");
+        if (!state->function->nblocks ||
+            verify_product_strip_copy(
+                state->function->blocks[state->function->nblocks - 1]->control) !=
+                state->construct)
+            return verify_fail(error, error_size,
+                               "Xi value-product return does not use its construction");
+        if (entry) {
+            for (uint32_t ordinal = 0; ordinal < 6; ordinal++)
+                if (!state->projects[ordinal] ||
+                    verify_product_strip_copy(state->projects[ordinal]->args[0]) != state->call ||
+                    verify_product_strip_copy(state->construct->args[ordinal]) !=
+                        state->projects[ordinal])
+                    return verify_fail(error, error_size,
+                                       "Xi value-product project/construct join is incomplete");
+        }
+    }
+    return (seen_calls[0] && seen_calls[1] && total_calls == 2 && total_constructs == 3 &&
+            total_projects == 12) ||
+           verify_fail(error, error_size, "Xi value-product operation coverage is incomplete");
+}
+
 static bool verify_single_module_partition(const XiModule *module,
                                            const XrTargetProfile *target_profile, char *error,
                                            size_t error_size) {
@@ -474,6 +778,12 @@ static bool verify_single_module_partition(const XiModule *module,
             return verify_fail(error, error_size,
                                "aggregate Xi authority cannot retain target facts");
         return verify_leaf_aggregate_program(module, error, error_size);
+    }
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
+        if (module->scalar_call_decision || module->scalar_target_profile || target_profile)
+            return verify_fail(error, error_size,
+                               "value-product Xi authority cannot retain target facts");
+        return verify_leaf_product_program(module, error, error_size);
     }
     if (family != XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL)
         return verify_fail(error, error_size, "Xi program semantic family is unsupported");

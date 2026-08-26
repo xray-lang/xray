@@ -87,14 +87,19 @@ projection defined below; they never imply TargetPlan admission on their own.
     effect, or ownership evidence is `INVALID`; allocation exhaustion is a
     distinct resource failure. Neither condition is converted into a looser
     family, default identity, fallback, alias, or compatibility path.
-    The additional leaf-value-product family is currently an explicit internal
-    source-backed publication only: exactly three nullary pure functions return
+    The additional leaf-value-product family is an explicit internal
+    source-backed publication: exactly three nullary pure functions return
     `[i64, i64, u8, i64, i64, i64]`; two distinct same-module entry callers each
-    make one direct-local call to the third function. Its independent verifier
-    requires exactly three type rows, six ordered member rows, three functions,
-    two calls, one shared callee, and complete caller coverage. It is not wired
-    into ordinary TypedProgram, Xi, SemanticPlan, TargetPlan, VM, or AOT yet, so
-    this PSC proof cannot be interpreted as tuple6 execution admission.
+    make one direct-local call to the third function. Its independent PSC
+    verifier requires exactly three type rows, six ordered member rows, three
+    functions, two calls, one shared callee, and complete caller coverage. Xi may
+    consume only that explicitly supplied PSC and replaces only its PSC-bound
+    tuple construction/projection nodes with canonical value-product proof
+    operations. The independent Xi verifier rechecks all six ordinals, the `u8`
+    member, both caller/callee joins, exact operation coverage, and an
+    authority-free module initializer. Ordinary TypedProgram publication and
+    SemanticPlan, TargetPlan, VM, and AOT consumption remain unwired, so this Xi
+    proof cannot be interpreted as tuple6 execution admission.
 11. Only the scalar family builds `XrScalarCallDecision`. It requires the exact
     verified scalar PSC/GCI/TargetProfile and freezes native ABI,
     `DIRECT_LOCAL`, `STATIC_DIRECT`, `I64`, register-only argument/result, and
@@ -324,17 +329,17 @@ anchor-sha256: src/plan/semantic/xr_semantic_verify.c 5fcd1df0951db1fbe73661f3a6
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
-anchor-sha256: src/ir/xi.h aeec8ba6571c3a53872d3d16d75bd32ab548abd28543284780910cd6284b96e7
+anchor-sha256: src/ir/xi.h 2999326e873b3b7904cd5760760f415e5037c0843c82ac569c89206b43a319ac
 anchor-sha256: src/ir/xi.c 0a8386b9b6f09578571726a6117444e9a60c4bb08b58f8dce59fadbae3417bd2
 anchor-sha256: src/ir/xi_module.h 7d4be4a43230d300e8090b59db559ecf76f29934560682d1d8e1bbe4da75d3a8
 anchor-sha256: src/ir/xi_lower.h 297d6165a47ac164a12df522091e970093fcc2ce35153378d5fd717019a8da72
 anchor-sha256: src/ir/xi_lower.c e76300335b9c149808a2bd3c4c55d783cce6848e4f3d11b8db557078b7caa1a6
-anchor-sha256: src/ir/xi_lower_expr.c 81236b56bc9c8e4a725c6d37e581c3592da0969584c896e673aeed7a26cf4670
+anchor-sha256: src/ir/xi_lower_expr.c f59a90d78d6fedf13701532fd4c169de68bc53c9e5b3aa01d0fd3f6552ef9898
 anchor-sha256: src/ir/xi_lower_stmt.c 063e8ead6151fd583b84554e1e4d8c23892d53c537f1b287d541337b72845c32
 anchor-sha256: src/ir/xi_pipeline.c fcd087786a75ad823d651f1e8d3632ab9f13516a7356eff3a1300ec8c3e2b639
 anchor-sha256: src/ir/xi_program_semantic.h 8fac41dc1783958c8794aca6721c843356112538fce8ba620f1c4aa9924cc12f
-anchor-sha256: src/ir/xi_program_semantic.c c930e5d667b7d70ea95c0fb9f6289aab95a5955cef8c181ac3f6d4d450f285a1
-anchor-sha256: src/ir/xi_program_semantic_verify.c e9eb1c5ea769f8618e7ceb8f418bf2ccf47a580244cf4b2f676c7130869691ac
+anchor-sha256: src/ir/xi_program_semantic.c 0b5851bf3e9a8ced97b63be88caa9954e35fcfb8e0140b38666a0308d6b29f70
+anchor-sha256: src/ir/xi_program_semantic_verify.c fd47f412edf01c83b24490e0752531c110a08e6e3391e33bdfd7be4b1fc0acbb
 anchor-sha256: src/ir/xi_own.c c8dda6cd586f03723baf676601306338d0cd7b6675a514670c558d96091a681e
 anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4aecb8cfac217dad32f1954a7a66a7ee7ae
 anchor-sha256: src/ir/xi_program_semantic_plan.c 42e2fa994d177b8e37aa88fdb7a300b9ef0429cebbd22e5524a36d5143c632fe
@@ -346,7 +351,7 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c 51d8d46a551ad9516b069bde501a
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 53e5b8fa4bbf6ae204c0b8f720792bd9580c559684daa2539077fd786d111ce5
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3ea53772f142cfcf2a40f0e7dfa52607183049f6d1412b175bc4b41f5d304101
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 26b94d51b9c5cc8c4b529abe9deaeb92cbc46ddbf494218e9ef9e1f1ec8248ed
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
 anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7

@@ -726,6 +726,12 @@ typedef enum {
     XI_VEC_WIDEN_MUL_HALF,
     XI_VEC_REDUCE_ADD,
 
+    /* PSC-bound anonymous value products. These are canonical Xi proof
+     * operations only; TargetPlan lowering owns their eventual executable
+     * representation. */
+    XI_VALUE_PRODUCT_CONSTRUCT,
+    XI_VALUE_PRODUCT_PROJECT,
+
     XI_OP_COUNT /* sentinel */
 } XiOp;
 

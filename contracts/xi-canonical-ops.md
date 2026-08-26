@@ -63,8 +63,8 @@ compatibility opcode, reserved hole, or second bounds owner.
     duplicate membership, and unknown operations are generator errors.
 15. `xr_semantic_ops_gen.h` contains only target-neutral fields. Target support,
     C/native spelling, backend rewrite, and lowering policy remain outside the
-    SemanticPlan registry. The independent registry verifier checks all 225
-    rows, and the SemanticPlan verifier reads arity, effects, result ownership,
+    SemanticPlan registry. The independent registry verifier checks every row,
+    and the SemanticPlan verifier reads arity, effects, result ownership,
     and operand ownership from this registry instead of backend metadata.
 16. The operation-registry fingerprint covers every target-neutral contract
     field and owner category. It is part of the SemanticPlan fingerprint and
@@ -90,8 +90,14 @@ compatibility opcode, reserved hole, or second bounds owner.
     destroyed with the Xi value. VM and AOT consume the same plan and stable
     assertion owner identity. Retired assertion opcodes, spelling-based adapter
     selection, and shallow source-location pointers are not compatible forms.
+21. `xi.value.product.construct` and `xi.value.product.project` are
+    verifier-only proof operations for an exact PSC-bound anonymous leaf value
+    product. Only the explicit product PSC finalizer may replace matching
+    managed tuple nodes; arity, spelling, encoded identity, or an unbound tuple
+    cannot select this family. These operations provide no TargetPlan, VM, AOT,
+    or ordinary-product execution route by themselves.
 
 ## Digest anchors
 
-anchor-sha256: xisa/xi/ops.def 6a002bfe21b8b1f505d4354626259884f242d613ff50ed33cfaae4dcfce4cc35
+anchor-sha256: xisa/xi/ops.def cd873e45558cba139d9675bcf9dce00223a514d3b4d811b494c55da65779de7d
 anchor-sha256: xisa/xi/lowering.def b928743b1e7b3d0cc50bcf2d9779f4c755f189bcb0f6e710e7fa232bce7aa517

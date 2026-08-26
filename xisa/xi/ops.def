@@ -2590,6 +2590,34 @@
   :observable ()
   :targets (vm-bytecode aot-c aot-verify))
 
+; Canonical PSC-bound anonymous leaf value-product construction. This is a
+; proof operation: executable layout and lowering remain TargetPlan work.
+(define-xi-op xi.value.product.construct
+  :class arithmetic
+  :arity variadic
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
+; Canonical PSC-bound anonymous leaf value-product projection. aux_int is the
+; frozen declaration ordinal, never a managed tuple slot interpretation.
+(define-xi-op xi.value.product.project
+  :class arithmetic
+  :arity 1
+  :own-use borrow
+  :speculation safe
+  :vn-kind pure
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (aot-verify)
+  :lowering-policy verifier-only)
+
 ; Every operation belongs to exactly one language-semantic owner category.
 ; These groups deliberately exclude target support, lowering policy, provider
 ; spelling and C representation. xisagen rejects missing, unknown or duplicate
@@ -2634,6 +2662,8 @@
     xi.map.new
     xi.tuple.new
     xi.tuple.get
+    xi.value.product.construct
+    xi.value.product.project
     xi.call
     xi.call.method
     xi.call.method.direct

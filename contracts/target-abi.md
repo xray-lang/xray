@@ -772,7 +772,7 @@ anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de97
 anchor-sha256: src/app/cli/xcmd_build.c 61bde16df4f1c90e3547de81865bbc4c3b33daabea597f15bbbbb207f8ce3b28
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75dd84190e084c3e7d2a88af62ca4eb1
-anchor-sha256: src/ir/xi.h aeec8ba6571c3a53872d3d16d75bd32ab548abd28543284780910cd6284b96e7
+anchor-sha256: src/ir/xi.h 2999326e873b3b7904cd5760760f415e5037c0843c82ac569c89206b43a319ac
 anchor-sha256: stdlib/simd/simd.xr 35c745eb6a37f37a0c7a2d2daf4d4bb953582e930929970d330a2cd3469696d9
 anchor-sha256: src/aot/xaot_coro.h 51edaa56bb72326f5bacd0998b00d505e0c0533190f4ba0289c10ee954049995
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1ebe380363e08e367a588194d1061ae1bdfcec

@@ -7,7 +7,7 @@
     "xisa/xi/ops.def"
   ],
   "generator": "target-machine-phase0/1",
-  "operation_count": 272,
+  "operation_count": 274,
   "operations": [
     {
       "benchmark_anchor": "shared-core/arithmetic",
@@ -6335,6 +6335,46 @@
       ]
     },
     {
+      "benchmark_anchor": "target-machine/arithmetic-and-conversion",
+      "capabilities": [],
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "arithmetic-and-conversion",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "independent-kat-property-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.value.product.construct",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
+      "benchmark_anchor": "target-machine/arithmetic-and-conversion",
+      "capabilities": [],
+      "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
+      "current_shared_owner": "xisa/xi/ops.def",
+      "current_vm_owner": "src/ir/xi_emit_vm_gen.h -> src/runtime/value/xinstruction_table.h -> src/vm",
+      "effects": [],
+      "error_panic_suspend_cancel_publication": [],
+      "family": "arithmetic-and-conversion",
+      "future_semantic_owner": "SemanticPlan.operation_registry",
+      "independent_oracle": "independent-kat-property-oracle",
+      "migration_task": 271,
+      "observable_contract": "contracts/xi-canonical-ops.md",
+      "observable_edges": [],
+      "operation_id": "xi.value.product.project",
+      "ownership": "borrow",
+      "targets": [
+        "aot-verify"
+      ]
+    },
+    {
       "benchmark_anchor": "target-machine/vector-and-simd",
       "capabilities": [],
       "current_aot_owner": "src/aot/xi_to_c_dispatch_gen.h -> src/aot/xi_cgen*.c",
@@ -7030,5 +7070,5 @@
     "unknown_owner": "error"
   },
   "schema": 1,
-  "source_tree_fingerprint": "bc615196b137dfb7d477c332be4deb61ab9d4d4643d9cee9cde916cfe00ff788"
+  "source_tree_fingerprint": "d309ea42675884115ed79ccdb241c9182af4c4ef6cf43d83b84888e0ba7169f5"
 }

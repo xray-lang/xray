@@ -68,6 +68,18 @@ static const char kLeafAggregateCanonicalShapeMismatchSource[] =
     "    return swap(Pair{left: left, right: right})\n"
     "}\n";
 
+static const char kLeafProductXiSource[] =
+    "fn scan() -> (i64, i64, u8, i64, i64, i64) { "
+    "return (1, 2, 3 as u8, 4, 5, 6) }\n"
+    "fn decodePath() -> (i64, i64, u8, i64, i64, i64) {\n"
+    "    var value = scan()\n"
+    "    return (value.0, value.1, value.2, value.3, value.4, value.5)\n"
+    "}\n"
+    "fn validatePath() -> (i64, i64, u8, i64, i64, i64) {\n"
+    "    var value = scan()\n"
+    "    return (value.0, value.1, value.2, value.3, value.4, value.5)\n"
+    "}\n";
+
 typedef struct ScalarFixture {
     XrModuleResolver *resolver;
     XrModuleGraph *graph;
@@ -1828,6 +1840,176 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     xr_compiler_session_delete(session);
 }
 
+TEST(leaf_product_uses_canonical_construct_project_joins) {
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    ASSERT_NOT_NULL(session);
+    ScalarFixture fixture;
+    ASSERT_TRUE(
+        fixture_analyze(&fixture, session, "xi-leaf-product-direct", kLeafProductXiSource));
+    ASSERT_TRUE(fixture_publish(&fixture));
+    ASSERT_NULL(xa_typed_program_program_semantic_closure(fixture.typed));
+
+    char error[512] = {0};
+    XrProgramSemanticClosure *closure = NULL;
+    ASSERT_EQ_INT(xa_program_semantic_closure_publish_leaf_product(
+                      fixture.analyzer, fixture.spec->ast, fixture.spec, &closure, error,
+                      sizeof(error)),
+                  XA_PROGRAM_SEMANTIC_CLOSURE_READY);
+    ASSERT_NOT_NULL(closure);
+    XiProgramSemanticInput input = {.closure = closure, .decision = NULL, .module_index = 0};
+    ASSERT_TRUE(xi_program_semantic_input_is_consistent(&input, error, sizeof(error)));
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
+    ASSERT_NOT_NULL(root);
+    ASSERT_NOT_NULL(root->module);
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+                                                 sizeof(error)));
+    ASSERT_NULL(closure);
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+
+    const XrProgramSemanticClosure *retained = root->module->program_semantic_closure;
+    uint32_t product_index =
+        find_program_type_row(retained, XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT);
+    uint32_t i64_index = XI_PSC_ROW_NONE;
+    uint32_t u8_index = XI_PSC_ROW_NONE;
+    for (uint32_t i = 0; i < xr_program_semantic_closure_type_count(retained); i++) {
+        const XrProgramSemanticTypeRecord *row = xr_program_semantic_closure_type(retained, i);
+        if (!row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR)
+            continue;
+        if (row->exact_scalar == XR_EXACT_SCALAR_I64)
+            i64_index = i;
+        if (row->exact_scalar == XR_EXACT_SCALAR_U8)
+            u8_index = i;
+    }
+    ASSERT_NE(product_index, XI_PSC_ROW_NONE);
+    ASSERT_NE(i64_index, XI_PSC_ROW_NONE);
+    ASSERT_NE(u8_index, XI_PSC_ROW_NONE);
+
+    XiValue *calls[2] = {NULL, NULL};
+    XiValue *entry_constructs[2] = {NULL, NULL};
+    XiValue *entry_projects[2][6] = {{0}};
+    XiValue *callee_construct = NULL;
+    uint32_t entry_index = 0;
+    uint32_t managed_tuple_count = 0;
+    for (uint16_t f = 0; f < root->module->nfuncs; f++) {
+        XiFunc *function = root->module->functions[f];
+        const XrProgramSemanticFunctionRecord *function_row =
+            xr_program_semantic_closure_function(retained, function->psc_function_index);
+        ASSERT_NOT_NULL(function_row);
+        bool entry = function_row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
+        uint32_t current_entry = entry_index;
+        if (entry)
+            ASSERT_TRUE(entry_index++ < 2);
+        for (uint32_t b = 0; b < function->nblocks; b++) {
+            XiBlock *block = function->blocks[b];
+            for (uint32_t v = 0; v < block->nvalues; v++) {
+                XiValue *value = block->values[v];
+                managed_tuple_count += value->op == XI_TUPLE_NEW || value->op == XI_TUPLE_GET;
+                if (value->op == XI_CALL) {
+                    ASSERT_TRUE(entry);
+                    ASSERT_TRUE(value->psc_call_index < 2);
+                    calls[value->psc_call_index] = value;
+                } else if (value->op == XI_VALUE_PRODUCT_CONSTRUCT) {
+                    if (entry)
+                        entry_constructs[current_entry] = value;
+                    else
+                        callee_construct = value;
+                } else if (value->op == XI_VALUE_PRODUCT_PROJECT) {
+                    ASSERT_TRUE(entry);
+                    ASSERT_TRUE(value->aux_int >= 0 && value->aux_int < 6);
+                    entry_projects[current_entry][value->aux_int] = value;
+                }
+            }
+        }
+    }
+    ASSERT_EQ_UINT(entry_index, 2);
+    ASSERT_EQ_UINT(managed_tuple_count, 0);
+    ASSERT_NOT_NULL(calls[0]);
+    ASSERT_NOT_NULL(calls[1]);
+    ASSERT_NOT_NULL(callee_construct);
+    for (uint32_t caller = 0; caller < 2; caller++) {
+        ASSERT_NOT_NULL(entry_constructs[caller]);
+        for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+            ASSERT_NOT_NULL(entry_projects[caller][ordinal]);
+            ASSERT_EQ_UINT(entry_projects[caller][ordinal]->psc_type_index,
+                           ordinal == 2 ? u8_index : i64_index);
+            ASSERT_EQ_PTR(entry_constructs[caller]->args[ordinal],
+                          entry_projects[caller][ordinal]);
+        }
+    }
+
+    uint16_t saved_op = entry_constructs[0]->op;
+    entry_constructs[0]->op = XI_TUPLE_NEW;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_constructs[0]->op = saved_op;
+
+    saved_op = entry_projects[0][5]->op;
+    entry_projects[0][5]->op = XI_COPY;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_projects[0][5]->op = saved_op;
+
+    int64_t saved_ordinal = entry_projects[0][1]->aux_int;
+    entry_projects[0][1]->aux_int = 0;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_projects[0][1]->aux_int = saved_ordinal;
+
+    XiValue *saved_argument = entry_constructs[0]->args[0];
+    entry_constructs[0]->args[0] = entry_constructs[0]->args[1];
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_constructs[0]->args[0] = saved_argument;
+
+    saved_ordinal = entry_projects[0][0]->aux_int;
+    entry_projects[0][0]->aux_int = 6;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_projects[0][0]->aux_int = saved_ordinal;
+
+    uint32_t saved_member = entry_projects[0][2]->psc_type_index;
+    entry_projects[0][2]->psc_type_index = i64_index;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_projects[0][2]->psc_type_index = saved_member;
+
+    uint32_t saved_call = calls[1]->psc_call_index;
+    calls[1]->psc_call_index = calls[0]->psc_call_index;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    calls[1]->psc_call_index = saved_call;
+
+    XiFunc *mutated_caller = calls[1]->block->func;
+    uint32_t saved_caller_row = mutated_caller->psc_function_index;
+    mutated_caller->psc_function_index = calls[0]->block->func->psc_function_index;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    mutated_caller->psc_function_index = saved_caller_row;
+
+    uint8_t saved_flags = entry_constructs[0]->flags;
+    entry_constructs[0]->flags ^= 1u;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_constructs[0]->flags = saved_flags;
+
+    uint8_t saved_aux_kind = entry_projects[0][0]->aux_kind;
+    entry_projects[0][0]->aux_kind = XI_AUX_KIND_ASSERTION_PLAN;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    entry_projects[0][0]->aux_kind = saved_aux_kind;
+
+    ASSERT_TRUE(root->nblocks > 0);
+    ASSERT_NOT_NULL(root->blocks[0]);
+    ASSERT_TRUE(root->blocks[0]->nvalues > 0);
+    XiValue *init_value = root->blocks[0]->values[0];
+    ASSERT_NOT_NULL(init_value);
+    saved_op = init_value->op;
+    init_value->op = XI_VALUE_PRODUCT_CONSTRUCT;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    init_value->op = saved_op;
+    saved_call = init_value->psc_call_index;
+    init_value->psc_call_index = 0;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    init_value->psc_call_index = saved_call;
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+
+    xi_func_free(root);
+    fixture_cleanup(&fixture);
+    xr_compiler_session_delete(session);
+}
+
 TEST(retain_rejects_mutable_closure) {
     XrProgramSemanticClosureLimits limits = {
         .max_modules = 1,
@@ -1851,5 +2033,6 @@ RUN_TEST_SUITE("PSC-backed Xi/SemanticPlan binding");
 RUN_TEST(stable_rows_survive_mutation_and_ownership_gates);
 RUN_TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected);
 RUN_TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates);
+RUN_TEST(leaf_product_uses_canonical_construct_project_joins);
 RUN_TEST(retain_rejects_mutable_closure);
 TEST_MAIN_END()

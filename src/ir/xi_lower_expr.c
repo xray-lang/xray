@@ -6783,9 +6783,14 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
             },
     };
     uint32_t call_index = XI_PSC_ROW_NONE;
-    if (!l || !l->program_semantics || !node || !call || !call->callee || !call->arguments ||
-        call->arg_count != 1 || call->default_arg_count != 0 || call->type_arg_count != 0 ||
-        (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN) ||
+    bool product = l && l->program_semantics &&
+                   xr_program_semantic_closure_family(l->program_semantics->closure) ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    if (!l || !l->program_semantics || !node || !call || !call->callee ||
+        call->default_arg_count != 0 || call->type_arg_count != 0 ||
+        (product ? (call->arg_count != 0)
+                 : (!call->arguments || call->arg_count != 1 ||
+                    (call->arg_accesses && call->arg_accesses[0] != XR_CALL_ARG_PLAIN))) ||
         !xi_program_semantic_find_call(l->func, l->program_semantics, locator, &call_index, NULL,
                                        0)) {
         if (l)
@@ -6793,14 +6798,17 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
         return NULL;
     }
     XiValue *callee = xi_lower_expr(l, call->callee);
-    XiValue *argument = callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
+    XiValue *argument = !product && callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
     XiImportRef *import_ref = callee ? lower_import_ref_from_value(l, callee) : NULL;
     XrType *result_type = xi_lower_node_type(l, node);
-    if (!callee || !argument || !argument->type || !result_type ||
-        XR_TYPE_IS_UNKNOWN(argument->type) || XR_TYPE_IS_ERROR(argument->type) ||
+    if (!callee || (!product && (!argument || !argument->type ||
+                                 XR_TYPE_IS_UNKNOWN(argument->type) ||
+                                 XR_TYPE_IS_ERROR(argument->type))) ||
+        !result_type ||
         XR_TYPE_IS_UNKNOWN(result_type) || XR_TYPE_IS_ERROR(result_type) ||
-        (l->program_semantics->decision && (!lower_scalar_i64_type_is_exact(argument->type) ||
-                                            !lower_scalar_i64_type_is_exact(result_type))) ||
+        (!product && l->program_semantics->decision &&
+         (!lower_scalar_i64_type_is_exact(argument->type) ||
+          !lower_scalar_i64_type_is_exact(result_type))) ||
         (xr_program_semantic_closure_family(l->program_semantics->closure) ==
              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
          (!import_ref || !xi_program_semantic_bind_import(import_ref, l->program_semantics,
@@ -6808,13 +6816,14 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
         l->had_error = true;
         return NULL;
     }
-    XiValue *value = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, 2);
+    XiValue *value = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, product ? 1 : 2);
     if (!value) {
         l->had_error = true;
         return NULL;
     }
     value->args[0] = callee;
-    value->args[1] = argument;
+    if (!product)
+        value->args[1] = argument;
     value->line = (uint32_t) node->line;
     value->source_kind = locator.kind;
     value->source_span = locator.span;
