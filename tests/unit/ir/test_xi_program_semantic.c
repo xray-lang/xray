@@ -34,6 +34,7 @@
 #include "plan/semantic/xr_semantic_verify.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/target/xr_target_builder.h"
+#include "plan/target/xr_target_instruction_verify.h"
 #include "plan/target/xr_target_plan_internal.h"
 #include "plan/target/xr_target_profile.h"
 #include "plan/target/xr_target_verify.h"
@@ -56,6 +57,15 @@ static const char kLeafAggregateSourceWithTrailingComment[] =
     "fn swap(value: Pair) -> Pair { return Pair{left: value.right, right: value.left} }\n"
     "fn root() -> Pair { return swap(Pair{left: 1, right: 41}) }\n"
     "// Changes source identity without moving any declaration locator.\n";
+
+static const char kLeafAggregateCanonicalShapeMismatchSource[] =
+    "struct Pair { left: i64; right: i64 }\n"
+    "fn swap(value: Pair) -> Pair { return Pair{left: value.right, right: value.left} }\n"
+    "fn root() -> Pair {\n"
+    "    var left = 1\n"
+    "    var right = left + 40\n"
+    "    return swap(Pair{left: left, right: right})\n"
+    "}\n";
 
 typedef struct ScalarFixture {
     XrModuleResolver *resolver;
@@ -305,6 +315,11 @@ static void expect_leaf_target_verify_rejection(XrTargetPlan *plan) {
     char error[512] = {0};
     resign_leaf_target(plan);
     ASSERT_FALSE(xr_target_plan_verify(plan, error, sizeof(error)));
+}
+
+static void expect_leaf_instruction_verify_rejection(XrTargetPlan *plan) {
+    char error[512] = {0};
+    ASSERT_FALSE(xr_target_instruction_program_verify(plan, error, sizeof(error)));
 }
 
 static void expect_leaf_target_build_rejection(XrSemanticPlan *semantic, XrTargetProfile *profile) {
@@ -579,6 +594,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
 
 static void assert_leaf_aggregate_target_mutations(XrSemanticPlan *semantic, XrTargetPlan *plan,
                                                    LeafAggregateTargetEvidence evidence) {
+    ASSERT_TRUE(xr_target_instruction_program_verify(plan, NULL, 0));
     ASSERT_TRUE(evidence.layout->extent < plan->extents_count);
     XrTargetExtentRecord *extent = &plan->extents[evidence.layout->extent];
     uint32_t saved_u32 = extent->alignment;
@@ -682,6 +698,7 @@ static void assert_leaf_aggregate_target_mutations(XrSemanticPlan *semantic, XrT
     uint32_t saved_instruction_count = plan->instructions_count;
     plan->instructions = NULL;
     plan->instructions_count = 0;
+    expect_leaf_instruction_verify_rejection(plan);
     expect_leaf_target_verify_rejection(plan);
     plan->instructions = saved_instructions;
     plan->instructions_count = saved_instruction_count;
@@ -692,6 +709,7 @@ static void assert_leaf_aggregate_target_mutations(XrSemanticPlan *semantic, XrT
         only_caller[i].id = i;
     plan->instructions = only_caller;
     plan->instructions_count = 5;
+    expect_leaf_instruction_verify_rejection(plan);
     expect_leaf_target_verify_rejection(plan);
     plan->instructions = saved_instructions;
     plan->instructions_count = saved_instruction_count;
@@ -702,6 +720,7 @@ static void assert_leaf_aggregate_target_mutations(XrSemanticPlan *semantic, XrT
         only_callee[i].id = i;
     plan->instructions = only_callee;
     plan->instructions_count = 5;
+    expect_leaf_instruction_verify_rejection(plan);
     expect_leaf_target_verify_rejection(plan);
     plan->instructions = saved_instructions;
     plan->instructions_count = saved_instruction_count;
@@ -1241,6 +1260,73 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     xr_compiler_session_delete(session);
 }
 
+TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    ASSERT_NOT_NULL(session);
+    ScalarFixture fixture;
+    ASSERT_TRUE(fixture_analyze(&fixture, session, "xi-leaf-aggregate-shape-mismatch",
+                                kLeafAggregateCanonicalShapeMismatchSource));
+    ASSERT_TRUE(fixture_publish(&fixture));
+    const XrProgramSemanticClosure *published =
+        xa_typed_program_program_semantic_closure(fixture.typed);
+    ASSERT_NOT_NULL(published);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(published),
+                   XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL);
+    XrProgramSemanticClosure *closure =
+        xr_program_semantic_closure_retain((XrProgramSemanticClosure *) published);
+    ASSERT_NOT_NULL(closure);
+    XiProgramSemanticInput input = {
+        .closure = closure,
+        .decision = NULL,
+    };
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
+    ASSERT_NOT_NULL(root);
+    ASSERT_NOT_NULL(root->module);
+    char error[512] = {0};
+    ASSERT_TRUE(
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, error, sizeof(error)));
+    ASSERT_NULL(closure);
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+
+    prepare_leaf_tree_for_semantic_plan(root);
+    ASSERT_TRUE(xi_module_set_identity(
+        root->module, "memory-module-v1:id=35:xi-leaf-aggregate-shape-mismatch-v1"));
+    XrSemanticPlan *semantic = NULL;
+    ASSERT_MSG(xr_semantic_plan_build(root, &semantic, error, sizeof(error)), error);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    ASSERT_NOT_NULL(provenance);
+    ASSERT_EQ_UINT(provenance->program_family,
+                   XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL);
+    const XrSemanticFunctionRecord *caller = NULL;
+    for (uint32_t i = 0; i < semantic->program_function_binding_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            &semantic->program_function_bindings[i];
+        if ((binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0)
+            caller = xr_semantic_plan_function(semantic, binding->semantic_function);
+    }
+    ASSERT_NOT_NULL(caller);
+    ASSERT_EQ_UINT(caller->block_count, 1);
+    const XrSemanticBlockRecord *caller_block =
+        xr_semantic_plan_block(semantic, caller->block_begin);
+    ASSERT_NOT_NULL(caller_block);
+    ASSERT_NE(caller_block->operation_count, 9);
+
+    XrTargetProfile *profile = NULL;
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
+    ASSERT_NOT_NULL(profile);
+    expect_leaf_target_build_rejection(semantic, profile);
+
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xi_func_free(root);
+    fixture_cleanup(&fixture);
+    xr_compiler_session_delete(session);
+}
+
 TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     XrCompilerSessionConfig session_config = {0};
     XrCompilerSession *session = xr_compiler_session_new(&session_config);
@@ -1665,6 +1751,7 @@ TEST(retain_rejects_mutable_closure) {
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("PSC-backed Xi/SemanticPlan binding");
 RUN_TEST(stable_rows_survive_mutation_and_ownership_gates);
+RUN_TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected);
 RUN_TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates);
 RUN_TEST(retain_rejects_mutable_closure);
 TEST_MAIN_END()

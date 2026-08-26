@@ -555,7 +555,11 @@ Evidence:
   layout/value/slot/call joins; it proves same-plan and same-fingerprint parity
   through both typed VM providers and the AOT boundary, plus fail-closed field,
   layout, call, slot, instruction, PSC identity, type-modifier, foreign-shape,
-  and foreign-source mutations.
+  and foreign-source mutations. It invokes the independent instruction verifier
+  directly to reject zero groups and caller-only or callee-only coverage, and
+  proves that valid leaf authority with a noncanonical SemanticPlan operation
+  shape is rejected by the builder rather than published as an empty executable
+  family.
 - `test_xaot_driver` proves that the source-backed leaf aggregate functions use
   TargetPlan ABI ownership, publish no covered legacy value plans, emit the
   direct native aggregate call and field operations, and contain no covered
@@ -617,9 +621,9 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h e09c17d38ae7d70e18ac2d8996e33bcc13a13f9448a4a586267f074826a2636c
 anchor-sha256: src/plan/target/xr_target_plan.c 31067ae316702f34e546331fc79d93e790696deb8618ece28c2ca3ac96b17c78
-anchor-sha256: src/plan/target/xr_target_builder.c 567c8dfed6ee1b9ee91ccaad1f317652e68bb5bb9affc1ae2e6078b6a97d969a
+anchor-sha256: src/plan/target/xr_target_builder.c 66a3aaa1eb2bbf39824f55eccff2adc24027102e77f98842524624cfb5bb0757
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c 42c12fbe9477e795a903741c72dd4db17ec75f4256a4809f1ccd8d7e6282a6ea
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c f031be22e7fb1d843c318f802b84997f2ebe5c88f84970e058ded0751fa963ad
 anchor-sha256: src/plan/target/xr_target_verify.c feb92f272a1465be2d0112a3e53f37c2f07c7851a423f6abf4bc994f015bc0d2
 anchor-sha256: src/plan/format/xr_xtp_schema.h a53c1f1c5481784af7636d49e554e92d11055ad701e6727ad5961a4dfdf2100b
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -687,5 +691,5 @@ anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c58bde5be23a2b2509a369632eb2e83
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 283d4f75e19ace0f068d040c12a4633726038dd6c4eafffc35df0bba9acdca15
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ebc90392a842b12a97794a7bf3e0ea862e8340c58dde8ff215d65f6e75c7ffd3
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 028625bf7b25003e5a59875d12da34bde4ff6af0ca5f1b3970be250dea085e26
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c a553850263b1e8c90321c03b74cc84d280f8ce9e4d291180b2ff1fca787fbc6f
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a6a9fe22bcb7e7c3df79d16f478f437c3ef1c8775169feaea9ff9323e2b148f8

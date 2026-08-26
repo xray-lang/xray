@@ -627,8 +627,22 @@ static bool instruction_semantic_is_leaf_program(const XrSemanticPlan *semantic)
     return provenance &&
            provenance->program_family ==
                XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL &&
+           provenance->schema == XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION &&
+           provenance->program_schema == XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION &&
            provenance->type_count == 2 && provenance->type_field_count == 2 &&
-           provenance->function_count == 2 && provenance->call_count == 1;
+           provenance->function_count == 2 && provenance->call_count == 1 &&
+           provenance->reserved == 0 &&
+           xr_semantic_plan_program_type_binding_count(semantic) == 2 &&
+           xr_semantic_plan_program_type_field_binding_count(semantic) == 2 &&
+           xr_semantic_plan_program_function_binding_count(semantic) == 2 &&
+           xr_semantic_plan_program_call_binding_count(semantic) == 1;
+}
+
+static bool instruction_stable_id_is_zero(XrStableId id) {
+    for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++)
+        if (id.bytes[i] != 0)
+            return false;
+    return true;
 }
 
 static bool instruction_leaf_required_functions(const XrSemanticPlan *semantic,
@@ -641,28 +655,52 @@ static bool instruction_leaf_required_functions(const XrSemanticPlan *semantic,
     if (!instruction_semantic_is_leaf_program(semantic) || !caller_out || !callee_out ||
         xr_semantic_plan_program_function_binding_count(semantic) != 2)
         return false;
+    size_t semantic_function_count = xr_semantic_plan_function_count(semantic);
     bool program_rows[2] = {false, false};
+    const XrSemanticProgramFunctionBinding *caller_binding = NULL;
+    const XrSemanticProgramFunctionBinding *callee_binding = NULL;
     for (uint32_t i = 0; i < 2; i++) {
         const XrSemanticProgramFunctionBinding *binding =
             xr_semantic_plan_program_function_binding(semantic, i);
-        if (!binding || binding->program_row >= 2 || program_rows[binding->program_row])
+        if (!binding || binding->program_row >= 2 || program_rows[binding->program_row] ||
+            binding->semantic_function >= semantic_function_count ||
+            instruction_stable_id_is_zero(binding->program_function) ||
+            (binding->flags & ~(XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY |
+                                XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)) != 0 ||
+            memcmp(binding->reserved, (uint8_t[3]) {0}, sizeof(binding->reserved)) != 0 ||
+            xr_semantic_plan_program_function_for_semantic_function(
+                semantic, binding->semantic_function) != binding)
             return false;
         program_rows[binding->program_row] = true;
         if ((binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0) {
-            if (*caller_out != XR_SEMANTIC_INDEX_NONE)
+            if (*caller_out != XR_SEMANTIC_INDEX_NONE || caller_binding)
                 return false;
             *caller_out = binding->semantic_function;
+            caller_binding = binding;
         } else if (binding->flags == 0) {
-            if (*callee_out != XR_SEMANTIC_INDEX_NONE)
+            if (*callee_out != XR_SEMANTIC_INDEX_NONE || callee_binding)
                 return false;
             *callee_out = binding->semantic_function;
+            callee_binding = binding;
         } else {
             return false;
         }
     }
-    return program_rows[0] && program_rows[1] &&
-           *caller_out != XR_SEMANTIC_INDEX_NONE && *callee_out != XR_SEMANTIC_INDEX_NONE &&
-           *caller_out != *callee_out;
+    const XrSemanticProgramCallBinding *call =
+        xr_semantic_plan_program_call_binding(semantic, 0);
+    const XrSemanticOperationRecord *operation =
+        call ? xr_semantic_plan_operation(semantic, call->operation) : NULL;
+    return program_rows[0] && program_rows[1] && caller_binding && callee_binding &&
+           *caller_out != *callee_out && call && operation && call->program_row == 0 &&
+           call->reserved == 0 && !instruction_stable_id_is_zero(call->program_call) &&
+           !instruction_stable_id_is_zero(call->callsite) &&
+           xr_semantic_plan_program_call_for_operation(semantic, call->operation) == call &&
+           call->target_function == *callee_out && operation->function == *caller_out &&
+           operation->opcode == XI_CALL &&
+           xr_stable_id_equal(call->caller_program_function,
+                              caller_binding->program_function) &&
+           xr_stable_id_equal(call->callee_program_function,
+                              callee_binding->program_function);
 }
 
 static bool call_rep_is_leaf_aggregate(const XrTargetPlan *plan, uint16_t rep,

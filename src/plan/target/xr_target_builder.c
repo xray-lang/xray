@@ -13431,6 +13431,21 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             }
         }
     }
+    if (requires_leaf_aggregate) {
+        uint32_t caller = required_leaf_shape.caller_binding->semantic_function;
+        uint32_t callee = required_leaf_shape.callee_binding->semantic_function;
+        if (caller >= materialized->function_count || callee >= materialized->function_count ||
+            !executable[caller] || !executable[callee] || !leaf_aggregate[caller] ||
+            !leaf_aggregate[callee] || function_rows[caller] != 5 || function_rows[callee] != 5) {
+            xr_free(function_rows);
+            xr_free(executable);
+            xr_free(managed_push);
+            xr_free(leaf_aggregate);
+            scalar_instruction_analysis_dispose(&analysis);
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "leaf aggregate caller and callee must survive instruction closure");
+        }
+    }
     for (uint32_t function = 0; function < materialized->function_count; function++) {
         if (function_rows[function] > 40000000u - instruction_count) {
             xr_free(function_rows);
