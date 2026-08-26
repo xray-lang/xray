@@ -466,6 +466,45 @@ static XrTypedFrameStatus validate_plan_identity(
     return XR_TYPED_FRAME_OK;
 }
 
+/* Ordinary plans use one global function namespace for their sole semantic
+ * module. The bounded program graph instead carries two local semantic
+ * namespaces inside one global target namespace. A frame never translates an
+ * index: it only confirms that the selected global function is the exact entry
+ * or producer row owned by its canonical partition. */
+static bool function_semantic_index_is_exact(
+    const XrTargetPlan *plan, uint32_t function_index,
+    const XrTargetFunctionRecord *function) {
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(plan, &graph_count);
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(plan, &partition_count);
+    if (graph_count == 0 && partition_count == 0)
+        return function && function->semantic_function == function_index;
+    if (!function || !graphs || !partitions || graph_count != 1u ||
+        partition_count != 2u || graphs[0].module_count != 2u)
+        return false;
+    const XrTargetProgramGraphRecord *graph = &graphs[0];
+    uint32_t partition_index = UINT32_MAX;
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    if (function_index == graph->entry_target_function) {
+        partition_index = graph->entry_partition;
+        semantic_function = graph->entry_semantic_function;
+    } else if (function_index == graph->producer_target_function) {
+        partition_index = graph->producer_partition;
+        semantic_function = graph->producer_semantic_function;
+    }
+    if (partition_index >= partition_count ||
+        function->semantic_function != semantic_function)
+        return false;
+    const XrTargetModulePartitionRecord *partition =
+        &partitions[partition_index];
+    return partition->functions_begin <= function_index &&
+           function_index - partition->functions_begin <
+               partition->functions_count;
+}
+
 static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
                                          uint32_t function_index,
                                          const XrTypedFrameLimits *limits,
@@ -484,7 +523,8 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
     bool has_verified_instruction_closure =
         xr_target_plan_function_execution_family_mask(plan, function_index) !=
         0;
-    if (function->id != function_index || function->semantic_function != function_index ||
+    if (function->id != function_index ||
+        !function_semantic_index_is_exact(plan, function_index, function) ||
         function->slot_begin > total_slots ||
         function->slot_count > total_slots - function->slot_begin ||
         !is_power_of_two(function->frame_align) ||

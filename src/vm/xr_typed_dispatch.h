@@ -88,11 +88,13 @@ typedef enum XrTypedDispatchStatus {
 
 /* Arguments are positional signed i64 values. The count must equal the
  * parameter count the verified instruction group binds; a shorter, longer, or
- * absent vector is rejected rather than truncated or zero filled. The request
- * is the one execution boundary: optional runtime services extend it without
- * growing a positional ABI or introducing alternate entry points. Provider is
- * mandatory: callers choose one generated provider explicitly, and zero or an
- * unknown value is rejected rather than selecting a default implementation. */
+ * absent vector is rejected rather than truncated or zero filled. For a
+ * program graph, function must be its verified entry target row; producer rows
+ * are reachable only through same-plan direct calls. The request is the one
+ * execution boundary: optional runtime services extend it without growing a
+ * positional ABI or introducing alternate entry points. Provider is mandatory:
+ * callers choose one generated provider explicitly, and zero or an unknown
+ * value is rejected rather than selecting a default implementation. */
 typedef struct XrTypedDispatchI64Request {
     const XrTargetPlan *verified_plan;
     const XrFingerprint *required_plan_fingerprint;

@@ -45,6 +45,8 @@
 #include "runtime/xr_runtime_artifact_authority_internal.h"
 #include "shared/xr_exact_scalar_registry.h"
 #include "toolchain/xcompiler_session.h"
+#include "vm/xr_typed_dispatch.h"
+#include "vm/xr_vm_decoded_cache.h"
 #include "xray.h"
 #include "xray_vm.h"
 #include <stdio.h>
@@ -1036,6 +1038,8 @@ static bool scalar_graph_runtime_load_rejected(
            strncmp(error, "XR_", 3u) == 0;
 }
 
+static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target);
+
 static bool scalar_graph_xtp_roundtrip(
     XrTargetPlan *target, const XrSemanticPlan *const *semantic_modules,
     XrTargetProfile *profile) {
@@ -1083,7 +1087,8 @@ static bool scalar_graph_xtp_roundtrip(
                                      xr_target_plan_fingerprint(target)) &&
                 xr_fingerprint_equal(
                     xr_target_plan_semantic_fingerprint(decoded),
-                    xr_target_plan_semantic_fingerprint(target));
+                    xr_target_plan_semantic_fingerprint(target)) &&
+                scalar_graph_typed_vm_is_exact(decoded);
     }
     uint8_t *encoded = NULL;
     size_t encoded_size = 0;
@@ -1140,6 +1145,78 @@ static bool scalar_graph_target_rehashed_mutation_rejected(XrTargetPlan *target)
     char error[512] = {0};
     scalar_graph_target_refresh_fingerprints(target);
     return !xr_target_plan_verify(target, error, sizeof(error));
+}
+
+static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target) {
+    uint32_t graph_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(target, &graph_count);
+    if (!target || !graphs || graph_count != 1u)
+        return false;
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(target);
+    XrVmDecodedCache *cache = NULL;
+    if (xr_typed_decoded_cache_create(target, &fingerprint, &cache) !=
+        XR_VM_DECODED_CACHE_OK)
+        return false;
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    bool exact = true;
+    for (size_t provider = 0;
+         exact && provider < sizeof(providers) / sizeof(providers[0]); provider++) {
+        int64_t result = -1;
+        XrTypedDispatchI64Request request = {
+            .verified_plan = target,
+            .required_plan_fingerprint = &fingerprint,
+            .result = &result,
+            .provider = providers[provider],
+            .function = graphs[0].entry_target_function,
+        };
+        exact = xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_OK &&
+                result == 42;
+        request.decoded_cache = cache;
+        result = -1;
+        exact = exact &&
+                xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_OK &&
+                result == 42;
+        request.function = graphs[0].producer_target_function;
+        result = -1;
+        exact = exact && xr_typed_dispatch_execute_i64(&request) ==
+                             XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE &&
+                result == 0;
+    }
+    xr_typed_decoded_cache_free(cache);
+    return exact;
+}
+
+static bool scalar_graph_typed_vm_rejects_resigned_authority(
+    XrTargetPlan *target) {
+    if (!target || target->program_graphs_count != 1u)
+        return false;
+    XrTargetProgramGraphRecord *graph = &target->program_graphs[0];
+    uint32_t saved_entry = graph->entry_target_function;
+    XrFingerprint saved_fingerprint = xr_target_plan_fingerprint(target);
+    if (saved_entry == graph->producer_target_function)
+        return false;
+    graph->entry_target_function = graph->producer_target_function;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    XrFingerprint resigned = xr_target_plan_fingerprint(target);
+    int64_t result = -1;
+    XrTypedDispatchI64Request request = {
+        .verified_plan = target,
+        .required_plan_fingerprint = &resigned,
+        .result = &result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        .function = saved_entry,
+    };
+    bool rejected = xr_typed_dispatch_execute_i64(&request) ==
+                        XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED &&
+                    result == 0;
+    graph->entry_target_function = saved_entry;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    return rejected && xr_fingerprint_equal(
+                           xr_target_plan_fingerprint(target), saved_fingerprint);
 }
 
 static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
@@ -1209,7 +1286,9 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
         }
         exact = exact && direct == 1u && dynamic == 0u;
     }
-    exact = exact && scalar_graph_xtp_roundtrip(target, modules, profile);
+    exact = exact && scalar_graph_typed_vm_is_exact(target) &&
+            scalar_graph_xtp_roundtrip(target, modules, profile) &&
+            scalar_graph_typed_vm_rejects_resigned_authority(target);
     if (exact) {
         XrTargetProgramGraphRecord *graph = &target->program_graphs[0];
         XrTargetModulePartitionRecord *entry_partition =

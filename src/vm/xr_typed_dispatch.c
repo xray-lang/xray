@@ -8,9 +8,11 @@
  * xr_typed_dispatch.c - Typed TargetPlan scalar executor
  *
  * KEY CONCEPT:
- *   The dispatcher consumes only a verified function-local instruction table
- *   and exact typed slots. It does not inspect SemanticPlan or Xi and has no
- *   legacy bytecode, XrValue, AOT, or CGen fallback.
+ *   The dispatcher consumes only one verified TargetPlan and exact typed
+ *   slots. Program plans enter through their graph-owned entry function and
+ *   direct calls stay inside the same global row namespace. The dispatcher
+ *   does not inspect SemanticPlan or Xi and has no legacy bytecode, AOT, or
+ *   CGen fallback.
  */
 
 #include "xr_typed_dispatch.h"
@@ -20,6 +22,7 @@
 #include "debug/xr_vm_trace_internal.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../plan/target/xr_target_profile.h"
+#include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xtransfer_mode.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_compare_core.h"
@@ -62,6 +65,37 @@ static bool function_has_zero_lifecycle(const XrTargetPlan *plan,
                coroutine_count - record->coroutine_begin &&
            record->root_count == 0 && record->cleanup_count == 0 &&
            record->coroutine_count == 0;
+}
+
+/* A program graph has one externally callable root. Callee rows remain
+ * ordinary global function indexes reached only by verified CALL_DIRECT_I64
+ * instructions; accepting one of them as a second request root would create
+ * an executor-owned graph entry policy. A cold execution repeats the
+ * independent verifier. A decoded cache already carries that proof for the
+ * exact retained plan, while the intact fingerprint check below still rejects
+ * in-place mutation. */
+static XrTypedDispatchStatus require_program_graph_entry(
+    const XrTargetPlan *plan, uint32_t function, bool decoded_cache_exact) {
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(plan, &graph_count);
+    (void) xr_target_plan_module_partitions(plan, &partition_count);
+    if (graph_count == 0 && partition_count == 0)
+        return XR_TYPED_DISPATCH_OK;
+    if (!xr_target_plan_fingerprint_is_intact(plan))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (!decoded_cache_exact) {
+        char error[512] = {0};
+        if (!xr_target_plan_verify(plan, error, sizeof(error)))
+            return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    }
+    if (!graphs || graph_count != 1u || partition_count != 2u ||
+        graphs[0].module_count != 2u)
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    return function == graphs[0].entry_target_function
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
 }
 
 static bool function_has_zero_managed_lifecycle(
@@ -1767,6 +1801,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     if (!xr_fingerprint_equal(xr_target_plan_fingerprint(verified_plan),
                               *required_plan_fingerprint))
         return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+    bool decoded_cache_exact = false;
     if (request->decoded_cache) {
         XrVmDecodedCacheStatus cache_status =
             xr_typed_decoded_cache_require_exact(
@@ -1778,6 +1813,7 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
             return cache_status == XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED
                        ? XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED
                        : XR_TYPED_DISPATCH_PROGRAM_INVALID;
+        decoded_cache_exact = true;
     } else {
         char error[512] = {0};
         if (!xr_target_plan_fingerprint_is_intact(verified_plan) ||
@@ -1785,6 +1821,10 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
                                                    sizeof(error)))
             return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
     }
+    XrTypedDispatchStatus graph_entry_status = require_program_graph_entry(
+        verified_plan, request->function, decoded_cache_exact);
+    if (graph_entry_status != XR_TYPED_DISPATCH_OK)
+        return graph_entry_status;
     if (request->debug_session &&
         !xr_typed_debug_session_matches_plan(
             request->debug_session,

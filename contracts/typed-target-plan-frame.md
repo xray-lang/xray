@@ -17,12 +17,13 @@ function, slot, value, instruction, call, argument, debug, layout, extent, and
 capability rows are globally indexed. Canonical module partitions provide
 pointer-free ranges and a local SemanticPlan owner index; they are not separate
 plans or independently executable frames. The existing typed frame continues
-to select one global function and its exact global slot range. It does not yet
-authorize `PROGRAM_DIRECT`/`CALL_DIRECT_I64` cross-partition recursion, create a
-second frame from another plan, translate local indexes at execution time, or
-stitch per-module fingerprints. Until the same verified schema-48 plan drives
-the complete caller/callee frame chain, program-graph VM execution remains fail
-closed.
+to select one global function and its exact global slot range. For the exact
+two-module scalar graph, the dispatcher admits only the verified graph entry as
+the external root; `PROGRAM_DIRECT`/`CALL_DIRECT_I64` creates the callee frame
+from the same verified plan and copies its exact argument through global slot
+rows. No second plan or independently executable partition exists, and the VM
+does not translate local indexes, stitch per-module fingerprints, or expose the
+producer as another entry.
 
 The bounded `XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2` family transports one
 complete trivial aggregate as two positional signed-`i64` fields. Its exact
@@ -356,8 +357,8 @@ Evidence:
 
 anchor-sha256: src/plan/target/xr_target_plan.h 3a46929e884bd66c4ba2a5466b4e9a95ab381821c3f756a74b2ca7efa5237ff2
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
-anchor-sha256: src/vm/xr_typed_frame.c a90c15e7554024ce8ed4170b2d6b3e9d1269409678587abca7088d3b1216cc5b
-anchor-sha256: src/vm/xr_typed_dispatch.c 692a5a9ad5cdac4f0d8fcaea433b423615a68461bca9a3d7987da7da55cbbfa2
+anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
+anchor-sha256: src/vm/xr_typed_dispatch.c b2d56b254da8cc9e6e391664c0583ca0042ca9b1e976b71d2fcad0e894de9a34
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041

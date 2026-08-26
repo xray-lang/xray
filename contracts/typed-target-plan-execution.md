@@ -40,8 +40,8 @@ cannot fall back to them. This boundary covers only the exact leaf
 `Pair<i64,i64>`-shaped direct-local family and grants no general struct,
 container, coroutine, cross-module, or W4 execution authority.
 
-The bounded two-module scalar graph is one additional schema-48 TargetPlan
-authority, but not yet an executable family. Its sole program-graph row and two
+The bounded two-module scalar graph is one additional executable schema-48
+TargetPlan family. Its sole program-graph row and two
 canonical module partitions index global TargetPlan tables and bind the complete
 ordered SemanticPlan module set, aggregate semantic fingerprint, entry and
 producer identities, exact cross-partition callsite, resolver, argument, and
@@ -52,12 +52,19 @@ interpreted only through its owning partition. Independent verification
 reconstructs the complete graph, global row ownership, exact scalar physical
 representations, slots, instructions, call and argument policy, debug facts,
 capability union, and all inner fingerprints. A hostile mutation remains
-invalid after related row and plan fingerprints are recomputed.
+invalid after related row and plan fingerprints are recomputed. Typed VM
+accepts only the graph-owned entry target as an external root and follows its
+`CALL_DIRECT_I64` edge by creating the callee frame from the same plan and
+global row namespace. It does not translate local indexes, construct a
+producer plan, or expose the producer as a second root. Cold execution repeats
+independent TargetPlan verification; warm execution requires an exact decoded
+cache retaining that same plan and fingerprint.
 
-The graph XTP route is likewise authority-only. Schema 48 appends exact graph
-and partition sections, mutually excludes ordinary and graph directory shapes,
-binds the header semantic fingerprint to the full canonical module set, and
-materializes only through that set plus the exact target profile.
+The graph XTP route preserves the same executable VM authority. Schema 48
+appends exact graph and partition sections, mutually excludes ordinary and
+graph directory shapes, binds the header semantic fingerprint to the full
+canonical module set, and materializes only through that set plus the exact
+target profile.
 `MODULE_PARTITIONS` is a fixed 208-byte row format with at most 256 rows;
 `PROGRAM_GRAPHS` is a fixed 340-byte row format with at most one row. Round-trip
 is byte-identical, while wrong count/order, duplicate/missing modules, re-signed
@@ -65,8 +72,9 @@ graph or partition mutations, and ordinary/graph substitution fail closed. The
 ordinary runtime loader accepts no graph plan. The source AOT product builds and
 verifies the graph plan, publishes deterministic module summaries, then stops
 with `XR_TARGET_1001` before legacy per-module TargetPlan preparation, C
-emission, or binary publication. VM and AOT may claim this family only when both
-consume the same verified program plan and its global rows end to end.
+emission, or binary publication. Native AOT and product publication remain
+unavailable until AOT consumes this same verified program plan and its global
+rows end to end; the VM does not bypass that product fence.
 
 The scalar representation boundary separately recognizes an exact unaliased
 SemanticPlan `Ptr` or `MutPtr` as TargetPlan `RAW_PTR`: its size and alignment
@@ -652,8 +660,10 @@ Evidence:
 - `test_xa_program_semantic_closure` proves the bounded source graph builds one
   verified schema-48 TargetPlan, uses global rows with exact module partitions
   and a `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge, rejects independently mutated
-  or re-signed inner authority, round-trips the graph XTP byte-identically, and
-  keeps the ordinary runtime loader fail closed.
+  or re-signed inner authority, executes its graph-owned entry through both VM
+  providers in cold and exact-cache modes, rejects the producer as a second
+  root, round-trips and executes graph XTP byte-identically, and keeps the
+  ordinary runtime loader fail closed.
 - `run_module_summary_determinism.py` proves cold, warm, dependency-edit, and
   dependency-revert products reach a verified program TargetPlan before cache
   publication, then stop at the explicit same-plan VM/AOT execution fence and
@@ -679,16 +689,16 @@ anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863c
 anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e794988105d6bdc18aa19d82ac4162
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 6079934e95208abe3b7b7251b4c4b59275c61776f20de0d0873b70617899a62a
-anchor-sha256: src/vm/xr_typed_dispatch.h eb086aac4115bbc7b34555e8ec3dccda7c4cc05c86e94a74e24f2d8491886c71
-anchor-sha256: src/vm/xr_typed_dispatch.c 692a5a9ad5cdac4f0d8fcaea433b423615a68461bca9a3d7987da7da55cbbfa2
+anchor-sha256: src/vm/xr_typed_dispatch.h acd1095b3a2d9e5607d007992b68b714d2e22fe394bfa8543611ea061ab40f43
+anchor-sha256: src/vm/xr_typed_dispatch.c b2d56b254da8cc9e6e391664c0583ca0042ca9b1e976b71d2fcad0e894de9a34
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9afae20ec066e588cc69e60f05c21
-anchor-sha256: src/vm/xr_typed_frame.c a90c15e7554024ce8ed4170b2d6b3e9d1269409678587abca7088d3b1216cc5b
+anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 3556b4e30fe1464e82b1fd8c4a23a3ba04530a1ca918ef055454cf84a531884e
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: tests/unit/plan/test_xtp_format.c e994e527df3931be8ad94a395345f8f11d34805cd4cfe603193d1c4bfa2c5c8b
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c b9b5ee347551be65af131899afee26d1cb071e3b427bb6f0916c5772440ee50c
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f5696c866f372448e15798d3ba16c61861940e357507340c15b0bf0c353fdeb1
 anchor-sha256: tests/aot/run_module_summary_determinism.py f354af59bb3884145691f0ebe0319adc9dfe2b3c5f9438e2de4f4c79036c1ea0
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e

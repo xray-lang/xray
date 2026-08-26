@@ -335,8 +335,11 @@ roots, or general module activation.
    fingerprint authority fails closed. Canonical graph encode/materialize/
    re-encode is byte-identical. The ordinary materializer and the installed
    `xr_runtime_target_plan_load` route intentionally do not accept this
-   multi-SemanticPlan authority; graph execution also remains unavailable until
-   the same verified plan is consumed by both VM and AOT.
+   multi-SemanticPlan authority. A plan produced by the dedicated graph
+   materializer is executable by the typed VM only through its verified graph
+   entry and same-plan global rows. The installed loader, native AOT, and
+   product publication remain unavailable until their own graph consumers are
+   complete; none may reconstruct per-module executable plans.
 6. Installed runtimes construct artifact authority only from exact XSM bytes.
    XSM decoding applies the current schema, operation-registry fingerprint,
    payload digest, ownership replay, semantic fingerprint, and independent
@@ -436,7 +439,7 @@ anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837
 anchor-sha256: tests/unit/plan/test_target_plan.c f9328d8928498f48a88091b0a7b412f5119d4c126a44e3dc3ff896fbfab3fcef
 anchor-sha256: tests/unit/plan/test_xtp_format.c e994e527df3931be8ad94a395345f8f11d34805cd4cfe603193d1c4bfa2c5c8b
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c b9b5ee347551be65af131899afee26d1cb071e3b427bb6f0916c5772440ee50c
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f5696c866f372448e15798d3ba16c61861940e357507340c15b0bf0c353fdeb1
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f
