@@ -213,7 +213,7 @@ XR_FUNC void xr_xtp_put_u64(uint8_t *bytes, uint64_t value) {
     F(FP, layout_fingerprint)
 #define XR_XTP_MODULE_PARTITION_FIELDS(F)                                                        \
     F(ID, module_identity) F(FP, semantic_fingerprint) F(U32, program_module_row)                \
-    F(U32, semantic_dependency) F(U32, value_reps_begin) F(U32, value_reps_count)                \
+    F(U32, semantic_module) F(U32, value_reps_begin) F(U32, value_reps_count)                    \
     F(U32, extents_begin) F(U32, extents_count) F(U32, layouts_begin) F(U32, layouts_count)       \
     F(U32, fields_begin) F(U32, fields_count) F(U32, storage_begin) F(U32, storage_count)         \
     F(U32, allocations_begin) F(U32, allocations_count)                                          \

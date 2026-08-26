@@ -22,6 +22,7 @@
 #include "frontend/parser/xast_walk.h"
 #include "frontend/parser/xparse.h"
 #include "base/xmalloc.h"
+#include "base/xsha256.h"
 #include "ir/xi_import_resolve.h"
 #include "ir/xi_pipeline.h"
 #include "ir/xi_program_semantic.h"
@@ -29,6 +30,7 @@
 #include "module/xmodule.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
+#include "plan/format/xr_xtp_internal.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/semantic/xr_program_semantic_closure.h"
 #include "plan/semantic/xr_program_semantic_closure_internal.h"
@@ -40,6 +42,7 @@
 #include "plan/target/xr_target_profile.h"
 #include "plan/target/xr_target_verify.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
+#include "runtime/xr_runtime_artifact_authority_internal.h"
 #include "shared/xr_exact_scalar_registry.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray.h"
@@ -862,6 +865,173 @@ static bool scalar_graph_target_mutation_rejected(XrTargetPlan *target, void *fi
     return rejected;
 }
 
+static uint8_t *scalar_graph_xtp_directory_entry(uint8_t *bytes,
+                                                 XrXtpSectionKind kind) {
+    return bytes + XR_XTP_HEADER_SIZE +
+           ((size_t) kind - 1u) * XR_XTP_DIRECTORY_ENTRY_SIZE;
+}
+
+static void scalar_graph_xtp_resign_artifact(uint8_t *bytes, size_t size) {
+    static const uint8_t zero[XR_FINGERPRINT_BYTES] = {0};
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    xr_sha256_update(&context, bytes, XR_XTP_FULL_DIGEST_OFFSET);
+    xr_sha256_update(&context, zero, sizeof(zero));
+    xr_sha256_update(&context,
+                     bytes + XR_XTP_FULL_DIGEST_OFFSET + sizeof(zero),
+                     size - XR_XTP_FULL_DIGEST_OFFSET - sizeof(zero));
+    xr_sha256_final(&context, bytes + XR_XTP_FULL_DIGEST_OFFSET);
+}
+
+static void scalar_graph_xtp_resign_section(uint8_t *bytes,
+                                            XrXtpSectionKind kind) {
+    uint8_t *entry = scalar_graph_xtp_directory_entry(bytes, kind);
+    size_t offset = (size_t) xr_xtp_take_u64(entry + 8u);
+    size_t length = (size_t) xr_xtp_take_u64(entry + 16u);
+    xr_sha256(bytes + offset, length, entry + 40u);
+}
+
+static bool scalar_graph_xtp_materialization_rejected(
+    const XrXtpCandidate *candidate,
+    const XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count,
+    XrTargetProfile *profile) {
+    XrTargetPlan *rejected = (XrTargetPlan *) (uintptr_t) 1;
+    char error[512] = {0};
+    bool accepted = xr_xtp_materialize_target_plan_program_graph(
+        candidate, semantic_modules, semantic_module_count, profile, &rejected,
+        error, sizeof(error));
+    if (accepted)
+        xr_target_plan_free(rejected);
+    return !accepted && rejected == NULL && strncmp(error, "XR_", 3u) == 0;
+}
+
+static bool scalar_graph_xtp_bytes_rejected(
+    const uint8_t *bytes, size_t size,
+    const XrSemanticPlan *const *semantic_modules, XrTargetProfile *profile) {
+    XrXtpCandidate *candidate = NULL;
+    char error[512] = {0};
+    bool decoded = xr_xtp_decode_candidate(bytes, size, &candidate, error,
+                                           sizeof(error));
+    bool rejected = decoded && scalar_graph_xtp_materialization_rejected(
+                                   candidate, semantic_modules, 2u, profile);
+    xr_xtp_candidate_release(candidate);
+    return rejected;
+}
+
+static bool scalar_graph_runtime_load_rejected(
+    const uint8_t *bytes, size_t size,
+    const XrSemanticPlan *const *semantic_modules) {
+    const XrSemanticPlan *standalone = NULL;
+    char error[512] = {0};
+    for (uint32_t row = 0; row < 2u; row++)
+        if (semantic_modules[row] &&
+            xr_semantic_plan_dependency_count(semantic_modules[row]) == 0u &&
+            xr_semantic_plan_verify(semantic_modules[row], error,
+                                    sizeof(error)))
+            standalone = semantic_modules[row];
+    XrRuntimeArtifactAuthority *authority = NULL;
+    bool ready = standalone && xr_runtime_artifact_authority_create_internal(
+                                   standalone, &authority, error,
+                                   sizeof(error));
+    XrTargetPlan *loaded = (XrTargetPlan *) (uintptr_t) 1;
+    bool accepted = ready && xr_runtime_target_plan_load(
+                                 bytes, size, authority, &loaded, error,
+                                 sizeof(error));
+    if (accepted)
+        xr_target_plan_free(loaded);
+    xr_runtime_artifact_authority_free(authority);
+    return ready && !accepted && loaded == NULL &&
+           strncmp(error, "XR_", 3u) == 0;
+}
+
+static bool scalar_graph_xtp_roundtrip(
+    const XrTargetPlan *target, const XrSemanticPlan *const *semantic_modules,
+    XrTargetProfile *profile) {
+    uint8_t *bytes = NULL;
+    size_t size = 0;
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *ordinary = NULL;
+    XrTargetPlan *decoded = NULL;
+    char error[512] = {0};
+    bool exact =
+        xr_xtp_encode_plan(target, &bytes, &size, error, sizeof(error)) &&
+        xr_xtp_decode_candidate(bytes, size, &candidate, error, sizeof(error));
+    if (exact) {
+        ordinary = (XrTargetPlan *) (uintptr_t) 1;
+        bool ordinary_result = xr_xtp_materialize_target_plan(
+            candidate, semantic_modules[0], profile, &ordinary, error,
+            sizeof(error));
+        if (ordinary_result)
+            xr_target_plan_free(ordinary);
+        exact = !ordinary_result && ordinary == NULL;
+    }
+    if (exact) {
+        const XrSemanticPlan *reordered[2] = {semantic_modules[1],
+                                              semantic_modules[0]};
+        const XrSemanticPlan *duplicate[2] = {semantic_modules[0],
+                                              semantic_modules[0]};
+        const XrSemanticPlan *missing[2] = {semantic_modules[0], NULL};
+        exact = scalar_graph_xtp_materialization_rejected(
+                    candidate, semantic_modules, 1u, profile) &&
+                scalar_graph_xtp_materialization_rejected(
+                    candidate, reordered, 2u, profile) &&
+                scalar_graph_xtp_materialization_rejected(
+                    candidate, duplicate, 2u, profile) &&
+                scalar_graph_xtp_materialization_rejected(
+                    candidate, missing, 2u, profile);
+    }
+    if (exact) {
+        error[0] = '\0';
+        exact = xr_xtp_materialize_target_plan_program_graph(
+                    candidate, semantic_modules, 2u, profile, &decoded, error,
+                    sizeof(error)) &&
+                decoded && xr_target_plan_is_verified(decoded) &&
+                xr_target_plan_program_module_count(decoded) == 2u &&
+                xr_fingerprint_equal(xr_target_plan_fingerprint(decoded),
+                                     xr_target_plan_fingerprint(target)) &&
+                xr_fingerprint_equal(
+                    xr_target_plan_semantic_fingerprint(decoded),
+                    xr_target_plan_semantic_fingerprint(target));
+    }
+    uint8_t *encoded = NULL;
+    size_t encoded_size = 0;
+    if (exact)
+        exact = xr_xtp_encode_plan(decoded, &encoded, &encoded_size, error,
+                                   sizeof(error)) &&
+                encoded_size == size && memcmp(encoded, bytes, size) == 0;
+    if (exact)
+        exact = scalar_graph_runtime_load_rejected(bytes, size,
+                                                   semantic_modules);
+    uint8_t *mutated = exact ? (uint8_t *) xr_malloc(size) : NULL;
+    if (exact)
+        exact = mutated != NULL;
+    if (exact) {
+        memcpy(mutated, bytes, size);
+        uint8_t *graph_entry = scalar_graph_xtp_directory_entry(
+            mutated, XR_XTP_SECTION_PROGRAM_GRAPHS);
+        size_t graph_offset = (size_t) xr_xtp_take_u64(graph_entry + 8u);
+        mutated[graph_offset + 32u] ^= 1u;
+        scalar_graph_xtp_resign_section(mutated,
+                                        XR_XTP_SECTION_PROGRAM_GRAPHS);
+        scalar_graph_xtp_resign_artifact(mutated, size);
+        exact = scalar_graph_xtp_bytes_rejected(
+            mutated, size, semantic_modules, profile);
+    }
+    if (exact) {
+        memcpy(mutated, bytes, size);
+        mutated[72u] ^= 1u;
+        scalar_graph_xtp_resign_artifact(mutated, size);
+        exact = scalar_graph_xtp_bytes_rejected(
+            mutated, size, semantic_modules, profile);
+    }
+    xr_free(mutated);
+    xr_xtp_encoded_free(encoded);
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+    xr_xtp_encoded_free(bytes);
+    return exact;
+}
+
 static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
     XrTargetProfile *profile = NULL;
     XrTargetPlan *target = NULL;
@@ -929,6 +1099,7 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
         }
         exact = exact && direct == 1u && dynamic == 0u;
     }
+    exact = exact && scalar_graph_xtp_roundtrip(target, modules, profile);
     if (exact) {
         XrTargetProgramGraphRecord *graph = &target->program_graphs[0];
         XrTargetModulePartitionRecord *entry_partition =

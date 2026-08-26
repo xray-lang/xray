@@ -66,5 +66,10 @@ XR_FUNC bool xr_xtp_materialize_target_plan_module_set(
     const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
     const XrTargetProfile *expected_profile, XrTargetPlan **plan, char *error,
     size_t error_size);
+XR_FUNC bool xr_xtp_materialize_target_plan_program_graph(
+    const XrXtpCandidate *candidate,
+    const XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count,
+    const XrTargetProfile *expected_profile, XrTargetPlan **plan, char *error,
+    size_t error_size);
 
 #endif  // XR_XTP_INTERNAL_H

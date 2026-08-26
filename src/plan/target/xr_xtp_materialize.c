@@ -83,17 +83,84 @@ static bool fingerprint_matches(XrFingerprint left, XrFingerprint right) {
     return xr_fingerprint_equal(left, right);
 }
 
-static bool validate_requirements(const XrXtpCandidate *candidate,
-                                  const XrSemanticPlan *semantic_plan,
-                                  const XrSemanticPlan *const *dependencies,
-                                  uint32_t dependency_count,
-                                  const XrTargetProfile *expected_profile,
-                                  char *error, size_t error_size) {
-    if (!candidate || !semantic_plan || !expected_profile) {
+static bool validate_section_shape(const XrXtpCandidate *candidate, bool program_graph,
+                                   uint32_t semantic_module_count, char *error,
+                                   size_t error_size) {
+    const XrXtpSectionView *graphs =
+        xr_xtp_candidate_section(candidate, XR_XTP_SECTION_PROGRAM_GRAPHS);
+    const XrXtpSectionView *partitions =
+        xr_xtp_candidate_section(candidate, XR_XTP_SECTION_MODULE_PARTITIONS);
+    bool exact = candidate && graphs && partitions;
+    if (program_graph)
+        exact = exact && semantic_module_count != 0u &&
+                semantic_module_count <= XR_TARGET_MAX_PROGRAM_MODULES &&
+                graphs->count == 1u && partitions->count == semantic_module_count;
+    else
+        exact = exact && graphs->count == 0u && partitions->count == 0u;
+    if (!exact)
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2004",
+                         "materialization API does not match artifact shape");
+    return exact;
+}
+
+static bool validate_profile_requirements(const XrXtpCandidate *candidate,
+                                          const XrTargetProfile *expected_profile,
+                                          char *error, size_t error_size) {
+    if (!candidate || !expected_profile) {
         xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2004",
                          "materialization requirements are incomplete");
         return false;
     }
+    char nested_error[512] = {0};
+    if (!xr_target_profile_verify(expected_profile, nested_error,
+                                  sizeof(nested_error))) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "materialization requirements are not verified");
+        return false;
+    }
+    const XrTargetProfileDraft *facts = xr_target_profile_facts(expected_profile);
+    const XrXtpIdentity *identity = &candidate->identity;
+    if (!facts || identity->profile_schema != facts->schema_version ||
+        identity->plan_schema != XR_TARGET_PLAN_SCHEMA_VERSION ||
+        identity->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES ||
+        !fingerprint_matches(identity->profile_fingerprint,
+                             xr_target_profile_fingerprint(expected_profile)) ||
+        !fingerprint_matches(identity->runtime_fingerprint, facts->runtime_abi_fingerprint) ||
+        !fingerprint_matches(identity->provider_fingerprint,
+                             facts->provider_set_fingerprint) ||
+        !fingerprint_matches(identity->object_fingerprint,
+                             facts->object_header_fingerprint)) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "artifact identity does not match exact requirements");
+        return false;
+    }
+    return true;
+}
+
+static bool validate_semantic_identity(const XrXtpCandidate *candidate,
+                                       const XrSemanticPlan *semantic_plan,
+                                       XrFingerprint semantic_fingerprint,
+                                       char *error, size_t error_size) {
+    const XrXtpIdentity *identity = &candidate->identity;
+    if (!semantic_plan ||
+        identity->semantic_schema != xr_semantic_plan_schema(semantic_plan) ||
+        !fingerprint_matches(identity->semantic_fingerprint, semantic_fingerprint) ||
+        !fingerprint_matches(identity->operation_registry_fingerprint,
+                             xr_semantic_plan_operation_registry_fingerprint(semantic_plan))) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "artifact semantic identity does not match exact requirements");
+        return false;
+    }
+    return true;
+}
+
+static bool validate_local_requirements(
+    const XrXtpCandidate *candidate, const XrSemanticPlan *semantic_plan,
+    const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
+    const XrTargetProfile *expected_profile, char *error, size_t error_size) {
+    if (!semantic_plan ||
+        !validate_profile_requirements(candidate, expected_profile, error, error_size))
+        return false;
     if (dependency_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES ||
         dependency_count != xr_semantic_plan_dependency_count(semantic_plan)) {
         xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
@@ -109,49 +176,14 @@ static bool validate_requirements(const XrXtpCandidate *candidate,
                                        semantic_plan, dependencies,
                                        dependency_count, nested_error,
                                        sizeof(nested_error));
-    if (!semantic_verified ||
-        !xr_target_profile_verify(expected_profile, nested_error, sizeof(nested_error))) {
+    if (!semantic_verified) {
         xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
                          "materialization requirements are not verified");
         return false;
     }
-    const XrTargetProfileDraft *facts = xr_target_profile_facts(expected_profile);
-    const XrXtpIdentity *identity = &candidate->identity;
-    XrFingerprint semantic_fingerprint = xr_semantic_plan_fingerprint(semantic_plan);
-    const XrXtpSectionView *program_graphs =
-        xr_xtp_candidate_section(candidate, XR_XTP_SECTION_PROGRAM_GRAPHS);
-    const XrXtpSectionView *module_partitions =
-        xr_xtp_candidate_section(candidate, XR_XTP_SECTION_MODULE_PARTITIONS);
-    bool graph_module_set = program_graphs && module_partitions &&
-                            (program_graphs->count || module_partitions->count);
-    if ((!program_graphs || !module_partitions) ||
-        (graph_module_set &&
-         (dependency_count >= XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES ||
-          !xr_target_semantic_module_set_fingerprint(
-              semantic_plan, dependencies, dependency_count, &semantic_fingerprint)))) {
-        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
-                         "artifact module-set identity cannot be established");
-        return false;
-    }
-    if (!facts || identity->semantic_schema != xr_semantic_plan_schema(semantic_plan) ||
-        identity->profile_schema != facts->schema_version ||
-        identity->plan_schema != XR_TARGET_PLAN_SCHEMA_VERSION ||
-        identity->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES ||
-        !fingerprint_matches(identity->semantic_fingerprint, semantic_fingerprint) ||
-        !fingerprint_matches(identity->operation_registry_fingerprint,
-                             xr_semantic_plan_operation_registry_fingerprint(semantic_plan)) ||
-        !fingerprint_matches(identity->profile_fingerprint,
-                             xr_target_profile_fingerprint(expected_profile)) ||
-        !fingerprint_matches(identity->runtime_fingerprint, facts->runtime_abi_fingerprint) ||
-        !fingerprint_matches(identity->provider_fingerprint,
-                             facts->provider_set_fingerprint) ||
-        !fingerprint_matches(identity->object_fingerprint,
-                             facts->object_header_fingerprint)) {
-        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
-                         "artifact identity does not match exact requirements");
-        return false;
-    }
-    return true;
+    return validate_semantic_identity(
+        candidate, semantic_plan, xr_semantic_plan_fingerprint(semantic_plan),
+        error, error_size);
 }
 
 static bool decode_profile(const XrXtpCandidate *candidate, XrXtpDecodedTables *tables,
@@ -283,11 +315,22 @@ static bool decode_tables(const XrXtpCandidate *candidate, XrXtpDecodedTables *t
     XR_XTP_DECODE_TABLE(entry_expectations, XrTargetEntryExpectationRecord,
                         ENTRY_EXPECTATIONS);
     XR_XTP_DECODE_TABLE(debug_facts, XrTargetDebugFactRecord, DEBUG_FACTS);
-    XR_XTP_DECODE_TABLE(module_partitions, XrTargetModulePartitionRecord,
-                        MODULE_PARTITIONS);
-    XR_XTP_DECODE_TABLE(program_graphs, XrTargetProgramGraphRecord, PROGRAM_GRAPHS);
 #undef XR_XTP_DECODE_TABLE
     return true;
+}
+
+static bool decode_graph_tables(const XrXtpCandidate *candidate,
+                                XrXtpDecodedTables *tables, char *error,
+                                size_t error_size) {
+    return allocate_and_decode(
+               candidate, XR_XTP_SECTION_MODULE_PARTITIONS,
+               sizeof(XrTargetModulePartitionRecord),
+               (void **) &tables->module_partitions,
+               &tables->module_partitions_count, error, error_size) &&
+           allocate_and_decode(candidate, XR_XTP_SECTION_PROGRAM_GRAPHS,
+                               sizeof(XrTargetProgramGraphRecord),
+                               (void **) &tables->program_graphs,
+                               &tables->program_graphs_count, error, error_size);
 }
 
 static uint64_t compute_total_frame_bytes(const XrXtpDecodedTables *tables) {
@@ -304,11 +347,15 @@ static XrTargetPlanDraft make_draft(const XrXtpDecodedTables *tables,
                                     const XrSemanticPlan *semantic_plan,
                                     const XrSemanticPlan *const *dependencies,
                                     uint32_t dependency_count,
+                                    const XrSemanticPlan *const *semantic_modules,
+                                    uint32_t semantic_module_count,
                                     XrTargetProfile *profile) {
     XrTargetPlanDraft draft = {
         .semantic_plan = semantic_plan,
         .semantic_dependencies = dependencies,
         .semantic_dependency_count = dependency_count,
+        .semantic_modules = semantic_modules,
+        .semantic_module_count = semantic_module_count,
         .profile = profile,
         .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
 #define XR_XTP_DRAFT_TABLE(name) .name = tables->name, .name##_count = tables->name##_count
@@ -358,6 +405,129 @@ static bool derived_fingerprints_match(const XrXtpDecodedTables *tables,
     return true;
 }
 
+static bool resolve_program_graph_semantics(
+    const XrXtpCandidate *candidate, const XrXtpDecodedTables *tables,
+    const XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count,
+    const XrSemanticPlan **entry_semantic,
+    const XrSemanticPlan ***entry_dependencies, uint32_t *entry_dependency_count,
+    char *error, size_t error_size) {
+    *entry_semantic = NULL;
+    *entry_dependencies = NULL;
+    *entry_dependency_count = 0u;
+    if (!tables->program_graphs || tables->program_graphs_count != 1u ||
+        !tables->module_partitions ||
+        tables->module_partitions_count != semantic_module_count ||
+        !semantic_modules) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "program graph semantic requirements are incomplete");
+        return false;
+    }
+    const XrTargetProgramGraphRecord *graph = &tables->program_graphs[0];
+    if (graph->module_count != semantic_module_count ||
+        graph->entry_partition >= semantic_module_count ||
+        graph->producer_partition >= semantic_module_count ||
+        graph->entry_partition == graph->producer_partition) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1001",
+                         "program graph partition authority is invalid");
+        return false;
+    }
+    for (uint32_t row = 0; row < semantic_module_count; row++) {
+        const XrTargetModulePartitionRecord *partition =
+            &tables->module_partitions[row];
+        const XrSemanticPlan *semantic = semantic_modules[row];
+        const XrSemanticProgramProvenance *program =
+            semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+        if (!program || partition->program_module_row != row ||
+            partition->semantic_module != row ||
+            program->program_module_row != row ||
+            !xr_stable_id_equal(partition->module_identity,
+                                program->program_module) ||
+            !fingerprint_matches(partition->semantic_fingerprint,
+                                 xr_semantic_plan_fingerprint(semantic))) {
+            xr_xtp_set_error(error, error_size, "XR_TARGET_1001",
+                             "program graph module partition identity is invalid");
+            return false;
+        }
+    }
+    uint32_t entry_module =
+        tables->module_partitions[graph->entry_partition].semantic_module;
+    const XrSemanticPlan *entry = semantic_modules[entry_module];
+    const XrSemanticProgramProvenance *authority =
+        xr_semantic_plan_program_provenance(semantic_modules[0]);
+    XrFingerprint aggregate_fingerprint;
+    if (!authority ||
+        graph->schema != XR_TARGET_PROGRAM_GRAPH_SCHEMA_VERSION ||
+        graph->family != authority->program_family ||
+        !fingerprint_matches(graph->program_fingerprint,
+                             authority->program_fingerprint) ||
+        !xr_stable_id_equal(graph->generation_identity,
+                            authority->generation_identity) ||
+        !xr_target_semantic_module_set_fingerprint(
+            semantic_modules, semantic_module_count, &aggregate_fingerprint) ||
+        !validate_semantic_identity(candidate, entry, aggregate_fingerprint,
+                                    error, error_size)) {
+        if (!error || !error_size || !error[0])
+            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                             "program graph semantic identity is invalid");
+        return false;
+    }
+    if (!xr_target_semantic_program_module_set_verify(
+            semantic_modules, semantic_module_count, error, error_size) ||
+        !xr_target_semantic_program_module_direct_dependencies(
+            semantic_modules, semantic_module_count, entry_module,
+            entry_dependencies, entry_dependency_count, error, error_size))
+        return false;
+    *entry_semantic = entry;
+    return true;
+}
+
+static bool materialize_decoded_tables(
+    const XrXtpCandidate *candidate, const XrXtpDecodedTables *tables,
+    const XrSemanticPlan *semantic_plan,
+    const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
+    const XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count,
+    const XrTargetProfile *expected_profile, XrTargetPlan **plan, char *error,
+    size_t error_size) {
+    if (compute_total_frame_bytes(tables) != candidate->resources.total_frame_bytes) {
+        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
+                         "frame byte manifest does not match functions");
+        return false;
+    }
+    XrTargetProfile *decoded_profile = NULL;
+    if (!xr_target_profile_freeze(&tables->profile, &decoded_profile, error,
+                                  error_size) ||
+        !fingerprint_matches(xr_target_profile_fingerprint(decoded_profile),
+                             candidate->identity.profile_fingerprint) ||
+        !fingerprint_matches(xr_target_profile_fingerprint(decoded_profile),
+                             xr_target_profile_fingerprint(expected_profile))) {
+        xr_target_profile_free(decoded_profile);
+        if (!error || !error_size || !error[0])
+            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                             "decoded target profile identity is invalid");
+        return false;
+    }
+    XrTargetPlanDraft draft =
+        make_draft(tables, semantic_plan, dependencies, dependency_count,
+                   semantic_modules, semantic_module_count, decoded_profile);
+    XrTargetPlan *materialized = NULL;
+    bool frozen = xr_target_plan_freeze(&draft, &materialized, error, error_size);
+    xr_target_profile_free(decoded_profile);
+    if (!frozen || !materialized || !xr_target_plan_is_verified(materialized) ||
+        xr_target_plan_completed_family_mask(materialized) !=
+            XR_TARGET_REQUIRED_FAMILIES ||
+        !fingerprint_matches(xr_target_plan_fingerprint(materialized),
+                             candidate->identity.plan_fingerprint) ||
+        !derived_fingerprints_match(tables, materialized)) {
+        xr_target_plan_free(materialized);
+        if (!error || !error_size || !error[0])
+            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                             "typed TargetPlan failed exact verification");
+        return false;
+    }
+    *plan = materialized;
+    return true;
+}
+
 XR_FUNC bool xr_xtp_materialize_target_plan(const XrXtpCandidate *candidate,
                                             const XrSemanticPlan *semantic_plan,
                                             const XrTargetProfile *expected_profile,
@@ -375,9 +545,10 @@ XR_FUNC bool xr_xtp_materialize_target_plan_module_set(
     size_t error_size) {
     if (plan)
         *plan = NULL;
-    if (!plan || !validate_requirements(candidate, semantic_plan, dependencies,
-                                        dependency_count, expected_profile,
-                                        error, error_size))
+    if (!plan || !validate_section_shape(candidate, false, 0u, error, error_size) ||
+        !validate_local_requirements(candidate, semantic_plan, dependencies,
+                                     dependency_count, expected_profile, error,
+                                     error_size))
         return false;
     size_t decoded_bytes = 0;
     if (!decoded_storage_within_budget(candidate, &decoded_bytes) ||
@@ -391,43 +562,51 @@ XR_FUNC bool xr_xtp_materialize_target_plan_module_set(
         dispose_tables(&tables);
         return false;
     }
-    if (compute_total_frame_bytes(&tables) != candidate->resources.total_frame_bytes) {
-        dispose_tables(&tables);
-        xr_xtp_set_error(error, error_size, "XR_ARTIFACT_2001",
-                         "frame byte manifest does not match functions");
-        return false;
-    }
-    XrTargetProfile *decoded_profile = NULL;
-    if (!xr_target_profile_freeze(&tables.profile, &decoded_profile, error, error_size) ||
-        !fingerprint_matches(xr_target_profile_fingerprint(decoded_profile),
-                             candidate->identity.profile_fingerprint) ||
-        !fingerprint_matches(xr_target_profile_fingerprint(decoded_profile),
-                             xr_target_profile_fingerprint(expected_profile))) {
-        xr_target_profile_free(decoded_profile);
-        dispose_tables(&tables);
-        if (!error || !error_size || !error[0])
-            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
-                             "decoded target profile identity is invalid");
-        return false;
-    }
-    XrTargetPlanDraft draft = make_draft(&tables, semantic_plan, dependencies,
-                                         dependency_count, decoded_profile);
-    XrTargetPlan *materialized = NULL;
-    bool frozen = xr_target_plan_freeze(&draft, &materialized, error, error_size);
-    xr_target_profile_free(decoded_profile);
-    if (!frozen || !materialized || !xr_target_plan_is_verified(materialized) ||
-        xr_target_plan_completed_family_mask(materialized) != XR_TARGET_REQUIRED_FAMILIES ||
-        !fingerprint_matches(xr_target_plan_fingerprint(materialized),
-                             candidate->identity.plan_fingerprint) ||
-        !derived_fingerprints_match(&tables, materialized)) {
-        xr_target_plan_free(materialized);
-        dispose_tables(&tables);
-        if (!error || !error_size || !error[0])
-            xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
-                             "typed TargetPlan failed exact verification");
-        return false;
-    }
+    bool materialized = materialize_decoded_tables(
+        candidate, &tables, semantic_plan, dependencies, dependency_count, NULL,
+        0u, expected_profile, plan, error, error_size);
     dispose_tables(&tables);
-    *plan = materialized;
-    return true;
+    return materialized;
+}
+
+XR_FUNC bool xr_xtp_materialize_target_plan_program_graph(
+    const XrXtpCandidate *candidate,
+    const XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count,
+    const XrTargetProfile *expected_profile, XrTargetPlan **plan, char *error,
+    size_t error_size) {
+    if (plan)
+        *plan = NULL;
+    if (!plan ||
+        !validate_section_shape(candidate, true, semantic_module_count, error,
+                                error_size) ||
+        !validate_profile_requirements(candidate, expected_profile, error,
+                                       error_size))
+        return false;
+    size_t decoded_bytes = 0;
+    if (!decoded_storage_within_budget(candidate, &decoded_bytes) ||
+        !xr_xtp_runtime_peak_within_budget(candidate->size, decoded_bytes)) {
+        xr_xtp_set_error(error, error_size, "XR_EXEC_5003",
+                         "read, snapshot, decode, and freeze peak exceeds its hard budget");
+        return false;
+    }
+    XrXtpDecodedTables tables = {0};
+    const XrSemanticPlan *entry_semantic = NULL;
+    const XrSemanticPlan **entry_dependencies = NULL;
+    uint32_t entry_dependency_count = 0u;
+    bool decoded = decode_graph_tables(candidate, &tables, error, error_size) &&
+                   resolve_program_graph_semantics(
+                       candidate, &tables, semantic_modules,
+                       semantic_module_count, &entry_semantic,
+                       &entry_dependencies, &entry_dependency_count, error,
+                       error_size) &&
+                   decode_tables(candidate, &tables, error, error_size);
+    bool materialized =
+        decoded && materialize_decoded_tables(
+                       candidate, &tables, entry_semantic, entry_dependencies,
+                       entry_dependency_count, semantic_modules,
+                       semantic_module_count, expected_profile, plan, error,
+                       error_size);
+    xr_free(entry_dependencies);
+    dispose_tables(&tables);
+    return materialized;
 }

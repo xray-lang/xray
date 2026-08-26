@@ -191,7 +191,7 @@ static void write_header(uint8_t *artifact, size_t artifact_size, const XrTarget
     xr_xtp_put_u32(artifact + 56, xr_semantic_plan_schema(semantic));
     xr_xtp_put_u32(artifact + 60, facts->schema_version);
     xr_xtp_put_u32(artifact + 64, xr_target_plan_schema_version(plan));
-    put_fingerprint(artifact + 72, xr_semantic_plan_fingerprint(semantic));
+    put_fingerprint(artifact + 72, xr_target_plan_semantic_fingerprint(plan));
     put_fingerprint(artifact + 104,
                     xr_semantic_plan_operation_registry_fingerprint(semantic));
     put_fingerprint(artifact + 136, xr_target_profile_fingerprint(profile));

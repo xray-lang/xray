@@ -911,6 +911,13 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
     REQUIRE(identity.completed_family_mask == XR_TARGET_REQUIRED_FAMILIES);
     REQUIRE(resources.total_rows > 1 &&
             resources.verification_work_units > resources.total_rows);
+    const XrSemanticPlan *local_modules[] = {fixture.semantic};
+    XrTargetPlan *graph_plan = (XrTargetPlan *) (uintptr_t) 1;
+    REQUIRE(!xr_xtp_materialize_target_plan_program_graph(
+        candidate, local_modules, 1u, fixture.profile, &graph_plan, error,
+        sizeof(error)));
+    REQUIRE(graph_plan == NULL);
+    error[0] = '\0';
 
     uint8_t saved = fixture.bytes[0];
     uint8_t saved_schema = fixture.bytes[4];
