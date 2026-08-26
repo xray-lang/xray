@@ -39,6 +39,7 @@
 #include "../ir/xi_evidence.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_pipeline.h"
+#include "../ir/xi_program_semantic.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
 #include "xi_cgen_verify_output.h"
@@ -2441,6 +2442,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     cfg.run_canonicalize = false;
     cfg.global_evidence = &global_evidence;
+    cfg.program_semantic_closure = source_program_closure;
 
     int total_funcs = 0;
     for (int ti = 0; ti < nmodules; ti++) {
@@ -2483,8 +2485,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                                        source_program_closure, options,
                                        evidence_cache_verbose, &result->module_summary_cache))
         goto fail_free_ir;
-    xr_program_semantic_closure_free(source_program_closure);
-    source_program_closure = NULL;
 
     /* Xi values and AOT plans retain pointers into the analyzer-owned type
      * pool. Keep that pool alive through import resolution, prepare, verify,
@@ -2495,6 +2495,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     for (int ti = 0; ti < nmodules; ti++) {
         xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
     }
+    if (source_program_closure) {
+        char graph_semantic_error[512] = {0};
+        if (!xi_program_semantic_verify_module_set(
+                modules, (uint32_t) nmodules, (uint32_t) entry_index, NULL,
+                graph_semantic_error, sizeof(graph_semantic_error))) {
+            fprintf(stderr, "Error: Xi graph PSC verification failed: %s\n",
+                    graph_semantic_error[0] ? graph_semantic_error
+                                            : "incomplete resolved module-set authority");
+            goto fail_free_ir;
+        }
+    }
+    xr_program_semantic_closure_free(source_program_closure);
+    source_program_closure = NULL;
 
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
     if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {

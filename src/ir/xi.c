@@ -759,6 +759,7 @@ XR_FUNC XiModule *xi_module_new(const char *path, const char *name, XiFunc *init
     mod->path = path;
     mod->name = name;
     mod->init = init;
+    mod->psc_module_index = XI_PSC_ROW_NONE;
     /* Populate functions array from init's children */
     if (init->nchildren > 0) {
         mod->functions = (XiFunc **) xr_calloc(init->nchildren, sizeof(XiFunc *));

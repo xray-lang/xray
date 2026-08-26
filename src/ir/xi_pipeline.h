@@ -32,6 +32,7 @@ struct AstNode;
 struct XaAnalyzer;
 struct XgGlobalEvidence;
 struct XrModuleGraph;
+struct XrProgramSemanticClosure;
 struct XrVMRuntime;
 struct XrProto;
 
@@ -128,6 +129,10 @@ typedef struct XiPipelineConfig {
     bool preserve_wide_vector_boundaries; /* keep target-specific wide SIMD behind call edges */
     const struct XgGlobalEvidence *global_evidence; /* optional lowering-time evidence seed */
     uint32_t global_evidence_module_id;             /* 1-based module id in global evidence */
+    /* Borrowed verified whole-program PSC. Each successful graph module
+     * compilation retains exactly one reference and installs only the source
+     * module partition selected by stable source authority. */
+    const struct XrProgramSemanticClosure *program_semantic_closure;
     /* Multi-module import resolution context. When a driver compiles a module
      * graph in topological order it can expose the graph plus the (partially
      * filled, dependency-complete) module array here; the pipeline then

@@ -63,7 +63,7 @@ static bool lower_is_comptime_block_expr(AstNode *node) {
            node->as.comptime_expr.expr->type == AST_BLOCK;
 }
 
-static int xi_lower_sync_runtime_class_global_index(const char *name) {
+XR_FUNC int xi_lower_sync_runtime_class_global_index(const char *name) {
     if (!name)
         return -1;
     if (strcmp(name, "WorkQueue") == 0)
@@ -4370,20 +4370,12 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         if (!local_name)
             return;
         struct XrType *type = xr_type_new_unknown(NULL);
-        XiImportRef *ref =
-            (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
-        XR_DCHECK(ref != NULL, "lower_import_stmt: arena alloc failed");
-        memset(ref, 0, sizeof(*ref));
-        ref->resolved_mod_index = -1;
-        ref->resolved_shared_slot = -1;
-        ref->resolved_export_slot = -1;
-        if (imp->module_name) {
-            uint32_t ml = (uint32_t) strlen(imp->module_name);
-            char *mc = (char *) xi_func_arena_alloc(l->func, ml + 1);
-            if (mc) {
-                memcpy(mc, imp->module_name, ml + 1);
-                ref->module_path = mc;
-            }
+        int var_id = xi_lower_var_create(l, imp->symbol_id, local_name, type);
+        int slot = var_id >= 0 && var_id < l->var_cap ? l->shared_map[var_id] : -1;
+        XiImportRef *ref = slot >= 0 && slot < l->var_cap ? l->shared_slot_imports[slot] : NULL;
+        if (!ref) {
+            l->had_error = true;
+            return;
         }
 
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
@@ -4393,7 +4385,6 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         v->aux_int = -1;
         v->line = (uint32_t) node->line;
 
-        int var_id = xi_lower_var_create(l, imp->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
         /* Store into backing store so nested functions can access */
@@ -4442,30 +4433,13 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
 
         /* Create XI_IMPORT_REF carrying module path and member name */
         struct XrType *type = xr_type_new_unknown(NULL);
-        XiImportRef *ref =
-            (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
-        XR_DCHECK(ref != NULL, "lower_import_stmt: arena alloc failed");
-        memset(ref, 0, sizeof(*ref));
-        /* Copy strings into arena so they survive AST destruction */
-        if (imp->module_name) {
-            uint32_t ml = (uint32_t) strlen(imp->module_name);
-            char *mc = (char *) xi_func_arena_alloc(l->func, ml + 1);
-            if (mc) {
-                memcpy(mc, imp->module_name, ml + 1);
-                ref->module_path = mc;
-            }
+        int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
+        int slot = var_id >= 0 && var_id < l->var_cap ? l->shared_map[var_id] : -1;
+        XiImportRef *ref = slot >= 0 && slot < l->var_cap ? l->shared_slot_imports[slot] : NULL;
+        if (!ref) {
+            l->had_error = true;
+            return;
         }
-        if (m->name) {
-            uint32_t nl = (uint32_t) strlen(m->name);
-            char *nc = (char *) xi_func_arena_alloc(l->func, nl + 1);
-            if (nc) {
-                memcpy(nc, m->name, nl + 1);
-                ref->member_name = nc;
-            }
-        }
-        ref->resolved_mod_index = -1;
-        ref->resolved_shared_slot = -1;
-        ref->resolved_export_slot = -1;
 
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
         if (!v)
@@ -4475,7 +4449,6 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         v->line = (uint32_t) node->line;
 
         /* Bind as a local variable so subsequent references resolve */
-        int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
         /* Store into backing store so nested functions can access.

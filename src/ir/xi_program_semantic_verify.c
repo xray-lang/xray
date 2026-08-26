@@ -11,11 +11,13 @@
 #include "xi_program_semantic.h"
 #include "xi_core_api.h"
 #include "xi_effect.h"
+#include "xi_value_query.h"
 #include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/class/xclass_info.h"
 #include "../shared/xr_exact_scalar_registry.h"
+#include "../plan/semantic/xr_source_semantic_identity.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -63,19 +65,27 @@ static bool verify_i64(const XrType *type) {
 static bool verify_source_module_exact(const XiModule *module) {
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
     const XrProgramSemanticModuleRecord *row =
-        closure && xr_program_semantic_closure_module_count(closure) == 1
-            ? xr_program_semantic_closure_module(closure, 0)
-            : NULL;
+        closure ? xr_program_semantic_closure_module(closure, module->psc_module_index) : NULL;
     const XrProgramSemanticModuleInput *source =
         module && module->source_semantic_module_present ? &module->source_semantic_module : NULL;
-    return row && source && verify_same_id(row->module_identity, source->module_identity) &&
+    bool graph = closure && xr_program_semantic_closure_family(closure) ==
+                                XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    XrProgramSemanticModuleInput rebuilt = {0};
+    return row && source && module->identity &&
+           xr_source_semantic_module_authority(module->identity, source->source_fingerprint,
+                                               &rebuilt, NULL) &&
+           verify_same_id(rebuilt.module_identity, source->module_identity) &&
+           memcmp(rebuilt.module_authority_fingerprint.bytes,
+                  source->module_authority_fingerprint.bytes,
+                  sizeof(rebuilt.module_authority_fingerprint.bytes)) == 0 &&
+           verify_same_id(row->module_identity, source->module_identity) &&
            memcmp(row->module_authority_fingerprint.bytes,
                   source->module_authority_fingerprint.bytes,
                   sizeof(row->module_authority_fingerprint.bytes)) == 0 &&
            memcmp(row->source_fingerprint.bytes, source->source_fingerprint.bytes,
                   sizeof(row->source_fingerprint.bytes)) == 0 &&
-           memcmp(row->export_fingerprint.bytes, source->export_fingerprint.bytes,
-                  sizeof(row->export_fingerprint.bytes)) == 0;
+           (graph || memcmp(row->export_fingerprint.bytes, source->export_fingerprint.bytes,
+                            sizeof(row->export_fingerprint.bytes)) == 0);
 }
 
 static const XrProgramSemanticTypeRecord *
@@ -191,6 +201,8 @@ static bool verify_exact_type_metadata(const XiModule *module,
                                        const XiFunc *function, char *error, size_t error_size) {
     uint32_t expected = XI_PSC_ROW_NONE;
     if (!function ||
+        (function->nparams > 0 && !function->params) ||
+        (function->nblocks > 0 && !function->blocks) ||
         !expected_program_type_row(module, closure, function->return_type, &expected) ||
         function->psc_return_type_index != expected)
         return verify_fail(error, error_size, "Xi return type PSC binding is not exact");
@@ -203,6 +215,8 @@ static bool verify_exact_type_metadata(const XiModule *module,
         const XiBlock *block = function->blocks[b];
         if (!block)
             return verify_fail(error, error_size, "Xi type metadata block is NULL");
+        if (block->nvalues > 0 && !block->values)
+            return verify_fail(error, error_size, "Xi type metadata values are missing");
         for (const XiPhi *phi = block->phis; phi; phi = phi->next)
             if (!expected_program_type_row(module, closure, phi->value.type, &expected) ||
                 phi->value.psc_type_index != expected)
@@ -423,8 +437,9 @@ static bool verify_leaf_aggregate_program(const XiModule *module, char *error, s
            verify_fail(error, error_size, "Xi aggregate call coverage is incomplete");
 }
 
-bool xi_program_semantic_verify(const XiModule *module, const XrTargetProfile *target_profile,
-                                char *error, size_t error_size) {
+static bool verify_single_module_partition(const XiModule *module,
+                                           const XrTargetProfile *target_profile, char *error,
+                                           size_t error_size) {
     if (!module || !module->program_semantic_closure || !module->init ||
         !verify_source_module_exact(module) ||
         !xr_program_semantic_closure_verify(module->program_semantic_closure, NULL, 0))
@@ -512,4 +527,428 @@ bool xi_program_semantic_verify(const XiModule *module, const XrTargetProfile *t
     if (state.indexed_call_count != 1 || state.xi_call_count != 1 || !state.call)
         return verify_fail(error, error_size, "Xi scalar call row coverage is not exact");
     return true;
+}
+
+typedef struct XiGraphPartitionState {
+    const XiFunc *function;
+    const XiValue *call;
+    const XiImportRef *import_ref;
+    uint32_t call_index;
+    uint32_t indexed_call_count;
+    uint32_t import_value_count;
+} XiGraphPartitionState;
+
+static bool graph_function_is_local(const XrProgramSemanticClosure *closure,
+                                    uint32_t module_index,
+                                    const XrProgramSemanticFunctionRecord *function) {
+    const XrProgramSemanticModuleRecord *module =
+        xr_program_semantic_closure_module(closure, module_index);
+    return module && function && verify_same_id(module->module_identity, function->module_identity);
+}
+
+static bool graph_verify_values(const XiModule *module, const XiFunc *function,
+                                XiGraphPartitionState *state, char *error, size_t error_size) {
+    const XrProgramSemanticClosure *closure = module->program_semantic_closure;
+    const XrProgramSemanticFunctionRecord *function_row =
+        xr_program_semantic_closure_function(closure, function->psc_function_index);
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        if (!function->blocks)
+            return verify_fail(error, error_size, "Xi graph block inventory is missing");
+        const XiBlock *block = function->blocks[b];
+        if (!block)
+            return verify_fail(error, error_size, "Xi graph block inventory contains NULL");
+        if (block->nvalues > 0 && !block->values)
+            return verify_fail(error, error_size, "Xi graph value inventory is missing");
+        for (const XiPhi *phi = block->phis; phi; phi = phi->next)
+            if (phi->value.psc_call_index != XI_PSC_ROW_NONE)
+                return verify_fail(error, error_size,
+                                   "Xi graph phi carries a forbidden PSC call row");
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            const XiValue *value = block->values[i];
+            if (!value)
+                return verify_fail(error, error_size,
+                                   "Xi graph value inventory contains NULL");
+            if (value->op == XI_IMPORT_REF) {
+                const XiImportRef *value_ref = value->aux ? (const XiImportRef *) value->aux : NULL;
+                state->import_value_count++;
+                if (!value_ref || (state->import_ref && state->import_ref != value_ref))
+                    return verify_fail(error, error_size,
+                                       "Xi graph import value inventory is not unique");
+                state->import_ref = value_ref;
+            }
+            if (value->psc_call_index == XI_PSC_ROW_NONE) {
+                if (value->op == XI_CALL)
+                    return verify_fail(error, error_size,
+                                       "Xi graph call lacks its exact PSC row");
+                continue;
+            }
+            state->indexed_call_count++;
+            const XrProgramSemanticCallRecord *call =
+                xr_program_semantic_closure_call(closure, value->psc_call_index);
+            XiSourceLocator locator = {
+                .kind = value->source_kind,
+                .span = value->source_span,
+            };
+            const XiImportRef *ref =
+                value->nargs > 0 && value->args ? xi_value_import_ref(function, value->args[0])
+                                                : NULL;
+            if (state->call || !call || !function_row || value->op != XI_CALL ||
+                !verify_same_id(function_row->id, call->caller_function) ||
+                !verify_locator_exact(locator, call->locator) || value->psc_type_index != 0 ||
+                !verify_bound_type(module, closure, value) || value->nargs != 2 || !value->args ||
+                !value->args[0] || !value->args[1] || value->args[1]->psc_type_index != 0 ||
+                !verify_bound_type(module, closure, value->args[1]) || !ref ||
+                ref->psc_dependency_index == XI_PSC_ROW_NONE ||
+                !verify_same_id(ref->psc_resolver_binding, call->resolver_binding) ||
+                value->flags != xi_op_default_effects(XI_CALL) || value->aux_int != 0 ||
+                value->call_plan || value->xg_callsite_id != 0 || value->error_region ||
+                value->transfer_mode != 0 || value->param_mode != XR_PARAM_READ ||
+                value->call_return_ownership.kind != XI_RETURN_OWNERSHIP_UNKNOWN ||
+                value->call_return_ownership.param_index != -1 ||
+                value->call_return_ownership.complete || value->result_alias_operand != -1)
+                return verify_fail(error, error_size, "Xi graph call partition is invalid");
+            const XrProgramSemanticDependencyRecord *dependency =
+                xr_program_semantic_closure_dependency(closure, ref->psc_dependency_index);
+            if (!dependency ||
+                !verify_same_id(dependency->source_module, function_row->module_identity) ||
+                !verify_locator_exact(ref->psc_import_locator, dependency->import_locator) ||
+                !verify_same_id(dependency->exported_function, call->callee_function) ||
+                !verify_same_id(dependency->resolver_binding, call->resolver_binding))
+                return verify_fail(error, error_size,
+                                   "Xi graph import dependency join is invalid");
+            state->call = value;
+            state->call_index = value->psc_call_index;
+        }
+    }
+    return true;
+}
+
+static const XiValue *graph_unwrap_identity(const XiValue *value) {
+    uint32_t depth = 0;
+    while (value && depth++ < 64 &&
+           (value->op == XI_BOX || value->op == XI_UNBOX ||
+            xi_copy_is_identity_alias(value) || xi_op_is_identity_forward(value->op))) {
+        if (value->nargs < 1 || !value->args || !value->args[0])
+            return NULL;
+        value = value->args[0];
+    }
+    return depth <= 64 ? value : NULL;
+}
+
+static const XiValue *graph_unique_shared_store(const XiFunc *function, int64_t slot,
+                                                char *error, size_t error_size) {
+    const XiValue *match = NULL;
+    if (!function || (function->nblocks > 0 && !function->blocks))
+        return NULL;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        const XiBlock *block = function->blocks[b];
+        if (!block || (block->nvalues > 0 && !block->values))
+            return NULL;
+        for (uint32_t i = 0; i < block->nvalues; i++) {
+            const XiValue *value = block->values[i];
+            if (!value || value->op != XI_SET_SHARED || value->aux_int != slot)
+                continue;
+            if (match) {
+                verify_fail(error, error_size, "Xi graph import shared store is ambiguous");
+                return NULL;
+            }
+            match = value;
+        }
+    }
+    return match;
+}
+
+static bool verify_graph_partition(const XiModule *module, char *error, size_t error_size) {
+    if (!module || !module->program_semantic_closure || !module->init ||
+        !verify_source_module_exact(module) || module->scalar_call_decision ||
+        module->scalar_target_profile ||
+        !xr_program_semantic_closure_verify(module->program_semantic_closure, NULL, 0))
+        return verify_fail(error, error_size, "Xi graph partition requires a verified PSC");
+    const XrProgramSemanticClosure *closure = module->program_semantic_closure;
+    if (xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+        xr_program_semantic_closure_module_count(closure) != 2 ||
+        xr_program_semantic_closure_dependency_count(closure) != 1 ||
+        xr_program_semantic_closure_type_count(closure) != 1 ||
+        xr_program_semantic_closure_function_count(closure) != 2 ||
+        xr_program_semantic_closure_call_count(closure) != 1 ||
+        module->psc_module_index >= 2 || module->init->psc_function_index != XI_PSC_ROW_NONE ||
+        module->init->psc_declaration_locator.kind != 0 ||
+        !verify_span_empty(module->init->psc_declaration_locator.span) || !module->functions ||
+        !module->init->children ||
+        module->init->nchildren != module->nfuncs || module->nslots != module->init->nshared)
+        return verify_fail(error, error_size, "Xi graph partition inventory is not exact");
+    const XrProgramSemanticTypeRecord *i64 = xr_program_semantic_closure_type(closure, 0);
+    if (!i64 || i64->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+        i64->exact_scalar != XR_EXACT_SCALAR_I64)
+        return verify_fail(error, error_size, "Xi graph scalar type is not exact i64");
+
+    uint32_t expected_functions = 0;
+    uint32_t expected_calls = 0;
+    for (uint32_t i = 0; i < xr_program_semantic_closure_function_count(closure); i++) {
+        const XrProgramSemanticFunctionRecord *row =
+            xr_program_semantic_closure_function(closure, i);
+        expected_functions += graph_function_is_local(closure, module->psc_module_index, row);
+    }
+    for (uint32_t i = 0; i < xr_program_semantic_closure_call_count(closure); i++) {
+        const XrProgramSemanticCallRecord *call = xr_program_semantic_closure_call(closure, i);
+        const XrProgramSemanticFunctionRecord *caller = NULL;
+        for (uint32_t f = 0; call && f < xr_program_semantic_closure_function_count(closure); f++) {
+            const XrProgramSemanticFunctionRecord *candidate =
+                xr_program_semantic_closure_function(closure, f);
+            if (candidate && verify_same_id(candidate->id, call->caller_function))
+                caller = candidate;
+        }
+        expected_calls += graph_function_is_local(closure, module->psc_module_index, caller);
+    }
+    if (expected_functions != 1 || module->nfuncs != expected_functions)
+        return verify_fail(error, error_size, "Xi graph local function coverage is not exact");
+
+    XiGraphPartitionState state = {.call_index = XI_PSC_ROW_NONE};
+    const XrProgramSemanticFunctionRecord *local_row = NULL;
+    if (!verify_exact_type_metadata(module, closure, module->init, error, error_size) ||
+        !graph_verify_values(module, module->init, &state, error, error_size))
+        return false;
+    for (uint16_t i = 0; i < module->nfuncs; i++) {
+        const XiFunc *function = module->functions[i];
+        if (!function || function != module->init->children[i] ||
+            function->parent_func != module->init || function->nchildren != 0 ||
+            function->psc_function_index >= 2)
+            return verify_fail(error, error_size, "Xi graph local function tree is invalid");
+        const XrProgramSemanticFunctionRecord *row =
+            xr_program_semantic_closure_function(closure, function->psc_function_index);
+        if (!graph_function_is_local(closure, module->psc_module_index, row) ||
+            !verify_locator_exact(function->psc_declaration_locator, row->declaration_locator) ||
+            !verify_i64(function->return_type))
+            return verify_fail(error, error_size, "Xi graph function row join is invalid");
+        local_row = row;
+        if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) {
+            if (function->nparams != 0)
+                return verify_fail(error, error_size, "Xi graph entry signature is invalid");
+        } else if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED) {
+            const XrProgramSemanticFunctionParameterRecord *parameter =
+                xr_program_semantic_closure_function_parameter(closure, row->parameter_begin);
+            if (function->nparams != 1 || !function->params || !function->params[0] ||
+                function->params[0]->op != XI_PARAM ||
+                function->params[0]->psc_type_index != 0 ||
+                !verify_i64(function->params[0]->type) ||
+                function->params[0]->param_mode != XR_PARAM_READ || !parameter ||
+                parameter->mode != XR_PARAM_READ || function->inline_policy != XI_INLINE_PRESERVE_CALL)
+                return verify_fail(error, error_size, "Xi graph export signature is invalid");
+        } else {
+            return verify_fail(error, error_size, "Xi graph function role is invalid");
+        }
+        if (!verify_exact_type_metadata(module, closure, function, error, error_size))
+            return false;
+        state.function = function;
+        if (!graph_verify_values(module, function, &state, error, error_size))
+            return false;
+    }
+    if (state.indexed_call_count != expected_calls ||
+        (expected_calls == 1 && (!state.call || state.call_index != 0)) ||
+        (expected_calls == 0 && state.call))
+        return verify_fail(error, error_size, "Xi graph local call coverage is not exact");
+    uint32_t import_count = 0;
+    const XiImportRef *partition_import = NULL;
+    for (uint16_t slot = 0; slot < module->nslots; slot++) {
+        const XiImportRef *ref = module->slot_imports ? module->slot_imports[slot] : NULL;
+        if (!ref)
+            continue;
+        import_count++;
+        partition_import = ref;
+        const XrProgramSemanticDependencyRecord *dependency =
+            xr_program_semantic_closure_dependency(closure, ref->psc_dependency_index);
+        if (ref->psc_dependency_index != 0 || !dependency ||
+            !verify_locator_exact(ref->psc_import_locator, dependency->import_locator) ||
+            !verify_same_id(ref->psc_resolver_binding, dependency->resolver_binding))
+            return verify_fail(error, error_size, "Xi graph import inventory is not exact");
+    }
+    if (import_count != expected_calls || state.import_value_count != expected_calls ||
+        state.import_ref != partition_import)
+        return verify_fail(error, error_size, "Xi graph import coverage is not exact");
+    if (expected_calls == 1) {
+        const XiValue *callee = state.call && state.call->nargs > 0 && state.call->args
+                                    ? graph_unwrap_identity(state.call->args[0])
+                                    : NULL;
+        const XiImportRef *call_import =
+            state.call && state.call->nargs > 0 && state.call->args
+                ? xi_value_import_ref(module->functions[0], state.call->args[0])
+                : NULL;
+        const XiValue *store =
+            callee && callee->op == XI_GET_SHARED && callee->aux_int >= 0 &&
+                    callee->aux_int < module->nslots
+                ? graph_unique_shared_store(module->init, callee->aux_int, error, error_size)
+                : NULL;
+        const XiValue *stored =
+            store && store->nargs == 1 && store->args ? graph_unwrap_identity(store->args[0])
+                                                     : NULL;
+        if (module->nexports != 0 || module->exports || call_import != partition_import ||
+            !callee || callee->op != XI_GET_SHARED || callee->block == NULL ||
+            callee->block->func != module->functions[0] || !store || store->block == NULL ||
+            store->block->func != module->init || !stored || stored->op != XI_IMPORT_REF ||
+            stored->aux != partition_import || !module->slot_imports ||
+            module->slot_imports[callee->aux_int] != partition_import)
+            return verify_fail(error, error_size, "Xi graph entry inventory is not exact");
+    } else {
+        if (!local_row || local_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED ||
+            module->nexports != 1 || !module->exports ||
+            module->exports[0].function != module->functions[0] ||
+            module->exports[0].class_data || module->exports[0].cell_index != -1 ||
+            !verify_i64(module->exports[0].value_type) ||
+            module->exports[0].is_live_binding ||
+            module->exports[0].shared_slot >= module->nslots || !module->slot_funcs ||
+            module->slot_funcs[module->exports[0].shared_slot] != module->functions[0])
+            return verify_fail(error, error_size, "Xi graph export inventory is not exact");
+    }
+    return true;
+}
+
+static const XiFunc *graph_function_by_row(const XiModule *module, uint32_t row_index) {
+    if (!module)
+        return NULL;
+    const XiFunc *match = NULL;
+    for (uint16_t i = 0; i < module->nfuncs; i++) {
+        const XiFunc *candidate = module->functions ? module->functions[i] : NULL;
+        if (!candidate || candidate->psc_function_index != row_index)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static const XiValue *graph_call_by_row(const XiFunc *function, uint32_t row_index) {
+    const XiValue *match = NULL;
+    if (!function)
+        return NULL;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        const XiBlock *block = function->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            const XiValue *candidate = block->values[i];
+            if (!candidate || candidate->psc_call_index != row_index)
+                continue;
+            if (match)
+                return NULL;
+            match = candidate;
+        }
+    }
+    return match;
+}
+
+bool xi_program_semantic_verify_partition(const XiModule *module,
+                                          const XrTargetProfile *target_profile, char *error,
+                                          size_t error_size) {
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    if (closure && xr_program_semantic_closure_family(closure) ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) {
+        if (target_profile)
+            return verify_fail(error, error_size, "Xi graph partition cannot retain target facts");
+        return verify_graph_partition(module, error, error_size);
+    }
+    return verify_single_module_partition(module, target_profile, error, error_size);
+}
+
+bool xi_program_semantic_verify_module_set(XiModule *const *module_set, uint32_t module_count,
+                                           uint32_t entry_index,
+                                           const XrTargetProfile *target_profile, char *error,
+                                           size_t error_size) {
+    if (!module_set || module_count == 0 || entry_index >= module_count ||
+        !module_set[entry_index])
+        return verify_fail(error, error_size, "Xi module set entry is incomplete");
+    const XiModule *entry = module_set[entry_index];
+    if (!xi_program_semantic_verify_partition(entry, target_profile, error, error_size))
+        return false;
+    const XrProgramSemanticClosure *closure = entry->program_semantic_closure;
+    if (xr_program_semantic_closure_family(closure) !=
+        XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) {
+        if (module_count != 1 || entry_index != 0)
+            return verify_fail(error, error_size,
+                               "single-module Xi closure has a foreign module set");
+        return true;
+    }
+    if (target_profile || module_count != 2)
+        return verify_fail(error, error_size, "Xi graph module set cardinality is not exact");
+    const XiModule *modules[2] = {NULL, NULL};
+    uint32_t topo_by_psc[2] = {XI_PSC_ROW_NONE, XI_PSC_ROW_NONE};
+    for (uint32_t i = 0; i < 2; i++) {
+        const XiModule *candidate = module_set[i];
+        if (!candidate || candidate->program_semantic_closure != closure ||
+            candidate->psc_module_index >= 2 ||
+            modules[candidate->psc_module_index] ||
+            !xi_program_semantic_verify_partition(candidate, NULL, error, error_size))
+            return verify_fail(error, error_size, "Xi graph module partition is not unique");
+        modules[candidate->psc_module_index] = candidate;
+        topo_by_psc[candidate->psc_module_index] = i;
+    }
+    if (!modules[0] || !modules[1])
+        return verify_fail(error, error_size, "Xi graph module coverage is incomplete");
+    const XrProgramSemanticDependencyRecord *dependency =
+        xr_program_semantic_closure_dependency(closure, 0);
+    const XrProgramSemanticCallRecord *call = xr_program_semantic_closure_call(closure, 0);
+    const XrProgramSemanticFunctionRecord *caller_row = NULL;
+    const XrProgramSemanticFunctionRecord *callee_row = NULL;
+    uint32_t caller_index = XI_PSC_ROW_NONE;
+    uint32_t callee_index = XI_PSC_ROW_NONE;
+    uint32_t source_index = XI_PSC_ROW_NONE;
+    uint32_t dependency_index = XI_PSC_ROW_NONE;
+    for (uint32_t i = 0; dependency && call && i < 2; i++) {
+        const XrProgramSemanticModuleRecord *module =
+            xr_program_semantic_closure_module(closure, i);
+        if (module && verify_same_id(module->module_identity, dependency->source_module))
+            source_index = i;
+        if (module && verify_same_id(module->module_identity, dependency->dependency_module))
+            dependency_index = i;
+    }
+    for (uint32_t i = 0; call && i < 2; i++) {
+        const XrProgramSemanticFunctionRecord *function =
+            xr_program_semantic_closure_function(closure, i);
+        if (function && verify_same_id(function->id, call->caller_function)) {
+            caller_row = function;
+            caller_index = i;
+        }
+        if (function && verify_same_id(function->id, call->callee_function)) {
+            callee_row = function;
+            callee_index = i;
+        }
+    }
+    if (!caller_row || !callee_row || source_index >= 2 || dependency_index >= 2 ||
+        source_index == dependency_index || modules[source_index] != entry ||
+        topo_by_psc[source_index] != entry_index ||
+        caller_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+        callee_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)
+        return verify_fail(error, error_size, "Xi graph PSC roles are not exact");
+    const XiFunc *caller = graph_function_by_row(modules[source_index], caller_index);
+    const XiFunc *callee = graph_function_by_row(modules[dependency_index], callee_index);
+    const XiValue *xi_call = graph_call_by_row(caller, 0);
+    const XiImportRef *ref = xi_call && xi_call->nargs > 0 && xi_call->args
+                                 ? xi_value_import_ref(caller, xi_call->args[0])
+                                 : NULL;
+    if (!caller || !callee || !xi_call || !ref || ref->psc_dependency_index != 0 ||
+        !verify_locator_exact(ref->psc_import_locator, dependency->import_locator) ||
+        !verify_same_id(ref->psc_resolver_binding, dependency->resolver_binding) ||
+        !ref->resolution_attempted || ref->resolved_mod_index < 0 ||
+        (uint32_t) ref->resolved_mod_index != topo_by_psc[dependency_index] ||
+        ref->resolved_shared_slot < 0 || ref->resolved_export_slot < 0 ||
+        ref->resolved_module != modules[dependency_index] || ref->resolved_func != callee ||
+        ref->resolved_shared_slot >= modules[dependency_index]->nslots ||
+        !modules[dependency_index]->slot_funcs ||
+        modules[dependency_index]->slot_funcs[ref->resolved_shared_slot] != callee ||
+        ref->resolved_export_slot >= modules[dependency_index]->nexports ||
+        modules[dependency_index]->exports[ref->resolved_export_slot].function != callee ||
+        !ref->member_name || ref->member_name[0] == '\0' ||
+        !modules[dependency_index]->exports[ref->resolved_export_slot].name ||
+        strcmp(modules[dependency_index]->exports[ref->resolved_export_slot].name,
+               ref->member_name) != 0 ||
+        modules[dependency_index]->exports[ref->resolved_export_slot].shared_slot !=
+            ref->resolved_shared_slot)
+        return verify_fail(error, error_size, "Xi graph resolved call does not match PSC authority");
+    return true;
+}
+
+bool xi_program_semantic_verify(const XiModule *module, const XrTargetProfile *target_profile,
+                                char *error, size_t error_size) {
+    XiModule *module_set[1] = {(XiModule *) module};
+    return xi_program_semantic_verify_module_set(module_set, 1, 0, target_profile, error,
+                                                 error_size);
 }

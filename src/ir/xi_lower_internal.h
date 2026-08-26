@@ -226,6 +226,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, struct AstNode *node);
 struct ImportMember;
 XR_FUNC bool xi_lower_import_member_is_type_only(const XiLower *l,
                                                  const struct ImportMember *member);
+XR_FUNC int xi_lower_sync_runtime_class_global_index(const char *name);
 XR_FUNC struct XrType *xi_lower_node_type(XiLower *l, struct AstNode *node);
 
 /* ========== Cross-boundary helpers (xi_lower_expr.c, called from stmt) ========== */

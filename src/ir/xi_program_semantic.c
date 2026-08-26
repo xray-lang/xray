@@ -14,6 +14,7 @@
 #include "../runtime/class/xclass_info.h"
 #include "../runtime/value/xtype.h"
 #include "../shared/xr_exact_scalar_registry.h"
+#include "../plan/semantic/xr_source_semantic_identity.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -64,21 +65,48 @@ static const XrProgramSemanticFunctionRecord *find_function(const XrProgramSeman
 }
 
 static bool source_module_matches_psc(const XiModule *module,
-                                      const XrProgramSemanticClosure *closure) {
+                                      const XrProgramSemanticClosure *closure,
+                                      uint32_t module_index) {
     const XrProgramSemanticModuleRecord *row =
-        closure && xr_program_semantic_closure_module_count(closure) == 1
-            ? xr_program_semantic_closure_module(closure, 0)
-            : NULL;
+        closure ? xr_program_semantic_closure_module(closure, module_index) : NULL;
     const XrProgramSemanticModuleInput *source =
         module && module->source_semantic_module_present ? &module->source_semantic_module : NULL;
+    bool graph = closure && xr_program_semantic_closure_family(closure) ==
+                                XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     return row && source && same_id(row->module_identity, source->module_identity) &&
            same_bytes(row->module_authority_fingerprint.bytes,
                       source->module_authority_fingerprint.bytes,
                       sizeof(row->module_authority_fingerprint.bytes)) &&
            same_bytes(row->source_fingerprint.bytes, source->source_fingerprint.bytes,
                       sizeof(row->source_fingerprint.bytes)) &&
-           same_bytes(row->export_fingerprint.bytes, source->export_fingerprint.bytes,
-                      sizeof(row->export_fingerprint.bytes));
+           (graph || same_bytes(row->export_fingerprint.bytes, source->export_fingerprint.bytes,
+                                sizeof(row->export_fingerprint.bytes)));
+}
+
+static bool module_identity_matches_source(const XiModule *module) {
+    const XrProgramSemanticModuleInput *source =
+        module && module->source_semantic_module_present ? &module->source_semantic_module : NULL;
+    XrProgramSemanticModuleInput rebuilt = {0};
+    return source && module->identity &&
+           xr_source_semantic_module_authority(module->identity, source->source_fingerprint,
+                                               &rebuilt, NULL) &&
+           same_id(rebuilt.module_identity, source->module_identity) &&
+           same_bytes(rebuilt.module_authority_fingerprint.bytes,
+                      source->module_authority_fingerprint.bytes,
+                      sizeof(rebuilt.module_authority_fingerprint.bytes));
+}
+
+static bool stable_id_is_zero(XrStableId id) {
+    static const XrStableId zero = {{0}};
+    return same_id(id, zero);
+}
+
+static bool function_belongs_to_module(const XrProgramSemanticClosure *closure,
+                                       const XrProgramSemanticFunctionRecord *function,
+                                       uint32_t module_index) {
+    const XrProgramSemanticModuleRecord *module =
+        closure ? xr_program_semantic_closure_module(closure, module_index) : NULL;
+    return module && function && same_id(function->module_identity, module->module_identity);
 }
 
 static bool xr_type_matches_program_type(const XrProgramSemanticClosure *closure,
@@ -221,12 +249,55 @@ static bool bind_function_types(XiFunc *function, const XiModule *module,
     return true;
 }
 
+bool xi_program_semantic_input_prepare(const XrProgramSemanticClosure *closure,
+                                       const XrScalarCallDecision *decision,
+                                       const XrProgramSemanticModuleInput *source_module,
+                                       XiProgramSemanticInput *out, char *error,
+                                       size_t error_size) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!closure || !source_module || !out)
+        return scalar_fail(error, error_size, "Xi input selection authority is incomplete");
+    bool graph = xr_program_semantic_closure_family(closure) ==
+                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    uint32_t match = XI_PSC_ROW_NONE;
+    for (uint32_t i = 0; i < xr_program_semantic_closure_module_count(closure); i++) {
+        const XrProgramSemanticModuleRecord *row =
+            xr_program_semantic_closure_module(closure, i);
+        if (!row || !same_id(row->module_identity, source_module->module_identity) ||
+            !same_bytes(row->module_authority_fingerprint.bytes,
+                        source_module->module_authority_fingerprint.bytes,
+                        sizeof(row->module_authority_fingerprint.bytes)) ||
+            !same_bytes(row->source_fingerprint.bytes, source_module->source_fingerprint.bytes,
+                        sizeof(row->source_fingerprint.bytes)) ||
+            (!graph &&
+             !same_bytes(row->export_fingerprint.bytes, source_module->export_fingerprint.bytes,
+                         sizeof(row->export_fingerprint.bytes))))
+            continue;
+        if (match != XI_PSC_ROW_NONE)
+            return scalar_fail(error, error_size, "Xi source module PSC row is ambiguous");
+        match = i;
+    }
+    if (match == XI_PSC_ROW_NONE)
+        return scalar_fail(error, error_size, "Xi source module has no exact PSC partition");
+    *out = (XiProgramSemanticInput) {
+        .closure = closure,
+        .decision = decision,
+        .module_index = match,
+    };
+    if (!xi_program_semantic_input_is_consistent(out, error, error_size)) {
+        memset(out, 0, sizeof(*out));
+        return false;
+    }
+    return true;
+}
+
 bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input, char *error,
                                              size_t error_size) {
     if (!input || !input->closure || !xr_program_semantic_closure_is_frozen(input->closure) ||
         !xr_program_semantic_closure_is_verified(input->closure) ||
         !xr_program_semantic_closure_verify(input->closure, NULL, 0))
-        return scalar_fail(error, error_size, "Xi scalar input requires one verified frozen PSC");
+        return scalar_fail(error, error_size, "Xi input requires one verified frozen PSC");
     const XrScalarCallDecision *decision = input->decision;
     XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(input->closure);
     XrFingerprint fingerprint = xr_program_semantic_closure_fingerprint(input->closure);
@@ -234,6 +305,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
     size_t type_count = xr_program_semantic_closure_type_count(input->closure);
     XrProgramSemanticFamily family = xr_program_semantic_closure_family(input->closure);
     bool scalar = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
+    bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     bool aggregate = false;
     if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
         uint32_t aggregate_count = 0;
@@ -250,11 +322,21 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
         aggregate = aggregate_count == 1 &&
                     xr_program_semantic_closure_type_field_count(input->closure) > 0;
     }
-    if ((!scalar && (!aggregate || decision)) ||
+    size_t module_count = xr_program_semantic_closure_module_count(input->closure);
+    if ((!scalar && !graph && (!aggregate || decision)) || (graph && decision) ||
         (scalar && (!decision || decision->schema != XR_SCALAR_CALL_DECISION_SCHEMA_VERSION ||
                     decision->sealed != 1)) ||
-        xr_program_semantic_closure_module_count(input->closure) != 1 ||
-        xr_program_semantic_closure_dependency_count(input->closure) != 0 ||
+        input->module_index >= module_count ||
+        ((scalar || aggregate) &&
+         (module_count != 1 || xr_program_semantic_closure_dependency_count(input->closure) != 0)) ||
+        (graph &&
+         (module_count != 2 || xr_program_semantic_closure_dependency_count(input->closure) != 1 ||
+          type_count != 1 ||
+          !xr_program_semantic_closure_type(input->closure, 0) ||
+          xr_program_semantic_closure_type(input->closure, 0)->kind !=
+              XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+          xr_program_semantic_closure_type(input->closure, 0)->exact_scalar !=
+              XR_EXACT_SCALAR_I64)) ||
         xr_program_semantic_closure_function_count(input->closure) != 2 ||
         xr_program_semantic_closure_call_count(input->closure) != 1 || !call ||
         (scalar &&
@@ -267,7 +349,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
           !same_id(decision->callee_function, call->callee_function))) ||
         !find_function(input->closure, call->caller_function, NULL) ||
         !find_function(input->closure, call->callee_function, NULL))
-        return scalar_fail(error, error_size, "Xi scalar input decision does not bind its PSC");
+        return scalar_fail(error, error_size, "Xi input does not bind its PSC partition");
     return true;
 }
 
@@ -280,11 +362,15 @@ bool xi_program_semantic_bind_function(XiFunc *function, const XiProgramSemantic
         !xi_program_semantic_input_is_consistent(input, NULL, 0))
         return scalar_fail(error, error_size, "Xi function row join input is incomplete");
     uint32_t match = XI_PSC_ROW_NONE;
+    const XrProgramSemanticModuleRecord *module_row =
+        xr_program_semantic_closure_module(input->closure, input->module_index);
     size_t count = xr_program_semantic_closure_function_count(input->closure);
     for (uint32_t i = 0; i < count; i++) {
         const XrProgramSemanticFunctionRecord *row =
             xr_program_semantic_closure_function(input->closure, i);
-        if (!row || !locator_matches(locator, row->declaration_locator))
+        if (!row || !module_row ||
+            !same_id(row->module_identity, module_row->module_identity) ||
+            !locator_matches(locator, row->declaration_locator))
             continue;
         if (match != XI_PSC_ROW_NONE)
             return scalar_fail(error, error_size, "PSC declaration locator is ambiguous");
@@ -294,6 +380,41 @@ bool xi_program_semantic_bind_function(XiFunc *function, const XiProgramSemantic
         return scalar_fail(error, error_size, "Xi declaration has no exact PSC function row");
     function->psc_function_index = match;
     function->psc_declaration_locator = locator;
+    return true;
+}
+
+bool xi_program_semantic_bind_import(XiImportRef *ref, const XiProgramSemanticInput *input,
+                                     uint32_t call_index, char *error, size_t error_size) {
+    if (!ref || ref->psc_dependency_index != XI_PSC_ROW_NONE ||
+        !locator_is_complete(ref->psc_import_locator) ||
+        !stable_id_is_zero(ref->psc_resolver_binding) ||
+        !xi_program_semantic_input_is_consistent(input, NULL, 0) ||
+        xr_program_semantic_closure_family(input->closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+        return scalar_fail(error, error_size, "Xi import authority input is incomplete");
+    const XrProgramSemanticCallRecord *call =
+        xr_program_semantic_closure_call(input->closure, call_index);
+    const XrProgramSemanticModuleRecord *source =
+        xr_program_semantic_closure_module(input->closure, input->module_index);
+    uint32_t match = XI_PSC_ROW_NONE;
+    for (uint32_t i = 0; call && source &&
+                         i < xr_program_semantic_closure_dependency_count(input->closure);
+         i++) {
+        const XrProgramSemanticDependencyRecord *dependency =
+            xr_program_semantic_closure_dependency(input->closure, i);
+        if (!dependency || !same_id(dependency->source_module, source->module_identity) ||
+            !locator_matches(ref->psc_import_locator, dependency->import_locator) ||
+            !same_id(dependency->exported_function, call->callee_function) ||
+            !same_id(dependency->resolver_binding, call->resolver_binding))
+            continue;
+        if (match != XI_PSC_ROW_NONE)
+            return scalar_fail(error, error_size, "PSC import resolver binding is ambiguous");
+        match = i;
+    }
+    if (match == XI_PSC_ROW_NONE)
+        return scalar_fail(error, error_size, "Xi import has no exact PSC dependency row");
+    ref->psc_dependency_index = match;
+    ref->psc_resolver_binding = call->resolver_binding;
     return true;
 }
 
@@ -367,33 +488,58 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
     if (!root || !root->module || root->module->init != root ||
         root->psc_function_index != XI_PSC_ROW_NONE ||
         !xi_program_semantic_input_is_consistent(input, NULL, 0) ||
-        !source_module_matches_psc(root->module, input->closure))
-        return scalar_fail(error, error_size, "Xi scalar function tree is incomplete");
-    const XrProgramSemanticCallRecord *call = xr_program_semantic_closure_call(input->closure, 0);
-    XiFunc *callee = NULL;
-    bool seen[2] = {false, false};
-    if (!call || root->module->nfuncs != 2)
-        return scalar_fail(error, error_size, "Xi scalar function inventory is not exact");
+        !source_module_matches_psc(root->module, input->closure, input->module_index))
+        return scalar_fail(error, error_size, "Xi function partition is incomplete");
+    uint32_t function_count =
+        (uint32_t) xr_program_semantic_closure_function_count(input->closure);
+    bool *seen = (bool *) xr_calloc(function_count, sizeof(*seen));
+    uint32_t local_count = 0;
+    XiFunc *preserved_callee = NULL;
+    if (!seen)
+        return scalar_fail(error, error_size, "Xi function partition allocation failed");
+    for (uint32_t i = 0; i < function_count; i++) {
+        const XrProgramSemanticFunctionRecord *row =
+            xr_program_semantic_closure_function(input->closure, i);
+        local_count += function_belongs_to_module(input->closure, row, input->module_index);
+    }
+    if (root->module->nfuncs != local_count) {
+        xr_free(seen);
+        return scalar_fail(error, error_size, "Xi function partition inventory is not exact");
+    }
     for (uint16_t i = 0; i < root->module->nfuncs; i++) {
         XiFunc *function = root->module->functions[i];
-        if (!function || function->psc_function_index >= 2 || seen[function->psc_function_index])
+        if (!function || function->psc_function_index >= function_count ||
+            seen[function->psc_function_index]) {
+            xr_free(seen);
             return scalar_fail(error, error_size,
-                               "Xi scalar function rows are incomplete or duplicated");
+                               "Xi function partition rows are incomplete or duplicated");
+        }
         seen[function->psc_function_index] = true;
         const XrProgramSemanticFunctionRecord *row =
             xr_program_semantic_closure_function(input->closure, function->psc_function_index);
-        if (!row || !locator_matches(function->psc_declaration_locator, row->declaration_locator))
+        if (!function_belongs_to_module(input->closure, row, input->module_index) ||
+            !locator_matches(function->psc_declaration_locator, row->declaration_locator)) {
+            xr_free(seen);
             return scalar_fail(error, error_size, "Xi function locator does not match its PSC row");
-        if (same_id(row->id, call->callee_function)) {
-            if (callee)
-                return scalar_fail(error, error_size, "Xi scalar callee row is duplicated");
-            callee = function;
+        }
+        for (uint32_t c = 0; c < xr_program_semantic_closure_call_count(input->closure); c++) {
+            const XrProgramSemanticCallRecord *call =
+                xr_program_semantic_closure_call(input->closure, c);
+            if (call && same_id(row->id, call->callee_function))
+                preserved_callee = function;
         }
     }
-    if (!seen[0] || !seen[1] || !callee)
-        return scalar_fail(error, error_size,
-                           "Xi scalar callee cannot be selected by PSC identity");
-    callee->inline_policy = XI_INLINE_PRESERVE_CALL;
+    for (uint32_t i = 0; i < function_count; i++) {
+        const XrProgramSemanticFunctionRecord *row =
+            xr_program_semantic_closure_function(input->closure, i);
+        if (function_belongs_to_module(input->closure, row, input->module_index) && !seen[i]) {
+            xr_free(seen);
+            return scalar_fail(error, error_size, "Xi function partition coverage is incomplete");
+        }
+    }
+    xr_free(seen);
+    if (preserved_callee)
+        preserved_callee->inline_policy = XI_INLINE_PRESERVE_CALL;
     if (!bind_aggregate_class(root->module, input->closure, error, error_size))
         return false;
     return bind_function_types(root, root->module, input->closure) ||
@@ -402,26 +548,31 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
 
 bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure **closure,
                                       const XrScalarCallDecision *decision,
-                                      const XrTargetProfile *target_profile, char *error,
-                                      size_t error_size) {
+                                      const XrTargetProfile *target_profile, uint32_t module_index,
+                                      char *error, size_t error_size) {
     if (!module || !closure || !*closure || module->program_semantic_closure ||
-        module->scalar_call_decision || module->scalar_target_profile ||
-        !source_module_matches_psc(module, *closure)) {
-        return scalar_fail(error, error_size, "Xi scalar authority ownership transfer is invalid");
+        module->psc_module_index != XI_PSC_ROW_NONE || module->scalar_call_decision ||
+        module->scalar_target_profile ||
+        !module_identity_matches_source(module) ||
+        !source_module_matches_psc(module, *closure, module_index)) {
+        return scalar_fail(error, error_size, "Xi authority ownership transfer is invalid");
     }
-    XiProgramSemanticInput input = {*closure, decision};
+    XiProgramSemanticInput input = {*closure, decision, module_index};
     bool scalar = xr_program_semantic_closure_family(*closure) ==
                   XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     bool aggregate = xr_program_semantic_closure_family(*closure) ==
                      XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+    bool graph = xr_program_semantic_closure_family(*closure) ==
+                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     if (!xi_program_semantic_input_is_consistent(&input, error, error_size) ||
         (scalar &&
          (!target_profile || !xr_scalar_call_decision_verify(decision, *closure, target_profile,
                                                              error, error_size))) ||
-        (!aggregate && !scalar) || (aggregate && (decision || target_profile)))
+        (!aggregate && !scalar && !graph) || ((aggregate || graph) && (decision || target_profile)))
         return false;
     if (!scalar) {
         module->program_semantic_closure = *closure;
+        module->psc_module_index = module_index;
         *closure = NULL;
         return true;
     }
@@ -436,6 +587,7 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
     }
     *owned = *decision;
     module->program_semantic_closure = *closure;
+    module->psc_module_index = module_index;
     module->scalar_call_decision = owned;
     module->scalar_target_profile = retained_profile;
     *closure = NULL;

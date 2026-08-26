@@ -42,6 +42,7 @@
 #include <stddef.h>
 #include "../base/xdefs.h"
 #include "../base/xconstants.h"
+#include "../base/xstable_id.h"
 #include "../shared/xr_conversion.h"
 #include "../shared/xr_assertion_plan.h"
 #include "../shared/xr_copy_core.h"
@@ -826,6 +827,11 @@ typedef struct XiImportRef {
     struct XiFunc *resolved_func;     /* exported function this member ref binds to, or NULL */
     struct XiModule *resolved_module; /* target module (namespace refs included), or NULL */
     bool resolution_attempted;        /* module-graph resolver completed exact lookup */
+    /* Stable PSC dependency authority for a covered cross-module call. Names
+     * and resolved pointers only corroborate this join after construction. */
+    uint32_t psc_dependency_index;
+    XiSourceLocator psc_import_locator;
+    XrStableId psc_resolver_binding;
 } XiImportRef;
 
 typedef struct XiResolvedReexport {

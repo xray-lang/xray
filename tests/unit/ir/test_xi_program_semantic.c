@@ -874,8 +874,8 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, profile, error,
-                                                 sizeof(error)));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, profile, 0,
+                                                 error, sizeof(error)));
     ASSERT_NULL(closure);
     bool verified = xi_program_semantic_verify(root->module, profile, error, sizeof(error));
     ASSERT_TRUE(verified);
@@ -1262,7 +1262,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
         build_authorities(&fixture, profile, &second, &second_decision, error, sizeof(error)));
     XrProgramSemanticClosure *second_owner = second;
     ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, profile,
-                                                  error, sizeof(error)));
+                                                  0, error, sizeof(error)));
     ASSERT_TRUE(second == second_owner);
     xr_program_semantic_closure_free(second);
 
@@ -1302,7 +1302,8 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     ASSERT_NOT_NULL(root->module);
     char error[512] = {0};
     ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, error, sizeof(error)));
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+                                         sizeof(error)));
     ASSERT_NULL(closure);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
 
@@ -1440,7 +1441,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         (XrProgramSemanticClosure *) foreign_authority_published);
     ASSERT_NOT_NULL(foreign_authority);
     XrProgramSemanticClosure *foreign_authority_owner = foreign_authority;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL, 0,
                                                   error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_authority, foreign_authority_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
@@ -1450,14 +1451,15 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         xr_program_semantic_closure_retain((XrProgramSemanticClosure *) foreign_source_published);
     ASSERT_NOT_NULL(foreign_source);
     XrProgramSemanticClosure *foreign_source_owner = foreign_source;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, error,
-                                                  sizeof(error)));
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, 0,
+                                                  error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_source, foreign_source_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
     xr_program_semantic_closure_free(foreign_source);
 
     ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, error, sizeof(error)));
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+                                         sizeof(error)));
     ASSERT_NULL(closure);
     bool xi_verified = xi_program_semantic_verify(root->module, NULL, error, sizeof(error));
     ASSERT_TRUE(xi_verified);

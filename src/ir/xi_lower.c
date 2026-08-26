@@ -2369,6 +2369,46 @@ static void prescan_enum_method_bindings(XiLower *l, EnumDeclNode *ed, uint16_t 
     }
 }
 
+static XiImportRef *prescan_import_ref(XiLower *l, const AstNode *node, const char *module_name,
+                                       const char *member_name) {
+    if (!l || !l->func || !node || node->type != AST_IMPORT_STMT || !module_name)
+        return NULL;
+    XiImportRef *ref =
+        (XiImportRef *) xi_func_arena_alloc(l->func, (uint32_t) sizeof(XiImportRef));
+    if (!ref)
+        return NULL;
+    memset(ref, 0, sizeof(*ref));
+    ref->resolved_mod_index = -1;
+    ref->resolved_shared_slot = -1;
+    ref->resolved_export_slot = -1;
+    ref->psc_dependency_index = XI_PSC_ROW_NONE;
+    ref->psc_import_locator = (XiSourceLocator) {
+        .kind = (uint32_t) node->type,
+        .span =
+            {
+                .start_line = node->line > 0 ? (uint32_t) node->line : 0,
+                .start_column = node->column > 0 ? (uint32_t) node->column : 0,
+                .end_line = node->end_line > 0 ? (uint32_t) node->end_line : 0,
+                .end_column = node->end_column > 0 ? (uint32_t) node->end_column : 0,
+            },
+    };
+    uint32_t module_length = (uint32_t) strlen(module_name);
+    char *module_copy = (char *) xi_func_arena_alloc(l->func, module_length + 1);
+    if (!module_copy)
+        return NULL;
+    memcpy(module_copy, module_name, module_length + 1);
+    ref->module_path = module_copy;
+    if (member_name) {
+        uint32_t member_length = (uint32_t) strlen(member_name);
+        char *member_copy = (char *) xi_func_arena_alloc(l->func, member_length + 1);
+        if (!member_copy)
+            return NULL;
+        memcpy(member_copy, member_name, member_length + 1);
+        ref->member_name = member_copy;
+    }
+    return ref;
+}
+
 /*
  * Top-level binding prescan: allocate a shared slot for every top-level
  * declaration (var / const / fn / class / enum / struct / import member)
@@ -2428,6 +2468,20 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     XR_DCHECK(vid >= 0 && vid < l->var_cap,
                               "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;
+                    bool runtime_builtin =
+                        s->as.import_stmt.module_name &&
+                        strcmp(s->as.import_stmt.module_name, "sync") == 0 &&
+                        xi_lower_sync_runtime_class_global_index(m->name) >= 0;
+                    if (!runtime_builtin) {
+                        XiImportRef *ref = prescan_import_ref(
+                            l, s, s->as.import_stmt.module_name, m->name);
+                        if (!ref || next_shared >= (uint16_t) l->var_cap) {
+                            l->had_error = true;
+                            prescan_slot_meta_free(&slot_meta);
+                            return;
+                        }
+                        l->shared_slot_imports[next_shared] = ref;
+                    }
                     next_shared++;
                 }
                 continue;
@@ -2440,6 +2494,15 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
         XR_DCHECK(var_id >= 0 && var_id < l->var_cap,
                   "prescan_top_level_bindings: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
+        if (s && s->type == AST_IMPORT_STMT) {
+            XiImportRef *ref = prescan_import_ref(l, s, s->as.import_stmt.module_name, NULL);
+            if (!ref || next_shared >= (uint16_t) l->var_cap) {
+                l->had_error = true;
+                prescan_slot_meta_free(&slot_meta);
+                return;
+            }
+            l->shared_slot_imports[next_shared] = ref;
+        }
         if (!prescan_slot_meta_reserve(&slot_meta, next_shared + 1u)) {
             prescan_slot_meta_free(&slot_meta);
             return;

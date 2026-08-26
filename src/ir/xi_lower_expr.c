@@ -342,6 +342,7 @@ static XiValue *xi_lower_emit_import_ref(XiLower *l, const char *module_name,
     ref->resolved_mod_index = -1;
     ref->resolved_shared_slot = -1;
     ref->resolved_export_slot = -1;
+    ref->psc_dependency_index = XI_PSC_ROW_NONE;
 
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_IMPORT_REF, type, 0);
     if (!v)
@@ -1552,14 +1553,14 @@ static int lower_resolved_object_field_ordinal(XiLower *l, AstNode *node, XrType
     return runtime_ordinal;
 }
 
-static const XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
+static XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
     while ((xi_value_forwards_referent(v) || (v && v->op == XI_RELEASE)) && v->nargs >= 1) {
         v = v->args[0];
     }
     if (!v)
         return NULL;
     if (v->op == XI_IMPORT_REF && v->aux)
-        return (const XiImportRef *) v->aux;
+        return (XiImportRef *) v->aux;
     if (v->op != XI_GET_SHARED || v->aux_int < 0)
         return NULL;
     int slot = (int) v->aux_int;
@@ -6793,12 +6794,17 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
     }
     XiValue *callee = xi_lower_expr(l, call->callee);
     XiValue *argument = callee ? xi_lower_expr(l, call->arguments[0]) : NULL;
+    XiImportRef *import_ref = callee ? lower_import_ref_from_value(l, callee) : NULL;
     XrType *result_type = xi_lower_node_type(l, node);
     if (!callee || !argument || !argument->type || !result_type ||
         XR_TYPE_IS_UNKNOWN(argument->type) || XR_TYPE_IS_ERROR(argument->type) ||
         XR_TYPE_IS_UNKNOWN(result_type) || XR_TYPE_IS_ERROR(result_type) ||
         (l->program_semantics->decision && (!lower_scalar_i64_type_is_exact(argument->type) ||
-                                            !lower_scalar_i64_type_is_exact(result_type)))) {
+                                            !lower_scalar_i64_type_is_exact(result_type))) ||
+        (xr_program_semantic_closure_family(l->program_semantics->closure) ==
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+         (!import_ref || !xi_program_semantic_bind_import(import_ref, l->program_semantics,
+                                                          call_index, NULL, 0)))) {
         l->had_error = true;
         return NULL;
     }

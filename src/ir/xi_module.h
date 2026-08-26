@@ -101,6 +101,7 @@ typedef struct XiModule {
      * these references for the Xi lifetime; later compiler stages may retain
      * the same immutable authorities. */
     struct XrProgramSemanticClosure *program_semantic_closure;
+    uint32_t psc_module_index;
     struct XrScalarCallDecision *scalar_call_decision;
     struct XrTargetProfile *scalar_target_profile;
 } XiModule;
