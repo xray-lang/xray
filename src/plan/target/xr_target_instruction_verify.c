@@ -790,13 +790,21 @@ static bool direct_i64_call_row_is_exact(
     uint32_t call_index = (uint32_t) row->immediate_bits;
     const XrTargetCallRecord *call =
         calls && call_index < call_count ? &calls[call_index] : NULL;
-    if (!call || (!arguments && call->argument_count) || !slots ||
+    bool direct_local =
+        call && call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
+        call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL;
+    uint32_t program_graph_count = 0u;
+    xr_target_plan_program_graphs(plan, &program_graph_count);
+    bool program_direct =
+        call && call->calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT &&
+        call->target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+        program_graph_count == 1u;
+    if (!call || (!direct_local && !program_direct) ||
+        (!arguments && call->argument_count) || !slots ||
         call->id != call_index ||
         call->caller_function != function_index ||
         call->callee_function >= function_count ||
         !executable_functions[call->callee_function] || call->flags != 0 ||
-        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
-        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
         call->adapter_begin != 0 || call->adapter_count != 0 ||
         call->result_mode != XR_TARGET_CALL_VALUE ||
         call->result_ownership != XR_TARGET_CALL_NONE ||

@@ -7603,6 +7603,32 @@ static void test_string_byte_slice_view_target_authority(void) {
 }
 
 static void test_assertion_target_capability_authority(void) {
+    {
+        XrRuntimeTargetAuthority authority;
+        REQUIRE(xr_runtime_target_authority_native_hosted(&authority) == XR_RUNTIME_ABI_OK);
+        XrTargetProfile *profile =
+            build_native_profile_with_provider_count(&authority, authority.provider_count);
+        XrSemanticPlan *entry = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT);
+        XrSemanticPlan *producer = build_assertion_semantic(XR_CORE_BUILTIN_ASSERT_THROWS);
+        const XrSemanticPlan *modules[2] = {entry, producer};
+        uint64_t mask = 0u;
+        char error[512] = {0};
+        REQUIRE(xr_target_semantic_capability_requirements(
+            modules, 1u, profile, &mask, error, sizeof(error)));
+        REQUIRE(mask == XR_TARGET_FOUNDATION_CAPABILITY_MASK);
+        REQUIRE(xr_target_semantic_capability_requirements(
+            modules, 2u, profile, &mask, error, sizeof(error)));
+        REQUIRE(mask ==
+                (XR_TARGET_FOUNDATION_CAPABILITY_MASK |
+                 XR_TARGET_CAPABILITY_MASK(XR_TARGET_CAPABILITY_TYPED_ERROR_BOUNDARY)));
+        modules[1] = entry;
+        REQUIRE(xr_target_semantic_capability_requirements(
+            modules, 2u, profile, &mask, error, sizeof(error)));
+        REQUIRE(mask == XR_TARGET_FOUNDATION_CAPABILITY_MASK);
+        xr_semantic_plan_free(producer);
+        xr_semantic_plan_free(entry);
+        xr_target_profile_free(profile);
+    }
     const XrCoreBuiltinId builtins[] = {
         XR_CORE_BUILTIN_ASSERT,
         XR_CORE_BUILTIN_ASSERT_EQUAL,

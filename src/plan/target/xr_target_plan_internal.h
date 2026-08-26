@@ -130,6 +130,10 @@ XR_FUNC bool xr_target_semantic_program_module_direct_dependencies(
     uint32_t *dependency_count, char *error, size_t error_size);
 XR_FUNC bool xr_target_semantic_module_set_fingerprint(
     const XrSemanticPlan *const *modules, uint32_t module_count, XrFingerprint *out);
+XR_FUNC bool xr_target_semantic_capability_requirements(
+    const XrSemanticPlan *const *modules, uint32_t module_count,
+    const XrTargetProfile *profile, uint64_t *expected_mask,
+    char *error, size_t error_size);
 XR_FUNC void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout,
                                                   XrFingerprint *out);
 XR_FUNC void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call,

@@ -14732,29 +14732,31 @@ static bool graph_merge_machine_reps(const XrTargetMaterializedPlan *left,
 static bool graph_merge_capabilities(const XrTargetMaterializedPlan *left,
                                      const XrTargetMaterializedPlan *right,
                                      XrTargetMaterializedPlan *target) {
-    uint32_t count = 0;
-    for (uint32_t source_index = 0; source_index < 2u; source_index++) {
-        const XrTargetMaterializedPlan *source = source_index ? right : left;
-        for (uint32_t i = 0; i < source->capability_count; i++) {
-            const XrTargetCapabilityRecord *candidate = &source->capabilities[i];
-            XrTargetCapabilityRecord *match = NULL;
-            for (uint32_t j = 0; j < count; j++) {
-                if (target->capabilities[j].capability == candidate->capability) {
-                    match = &target->capabilities[j];
-                    break;
-                }
-            }
-            if (match) {
-                if (match->provider != candidate->provider || match->flags != candidate->flags)
-                    return false;
-                continue;
-            }
-            if (count >= target->capability_count)
-                return false;
-            target->capabilities[count] = *candidate;
-            target->capabilities[count].id = count;
-            count++;
-        }
+    uint32_t indexes[2] = {0u, 0u};
+    uint32_t count = 0u;
+    while (indexes[0] < left->capability_count || indexes[1] < right->capability_count) {
+        const XrTargetCapabilityRecord *left_row =
+            indexes[0] < left->capability_count ? &left->capabilities[indexes[0]] : NULL;
+        const XrTargetCapabilityRecord *right_row =
+            indexes[1] < right->capability_count ? &right->capabilities[indexes[1]] : NULL;
+        int order = !right_row ? -1
+                    : !left_row ? 1
+                    : left_row->capability < right_row->capability ? -1
+                    : left_row->capability > right_row->capability ? 1
+                                                                    : 0;
+        if (order == 0 &&
+            (left_row->provider != right_row->provider ||
+             left_row->flags != right_row->flags))
+            return false;
+        const XrTargetCapabilityRecord *chosen = order <= 0 ? left_row : right_row;
+        if (!chosen || count >= target->capability_count)
+            return false;
+        target->capabilities[count] = *chosen;
+        target->capabilities[count].id = count++;
+        if (order <= 0)
+            indexes[0]++;
+        if (order >= 0)
+            indexes[1]++;
     }
     target->capability_count = count;
     return true;

@@ -1032,6 +1032,21 @@ static bool scalar_graph_xtp_roundtrip(
     return exact;
 }
 
+static void scalar_graph_target_refresh_fingerprints(XrTargetPlan *target) {
+    for (uint32_t layout = 0; layout < target->layouts_count; layout++)
+        xr_target_layout_compute_fingerprint(target, layout,
+                                             &target->layouts[layout].fingerprint);
+    for (uint32_t call = 0; call < target->calls_count; call++)
+        xr_target_call_compute_fingerprint(target, call, &target->calls[call].fingerprint);
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+}
+
+static bool scalar_graph_target_rehashed_mutation_rejected(XrTargetPlan *target) {
+    char error[512] = {0};
+    scalar_graph_target_refresh_fingerprints(target);
+    return !xr_target_plan_verify(target, error, sizeof(error));
+}
+
 static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
     XrTargetProfile *profile = NULL;
     XrTargetPlan *target = NULL;
@@ -1142,6 +1157,311 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
                 xr_target_plan_verify(target, error, sizeof(error)) &&
                 xr_target_plan_fingerprint_is_intact(target);
     }
+    if (exact) {
+        XrTargetProgramGraphRecord *graph = &target->program_graphs[0];
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[graph->entry_partition];
+        uint32_t saved_module = partition->semantic_module;
+        uint32_t mutated_module = graph->producer_partition;
+        partition->semantic_module = mutated_module;
+        bool rejected = mutated_module != saved_module &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        partition->semantic_module = saved_module;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        uint32_t original_count = target->machine_reps_count;
+        XrTargetMachineRepRecord *original_rows = target->machine_reps;
+        XrTargetMachineRepRecord *expanded =
+            xr_malloc((size_t) (original_count + 1u) * sizeof(*expanded));
+        bool shape_exact = expanded && original_count == 4u &&
+                           original_rows[1].kind == XR_MACHINE_REP_I64;
+        if (shape_exact) {
+            memcpy(expanded, original_rows,
+                   (size_t) original_count * sizeof(*expanded));
+            expanded[original_count] = original_rows[1];
+            expanded[original_count].id = original_count;
+            expanded[1].legal_conversion_mask[0] |=
+                UINT64_C(1) << original_count;
+            memset(expanded[original_count].legal_conversion_mask, 0,
+                   sizeof(expanded[original_count].legal_conversion_mask));
+            expanded[original_count].legal_conversion_mask[0] = UINT64_C(1) << 1u;
+            target->machine_reps = expanded;
+            target->machine_reps_count = original_count + 1u;
+        }
+        bool rejected = shape_exact &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        if (shape_exact) {
+            target->machine_reps = original_rows;
+            target->machine_reps_count = original_count;
+        }
+        xr_free(expanded);
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetExtentRecord *extent = &target->extents[partition->extents_begin];
+        uint16_t saved_alignment = extent->alignment;
+        extent->alignment = 1u;
+        bool rejected = saved_alignment != extent->alignment &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        extent->alignment = saved_alignment;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetLayoutRecord *layout = &target->layouts[partition->layouts_begin];
+        uint8_t saved_kind = layout->kind;
+        layout->kind = saved_kind == XR_TARGET_LAYOUT_SCALAR
+                           ? XR_TARGET_LAYOUT_DYNAMIC
+                           : XR_TARGET_LAYOUT_SCALAR;
+        bool rejected = saved_kind != layout->kind &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        layout->kind = saved_kind;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetValueRepRecord *value = &target->value_reps[partition->value_reps_begin];
+        uint16_t saved_rep = value->register_rep;
+        value->register_rep = (uint16_t) ((saved_rep + 1u) % target->machine_reps_count);
+        bool rejected = target->machine_reps_count > 1u &&
+                        saved_rep != value->register_rep &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        value->register_rep = saved_rep;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetFunctionRecord *function = &target->functions[partition->functions_begin];
+        uint32_t saved_function = function->semantic_function;
+        function->semantic_function = (saved_function + 1u) % partition->functions_count;
+        bool rejected = partition->functions_count > 1u &&
+                        saved_function != function->semantic_function &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        function->semantic_function = saved_function;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetSlotRecord *slot = &target->slots[partition->slots_begin];
+        uint32_t saved_logical = slot->logical_slot;
+        slot->logical_slot = 0u;
+        bool rejected = saved_logical != slot->logical_slot &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        slot->logical_slot = saved_logical;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetInstructionRecord *constant = NULL;
+        for (uint32_t row = 0; row < target->instructions_count; row++)
+            if (target->instructions[row].opcode == XR_TARGET_INSTRUCTION_CONST_I64) {
+                constant = &target->instructions[row];
+                break;
+            }
+        uint64_t saved_immediate = constant ? constant->immediate_bits : 0u;
+        if (constant)
+            constant->immediate_bits++;
+        bool rejected = constant && saved_immediate != constant->immediate_bits &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        if (constant)
+            constant->immediate_bits = saved_immediate;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetDebugFactRecord *fact = &target->debug_facts[0];
+        uint32_t saved_line = fact->source_start_line;
+        fact->source_start_line++;
+        bool rejected = saved_line != fact->source_start_line &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        fact->source_start_line = saved_line;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetCallRecord *call = &target->calls[target->program_graphs[0].target_call];
+        uint32_t saved_operation = call->semantic_operation;
+        uint32_t semantic_count = (uint32_t) xr_semantic_plan_operation_count(entry);
+        call->semantic_operation = (saved_operation + 1u) % semantic_count;
+        bool rejected = semantic_count > 1u &&
+                        saved_operation != call->semantic_operation &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        call->semantic_operation = saved_operation;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetCallRecord *call = &target->calls[target->program_graphs[0].target_call];
+        uint8_t saved_mode = call->result_mode;
+        call->result_mode = XR_TARGET_CALL_CALLER_STORAGE;
+        bool rejected = saved_mode != call->result_mode &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        call->result_mode = saved_mode;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetCallArgumentRecord *argument =
+            &target->call_arguments[target->program_graphs[0].target_argument];
+        uint8_t saved_ownership = argument->ownership;
+        argument->ownership = saved_ownership == XR_TARGET_CALL_READ
+                                  ? XR_TARGET_CALL_CONSUME
+                                  : XR_TARGET_CALL_READ;
+        bool rejected = saved_ownership != argument->ownership &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        argument->ownership = saved_ownership;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetCallArgumentRecord *argument =
+            &target->call_arguments[target->program_graphs[0].target_argument];
+        XrTargetCallRecord *call =
+            &target->calls[target->program_graphs[0].target_call];
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(entry, call->semantic_operation);
+        uint32_t saved_operand = argument->semantic_operand;
+        uint32_t mutated_operand = operation ? operation->operand_begin
+                                             : XR_SEMANTIC_INDEX_NONE;
+        argument->semantic_operand = mutated_operand;
+        bool rejected = operation && operation->operand_count == 2u &&
+                        saved_operand != mutated_operand &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        argument->semantic_operand = saved_operand;
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetValueRepRecord *saved_rows =
+            xr_malloc((size_t) partition->value_reps_count * sizeof(*saved_rows));
+        uint32_t removed = UINT32_MAX;
+        for (uint32_t row = 0; row < partition->value_reps_count; row++)
+            if (target->value_reps[partition->value_reps_begin + row].slot ==
+                XR_SEMANTIC_INDEX_NONE) {
+                removed = row;
+                break;
+            }
+        bool shape_exact = saved_rows && removed != UINT32_MAX &&
+                           partition->value_reps_begin +
+                                   partition->value_reps_count ==
+                               target->value_reps_count;
+        if (shape_exact) {
+            memcpy(saved_rows, &target->value_reps[partition->value_reps_begin],
+                   (size_t) partition->value_reps_count * sizeof(*saved_rows));
+            memmove(&target->value_reps[partition->value_reps_begin + removed],
+                    &target->value_reps[partition->value_reps_begin + removed + 1u],
+                    (size_t) (partition->value_reps_count - removed - 1u) *
+                        sizeof(*saved_rows));
+            partition->value_reps_count--;
+            target->value_reps_count--;
+        }
+        bool rejected = shape_exact &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        if (shape_exact) {
+            target->value_reps_count++;
+            partition->value_reps_count++;
+            memcpy(&target->value_reps[partition->value_reps_begin], saved_rows,
+                   (size_t) partition->value_reps_count * sizeof(*saved_rows));
+        }
+        xr_free(saved_rows);
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        XrTargetLayoutRecord *removed_layout =
+            partition->layouts_count
+                ? &target->layouts[partition->layouts_begin +
+                                   partition->layouts_count - 1u]
+                : NULL;
+        XrTargetDebugFactRecord *saved_debug =
+            xr_malloc((size_t) partition->debug_facts_count * sizeof(*saved_debug));
+        bool shape_exact =
+            removed_layout && saved_debug && partition->extents_count &&
+            partition->layouts_begin + partition->layouts_count ==
+                target->layouts_count &&
+            partition->extents_begin + partition->extents_count ==
+                target->extents_count &&
+            removed_layout->extent == target->extents_count - 1u;
+        if (shape_exact) {
+            memcpy(saved_debug, &target->debug_facts[partition->debug_facts_begin],
+                   (size_t) partition->debug_facts_count * sizeof(*saved_debug));
+            for (uint32_t row = 0; row < partition->debug_facts_count; row++) {
+                XrTargetDebugFactRecord *fact =
+                    &target->debug_facts[partition->debug_facts_begin + row];
+                const XrSemanticOperationRecord *operation =
+                    xr_semantic_plan_operation(entry, fact->semantic_operation);
+                if (operation && operation->result_type == removed_layout->semantic_type)
+                    memset(&fact->layout_fingerprint, 0,
+                           sizeof(fact->layout_fingerprint));
+            }
+            partition->layouts_count--;
+            partition->extents_count--;
+            target->layouts_count--;
+            target->extents_count--;
+        }
+        bool rejected = shape_exact &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        if (shape_exact) {
+            target->layouts_count++;
+            target->extents_count++;
+            partition->layouts_count++;
+            partition->extents_count++;
+            memcpy(&target->debug_facts[partition->debug_facts_begin], saved_debug,
+                   (size_t) partition->debug_facts_count * sizeof(*saved_debug));
+        }
+        xr_free(saved_debug);
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact) {
+        XrTargetModulePartitionRecord *partition =
+            &target->module_partitions[target->program_graphs[0].entry_partition];
+        bool shape_exact = partition->instructions_count &&
+                           partition->debug_facts_count ==
+                               partition->instructions_count &&
+                           partition->instructions_begin +
+                                   partition->instructions_count ==
+                               target->instructions_count &&
+                           partition->debug_facts_begin +
+                                   partition->debug_facts_count ==
+                               target->debug_facts_count;
+        if (shape_exact) {
+            partition->instructions_count--;
+            partition->debug_facts_count--;
+            target->instructions_count--;
+            target->debug_facts_count--;
+        }
+        bool rejected = shape_exact &&
+                        scalar_graph_target_rehashed_mutation_rejected(target);
+        if (shape_exact) {
+            target->instructions_count++;
+            target->debug_facts_count++;
+            partition->instructions_count++;
+            partition->debug_facts_count++;
+        }
+        scalar_graph_target_refresh_fingerprints(target);
+        exact = rejected;
+    }
+    if (exact)
+        exact = xr_target_plan_verify(target, error, sizeof(error)) &&
+                xr_target_plan_fingerprint_is_intact(target);
     xr_target_plan_free(target);
     xr_target_profile_free(profile);
     return exact;
