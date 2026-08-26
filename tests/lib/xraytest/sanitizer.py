@@ -104,6 +104,51 @@ def resolve_compiler_command(command: str) -> str:
     return command
 
 
+def activate_windows_dynamic_asan_runtime(spec: BuildSpec, log) -> bool:
+    """Expose Clang's Windows ASan DLL to every child in this lane.
+
+    Linking records an import of ``clang_rt.asan_dynamic-x86_64.dll``; Windows
+    then resolves that import from the executable directory or ``PATH``.  A
+    standard LLVM installation keeps the DLL under the compiler resource
+    directory, which is intentionally not a process-global PATH entry.  Ask
+    the selected compiler for its own resource/runtime roots so this remains
+    independent of the LLVM version and installation prefix.
+    """
+    if not platform.IS_WINDOWS:
+        return True
+
+    compiler = resolve_compiler_command(spec.c_compiler)
+    roots: list[Path] = []
+    for option in ("--print-runtime-dir", "--print-resource-dir"):
+        result = proc.run([compiler, option], timeout=30)
+        if not result.ok:
+            continue
+        reported = result.stdout.decode("utf-8", "replace").strip()
+        if reported:
+            roots.append(Path(reported))
+
+    dll_name = "clang_rt.asan_dynamic-x86_64.dll"
+    candidates: list[Path] = []
+    for root in roots:
+        candidates.extend((root, root / "lib" / "windows"))
+    runtime_dir = next(
+        (candidate for candidate in candidates
+         if (candidate / dll_name).is_file()),
+        None,
+    )
+    if runtime_dir is None:
+        log(f"{dll_name} was not found under the selected Clang resource roots",
+            error=True)
+        return False
+
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    runtime_text = str(runtime_dir)
+    if not any(entry and Path(entry) == runtime_dir for entry in path_entries):
+        os.environ["PATH"] = runtime_text + os.pathsep + os.environ.get("PATH", "")
+    log(f"Windows ASan runtime={runtime_text}")
+    return True
+
+
 def verify_configured(build_dir: Path, required_flag: str) -> str | None:
     """None when the tree really has the sanitizer on, else an error message.
 

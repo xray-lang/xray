@@ -156,6 +156,9 @@ def main(argv: list[str]) -> int:
         ),
     )
 
+    if not sanitizer.activate_windows_dynamic_asan_runtime(spec, log):
+        return 1
+
     xray = build_dir / platform.exe_name("xray")
     reason = sanitizer.rebuild_reason(xray, PROJECT_DIR)
     if reason:

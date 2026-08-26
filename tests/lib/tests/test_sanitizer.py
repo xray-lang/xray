@@ -121,6 +121,59 @@ class CacheInspectionTest(unittest.TestCase):
               mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
             self.assertEqual(Path(sanitizer.resolve_compiler_command("clang")), compiler)
 
+    def test_windows_dynamic_asan_runtime_is_inherited_from_clang(self):
+        resource = self.build / "LLVM" / "lib" / "clang" / "22"
+        runtime = resource / "lib" / "windows"
+        runtime.mkdir(parents=True)
+        (runtime / "clang_rt.asan_dynamic-x86_64.dll").write_bytes(b"dll")
+        missing_runtime = self.build / "LLVM" / "lib" / "runtime"
+        reports = [
+            sanitizer.proc.ProcResult(
+                argv=("clang", "--print-runtime-dir"), returncode=0,
+                stdout=(str(missing_runtime) + "\n").encode(), stderr=b"",
+                timed_out=False),
+            sanitizer.proc.ProcResult(
+                argv=("clang", "--print-resource-dir"), returncode=0,
+                stdout=(str(resource) + "\n").encode(), stderr=b"",
+                timed_out=False),
+        ]
+        messages = []
+
+        def log(message, *, error=False):
+            messages.append((message, error))
+
+        spec = sanitizer.BuildSpec(
+            build_dir=self.build, sanitizer_flags=("ENABLE_ASAN=ON",))
+        with (mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.object(sanitizer, "resolve_compiler_command",
+                                return_value="clang"),
+              mock.patch.object(sanitizer.proc, "run", side_effect=reports),
+              mock.patch.dict(os.environ, {"PATH": "existing"})):
+            self.assertTrue(
+                sanitizer.activate_windows_dynamic_asan_runtime(spec, log))
+            self.assertEqual(os.environ["PATH"].split(os.pathsep)[0], str(runtime))
+        self.assertIn("Windows ASan runtime=", messages[-1][0])
+
+    def test_missing_windows_dynamic_asan_runtime_fails_closed(self):
+        report = sanitizer.proc.ProcResult(
+            argv=("clang", "--print-resource-dir"), returncode=0,
+            stdout=(str(self.build / "missing") + "\n").encode(), stderr=b"",
+            timed_out=False)
+        messages = []
+
+        def log(message, *, error=False):
+            messages.append((message, error))
+
+        spec = sanitizer.BuildSpec(
+            build_dir=self.build, sanitizer_flags=("ENABLE_ASAN=ON",))
+        with (mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.object(sanitizer, "resolve_compiler_command",
+                                return_value="clang"),
+              mock.patch.object(sanitizer.proc, "run", return_value=report)):
+            self.assertFalse(
+                sanitizer.activate_windows_dynamic_asan_runtime(spec, log))
+        self.assertTrue(messages[-1][1])
+
 
 class StaleSourceTest(unittest.TestCase):
     def setUp(self):
