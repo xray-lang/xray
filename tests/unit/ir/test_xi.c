@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 /* Minimal XrType stubs for testing without an isolate */
@@ -29,6 +30,9 @@ static void reset_import_ref(XiImportRef *ref) {
     ref->resolved_export_slot = -1;
     ref->resolved_module = NULL;
     ref->resolved_func = NULL;
+    ref->psc_dependency_index = XI_PSC_ROW_NONE;
+    memset(&ref->psc_import_locator, 0, sizeof(ref->psc_import_locator));
+    memset(&ref->psc_resolver_binding, 0, sizeof(ref->psc_resolver_binding));
 }
 
 /* Named source imports are lookup coordinates, not durable identities.  Once
@@ -44,6 +48,7 @@ static void test_typed_named_import_resolution(void) {
         {
             .canonical = "stdlib-module-v1:module=4:http:path=12:http/http.xr",
             .source_path = importer_path,
+            .logical_path = "http/http.xr",
             .kind = XR_MOD_STDLIB,
             .authority = {.kind = XR_MODULE_IDENTITY_STDLIB, .namespace_id = "http"},
             .dep_indices = dependencies,
@@ -52,6 +57,7 @@ static void test_typed_named_import_resolution(void) {
         {
             .canonical = "stdlib-module-v1:module=3:net:path=10:net/net.xr",
             .source_path = "C:/checkout/stdlib/net/net.xr",
+            .logical_path = "net/net.xr",
             .kind = XR_MOD_STDLIB,
             .authority = {.kind = XR_MODULE_IDENTITY_STDLIB, .namespace_id = "net"},
         },

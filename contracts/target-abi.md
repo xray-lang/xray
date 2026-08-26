@@ -415,7 +415,7 @@ whole-scalar ABI authority.
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
 function is identified through its owning module's frozen PSC v5 row:
 `XiFunc.psc_function_index` selects the PSC function identity and locator, which
-must join uniquely to the SemanticPlan 41 program-function binding and the exact
+must join uniquely to the SemanticPlan 42 program-function binding and the exact
 verified TargetPlan provenance and fingerprint. A mutable `XiFunc.semantic_plan`
 pointer is not required authority; when present it is only an additional exact
 agreement check. Missing, duplicate, foreign same-shape, or mutated identity
@@ -743,7 +743,7 @@ anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de97
 anchor-sha256: src/app/cli/xcmd_build.c 61bde16df4f1c90e3547de81865bbc4c3b33daabea597f15bbbbb207f8ce3b28
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 8d1cb7212b432a7cefe7e3e3d202509c75dd84190e084c3e7d2a88af62ca4eb1
-anchor-sha256: src/ir/xi.h 159f1232d5604c2478e9c9593e4a209a9c845b45268bad17775f6e3c9387dce6
+anchor-sha256: src/ir/xi.h aeec8ba6571c3a53872d3d16d75bd32ab548abd28543284780910cd6284b96e7
 anchor-sha256: stdlib/simd/simd.xr 35c745eb6a37f37a0c7a2d2daf4d4bb953582e930929970d330a2cd3469696d9
 anchor-sha256: src/aot/xaot_coro.h 51edaa56bb72326f5bacd0998b00d505e0c0533190f4ba0289c10ee954049995
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1ebe380363e08e367a588194d1061ae1bdfcec
@@ -752,5 +752,5 @@ anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1b
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7
 anchor-sha256: src/aot/xaot_boundary.c 22b97cdfac8d0b22905dfe036190560ab29f4beb32abd660cb9a49dc2f4c6b09
-anchor-sha256: src/aot/xaot_driver.c 862e1ac8a866931d8a5c7a86262657c986480af28da0bc6842322dea2f5b4bf6
+anchor-sha256: src/aot/xaot_driver.c ed7fb88a012049a4dae8b2286c87e7231f5841d5920c03fa9940ca9456cc3252
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 717147203998c04a1ab1653756994cbceb5ea37a138e02898cb5fd99505dee65

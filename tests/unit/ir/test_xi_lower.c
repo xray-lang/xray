@@ -991,14 +991,17 @@ TEST(user_method_named_fetch_add_remains_ordinary_call) {
 }
 
 TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
-    XiFunc *f = lower_source("fn appendRune(out: ref StringBuilder) { out.append('x') }\n"
-                             "fn build() -> string {\n"
-                             "  var builder = StringBuilder()\n"
-                             "  builder.append(\"x\")\n"
-                             "  builder.append('中')\n"
-                             "  appendRune(ref builder)\n"
-                             "  return builder.toString()\n"
-                             "}\n");
+    XgGlobalEvidence evidence = {0};
+    XiFunc *f = lower_source_with_global_evidence(
+        "fn appendRune(out: ref StringBuilder) { out.append('x') }\n"
+        "fn build() -> string {\n"
+        "  var builder = StringBuilder()\n"
+        "  builder.append(\"x\")\n"
+        "  builder.append('中')\n"
+        "  appendRune(ref builder)\n"
+        "  return builder.toString()\n"
+        "}\n",
+        &evidence);
     assert(f != NULL);
     assert(func_tree_count_intrinsic_method(
                f, "append", XA_INTRINSIC_STRING_BUILDER_APPEND) == 3 &&
@@ -1055,6 +1058,7 @@ TEST(string_builder_append_lowers_with_stable_intrinsic_identity) {
     assert(xr_semantic_plan_verify(plan, error, sizeof(error)));
     xr_semantic_plan_free(plan);
     xi_func_free(f);
+    xg_global_evidence_free(&evidence);
 }
 
 TEST(user_method_named_append_remains_ordinary_call) {

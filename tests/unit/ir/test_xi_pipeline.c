@@ -951,11 +951,12 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
     config.run_emit = false;
     config.run_canonicalize = false;
     config.source_file = "scalar-binding.xr";
-    config.module_identity = "memory-module-v1:id=20:xi-scalar-binding-v1";
 
     XiPipelineScalarFixture missing_profile = {0};
     PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(&missing_profile, session,
                                                              "xi-scalar-pipeline-missing-profile"));
+    config.module_identity = missing_profile.spec->canonical;
+    config.module_name = "xi_scalar_pipeline_missing_profile";
     XiPipelineResult rejected = xi_pipeline_compile_program(
         missing_profile.spec->ast, missing_profile.analyzer, g_iso, &config);
     PIPELINE_TEST_REQUIRE(rejected.status == XI_PIPE_ERR_INTERNAL);
@@ -974,6 +975,8 @@ TEST(e2e_scalar_authority_requires_and_uses_session_profile) {
     XiPipelineScalarFixture exact_profile = {0};
     PIPELINE_TEST_REQUIRE(xi_pipeline_scalar_fixture_analyze(&exact_profile, session,
                                                              "xi-scalar-pipeline-exact-profile"));
+    config.module_identity = exact_profile.spec->canonical;
+    config.module_name = "xi_scalar_pipeline_exact_profile";
     XiPipelineResult accepted = xi_pipeline_compile_program(exact_profile.spec->ast,
                                                             exact_profile.analyzer, g_iso, &config);
     if (accepted.status != XI_PIPE_OK)

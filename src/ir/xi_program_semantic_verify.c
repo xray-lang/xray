@@ -62,6 +62,29 @@ static bool verify_i64(const XrType *type) {
            type->scalar_rep == XR_NATIVE_I64;
 }
 
+static bool verify_graph_function_signature_effect(const XiFunc *function,
+                                                   uint16_t parameter_count) {
+    return function && function->nparams == parameter_count &&
+           function->min_params == parameter_count && !function->is_vararg &&
+           !function->is_extern && !function->is_generic_template &&
+           function->error_effect_nothrow && function->analyzer_effect_complete &&
+           function->semantic_effects == 0 && function->unknown_semantic_effects == 0 &&
+           function->effect_unknown_reasons == 0 && !function->contains_unsafe_op &&
+           !function->requires_unsafe_at_call && function->entry_type == 0;
+}
+
+static bool verify_graph_export_function_type(const XrType *type, const XiFunc *function) {
+    return type && function && type->kind == XR_KIND_FUNCTION && !type->is_nullable &&
+           !type->is_const && !type->is_literal && type->function.params &&
+           type->function.param_count == 1 &&
+           type->function.min_params == 1 && !type->function.is_variadic &&
+           !type->function.is_c_abi && type->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
+           type->function.type_param_count == 0 && verify_i64(type->function.return_type) &&
+           verify_i64(type->function.params[0].type) &&
+           type->function.params[0].mode == XR_PARAM_READ &&
+           verify_graph_function_signature_effect(function, 1);
+}
+
 static bool verify_source_module_exact(const XiModule *module) {
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
     const XrProgramSemanticModuleRecord *row =
@@ -723,12 +746,13 @@ static bool verify_graph_partition(const XiModule *module, char *error, size_t e
             return verify_fail(error, error_size, "Xi graph function row join is invalid");
         local_row = row;
         if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) {
-            if (function->nparams != 0)
+            if (!verify_graph_function_signature_effect(function, 0))
                 return verify_fail(error, error_size, "Xi graph entry signature is invalid");
         } else if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED) {
             const XrProgramSemanticFunctionParameterRecord *parameter =
                 xr_program_semantic_closure_function_parameter(closure, row->parameter_begin);
-            if (function->nparams != 1 || !function->params || !function->params[0] ||
+            if (!verify_graph_function_signature_effect(function, 1) || !function->params ||
+                !function->params[0] ||
                 function->params[0]->op != XI_PARAM ||
                 function->params[0]->psc_type_index != 0 ||
                 !verify_i64(function->params[0]->type) ||
@@ -794,7 +818,8 @@ static bool verify_graph_partition(const XiModule *module, char *error, size_t e
             module->nexports != 1 || !module->exports ||
             module->exports[0].function != module->functions[0] ||
             module->exports[0].class_data || module->exports[0].cell_index != -1 ||
-            !verify_i64(module->exports[0].value_type) ||
+            !verify_graph_export_function_type(module->exports[0].value_type,
+                                               module->functions[0]) ||
             module->exports[0].is_live_binding ||
             module->exports[0].shared_slot >= module->nslots || !module->slot_funcs ||
             module->slot_funcs[module->exports[0].shared_slot] != module->functions[0])

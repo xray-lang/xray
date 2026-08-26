@@ -56,6 +56,13 @@ PROGRAM_RE = re.compile(
     r"\[program-closure\] modules=(\d+) dependencies=(\d+) "
     r"psc=([0-9a-f]{64}) gci=([0-9a-f]{32})"
 )
+PROGRAM_PLAN_GATE = (
+    "[program-semantic-plan] modules=2 entry=1 xi=verified "
+    "semantic=verified target=pending"
+)
+GRAPH_TARGET_REJECTION = (
+    "XR_TARGET_1001: graph SemanticPlan execution is outside TargetPlan coverage"
+)
 
 SOLO_V1 = "fn scale(x: i64) -> i64 {\n    return x * 3\n}\n\nprint(scale(14))\n"
 SOLO_V2 = "fn scale(x: i64) -> i64 {\n    return x * 5\n}\n\nprint(scale(14))\n"
@@ -177,6 +184,26 @@ def expect_output(rec: Recorder, config: Config, binary: Path, want: str, label:
     result = proc.run([binary], timeout=config.timeout)
     got = result.stdout.decode("utf-8", "replace").strip()
     expect(rec, got == want, f"{label}: output {want!r}", f"got {got!r}")
+
+
+def expect_product_target_boundary(rec: Recorder, result: proc.ProcResult,
+                                   output: Path, label: str) -> None:
+    stdout = result.stdout_text("replace")
+    stderr = result.stderr_text("replace")
+    gate_at = stdout.find(PROGRAM_PLAN_GATE)
+    summary_at = stdout.find("[module-summary]")
+    closure_at = stdout.find("[program-closure]")
+    forbidden = ("legacy success", "legacy fallback", "fallback succeeded")
+    expect(rec, not result.ok and not result.timed_out and GRAPH_TARGET_REJECTION in stderr,
+           f"{label}: verified graph reaches the exact Target fail-closed boundary",
+           result.combined_text())
+    expect(rec, 0 <= gate_at < summary_at < closure_at,
+           f"{label}: Xi/SemanticPlan gate precedes cache publication and Target",
+           stdout)
+    expect(rec, not output.exists(),
+           f"{label}: Target rejection publishes no native binary", str(output))
+    expect(rec, all(marker not in result.combined_text().lower() for marker in forbidden),
+           f"{label}: Target rejection has no legacy recovery", result.combined_text())
 
 
 def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> None:
@@ -344,7 +371,9 @@ def run_product_graph_identity(rec: Recorder, config: Config,
     producer.write_text(PRODUCT_PRODUCER_V1, encoding="utf-8")
     entry.write_text(PRODUCT_ENTRY, encoding="utf-8")
 
-    cold_result = build(config, cache, entry, d / "product1")
+    cold_output = d / "product1"
+    cold_result = build(config, cache, entry, cold_output)
+    expect_product_target_boundary(rec, cold_result, cold_output, "product-cold")
     cold = parse_summary(rec, cold_result, "product-cold", False)
     cold_program = parse_program_closure(rec, cold_result, "product-cold")
     if not cold or not cold_program:
@@ -363,7 +392,9 @@ def run_product_graph_identity(rec: Recorder, config: Config,
            "product-cold: one immutable XSM object exists per module",
            str(cold_inventory))
 
-    warm_result = build(config, cache, entry, d / "product2")
+    warm_output = d / "product2"
+    warm_result = build(config, cache, entry, warm_output)
+    expect_product_target_boundary(rec, warm_result, warm_output, "product-warm")
     warm = parse_summary(rec, warm_result, "product-warm", False)
     warm_program = parse_program_closure(rec, warm_result, "product-warm")
     if not warm or not warm_program:
@@ -377,7 +408,9 @@ def run_product_graph_identity(rec: Recorder, config: Config,
            str(warm))
 
     producer.write_text(PRODUCT_PRODUCER_V2, encoding="utf-8")
-    edited_result = build(config, cache, entry, d / "product3")
+    edited_output = d / "product3"
+    edited_result = build(config, cache, entry, edited_output)
+    expect_product_target_boundary(rec, edited_result, edited_output, "product-edit")
     edited = parse_summary(rec, edited_result, "product-edit", False)
     edited_program = parse_program_closure(rec, edited_result, "product-edit")
     if not edited or not edited_program:
@@ -399,7 +432,9 @@ def run_product_graph_identity(rec: Recorder, config: Config,
            str(edited_inventory))
 
     producer.write_text(PRODUCT_PRODUCER_V1, encoding="utf-8")
-    restored_result = build(config, cache, entry, d / "product4")
+    restored_output = d / "product4"
+    restored_result = build(config, cache, entry, restored_output)
+    expect_product_target_boundary(rec, restored_result, restored_output, "product-revert")
     restored = parse_summary(rec, restored_result, "product-revert", False)
     restored_program = parse_program_closure(rec, restored_result, "product-revert")
     if not restored or not restored_program:

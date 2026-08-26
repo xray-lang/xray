@@ -22,12 +22,22 @@
 #include "frontend/parser/xast_walk.h"
 #include "frontend/parser/xparse.h"
 #include "base/xmalloc.h"
+#include "ir/xi_import_resolve.h"
+#include "ir/xi_pipeline.h"
+#include "ir/xi_program_semantic.h"
+#include "ir/xi_program_semantic_plan.h"
 #include "module/xmodule.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
+#include "plan/format/xr_xsm_schema.h"
 #include "plan/semantic/xr_program_semantic_closure.h"
 #include "plan/semantic/xr_program_semantic_closure_internal.h"
 #include "plan/semantic/xr_scalar_call_semantics.h"
+#include "plan/semantic/xr_semantic_plan_internal.h"
+#include "plan/semantic/xr_semantic_verify.h"
+#include "plan/target/xr_target_builder.h"
+#include "plan/target/xr_target_profile.h"
+#include "runtime/abi/xr_runtime_target_profile.h"
 #include "shared/xr_exact_scalar_registry.h"
 #include "toolchain/xcompiler_session.h"
 #include "xray.h"
@@ -300,6 +310,15 @@ typedef struct ScalarGraphFixture {
     XaAnalyzer *analyzer;
 } ScalarGraphFixture;
 
+typedef struct ScalarGraphPlanFixture {
+    ScalarGraphFixture *source;
+    const XrProgramSemanticClosure *closure;
+    XiPipelineResult pipelines[2];
+    XiModule *modules[2];
+    uint32_t entry_index;
+    uint32_t producer_index;
+} ScalarGraphPlanFixture;
+
 static bool write_source_file(const char *path, const char *source) {
     FILE *file = fopen(path, "wb");
     if (!file)
@@ -447,6 +466,411 @@ static void scalar_graph_fixture_cleanup(ScalarGraphFixture *fixture) {
             xr_test_rmdir(fixture->directory);
     }
     memset(fixture, 0, sizeof(*fixture));
+}
+
+static void scalar_graph_plan_fixture_cleanup(ScalarGraphPlanFixture *fixture) {
+    if (!fixture)
+        return;
+    for (uint32_t i = 0; i < 2; i++)
+        xi_pipeline_result_free(&fixture->pipelines[i]);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static bool scalar_graph_import_join_is_exact(const ScalarGraphPlanFixture *fixture) {
+    if (!fixture || fixture->entry_index >= 2 || fixture->producer_index >= 2)
+        return false;
+    XiModule *entry = fixture->modules[fixture->entry_index];
+    XiModule *producer = fixture->modules[fixture->producer_index];
+    if (!entry || !producer || producer->nexports != 1 || !producer->exports ||
+        producer->nfuncs != 1 || !producer->functions || !producer->slot_funcs)
+        return false;
+    XiImportRef *match = NULL;
+    for (uint16_t slot = 0; slot < entry->nslots; slot++) {
+        XiImportRef *candidate = entry->slot_imports ? entry->slot_imports[slot] : NULL;
+        if (!candidate)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    return match && match->resolution_attempted &&
+           match->resolved_mod_index == (int) fixture->producer_index &&
+           match->resolved_module == producer && match->resolved_func == producer->functions[0] &&
+           match->resolved_export_slot == 0 && match->resolved_shared_slot >= 0 &&
+           (uint16_t) match->resolved_shared_slot == producer->exports[0].shared_slot &&
+           (uint16_t) match->resolved_shared_slot < producer->nslots &&
+           producer->slot_funcs[match->resolved_shared_slot] == producer->functions[0];
+}
+
+static bool scalar_graph_plan_fixture_build(ScalarGraphPlanFixture *fixture,
+                                            ScalarGraphFixture *source,
+                                            const XrProgramSemanticClosure *closure, char *error,
+                                            size_t error_size) {
+    memset(fixture, 0, sizeof(*fixture));
+    if (error && error_size)
+        error[0] = '\0';
+    fixture->source = source;
+    fixture->closure = closure;
+    if (!source || !closure || xr_program_semantic_closure_schema(closure) !=
+            XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
+        xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+        goto fail;
+
+    XiPipelineConfig config = xi_pipeline_aot_config();
+    /* The fixture already ran whole-graph mono, canonicalization, and final
+     * analysis. The product driver disables a second canonicalization here so
+     * analyzer authority and the lowered AST remain the same snapshot. */
+    config.run_canonicalize = false;
+    config.program_semantic_closure = closure;
+    config.module_graph = source->graph;
+    config.graph_modules = fixture->modules;
+    config.graph_module_count = 2;
+    /* The pipeline resolves dependency-complete imports before ARC. The
+     * product driver repeats the walk after the module array is complete so
+     * every retained module/function/slot pointer is also exact. */
+    for (uint32_t topo = 0; topo < 2; topo++) {
+        int spec_index = source->graph->topo_order[topo];
+        XrModuleSpec *spec = &source->graph->specs[spec_index];
+        config.source_file = spec->source_path;
+        config.module_identity = spec->canonical;
+        config.module_name = spec_index == source->graph->entry_index
+                                 ? "entry_graph_kat"
+                                 : "producer_graph_kat";
+        fixture->pipelines[topo] = xi_pipeline_compile_program(
+            spec->ast, source->analyzer, g_isolate, &config);
+        if (fixture->pipelines[topo].status != XI_PIPE_OK ||
+            !fixture->pipelines[topo].ir || !fixture->pipelines[topo].ir->module) {
+            if (error && error_size)
+                snprintf(error, error_size, "%s", fixture->pipelines[topo].error.detail);
+            goto fail;
+        }
+        fixture->modules[topo] = fixture->pipelines[topo].ir->module;
+        if (spec_index == source->graph->entry_index)
+            fixture->entry_index = topo;
+    }
+    fixture->producer_index = fixture->entry_index == 0 ? 1u : 0u;
+    if (!scalar_graph_import_join_is_exact(fixture))
+        goto fail;
+    for (uint32_t topo = 0; topo < 2; topo++) {
+        int spec_index = source->graph->topo_order[topo];
+        xi_resolve_imports(fixture->pipelines[topo].ir, source->graph,
+                           source->graph->specs[spec_index].source_path,
+                           fixture->modules, 2);
+    }
+    if (!scalar_graph_import_join_is_exact(fixture) ||
+        !xi_program_semantic_verify_module_set(fixture->modules, 2, fixture->entry_index, NULL,
+                                               error, error_size) ||
+        !xi_program_semantic_plan_verify_module_set(fixture->modules, 2,
+                                                    fixture->entry_index, error, error_size))
+        goto fail;
+    return true;
+
+fail:
+    scalar_graph_plan_fixture_cleanup(fixture);
+    return false;
+}
+
+static XrSemanticPlan *scalar_graph_plan(const ScalarGraphPlanFixture *fixture, uint32_t index) {
+    return fixture && index < 2 && fixture->modules[index] && fixture->modules[index]->init
+               ? fixture->modules[index]->init->semantic_plan
+               : NULL;
+}
+
+static XiImportRef *scalar_graph_entry_import(const ScalarGraphPlanFixture *fixture) {
+    XiModule *entry = fixture ? fixture->modules[fixture->entry_index] : NULL;
+    XiImportRef *match = NULL;
+    for (uint16_t slot = 0; entry && slot < entry->nslots; slot++) {
+        XiImportRef *candidate = entry->slot_imports ? entry->slot_imports[slot] : NULL;
+        if (!candidate)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+static void scalar_graph_refresh_plan(XrSemanticPlan *plan) {
+    if (plan)
+        xr_semantic_plan_compute_fingerprint(plan, &plan->fingerprint);
+}
+
+static bool scalar_graph_plan_set_valid(const ScalarGraphPlanFixture *fixture) {
+    char error[512] = {0};
+    return xi_program_semantic_plan_verify_module_set(
+        (XiModule *const *) fixture->modules, 2, fixture->entry_index, error, sizeof(error));
+}
+
+static bool scalar_graph_xsm_roundtrip(ScalarGraphPlanFixture *fixture) {
+    XrSemanticPlan *producer = scalar_graph_plan(fixture, fixture->producer_index);
+    XrSemanticPlan *entry = scalar_graph_plan(fixture, fixture->entry_index);
+    uint8_t *producer_bytes = NULL;
+    uint8_t *producer_again = NULL;
+    uint8_t *entry_bytes = NULL;
+    uint8_t *entry_again = NULL;
+    size_t producer_size = 0, producer_again_size = 0;
+    size_t entry_size = 0, entry_again_size = 0;
+    XrSemanticPlan *decoded_producer = NULL;
+    XrSemanticPlan *decoded_entry = NULL;
+    XrSemanticPlan *plain_entry = NULL;
+    char error[512] = {0};
+    bool ok = producer && entry && producer->dependency_count == 0 &&
+              producer->source_export_count == 1 && entry->dependency_count == 1 &&
+              xr_xsm_encode(producer, &producer_bytes, &producer_size, error, sizeof(error)) &&
+              xr_xsm_encode(producer, &producer_again, &producer_again_size, error,
+                            sizeof(error)) &&
+              producer_size == producer_again_size &&
+              memcmp(producer_bytes, producer_again, producer_size) == 0 &&
+              xr_xsm_encode(entry, &entry_bytes, &entry_size, error, sizeof(error)) &&
+              xr_xsm_encode(entry, &entry_again, &entry_again_size, error, sizeof(error)) &&
+              entry_size == entry_again_size && memcmp(entry_bytes, entry_again, entry_size) == 0 &&
+              xr_xsm_decode(producer_bytes, producer_size, &decoded_producer, error,
+                            sizeof(error)) &&
+              !xr_xsm_decode(entry_bytes, entry_size, &plain_entry, error, sizeof(error));
+    const XrSemanticPlan *dependencies[1] = {decoded_producer};
+    ok = ok && !plain_entry && xr_xsm_decode_module_set(
+                                    entry_bytes, entry_size, dependencies, 1, &decoded_entry,
+                                    error, sizeof(error)) &&
+         xr_semantic_plan_verify(decoded_producer, error, sizeof(error)) &&
+         xr_semantic_plan_verify_module_set(decoded_entry, dependencies, 1, error,
+                                            sizeof(error));
+    uint8_t *producer_roundtrip = NULL;
+    uint8_t *entry_roundtrip = NULL;
+    size_t producer_roundtrip_size = 0, entry_roundtrip_size = 0;
+    ok = ok && xr_xsm_encode(decoded_producer, &producer_roundtrip, &producer_roundtrip_size,
+                             error, sizeof(error)) &&
+         xr_xsm_encode(decoded_entry, &entry_roundtrip, &entry_roundtrip_size, error,
+                       sizeof(error)) &&
+         producer_roundtrip_size == producer_size && entry_roundtrip_size == entry_size &&
+         memcmp(producer_roundtrip, producer_bytes, producer_size) == 0 &&
+         memcmp(entry_roundtrip, entry_bytes, entry_size) == 0;
+
+    XrSemanticPlan *saved_entry_root = fixture->modules[fixture->entry_index]->init->semantic_plan;
+    XrSemanticPlan *saved_entry_local =
+        fixture->modules[fixture->entry_index]->functions[0]->semantic_plan;
+    XrSemanticPlan *saved_producer_root =
+        fixture->modules[fixture->producer_index]->init->semantic_plan;
+    XrSemanticPlan *saved_producer_local =
+        fixture->modules[fixture->producer_index]->functions[0]->semantic_plan;
+    fixture->modules[fixture->entry_index]->init->semantic_plan = decoded_entry;
+    fixture->modules[fixture->entry_index]->functions[0]->semantic_plan = decoded_entry;
+    fixture->modules[fixture->producer_index]->init->semantic_plan = decoded_producer;
+    fixture->modules[fixture->producer_index]->functions[0]->semantic_plan = decoded_producer;
+    ok = ok && xi_program_semantic_plan_verify_module_set(
+                   fixture->modules, 2, fixture->entry_index, error, sizeof(error));
+    fixture->modules[fixture->entry_index]->init->semantic_plan = saved_entry_root;
+    fixture->modules[fixture->entry_index]->functions[0]->semantic_plan = saved_entry_local;
+    fixture->modules[fixture->producer_index]->init->semantic_plan = saved_producer_root;
+    fixture->modules[fixture->producer_index]->functions[0]->semantic_plan = saved_producer_local;
+
+    xr_free(entry_roundtrip);
+    xr_free(producer_roundtrip);
+    xr_semantic_plan_free(plain_entry);
+    xr_semantic_plan_free(decoded_entry);
+    xr_semantic_plan_free(decoded_producer);
+    xr_free(entry_again);
+    xr_free(entry_bytes);
+    xr_free(producer_again);
+    xr_free(producer_bytes);
+    return ok;
+}
+
+static bool scalar_graph_program_row_mutations(ScalarGraphPlanFixture *fixture) {
+    XrSemanticPlan *producer = scalar_graph_plan(fixture, fixture->producer_index);
+    XrSemanticPlan *entry = scalar_graph_plan(fixture, fixture->entry_index);
+    if (!producer || !entry || !producer->program_type_bindings ||
+        !producer->program_function_bindings || !entry->program_call_bindings ||
+        !entry->program_dependency_bindings)
+        return false;
+    bool ok = true;
+
+    uint8_t saved_scalar =
+        producer->types[producer->program_type_bindings[0].semantic_type].scalar_rep;
+    producer->types[producer->program_type_bindings[0].semantic_type].scalar_rep = XR_NATIVE_I32;
+    scalar_graph_refresh_plan(producer);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    producer->types[producer->program_type_bindings[0].semantic_type].scalar_rep = saved_scalar;
+    scalar_graph_refresh_plan(producer);
+
+    uint32_t saved_export_count = producer->source_export_count;
+    producer->source_export_count = 0;
+    scalar_graph_refresh_plan(producer);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    producer->source_export_count = saved_export_count;
+    scalar_graph_refresh_plan(producer);
+
+    uint8_t saved_role = producer->program_function_bindings[0].flags;
+    producer->program_function_bindings[0].flags = XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
+    scalar_graph_refresh_plan(producer);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    producer->program_function_bindings[0].flags = saved_role;
+    scalar_graph_refresh_plan(producer);
+
+    uint32_t saved_module_row = entry->program_provenance.program_module_row;
+    entry->program_provenance.program_module_row = fixture->modules[fixture->producer_index]
+                                                       ->psc_module_index;
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    entry->program_provenance.program_module_row = saved_module_row;
+    scalar_graph_refresh_plan(entry);
+
+    entry->program_provenance.program_module.bytes[0] ^= UINT8_C(0x80);
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    entry->program_provenance.program_module.bytes[0] ^= UINT8_C(0x80);
+    scalar_graph_refresh_plan(entry);
+
+    uint32_t saved_function_row = entry->program_function_bindings[0].program_row;
+    entry->program_function_bindings[0].program_row =
+        producer->program_function_bindings[0].program_row;
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    entry->program_function_bindings[0].program_row = saved_function_row;
+    scalar_graph_refresh_plan(entry);
+    return ok && scalar_graph_plan_set_valid(fixture);
+}
+
+static bool scalar_graph_export_carrier_mutations(ScalarGraphPlanFixture *fixture) {
+    XiModule *producer = fixture ? fixture->modules[fixture->producer_index] : NULL;
+    XiModule *entry = fixture ? fixture->modules[fixture->entry_index] : NULL;
+    if (!producer || producer->nexports != 1 || !producer->exports || producer->nfuncs != 1 ||
+        !producer->functions || !entry || entry->nfuncs != 1 || !entry->functions ||
+        !producer->exports[0].value_type ||
+        producer->exports[0].value_type->kind != XR_KIND_FUNCTION)
+        return false;
+    char error[512] = {0};
+    XrType *carrier = producer->exports[0].value_type;
+    producer->exports[0].value_type = producer->functions[0]->return_type;
+    bool ok = !xi_program_semantic_verify_module_set(
+        fixture->modules, 2, fixture->entry_index, NULL, error, sizeof(error));
+    producer->exports[0].value_type = carrier;
+
+    int saved_min_params = carrier->function.min_params;
+    carrier->function.min_params = 0;
+    ok = ok && !xi_program_semantic_verify_module_set(
+                   fixture->modules, 2, fixture->entry_index, NULL, error, sizeof(error));
+    carrier->function.min_params = saved_min_params;
+
+    bool saved_nothrow = entry->functions[0]->error_effect_nothrow;
+    entry->functions[0]->error_effect_nothrow = false;
+    ok = ok && !xi_program_semantic_verify_module_set(
+                   fixture->modules, 2, fixture->entry_index, NULL, error, sizeof(error));
+    entry->functions[0]->error_effect_nothrow = saved_nothrow;
+    return ok && scalar_graph_plan_set_valid(fixture);
+}
+
+static bool scalar_graph_external_join_mutations(ScalarGraphPlanFixture *fixture) {
+    XrSemanticPlan *entry = scalar_graph_plan(fixture, fixture->entry_index);
+    if (!entry || entry->program_dependency_binding_count != 1 ||
+        entry->program_call_binding_count != 1 || entry->call_target_count != 1)
+        return false;
+    bool ok = true;
+    XrSemanticProgramDependencyBinding *dependency = &entry->program_dependency_bindings[0];
+    XrSemanticProgramCallBinding *call = &entry->program_call_bindings[0];
+    XrSemanticCallTargetRecord *target = &entry->call_targets[0];
+
+    dependency->resolver_binding.bytes[0] ^= UINT8_C(0x40);
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    dependency->resolver_binding.bytes[0] ^= UINT8_C(0x40);
+    scalar_graph_refresh_plan(entry);
+
+    uint32_t saved_dependency = call->program_dependency;
+    call->program_dependency = XR_SEMANTIC_INDEX_NONE;
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    call->program_dependency = saved_dependency;
+    scalar_graph_refresh_plan(entry);
+
+    uint32_t saved_source_export = target->source_export;
+    target->source_export = XR_SEMANTIC_INDEX_NONE;
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    target->source_export = saved_source_export;
+    scalar_graph_refresh_plan(entry);
+
+    call->callee_program_function.bytes[0] ^= UINT8_C(0x20);
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    call->callee_program_function.bytes[0] ^= UINT8_C(0x20);
+    scalar_graph_refresh_plan(entry);
+    return ok && scalar_graph_plan_set_valid(fixture);
+}
+
+static bool scalar_graph_module_and_plan_mutations(ScalarGraphPlanFixture *fixture) {
+    char error[512] = {0};
+    XiModule *entry = fixture->modules[fixture->entry_index];
+    XiModule *producer = fixture->modules[fixture->producer_index];
+    XrSemanticPlan *entry_plan = entry->init->semantic_plan;
+    XrSemanticPlan *producer_plan = producer->init->semantic_plan;
+    XiModule *missing[2] = {producer, NULL};
+    XiModule *duplicate[2] = {producer, producer};
+    XiModule *reordered[2] = {entry, producer};
+    XiModule foreign = *producer;
+    foreign.identity = "script-module-v1:foreign-graph-kat";
+    XiModule *foreign_set[2] = {&foreign, entry};
+    bool ok = !xi_program_semantic_plan_verify_module_set(missing, 2, fixture->entry_index, error,
+                                                          sizeof(error)) &&
+              !xi_program_semantic_plan_verify_module_set(duplicate, 2, fixture->entry_index,
+                                                          error, sizeof(error)) &&
+              !xi_program_semantic_plan_verify_module_set(reordered, 2, 0, error,
+                                                          sizeof(error)) &&
+              !xi_program_semantic_plan_verify_module_set(foreign_set, 2, 1, error,
+                                                          sizeof(error));
+
+    const XrSemanticPlan *duplicate_plans[2] = {producer_plan, producer_plan};
+    const XrSemanticPlan *foreign_plan[1] = {entry_plan};
+    ok = ok && !xr_semantic_plan_verify_module_set(entry_plan, NULL, 0, error, sizeof(error)) &&
+         !xr_semantic_plan_verify_module_set(entry_plan, duplicate_plans, 2, error,
+                                             sizeof(error)) &&
+         !xr_semantic_plan_verify_module_set(entry_plan, foreign_plan, 1, error, sizeof(error));
+
+    XiImportRef *ref = scalar_graph_entry_import(fixture);
+    if (!ref)
+        return false;
+    int saved_module_index = ref->resolved_mod_index;
+    ref->resolved_mod_index = (int) fixture->entry_index;
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    ref->resolved_mod_index = saved_module_index;
+
+    XiFunc *saved_resolved_function = ref->resolved_func;
+    ref->resolved_func = entry->functions[0];
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    ref->resolved_func = saved_resolved_function;
+
+    uint32_t saved_attachment = entry->functions[0]->semantic_plan_function_index;
+    entry->functions[0]->semantic_plan_function_index = XR_SEMANTIC_INDEX_NONE;
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    entry->functions[0]->semantic_plan_function_index = saved_attachment;
+
+    XrSemanticPlan *saved_plan = entry->functions[0]->semantic_plan;
+    entry->functions[0]->semantic_plan = producer_plan;
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    entry->functions[0]->semantic_plan = saved_plan;
+    return ok && scalar_graph_plan_set_valid(fixture);
+}
+
+static bool scalar_graph_target_rejects_execution(ScalarGraphPlanFixture *fixture) {
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = NULL;
+    char error[512] = {0};
+    if (!xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)))
+        return false;
+    XrSemanticPlan *entry = scalar_graph_plan(fixture, fixture->entry_index);
+    XrSemanticPlan *producer = scalar_graph_plan(fixture, fixture->producer_index);
+    const XrSemanticPlan *dependencies[1] = {producer};
+    bool rejected = !xr_target_plan_build_module_set(entry, dependencies, 1, profile, &target,
+                                                      error, sizeof(error)) &&
+                    !target && strstr(error, "XR_TARGET_1001") &&
+                    strstr(error, "outside TargetPlan coverage");
+    memset(error, 0, sizeof(error));
+    rejected = rejected && !xr_target_plan_build(producer, profile, &target, error,
+                                                 sizeof(error)) &&
+               !target && strstr(error, "XR_TARGET_1001");
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    return rejected;
 }
 
 static void expect_strict_call_locator_rejection(bool match_caller_end, const char *namespace_id) {
@@ -676,6 +1100,8 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ASSERT_EQ_INT(status, XA_PROGRAM_SEMANTIC_CLOSURE_READY);
     ASSERT_NOT_NULL(closure);
     ASSERT_TRUE(xr_program_semantic_closure_is_verified(closure));
+    ASSERT_EQ_UINT(xr_program_semantic_closure_schema(closure),
+                   XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
     ASSERT_EQ_UINT(xr_program_semantic_closure_family(closure),
                    XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL);
     ASSERT_EQ_UINT(xr_program_semantic_closure_module_count(closure), 2);
@@ -777,6 +1203,19 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ASSERT_TRUE(memcmp(fingerprint.bytes, expected_fingerprint, sizeof(expected_fingerprint)) == 0);
     ASSERT_TRUE(
         memcmp(generation_id.bytes, expected_generation_id, sizeof(expected_generation_id)) == 0);
+
+    ScalarGraphPlanFixture plan_fixture;
+    ASSERT_MSG(scalar_graph_plan_fixture_build(&plan_fixture, &fixture, closure, error,
+                                               sizeof(error)),
+               error);
+    ASSERT_TRUE(scalar_graph_xsm_roundtrip(&plan_fixture));
+    ASSERT_TRUE(scalar_graph_export_carrier_mutations(&plan_fixture));
+    ASSERT_TRUE(scalar_graph_program_row_mutations(&plan_fixture));
+    ASSERT_TRUE(scalar_graph_external_join_mutations(&plan_fixture));
+    ASSERT_TRUE(scalar_graph_module_and_plan_mutations(&plan_fixture));
+    ASSERT_TRUE(scalar_graph_target_rejects_execution(&plan_fixture));
+    scalar_graph_plan_fixture_cleanup(&plan_fixture);
+
     int first = fixture.graph->topo_order[0];
     fixture.graph->topo_order[0] = fixture.graph->topo_order[1];
     fixture.graph->topo_order[1] = first;

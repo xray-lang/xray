@@ -2510,6 +2510,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                                             : "incomplete resolved module-set authority");
             goto fail_free_ir;
         }
+        if (evidence_cache_verbose)
+            printf("[program-semantic-plan] modules=%d entry=%d xi=verified "
+                   "semantic=verified target=pending\n",
+                   nmodules, entry_index);
     }
     if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
                                        source_program_closure, options,
