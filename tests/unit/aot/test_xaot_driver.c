@@ -1,8 +1,10 @@
 #include "../../../src/aot/xaot_driver.h"
 #include "../../../src/analysis/xglobal_producer.h"
+#include "../../../src/base/xfileio.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_resolver.h"
+#include "../../../src/module/xlockfile.h"
 #include "../../../src/incremental/xr_target_plan_tasks.h"
 #include "../../../src/app/toolchain/xtc_target_profile.h"
 #include "../../../src/os/os_dir.h"
@@ -278,52 +280,145 @@ static bool mkdir_p(const char *path) {
     return mkdir_one(buf);
 }
 
-static char *make_package_payload_for_source(const char *canonical, const char *source_path) {
-    XrModuleSpec spec = {0};
+static XrLockfile *make_package_lockfile(const char *home_dir,
+                                         const char *const *coordinates, uint32_t count) {
+    XrLockfile *lockfile = NULL;
+    char cache_dir[XR_TEST_PATH_MAX];
+    int n;
+    if (!home_dir || !coordinates || count == 0)
+        return NULL;
+    n = snprintf(cache_dir, sizeof(cache_dir), "%s/.xray/cache", home_dir);
+    if (n < 0 || (size_t) n >= sizeof(cache_dir) || !mkdir_p(cache_dir))
+        return NULL;
+    lockfile = xr_lockfile_new();
+    if (!lockfile)
+        return NULL;
+    for (uint32_t i = 0; i < count; i++) {
+        const char *coordinate = coordinates[i];
+        const char *slash = coordinate ? strchr(coordinate, '/') : NULL;
+        char archive_path[XR_TEST_PATH_MAX];
+        char checksum[72];
+        if (!slash || slash == coordinate || !slash[1])
+            goto fail;
+        size_t owner_len = (size_t) (slash - coordinate);
+        n = snprintf(archive_path, sizeof(archive_path), "%s/%.*s-%s-1.0.0.tar.gz", cache_dir,
+                     (int) owner_len, coordinate, slash + 1);
+        if (n < 0 || (size_t) n >= sizeof(archive_path) ||
+            !write_file_text(archive_path, coordinate) ||
+            !xr_lockfile_checksum_file(archive_path, checksum) ||
+            !xr_lockfile_add_package(lockfile, coordinate, "1.0.0", "fixture://package",
+                                     checksum))
+            goto fail;
+    }
+    return lockfile;
+
+fail:
+    xr_lockfile_free(lockfile);
+    return NULL;
+}
+
+typedef struct PackageModuleSpecFixture {
+    XrModuleSpec spec;
+    char namespace_id[256];
+    char physical_root[XR_TEST_PATH_MAX];
+} PackageModuleSpecFixture;
+
+static void package_module_spec_fixture_free(PackageModuleSpecFixture *fixture) {
+    if (!fixture)
+        return;
+    xr_free(fixture->spec.canonical);
+    xr_free(fixture->spec.logical_path);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static bool package_module_spec_fixture_init(PackageModuleSpecFixture *fixture,
+                                             const char *home_dir, const char *coordinate,
+                                             const char *source_path) {
+    const char *slash;
+    size_t owner_len;
+    char *source = NULL;
+    int n;
+    if (!fixture || !home_dir || !coordinate || !source_path)
+        return false;
+    memset(fixture, 0, sizeof(*fixture));
+    slash = strchr(coordinate, '/');
+    if (!slash || slash == coordinate || !slash[1])
+        return false;
+    owner_len = (size_t) (slash - coordinate);
+    n = snprintf(fixture->physical_root, sizeof(fixture->physical_root),
+                 "%s/.xray/packages/%.*s/%s/1.0.0", home_dir, (int) owner_len, coordinate,
+                 slash + 1);
+    if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
+        return false;
+    n = snprintf(fixture->namespace_id, sizeof(fixture->namespace_id), "%s@1.0.0", coordinate);
+    if (n < 0 || (size_t) n >= sizeof(fixture->namespace_id))
+        return false;
+    fixture->spec.authority = (XrModuleIdentityAuthority) {
+        .kind = XR_MODULE_IDENTITY_PACKAGE,
+        .namespace_id = fixture->namespace_id,
+        .physical_root = fixture->physical_root,
+    };
+    if (!xr_module_identity_from_source(&fixture->spec.authority, source_path,
+                                        &fixture->spec.canonical, &fixture->spec.logical_path))
+        return false;
+    source = xr_file_read_all(source_path, "r", NULL);
+    if (!source) {
+        package_module_spec_fixture_free(fixture);
+        return false;
+    }
+    fixture->spec.source_path = (char *) source_path;
+    fixture->spec.kind = XR_MOD_PACKAGE;
+    xr_module_source_fingerprint(source, &fixture->spec.source_content_fingerprint);
+    xr_free(source);
+    return true;
+}
+
+static char *make_package_payload_for_source(const char *home_dir, const char *coordinate,
+                                             const char *source_path) {
+    PackageModuleSpecFixture fixture = {0};
     XgBuildKey key;
     XgModuleSummary module;
     XgGlobalEvidence package = {0};
-    char *payload;
-    spec.canonical = (char *) canonical;
-    spec.source_path = (char *) source_path;
-    spec.kind = XR_MOD_PACKAGE;
-    if (!xg_standalone_build_key_from_module_spec(&key, &spec, XG_BUILD_NATIVE_RELEASE, 0))
+    char *payload = NULL;
+    if (!package_module_spec_fixture_init(&fixture, home_dir, coordinate, source_path))
         return NULL;
-    if (!xg_module_summary_from_module_spec(&module, 1, &spec))
-        return NULL;
+    if (!xg_standalone_build_key_from_module_spec(&key, &fixture.spec, XG_BUILD_NATIVE_RELEASE,
+                                                  0) ||
+        !xg_module_summary_from_module_spec(&module, 1, &fixture.spec))
+        goto done;
     xg_global_evidence_init(&package, key);
     if (!xg_global_evidence_add_module(&package, &module) ||
         !add_package_function_storage_decls(&package, module.module_id, source_path) ||
-        !add_package_link_dependency(&package, module.module_id)) {
-        xg_global_evidence_free(&package);
-        return NULL;
-    }
+        !add_package_link_dependency(&package, module.module_id))
+        goto done;
     payload = xg_global_evidence_cache_payload_dump(&package, XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE);
+
+done:
     xg_global_evidence_free(&package);
+    package_module_spec_fixture_free(&fixture);
     return payload;
 }
 
-static char *make_package_payload_for_ordered_sources(const char *const *canonicals,
+static char *make_package_payload_for_ordered_sources(const char *home_dir,
+                                                      const char *const *coordinates,
                                                       const char *const *source_paths,
                                                       uint32_t count) {
-    XrModuleSpec *specs = NULL;
+    PackageModuleSpecFixture *fixtures = NULL;
     const XrModuleSpec **ordered_specs = NULL;
     XgBuildKey key;
     XgGlobalEvidence package = {0};
     char *payload = NULL;
-    if (!canonicals || !source_paths || count == 0)
+    if (!home_dir || !coordinates || !source_paths || count == 0)
         return NULL;
-    specs = (XrModuleSpec *) xr_calloc(count, sizeof(*specs));
+    fixtures = (PackageModuleSpecFixture *) xr_calloc(count, sizeof(*fixtures));
     ordered_specs = (const XrModuleSpec **) xr_calloc(count, sizeof(*ordered_specs));
-    if (!specs || !ordered_specs)
+    if (!fixtures || !ordered_specs)
         goto done;
     for (uint32_t i = 0; i < count; i++) {
-        if (!canonicals[i] || !source_paths[i])
+        if (!package_module_spec_fixture_init(&fixtures[i], home_dir, coordinates[i],
+                                              source_paths[i]))
             goto done;
-        specs[i].canonical = (char *) canonicals[i];
-        specs[i].source_path = (char *) source_paths[i];
-        specs[i].kind = XR_MOD_PACKAGE;
-        ordered_specs[i] = &specs[i];
+        ordered_specs[i] = &fixtures[i].spec;
     }
     if (!xg_build_key_from_ordered_module_specs(&key, ordered_specs, count, XG_BUILD_NATIVE_RELEASE,
                                                 0))
@@ -331,7 +426,7 @@ static char *make_package_payload_for_ordered_sources(const char *const *canonic
     xg_global_evidence_init(&package, key);
     for (uint32_t i = 0; i < count; i++) {
         XgModuleSummary module;
-        if (!xg_module_summary_from_module_spec(&module, i + 1, &specs[i]) ||
+        if (!xg_module_summary_from_module_spec(&module, i + 1, &fixtures[i].spec) ||
             !xg_global_evidence_add_module(&package, &module) ||
             !add_package_function_storage_decls(&package, module.module_id, source_paths[i]))
             goto done;
@@ -342,8 +437,12 @@ static char *make_package_payload_for_ordered_sources(const char *const *canonic
 
 done:
     xg_global_evidence_free(&package);
+    if (fixtures) {
+        for (uint32_t i = 0; i < count; i++)
+            package_module_spec_fixture_free(&fixtures[i]);
+    }
     xr_free(ordered_specs);
-    xr_free(specs);
+    xr_free(fixtures);
     return payload;
 }
 
@@ -403,7 +502,7 @@ static char *install_package_payload(const char *home_dir, const char *cache_dir
         !write_package_source(home_dir, canonical, source_text, real_pkg_source,
                               sizeof(real_pkg_source)))
         return NULL;
-    payload = make_package_payload_for_source(canonical, real_pkg_source);
+    payload = make_package_payload_for_source(home_dir, canonical, real_pkg_source);
     if (!payload)
         return NULL;
     if (!write_global_payload_to_cache(cache_dir, payload)) {
@@ -920,12 +1019,14 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     XaotBuildOptions options = {0};
     XaotBuildResult result;
     char *payload = NULL;
+    const char *coordinates[1] = {"codex/pkg"};
     const char *payloads[1];
+    XrLockfile *lockfile = NULL;
     uint64_t imported_hash = 0;
     char *old_home;
 
     memset(&result, 0, sizeof(result));
-    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-%ld", (long) xr_test_getpid());
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-driver-auto", root, sizeof(root)) == 0);
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
@@ -940,6 +1041,8 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
                                               "}\n"));
     payloads[0] = payload;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
+    lockfile = make_package_lockfile(home_dir, coordinates, 1);
+    ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
     xr_test_setenv("HOME", home_dir, 1);
 
@@ -949,11 +1052,14 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
+    options.lockfile = lockfile;
 
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
     xaot_build_result_free(&result);
+    options.lockfile = NULL;
+    xr_lockfile_free(lockfile);
     release_target_profile(&options);
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
@@ -976,12 +1082,14 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     XaotBuildResult result;
     char *payload_a = NULL;
     char *payload_b = NULL;
+    const char *coordinates[2] = {"codex/pkga", "codex/pkgb"};
     const char *payloads[2];
+    XrLockfile *lockfile = NULL;
     uint64_t imported_hash = 0;
     char *old_home;
 
     memset(&result, 0, sizeof(result));
-    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-multi-%ld", (long) xr_test_getpid());
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-driver-auto-multi", root, sizeof(root)) == 0);
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
@@ -1011,6 +1119,8 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     payloads[0] = payload_a;
     payloads[1] = payload_b;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 2, &imported_hash));
+    lockfile = make_package_lockfile(home_dir, coordinates, 2);
+    ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
     xr_test_setenv("HOME", home_dir, 1);
 
@@ -1020,6 +1130,7 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
+    options.lockfile = lockfile;
     if (!parallel_probe) {
         ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
         ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump,
@@ -1131,6 +1242,8 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     }
 
     xaot_build_result_free(&result);
+    options.lockfile = NULL;
+    xr_lockfile_free(lockfile);
     release_target_profile(&options);
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
@@ -1163,11 +1276,12 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     const char *ordered_canonicals[2] = {"codex/pkgb", "codex/pkga"};
     const char *ordered_sources[2];
     const char *payloads[1];
+    XrLockfile *lockfile = NULL;
     uint64_t imported_hash = 0;
     char *old_home;
 
     memset(&result, 0, sizeof(result));
-    snprintf(root, sizeof(root), "/tmp/xray-xaot-driver-auto-graph-%ld", (long) xr_test_getpid());
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-driver-auto-graph", root, sizeof(root)) == 0);
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
@@ -1184,8 +1298,9 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
                                      pkg_a_source, sizeof(pkg_a_source)));
     ordered_sources[0] = pkg_b_source;
     ordered_sources[1] = pkg_a_source;
-    payload_ab = make_package_payload_for_ordered_sources(ordered_canonicals, ordered_sources, 2);
-    payload_b = make_package_payload_for_source("codex/pkgb", pkg_b_source);
+    payload_ab =
+        make_package_payload_for_ordered_sources(home_dir, ordered_canonicals, ordered_sources, 2);
+    payload_b = make_package_payload_for_source(home_dir, "codex/pkgb", pkg_b_source);
     ASSERT_TRUE(payload_ab != NULL);
     ASSERT_TRUE(payload_b != NULL);
     ASSERT_TRUE(write_global_payload_to_cache(cache_dir, payload_ab));
@@ -1196,6 +1311,8 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
                                               "}\n"));
     payloads[0] = payload_ab;
     ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 1, &imported_hash));
+    lockfile = make_package_lockfile(home_dir, ordered_canonicals, 2);
+    ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
     xr_test_setenv("HOME", home_dir, 1);
 
@@ -1205,11 +1322,14 @@ static void test_driver_auto_discovers_package_dependency_summary_payload(void) 
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
+    options.lockfile = lockfile;
 
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
 
     xaot_build_result_free(&result);
+    options.lockfile = NULL;
+    xr_lockfile_free(lockfile);
     release_target_profile(&options);
     xaot_target_free(&target);
     restore_env_value("HOME", old_home);
