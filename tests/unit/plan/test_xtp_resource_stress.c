@@ -18,6 +18,7 @@
 #include "../../../src/base/xplatform.h"
 #include "../../../src/base/xsha256.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/os/os_thread.h"
 #include "../../../src/os/os_time.h"
 #include "../../../src/plan/format/xr_xtp_internal.h"
@@ -144,6 +145,12 @@ static XrSemanticPlan *build_ladder_semantic(uint32_t block_count,
             xi_block_set_return(blocks[block], current);
     }
     function->stage = XI_STAGE_OPTIMIZED;
+    XiModule *module = xi_module_new("fixtures/xtp_resource_ladder.xr",
+                                     "xtp_resource_ladder", function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=22:xtp-resource-ladder-v1"));
+    function->module = module;
 
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
