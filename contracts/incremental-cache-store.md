@@ -112,11 +112,16 @@ invalidation, compiler-session ownership, or any compatibility reader.
     later operation must derive the same key and independently verify the raw
     bytes again before it can count as a hit.
 12. For the bounded two-source-module scalar product graph, the native source
-    driver publishes one independently verified PSC/GCI before Xi lowering and
+    driver publishes one independently verified schema-v5
+    `SCALAR_MODULE_GRAPH_DIRECT_CALL` PSC/GCI before Xi lowering and
     carries that immutable authority into module-summary construction. Each
     graph spec must match exactly one PSC module row through canonical source
     semantic module authority; duplicate, missing, stale, or foreign rows abort
-    publication. The complete product PSC fingerprint and GCI are copied into
+    publication. Its typed selective dependency freezes the exact import
+    locator, exported declaration/function, canonical dependency export
+    fingerprint, and resolver binding; the cross-module call carries the same
+    binding, and the verifier independently rebuilds every join. The complete
+    product PSC fingerprint and GCI are copied into
     every module's XSM key, so a dependency source change rotates both module
     addresses even when the entry source is unchanged. An existing per-plan
     provenance row may only confirm the identical PSC/GCI. The claimed product
@@ -139,7 +144,7 @@ anchor-sha256: src/incremental/xr_target_plan_tasks.c 97cb9d24a31e852506ace288f2
 anchor-sha256: src/incremental/xr_module_summary_build.h 1d387ea9e943fa0fcebeba7222105b8d0677bdecf05cda3677dc0d400868279b
 anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57c51780e1ddb99dfe8e9bfbb38001abfb28ed29cc2
 anchor-sha256: src/aot/xaot_module_summary.h ab160517cfb59565b24f75f1273afb08e0c5d6c2370f282a1c09c7f45846adcc
-anchor-sha256: src/aot/xaot_module_summary.c 6fbc2301aed4722a12d0daf8600dd708be13d8bf2ab5d4210d8967fd1e7509fd
+anchor-sha256: src/aot/xaot_module_summary.c e8ad587dbe89d9b8e814851c04f9fa5756a6f6fa30776aa436fbf7067237673d
 anchor-sha256: src/aot/xaot_driver.h 8f2f4d10c58b2d2e37f0a1806b5c0b29814c343c69b1a2ff4f51633ec7a9392d
 anchor-sha256: src/aot/xaot_driver.c 862e1ac8a866931d8a5c7a86262657c986480af28da0bc6842322dea2f5b4bf6
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253

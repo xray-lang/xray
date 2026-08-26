@@ -6,16 +6,20 @@ storage, ABI, TargetProfile, executor recipe, or standalone artifact codec.
 Its verified rows may enter Xi and then the pointer-free SemanticPlan/XSM
 projection defined below; they never imply TargetPlan admission on their own.
 
-1. ProgramSemanticClosure schema v4 has one mutable builder, one explicit
+1. ProgramSemanticClosure schema v5 has one mutable builder, one explicit
    `XrProgramSemanticFamily`, bounded module/dependency/type/type-field/
    function/function-parameter/call tables, and a typed failure kind. The
    builder canonicalizes all rows before freeze and cannot be reopened after
    verification or any terminal failure. Family is durable authority; table
    cardinality is not interpreted as a capability bit.
 2. Every module row carries an exact stable module identity and complete source
-   and export fingerprints. Every dependency row names two present modules and
-   a nonzero contract fingerprint. The dependency graph is acyclic and every
-   module is reachable from the canonical entry/export root module set.
+   and export fingerprints. An opaque dependency names two present modules, a
+   nonzero contract fingerprint, and no typed binding fields. The scalar
+   module-graph family instead requires one selective-function dependency with
+   an exact import locator, exported declaration/function identities, nonzero
+   resolver binding, and independently reconstructable contract. The dependency
+   graph is acyclic and every module is reachable from the canonical
+   entry/export root module set.
 3. Type rows are explicitly `OPAQUE`, registry-owned `EXACT_SCALAR`, or
    `LEAF_VALUE_AGGREGATE`. Opaque rows retain producer-supplied nonzero shape
    and ownership fingerprints. Typed rows require exactly the frozen
@@ -34,23 +38,30 @@ projection defined below; they never imply TargetPlan admission on their own.
    or parameters outside the selected family fail closed.
 5. A resolved-call row binds the complete policy and one stable callsite to
    exact present caller/callee functions and a complete call-contract
-   fingerprint. Its source kind and complete locator participate in the
-   closed-world evidence. A cross-module call requires an exact dependency;
-   every function and module must be reachable from an explicit entry/export
-   root.
-6. Freeze hashes schema v4, family, complete policy, every canonical row and
+   fingerprint. Scalar module-graph calls additionally carry the same nonzero
+   resolver binding as their selective dependency; every other family carries
+   zero. Its source kind and complete locator participate in the closed-world
+   evidence. A cross-module call requires an exact dependency; every function
+   and module must be reachable from an explicit entry/export root.
+6. Freeze hashes schema v5, family, complete policy, every canonical row and
    locator, then derives `XrGenerationClosureId` from the full closure
    fingerprint. The independent verifier reconstructs typed fingerprints,
    identities, ordered type-field and function-parameter domains, graph
    closure, canonical order, fingerprint, and generation identity without
-   calling the builder. A resigned but semantically mutated closure is rejected.
+   calling the builder. Re-signing only the aggregate PSC/GCI cannot conceal a
+   stale or contradictory typed inner join.
 7. Canonical source identity has one domain- and length-framed owner.
    `xr_source_semantic_module_authority` derives module and empty-export
    authority from the canonical module spelling and installs the separately
    supplied complete source fingerprint. `xr_source_semantic_callsite_identity`
-   binds source fingerprint, module identity, caller declaration, and exact locator. AST
-   node ids, pointers, filesystem spellings, names, dense indexes, target
-   representations, and ABI selections are not durable identity inputs.
+   binds source fingerprint, module identity, caller declaration, and exact
+   locator. The same owner derives canonical scalar-i64 export and resolver
+   identities from verified module/source/export, import-locator,
+   declaration/function, signature, effect, capability, return, and
+   `READ`-parameter facts. The independent PSC verifier reconstructs those
+   formulas without calling the owner. AST node ids, pointers, filesystem
+   spellings, names, dense indexes, target representations, and ABI selections
+   are not durable identity inputs.
 8. The scalar source family remains exactly one memory module, two sealed,
    nongeneric, nonsuspending functions and one direct `i64 -> i64` call. Its
    verified owned analyzer snapshot projects a scalar PSC with no type or
@@ -142,7 +153,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     ordinal, stable type or source-class identity, family, flag, reserved,
     fingerprint, or join mutations fail closed even when outer framing is
     otherwise valid.
-18. The single-module W1 boundary closes source -> PSC v4 -> Xi -> SemanticPlan
+18. The single-module W1 boundary closes source -> PSC v5 -> Xi -> SemanticPlan
     41 -> XSM. The product-graph boundary in this contract closes source graph
     -> standalone PSC/GCI -> module-summary XSM key only; it does not claim a
     per-function Xi/SemanticPlan/TargetPlan transfer. Neither boundary adds
@@ -164,7 +175,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     or C-emission execution authority; execution additionally requires the exact
     independently verified leaf instruction group and consumer gates.
 20. The bounded W3 AOT consumer joins a Xi function to that execution authority
-    only through the owning module's frozen PSC v4 and
+    only through the owning module's frozen PSC v5 and
     `XiFunc.psc_function_index`: the selected PSC function identity and locator
     must match one SemanticPlan 41 program-function binding, which must in turn
     match the verified TargetPlan semantic provenance and fingerprint. A mutable
@@ -179,15 +190,25 @@ projection defined below; they never imply TargetPlan admission on their own.
     exported, nongeneric, nonsuspending, pure unary `i64 -> i64` function; the
     entry contains one selective import and one nonexported pure nullary `i64`
     function whose unique resolved call targets that exact export with one
-    exact `i64` argument. Publication joins the analyzer's imported symbol,
-    dependency export table, resolver result, module/source authority, effect,
-    signature, and callsite locator. It emits a frozen verified GENERAL-family
-    PSC with two module rows, one dependency row, two function rows, one
-    cross-module call row, and one GCI. Topological enumeration order cannot
-    change its canonical identity. Once the syntax claims this predicate,
-    missing, stale, ambiguous, or wrong dependency/export/call authority is
-    `INVALID` and aborts the native source build; it cannot become a zero PSC,
-    single-module PSC, name/path guess, allowlist, or compatibility path.
+    exact `i64` argument. Publication independently checks the imported member,
+    export-table symbol, and call-use typed facts, then reconstructs the same
+    exported declaration from dependency module/source authority, declaration
+    locator, and sealed signature; pointer equality and analyzer-local symbol
+    ids never select the target. It emits only
+    `SCALAR_MODULE_GRAPH_DIRECT_CALL`: two module rows, one typed selective
+    dependency, one exact-i64 type, two typed functions with one `READ`
+    parameter, one cross-module call carrying the same resolver binding, and
+    one GCI. The dependency export fingerprint, dependency contract, resolver
+    binding, call target, effect/capability, and entry empty-export fingerprint
+    are independently rebuilt and rejoined. Topological enumeration order
+    cannot change canonical identity. Missing or contradictory resolver,
+    locator, export, dependency, contract, or foreign same-shaped source
+    authority is `INVALID`; it cannot become GENERAL, a zero PSC, a name/path
+    guess, allowlist, fallback, or compatibility path. A standalone verifier
+    has no source bytes and therefore validates the frozen locator joins, not
+    the authenticity of an attacker-recomputed self-consistent source span.
+    This slice closes verified PSC/GCI and module-summary XSM cache identity
+    only; Xi, SemanticPlan, and TargetPlan admission remain a later boundary.
 
 ## Digest anchors
 
@@ -196,6 +217,7 @@ anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec43389
 anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365
 anchor-sha256: src/frontend/parser/xparse_decl.c 956af54b931477adfe03b61de2271af8951a2241a9e0fa8ec8875855be2a5b06
+anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
 anchor-sha256: src/frontend/analyzer/xanalyzer.h c12244d5565e4e0ceb65177b8bf24f08c7161b6145d6c5d41fe4555d03f74988
 anchor-sha256: src/frontend/analyzer/xanalyzer.c ea9243e7fae24e07022423822848abf3060ddb444b86202e96f221d7e3f8bd61
 anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c d1c86a031eb0f9fdbbbacb2680e25bb9953b1dac3f50549035a9d1a01a8279a6
@@ -206,13 +228,13 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c 57e0d760a7d12f1cc5763ba3768eba48ae6859356018c37b9353d3d1e329113a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 19d2eab8e1b2b36e6ef2bdc6452e246a63a056704d7785cec8c5d25274900f40
 anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 15ce506179036ab9708aa8cd1fb983ba4067149b0aa0c5b33241bd9c2e3b7f3b
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 1cb18334ccd12479e6d06e4c7aade2ee5407e44be4bf605ecca748882b044124
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 6b53eb59868c8608b36704f3a7448960b2e4d5bf3f88f109ec1d7a387ff8442d
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 8f7403b7918cd9ed6ec595cd9a3b4047d964d1ccdf19c5762d4692c88212807c
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 32016f420b187487a6ba15f1966c16a17f9743e24b00dc57279ba7841a7e619e
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 006da5f6b47f362c7e0296f648638bb396db27d6bcd9df65f58ae9cde1d5b03e
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 7b545703eff42c71172124874b7316aa882db46a04dc09eda319137bacfe2e84
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 4a0e26364ce518dc8db35837a50f60675623040602b0b062e2a78e241a39cd70
-anchor-sha256: src/plan/semantic/xr_source_semantic_identity.h ffd6bd6f8f57c44fbfe282addd337290ff0c90cc230e53cc0bfd8e089c40071a
-anchor-sha256: src/plan/semantic/xr_source_semantic_identity.c e992247da4b0376c186296f939ddc0c6bf73af4818303c2196cd1393bbbaeaeb
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 561413c6e6335cbff878b8007c64a0d70cbb199ad337f58ac20dab1c2eeedb8f
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 2792df0bd7d046e226971e2e8f459c069de93f2cdb4cda6429c349d7e636ab71
+anchor-sha256: src/plan/semantic/xr_source_semantic_identity.h fec2785aa50e9285d3071c8463555f03f0dfdf99c6dfd21bb3cd84fa4f00e836
+anchor-sha256: src/plan/semantic/xr_source_semantic_identity.c 3978515423419fbf4e83b35893d709ab3c6bb487fae2093b1cb1ce26f0b34f95
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece99304f2de817381b6e4051b2b66fd7b336bb1c66d493
 anchor-sha256: src/plan/format/xr_xsm_decode.c 6ff4b7c3b998c73a8d7451989145d58d2d6745406c766acd40ea1bc02614bc61
@@ -241,11 +263,11 @@ anchor-sha256: src/ir/xi_program_semantic_verify.c ddb8dc0c03b390ffcff1795e68613
 anchor-sha256: src/ir/xi_own.c c8dda6cd586f03723baf676601306338d0cd7b6675a514670c558d96091a681e
 anchor-sha256: src/ir/xi_program_semantic_plan.h c69c6864a8ba090a947f64c445adafcf756685a5581b00183ef2d758ffa81efd
 anchor-sha256: src/ir/xi_program_semantic_plan.c 7c10bf3d69c4e7bbd2a3245246aefd9cd7d874729695d07b39b91f0a9a0cc054
-anchor-sha256: tests/unit/plan/test_program_semantic_closure.c a70207fc78e278308c8471733157017864ffbc85054575f5893ec98312c3b141
+anchor-sha256: tests/unit/plan/test_program_semantic_closure.c aa2bff8af087b730168b25faf26ffb08cd69ace09963fb8c762c1071bac6796e
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c a02d1f10431993c9efd64538f1eb8f0c0dc61999c9977ac5684e3aefda3b564d
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 05ab0c7478067bf6fc8b510ca157ab8eda4297fb487488ad7143cc4d3c94d1d9
-anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
+anchor-sha256: tests/unit/plan/test_semantic_plan.c f588458eaf8328c7ecb7f771df387106c0267e3ebe223084064cdf9cf060ee7c
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 7130814ac76dc355e278431f635db563685d10998cced4fec924adf1b0c268f2
+anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e052a97632a0e2f33acba67b1ec07fdb4f193d00a46a1a8efe9fbe82984b10cf
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 1626ab33972df02d651bda9d2133b41128dd6633caffa0fc9df9ca58a316c721

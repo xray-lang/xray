@@ -260,17 +260,34 @@ static XrStableId derive_function_identity(XrFingerprint policy_fingerprint,
     return finish_stable_id(&context);
 }
 
+bool xr_program_semantic_function_identity(XrFingerprint policy_fingerprint,
+                                           const XrProgramSemanticFunctionInput *input,
+                                           XrStableId *function_identity) {
+    if (function_identity)
+        memset(function_identity, 0, sizeof(*function_identity));
+    if (!input || !function_identity || fingerprint_is_zero(policy_fingerprint) ||
+        stable_id_is_zero(input->module_identity) ||
+        stable_id_is_zero(input->declaration_identity) ||
+        stable_id_is_zero(input->concrete_instance_identity) ||
+        fingerprint_is_zero(input->signature_fingerprint) ||
+        fingerprint_is_zero(input->effect_fingerprint))
+        return false;
+    *function_identity = derive_function_identity(policy_fingerprint, input);
+    return true;
+}
+
 static XrStableId derive_call_identity(XrFingerprint policy_fingerprint,
                                        const XrProgramSemanticCallInput *input) {
-    static const uint8_t domain[] = "xray-program-semantic-call-v1\0";
+    static const uint8_t domain[] = "xray-program-semantic-call-v2\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    hash_u32(&context, UINT32_C(1));
+    hash_u32(&context, UINT32_C(2));
     hash_fingerprint(&context, policy_fingerprint);
     hash_stable_id(&context, input->callsite_identity);
     hash_stable_id(&context, input->caller_function);
     hash_stable_id(&context, input->callee_function);
+    hash_stable_id(&context, input->resolver_binding);
     hash_fingerprint(&context, input->contract_fingerprint);
     return finish_stable_id(&context);
 }
@@ -283,6 +300,11 @@ static bool locator_is_valid(XrProgramSemanticSourceLocator locator) {
         return false;
     return locator.end_line > locator.start_line ||
            (locator.end_line == locator.start_line && locator.end_column > locator.start_column);
+}
+
+static bool locator_is_empty(XrProgramSemanticSourceLocator locator) {
+    return locator.kind == 0 && locator.start_line == 0 && locator.start_column == 0 &&
+           locator.end_line == 0 && locator.end_column == 0;
 }
 
 static bool function_locator_is_valid(XrProgramSemanticSourceLocator locator) {
@@ -469,10 +491,25 @@ bool xr_program_semantic_closure_add_dependency(XrProgramSemanticClosure *closur
                                                 const XrProgramSemanticDependencyInput *input,
                                                 char *error, size_t error_size) {
     begin_mutation(closure);
+    bool selective =
+        closure && closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool selective_input =
+        input && input->kind == XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT &&
+        locator_is_valid(input->import_locator) &&
+        !stable_id_is_zero(input->exported_declaration) &&
+        !stable_id_is_zero(input->exported_function) &&
+        !stable_id_is_zero(input->resolver_binding) &&
+        memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) == 0;
+    bool opaque_input =
+        input && input->kind == XR_PROGRAM_SEMANTIC_DEPENDENCY_OPAQUE &&
+        locator_is_empty(input->import_locator) && stable_id_is_zero(input->exported_declaration) &&
+        stable_id_is_zero(input->exported_function) && stable_id_is_zero(input->resolver_binding) &&
+        memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) == 0;
     if (!collecting(closure) || !input || stable_id_is_zero(input->source_module) ||
         stable_id_is_zero(input->dependency_module) ||
         stable_id_equal(input->source_module, input->dependency_module) ||
-        fingerprint_is_zero(input->contract_fingerprint))
+        fingerprint_is_zero(input->contract_fingerprint) ||
+        (selective ? !selective_input : !opaque_input))
         return fail(error, error_size, "XR_SEM_0019", "program dependency authority is incomplete");
     for (uint32_t i = 0; i < closure->dependency_count; i++) {
         const XrProgramSemanticDependencyRecord *row = &closure->dependencies[i];
@@ -489,7 +526,12 @@ bool xr_program_semantic_closure_add_dependency(XrProgramSemanticClosure *closur
     closure->dependencies[closure->dependency_count++] = (XrProgramSemanticDependencyRecord) {
         .source_module = input->source_module,
         .dependency_module = input->dependency_module,
+        .import_locator = input->import_locator,
+        .exported_declaration = input->exported_declaration,
+        .exported_function = input->exported_function,
+        .resolver_binding = input->resolver_binding,
         .contract_fingerprint = input->contract_fingerprint,
+        .kind = input->kind,
     };
     mutation_succeeded(closure);
     return true;
@@ -589,7 +631,8 @@ bool xr_program_semantic_closure_add_function(XrProgramSemanticClosure *closure,
         (input->flags &
          ~(XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY | XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)) != 0 ||
         memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) != 0 ||
-        (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL
+        ((closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+          closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
              ? (stable_id_is_zero(input->return_type) || input->parameter_count > 1 ||
                 input->parameter_count > closure->limits.max_function_parameters ||
                 (input->parameter_count && !input->parameters))
@@ -604,7 +647,10 @@ bool xr_program_semantic_closure_add_function(XrProgramSemanticClosure *closure,
             return fail(error, error_size, "XR_SEM_0019",
                         "concrete function parameter authority is invalid");
     }
-    XrStableId id = derive_function_identity(closure->policy_fingerprint, input);
+    XrStableId id = {{0}};
+    if (!xr_program_semantic_function_identity(closure->policy_fingerprint, input, &id))
+        return fail(error, error_size, "XR_SEM_0019",
+                    "concrete function identity authority is incomplete");
     for (uint32_t i = 0; i < closure->function_count; i++) {
         const XrProgramSemanticFunctionRecord *row = &closure->functions[i];
         if (stable_id_equal(row->id, id) ||
@@ -669,7 +715,10 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
     if (!collecting(closure) || !input || !call_identity ||
         stable_id_is_zero(input->callsite_identity) || stable_id_is_zero(input->caller_function) ||
         stable_id_is_zero(input->callee_function) || !locator_is_valid(input->locator) ||
-        fingerprint_is_zero(input->contract_fingerprint))
+        fingerprint_is_zero(input->contract_fingerprint) ||
+        (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL
+             ? stable_id_is_zero(input->resolver_binding)
+             : !stable_id_is_zero(input->resolver_binding)))
         return fail(error, error_size, "XR_SEM_0019", "resolved call authority is incomplete");
     const XrProgramSemanticFunctionRecord *caller =
         find_function_record(closure, input->caller_function);
@@ -707,6 +756,7 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
         .locator = input->locator,
         .caller_function = input->caller_function,
         .callee_function = input->callee_function,
+        .resolver_binding = input->resolver_binding,
         .contract_fingerprint = input->contract_fingerprint,
     };
     *call_identity = id;
@@ -813,7 +863,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v4\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v5\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -836,7 +886,16 @@ static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
     for (uint32_t i = 0; i < closure->dependency_count; i++) {
         hash_stable_id(&context, closure->dependencies[i].source_module);
         hash_stable_id(&context, closure->dependencies[i].dependency_module);
+        hash_u32(&context, closure->dependencies[i].import_locator.kind);
+        hash_u32(&context, closure->dependencies[i].import_locator.start_line);
+        hash_u32(&context, closure->dependencies[i].import_locator.start_column);
+        hash_u32(&context, closure->dependencies[i].import_locator.end_line);
+        hash_u32(&context, closure->dependencies[i].import_locator.end_column);
+        hash_stable_id(&context, closure->dependencies[i].exported_declaration);
+        hash_stable_id(&context, closure->dependencies[i].exported_function);
+        hash_stable_id(&context, closure->dependencies[i].resolver_binding);
         hash_fingerprint(&context, closure->dependencies[i].contract_fingerprint);
+        hash_u32(&context, closure->dependencies[i].kind);
     }
     for (uint32_t i = 0; i < closure->type_count; i++) {
         hash_stable_id(&context, closure->types[i].id);
@@ -895,6 +954,7 @@ static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
         hash_u32(&context, closure->calls[i].locator.end_column);
         hash_stable_id(&context, closure->calls[i].caller_function);
         hash_stable_id(&context, closure->calls[i].callee_function);
+        hash_stable_id(&context, closure->calls[i].resolver_binding);
         hash_fingerprint(&context, closure->calls[i].contract_fingerprint);
     }
     xr_sha256_final(&context, out->bytes);

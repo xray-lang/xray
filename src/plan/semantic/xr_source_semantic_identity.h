@@ -25,4 +25,15 @@ XR_FUNC bool xr_source_semantic_callsite_identity(XrFingerprint source_fingerpri
                                                   XrProgramSemanticSourceLocator locator,
                                                   XrStableId *out);
 
+XR_FUNC bool xr_source_semantic_scalar_i64_export_fingerprint(
+    const XrProgramSemanticModuleInput *module, XrStableId exported_declaration,
+    XrStableId exported_function, XrFingerprint signature, XrFingerprint effect,
+    uint64_t capability_mask, XrFingerprint *out);
+
+XR_FUNC bool xr_source_semantic_scalar_i64_import_binding(
+    const XrProgramSemanticModuleInput *source, const XrProgramSemanticModuleInput *dependency,
+    XrProgramSemanticSourceLocator import_locator, XrStableId exported_declaration,
+    XrStableId exported_function, XrStableId return_type, XrFingerprint signature,
+    XrFingerprint effect, uint64_t capability_mask, XrStableId *out);
+
 #endif  // XR_SOURCE_SEMANTIC_IDENTITY_H

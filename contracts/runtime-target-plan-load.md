@@ -264,7 +264,7 @@ roots, or general module activation.
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V47 is a breaking hard cutover from
    v46 and all earlier XTP schemas. It requires SemanticPlan schema 41 and
-   TargetPlan schema 47, including exact PSC v4 provenance and typed program
+   TargetPlan schema 47, including exact PSC v5 provenance and typed program
    bindings; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
    expectation section and preserves the compact instruction stream introduced

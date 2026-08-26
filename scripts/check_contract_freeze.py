@@ -627,6 +627,7 @@ CONTRACT_SPECS = (
             "src/module/xmodule_graph.c",
             "src/frontend/parser/xparse.c",
             "src/frontend/parser/xparse_decl.c",
+            "src/frontend/parser/xparse_import.c",
             "src/frontend/analyzer/xanalyzer.h",
             "src/frontend/analyzer/xanalyzer.c",
             "src/frontend/analyzer/xanalyzer_visitor_call.c",

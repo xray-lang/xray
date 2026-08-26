@@ -149,6 +149,20 @@ TEST(parser_non_expression_string_consumers_use_shared_decoder) {
     teardown();
 }
 
+TEST(parser_selective_import_freezes_exact_locator) {
+    setup();
+    AstNode *program = parse_ok("import { add1 } from \"./producer\"\n");
+    AstNode *import = program->as.program.statements[0];
+    ASSERT_EQ_INT(import->type, AST_IMPORT_STMT);
+    ASSERT_EQ_INT(import->line, 1);
+    ASSERT_EQ_INT(import->column, 1);
+    ASSERT_EQ_INT(import->end_line, 1);
+    ASSERT_EQ_INT(import->end_column, 34);
+    ASSERT_TRUE(import->end_column > import->column);
+    ASSERT_NULL(xr_parse(xr_compiler_session_current_for_isolate(X), "import { add1 } from\n"));
+    teardown();
+}
+
 TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder) {
     setup();
     AstNode *program = parse_ok("var object = {\n"
@@ -1305,6 +1319,7 @@ int main(void) {
     RUN_TEST(parser_string_literal);
     RUN_TEST(parser_block_string_normalizes_crlf_and_margin);
     RUN_TEST(parser_non_expression_string_consumers_use_shared_decoder);
+    RUN_TEST(parser_selective_import_freezes_exact_locator);
     RUN_TEST(parser_block_object_key_and_coroutine_name_use_shared_decoder);
     RUN_TEST(parser_fixed_bytes_are_one_compact_payload_node);
     RUN_TEST(parser_c_literal_retains_nul_policy_without_element_ast);

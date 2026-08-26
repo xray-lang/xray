@@ -24,7 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(4)
+#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(5)
 
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES UINT32_C(256)
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES UINT32_C(4096)
@@ -42,6 +42,7 @@ typedef enum XrProgramSemanticFamily {
     XR_PROGRAM_SEMANTIC_FAMILY_GENERAL = 1,
     XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL,
     XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL,
+    XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL,
     XR_PROGRAM_SEMANTIC_FAMILY_COUNT,
 } XrProgramSemanticFamily;
 
@@ -72,10 +73,31 @@ typedef struct XrProgramSemanticModuleInput {
     XrFingerprint export_fingerprint;
 } XrProgramSemanticModuleInput;
 
+typedef struct XrProgramSemanticSourceLocator {
+    /* Coordinates are 1-indexed and the end point is exclusive. */
+    uint32_t kind;
+    uint32_t start_line;
+    uint32_t start_column;
+    uint32_t end_line;
+    uint32_t end_column;
+} XrProgramSemanticSourceLocator;
+
+typedef enum XrProgramSemanticDependencyKind {
+    XR_PROGRAM_SEMANTIC_DEPENDENCY_OPAQUE = 0,
+    XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT,
+    XR_PROGRAM_SEMANTIC_DEPENDENCY_KIND_COUNT,
+} XrProgramSemanticDependencyKind;
+
 typedef struct XrProgramSemanticDependencyInput {
     XrStableId source_module;
     XrStableId dependency_module;
+    XrProgramSemanticSourceLocator import_locator;
+    XrStableId exported_declaration;
+    XrStableId exported_function;
+    XrStableId resolver_binding;
     XrFingerprint contract_fingerprint;
+    uint8_t kind;
+    uint8_t reserved[7];
 } XrProgramSemanticDependencyInput;
 
 typedef enum XrProgramSemanticTypeKind {
@@ -92,15 +114,6 @@ typedef enum XrProgramSemanticTypeFlag {
     XR_PROGRAM_SEMANTIC_TYPE_VALUE = 1u << 2,
     XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE = 1u << 3,
 } XrProgramSemanticTypeFlag;
-
-typedef struct XrProgramSemanticSourceLocator {
-    /* Coordinates are 1-indexed and the end point is exclusive. */
-    uint32_t kind;
-    uint32_t start_line;
-    uint32_t start_column;
-    uint32_t end_line;
-    uint32_t end_column;
-} XrProgramSemanticSourceLocator;
 
 typedef struct XrProgramSemanticTypeFieldInput {
     XrStableId field_type;
@@ -155,6 +168,7 @@ typedef struct XrProgramSemanticCallInput {
     XrProgramSemanticSourceLocator locator;
     XrStableId caller_function;
     XrStableId callee_function;
+    XrStableId resolver_binding;
     XrFingerprint contract_fingerprint;
 } XrProgramSemanticCallInput;
 
@@ -168,7 +182,13 @@ typedef struct XrProgramSemanticModuleRecord {
 typedef struct XrProgramSemanticDependencyRecord {
     XrStableId source_module;
     XrStableId dependency_module;
+    XrProgramSemanticSourceLocator import_locator;
+    XrStableId exported_declaration;
+    XrStableId exported_function;
+    XrStableId resolver_binding;
     XrFingerprint contract_fingerprint;
+    uint8_t kind;
+    uint8_t reserved[7];
 } XrProgramSemanticDependencyRecord;
 
 typedef struct XrProgramSemanticTypeRecord {
@@ -224,6 +244,7 @@ typedef struct XrProgramSemanticCallRecord {
     XrProgramSemanticSourceLocator locator;
     XrStableId caller_function;
     XrStableId callee_function;
+    XrStableId resolver_binding;
     XrFingerprint contract_fingerprint;
 } XrProgramSemanticCallRecord;
 
@@ -261,6 +282,12 @@ XR_FUNC bool xr_program_semantic_closure_add_function(XrProgramSemanticClosure *
                                                       const XrProgramSemanticFunctionInput *input,
                                                       XrStableId *function_identity, char *error,
                                                       size_t error_size);
+/* Construct the canonical stable identity from one function input's identity
+ * domain.
+ * Row/cardinality validation remains owned by add/freeze/verify. */
+XR_FUNC bool xr_program_semantic_function_identity(XrFingerprint policy_fingerprint,
+                                                   const XrProgramSemanticFunctionInput *input,
+                                                   XrStableId *function_identity);
 XR_FUNC bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
                                                   const XrProgramSemanticCallInput *input,
                                                   XrStableId *call_identity, char *error,

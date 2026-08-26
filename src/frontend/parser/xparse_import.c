@@ -260,6 +260,7 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
 AstNode *xr_parse_import_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_import_declaration: NULL parser");
     int line = parser->previous.line;  // import keyword already consumed
+    int column = parser->previous.column;
 
     char *module_name = NULL;
     char *alias = NULL;
@@ -346,6 +347,11 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     // ========== Create AST node ==========
     AstNode *node = xr_ast_import_stmt_ex(parser->compiler_session, module_name, alias, is_quoted,
                                           members, member_count, line);
+    if (node) {
+        node->column = column;
+        node->end_line = parser->previous.line;
+        node->end_column = parser->previous.column + parser->previous.length;
+    }
 
     // Clean up temporary memory (members are taken over by AST node)
 

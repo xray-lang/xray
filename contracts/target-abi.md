@@ -413,7 +413,7 @@ convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
-function is identified through its owning module's frozen PSC v4 row:
+function is identified through its owning module's frozen PSC v5 row:
 `XiFunc.psc_function_index` selects the PSC function identity and locator, which
 must join uniquely to the SemanticPlan 41 program-function binding and the exact
 verified TargetPlan provenance and fingerprint. A mutable `XiFunc.semantic_plan`

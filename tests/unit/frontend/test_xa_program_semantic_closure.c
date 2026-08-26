@@ -169,6 +169,129 @@ static bool generation_id_equal(XrGenerationClosureId left, XrGenerationClosureI
     return memcmp(left.bytes, right.bytes, sizeof(left.bytes)) == 0;
 }
 
+typedef enum ScalarGraphOuterResignMutation {
+    SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_ZERO,
+    SCALAR_GRAPH_OUTER_RESIGN_CALL_BINDING_MISMATCH,
+    SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_MUTATION,
+    SCALAR_GRAPH_OUTER_RESIGN_FOREIGN_EXPORT,
+    SCALAR_GRAPH_OUTER_RESIGN_WRONG_IMPORT_LOCATOR,
+} ScalarGraphOuterResignMutation;
+
+static bool scalar_graph_outer_resign_rejects(const XrProgramSemanticClosure *source,
+                                              ScalarGraphOuterResignMutation mutation) {
+    char error[256] = {0};
+    XrProgramSemanticClosure *rebuilt = NULL;
+    bool ok = xr_program_semantic_closure_create(&source->limits, source->policy_fingerprint,
+                                                 &rebuilt, error, sizeof(error)) &&
+              xr_program_semantic_closure_set_family(
+                  rebuilt, XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL, error,
+                  sizeof(error));
+    XrProgramSemanticTypeInput scalar_input;
+    XrStableId scalar_type = {{0}};
+    ok = ok && xr_program_semantic_exact_scalar_type_input(XR_EXACT_SCALAR_I64, &scalar_input) &&
+         xr_program_semantic_closure_add_type(rebuilt, &scalar_input, &scalar_type, error,
+                                              sizeof(error));
+    for (uint32_t i = 0; ok && i < source->module_count; i++) {
+        const XrProgramSemanticModuleRecord *row = &source->modules[i];
+        XrProgramSemanticModuleInput input = {
+            .module_identity = row->module_identity,
+            .module_authority_fingerprint = row->module_authority_fingerprint,
+            .source_fingerprint = row->source_fingerprint,
+            .export_fingerprint = row->export_fingerprint,
+        };
+        ok = xr_program_semantic_closure_add_module(rebuilt, &input, error, sizeof(error));
+    }
+    XrStableId entry_function = {{0}};
+    for (uint32_t i = 0; ok && i < source->function_count; i++) {
+        const XrProgramSemanticFunctionRecord *row = &source->functions[i];
+        XrProgramSemanticFunctionParameterInput parameter = {0};
+        if (row->parameter_count) {
+            const XrProgramSemanticFunctionParameterRecord *record =
+                &source->function_parameters[row->parameter_begin];
+            parameter.type = record->type;
+            parameter.declaration_ordinal = record->declaration_ordinal;
+            parameter.mode = record->mode;
+        }
+        XrProgramSemanticFunctionInput input = {
+            .module_identity = row->module_identity,
+            .declaration_identity = row->declaration_identity,
+            .concrete_instance_identity = row->concrete_instance_identity,
+            .declaration_locator = row->declaration_locator,
+            .signature_fingerprint = row->signature_fingerprint,
+            .effect_fingerprint = row->effect_fingerprint,
+            .return_type = row->return_type,
+            .parameters = row->parameter_count ? &parameter : NULL,
+            .parameter_count = row->parameter_count,
+            .capability_mask = row->capability_mask,
+            .flags = row->flags,
+        };
+        XrStableId id = {{0}};
+        ok = xr_program_semantic_closure_add_function(rebuilt, &input, &id, error, sizeof(error));
+        if (ok && row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY)
+            entry_function = id;
+    }
+    XrProgramSemanticDependencyInput dependency = {
+        .source_module = source->dependencies[0].source_module,
+        .dependency_module = source->dependencies[0].dependency_module,
+        .import_locator = source->dependencies[0].import_locator,
+        .exported_declaration = source->dependencies[0].exported_declaration,
+        .exported_function = source->dependencies[0].exported_function,
+        .resolver_binding = source->dependencies[0].resolver_binding,
+        .contract_fingerprint = source->dependencies[0].contract_fingerprint,
+        .kind = source->dependencies[0].kind,
+    };
+    XrProgramSemanticCallInput call = {
+        .callsite_identity = source->calls[0].callsite_identity,
+        .locator = source->calls[0].locator,
+        .caller_function = source->calls[0].caller_function,
+        .callee_function = source->calls[0].callee_function,
+        .resolver_binding = source->calls[0].resolver_binding,
+        .contract_fingerprint = source->calls[0].contract_fingerprint,
+    };
+    switch (mutation) {
+        case SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_ZERO:
+            memset(&dependency.resolver_binding, 0, sizeof(dependency.resolver_binding));
+            break;
+        case SCALAR_GRAPH_OUTER_RESIGN_CALL_BINDING_MISMATCH:
+            call.resolver_binding.bytes[0] ^= UINT8_C(0x80);
+            break;
+        case SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_MUTATION:
+            dependency.resolver_binding.bytes[0] ^= UINT8_C(0x40);
+            call.resolver_binding = dependency.resolver_binding;
+            break;
+        case SCALAR_GRAPH_OUTER_RESIGN_FOREIGN_EXPORT:
+            dependency.exported_declaration =
+                source->functions[0].flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY
+                    ? source->functions[0].declaration_identity
+                    : source->functions[1].declaration_identity;
+            dependency.exported_function = entry_function;
+            break;
+        case SCALAR_GRAPH_OUTER_RESIGN_WRONG_IMPORT_LOCATOR:
+            dependency.import_locator.start_column++;
+            break;
+    }
+    bool dependency_added = ok && xr_program_semantic_closure_add_dependency(rebuilt, &dependency,
+                                                                             error, sizeof(error));
+    if (mutation == SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_ZERO) {
+        bool rejected = ok && !dependency_added &&
+                        xr_program_semantic_closure_failure_kind(rebuilt) ==
+                            XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_INVALID;
+        xr_program_semantic_closure_free(rebuilt);
+        return rejected;
+    }
+    XrStableId ignored = {{0}};
+    ok = dependency_added &&
+         xr_program_semantic_closure_add_call(rebuilt, &call, &ignored, error, sizeof(error));
+    /* Freeze re-signs the aggregate PSC/GCI. The independent verifier then
+     * rejects the
+     * deliberately stale or contradictory typed inner join. */
+    bool rejected = ok && !xr_program_semantic_closure_freeze(rebuilt, error, sizeof(error)) &&
+                    xr_program_semantic_closure_failure_kind(rebuilt) ==
+                        XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_INVALID;
+    xr_program_semantic_closure_free(rebuilt);
+    return rejected;
+}
+
 typedef struct ScalarGraphFixture {
     char directory[256];
     char producer_path[320];
@@ -502,6 +625,47 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ScalarGraphFixture fixture;
     ASSERT_TRUE(scalar_graph_fixture_build(&fixture, "41"));
     char error[256] = {0};
+    XrModuleSpec *entry_spec = &fixture.graph->specs[fixture.graph->entry_index];
+    XrModuleSpec *producer_spec = &fixture.graph->specs[entry_spec->dep_indices[0]];
+    AstNode *import_node = entry_spec->ast->as.program.statements[0];
+    AstNode *export_node = producer_spec->ast->as.program.statements[0];
+    const char *export_name = import_node->as.import_stmt.members[0].name;
+    XaSymbol *original_export =
+        (XaSymbol *) xr_hashmap_get(producer_spec->export_symbols, export_name);
+    ASSERT_NOT_NULL(original_export);
+    XaSymbol cloned_export = *original_export;
+    cloned_export.id += UINT32_C(1000000);
+    ASSERT_TRUE(xr_hashmap_set(producer_spec->export_symbols, export_name, &cloned_export));
+    XrProgramSemanticClosure *cloned_symbol_closure = NULL;
+    ASSERT_EQ_INT(
+        xa_program_semantic_closure_publish_scalar_module_graph(
+            fixture.analyzer, fixture.graph, &cloned_symbol_closure, error, sizeof(error)),
+        XA_PROGRAM_SEMANTIC_CLOSURE_READY);
+    xr_program_semantic_closure_free(cloned_symbol_closure);
+    AstNode *entry_node = entry_spec->ast->as.program.statements[1];
+    XaSymbol *entry_symbol =
+        xa_analyzer_symbol_by_id(fixture.analyzer, entry_node->as.function_decl.symbol_id);
+    ASSERT_NOT_NULL(entry_symbol);
+    XrType *export_type = cloned_export.links.type;
+    cloned_export.links.type = entry_symbol->links.type;
+    XrProgramSemanticClosure *wrong_export_type_closure = NULL;
+    ASSERT_EQ_INT(
+        xa_program_semantic_closure_publish_scalar_module_graph(
+            fixture.analyzer, fixture.graph, &wrong_export_type_closure, error, sizeof(error)),
+        XA_PROGRAM_SEMANTIC_CLOSURE_INVALID);
+    ASSERT_NULL(wrong_export_type_closure);
+    cloned_export.links.type = export_type;
+    AstNode foreign_declaration = *export_node;
+    foreign_declaration.column++;
+    cloned_export.links.function_decl_node = &foreign_declaration;
+    XrProgramSemanticClosure *foreign_symbol_closure = NULL;
+    ASSERT_EQ_INT(
+        xa_program_semantic_closure_publish_scalar_module_graph(
+            fixture.analyzer, fixture.graph, &foreign_symbol_closure, error, sizeof(error)),
+        XA_PROGRAM_SEMANTIC_CLOSURE_INVALID);
+    ASSERT_NULL(foreign_symbol_closure);
+    ASSERT_TRUE(xr_hashmap_set(producer_spec->export_symbols, export_name, original_export));
+
     XrProgramSemanticClosure *closure = NULL;
     XaProgramSemanticClosurePublishStatus status =
         xa_program_semantic_closure_publish_scalar_module_graph(
@@ -513,38 +677,106 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ASSERT_NOT_NULL(closure);
     ASSERT_TRUE(xr_program_semantic_closure_is_verified(closure));
     ASSERT_EQ_UINT(xr_program_semantic_closure_family(closure),
-                   XR_PROGRAM_SEMANTIC_FAMILY_GENERAL);
+                   XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL);
     ASSERT_EQ_UINT(xr_program_semantic_closure_module_count(closure), 2);
     ASSERT_EQ_UINT(xr_program_semantic_closure_dependency_count(closure), 1);
-    ASSERT_EQ_UINT(xr_program_semantic_closure_type_count(closure), 0);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_type_count(closure), 1);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_type_field_count(closure), 0);
     ASSERT_EQ_UINT(xr_program_semantic_closure_function_count(closure), 2);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_function_parameter_count(closure), 1);
     ASSERT_EQ_UINT(xr_program_semantic_closure_call_count(closure), 1);
+    const XrProgramSemanticTypeRecord *i64_type = xr_program_semantic_closure_type(closure, 0);
+    ASSERT_NOT_NULL(i64_type);
+    ASSERT_EQ_UINT(i64_type->kind, XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR);
+    ASSERT_EQ_UINT(i64_type->exact_scalar, XR_EXACT_SCALAR_I64);
     uint32_t entry_count = 0;
     uint32_t exported_count = 0;
+    const XrProgramSemanticFunctionRecord *entry_function = NULL;
+    const XrProgramSemanticFunctionRecord *exported_function = NULL;
     for (uint32_t i = 0; i < 2; i++) {
         const XrProgramSemanticFunctionRecord *function =
             xr_program_semantic_closure_function(closure, i);
         ASSERT_NOT_NULL(function);
+        ASSERT_TRUE(memcmp(function->return_type.bytes, i64_type->id.bytes,
+                           sizeof(i64_type->id.bytes)) == 0);
+        ASSERT_EQ_UINT(function->capability_mask, 0);
         entry_count += (function->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
         exported_count += (function->flags & XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED) != 0;
+        if (function->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) {
+            entry_function = function;
+            ASSERT_EQ_UINT(function->parameter_count, 0);
+        } else {
+            exported_function = function;
+            ASSERT_EQ_UINT(function->flags, XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED);
+            ASSERT_EQ_UINT(function->parameter_count, 1);
+            const XrProgramSemanticFunctionParameterRecord *parameter =
+                xr_program_semantic_closure_function_parameter(closure, function->parameter_begin);
+            ASSERT_NOT_NULL(parameter);
+            ASSERT_EQ_UINT(parameter->mode, XR_PARAM_READ);
+            ASSERT_TRUE(
+                memcmp(parameter->type.bytes, i64_type->id.bytes, sizeof(i64_type->id.bytes)) == 0);
+        }
     }
     ASSERT_EQ_UINT(entry_count, 1);
     ASSERT_EQ_UINT(exported_count, 1);
+    ASSERT_NOT_NULL(entry_function);
+    ASSERT_NOT_NULL(exported_function);
     const XrProgramSemanticDependencyRecord *dependency =
         xr_program_semantic_closure_dependency(closure, 0);
     const XrProgramSemanticCallRecord *call =
         xr_program_semantic_closure_call(closure, 0);
     ASSERT_NOT_NULL(dependency);
     ASSERT_NOT_NULL(call);
+    ASSERT_EQ_UINT(dependency->kind, XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT);
+    ASSERT_EQ_UINT(dependency->import_locator.kind, AST_IMPORT_STMT);
+    ASSERT_TRUE(memcmp(dependency->exported_declaration.bytes,
+                       exported_function->declaration_identity.bytes,
+                       sizeof(dependency->exported_declaration.bytes)) == 0);
+    ASSERT_TRUE(memcmp(dependency->exported_function.bytes, exported_function->id.bytes,
+                       sizeof(dependency->exported_function.bytes)) == 0);
+    ASSERT_TRUE(memcmp(dependency->resolver_binding.bytes, call->resolver_binding.bytes,
+                       sizeof(dependency->resolver_binding.bytes)) == 0);
+    ASSERT_TRUE(memcmp(call->caller_function.bytes, entry_function->id.bytes,
+                       sizeof(call->caller_function.bytes)) == 0);
+    ASSERT_TRUE(memcmp(call->callee_function.bytes, exported_function->id.bytes,
+                       sizeof(call->callee_function.bytes)) == 0);
     ASSERT_FALSE(memcmp(dependency->source_module.bytes,
                         dependency->dependency_module.bytes,
                         sizeof(dependency->source_module.bytes)) == 0);
     ASSERT_FALSE(memcmp(call->caller_function.bytes, call->callee_function.bytes,
                         sizeof(call->caller_function.bytes)) == 0);
+    ASSERT_TRUE(
+        scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_ZERO));
+    ASSERT_TRUE(scalar_graph_outer_resign_rejects(closure,
+                                                  SCALAR_GRAPH_OUTER_RESIGN_CALL_BINDING_MISMATCH));
+    ASSERT_TRUE(
+        scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_RESOLVER_MUTATION));
+    ASSERT_TRUE(
+        scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_FOREIGN_EXPORT));
+    ASSERT_TRUE(
+        scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_WRONG_IMPORT_LOCATOR));
 
+    static const uint8_t expected_resolver_binding[16] = {
+        0x5e, 0x67, 0x57, 0x46, 0x54, 0xf5, 0x51, 0x28,
+        0x14, 0x26, 0xbf, 0x7c, 0x2a, 0x9a, 0x16, 0x83,
+    };
+    static const uint8_t expected_fingerprint[32] = {
+        0xc1, 0xb2, 0x50, 0x3c, 0xcf, 0xf1, 0x19, 0x54, 0x45, 0x47, 0x9a,
+        0xf2, 0x37, 0x46, 0x57, 0x10, 0xe3, 0x4d, 0x31, 0x31, 0x90, 0x81,
+        0x6e, 0x21, 0x98, 0x04, 0xde, 0xd5, 0xfc, 0x32, 0x14, 0x99,
+    };
+    static const uint8_t expected_generation_id[16] = {
+        0xea, 0x39, 0x98, 0x2c, 0x91, 0x2f, 0xdd, 0xd5,
+        0x3e, 0x01, 0x00, 0xd5, 0x3c, 0x25, 0xa9, 0xcc,
+    };
     XrFingerprint fingerprint = xr_program_semantic_closure_fingerprint(closure);
     XrGenerationClosureId generation_id =
         xr_program_semantic_closure_generation_id(closure);
+    ASSERT_TRUE(memcmp(dependency->resolver_binding.bytes, expected_resolver_binding,
+                       sizeof(expected_resolver_binding)) == 0);
+    ASSERT_TRUE(memcmp(fingerprint.bytes, expected_fingerprint, sizeof(expected_fingerprint)) == 0);
+    ASSERT_TRUE(
+        memcmp(generation_id.bytes, expected_generation_id, sizeof(expected_generation_id)) == 0);
     int first = fixture.graph->topo_order[0];
     fixture.graph->topo_order[0] = fixture.graph->topo_order[1];
     fixture.graph->topo_order[1] = first;

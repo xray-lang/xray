@@ -713,21 +713,30 @@ static XrStableId scalar_graph_function_instance(XrStableId declaration,
 }
 
 static XrFingerprint scalar_graph_dependency_contract(
-    const XrProgramSemanticModuleInput *source,
-    const XrProgramSemanticModuleInput *dependency, XrStableId exported_declaration,
-    XrFingerprint signature, XrFingerprint effect,
+    const XrProgramSemanticModuleInput *source, const XrProgramSemanticModuleInput *dependency,
+    XrStableId exported_declaration, XrStableId exported_function, XrStableId resolver_binding,
+    XrStableId return_type, XrFingerprint signature, XrFingerprint effect, uint64_t capability_mask,
     XrProgramSemanticSourceLocator import_locator) {
     XrSHA256Context context;
-    leaf_hash_begin(&context, "xray-source-scalar-graph-dependency-contract-v1");
+    leaf_hash_begin(&context, "xray-source-scalar-graph-dependency-contract-v2");
     leaf_hash_id(&context, source->module_identity);
     leaf_hash_fingerprint(&context, source->module_authority_fingerprint);
+    leaf_hash_fingerprint(&context, source->source_fingerprint);
+    leaf_hash_fingerprint(&context, source->export_fingerprint);
     leaf_hash_id(&context, dependency->module_identity);
     leaf_hash_fingerprint(&context, dependency->module_authority_fingerprint);
     leaf_hash_fingerprint(&context, dependency->source_fingerprint);
+    leaf_hash_fingerprint(&context, dependency->export_fingerprint);
+    leaf_hash_span(&context, import_locator);
     leaf_hash_id(&context, exported_declaration);
+    leaf_hash_id(&context, exported_function);
+    leaf_hash_id(&context, resolver_binding);
+    leaf_hash_id(&context, return_type);
     leaf_hash_fingerprint(&context, signature);
     leaf_hash_fingerprint(&context, effect);
-    leaf_hash_span(&context, import_locator);
+    leaf_hash_u64(&context, capability_mask);
+    leaf_hash_u32(&context, 1);
+    leaf_hash_u32(&context, XR_PARAM_READ);
     return leaf_finish_fingerprint(&context);
 }
 
@@ -766,6 +775,52 @@ static bool scalar_graph_function_exact(const XaAnalyzer *analyzer, const AstNod
     if (leaf_effect_fingerprint(analyzer, symbol, &ignored) != XA_LEAF_AUTHORITY_READY)
         return false;
     *symbol_out = symbol;
+    return true;
+}
+
+static bool scalar_graph_unary_i64_symbol_type_exact(const XaAnalyzer *analyzer,
+                                                     const XaSymbol *symbol) {
+    const XrType *type = symbol ? symbol->links.type : NULL;
+    return analyzer && symbol && symbol->kind == XA_SYM_FUNCTION && !symbol->is_builtin &&
+           !symbol->parent && symbol->links.summary_owner == analyzer && type &&
+           type->kind == XR_KIND_FUNCTION && type->function.param_count == 1 &&
+           type->function.min_params == 1 && !type->function.is_variadic &&
+           !type->function.is_c_abi && type->function.throw_effect == XR_FN_EFFECT_NO_THROW &&
+           type->function.type_param_count == 0 && type->function.params &&
+           type->function.params[0].mode == XR_PARAM_READ &&
+           leaf_exact_scalar(type->function.params[0].type) &&
+           leaf_exact_scalar(type->function.params[0].type)->id == XR_EXACT_SCALAR_I64 &&
+           leaf_exact_scalar(type->function.return_type) &&
+           leaf_exact_scalar(type->function.return_type)->id == XR_EXACT_SCALAR_I64;
+}
+
+static bool scalar_graph_import_symbol_exact(const XaAnalyzer *analyzer, const XaSymbol *symbol) {
+    return scalar_graph_unary_i64_symbol_type_exact(analyzer, symbol) && symbol->is_imported &&
+           !symbol->is_exported;
+}
+
+static bool
+scalar_graph_symbol_export_declaration(const XaAnalyzer *analyzer, const XaSymbol *symbol,
+                                       bool imported,
+                                       const XrProgramSemanticModuleInput *dependency_module,
+                                       XrFingerprint signature, XrStableId *out) {
+    const AstNode *declaration = symbol ? symbol->links.function_decl_node : NULL;
+    XrFingerprint ignored_effect;
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!out || !dependency_module || !symbol || symbol->kind != XA_SYM_FUNCTION ||
+        symbol->is_imported != imported || symbol->is_builtin || symbol->parent ||
+        symbol->links.summary_owner != analyzer || !declaration ||
+        declaration->type != AST_FUNCTION_DECL || !leaf_locator_valid(leaf_locator(declaration)) ||
+        leaf_effect_fingerprint(analyzer, symbol, &ignored_effect) != XA_LEAF_AUTHORITY_READY ||
+        (imported ? symbol->is_exported
+                  : !symbol->is_exported || declaration->as.function_decl.param_count != 1))
+        return false;
+    if (imported ? !scalar_graph_import_symbol_exact(analyzer, symbol)
+                 : !scalar_graph_unary_i64_symbol_type_exact(analyzer, symbol))
+        return false;
+    *out =
+        scalar_graph_function_declaration(dependency_module, leaf_locator(declaration), signature);
     return true;
 }
 
@@ -857,17 +912,9 @@ xa_program_semantic_closure_publish_scalar_module_graph(
         dependency->export_symbols && member->name
             ? (const XaSymbol *) xr_hashmap_get(dependency->export_symbols, member->name)
             : NULL;
-    if (!member->name || !member->symbol_id || !imported_symbol ||
-        imported_symbol->id != member->symbol_id || !imported_symbol->is_imported ||
-        imported_symbol->kind != XA_SYM_FUNCTION ||
-        imported_symbol->links.summary_owner != analyzer ||
-        !imported_symbol->links.function_decl_node ||
-        imported_symbol->links.function_decl_node->type != AST_FUNCTION_DECL ||
-        imported_symbol->links.function_decl_node->as.function_decl.symbol_id !=
-            exported_symbol->id ||
-        export_table_symbol != exported_symbol ||
-        !exported_function->as.function_decl.name ||
-        strcmp(member->name, exported_function->as.function_decl.name) != 0) {
+    if (!member->name || !member->symbol_id || !exported_function->as.function_decl.name ||
+        strcmp(member->name, exported_function->as.function_decl.name) != 0 ||
+        !scalar_graph_import_symbol_exact(analyzer, imported_symbol) || !export_table_symbol) {
         bridge_fail(error, error_size,
                     "two-module scalar import has no exact exported target");
         return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
@@ -900,9 +947,7 @@ xa_program_semantic_closure_publish_scalar_module_graph(
                                       ? xa_analyzer_symbol_by_id(
                                             analyzer, call->callee->as.variable.symbol_id)
                                       : NULL;
-    if (!call_symbol || call_symbol->kind != XA_SYM_FUNCTION || !call_symbol->is_imported ||
-        call_symbol->is_builtin || call_symbol->links.summary_owner != analyzer ||
-        call_symbol->links.function_decl_node != exported_function) {
+    if (!scalar_graph_import_symbol_exact(analyzer, call_symbol)) {
         bridge_fail(error, error_size, "two-module scalar call target authority is incomplete");
         return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
     }
@@ -941,63 +986,110 @@ xa_program_semantic_closure_publish_scalar_module_graph(
         return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
     }
 
-    XrProgramSemanticSourceLocator entry_locator = leaf_locator(entry_function);
-    XrProgramSemanticSourceLocator exported_locator = leaf_locator(exported_function);
-    XrStableId entry_declaration = scalar_graph_function_declaration(
-        &entry_module, entry_locator, nullary.signature_fingerprint);
-    XrStableId exported_declaration = scalar_graph_function_declaration(
-        &dependency_module, exported_locator, unary.signature_fingerprint);
-    XrFingerprint dependency_contract = scalar_graph_dependency_contract(
-        &entry_module, &dependency_module, exported_declaration,
-        unary.signature_fingerprint, unary.effect_fingerprint, leaf_locator(import_node));
     XrSHA256Context policy_context;
     leaf_hash_begin(&policy_context, "xray-source-scalar-module-graph-policy-v1");
     leaf_hash_u32(&policy_context, 2);
     leaf_hash_u32(&policy_context, 1);
+    leaf_hash_u32(&policy_context, 1);
+    leaf_hash_u32(&policy_context, 0);
     leaf_hash_u32(&policy_context, 2);
     leaf_hash_u32(&policy_context, 1);
+    leaf_hash_u32(&policy_context, 1);
     XrFingerprint policy = leaf_finish_fingerprint(&policy_context);
+
+    XrProgramSemanticSourceLocator entry_locator = leaf_locator(entry_function);
+    XrProgramSemanticSourceLocator exported_locator = leaf_locator(exported_function);
+    XrStableId entry_declaration = scalar_graph_function_declaration(&entry_module, entry_locator,
+                                                                     nullary.signature_fingerprint);
+    XrStableId exported_declaration = scalar_graph_function_declaration(
+        &dependency_module, exported_locator, unary.signature_fingerprint);
+    XrStableId member_declaration = {{0}};
+    XrStableId export_table_declaration = {{0}};
+    XrStableId call_declaration = {{0}};
+    if (!scalar_graph_symbol_export_declaration(analyzer, imported_symbol, true, &dependency_module,
+                                                unary.signature_fingerprint, &member_declaration) ||
+        !scalar_graph_symbol_export_declaration(analyzer, export_table_symbol, false,
+                                                &dependency_module, unary.signature_fingerprint,
+                                                &export_table_declaration) ||
+        !scalar_graph_symbol_export_declaration(analyzer, call_symbol, true, &dependency_module,
+                                                unary.signature_fingerprint, &call_declaration) ||
+        !stable_id_equal(exported_declaration, member_declaration) ||
+        !stable_id_equal(exported_declaration, export_table_declaration) ||
+        !stable_id_equal(exported_declaration, call_declaration)) {
+        bridge_fail(error, error_size,
+                    "two-module scalar bindings do not rejoin one stable export declaration");
+        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    }
+    XrStableId entry_instance =
+        scalar_graph_function_instance(entry_declaration, nullary.signature_fingerprint);
+    XrStableId exported_instance =
+        scalar_graph_function_instance(exported_declaration, unary.signature_fingerprint);
+    XrProgramSemanticFunctionInput exported_identity_input = {
+        .module_identity = dependency_module.module_identity,
+        .declaration_identity = exported_declaration,
+        .concrete_instance_identity = exported_instance,
+        .signature_fingerprint = unary.signature_fingerprint,
+        .effect_fingerprint = unary.effect_fingerprint,
+        .capability_mask = unary.capability_mask,
+    };
+    XrStableId expected_exported_function_id = {{0}};
+    if (!xr_program_semantic_function_identity(policy, &exported_identity_input,
+                                               &expected_exported_function_id) ||
+        !xr_source_semantic_scalar_i64_export_fingerprint(
+            &dependency_module, exported_declaration, expected_exported_function_id,
+            unary.signature_fingerprint, unary.effect_fingerprint, unary.capability_mask,
+            &dependency_module.export_fingerprint)) {
+        bridge_fail(error, error_size, "two-module scalar export identity authority is incomplete");
+        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    }
     XrProgramSemanticClosureLimits limits = {
         .max_modules = 2,
         .max_dependencies = 1,
-        .max_types = 0,
+        .max_types = 1,
+        .max_type_fields = 0,
         .max_functions = 2,
+        .max_function_parameters = 1,
         .max_calls = 1,
     };
     XrProgramSemanticClosure *closure = NULL;
     if (!xr_program_semantic_closure_create(&limits, policy, &closure, error, error_size))
         return XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
     bool ok = xr_program_semantic_closure_set_family(
-                  closure, XR_PROGRAM_SEMANTIC_FAMILY_GENERAL, error, error_size) &&
-              xr_program_semantic_closure_add_module(closure, &entry_module, error,
-                                                     error_size) &&
-              xr_program_semantic_closure_add_module(closure, &dependency_module, error,
-                                                     error_size);
-    XrProgramSemanticDependencyInput dependency_input = {
-        .source_module = entry_module.module_identity,
-        .dependency_module = dependency_module.module_identity,
-        .contract_fingerprint = dependency_contract,
-    };
-    ok = ok && xr_program_semantic_closure_add_dependency(
-                   closure, &dependency_input, error, error_size);
+        closure, XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL, error, error_size);
+    XrProgramSemanticTypeInput scalar_input;
+    XrStableId i64_type = {{0}};
+    ok = ok && xr_program_semantic_exact_scalar_type_input(XR_EXACT_SCALAR_I64, &scalar_input) &&
+         xr_program_semantic_closure_add_type(closure, &scalar_input, &i64_type, error,
+                                              error_size) &&
+         xr_program_semantic_closure_add_module(closure, &entry_module, error, error_size) &&
+         xr_program_semantic_closure_add_module(closure, &dependency_module, error, error_size);
     XrProgramSemanticFunctionInput entry_input = {
         .module_identity = entry_module.module_identity,
         .declaration_identity = entry_declaration,
-        .concrete_instance_identity = scalar_graph_function_instance(
-            entry_declaration, nullary.signature_fingerprint),
+        .concrete_instance_identity = entry_instance,
         .declaration_locator = entry_locator,
         .signature_fingerprint = nullary.signature_fingerprint,
         .effect_fingerprint = nullary.effect_fingerprint,
+        .return_type = i64_type,
+        .capability_mask = nullary.capability_mask,
         .flags = XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY,
+    };
+    XrProgramSemanticFunctionParameterInput exported_parameter = {
+        .type = i64_type,
+        .declaration_ordinal = 0,
+        .mode = XR_PARAM_READ,
     };
     XrProgramSemanticFunctionInput exported_input = {
         .module_identity = dependency_module.module_identity,
         .declaration_identity = exported_declaration,
-        .concrete_instance_identity = scalar_graph_function_instance(
-            exported_declaration, unary.signature_fingerprint),
+        .concrete_instance_identity = exported_instance,
         .declaration_locator = exported_locator,
         .signature_fingerprint = unary.signature_fingerprint,
         .effect_fingerprint = unary.effect_fingerprint,
+        .return_type = i64_type,
+        .parameters = &exported_parameter,
+        .parameter_count = 1,
+        .capability_mask = unary.capability_mask,
         .flags = XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED,
     };
     XrStableId entry_function_id = {{0}};
@@ -1006,6 +1098,31 @@ xa_program_semantic_closure_publish_scalar_module_graph(
                    closure, &entry_input, &entry_function_id, error, error_size) &&
          xr_program_semantic_closure_add_function(
              closure, &exported_input, &exported_function_id, error, error_size);
+    if (ok && !stable_id_equal(exported_function_id, expected_exported_function_id))
+        ok = bridge_fail(error, error_size,
+                         "two-module scalar exported function identity did not rejoin");
+    XrStableId resolver_binding = {{0}};
+    if (ok && !xr_source_semantic_scalar_i64_import_binding(
+                  &entry_module, &dependency_module, leaf_locator(import_node),
+                  exported_declaration, exported_function_id, i64_type, unary.signature_fingerprint,
+                  unary.effect_fingerprint, unary.capability_mask, &resolver_binding))
+        ok = bridge_fail(error, error_size,
+                         "two-module scalar resolver binding authority is incomplete");
+    XrProgramSemanticDependencyInput dependency_input = {
+        .source_module = entry_module.module_identity,
+        .dependency_module = dependency_module.module_identity,
+        .import_locator = leaf_locator(import_node),
+        .exported_declaration = exported_declaration,
+        .exported_function = exported_function_id,
+        .resolver_binding = resolver_binding,
+        .contract_fingerprint = scalar_graph_dependency_contract(
+            &entry_module, &dependency_module, exported_declaration, exported_function_id,
+            resolver_binding, i64_type, unary.signature_fingerprint, unary.effect_fingerprint,
+            unary.capability_mask, leaf_locator(import_node)),
+        .kind = XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT,
+    };
+    ok = ok &&
+         xr_program_semantic_closure_add_dependency(closure, &dependency_input, error, error_size);
     XrStableId callsite = {{0}};
     XrProgramSemanticSourceLocator call_locator = leaf_locator(call_node);
     ok = ok && xr_source_semantic_callsite_identity(
@@ -1016,6 +1133,7 @@ xa_program_semantic_closure_publish_scalar_module_graph(
         .locator = call_locator,
         .caller_function = entry_function_id,
         .callee_function = exported_function_id,
+        .resolver_binding = dependency_input.resolver_binding,
         .contract_fingerprint = call_contract,
     };
     XrStableId ignored_call = {{0}};

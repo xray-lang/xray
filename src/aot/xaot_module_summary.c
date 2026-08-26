@@ -537,13 +537,14 @@ static const XrProgramSemanticModuleRecord *program_module_for_spec(
         if (!candidate || !xr_stable_id_equal(candidate->module_identity,
                                               source.module_identity))
             continue;
-        if (match || !xr_fingerprint_equal(candidate->module_authority_fingerprint,
-                                           source.module_authority_fingerprint) ||
-            !xr_fingerprint_equal(candidate->source_fingerprint,
-                                  source.source_fingerprint) ||
-            !xr_fingerprint_equal(candidate->export_fingerprint,
-                                  source.export_fingerprint))
+        if (match ||
+            !xr_fingerprint_equal(candidate->module_authority_fingerprint,
+                                  source.module_authority_fingerprint) ||
+            !xr_fingerprint_equal(candidate->source_fingerprint, source.source_fingerprint))
             return NULL;
+        /* Source authority reconstructs the module and source rows only. The
+         * verified PSC family owns its exact empty or typed export fingerprint;
+         * the complete PSC/GCI keys every XSM below. */
         match = candidate;
     }
     return match;

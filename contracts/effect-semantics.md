@@ -470,11 +470,16 @@ type. Synchronous shared callable loads therefore do not acquire invented
 suspension, while a missing target, removed state, or mismatched callable type
 fails closed.
 
-The bounded PSC-backed direct-call families consume frozen PSC and Xi authority
-as typed external construction/verification inputs. The scalar family also
+The currently admitted single-module scalar and leaf-value PSC-backed
+direct-call families consume frozen PSC and Xi authority as typed external
+construction/verification inputs. The scalar family also
 requires its sealed CallDecision and exact TargetProfile; the leaf-value
-aggregate family requires both to be absent. SemanticPlan schema 41 and program
-provenance schema 2 retain no compiler pointer or target-specific bytes. They
+aggregate family requires both to be absent. SemanticPlan schema 41 and
+program-provenance schema 2 do not admit the new two-module scalar graph in
+this slice; that family stops at independently verified PSC/GCI and
+module-summary XSM cache identity, with no Xi, SemanticPlan, or TargetPlan
+effect authority.
+Those schemas retain no compiler pointer or target-specific bytes. They
 serialize and fingerprint the PSC schema/family/fingerprint,
 GenerationClosureId, exact type/type-field/function/call row bindings, preserved
 function flags, and their semantic type/function/operation/direct-local target
@@ -534,7 +539,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c a7d9b71745ac71f3682dbcb59998bed5cce29a81d2e954a336102de034dfdf6b
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
-anchor-sha256: tests/unit/plan/test_semantic_plan.c a02d1f10431993c9efd64538f1eb8f0c0dc61999c9977ac5684e3aefda3b564d
+anchor-sha256: tests/unit/plan/test_semantic_plan.c f588458eaf8328c7ecb7f771df387106c0267e3ebe223084064cdf9cf060ee7c
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
 anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1
