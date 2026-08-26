@@ -168,23 +168,29 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then publishes deterministic per-module XSM/cache authority. This does not
-    grant graph TargetPlan, VM, native AOT, container, coroutine, or public-ABI
-    execution authority. TargetPlan build and verification reject the graph
-    family with `XR_TARGET_1001`; no consumer may skip, fall back, or reconstruct
-    missing facts from names, function bodies, tags, or legacy readers.
-19. The first TargetPlan consumer admits only the exact leaf-aggregate family
-    from the public SemanticPlan program provenance and type, field, function,
-    and call bindings. It projects those rows into the existing TargetPlan
-    schema rather than creating an aggregate-only plan. Layout is derived from
-    the verified target profile and declaration ordinals; the canonical native
-    `Pair<i64,i64>` case is 16-byte size, 8-byte alignment, and field offsets 0
-    and 8. The direct-local argument is `VALUE/READ`, caller and callee use one
-    aggregate representation, and the result uses caller storage with no
-    ownership transfer or adapter. The independent Target verifier reconstructs
-    every program-to-semantic-to-target join. Missing or mutated bindings fail
-    closed and cannot fall back to a SemanticPlan shape helper, Xi operation,
-    source name, or function body. The projection by itself grants no VM, AOT,
+    then builds one schema-48 program TargetPlan from the complete canonical
+    SemanticPlan module set. The plan has one program-graph row, two module
+    partitions over global rows, one aggregate semantic fingerprint, and the
+    exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
+    after independent TargetPlan verification may per-module summary cache
+    authority publish. This grants graph TargetPlan and exact XTP
+    materialization authority, but not VM, native AOT, container, coroutine, or
+    public-ABI execution authority. The product fails closed after cache
+    publication at the explicit same-plan VM/AOT coverage boundary; no consumer
+    may skip, stitch per-module plans, fall back, or reconstruct missing facts
+    from names, function bodies, tags, or legacy readers.
+19. The first single-module TargetPlan consumer admits only the exact
+    leaf-aggregate family from the public SemanticPlan program provenance and
+    type, field, function, and call bindings. It projects those rows into the
+    existing TargetPlan schema rather than creating an aggregate-only plan.
+    Layout is derived from the verified target profile and declaration ordinals;
+    the canonical native `Pair<i64,i64>` case is 16-byte size, 8-byte alignment,
+    and field offsets 0 and 8. The direct-local argument is `VALUE/READ`, caller
+    and callee use one aggregate representation, and the result uses caller
+    storage with no ownership transfer or adapter. The independent Target
+    verifier reconstructs every program-to-semantic-to-target join. Missing or
+    mutated bindings fail closed and cannot fall back to a SemanticPlan shape
+    helper, Xi operation, source name, or function body. The projection by itself grants no VM, AOT,
     or C-emission execution authority; execution additionally requires the exact
     independently verified leaf instruction group and consumer gates.
 20. The bounded W3 AOT consumer joins a Xi function to that execution authority
@@ -225,9 +231,23 @@ projection defined below; they never imply TargetPlan admission on their own.
     export type, resolver, import slot, dependency, call, callee, and exact pure
     i64 signatures. The SemanticPlan module-set verifier then rejoins root/local
     attachments and producer/entry plan authority. Per-partition SemanticPlans
-    and their XSM round-trips close the same graph authority before module-summary
-    cache publication. TargetPlan, VM, and native AOT execution remain deliberately
-    outside this family and fail closed at the Target boundary.
+    and their XSM round-trips close the same graph authority. Target construction
+    consumes the full canonical plan set in `program_module_row` order while the
+    entry fragment separately carries only its ordered direct dependency.
+    It emits one verified schema-48 TargetPlan with global functions, slots,
+    values, instructions, calls, arguments, debug facts, layouts, extents, and
+    capabilities; module partitions are bounded pointer-free views and are not
+    independent plans. The cross-partition edge is exactly one
+    `PROGRAM_DIRECT` call with one `VALUE/READ` i64 argument and one
+    `CALL_DIRECT_I64` instruction. Builder and verifier independently bind every
+    global row back to the owning local SemanticPlan row, require the exact
+    program module set and aggregate fingerprint, and reject missing, extra,
+    overlapping, reordered, foreign, or re-signed authority. The exact graph
+    XTP materializer rebuilds the same plan from the full module set and rejects
+    ordinary/graph shape substitution. VM and native AOT execution remain
+    deliberately outside this bounded family until both consume this same
+    verified plan; the source product publishes module summaries and then fails
+    closed without a binary at that execution boundary.
 
 ## Digest anchors
 
@@ -285,10 +305,10 @@ anchor-sha256: src/ir/xi_program_semantic_plan.c 42e2fa994d177b8e37aa88fdb7a300b
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c aa2bff8af087b730168b25faf26ffb08cd69ace09963fb8c762c1071bac6796e
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 83dd97975c5b7a9e3def44f72a5f2f5e39cd1f009972365c4c55d7b859a63b6c
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 09bc04101ca2437d4ff61a1a93aea59c2228b2c44cab1a19608588f3588926fa
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c b9b5ee347551be65af131899afee26d1cb071e3b427bb6f0916c5772440ee50c
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 61f1adff92feace6edca40e6b0683ead3c38dbf69f6b68b61dc38773ce50d35f
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c d1457dfbd2efe8490fd7a03c6372a70715588a7fd043e0777b3edf3946f8f7b5
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7

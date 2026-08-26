@@ -124,16 +124,24 @@ invalidation, compiler-session ownership, or any compatibility reader.
     binding, and the Xi/SemanticPlan module-set verifiers independently rebuild
     every live module, function, import/export, resolver, call, attachment, and
     dependency join. Producer and entry XSM bytes are deterministic; entry
-    decode requires the exact ordered producer plan. Only after this complete
-    gate may module-summary cache authority publish. The complete product PSC
+    decode requires the exact ordered producer plan. The driver then constructs
+    one independently verified schema-48 program TargetPlan from the full
+    canonical SemanticPlan module set. Its single graph row, two pointer-free
+    module partitions, aggregate semantic fingerprint, global Target rows, and
+    exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge must all verify before
+    module-summary cache authority may publish. The complete product PSC
     fingerprint and GCI are copied into
     every module's XSM key, so a dependency source change rotates both module
     addresses even when the entry source is unchanged. An existing per-plan
     provenance row may only confirm the identical PSC/GCI. The claimed product
     predicate cannot fall back to the zero-authority key state, a path/name
     reconstruction, an old key reader, or a second cache lookup path. Cache
-    publication grants no graph TargetPlan or execution authority: the product
-    runner must subsequently fail at `XR_TARGET_1001` and produce no binary.
+    publication grants no VM or AOT execution authority: after the module
+    summaries are published, the product runner must fail at
+    `XR_TARGET_1001: verified program TargetPlan execution is outside same-plan
+    VM/AOT coverage` and produce no binary. Cold, warm, dependency-edit, and
+    dependency-revert runs must retain the same cache publication and
+    invalidation behavior at this explicit execution fence.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup,
@@ -153,7 +161,7 @@ anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57
 anchor-sha256: src/aot/xaot_module_summary.h ab160517cfb59565b24f75f1273afb08e0c5d6c2370f282a1c09c7f45846adcc
 anchor-sha256: src/aot/xaot_module_summary.c beb39599107b96d9bc12bf4db76bf83e44695e65d9190836872f6974a0d11d21
 anchor-sha256: src/aot/xaot_driver.h 8f2f4d10c58b2d2e37f0a1806b5c0b29814c343c69b1a2ff4f51633ec7a9392d
-anchor-sha256: src/aot/xaot_driver.c ed7fb88a012049a4dae8b2286c87e7231f5841d5920c03fa9940ca9456cc3252
+anchor-sha256: src/aot/xaot_driver.c fb514f46f8e5edd941c7196feda3afa133c49ef320b15cc5bf9ace5f45608b65
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
@@ -162,6 +170,6 @@ anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c c9819052135b2
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 558d2917133a9dee2206b997d0a12139b63d561865431d960889c8d0d5b87d3c
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 117a7c617160868de286912287b70b97dc79d07f685b740deb08d1e79e3f704e
-anchor-sha256: tests/aot/run_module_summary_determinism.py 97a1e0edc457578a0620658b2e7e2d3b0393e76f50baefd8f6b74f76da9b040f
+anchor-sha256: tests/aot/run_module_summary_determinism.py 8d0e176650442e8fb808f81e6450fe1c7c6710d9c1c92d2c1230f6afa33ecb58
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 717147203998c04a1ab1653756994cbceb5ea37a138e02898cb5fd99505dee65
 anchor-sha256: tests/unit/os/test_fs_atomic.c 3166bf0113590778cf46f874a7205476819e043699bb99d9881549579237ce12

@@ -412,6 +412,19 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
+The schema-48 source program graph does not extend that legacy per-module AOT
+cutover. It owns one verified TargetPlan for the complete canonical SemanticPlan
+module set, with global function, slot, representation, instruction, call, and
+argument rows plus pointer-free module partitions. Its only cross-partition ABI
+edge is the exact trivial signed-`i64` `PROGRAM_DIRECT` call and
+`CALL_DIRECT_I64` instruction; caller and callee slots and representations are
+rows of the same plan. AOT must not construct `target_plans[]`, select authority
+by module name, translate through legacy `XaotFuncAbi`, or join fingerprints
+from separate plans. The current product therefore verifies this program plan
+and fails closed before per-module TargetPlan preparation or C emission. No
+cross-module native ABI claim exists until AOT consumes partition views of that
+same plan end to end; VM must use the same authority for parity.
+
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
 function is identified through its owning module's frozen PSC v5 row:
 `XiFunc.psc_function_index` selects the PSC function identity and locator, which
@@ -752,5 +765,5 @@ anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1b
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7
 anchor-sha256: src/aot/xaot_boundary.c 22b97cdfac8d0b22905dfe036190560ab29f4beb32abd660cb9a49dc2f4c6b09
-anchor-sha256: src/aot/xaot_driver.c ed7fb88a012049a4dae8b2286c87e7231f5841d5920c03fa9940ca9456cc3252
+anchor-sha256: src/aot/xaot_driver.c fb514f46f8e5edd941c7196feda3afa133c49ef320b15cc5bf9ace5f45608b65
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 717147203998c04a1ab1653756994cbceb5ea37a138e02898cb5fd99505dee65

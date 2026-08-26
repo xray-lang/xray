@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 47 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 48 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
@@ -11,6 +11,18 @@ any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
+
+TargetPlan schema 48 additionally permits one bounded program graph whose
+function, slot, value, instruction, call, argument, debug, layout, extent, and
+capability rows are globally indexed. Canonical module partitions provide
+pointer-free ranges and a local SemanticPlan owner index; they are not separate
+plans or independently executable frames. The existing typed frame continues
+to select one global function and its exact global slot range. It does not yet
+authorize `PROGRAM_DIRECT`/`CALL_DIRECT_I64` cross-partition recursion, create a
+second frame from another plan, translate local indexes at execution time, or
+stitch per-module fingerprints. Until the same verified schema-48 plan drives
+the complete caller/callee frame chain, program-graph VM execution remains fail
+closed.
 
 The bounded `XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2` family transports one
 complete trivial aggregate as two positional signed-`i64` fields. Its exact
@@ -342,7 +354,7 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h e09c17d38ae7d70e18ac2d8996e33bcc13a13f9448a4a586267f074826a2636c
+anchor-sha256: src/plan/target/xr_target_plan.h 3a46929e884bd66c4ba2a5466b4e9a95ab381821c3f756a74b2ca7efa5237ff2
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c a90c15e7554024ce8ed4170b2d6b3e9d1269409678587abca7088d3b1216cc5b
 anchor-sha256: src/vm/xr_typed_dispatch.c 692a5a9ad5cdac4f0d8fcaea433b423615a68461bca9a3d7987da7da55cbbfa2
