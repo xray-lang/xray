@@ -46,8 +46,31 @@ the program-output comparison remain byte-native and are not normalized.
     details. Result names, divergence baselines, and refusal baselines must all
     consume this one canonical spelling so the same governed case cannot leave
     and re-enter a baseline solely because the runner changed operating system.
+11. A live refusal/root-cause manifest is qualification evidence from one full,
+    unsharded invocation of the canonical VM/AOT differential runner; it is not
+    a baseline, waiver, active-generation manifest, or alternate case verdict.
+    The generator auto-discovers every governed case and oracle through that
+    runner, requires a clean source tree and its exact Ninja Release,
+    VM-fastpaths-off compiler whose `--version --json` commit and dirty state
+    match it, and freezes the exact hosted native
+    provider and artifact reported by `toolchain doctor --json`. Each refusal
+    retains its complete raw native build log, the first source-emitted refusal,
+    every reached refusal, and the emitting SemanticPlan verifier, TargetPlan
+    builder, or AOT representation owner. Missing identity, zero cases,
+    differential failure, a refusal without source-emitted owner/fact evidence,
+    or a raw-log/hash/aggregation mismatch fails the manifest; none can become
+    skip. Source-declared backend exclusions remain skips, and the two governed
+    VM-plus-native-rejection oracles are reported as expected rejections rather
+    than as comparable executions. Verification independently rediscovers the
+    inputs, rechecks the current compiler/provider, reparses raw logs, and
+    reconstructs first-refusal and root-cause aggregates.
 
 ## Digest anchors
 
-anchor-sha256: tests/diff/run_backend_diff.py 4826b13296a11bc9cee2402f85c1d34bb1b23abf988394a31787befdd31cf4c1
+anchor-sha256: tests/diff/run_backend_diff.py 9b30566a476c0816a1939f41a281cbac3709b2062482ddcc0620b72b7424484d
+anchor-sha256: tests/diff/survey_refusals.py df3d181d065cc4dc09cee43e78483bf5684ec80034d585b55300bc2773841acc
+anchor-sha256: scripts/check_live_refusal_manifest.py c58d30a24df4ea616e18985892dd746330d107bf08cba85c62f28b21ae1222b4
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c f255b5868f54b94bcb2c95a601d94eb30fcfb10730a7962d2d527acb45fdaf1f
+anchor-sha256: src/plan/target/xr_target_builder.c 266a3addfefb4e51230dffc44b59a73b009ea4959652fca2e3021575b8d0127b
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 24508f47e743b25ae98ea09489e3d246095f9230ae9dbf192e475d7571c6c5bd
 anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7

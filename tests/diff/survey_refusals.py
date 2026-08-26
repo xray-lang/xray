@@ -1,132 +1,443 @@
 #!/usr/bin/env python3
-"""Rank differential-net targets by what they would actually finish.
+"""Generate the current-binary live refusal/root-cause manifest.
 
-`run_backend_diff.py` reports the first refusal a case hits, so counting first
-refusals answers "how many cases does this construct head" -- not "how many
-would it finish".  The two differ sharply: a construct heading nine cases
-finished zero of them when every case turned out to have a different second
-construct waiting behind it.
+The differential runner remains the sole owner of case discovery and the
+pass/fail/refused/skip verdict. This generator enables its source-side refusal
+evidence, retains the complete refused build log, and freezes the identity of
+the clean source tree, matching compiler, toolchain provider, profile and
+artifact that produced the measurement.
 
-This walks every not-comparable case with XRAY_COLLECT_ALL_REFUSALS=1, which
-enumerates all refusals the current layer can see rather than stopping at the
-first, and groups cases by their complete refusal set.  A construct's yield is
-the number of cases it is the *sole* remaining refusal for.
-
-That count is still an upper bound, not a promise: the layers run in sequence,
-so a case clearing this layer may be refused by the next one.  It is the
-sharpest estimate available before doing the work.
-
-Usage:
-    python3 tests/diff/survey_refusals.py [--xray PATH] [--jobs N] [--json OUT]
+The output is qualification evidence, not a baseline or waiver. A dirty tree,
+stale binary, missing case, differential failure, unparsable refusal, missing
+toolchain provider or empty selection fails closed.
 """
-import argparse, collections, concurrent.futures, json, os, re, subprocess, sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-LIST = os.path.join(ROOT, "tests/diff/known_failures_not_comparable.txt")
-SURVEY = re.compile(r"\[refusal-survey\] family=(\S+)(.*)")
-ERRLINE = re.compile(r"^Error: .*?: (XR_[A-Z0-9_]+)")
+from __future__ import annotations
+
+import argparse
+import collections
+import concurrent.futures
+import hashlib
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import run_backend_diff as backend_diff
 
 
-def refusal_key(family, rest):
-    """One construct, named by the facts that decide which authority owes it.
+ROOT = Path(__file__).resolve().parents[2]
+SCHEMA = 1
+KIND = "xray-live-refusal-root-cause"
+GENERATOR = "tests/diff/survey_refusals.py"
+SURVEY = re.compile(
+    r"^\[refusal-survey\] owner=([a-z0-9-]+) family=([^\s]+)(?:\s+(.*))?$"
+)
+DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+):\s*([^\r\n]+)")
+OWNER_VALUES = {
+    "semantic-plan-verifier",
+    "target-plan-builder",
+    "aot-representation-refinement",
+}
 
-    A family alone is too coarse: `calls_and_adapters` covers both "argument
-    contract needs unsupported storage" and "signature or result storage is
-    incomplete", which are separate constructs owed by separate judgements.
-    The refusal message is what separates them, so it joins the key.
-    """
-    key = family
-    message = re.search(r"(XR_[A-Z0-9_]+: [a-z][^\n]*?)(?:\s+(?:operation|function|value)=|$)", rest)
+
+def sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_identity_owner() -> Any:
+    path = ROOT / "tests/target-machine/phase0/run_baseline.py"
+    spec = importlib.util.spec_from_file_location("xray_target_machine_identity", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load compiler identity owner: {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def canonical_path(path: Path) -> str:
+    return backend_diff.canonical_path_text(path.resolve().relative_to(ROOT.resolve()))
+
+
+def file_row(path: Path) -> dict[str, Any]:
+    return {
+        "path": canonical_path(path),
+        "sha256": sha256_file(path),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def optional_file_row(path: Path) -> dict[str, Any] | None:
+    return file_row(path) if path.is_file() else None
+
+
+def read_baseline(path: Path) -> set[str]:
+    if not path.is_file():
+        raise RuntimeError(f"governed baseline missing: {canonical_path(path)}")
+    rows: set[str] = set()
+    for raw in path.read_text(encoding="utf-8", errors="strict").splitlines():
+        value = raw.split("#", 1)[0].strip().replace("\\", "/")
+        if not value:
+            continue
+        if value in rows:
+            raise RuntimeError(f"duplicate governed baseline row: {value}")
+        rows.add(value)
+    return rows
+
+
+def case_input(case: Path, refusal_baseline: set[str], divergence_baseline: set[str]) -> dict[str, Any]:
+    expected = Path(str(case) + ".expected")
+    args = case.with_suffix(".args")
+    stdin = case.with_suffix(".stdin")
+    project = case.parent / "xray.toml"
+    name = canonical_path(case)
+    aot_reject = backend_diff.read_first_directive(case, "// diff-aot-reject: ", 5)
+    diff_backends = backend_diff.read_first_directive(case, "// diff-backends: ", 5)
+    oracle: dict[str, Any]
+    if expected.is_file():
+        oracle = {"kind": "checked-in-stdout", "asset": file_row(expected)}
+    elif aot_reject:
+        oracle = {
+            "kind": "vm-plus-native-rejection",
+            "asset": None,
+            "native_diagnostic": aot_reject,
+        }
+    else:
+        oracle = {"kind": "differential-vm", "asset": None}
+    return {
+        "path": name,
+        "source": file_row(case),
+        "args": optional_file_row(args),
+        "stdin": optional_file_row(stdin),
+        "project": optional_file_row(project),
+        "oracle": oracle,
+        "diff_backends": [value.strip() for value in diff_backends.split(",") if value.strip()],
+        "listed_refusal": name in refusal_baseline,
+        "listed_divergence": name in divergence_baseline,
+    }
+
+
+def blocking_fact(family: str, detail: str) -> str:
+    """Derive the stable blocking fact from source-emitted authority facts."""
+    parts = [family]
+    message = re.search(
+        r"(XR_[A-Z0-9_]+: [a-z][^\n]*?)(?:\s+(?:operation|function|value)=|$)", detail
+    )
     if message:
-        key += "|" + message.group(1).strip()
-    selector = re.search(r"selector=(\S+)", rest)
-    definer = re.search(r"definer-opcode=(\d+)", rest)
-    use = re.search(r"use-opcode=(\d+)", rest)
-    opcode = re.search(r"(?<!-)opcode=(\d+)", rest)
-    if selector:
-        key += "|sel=" + selector.group(1)
-    if definer and use:
-        key += f"|d{definer.group(1)}->u{use.group(1)}"
-    elif opcode:
-        key += "|op" + opcode.group(1)
-    return key
+        parts.append(message.group(1).strip())
+    for label, pattern in (
+        ("selector", r"\bselector=([^\s]+)"),
+        ("definer-opcode", r"\bdefiner-opcode=(\d+)"),
+        ("use-opcode", r"\buse-opcode=(\d+)"),
+        ("opcode", r"(?<!-)\bopcode=(\d+)"),
+        ("value-machine", r"\bvalue-machine=(\d+)"),
+        ("value-shape", r"\bvalue-shape=(\d+)"),
+        ("value-flags", r"\bvalue-flags=(\d+)"),
+    ):
+        match = re.search(pattern, detail)
+        if match:
+            parts.append(f"{label}={match.group(1)}")
+    return "|".join(parts)
 
 
-def survey_one(args):
-    case, xray, timeout = args
-    path = os.path.join(ROOT, case)
-    if not os.path.exists(path):
-        return case, None
-    env = dict(os.environ, XRAY_COLLECT_ALL_REFUSALS="1")
-    out_path = os.path.join("/tmp", "survey_%d.out" % os.getpid())
+def parse_refusals(log: bytes) -> tuple[list[dict[str, str]], dict[str, str] | None]:
+    rows: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+    text = log.decode("utf-8", errors="backslashreplace")
+    for line in text.splitlines():
+        match = SURVEY.fullmatch(line.strip())
+        if not match:
+            continue
+        owner, family, detail = match.group(1), match.group(2), match.group(3) or ""
+        if owner not in OWNER_VALUES:
+            raise RuntimeError(f"unknown refusal owner {owner!r}")
+        key = (owner, family, blocking_fact(family, detail))
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append({
+            "owner": owner,
+            "family": family,
+            "blocking_fact": key[2],
+        })
+    diagnostic_match = DIAGNOSTIC.search(text)
+    diagnostic = None
+    if diagnostic_match:
+        diagnostic = {
+            "code": diagnostic_match.group(1),
+            "message": diagnostic_match.group(2).strip(),
+        }
+    return rows, diagnostic
+
+
+def toolchain_identity(binary: Path, timeout: int) -> dict[str, Any]:
+    command = [
+        str(binary), "toolchain", "doctor", "--target", "native",
+        "--profile", "hosted", "--json",
+    ]
     try:
-        proc = subprocess.run([xray, "build", "--native", path, "-o", out_path],
-                              capture_output=True, text=True, timeout=timeout, env=env, cwd=ROOT)
-    except subprocess.TimeoutExpired:
-        return case, {"kinds": ["TIMEOUT"], "err": "TIMEOUT"}
-    text = proc.stdout + proc.stderr
-    kinds = set()
-    for line in text.splitlines():
-        match = SURVEY.match(line.strip())
-        if match:
-            kinds.add(refusal_key(match.group(1), match.group(2)))
-    err = ""
-    for line in text.splitlines():
-        match = ERRLINE.match(line)
-        if match:
-            err = match.group(1)
-            break
-    if proc.returncode == 0 and not kinds:
-        return case, {"kinds": [], "err": "BUILDS"}
-    return case, {"kinds": sorted(kinds), "err": err or ("rc=%d" % proc.returncode)}
+        completed = subprocess.run(
+            command, cwd=ROOT, text=True, encoding="utf-8", errors="strict",
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise RuntimeError(f"toolchain doctor failed: {error}") from error
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"toolchain doctor returned {completed.returncode}: "
+            f"{(completed.stdout + completed.stderr).strip()}"
+        )
+    try:
+        data = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"toolchain doctor output is not JSON: {error}") from error
+    request = data.get("request", {})
+    selection = data.get("selection", {})
+    if data.get("schema") != 1 or request.get("target") != "native" \
+            or request.get("profile") != "hosted" or not request.get("normalizedTarget") \
+            or not selection.get("ready") or selection.get("fallbackUsed") \
+            or not selection.get("provider") or not selection.get("runtimeArtifact"):
+        raise RuntimeError("toolchain doctor did not prove an exact ready native hosted provider")
+    probe = data.get("probe", {})
+    return {
+        "schema": data["schema"],
+        "xray": data.get("xray"),
+        "request": request,
+        "selection": selection,
+        "capabilities": data.get("capabilities"),
+        "probe": {"id": probe.get("id"), "fingerprint": probe.get("fingerprint")},
+    }
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--xray", default=os.path.join(ROOT, "build/xray"))
-    parser.add_argument("--jobs", type=int, default=6)
-    parser.add_argument("--timeout", type=int, default=90)
-    parser.add_argument("--json", default="")
-    parser.add_argument("--top", type=int, default=20)
+def qualified_compiler_identity(identity_owner: Any, build: Path) -> dict[str, Any]:
+    identity = identity_owner.compiler_identity(
+        ROOT, build, {"residue": {"source_root_globs": []}}
+    )
+    values = identity_owner.cmake_identity_values(build)
+    source = Path(values.get("CMAKE_HOME_DIRECTORY", "")).resolve()
+    if values.get("CMAKE_GENERATOR") != "Ninja" \
+            or values.get("CMAKE_BUILD_TYPE") != "Release" \
+            or values.get("XRAY_STDLIB_VM_FASTPATHS") != "OFF" \
+            or source != ROOT.resolve() \
+            or identity.get("version", {}).get("buildProfile") != "Release":
+        raise RuntimeError("compiler is not the exact source-root Ninja Release fastpaths-off build")
+    identity["build"] = {
+        "generator": "Ninja",
+        "build_type": "Release",
+        "stdlib_vm_fastpaths": "OFF",
+        "source_root": "${SOURCE_ROOT}",
+    }
+    return identity
+
+
+def build_config(build: Path, binary: Path, timeout: int) -> backend_diff.RunnerConfig:
+    cache_root = build / "live-refusal-root-cause-cache"
+    return backend_diff.RunnerConfig(
+        xray=binary,
+        backends=["vm", "aot"],
+        jobs=1,
+        aot_opt="0",
+        aot_cache=cache_root / "aot-objects",
+        aot_bin_cache=cache_root / "aot-binaries",
+        embed_bin_cache=cache_root / "embed-binaries",
+        diff_stderr=False,
+        xi_opt="",
+        case_timeout=float(timeout),
+    )
+
+
+def survey_case(order: int, case: Path, config: backend_diff.RunnerConfig) -> backend_diff.CaseResult:
+    return backend_diff.run_case(config, order, case)
+
+
+def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[str, Any], int]:
+    log_root = output.with_name(output.name + ".logs")
+    if output.exists() or log_root.exists():
+        raise RuntimeError("output manifest and log directory must not already exist")
+    identity_owner = load_identity_owner()
+    identity = qualified_compiler_identity(identity_owner, build)
+    binary = identity_owner.compiler_binary_path(build)
+    provider = toolchain_identity(binary, timeout)
+
+    extra_cases = str(backend_diff.SCRIPT_DIR / "coro_regression_cases.txt")
+    cases = [
+        path for path in backend_diff.collect_cases("", extra_cases)
+        if path.is_file() and not path.name.startswith("_")
+    ]
+    if not cases:
+        raise RuntimeError("governed backend-diff discovery returned zero runnable cases")
+    canonical_cases = [canonical_path(path) for path in cases]
+    if len(canonical_cases) != len(set(canonical_cases)):
+        raise RuntimeError("governed backend-diff discovery contains duplicate cases")
+
+    refusal_path = ROOT / "tests/diff/known_failures_not_comparable.txt"
+    divergence_path = ROOT / "tests/diff/known_failures.txt"
+    refusal_baseline = read_baseline(refusal_path)
+    divergence_baseline = read_baseline(divergence_path)
+    inputs = [case_input(case, refusal_baseline, divergence_baseline) for case in cases]
+    missing_refusal_inputs = refusal_baseline - set(canonical_cases)
+    if missing_refusal_inputs:
+        raise RuntimeError(
+            "refusal baseline contains cases outside governed discovery: "
+            + ", ".join(sorted(missing_refusal_inputs))
+        )
+
+    config = build_config(build, binary, timeout)
+    previous = os.environ.get("XRAY_COLLECT_ALL_REFUSALS")
+    os.environ["XRAY_COLLECT_ALL_REFUSALS"] = "1"
+    try:
+        results: list[backend_diff.CaseResult] = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as pool:
+            futures = [pool.submit(survey_case, index, case, config) for index, case in enumerate(cases)]
+            for index, future in enumerate(futures, start=1):
+                results.append(future.result())
+                if index % 50 == 0:
+                    print(f"  measured {index}/{len(cases)}", file=sys.stderr)
+    finally:
+        if previous is None:
+            os.environ.pop("XRAY_COLLECT_ALL_REFUSALS", None)
+        else:
+            os.environ["XRAY_COLLECT_ALL_REFUSALS"] = previous
+
+    log_root.mkdir(parents=True, exist_ok=True)
+    manifest_results: list[dict[str, Any]] = []
+    root_cases: dict[tuple[str, str, str], list[str]] = collections.defaultdict(list)
+    invalid = False
+    input_by_case = {row["path"]: row for row in inputs}
+    for result in sorted(results, key=lambda row: row.order):
+        outcome = result.status
+        if result.status == "pass" \
+                and input_by_case[result.name]["oracle"]["kind"] == "vm-plus-native-rejection":
+            outcome = "expected-rejection"
+        row: dict[str, Any] = {
+            "case": result.name,
+            "outcome": outcome,
+            "first_refusal": None,
+            "refusals": [],
+            "diagnostic": None,
+            "build_log": None,
+        }
+        if result.status == "refused":
+            log = result.refusal_build_logs.get("aot", b"")
+            if not log:
+                invalid = True
+            digest = sha256_bytes(log)
+            log_name = f"{result.order:04d}-{digest[:16]}.log"
+            log_path = log_root / log_name
+            log_path.write_bytes(log)
+            refusals, diagnostic = parse_refusals(log)
+            if not refusals:
+                invalid = True
+            row["refusals"] = refusals
+            row["first_refusal"] = refusals[0] if refusals else None
+            row["diagnostic"] = diagnostic
+            row["build_log"] = {
+                "path": log_path.relative_to(output.parent).as_posix(),
+                "sha256": digest,
+                "size_bytes": len(log),
+            }
+            for refusal in refusals:
+                key = (refusal["owner"], refusal["family"], refusal["blocking_fact"])
+                root_cases[key].append(result.name)
+        elif result.status == "fail":
+            invalid = True
+            row["diagnostic"] = {"code": "DIFFERENTIAL_FAILURE", "message": result.output}
+        governed = input_by_case[result.name]
+        if (outcome == "refused" and not governed["listed_refusal"]) \
+                or (governed["listed_refusal"] and outcome not in {"refused", "skip"}):
+            invalid = True
+        manifest_results.append(row)
+
+    counts = collections.Counter(row["outcome"] for row in manifest_results)
+    roots = [
+        {
+            "owner": owner,
+            "family": family,
+            "blocking_fact": fact,
+            "case_count": len(case_names),
+            "cases": sorted(case_names),
+        }
+        for (owner, family, fact), case_names in sorted(root_cases.items())
+    ]
+    manifest = {
+        "schema": SCHEMA,
+        "kind": KIND,
+        "generator": GENERATOR,
+        "status": "failed" if invalid else "passed",
+        "identity": identity,
+        "measurement": {
+            "profile": "hosted",
+            "artifact": "native-executable",
+            "host_c_optimization": "0",
+            "xi_optimization": "pipeline-default",
+            "backends": ["vm", "aot"],
+            "collect_all_refusals": True,
+            "toolchain": provider,
+        },
+        "inputs": {
+            "case_roots": ["tests/diff/cases"],
+            "case_manifests": [file_row(backend_diff.SCRIPT_DIR / "coro_regression_cases.txt")],
+            "case_count": len(inputs),
+            "cases": inputs,
+            "divergence_baseline": file_row(divergence_path),
+            "refusal_baseline": file_row(refusal_path),
+        },
+        "results": manifest_results,
+        "root_causes": roots,
+        "summary": {
+            "case_count": len(manifest_results),
+            "comparable_count": counts["pass"],
+            "expected_rejection_count": counts["expected-rejection"],
+            "refused_count": counts["refused"],
+            "skipped_count": counts["skip"],
+            "failed_count": counts["fail"],
+            "root_cause_count": len(roots),
+        },
+    }
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return manifest, 1 if invalid else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--build", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--jobs", type=int, default=min(os.cpu_count() or 1, 8))
+    parser.add_argument("--timeout", type=int, default=180)
     options = parser.parse_args()
-
-    cases = []
-    for line in open(LIST):
-        line = line.split("#")[0].strip()
-        if line:
-            cases.append(line)
-    print("surveying %d cases with %s" % (len(cases), options.xray), file=sys.stderr)
-
-    results = {}
-    work = [(c, options.xray, options.timeout) for c in cases]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=options.jobs) as pool:
-        for index, (case, result) in enumerate(pool.map(survey_one, work)):
-            if result is not None:
-                results[case] = result
-            if (index + 1) % 50 == 0:
-                print("  %d/%d" % (index + 1, len(cases)), file=sys.stderr)
-
-    sole = collections.Counter()
-    sole_cases = collections.defaultdict(list)
-    for case, result in results.items():
-        kinds = result.get("kinds") or []
-        if len(kinds) == 1 and kinds[0] != "TIMEOUT":
-            sole[kinds[0]] += 1
-            sole_cases[kinds[0]].append(case)
-
-    builds = [c for c, r in results.items() if r.get("err") == "BUILDS"]
-    print("\n%d surveyed, %d already build, %d have a single remaining construct"
-          % (len(results), len(builds), sum(sole.values())))
-    print("\nconstructs ranked by cases they would finish:")
-    for key, count in sole.most_common(options.top):
-        print("  %4d  %s" % (count, key))
-
-    if options.json:
-        json.dump({"cases": results, "sole": dict(sole_cases)}, open(options.json, "w"), indent=1)
-        print("\nwrote %s" % options.json)
-    return 0
+    if options.jobs < 1 or options.timeout < 1:
+        parser.error("--jobs and --timeout must be positive")
+    try:
+        manifest, status = generate(
+            options.build.resolve(), options.output.resolve(), options.jobs, options.timeout
+        )
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"live refusal manifest generation failed: {error}", file=sys.stderr)
+        return 1
+    summary = manifest["summary"]
+    print(
+        "live refusal manifest: "
+        f"{manifest['status']} cases={summary['case_count']} "
+        f"comparable={summary['comparable_count']} refused={summary['refused_count']} "
+        f"expected-rejection={summary['expected_rejection_count']} "
+        f"skipped={summary['skipped_count']} failed={summary['failed_count']}"
+    )
+    return status
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

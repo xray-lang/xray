@@ -233,6 +233,11 @@ class CaseResult:
     status: str
     output: str
     name: str = ""
+    # Full native build evidence is exposed only for a refusal.  Consumers such
+    # as the live refusal manifest must not scrape the console preview (which is
+    # deliberately truncated to twenty lines) or launch a second build with a
+    # subtly different differential policy.
+    refusal_build_logs: dict[str, bytes] = field(default_factory=dict)
 
 
 @dataclass
@@ -440,7 +445,13 @@ def run_case(config: RunnerConfig, order: int, case: Path) -> CaseResult:
         for backend in refusers:
             log = decode_build_log(results[backend].buildlog)
             lines.extend("      " + line for line in log.splitlines()[:20])
-        return CaseResult(order, "refused", "\n".join(lines), name)
+        return CaseResult(
+            order,
+            "refused",
+            "\n".join(lines),
+            name,
+            refusal_build_logs={backend: results[backend].buildlog for backend in refusers},
+        )
 
     mismatch = ""
     other = ""

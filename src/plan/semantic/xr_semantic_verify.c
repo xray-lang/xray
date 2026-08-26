@@ -90,7 +90,7 @@ static bool semantic_survey_enabled(void) {
 }
 
 static void semantic_survey_row(const char *family, const char *detail) {
-    fprintf(stderr, "[refusal-survey] family=semantic_%s %s\n", family,
+    fprintf(stderr, "[refusal-survey] owner=semantic-plan-verifier family=semantic_%s %s\n", family,
             detail && detail[0] ? detail : "refused without a detail");
 }
 

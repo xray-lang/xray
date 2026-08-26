@@ -313,7 +313,7 @@ static bool target_survey_enabled(void) {
 }
 
 static void target_survey_row(const char *family, const char *detail) {
-    fprintf(stderr, "[refusal-survey] family=%s %s\n", family,
+    fprintf(stderr, "[refusal-survey] owner=target-plan-builder family=%s %s\n", family,
             detail && detail[0] ? detail : "refused without a detail");
 }
 

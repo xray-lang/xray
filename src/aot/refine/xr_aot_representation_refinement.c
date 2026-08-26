@@ -410,7 +410,8 @@ static void rep_survey_row(const CollectContext *ctx, const char *side, uint32_t
     /* XR_MACHINE_REP_COUNT means the plan bound no representation for the
      * value; one past it means it bound one this pass could not resolve. */
     fprintf(stderr,
-            "[refusal-survey] family=refinement_%s_oracle definer-opcode=%u use-opcode=%u "
+            "[refusal-survey] owner=aot-representation-refinement "
+            "family=refinement_%s_oracle definer-opcode=%u use-opcode=%u "
             "selector=%s operand=%u value-machine=%u value-shape=%u value-flags=%u\n",
             side, def ? def->opcode : 9999u, use ? use->opcode : 9999u, selector, operand,
             machine   ? (unsigned) machine->kind

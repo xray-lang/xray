@@ -159,6 +159,11 @@ CONTRACT_SPECS = (
         "differential-protocol.md",
         (
             "tests/diff/run_backend_diff.py",
+            "tests/diff/survey_refusals.py",
+            "scripts/check_live_refusal_manifest.py",
+            "src/plan/semantic/xr_semantic_verify.c",
+            "src/plan/target/xr_target_builder.c",
+            "src/aot/refine/xr_aot_representation_refinement.c",
             "tests/aot/TOMBSTONES.tsv",
         ),
     ),
