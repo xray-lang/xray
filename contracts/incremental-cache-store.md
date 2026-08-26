@@ -111,7 +111,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
 12. For the bounded two-source-module scalar product graph, the native source
     driver publishes one independently verified schema-v5
     `SCALAR_MODULE_GRAPH_DIRECT_CALL` PSC/GCI before Xi lowering and carries
-    that immutable authority into two Xi partitions and two SemanticPlan 42
+    that immutable authority into two Xi partitions and two SemanticPlan 43
     artifacts. Each
     graph spec must match exactly one PSC module row through canonical source
     semantic module authority; duplicate, missing, stale, or foreign rows abort
@@ -122,7 +122,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
     every live module, function, import/export, resolver, call, attachment, and
     dependency join. Producer and entry XSM bytes are deterministic; entry
     decode requires the exact ordered producer plan. The driver then constructs
-    one independently verified schema-48 program TargetPlan from the full
+    one independently verified schema-49 program TargetPlan from the full
     canonical SemanticPlan module set. Its single graph row, two pointer-free
     module partitions, aggregate semantic fingerprint, global Target rows, and
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge must all verify before

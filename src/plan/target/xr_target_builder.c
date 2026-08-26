@@ -2685,6 +2685,96 @@ semantic_leaf_program_direct_call_is_exact(const XrSemanticPlan *plan, uint32_t 
     return true;
 }
 
+static const XrSemanticProgramProvenance *
+semantic_product_program_provenance(const XrSemanticPlan *plan) {
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(plan);
+    return provenance &&
+                   provenance->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+                   provenance->schema == XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION &&
+                   provenance->program_schema == XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION &&
+                   provenance->type_count == 3 && provenance->type_field_count == 6 &&
+                   provenance->function_count == 3 && provenance->call_count == 2 &&
+                   provenance->module_count == 1 && provenance->dependency_count == 0 &&
+                   provenance->program_module_row == 0 &&
+                   provenance->program_dependency_binding_count == 0 &&
+                   xr_semantic_plan_program_type_binding_count(plan) == 3 &&
+                   xr_semantic_plan_program_type_field_binding_count(plan) == 6 &&
+                   xr_semantic_plan_program_function_binding_count(plan) == 3 &&
+                   xr_semantic_plan_program_call_binding_count(plan) == 2
+               ? provenance
+               : NULL;
+}
+
+static bool semantic_product_direct_call_is_exact(
+    const XrSemanticPlan *plan, uint32_t operation_index,
+    const XrSemanticOperationRecord *operation,
+    const XrSemanticFunctionRecord *callee,
+    const XrSemanticProgramTypeBinding **out_product) {
+    if (out_product)
+        *out_product = NULL;
+    const XrSemanticProgramProvenance *provenance =
+        semantic_product_program_provenance(plan);
+    const XrSemanticProgramCallBinding *call =
+        provenance ? xr_semantic_plan_program_call_for_operation(plan, operation_index) : NULL;
+    const XrSemanticProgramFunctionBinding *caller_binding =
+        operation ? xr_semantic_plan_program_function_for_semantic_function(
+                        plan, operation->function)
+                  : NULL;
+    const XrSemanticProgramFunctionBinding *callee_binding =
+        call ? xr_semantic_plan_program_function_for_semantic_function(plan,
+                                                                       call->target_function)
+             : NULL;
+    const XrSemanticFunctionRecord *caller =
+        operation ? xr_semantic_plan_function(plan, operation->function) : NULL;
+    const XrSemanticFunctionRecord *bound_callee =
+        call ? xr_semantic_plan_function(plan, call->target_function) : NULL;
+    const XrSemanticProgramTypeBinding *product =
+        operation ? xr_semantic_plan_program_type_for_semantic_type(
+                        plan, operation->result_type)
+                  : NULL;
+    const XrSemanticTypeRecord *product_type =
+        product ? xr_semantic_plan_type(plan, product->semantic_type) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticOperandRecord *callee_operand =
+        operation && operation->operand_count == 1 &&
+                operation->operand_begin < operand_count
+            ? &operands[operation->operand_begin]
+            : NULL;
+    if (!provenance || !call || !operation || !caller_binding || !callee_binding || !caller ||
+        !bound_callee || bound_callee != callee || !product || !product_type || !callee_operand ||
+        call->program_row >= 2 || call->reserved != 0 ||
+        call->target_function == operation->function ||
+        !xr_stable_id_equal(call->caller_program_function,
+                            caller_binding->program_function) ||
+        !xr_stable_id_equal(call->callee_program_function,
+                            callee_binding->program_function) ||
+        caller_binding->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+        callee_binding->flags != 0 || operation->opcode != XI_CALL ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->result_type != bound_callee->return_type ||
+        caller->return_type != operation->result_type || caller->parameter_count != 0 ||
+        bound_callee->parameter_count != 0 ||
+        product->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT ||
+        product->exact_scalar != XR_EXACT_SCALAR_NONE || product->field_count != 6 ||
+        product_type->kind != XR_KIND_TUPLE || product_type->child_count != 6 ||
+        product_type->aggregate_extent != 6 || product_type->flags != XR_SEM_TYPE_VALUE ||
+        !stable_id_is_zero(product->source_class_identity) ||
+        callee_operand->role != XR_SEM_OPERAND_CALLEE || callee_operand->parameter != -1 ||
+        callee_operand->flags != 0 ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->return_provenance != XR_SEM_RETURN_NONE ||
+        bound_callee->return_parameter != -1 ||
+        bound_callee->return_provenance != XR_SEM_RETURN_NONE)
+        return false;
+    if (out_product)
+        *out_product = product;
+    return true;
+}
+
 static bool semantic_channel_type_is_exact(const XrSemanticPlan *plan, uint32_t type_index,
                                            uint32_t *element_type) {
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(plan, type_index);
@@ -7223,8 +7313,17 @@ static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilde
         return fail(error, error_size, "XR_TARGET_1003",
                     "leaf aggregate program provenance is incomplete");
     }
+    if (provenance &&
+        provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+        !semantic_product_program_provenance(builder->semantic_plan)) {
+        builder->poisoned = true;
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "leaf product program provenance is incomplete");
+    }
     uint32_t count =
         semantic_leaf_program_provenance(builder->semantic_plan)
+            ? (uint32_t) xr_semantic_plan_program_call_binding_count(builder->semantic_plan)
+        : semantic_product_program_provenance(builder->semantic_plan)
             ? (uint32_t) xr_semantic_plan_program_call_binding_count(builder->semantic_plan)
             : 0u;
     for (uint32_t i = 0; i < count; i++) {
@@ -7235,8 +7334,11 @@ static bool builder_add_direct_local_aggregate_result_storage(XrTargetPlanBuilde
         const XrSemanticFunctionRecord *callee =
             binding ? xr_semantic_plan_function(builder->semantic_plan, binding->target_function)
                     : NULL;
-        if (!binding || !semantic_leaf_program_direct_call_is_exact(
-                            builder->semantic_plan, binding->operation, operation, callee, NULL)) {
+        if (!binding ||
+            (!semantic_leaf_program_direct_call_is_exact(
+                 builder->semantic_plan, binding->operation, operation, callee, NULL) &&
+             !semantic_product_direct_call_is_exact(
+                 builder->semantic_plan, binding->operation, operation, callee, NULL))) {
             builder->poisoned = true;
             return fail(error, error_size, "XR_TARGET_1003",
                         "leaf aggregate program call binding is incomplete");
@@ -8553,9 +8655,13 @@ static bool collect_aggregate_intents(XrTargetPlanBuilder *builder,
          * with no binding at all, because no call family places a slot the
          * caller already owns. A coroutine function stays deferred either way
          * -- its frame placement is a separate authority. */
-        bool direct_local_aggregate_result = semantic_leaf_program_direct_call_is_exact(
-            builder->semantic_plan, i, operation,
-            semantic_direct_local_callee_for_operation(builder->semantic_plan, i), NULL);
+        const XrSemanticFunctionRecord *direct_callee =
+            semantic_direct_local_callee_for_operation(builder->semantic_plan, i);
+        bool direct_local_aggregate_result =
+            semantic_leaf_program_direct_call_is_exact(builder->semantic_plan, i, operation,
+                                                       direct_callee, NULL) ||
+            semantic_product_direct_call_is_exact(builder->semantic_plan, i, operation,
+                                                  direct_callee, NULL);
         if (deferred_functions[operation->function] ||
             (!direct_local_aggregate_result && operation->opcode < XI_OP_COUNT &&
              (xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_CALL ||
@@ -9914,6 +10020,13 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                                    &leaf_aggregate) &&
         target->function ==
             xr_semantic_plan_program_call_for_operation(plan, target->operation)->target_function;
+    const XrSemanticProgramTypeBinding *leaf_product = NULL;
+    bool exact_leaf_product =
+        !method && !suspends &&
+        semantic_product_direct_call_is_exact(plan, target->operation, operation, callee,
+                                              &leaf_product) &&
+        target->function ==
+            xr_semantic_plan_program_call_for_operation(plan, target->operation)->target_function;
     if (callee->parameter_count == UINT16_MAX ||
         operation->operand_count != (uint32_t) callee->parameter_count + operand_shift ||
         callee->parameter_begin > xr_semantic_plan_parameter_count(plan) ||
@@ -9928,7 +10041,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
          !semantic_direct_local_array_result_is_exact(plan, operation, callee) &&
          xr_semantic_class_instance_result_source_class(plan, operation) ==
              XR_SEMANTIC_INDEX_NONE &&
-         !exact_leaf_aggregate)) {
+         !exact_leaf_aggregate && !exact_leaf_product)) {
         if (target_trace_enabled()) {
             fprintf(stderr,
                     "[target] refused in direct-local signature: the call's arity, its result type "
@@ -9968,6 +10081,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                    xr_semantic_class_instance_result_source_class(
                                        plan, operation) != XR_SEMANTIC_INDEX_NONE);
             target_trace_judgement("result is an exact typed leaf aggregate", exact_leaf_aggregate);
+            target_trace_judgement("result is an exact typed leaf product", exact_leaf_product);
             fprintf(stderr,
                     "[target]   read it as: an arity or type line marked \"differs\" is the whole "
                     "refusal; if all of them match, the result type reached no storage family and "
@@ -9996,7 +10110,9 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
         .result_value = operation->result_value,
         .argument_begin = builder->call_argument_intent_count,
         .argument_count = callee->parameter_count,
-        .result_mode = exact_leaf_aggregate ? XR_TARGET_CALL_CALLER_STORAGE : XR_TARGET_CALL_VALUE,
+        .result_mode = (exact_leaf_aggregate || exact_leaf_product)
+                           ? XR_TARGET_CALL_CALLER_STORAGE
+                           : XR_TARGET_CALL_VALUE,
         .result_ownership =
             (semantic_direct_local_string_result_is_exact(plan, operation, callee) ||
              xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee) ||
@@ -10104,6 +10220,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                              leaf_aggregate && parameter &&
                                              parameter->type == leaf_aggregate->semantic_type &&
                                              operand->type == leaf_aggregate->semantic_type;
+        bool exact_leaf_product_argument = exact_leaf_product && ordinal == 0 && leaf_product &&
+                                           parameter &&
+                                           parameter->type == leaf_product->semantic_type &&
+                                           operand->type == leaf_product->semantic_type;
         /* The receiver sits at parameter 0 and is spelled as a receiver, not
          * an argument, and it names no argument ordinal of its own. Every
          * later operand states the argument ordinal it fills, counted without
@@ -10119,7 +10239,8 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) == 0 ||
             (!exact_scalar && !exact_u8_slice && !exact_unit_enum && !exact_adt_enum &&
              !exact_class_instance && !exact_tagged_ref && !exact_array_value &&
-             !exact_string_value && !exact_leaf_aggregate_argument) ||
+             !exact_string_value && !exact_leaf_aggregate_argument &&
+             !exact_leaf_product_argument) ||
             (!exact_tagged_ref &&
              (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
               (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0)) ||
@@ -13160,6 +13281,432 @@ static bool materialize_leaf_aggregate_instruction_function(
     return true;
 }
 
+typedef struct XrLeafProductInstructionShape {
+    const XrSemanticProgramTypeBinding *product;
+    const XrSemanticProgramFunctionBinding *callers[2];
+    const XrSemanticProgramFunctionBinding *callee;
+    const XrSemanticOperationRecord *constructs[3];
+    const XrSemanticOperationRecord *projects[2][6];
+    const XrSemanticOperationRecord *callables[2];
+    const XrSemanticOperationRecord *values[6];
+    const XrSemanticOperationRecord *literal_ops[6];
+    const XrTargetCallRecord *calls[2];
+    uint32_t call_indices[2];
+    uint32_t layout;
+    uint32_t fields[6];
+    uint16_t aggregate_rep;
+} XrLeafProductInstructionShape;
+
+static const XrSemanticOperationRecord *product_operation_for_value(
+    const XrSemanticPlan *semantic, const XrSemanticBlockRecord *block, uint32_t value,
+    uint32_t *out_index) {
+    const XrSemanticOperationRecord *match = NULL;
+    for (uint32_t i = 0; block && i < block->operation_count; i++) {
+        uint32_t index = block->operation_begin + i;
+        const XrSemanticOperationRecord *operation =
+            xr_semantic_plan_operation(semantic, index);
+        if (!operation || operation->result_value != value)
+            continue;
+        if (match)
+            return NULL;
+        match = operation;
+        if (out_index)
+            *out_index = index;
+    }
+    return match;
+}
+
+static bool leaf_product_instruction_shape_is_exact(
+    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    XrLeafProductInstructionShape *shape) {
+    if (shape)
+        memset(shape, 0, sizeof(*shape));
+    const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *provenance =
+        semantic ? semantic_product_program_provenance(semantic) : NULL;
+    if (!semantic || !materialized || !shape || !provenance)
+        return false;
+    uint32_t caller_count = 0;
+    for (uint32_t i = 0; i < provenance->function_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            xr_semantic_plan_program_function_binding(semantic, i);
+        if (!binding || binding->program_row >= provenance->function_count ||
+            binding->semantic_function >= materialized->function_count ||
+            memcmp(binding->reserved, (uint8_t[3]) {0}, 3) != 0)
+            return false;
+        if (binding->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) {
+            if (caller_count >= 2)
+                return false;
+            shape->callers[caller_count++] = binding;
+        } else if (binding->flags == 0) {
+            if (shape->callee)
+                return false;
+            shape->callee = binding;
+        } else {
+            return false;
+        }
+    }
+    if (caller_count != 2 || !shape->callee)
+        return false;
+    for (uint32_t i = 0; i < provenance->type_count; i++) {
+        const XrSemanticProgramTypeBinding *binding =
+            xr_semantic_plan_program_type_binding(semantic, i);
+        if (binding && binding->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
+            if (shape->product)
+                return false;
+            shape->product = binding;
+        }
+    }
+    if (!shape->product || shape->product->field_count != 6)
+        return false;
+
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    for (uint32_t role = 0; role < 3; role++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            role < 2 ? shape->callers[role] : shape->callee;
+        const XrSemanticFunctionRecord *function =
+            xr_semantic_plan_function(semantic, binding->semantic_function);
+        const XrSemanticBlockRecord *block =
+            function && function->block_count == 1
+                ? xr_semantic_plan_block(semantic, function->block_begin)
+                : NULL;
+        if (!function || !block || function->parameter_count != 0 ||
+            function->capture_count != 0 || function->return_type != shape->product->semantic_type ||
+            block->function != binding->semantic_function || block->kind != XI_BLOCK_RETURN ||
+            block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+            block->successors[1] != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        uint32_t constructs = 0, projects = 0, calls = 0, callables = 0;
+        for (uint32_t i = 0; i < block->operation_count; i++) {
+            uint32_t operation_index = block->operation_begin + i;
+            const XrSemanticOperationRecord *operation =
+                xr_semantic_plan_operation(semantic, operation_index);
+            if (!operation || operation->function != binding->semantic_function ||
+                operation->block != function->block_begin)
+                return false;
+            if (operation->opcode == XI_VALUE_PRODUCT_CONSTRUCT) {
+                if (++constructs != 1 || operation->result_type != shape->product->semantic_type ||
+                    operation->operand_count != 6 || operation->semantic_immediate != 6 ||
+                    operation->operand_begin > operand_count ||
+                    operation->operand_count > operand_count - operation->operand_begin)
+                    return false;
+                shape->constructs[role] = operation;
+            } else if (operation->opcode == XI_VALUE_PRODUCT_PROJECT) {
+                if (role >= 2 || operation->semantic_immediate < 0 ||
+                    operation->semantic_immediate >= 6 || operation->operand_count != 1 ||
+                    operation->operand_begin >= operand_count ||
+                    shape->projects[role][operation->semantic_immediate])
+                    return false;
+                shape->projects[role][operation->semantic_immediate] = operation;
+                projects++;
+            } else if (operation->opcode == XI_CALL) {
+                const XrSemanticFunctionRecord *callee =
+                    xr_semantic_plan_function(semantic, shape->callee->semantic_function);
+                if (role >= 2 || ++calls != 1 ||
+                    !semantic_product_direct_call_is_exact(
+                        semantic, operation_index, operation, callee, NULL))
+                    return false;
+                const XrTargetCallRecord *target_call = NULL;
+                uint32_t target_index = XR_SEMANTIC_INDEX_NONE;
+                for (uint32_t call = 0; call < materialized->call_count; call++) {
+                    if (materialized->calls[call].semantic_operation != operation_index)
+                        continue;
+                    if (target_call)
+                        return false;
+                    target_call = &materialized->calls[call];
+                    target_index = call;
+                }
+                if (!target_call || target_call->id != target_index ||
+                    target_call->caller_function != binding->semantic_function ||
+                    target_call->callee_function != shape->callee->semantic_function ||
+                    target_call->result_mode != XR_TARGET_CALL_CALLER_STORAGE ||
+                    target_call->result_slot != target_call->caller_storage_slot ||
+                    target_call->argument_count != 0 || target_call->adapter_count != 0 ||
+                    target_call->result_ownership != XR_TARGET_CALL_NONE)
+                    return false;
+                shape->calls[role] = target_call;
+                shape->call_indices[role] = target_index;
+            } else if (operation->opcode == XI_GET_SHARED) {
+                if (role >= 2 || ++callables != 1)
+                    return false;
+                shape->callables[role] = operation;
+            } else if (operation->opcode != XI_CONST && operation->opcode != XI_NARROW_U8) {
+                return false;
+            }
+        }
+        if (constructs != 1 || (role < 2 ? projects != 6 || calls != 1
+                                         : projects != 0 || calls != 0) ||
+            (role < 2 ? callables != 1 : callables != 0) ||
+            block->control_value != shape->constructs[role]->result_value)
+            return false;
+        if (role < 2) {
+            if (!shape->calls[role] ||
+                shape->constructs[role]->operand_begin > operand_count)
+                return false;
+            const XrSemanticOperationRecord *call_operation =
+                xr_semantic_plan_operation(semantic,
+                                           shape->calls[role]->semantic_operation);
+            if (!call_operation || call_operation->operand_count != 1 ||
+                call_operation->operand_begin >= operand_count ||
+                operands[call_operation->operand_begin].value !=
+                    shape->callables[role]->result_value)
+                return false;
+            for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+                const XrSemanticOperationRecord *project = shape->projects[role][ordinal];
+                if (!project || project->semantic_immediate != (int64_t) ordinal ||
+                    project->operand_begin >= operand_count ||
+                    operands[project->operand_begin].value != shape->calls[role]->result_value ||
+                    operands[shape->constructs[role]->operand_begin + ordinal].value !=
+                        project->result_value)
+                    return false;
+            }
+        } else {
+            for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+                uint32_t value = operands[shape->constructs[role]->operand_begin + ordinal].value;
+                const XrSemanticOperationRecord *source =
+                    product_operation_for_value(semantic, block, value, NULL);
+                const XrSemanticProgramTypeFieldBinding *field =
+                    xr_semantic_plan_program_type_field_binding(
+                        semantic, shape->product->field_begin + ordinal);
+                const XrSemanticOperationRecord *constant = source;
+                if (ordinal == 2) {
+                    if (!source || source->opcode != XI_NARROW_U8 || source->operand_count != 1 ||
+                        source->operand_begin >= operand_count || !field ||
+                        source->result_type != field->semantic_field_type)
+                        return false;
+                    constant = product_operation_for_value(
+                        semantic, block, operands[source->operand_begin].value, NULL);
+                }
+                const XrSemanticConstantRecord *literal =
+                    constant ? xr_semantic_plan_constant(semantic, constant->constant) : NULL;
+                if (!constant || !literal || constant->opcode != XI_CONST ||
+                    literal->kind != XR_SEM_CONST_INT || literal->type != constant->result_type ||
+                    !field || field->declaration_ordinal != ordinal ||
+                    (ordinal != 2 && constant->result_type != field->semantic_field_type) ||
+                    (ordinal == 2 &&
+                     (literal->integer < 0 || literal->integer > UINT8_MAX)))
+                    return false;
+                shape->values[ordinal] = source;
+                shape->literal_ops[ordinal] = constant;
+            }
+        }
+    }
+
+    uint32_t layout_matches = 0;
+    for (uint32_t i = 0; i < materialized->layout_count; i++) {
+        if (materialized->layouts[i].semantic_type != shape->product->semantic_type)
+            continue;
+        shape->layout = i;
+        layout_matches++;
+    }
+    const XrTargetLayoutRecord *layout =
+        layout_matches == 1 ? &materialized->layouts[shape->layout] : NULL;
+    if (!layout || layout->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        layout->fixed_prefix_size != 48 || layout->align != 8 || layout->field_count != 6 ||
+        layout->field_begin > materialized->field_count ||
+        layout->field_count > materialized->field_count - layout->field_begin)
+        return false;
+    for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+        shape->fields[ordinal] = layout->field_begin + ordinal;
+        const XrTargetFieldRecord *field = &materialized->fields[shape->fields[ordinal]];
+        uint16_t expected_kind = ordinal == 2 ? XR_MACHINE_REP_U8 : XR_MACHINE_REP_I64;
+        uint32_t expected_size = ordinal == 2 ? 1u : 8u;
+        uint16_t expected_align = ordinal == 2 ? 1u : 8u;
+        if (field->layout != shape->layout || field->semantic_field != ordinal ||
+            field->semantic_name != XR_SEMANTIC_INDEX_NONE || field->offset != ordinal * 8u ||
+            field->size != expected_size || field->align != expected_align ||
+            field->root_kind != XR_TARGET_ROOT_NONE || field->flags != 0 ||
+            field->reserved != 0 || field->memory_rep >= materialized->machine_rep_count ||
+            materialized->machine_reps[field->memory_rep].kind != expected_kind)
+            return false;
+    }
+    uint32_t rep_matches = 0;
+    for (uint32_t i = 0; i < materialized->machine_rep_count; i++) {
+        const XrTargetMachineRepRecord *rep = &materialized->machine_reps[i];
+        if (rep->kind == XR_MACHINE_REP_AGGREGATE && rep->detail == shape->layout) {
+            shape->aggregate_rep = (uint16_t) i;
+            rep_matches++;
+            if (rep->register_bits != 384 || rep->memory_size != 48 ||
+                rep->memory_align != 8 || rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+                return false;
+        }
+    }
+    return rep_matches == 1;
+}
+
+static bool product_materialized_slot_is_exact(
+    const XrTargetMaterializedPlan *materialized, uint32_t semantic_value, uint32_t function,
+    uint32_t semantic_operation, uint8_t role, uint16_t rep, uint32_t size, uint16_t align,
+    uint32_t *out_slot) {
+    const XrTargetValueRepRecord *value = find_materialized_value(materialized, semantic_value);
+    const XrTargetSlotRecord *slot =
+        value && value->slot < materialized->slot_count ? &materialized->slots[value->slot] : NULL;
+    const XrTargetMachineRepRecord *machine =
+        rep < materialized->machine_rep_count ? &materialized->machine_reps[rep] : NULL;
+    if (!value || !slot || !machine || value->register_rep != rep || value->memory_rep != rep ||
+        slot->function != function || slot->semantic_value != semantic_value ||
+        slot->semantic_operation != semantic_operation || slot->role != role ||
+        slot->register_rep != rep || slot->memory_rep != rep || slot->size != size ||
+        slot->align != align || slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL || machine->memory_size != size ||
+        machine->memory_align != align || machine->root_kind != XR_TARGET_ROOT_NONE ||
+        machine->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+    if (out_slot)
+        *out_slot = value->slot;
+    return true;
+}
+
+static bool materialize_leaf_product_instruction_function(
+    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    uint32_t function_index, XrTargetInstructionRecord *rows, uint32_t row_begin,
+    uint32_t *out_row_count) {
+    if (out_row_count)
+        *out_row_count = 0;
+    XrLeafProductInstructionShape shape = {0};
+    if (!leaf_product_instruction_shape_is_exact(builder, materialized, &shape))
+        return false;
+    uint32_t role = function_index == shape.callers[0]->semantic_function
+                        ? 0
+                    : function_index == shape.callers[1]->semantic_function
+                        ? 1
+                    : function_index == shape.callee->semantic_function ? 2 : UINT32_MAX;
+    if (role == UINT32_MAX)
+        return false;
+    XrTargetInstructionRecord group[15] = {0};
+    uint32_t scalar_slots[6] = {0};
+    uint32_t product_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    uint32_t next = 0;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(builder->semantic_plan, function_index);
+    const XrSemanticBlockRecord *block =
+        semantic_function ? xr_semantic_plan_block(builder->semantic_plan,
+                                                   semantic_function->block_begin)
+                          : NULL;
+    if (!block)
+        return false;
+    if (role == 2) {
+        for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+            const XrSemanticOperationRecord *value = shape.values[ordinal];
+            const XrSemanticOperationRecord *constant = shape.literal_ops[ordinal];
+            uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+            product_operation_for_value(builder->semantic_plan, block, value->result_value,
+                                        &operation_index);
+            const XrSemanticConstantRecord *literal =
+                xr_semantic_plan_constant(builder->semantic_plan, constant->constant);
+            const XrTargetFieldRecord *field = &materialized->fields[shape.fields[ordinal]];
+            if (!literal || !product_materialized_slot_is_exact(
+                                materialized, value->result_value, function_index,
+                                operation_index, XR_TARGET_SLOT_TEMPORARY, field->memory_rep,
+                                field->size, field->align, &scalar_slots[ordinal]))
+                return false;
+            group[next++] = (XrTargetInstructionRecord) {
+                .function = function_index,
+                .result_slot = scalar_slots[ordinal],
+                .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                                  XR_TARGET_INSTRUCTION_SLOT_NONE},
+                .opcode = ordinal == 2 ? XR_TARGET_INSTRUCTION_CONST_U8
+                                       : XR_TARGET_INSTRUCTION_CONST_I64,
+                .immediate_bits = (uint64_t) literal->integer,
+            };
+        }
+    } else {
+        if (!product_materialized_slot_is_exact(
+                materialized, shape.calls[role]->result_value, function_index,
+                shape.calls[role]->semantic_operation, XR_TARGET_SLOT_TEMPORARY,
+                shape.aggregate_rep, 48, 8, &product_slot))
+            return false;
+        group[next++] = (XrTargetInstructionRecord) {
+            .function = function_index,
+            .result_slot = product_slot,
+            .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                              XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE,
+            .immediate_bits = shape.call_indices[role],
+        };
+        for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+            const XrSemanticOperationRecord *project = shape.projects[role][ordinal];
+            const XrTargetFieldRecord *field = &materialized->fields[shape.fields[ordinal]];
+            uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+            if (product_operation_for_value(builder->semantic_plan, block,
+                                            project->result_value,
+                                            &operation_index) != project)
+                return false;
+            if (!product_materialized_slot_is_exact(
+                    materialized, project->result_value, function_index, operation_index,
+                    XR_TARGET_SLOT_TEMPORARY, field->memory_rep, field->size, field->align,
+                    &scalar_slots[ordinal]))
+                return false;
+            group[next++] = (XrTargetInstructionRecord) {
+                .function = function_index,
+                .result_slot = scalar_slots[ordinal],
+                .operand_slots = {product_slot, XR_TARGET_INSTRUCTION_SLOT_NONE},
+                .opcode = ordinal == 2 ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_GET_U8
+                                       : XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64,
+                .operand_count = 1,
+                .immediate_bits = shape.fields[ordinal],
+            };
+        }
+    }
+    const XrSemanticOperationRecord *construct = shape.constructs[role];
+    uint32_t construct_index = XR_SEMANTIC_INDEX_NONE;
+    if (product_operation_for_value(builder->semantic_plan, block,
+                                    construct->result_value,
+                                    &construct_index) != construct)
+        return false;
+    uint32_t construct_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    if (!product_materialized_slot_is_exact(
+            materialized, construct->result_value, function_index, construct_index,
+            XR_TARGET_SLOT_TEMPORARY, shape.aggregate_rep, 48, 8, &construct_slot))
+        return false;
+    group[next++] = (XrTargetInstructionRecord) {
+        .function = function_index,
+        .result_slot = construct_slot,
+        .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                          XR_TARGET_INSTRUCTION_SLOT_NONE},
+        .opcode = XR_TARGET_INSTRUCTION_VALUE_PRODUCT_INIT,
+        .immediate_bits = shape.layout,
+    };
+    for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+        group[next++] = (XrTargetInstructionRecord) {
+            .function = function_index,
+            .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+            .operand_slots = {construct_slot, scalar_slots[ordinal]},
+            .opcode = ordinal == 2 ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_U8
+                                   : XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_I64,
+            .operand_count = 2,
+            .immediate_bits = shape.fields[ordinal],
+        };
+    }
+    group[next++] = (XrTargetInstructionRecord) {
+        .function = function_index,
+        .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+        .operand_slots = {construct_slot, XR_TARGET_INSTRUCTION_SLOT_NONE},
+        .opcode = XR_TARGET_INSTRUCTION_RETURN_AGGREGATE,
+        .operand_count = 1,
+    };
+    uint32_t expected = role == 2 ? 14u : 15u;
+    if (next != expected ||
+        !xr_target_instruction_rows_control_flow_is_exact(
+            group, next, materialized->functions[function_index].slot_begin,
+            materialized->functions[function_index].slot_count, materialized->calls,
+            materialized->call_count, materialized->call_arguments,
+            materialized->call_argument_count, materialized->entry_expectations,
+            materialized->entry_expectation_count, materialized->coroutines,
+            materialized->coroutine_count))
+        return false;
+    if (rows)
+        for (uint32_t i = 0; i < next; i++) {
+            group[i].id = row_begin + i;
+            rows[row_begin + i] = group[i];
+        }
+    if (out_row_count)
+        *out_row_count = next;
+    return true;
+}
+
 /* The managed tagged Array.push family is deliberately separate from the
  * scalar family.  Its two parameter slots carry XrValue, the element slot is
  * consumed by the side-effect row, and the unit return has no result slot at
@@ -13361,12 +13908,21 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
     bool requires_leaf_aggregate =
         published && published->program_family ==
                          XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+    bool requires_leaf_product =
+        published && published->program_family ==
+                         XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     XrLeafAggregateInstructionShape required_leaf_shape = {0};
     if (requires_leaf_aggregate &&
         !leaf_aggregate_instruction_shape_is_exact(builder, materialized,
                                                    &required_leaf_shape))
         return fail(error, error_size, "XR_TARGET_1005",
                     "leaf aggregate program requires one exact caller and callee instruction group");
+    XrLeafProductInstructionShape required_product_shape = {0};
+    if (requires_leaf_product &&
+        !leaf_product_instruction_shape_is_exact(builder, materialized,
+                                                 &required_product_shape))
+        return fail(error, error_size, "XR_TARGET_1005",
+                    "leaf product program requires two exact callers and one callee instruction group");
     XrScalarInstructionAnalysis analysis = {0};
     if (!scalar_instruction_analysis_init(builder, materialized, &analysis))
         return fail(error, error_size, "XR_EXEC_5003", "scalar instruction analysis failed");
@@ -13378,18 +13934,49 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
         (uint8_t *) allocate_records(materialized->function_count, sizeof(*managed_push));
     uint8_t *leaf_aggregate =
         (uint8_t *) allocate_records(materialized->function_count, sizeof(*leaf_aggregate));
+    uint8_t *leaf_product =
+        (uint8_t *) allocate_records(materialized->function_count, sizeof(*leaf_product));
     if (materialized->function_count &&
-        (!function_rows || !executable || !managed_push || !leaf_aggregate)) {
+        (!function_rows || !executable || !managed_push || !leaf_aggregate || !leaf_product)) {
         xr_free(function_rows);
         xr_free(executable);
         xr_free(managed_push);
         xr_free(leaf_aggregate);
+        xr_free(leaf_product);
         scalar_instruction_analysis_dispose(&analysis);
         return fail(error, error_size, "XR_EXEC_5003",
                     "typed instruction eligibility allocation failed");
     }
     uint32_t instruction_count = 0;
     for (uint32_t function = 0; function < materialized->function_count; function++) {
+        bool required_product_function =
+            requires_leaf_product &&
+            (function == required_product_shape.callers[0]->semantic_function ||
+             function == required_product_shape.callers[1]->semantic_function ||
+             function == required_product_shape.callee->semantic_function);
+        bool emitted_product = materialize_leaf_product_instruction_function(
+            builder, materialized, function, NULL, 0, &function_rows[function]);
+        uint32_t expected_product_rows =
+            requires_leaf_product &&
+                    function == required_product_shape.callee->semantic_function
+                ? 14u
+                : 15u;
+        if (required_product_function &&
+            (!emitted_product || function_rows[function] != expected_product_rows)) {
+            xr_free(function_rows);
+            xr_free(executable);
+            xr_free(managed_push);
+            xr_free(leaf_aggregate);
+            xr_free(leaf_product);
+            scalar_instruction_analysis_dispose(&analysis);
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "leaf product program instruction coverage is incomplete");
+        }
+        if (emitted_product) {
+            leaf_product[function] = 1;
+            executable[function] = 1;
+            continue;
+        }
         bool required_leaf_function =
             requires_leaf_aggregate &&
             (function == required_leaf_shape.caller_binding->semantic_function ||
@@ -13401,6 +13988,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             xr_free(executable);
             xr_free(managed_push);
             xr_free(leaf_aggregate);
+            xr_free(leaf_product);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_TARGET_1005",
                         "leaf aggregate program instruction coverage is incomplete");
@@ -13444,9 +14032,31 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             xr_free(executable);
             xr_free(managed_push);
             xr_free(leaf_aggregate);
+            xr_free(leaf_product);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_TARGET_1005",
                         "leaf aggregate caller and callee must survive instruction closure");
+        }
+    }
+    if (requires_leaf_product) {
+        uint32_t caller0 = required_product_shape.callers[0]->semantic_function;
+        uint32_t caller1 = required_product_shape.callers[1]->semantic_function;
+        uint32_t callee = required_product_shape.callee->semantic_function;
+        if (caller0 >= materialized->function_count ||
+            caller1 >= materialized->function_count ||
+            callee >= materialized->function_count || !executable[caller0] ||
+            !executable[caller1] || !executable[callee] || !leaf_product[caller0] ||
+            !leaf_product[caller1] || !leaf_product[callee] ||
+            function_rows[caller0] != 15 || function_rows[caller1] != 15 ||
+            function_rows[callee] != 14) {
+            xr_free(function_rows);
+            xr_free(executable);
+            xr_free(managed_push);
+            xr_free(leaf_aggregate);
+            xr_free(leaf_product);
+            scalar_instruction_analysis_dispose(&analysis);
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "leaf product callers and callee must survive instruction closure");
         }
     }
     for (uint32_t function = 0; function < materialized->function_count; function++) {
@@ -13455,6 +14065,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             xr_free(executable);
             xr_free(managed_push);
             xr_free(leaf_aggregate);
+            xr_free(leaf_product);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_EXEC_5003", "typed instruction budget exhausted");
         }
@@ -13477,7 +14088,11 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
         if (!executable[function])
             continue;
         uint32_t emitted_rows = 0;
-        bool emitted = leaf_aggregate[function]
+        bool emitted = leaf_product[function]
+                           ? materialize_leaf_product_instruction_function(
+                                 builder, materialized, function, materialized->instructions,
+                                 next_instruction, &emitted_rows)
+                       : leaf_aggregate[function]
                            ? materialize_leaf_aggregate_instruction_function(
                                  builder, materialized, function, materialized->instructions,
                                  next_instruction, &emitted_rows)
@@ -13493,6 +14108,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             xr_free(executable);
             xr_free(managed_push);
             xr_free(leaf_aggregate);
+            xr_free(leaf_product);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_TARGET_1005",
                         "typed instruction eligibility changed during materialization");
@@ -13503,6 +14119,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
     xr_free(executable);
     xr_free(managed_push);
     xr_free(leaf_aggregate);
+    xr_free(leaf_product);
     scalar_instruction_analysis_dispose(&analysis);
     if (next_instruction != materialized->instruction_count)
         return fail(error, error_size, "XR_TARGET_1005",
@@ -13514,6 +14131,7 @@ allocation_failed:
     xr_free(executable);
     xr_free(managed_push);
     xr_free(leaf_aggregate);
+    xr_free(leaf_product);
     scalar_instruction_analysis_dispose(&analysis);
     return fail(error, error_size, "XR_EXEC_5003", "typed instruction materialization failed");
 }

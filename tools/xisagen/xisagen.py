@@ -3653,7 +3653,7 @@ def generate_aot_layout_header(entries: list[AotLayoutDef]) -> str:
 # Typed TargetPlan instruction contract
 # ============================================================
 
-TARGET_REP_FAMILIES = {'none', 'i64', 'bool', 'dyn-value', 'aggregate'}
+TARGET_REP_FAMILIES = {'none', 'u8', 'i64', 'bool', 'dyn-value', 'aggregate'}
 TARGET_RESULT_OWNERSHIPS = {'none', 'trivial', 'borrow', 'owned'}
 TARGET_OPERAND_OWNERSHIPS = {'borrow', 'consume'}
 TARGET_EFFECTS = {'control', 'may-error', 'may-suspend', 'memory-write'}
@@ -3684,6 +3684,7 @@ TARGET_DISPATCH_ARGUMENTS = {
     'aggregate-make': {'none'},
     'call-aggregate': {'none'},
     'return-aggregate': {'none'},
+    'target-only': {'none'},
 }
 
 
@@ -3873,6 +3874,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '',
         'typedef enum XrTargetInstructionRepFamily {',
         '    XR_TARGET_INSTRUCTION_REP_NONE = 0,',
+        '    XR_TARGET_INSTRUCTION_REP_U8,',
         '    XR_TARGET_INSTRUCTION_REP_I64,',
         '    XR_TARGET_INSTRUCTION_REP_BOOL,',
         '    XR_TARGET_INSTRUCTION_REP_DYN_VALUE,',
@@ -3949,6 +3951,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_AGGREGATE_MAKE,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_CALL_AGGREGATE,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN_AGGREGATE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_TARGET_ONLY,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',

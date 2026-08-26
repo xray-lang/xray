@@ -927,6 +927,17 @@ static XrTypedDispatchStatus execute_return_unit(
     return XR_TYPED_DISPATCH_OK;
 }
 
+static XrTypedDispatchStatus execute_target_only(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    (void) frame;
+    (void) row;
+    (void) contract;
+    (void) context;
+    return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+}
+
 static XrTypedDispatchStatus execute_array_push(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,

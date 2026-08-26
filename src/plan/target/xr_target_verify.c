@@ -124,6 +124,19 @@ typedef struct XrVerifyLeafProgramShape {
     uint32_t argument_index;
 } XrVerifyLeafProgramShape;
 
+typedef struct XrVerifyProductProgramShape {
+    const XrSemanticProgramTypeBinding *product;
+    const XrSemanticProgramTypeBinding *i64;
+    const XrSemanticProgramTypeBinding *u8;
+    const XrSemanticProgramFunctionBinding *caller_bindings[2];
+    const XrSemanticProgramFunctionBinding *callee_binding;
+    const XrSemanticFunctionRecord *callers[2];
+    const XrSemanticFunctionRecord *callee;
+    const XrSemanticProgramCallBinding *call_bindings[2];
+    const XrSemanticOperationRecord *calls[2];
+    uint32_t target_indices[2];
+} XrVerifyProductProgramShape;
+
 static XrStableId verify_program_generation(uint32_t schema, XrFingerprint fingerprint) {
     static const uint8_t domain[] = "xray-generation-closure-id-v1\0";
     uint8_t schema_bytes[4], digest[XR_FINGERPRINT_BYTES];
@@ -144,6 +157,152 @@ static bool semantic_is_leaf_program_family(const XrSemanticPlan *semantic) {
     const XrSemanticProgramProvenance *row = xr_semantic_plan_program_provenance(semantic);
     return row &&
            row->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+}
+
+static bool semantic_is_product_program_family(const XrSemanticPlan *semantic) {
+    const XrSemanticProgramProvenance *row =
+        xr_semantic_plan_program_provenance(semantic);
+    return row && row->program_family ==
+                      XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+}
+
+/* Reconstruct the frozen product authority from serialized SemanticPlan rows.
+ * This verifier deliberately does not call any TargetPlan builder predicate. */
+static bool verify_product_program_shape(const XrSemanticPlan *semantic,
+                                         XrVerifyProductProgramShape *shape) {
+    if (shape)
+        memset(shape, 0, sizeof(*shape));
+    const XrSemanticProgramProvenance *provenance =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    if (!semantic || !shape || !semantic_is_product_program_family(semantic) ||
+        !provenance || provenance->type_count != 3 ||
+        provenance->type_field_count != 6 || provenance->function_count != 3 ||
+        provenance->call_count != 2 || provenance->module_count != 1 ||
+        provenance->dependency_count != 0 ||
+        xr_semantic_plan_program_type_binding_count(semantic) != 3 ||
+        xr_semantic_plan_program_type_field_binding_count(semantic) != 6 ||
+        xr_semantic_plan_program_function_binding_count(semantic) != 3 ||
+        xr_semantic_plan_program_call_binding_count(semantic) != 2 ||
+        xr_semantic_plan_call_target_count(semantic) != 2)
+        return false;
+    for (uint32_t row = 0; row < 3; row++) {
+        const XrSemanticProgramTypeBinding *binding =
+            xr_semantic_plan_program_type_for_row(semantic, row);
+        const XrSemanticTypeRecord *type =
+            binding ? xr_semantic_plan_type(semantic, binding->semantic_type) : NULL;
+        if (!binding || !type || binding->program_row != row)
+            return false;
+        if (binding->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
+            if (shape->product || binding->field_count != 6 ||
+                type->kind != XR_KIND_TUPLE || type->child_count != 6 ||
+                type->aggregate_extent != 6 || type->flags != XR_SEM_TYPE_VALUE ||
+                !stable_id_is_zero(binding->source_class_identity))
+                return false;
+            shape->product = binding;
+        } else if (binding->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR &&
+                   binding->exact_scalar == XR_EXACT_SCALAR_I64) {
+            if (shape->i64 || type->kind != XR_KIND_INT ||
+                type->scalar_rep != XR_NATIVE_I64 || type->child_count != 0)
+                return false;
+            shape->i64 = binding;
+        } else if (binding->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR &&
+                   binding->exact_scalar == XR_EXACT_SCALAR_U8) {
+            if (shape->u8 || type->kind != XR_KIND_INT ||
+                type->scalar_rep != XR_NATIVE_U8 || type->child_count != 0)
+                return false;
+            shape->u8 = binding;
+        } else {
+            return false;
+        }
+    }
+    if (!shape->product || !shape->i64 || !shape->u8)
+        return false;
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    const XrSemanticTypeRecord *product_type =
+        xr_semantic_plan_type(semantic, shape->product->semantic_type);
+    if (!children || !product_type ||
+        !range_valid(product_type->child_begin, product_type->child_count, child_count))
+        return false;
+    for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+        const XrSemanticProgramTypeBinding *member = ordinal == 2 ? shape->u8 : shape->i64;
+        const XrSemanticProgramTypeFieldBinding *field =
+            xr_semantic_plan_program_type_field_binding(
+                semantic, shape->product->field_begin + ordinal);
+        if (!field || field->owner_program_row != shape->product->program_row ||
+            field->field_program_row != member->program_row ||
+            field->semantic_field_type != member->semantic_type ||
+            field->declaration_ordinal != ordinal ||
+            children[product_type->child_begin + ordinal] != member->semantic_type)
+            return false;
+    }
+    uint32_t caller_count = 0;
+    for (uint32_t row = 0; row < 3; row++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            xr_semantic_plan_program_function_binding(semantic, row);
+        const XrSemanticFunctionRecord *function =
+            binding ? xr_semantic_plan_function(semantic, binding->semantic_function) : NULL;
+        if (!binding || !function || binding->program_row >= 3 ||
+            function->parameter_count != 0 ||
+            function->return_type != shape->product->semantic_type ||
+            function->return_parameter != -1 ||
+            function->return_provenance != XR_SEM_RETURN_NONE || function->block_count != 1)
+            return false;
+        if (binding->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && caller_count < 2) {
+            shape->caller_bindings[caller_count] = binding;
+            shape->callers[caller_count++] = function;
+        } else if (binding->flags == 0 && !shape->callee) {
+            shape->callee_binding = binding;
+            shape->callee = function;
+        } else {
+            return false;
+        }
+    }
+    if (caller_count != 2 || !shape->callee)
+        return false;
+    bool caller_seen[2] = {false, false};
+    for (uint32_t row = 0; row < 2; row++) {
+        const XrSemanticProgramCallBinding *binding =
+            xr_semantic_plan_program_call_binding(semantic, row);
+        const XrSemanticOperationRecord *operation =
+            binding ? xr_semantic_plan_operation(semantic, binding->operation) : NULL;
+        if (!binding || !operation || binding->program_row >= 2 ||
+            binding->target_function != shape->callee_binding->semantic_function ||
+            operation->opcode != XI_CALL || operation->operand_count != 1 ||
+            operation->result_type != shape->product->semantic_type ||
+            operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+            operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_CALL_RESULT)
+            return false;
+        uint32_t caller = operation->function == shape->caller_bindings[0]->semantic_function
+                              ? 0u
+                          : operation->function == shape->caller_bindings[1]->semantic_function
+                              ? 1u
+                              : UINT32_MAX;
+        if (caller >= 2 || caller_seen[caller])
+            return false;
+        const XrSemanticCallTargetRecord *target = NULL;
+        uint32_t target_index = XR_SEMANTIC_INDEX_NONE;
+        for (uint32_t i = 0; i < 2; i++) {
+            const XrSemanticCallTargetRecord *candidate =
+                xr_semantic_plan_call_target(semantic, i);
+            if (candidate && candidate->operation == binding->operation) {
+                if (target)
+                    return false;
+                target = candidate;
+                target_index = i;
+            }
+        }
+        if (!target || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+            target->function != shape->callee_binding->semantic_function ||
+            target->dependency != XR_SEMANTIC_INDEX_NONE ||
+            target->source_export != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        caller_seen[caller] = true;
+        shape->call_bindings[caller] = binding;
+        shape->calls[caller] = operation;
+        shape->target_indices[caller] = target_index;
+    }
+    return caller_seen[0] && caller_seen[1];
 }
 
 static bool verify_leaf_program_provenance(const XrSemanticPlan *semantic) {
@@ -4065,15 +4224,29 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                                          exact_leaf_aggregate_type &&
                                          leaf_program.operation == operation &&
                                          leaf_program.call_binding->operation == operation_index;
+    XrVerifyProductProgramShape product_program = {0};
+    bool product_family = semantic_is_product_program_family(plan->semantic_plan);
+    bool product_shape_exact =
+        product_family && verify_product_program_shape(plan->semantic_plan, &product_program);
+    bool exact_product_type = product_shape_exact && product_program.product &&
+                              product_program.product->semantic_type == semantic_type;
+    bool exact_direct_product_result = false;
+    for (uint32_t caller = 0; operation && caller < 2; caller++)
+        exact_direct_product_result =
+            exact_direct_product_result ||
+            (exact_product_type && product_program.calls[caller] == operation &&
+             product_program.call_bindings[caller]->operation == operation_index &&
+             operation->result_value == semantic_value);
     bool deferred_operation =
         deferred_functions[semantic_function] ||
-        (!exact_direct_aggregate_result && operation && operation->opcode < XI_OP_COUNT &&
+        (!exact_direct_aggregate_result && !exact_direct_product_result && operation &&
+         operation->opcode < XI_OP_COUNT &&
          (xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_CALL ||
           xi_generated_op_class(operation->opcode) == XI_GEN_CLASS_COROUTINE));
     uint32_t aggregate_stack[64] = {0};
     int aggregate = 0;
     if (eligibility == 0 && !deferred_operation) {
-        if (exact_leaf_aggregate_type)
+        if (exact_leaf_aggregate_type || exact_product_type)
             aggregate = 1;
         else if (leaf_family && type && type->kind == XR_KIND_INSTANCE &&
                  (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0)
@@ -4510,7 +4683,15 @@ static bool verify_layouts(const XrTargetPlan *plan, const uint8_t *exact_dynami
         bool program_leaf_aggregate =
             leaf_shape_exact && leaf_family && leaf_program.aggregate_binding &&
             leaf_program.aggregate_binding->semantic_type == layout->semantic_type;
-        if (!leaf_shape_exact)
+        XrVerifyProductProgramShape product_program = {0};
+        bool product_family = semantic_is_product_program_family(plan->semantic_plan);
+        bool product_shape_exact =
+            !product_family || verify_product_program_shape(plan->semantic_plan,
+                                                            &product_program);
+        bool program_leaf_product =
+            product_shape_exact && product_family && product_program.product &&
+            product_program.product->semantic_type == layout->semantic_type;
+        if (!leaf_shape_exact || !product_shape_exact)
             return report(error, error_size, "XR_TARGET_1002",
                           "leaf program layout authority is incomplete");
         uint8_t expected_array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
@@ -4580,7 +4761,8 @@ static bool verify_layouts(const XrTargetPlan *plan, const uint8_t *exact_dynami
         } else {
             uint32_t expected_fields = semantic_type->aggregate_extent;
             if (scalar != 0 ||
-                (!program_leaf_aggregate && xr_semantic_aggregate_type_kind(semantic_type) != 1) ||
+                (!program_leaf_aggregate && !program_leaf_product &&
+                 xr_semantic_aggregate_type_kind(semantic_type) != 1) ||
                 semantic_type->child_begin > child_table_count ||
                 semantic_type->child_count > child_table_count - semantic_type->child_begin ||
                 semantic_type->aggregate_align > UINT16_MAX ||
@@ -4607,11 +4789,12 @@ static bool verify_layouts(const XrTargetPlan *plan, const uint8_t *exact_dynami
         uint32_t roots = 0;
         XrSemanticValueAggregateShape aggregate_shape = {0};
         bool named_value_aggregate =
-            !program_leaf_aggregate &&
+            !program_leaf_aggregate && !program_leaf_product &&
             xr_semantic_value_aggregate_shape_for_type(plan->semantic_plan, layout->semantic_type,
                                                        &aggregate_shape);
         if (semantic_type->kind == XR_KIND_INSTANCE &&
-            (semantic_type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0 && !program_leaf_aggregate &&
+            (semantic_type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0 &&
+            !program_leaf_aggregate && !program_leaf_product &&
             !named_value_aggregate)
             return report(error, error_size, "XR_TARGET_1002",
                           "value aggregate field identity is incomplete");
@@ -6064,7 +6247,17 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             direct && verify_leaf_program_shape(semantic, &leaf_program) &&
             leaf_program.call_binding->operation == call->semantic_operation &&
             leaf_program.operation == operation && leaf_program.callee == callee;
-        bool direct_aggregate_result = direct_leaf_program;
+        XrVerifyProductProgramShape product_program = {0};
+        bool direct_product_program = false;
+        if (direct && verify_product_program_shape(semantic, &product_program))
+            for (uint32_t caller = 0; caller < 2; caller++)
+                direct_product_program =
+                    direct_product_program ||
+                    (product_program.call_bindings[caller]->operation ==
+                         call->semantic_operation &&
+                     product_program.calls[caller] == operation &&
+                     product_program.callee == callee);
+        bool direct_aggregate_result = direct_leaf_program || direct_product_program;
         if (stringbuilder_constructor || stringbuilder_to_string || stringbuilder_append_string ||
             direct_string_result || direct_array_result || direct_adt_enum_result ||
             direct_class_instance_result || json_namespace_value || class_construction ||
@@ -6133,7 +6326,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             call->caller_function == operation->function &&
             call->result_value == operation->result_value && call->result_slot == result->slot &&
             call->caller_storage_slot ==
-                (direct_leaf_program ? result->slot : XR_SEMANTIC_INDEX_NONE) &&
+                (direct_aggregate_result ? result->slot : XR_SEMANTIC_INDEX_NONE) &&
             call->error_slot == XR_SEMANTIC_INDEX_NONE && call->argument_begin == next_argument &&
             range_valid(call->argument_begin, call->argument_count, plan->call_arguments_count) &&
             (!direct || (callee && call->argument_count == callee->parameter_count)) &&
@@ -6146,7 +6339,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
             call->native_abi == machine->native_abi &&
             call->result_mode ==
-                (direct_leaf_program ? XR_TARGET_CALL_CALLER_STORAGE : XR_TARGET_CALL_VALUE) &&
+                (direct_aggregate_result ? XR_TARGET_CALL_CALLER_STORAGE
+                                         : XR_TARGET_CALL_VALUE) &&
             /* Receiver-aliasing StringBuilder append preserves a borrowed
              * receiver. Every genuinely fresh dynamic family agrees on
              * RETURN_OWNED; the per-family branches below re-assert the same
@@ -7816,6 +8010,175 @@ static bool verify_leaf_program_target(const XrTargetPlan *plan, char *error, si
     (void) aggregate_layout;
     return valid || report(error, error_size, "XR_TARGET_1003",
                            "leaf aggregate program target projection is invalid");
+}
+
+static bool verify_product_u8_machine_rep(const XrTargetPlan *plan, uint16_t rep_index) {
+    if (rep_index >= plan->machine_reps_count)
+        return false;
+    const XrTargetMachineRepRecord *rep = &plan->machine_reps[rep_index];
+    return rep->kind == XR_MACHINE_REP_U8 && rep->register_bits == 8 &&
+           rep->memory_size == 1 && rep->memory_align == 1 &&
+           rep->signedness == XR_TARGET_SIGN_UNSIGNED &&
+           rep->root_kind == XR_TARGET_ROOT_NONE &&
+           rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+           rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE && rep->detail == 0 &&
+           rep->lane_count == 0 && rep->reserved == 0;
+}
+
+static bool verify_product_aggregate_machine_rep(const XrTargetPlan *plan,
+                                                 uint16_t rep_index,
+                                                 uint32_t layout_index) {
+    if (rep_index >= plan->machine_reps_count)
+        return false;
+    const XrTargetMachineRepRecord *rep = &plan->machine_reps[rep_index];
+    return rep->kind == XR_MACHINE_REP_AGGREGATE && rep->register_bits == 384 &&
+           rep->memory_size == 48 && rep->memory_align == 8 &&
+           rep->signedness == XR_TARGET_SIGN_NONE &&
+           rep->root_kind == XR_TARGET_ROOT_NONE &&
+           rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+           rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE &&
+           rep->detail == layout_index && rep->lane_count == 0 && rep->reserved == 0;
+}
+
+static bool verify_product_target_layout(const XrTargetPlan *plan,
+                                         const XrVerifyProductProgramShape *shape,
+                                         uint16_t *out_rep) {
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(plan->profile);
+    int product_index = target_plan_layout_for_type(plan, shape->product->semantic_type);
+    int i64_index = target_plan_layout_for_type(plan, shape->i64->semantic_type);
+    int u8_index = target_plan_layout_for_type(plan, shape->u8->semantic_type);
+    if (!machine || machine->architecture != XR_TARGET_ARCH_X86_64 ||
+        machine->data_layout.i64.size != 8 || machine->data_layout.i64.align != 8 ||
+        product_index < 0 || i64_index < 0 || u8_index < 0)
+        return false;
+    const XrTargetLayoutRecord *product = &plan->layouts[product_index];
+    const XrTargetLayoutRecord *i64 = &plan->layouts[i64_index];
+    const XrTargetLayoutRecord *u8 = &plan->layouts[u8_index];
+    if (product->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        product->fixed_prefix_size != 48 || product->align != 8 ||
+        product->field_count != 6 || product->root_field_count != 0 ||
+        product->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        i64->kind != XR_TARGET_LAYOUT_SCALAR || i64->fixed_prefix_size != 8 ||
+        i64->align != 8 || i64->field_count != 0 ||
+        u8->kind != XR_TARGET_LAYOUT_SCALAR || u8->fixed_prefix_size != 1 ||
+        u8->align != 1 || u8->field_count != 0 ||
+        !range_valid(product->field_begin, 6, plan->fields_count))
+        return false;
+    for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+        const XrTargetFieldRecord *field =
+            &plan->fields[product->field_begin + ordinal];
+        uint32_t size = ordinal == 2 ? 1u : 8u;
+        uint32_t align = ordinal == 2 ? 1u : 8u;
+        if (field->layout != (uint32_t) product_index ||
+            field->semantic_field != ordinal ||
+            field->semantic_name != XR_SEMANTIC_INDEX_NONE ||
+            field->offset != ordinal * 8u || field->size != size ||
+            field->align != align || field->root_kind != XR_TARGET_ROOT_NONE ||
+            field->flags != 0 || field->reserved != 0 ||
+            (ordinal == 2
+                 ? !verify_product_u8_machine_rep(plan, field->memory_rep)
+                 : !verify_leaf_scalar_machine_rep(plan, field->memory_rep)))
+            return false;
+    }
+    uint16_t aggregate_rep = XR_MACHINE_REP_COUNT;
+    uint32_t matches = 0;
+    for (uint32_t i = 0; i < plan->machine_reps_count; i++)
+        if (verify_product_aggregate_machine_rep(plan, (uint16_t) i,
+                                                 (uint32_t) product_index)) {
+            aggregate_rep = (uint16_t) i;
+            matches++;
+        }
+    if (matches != 1)
+        return false;
+    *out_rep = aggregate_rep;
+    return true;
+}
+
+static bool verify_product_target_call(const XrTargetPlan *plan,
+                                       const XrVerifyProductProgramShape *shape,
+                                       uint32_t caller, uint16_t aggregate_rep,
+                                       uint8_t *covered) {
+    const XrSemanticOperationRecord *operation = shape->calls[caller];
+    const XrTargetValueRepRecord *value =
+        xr_target_plan_value_rep(plan, operation->result_value);
+    const XrTargetCallRecord *call = NULL;
+    for (uint32_t i = 0; i < plan->calls_count; i++) {
+        const XrTargetCallRecord *candidate = &plan->calls[i];
+        if (candidate->semantic_operation != shape->call_bindings[caller]->operation)
+            continue;
+        if (call)
+            return false;
+        call = candidate;
+        covered[i] = 1;
+    }
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(plan->profile);
+    if (!call || !value || !machine || value->slot >= plan->slots_count ||
+        value->register_rep != aggregate_rep || value->memory_rep != aggregate_rep ||
+        !slot_binds_value_in_function(plan, value,
+                                      shape->caller_bindings[caller]->semantic_function))
+        return false;
+    const XrTargetSlotRecord *slot = &plan->slots[value->slot];
+    return slot->semantic_value == operation->result_value &&
+           slot->semantic_operation == shape->call_bindings[caller]->operation &&
+           slot->size == 48 && slot->align == 8 &&
+           slot->register_rep == aggregate_rep && slot->memory_rep == aggregate_rep &&
+           slot->role == XR_TARGET_SLOT_TEMPORARY &&
+           slot->root_kind == XR_TARGET_ROOT_NONE &&
+           slot->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+           call->semantic_call_target == shape->target_indices[caller] &&
+           call->caller_function == shape->caller_bindings[caller]->semantic_function &&
+           call->callee_function == shape->callee_binding->semantic_function &&
+           call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+           call->source_export == XR_SEMANTIC_INDEX_NONE &&
+           stable_id_is_zero(call->source_export_identity) &&
+           stable_id_is_zero(call->source_callee_identity) &&
+           call->result_value == operation->result_value &&
+           call->result_slot == value->slot && call->caller_storage_slot == value->slot &&
+           call->argument_count == 0 && call->adapter_count == 0 &&
+           call->result_register_rep == aggregate_rep &&
+           call->result_memory_rep == aggregate_rep && call->native_abi == machine->native_abi &&
+           call->flags == 0 &&
+           call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
+           call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
+           call->result_mode == XR_TARGET_CALL_CALLER_STORAGE &&
+           call->result_ownership == XR_TARGET_CALL_NONE &&
+           call->array_intrinsic_kind == XR_TARGET_ARRAY_INTRINSIC_NONE &&
+           call->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+           call->array_hof_kind == XR_TARGET_ARRAY_HOF_NONE &&
+           call->array_result_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+           call->reserved8[0] == 0 && call->reserved8[1] == 0 &&
+           call->reserved8[2] == 0;
+}
+
+static bool verify_product_program_target(const XrTargetPlan *plan, char *error,
+                                          size_t error_size) {
+    if (!semantic_is_product_program_family(plan->semantic_plan))
+        return true;
+    XrVerifyProductProgramShape shape = {0};
+    uint16_t aggregate_rep = XR_MACHINE_REP_COUNT;
+    uint8_t covered[2] = {0, 0};
+    bool valid = plan->calls_count == 2 && plan->call_arguments_count == 0 &&
+                 plan->adapters_count == 0 &&
+                 verify_product_program_shape(plan->semantic_plan, &shape) &&
+                 verify_product_target_layout(plan, &shape, &aggregate_rep) &&
+                 verify_product_target_call(plan, &shape, 0, aggregate_rep, covered) &&
+                 verify_product_target_call(plan, &shape, 1, aggregate_rep, covered) &&
+                 covered[0] && covered[1];
+    for (uint32_t i = 0; valid && i < plan->slots_count; i++) {
+        const XrTargetSlotRecord *slot = &plan->slots[i];
+        if (slot->register_rep != aggregate_rep && slot->memory_rep != aggregate_rep)
+            continue;
+        valid = slot->register_rep == aggregate_rep && slot->memory_rep == aggregate_rep &&
+                slot->size == 48 && slot->align == 8 &&
+                slot->root_kind == XR_TARGET_ROOT_NONE &&
+                slot->ownership == XR_TARGET_OWNERSHIP_TRIVIAL;
+        for (uint32_t root = 0; valid && root < plan->root_slots_count; root++)
+            valid = plan->root_slots[root] != i;
+        for (uint32_t cleanup = 0; valid && cleanup < plan->cleanups_count; cleanup++)
+            valid = plan->cleanups[cleanup].slot != i;
+    }
+    return valid || report(error, error_size, "XR_TARGET_1003",
+                           "leaf product program target projection is invalid");
 }
 
 static int verify_compare_u32(const void *left, const void *right) {
@@ -10018,6 +10381,7 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
                     xr_target_instruction_program_verify(plan, error, error_size) &&
                     verify_calls(plan, error, error_size) &&
                     verify_leaf_program_target(plan, error, error_size) &&
+                    verify_product_program_target(plan, error, error_size) &&
                     verify_roots_and_cleanups(plan, error, error_size) &&
                     verify_adapters_and_capabilities(plan, error, error_size) &&
                     verify_coroutines(plan, error, error_size) &&

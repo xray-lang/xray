@@ -188,9 +188,11 @@ static bool prepare_program_authority(XrSemanticBuildContext *ctx, const XiFunc 
         xr_program_semantic_closure_family(module->program_semantic_closure);
     bool scalar = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     bool aggregate = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+    bool product = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
-    if ((!scalar && !aggregate && !graph) || (scalar && (!decision || !profile)) ||
-        ((aggregate || graph) && (decision || profile)) ||
+    if ((!scalar && !aggregate && !product && !graph) ||
+        (scalar && (!decision || !profile)) ||
+        ((aggregate || product || graph) && (decision || profile)) ||
         !xi_program_semantic_verify_partition(
             module, scalar ? module->scalar_target_profile : NULL, ctx->error, ctx->error_size))
         return fail(ctx, "XR_SEM_0019", "SemanticPlan construction family is inconsistent");
@@ -589,6 +591,51 @@ static uint32_t program_type_row_for_source(const XrSemanticBuildContext *ctx, c
     uint32_t declared = declared_program_type_row_for_source(ctx, type);
     if (declared != XI_PSC_ROW_NONE)
         return declared;
+    if (xr_program_semantic_closure_family(ctx->program_closure) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+        type->kind == XR_KIND_TUPLE && !type->is_nullable && !type->is_const &&
+        !type->is_literal && type->tuple.element_count == 6 && type->tuple.element_types) {
+        uint32_t product = XI_PSC_ROW_NONE;
+        for (uint32_t i = 0; i < xr_program_semantic_closure_type_count(ctx->program_closure);
+             i++) {
+            const XrProgramSemanticTypeRecord *row =
+                xr_program_semantic_closure_type(ctx->program_closure, i);
+            if (!row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT ||
+                row->field_count != type->tuple.element_count)
+                continue;
+            bool fields_match = true;
+            for (uint32_t ordinal = 0; fields_match && ordinal < row->field_count; ordinal++) {
+                const XrProgramSemanticTypeFieldRecord *field =
+                    xr_program_semantic_closure_type_field(ctx->program_closure,
+                                                           row->field_begin + ordinal);
+                uint32_t child = XI_PSC_ROW_NONE;
+                for (uint32_t candidate = 0;
+                     field && candidate <
+                                  xr_program_semantic_closure_type_count(ctx->program_closure);
+                     candidate++) {
+                    const XrProgramSemanticTypeRecord *child_row =
+                        xr_program_semantic_closure_type(ctx->program_closure, candidate);
+                    if (child_row && xr_stable_id_equal(child_row->id, field->field_type)) {
+                        if (child != XI_PSC_ROW_NONE) {
+                            child = XI_PSC_ROW_NONE;
+                            break;
+                        }
+                        child = candidate;
+                    }
+                }
+                fields_match = field && field->declaration_ordinal == ordinal &&
+                               child != XI_PSC_ROW_NONE &&
+                               program_type_row_for_source(
+                                   ctx, type->tuple.element_types[ordinal]) == child;
+            }
+            if (!fields_match)
+                continue;
+            if (product != XI_PSC_ROW_NONE)
+                return XI_PSC_ROW_NONE;
+            product = i;
+        }
+        return product;
+    }
     if (type->is_nullable || type->is_const || type->is_literal || type->is_value_type)
         return XI_PSC_ROW_NONE;
     const XrExactScalarDesc *scalar = xr_exact_scalar_by_native_type(type->scalar_rep);
@@ -1036,9 +1083,12 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
         ctx->program_closure && program_row != XI_PSC_ROW_NONE
             ? xr_program_semantic_closure_type(ctx->program_closure, program_row)
             : NULL;
-    bool program_leaf_value =
+    bool program_leaf_aggregate =
         program_type && program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
-    record->kind = program_leaf_value ? XR_KIND_INSTANCE : (uint32_t) type->kind;
+    bool program_leaf_product =
+        program_type && program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT;
+    bool program_leaf_value = program_leaf_aggregate || program_leaf_product;
+    record->kind = program_leaf_aggregate ? XR_KIND_INSTANCE : (uint32_t) type->kind;
     record->builtin_type = program_leaf_value ? XR_TID_NULL : xr_semantic_frozen_builtin_type(type);
     record->source_class = source_class_for_type(ctx, type);
     (void) source_class_identity_for_type(ctx, type, &record->source_class_identity);
@@ -1064,7 +1114,7 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
                    (type->is_const ? XR_SEM_TYPE_CONST : 0u) |
-                   ((semantic_type_is_value(type) || source_is_program_leaf_aggregate(ctx, type))
+                   ((semantic_type_is_value(type) || program_leaf_value)
                         ? XR_SEM_TYPE_VALUE
                         : 0u) |
                    (type->is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
@@ -4595,10 +4645,19 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;
     record->return_complete = value_ownership.complete ? 1u : 0u;
+    XrProgramSemanticFamily program_family =
+        ctx->program_closure ? xr_program_semantic_closure_family(ctx->program_closure) : 0;
+    if (program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+        (value->op == XI_VALUE_PRODUCT_CONSTRUCT || value->op == XI_VALUE_PRODUCT_PROJECT)) {
+        record->return_parameter = -1;
+        record->return_provenance = XR_SEM_RETURN_NONE;
+        record->return_complete = 0;
+    }
     if (ctx->program_closure && value->op == XI_CALL &&
-        source_is_program_leaf_aggregate(ctx, value->type) &&
-        xr_program_semantic_closure_family(ctx->program_closure) ==
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+        ((program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL &&
+          source_is_program_leaf_aggregate(ctx, value->type)) ||
+         (program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+          program_type_row_for_source(ctx, value->type) != XI_PSC_ROW_NONE))) {
         record->result_ownership = XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
         record->parameter_ownership = XI_OWN_NONE;
         record->return_parameter = -1;
@@ -5010,8 +5069,10 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
             xr_program_semantic_closure_function(ctx->program_closure, source->psc_function_index);
         if (!row || ctx->program_function_binding_count >= function_count)
             return fail(ctx, "XR_SEM_0019", "program function binding is not canonical");
-        if (xr_program_semantic_closure_family(ctx->program_closure) ==
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+        XrProgramSemanticFamily family =
+            xr_program_semantic_closure_family(ctx->program_closure);
+        if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+            family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
             /* The verified PSC row is the narrow proof that this function
              * returns a
              * headerless pointer-free leaf value.  Project NONE at
@@ -5150,8 +5211,9 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
         ctx->program_call_binding_count != expected_local_calls ||
         ctx->program_dependency_binding_count > dependency_count)
         return fail(ctx, "XR_SEM_0019", "program operation binding table is incomplete");
-    if (xr_program_semantic_closure_family(ctx->program_closure) ==
-        XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+    XrProgramSemanticFamily family = xr_program_semantic_closure_family(ctx->program_closure);
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
         for (uint32_t i = 0; i < ctx->program_function_binding_count; i++) {
             uint32_t semantic = ctx->program_function_bindings[i].semantic_function;
             if (semantic >= ctx->plan->function_count ||
@@ -5166,14 +5228,15 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
 static bool install_program_provenance(XrSemanticBuildContext *ctx) {
     if (!ctx->program_closure)
         return true;
-    if (xr_program_semantic_closure_family(ctx->program_closure) ==
-        XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+    XrProgramSemanticFamily family = xr_program_semantic_closure_family(ctx->program_closure);
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
         for (uint32_t i = 0; i < ctx->program_function_binding_count; i++) {
             uint32_t semantic = ctx->program_function_bindings[i].semantic_function;
-            if (semantic >= ctx->plan->function_count ||
-                ctx->plan->functions[semantic].return_parameter != -1 ||
-                ctx->plan->functions[semantic].return_provenance != XR_SEM_RETURN_NONE)
+            if (semantic >= ctx->plan->function_count)
                 return fail(ctx, "XR_SEM_0019", "leaf function return projection was not retained");
+            ctx->plan->functions[semantic].return_parameter = -1;
+            ctx->plan->functions[semantic].return_provenance = XR_SEM_RETURN_NONE;
         }
     }
     XrGenerationClosureId generation =

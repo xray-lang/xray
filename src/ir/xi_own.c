@@ -120,9 +120,46 @@ static bool xi_own_type_is_pointer_free_program_leaf(const XiFunc *function, con
            row->flags == required && row->reserved == 0;
 }
 
+static bool xi_own_type_is_pointer_free_program_product(const XiFunc *function,
+                                                        const XrType *type,
+                                                        uint32_t program_row) {
+    const XiModule *module = xi_own_function_module(function);
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    const XrProgramSemanticTypeRecord *product =
+        closure && program_row != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_type(closure, program_row)
+            : NULL;
+    const uint8_t required = XR_PROGRAM_SEMANTIC_TYPE_NONNULLABLE |
+                             XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC |
+                             XR_PROGRAM_SEMANTIC_TYPE_VALUE |
+                             XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE;
+    if (!closure || !type || type->kind != XR_KIND_TUPLE || type->is_nullable ||
+        type->is_const || type->is_literal || type->tuple.element_count != 6 ||
+        !type->tuple.element_types || !xr_program_semantic_closure_is_frozen(closure) ||
+        !xr_program_semantic_closure_is_verified(closure) ||
+        xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
+        !product || product->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT ||
+        product->field_count != 6 || product->flags != required || product->reserved != 0)
+        return false;
+    for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+        XrExactScalarId expected = ordinal == 2 ? XR_EXACT_SCALAR_U8 : XR_EXACT_SCALAR_I64;
+        if (!type->tuple.element_types[ordinal])
+            return false;
+        const XrExactScalarDesc *source =
+            xr_exact_scalar_by_native_type(type->tuple.element_types[ordinal]->scalar_rep);
+        if (!source || source->id != expected)
+            return false;
+    }
+    return true;
+}
+
 XR_FUNC bool xi_own_value_is_psc_leaf_aggregate(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
-    return value && xi_own_type_is_pointer_free_program_leaf(function, value->type);
+    return value &&
+           (xi_own_type_is_pointer_free_program_leaf(function, value->type) ||
+            xi_own_type_is_pointer_free_program_product(function, value->type,
+                                                        value->psc_type_index));
 }
 
 XR_FUNC bool xi_own_value_is_rc(const XiValue *value) {
@@ -130,7 +167,10 @@ XR_FUNC bool xi_own_value_is_rc(const XiValue *value) {
 }
 
 XR_FUNC bool xi_own_function_return_is_rc(const XiFunc *function) {
-    return function && !xi_own_type_is_pointer_free_program_leaf(function, function->return_type) &&
+    return function &&
+           !xi_own_type_is_pointer_free_program_leaf(function, function->return_type) &&
+           !xi_own_type_is_pointer_free_program_product(function, function->return_type,
+                                                        function->psc_return_type_index) &&
            xi_own_type_is_rc(function->return_type);
 }
 

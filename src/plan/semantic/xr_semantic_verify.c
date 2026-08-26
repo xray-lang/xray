@@ -4266,6 +4266,8 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
          provenance->program_family !=
              XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL &&
          provenance->program_family !=
+             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+         provenance->program_family !=
              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) ||
         fingerprint_zero(provenance->program_fingerprint) ||
         stable_id_zero(provenance->generation_identity) ||
@@ -4305,6 +4307,14 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
           plan->program_function_binding_count != 2 || plan->program_call_binding_count != 1 ||
           plan->program_dependency_binding_count != 0)) ||
         (provenance->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+         (provenance->type_count != 3 || provenance->type_field_count != 6 ||
+          provenance->function_count != 3 || provenance->call_count != 2 ||
+          provenance->module_count != 1 || provenance->dependency_count != 0 ||
+          provenance->program_module_row != 0 ||
+          plan->program_function_binding_count != 3 || plan->program_call_binding_count != 2 ||
+          plan->program_dependency_binding_count != 0)) ||
+        (provenance->program_family ==
              XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
          (provenance->type_count != 1 || provenance->type_field_count != 0 ||
           provenance->function_count != 2 || provenance->call_count != 1 ||
@@ -4342,6 +4352,7 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
     }
     bool valid = true;
     uint32_t aggregate_count = 0;
+    uint32_t product_count = 0;
     for (uint32_t i = 0; valid && i < provenance->type_count; i++) {
         const XrSemanticProgramTypeBinding *binding = &plan->program_type_bindings[i];
         const XrSemanticTypeRecord *semantic =
@@ -4351,6 +4362,7 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
             XR_PROGRAM_SEMANTIC_TYPE_VALUE | XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE;
         bool scalar = binding->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR;
         bool aggregate = binding->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
+        bool product = binding->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT;
         const XrExactScalarDesc *scalar_desc =
             scalar ? xr_exact_scalar_by_id((XrExactScalarId) binding->exact_scalar) : NULL;
         valid =
@@ -4388,10 +4400,23 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
               semantic->aggregate_align == 0 && semantic->enum_layout_id == 0 &&
               semantic->enum_member_count == 0 && semantic->scalar_rep == XR_SCALAR_REP_NONE &&
               semantic->enum_flags == 0 && semantic->reserved_enum == 0 &&
-              semantic->flags == (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT)));
+              semantic->flags == (XR_SEM_TYPE_VALUE | XR_SEM_TYPE_AGGREGATE_EXACT)) ||
+             (product && binding->exact_scalar == XR_EXACT_SCALAR_NONE &&
+              binding->field_count == 6 && semantic->kind == XR_KIND_TUPLE &&
+              semantic->builtin_type == XR_TID_NULL &&
+              stable_id_zero(binding->source_class_identity) &&
+              semantic->source_class == XR_SEMANTIC_INDEX_NONE &&
+              stable_id_zero(semantic->source_class_identity) &&
+              stable_id_zero(semantic->source_enum_identity) && !semantic->source_enum_key &&
+              semantic->child_count == 6 && semantic->aggregate_extent == 6 &&
+              semantic->aggregate_align == 0 && semantic->enum_layout_id == 0 &&
+              semantic->enum_member_count == 0 && semantic->scalar_rep == XR_SCALAR_REP_NONE &&
+              semantic->enum_flags == 0 && semantic->reserved_enum == 0 &&
+              semantic->flags == XR_SEM_TYPE_VALUE));
         if (valid) {
             seen_type_rows[binding->program_row] = 1u;
             aggregate_count += aggregate ? 1u : 0u;
+            product_count += product ? 1u : 0u;
         }
     }
     for (uint32_t i = 0; valid && i < provenance->type_count; i++) {
@@ -4419,7 +4444,10 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
                         plan->type_child_count - plan->types[owner->semantic_type].child_begin &&
                     ordinal < plan->types[owner->semantic_type].child_count &&
                     plan->type_children[plan->types[owner->semantic_type].child_begin + ordinal] ==
-                        child->semantic_type;
+                        child->semantic_type &&
+                    (owner->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT ||
+                     child->exact_scalar ==
+                         (ordinal == 2 ? XR_EXACT_SCALAR_U8 : XR_EXACT_SCALAR_I64));
             if (valid)
                 seen_type_field_rows[field_index] = 1u;
             if (valid)
@@ -4433,6 +4461,18 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
             valid = binding && (binding->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR
                                     ? seen_type_rows[i] == 2u
                                     : seen_type_rows[i] == 1u);
+        }
+        for (uint32_t i = 0; valid && i < provenance->type_field_count; i++)
+            valid = seen_type_field_rows[i] != 0;
+    }
+    if (provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
+        valid = valid && aggregate_count == 0 && product_count == 1u;
+        for (uint32_t i = 0; valid && i < provenance->type_count; i++) {
+            const XrSemanticProgramTypeBinding *binding = program_type_binding_for_row(plan, i);
+            valid = binding && (binding->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR
+                                    ? seen_type_rows[i] == 2u
+                                    : binding->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT &&
+                                          seen_type_rows[i] == 1u);
         }
         for (uint32_t i = 0; valid && i < provenance->type_field_count; i++)
             valid = seen_type_field_rows[i] != 0;
@@ -4469,6 +4509,17 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
             callee_count += binding->flags == 0 ? 1u : 0u;
         }
         valid = entry_count == 1u && callee_count == 1u;
+    }
+    if (valid &&
+        provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
+        uint32_t entry_count = 0;
+        uint32_t callee_count = 0;
+        for (uint32_t i = 0; i < provenance->function_count; i++) {
+            const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[i];
+            entry_count += binding->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
+            callee_count += binding->flags == 0 ? 1u : 0u;
+        }
+        valid = entry_count == 2u && callee_count == 1u;
     }
     for (uint32_t i = 0; valid && i < plan->program_dependency_binding_count; i++) {
         const XrSemanticProgramDependencyBinding *binding =
@@ -4530,6 +4581,9 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
                      XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
                  ((caller->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0 &&
                   callee->flags == 0)) &&
+                (provenance->program_family !=
+                     XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
+                 (caller->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && callee->flags == 0)) &&
                 (i == 0 || plan->program_call_bindings[i - 1].operation < binding->operation);
         if (valid)
             seen_call_rows[binding->program_row] = 1;

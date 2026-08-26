@@ -412,7 +412,7 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-The schema-48 source program graph does not extend that legacy per-module AOT
+The schema-49 source program graph does not extend that legacy per-module AOT
 cutover. It owns one verified TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
 argument rows plus pointer-free module partitions. Its only cross-partition ABI
@@ -442,7 +442,7 @@ the same plan for parity.
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
 function is identified through its owning module's frozen PSC v5 row:
 `XiFunc.psc_function_index` selects the PSC function identity and locator, which
-must join uniquely to the SemanticPlan 42 program-function binding and the exact
+must join uniquely to the SemanticPlan 43 program-function binding and the exact
 verified TargetPlan provenance and fingerprint. A mutable `XiFunc.semantic_plan`
 pointer is not required authority; when present it is only an additional exact
 agreement check. Missing, duplicate, foreign same-shape, or mutated identity

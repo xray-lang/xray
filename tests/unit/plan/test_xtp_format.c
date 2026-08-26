@@ -2057,7 +2057,7 @@ static void test_header_and_directory_mutations(void) {
     expect_decode_failure(copy, fixture.size);
 
     memcpy(copy, fixture.bytes, fixture.size);
-    xr_xtp_put_u32(copy + 4, UINT32_C(8)); /* v8 is a hard-cutover negative. */
+    xr_xtp_put_u32(copy + 4, UINT32_C(48)); /* v48 is the exact hard-cutover negative. */
     resign_artifact(copy, fixture.size);
     expect_decode_failure(copy, fixture.size);
 
@@ -2331,9 +2331,9 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-48-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-49-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 48 cutover tests passed");
+        puts("XTP schema 49 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

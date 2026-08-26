@@ -1477,6 +1477,18 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
         rows[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
         rows[3].opcode == XR_TARGET_INSTRUCTION_RETURN_UNIT)
         return (uint64_t) XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED;
+    /* PSC6 product rows are frozen TargetPlan authority, not an execution ABI.
+     * Any target-only row fences the whole function from every installed VM,
+     * AOT, CGen, or public typed-entry family. */
+    for (uint32_t i = 0; i < count; i++) {
+        uint16_t opcode = rows[i].opcode;
+        if (opcode == XR_TARGET_INSTRUCTION_CONST_U8 ||
+            opcode == XR_TARGET_INSTRUCTION_VALUE_PRODUCT_INIT ||
+            opcode == XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_I64 ||
+            opcode == XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_U8 ||
+            opcode == XR_TARGET_INSTRUCTION_VALUE_PRODUCT_GET_U8)
+            return 0;
+    }
     bool leaf_aggregate = false;
     for (uint32_t i = 0; i < count; i++) {
         uint16_t opcode = rows[i].opcode;

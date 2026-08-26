@@ -60,7 +60,7 @@ roots, or general module activation.
    type identity and rejects incomplete or mutated representation facts; no Xi
    type, name, or legacy plan can authorize it. The
    aggregate family admits the bounded leaf-value direct-local family only
-   through SemanticPlan 42 program provenance and typed type, field, function,
+   through SemanticPlan 43 program provenance and typed type, field, function,
    and call bindings. It derives field geometry from the verified target profile
    and declaration ordinals, binds caller and callee to one trivial aggregate
    representation, and records the return in caller storage with no adapter or
@@ -263,8 +263,8 @@ roots, or general module activation.
 5. Runtime loading accepts only an XTP v48 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
    independent TargetPlan verification. V48 is a breaking hard cutover from
-   v47 and all earlier XTP schemas. It requires SemanticPlan schema 42 and
-   TargetPlan schema 48, including exact PSC v5 provenance and typed program
+   v48 and all earlier XTP schemas. It requires SemanticPlan schema 43 and
+   TargetPlan schema 49, including exact PSC v6 provenance and typed program
    bindings; no compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
    expectation section and preserves the compact instruction stream introduced
@@ -350,7 +350,7 @@ roots, or general module activation.
    SemanticPlan verifier before the runtime builds its canonical native
    TargetProfile. They do not guess SemanticPlan or TargetProfile authority
    from a host name, file name, sibling artifact, or caller-authored
-   fingerprint. A dependency-bearing schema-42 XSM cannot be decoded as a
+   fingerprint. A dependency-bearing schema-43 XSM cannot be decoded as a
    standalone artifact: its module-set route must present the canonical ordered
    vector of every exact verified dependency SemanticPlan, and the decoder
    rechecks dependency module IDs, semantic fingerprints, public export IDs,
@@ -409,7 +409,7 @@ anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b428893718
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
 anchor-sha256: src/plan/format/xr_xsm_decode.c 2dee1764076536b87cf00258cb58758cb799c0ffea1c8525d4ecd1a7fefcfcc7
-anchor-sha256: src/plan/format/xr_xtp_schema.h 0bee55fe5f79f9fffb91a5c7c03032c91ce59ddb7eb3ccdf197fb5ade619f282
+anchor-sha256: src/plan/format/xr_xtp_schema.h 41b794455308909d8cb8ccf6e1a276441c1ac2d5ad09b8d1c9963922d1b3d88a
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
@@ -426,12 +426,12 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_authority.h ec7f8aba2e76b4e2a10
 anchor-sha256: src/runtime/abi/xr_runtime_target_authority.c d0836e34b01e009e2a260b4c4c022b6a7f7a4e9ce80e77f18fc23b2d0e912ce2
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.h 8653f30d2ed073fd75d3adab9eb5e0cb27ddf538b7e0634f896ce21704382308
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.c 31918070b7e530780073a8ca0010d2b62f78afbfcdf4d610c41bf27e4da4a5d1
-anchor-sha256: src/plan/target/xr_target_profile.h 59aed034d3e68382db532706fbd1376c35219d1e4c8eaa77e9342a09afd6e387
+anchor-sha256: src/plan/target/xr_target_profile.h c629ddf32e5acc28daa58dc96862642dd6cf9e4993e83443cd9f7426fd438ea0
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
 anchor-sha256: src/plan/target/xr_target_plan.h e78f4e0216169aa2d1acbf9db0df80b338e6ecdb20c3a0b0dd7ef3dae8bf774b
-anchor-sha256: src/plan/target/xr_target_plan.c 3248f07e1b02eca3eb224a6009a03ff3a8ced6d2074932ac8338268ecc0ed885
-anchor-sha256: src/plan/target/xr_target_builder.c 7d5f82fef73cb858412d4593c40847faaadb285b424614bb39825fcdbeb1e17c
-anchor-sha256: src/plan/target/xr_target_verify.c 931eec0f2ed22268e9371b2a8065f5f0b79d266260277394a4e501aef0825ba0
+anchor-sha256: src/plan/target/xr_target_plan.c 6ee4f3abe15fc72c07d4e3ab07eb48c925d7d27fac69b272bc81ce95dff71b7c
+anchor-sha256: src/plan/target/xr_target_builder.c 87870c04824de87236a98491188357e1c2076d38d1fba4ae7970c9cd8f3c0dd1
+anchor-sha256: src/plan/target/xr_target_verify.c 1e9169019d391a5e3e057326debe1c75d60bac3581b88f0d38acd42713ca3b0a
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 6079934e95208abe3b7b7251b4c4b59275c61776f20de0d0873b70617899a62a
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c f0978e9727c181e5686bd0aea15e214d5dba687ce090d13b19d1830e005bcd2c
@@ -440,8 +440,8 @@ anchor-sha256: src/runtime/xr_target_plan_load.c 6b7f72151ed3359a8233e5b45e74b81
 anchor-sha256: src/app/cli/xcmd_run.c 4bbdfcfe6426abc90b411dd271bb849297a930e3c6364692225d8ba08e1c2f98
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
-anchor-sha256: tests/unit/plan/test_target_plan.c f9328d8928498f48a88091b0a7b412f5119d4c126a44e3dc3ff896fbfab3fcef
-anchor-sha256: tests/unit/plan/test_xtp_format.c e994e527df3931be8ad94a395345f8f11d34805cd4cfe603193d1c4bfa2c5c8b
+anchor-sha256: tests/unit/plan/test_target_plan.c 934176e9e784ccf2588fcb7bc205042e0a8530e394fc003355428976c56ebfd1
+anchor-sha256: tests/unit/plan/test_xtp_format.c c1e4045afcef05e4f74bcfd155558191c14ac9451ce840dd0cdd022e5d131d3c
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 53e5b8fa4bbf6ae204c0b8f720792bd9580c559684daa2539077fd786d111ce5
 anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
