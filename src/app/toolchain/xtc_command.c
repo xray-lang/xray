@@ -465,12 +465,14 @@ XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider,
         return command_error(err, err_size,
                              "MSVC system-library logical name has no explicit .lib mapping");
     }
-    /* Zig's MSVC ABI consumes the installed Windows SDK import libraries,
-     * where the canonical synchronization API-set is exposed by
-     * synchronization.lib. Its GNU ABI instead uses Zig's canonical API-set
-     * definitions, so keep the mapping target-specific. */
-    if (provider == XR_TOOLCHAIN_PROVIDER_ZIG && target &&
-        target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC && name &&
+    /* GNU-style drivers targeting the MSVC ABI consume the installed Windows
+     * SDK import libraries, where this API-set is exposed by
+     * synchronization.lib. Keep the mapping target-specific so GNU ABI
+     * providers retain their canonical API-set spelling. */
+    bool uses_msvc_sdk =
+        target && target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC &&
+        (provider == XR_TOOLCHAIN_PROVIDER_LLVM_CLANG || provider == XR_TOOLCHAIN_PROVIDER_ZIG);
+    if (uses_msvc_sdk && name &&
         strcmp(name, "api-ms-win-core-synch-l1-2-0") == 0)
         return joined(sink, "-l", "synchronization", err, err_size);
     return joined(sink, "-l", name, err, err_size);

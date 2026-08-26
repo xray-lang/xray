@@ -498,6 +498,21 @@ TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
     ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
 }
 
+TEST(llvm_clang_windows_msvc_uses_sdk_synchronization_import_library) {
+    XrToolchainSelection selection = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256];
+    selection.provider = XR_TOOLCHAIN_PROVIDER_LLVM_CLANG;
+    ASSERT_TRUE(xtc_target_parse("x86_64-windows-msvc", &selection.target, err, sizeof(err)));
+
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target,
+                                                "api-ms-win-core-synch-l1-2-0", &sink, err,
+                                                sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
+    ASSERT_FALSE(command_capture_has(&capture, "-lapi-ms-win-core-synch-l1-2-0"));
+}
+
 TEST(version_parser_reads_ascii_token_from_arbitrary_bytes) {
     char version[64];
     static const uint8_t banner[] =
@@ -984,6 +999,7 @@ RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
 RUN_TEST(assembly_oracle_io_maps_provider_dialects);
 RUN_TEST(semantic_simd_intent_maps_provider_dialects);
 RUN_TEST(zig_native_windows_msvc_keeps_exact_abi_target);
+RUN_TEST(llvm_clang_windows_msvc_uses_sdk_synchronization_import_library);
 
 RUN_TEST_SUITE("Toolchain discovery");
 RUN_TEST(find_missing_executable);
