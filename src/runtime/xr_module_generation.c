@@ -48,6 +48,110 @@ static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
     return combined == 0;
 }
 
+static bool active_manifest_list_valid_locked(
+    const XrRuntimeGenerationAuthority *authority) {
+    uint32_t count = 0;
+    for (const XrLoadedModuleGeneration *current =
+             authority ? authority->active_generations : NULL;
+         current; current = current->active_next) {
+        count++;
+        if (!authority || count > authority->budget.max_loaded_generations ||
+            current->authority != authority ||
+            current->state != XR_MODULE_GENERATION_ACTIVE ||
+            !current->active_manifest_published ||
+            current->active_program_target_plan != current->plan ||
+            memcmp(&current->active_identity, &current->identity,
+                   sizeof(current->identity)) != 0)
+            return false;
+    }
+    return authority && count == authority->active_generation_count &&
+           count <= authority->live_generations;
+}
+
+static bool active_manifest_absent(
+    const XrLoadedModuleGeneration *generation) {
+    return generation && !generation->active_manifest_published &&
+           !generation->active_next &&
+           !generation->active_program_target_plan &&
+           bytes_are_zero((const uint8_t *) &generation->active_identity,
+                          sizeof(generation->active_identity));
+}
+
+static bool active_manifest_publish_locked(
+    XrLoadedModuleGeneration *generation, char *diagnostic,
+    size_t diagnostic_size) {
+    XrRuntimeGenerationAuthority *authority = generation->authority;
+    if (!active_manifest_list_valid_locked(authority) ||
+        !active_manifest_absent(generation) ||
+        authority->active_generation_count >= authority->live_generations ||
+        authority->active_generation_count >=
+            authority->budget.max_loaded_generations)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "live generation manifest is not empty and exact");
+    generation->active_program_target_plan = generation->plan;
+    generation->active_identity = generation->identity;
+    generation->active_manifest_published = true;
+    generation->active_next = authority->active_generations;
+    authority->active_generations = generation;
+    authority->active_generation_count++;
+    return true;
+}
+
+static bool active_manifest_remove_locked(
+    XrLoadedModuleGeneration *generation, char *diagnostic,
+    size_t diagnostic_size) {
+    XrRuntimeGenerationAuthority *authority = generation->authority;
+    if (!active_manifest_list_valid_locked(authority) ||
+        !generation->active_manifest_published ||
+        generation->active_program_target_plan != generation->plan ||
+        memcmp(&generation->active_identity, &generation->identity,
+               sizeof(generation->identity)) != 0)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "live generation manifest is not exact");
+    XrLoadedModuleGeneration **link = &authority->active_generations;
+    while (*link && *link != generation)
+        link = &(*link)->active_next;
+    if (!*link || authority->active_generation_count == 0)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "active generation is absent from the live manifest");
+    *link = generation->active_next;
+    authority->active_generation_count--;
+    generation->active_next = NULL;
+    generation->active_program_target_plan = NULL;
+    memset(&generation->active_identity, 0,
+           sizeof(generation->active_identity));
+    generation->active_manifest_published = false;
+    return true;
+}
+
+XR_FUNCDEF bool xr_runtime_generation_live_manifest_snapshot(
+    const XrLoadedModuleGeneration *generation,
+    XrRuntimeGenerationLiveManifest *manifest) {
+    if (!generation || !generation->authority || !manifest)
+        return false;
+    XrRuntimeGenerationAuthority *authority = generation->authority;
+    xr_mutex_lock(&authority->gate);
+    bool found = false;
+    if (active_manifest_list_valid_locked(authority)) {
+        for (const XrLoadedModuleGeneration *current =
+                 authority->active_generations;
+             current; current = current->active_next) {
+            if (current != generation)
+                continue;
+            memset(manifest, 0, sizeof(*manifest));
+            manifest->program_target_plan =
+                generation->active_program_target_plan;
+            manifest->identity = generation->active_identity;
+            manifest->active_generation_count =
+                authority->active_generation_count;
+            found = true;
+            break;
+        }
+    }
+    xr_mutex_unlock(&authority->gate);
+    return found;
+}
+
 static void hash_u32(XrSHA256Context *context, uint32_t value) {
     uint8_t bytes[4];
     for (uint32_t i = 0; i < sizeof(bytes); i++)
@@ -247,7 +351,9 @@ XRAY_API bool xr_runtime_generation_authority_destroy(
                     "generation authority is missing");
     XrRuntimeGenerationAuthority *owned = *authority;
     xr_mutex_lock(&owned->gate);
-    bool empty = owned->live_generations == 0 && owned->total_pins == 0;
+    bool empty = owned->live_generations == 0 && owned->total_pins == 0 &&
+                 owned->active_generation_count == 0 &&
+                 owned->active_generations == NULL;
     xr_mutex_unlock(&owned->gate);
     xr_mutex_lock(&owned->dynamic_entry_lease_gate);
     bool leases_empty = owned->dynamic_entry_lease_count == 0 &&
@@ -649,6 +755,20 @@ XRAY_API bool xr_module_generation_activate(
                     "generation is missing");
     XrRuntimeGenerationAuthority *authority = generation->authority;
     xr_mutex_lock(&authority->gate);
+    bool program_generation =
+        !bytes_are_zero(generation->identity.program_fingerprint,
+                        sizeof(generation->identity.program_fingerprint)) ||
+        !bytes_are_zero(
+            generation->identity.program_module_set_fingerprint,
+            sizeof(generation->identity.program_module_set_fingerprint)) ||
+        !bytes_are_zero(generation->identity.generation_closure_id,
+                        sizeof(generation->identity.generation_closure_id));
+    xr_mutex_unlock(&authority->gate);
+    if (program_generation &&
+        !xr_module_generation_verify(generation, diagnostic,
+                                     diagnostic_size))
+        return false;
+    xr_mutex_lock(&authority->gate);
     bool ready = generation->state == XR_MODULE_GENERATION_READY &&
                  !generation->poisoned &&
                  !generation->rollback_requested;
@@ -662,6 +782,11 @@ XRAY_API bool xr_module_generation_activate(
     if (cache_status != XR_VM_DECODED_CACHE_OK) {
         xr_mutex_unlock(&authority->gate);
         return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
+    }
+    if (!active_manifest_publish_locked(generation, diagnostic,
+                                        diagnostic_size)) {
+        xr_mutex_unlock(&authority->gate);
+        return false;
     }
     bool ok = transition_locked(generation, XR_MODULE_GENERATION_READY,
                                 XR_MODULE_GENERATION_ACTIVE,
@@ -734,6 +859,12 @@ XRAY_API bool xr_module_generation_begin_drain(
                     "generation is missing");
     XrRuntimeGenerationAuthority *authority = generation->authority;
     xr_mutex_lock(&authority->gate);
+    if (generation->state == XR_MODULE_GENERATION_ACTIVE &&
+        !active_manifest_remove_locked(generation, diagnostic,
+                                       diagnostic_size)) {
+        xr_mutex_unlock(&authority->gate);
+        return false;
+    }
     bool ok = transition_locked(generation, XR_MODULE_GENERATION_ACTIVE,
                                 XR_MODULE_GENERATION_DRAINING,
                                 "only an active generation may begin draining",
@@ -752,6 +883,11 @@ XRAY_API bool xr_module_generation_retire(
     XrRuntimeGenerationAuthority *authority = generation->authority;
     xr_mutex_lock(&authority->gate);
     bool draining = generation->state == XR_MODULE_GENERATION_DRAINING;
+    if (draining && !active_manifest_absent(generation)) {
+        xr_mutex_unlock(&authority->gate);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "draining generation retained a live manifest");
+    }
     xr_mutex_unlock(&authority->gate);
     if (draining && !xr_runtime_dynamic_entry_retry_pending(
                         generation, diagnostic, diagnostic_size))
@@ -814,8 +950,20 @@ XRAY_API bool xr_module_generation_rollback(
     }
     generation->rollback_requested = true;
     if (generation->state == XR_MODULE_GENERATION_ACTIVE) {
+        if (!active_manifest_remove_locked(generation, diagnostic,
+                                           diagnostic_size)) {
+            generation->rollback_requested = false;
+            xr_mutex_unlock(&authority->gate);
+            return false;
+        }
         generation->state = XR_MODULE_GENERATION_DRAINING;
     } else if (generation->state < XR_MODULE_GENERATION_ACTIVE) {
+        if (!active_manifest_absent(generation)) {
+            generation->rollback_requested = false;
+            xr_mutex_unlock(&authority->gate);
+            return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                        "pre-activation generation retained a live manifest");
+        }
         if (generation->total_pins != 0) {
             xr_mutex_unlock(&authority->gate);
             return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
@@ -920,7 +1068,8 @@ XRAY_API bool xr_module_generation_unload(
                     "generation cannot unload while dynamic leases remain");
     xr_mutex_lock(&authority->gate);
     if (owned->state != XR_MODULE_GENERATION_RETIRED ||
-        owned->total_pins != 0 || authority->live_generations == 0) {
+        owned->total_pins != 0 || authority->live_generations == 0 ||
+        !active_manifest_absent(owned)) {
         xr_mutex_unlock(&authority->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
                     "only a zero-pin retired generation may unload");
@@ -932,7 +1081,8 @@ XRAY_API bool xr_module_generation_unload(
         return false;
     xr_mutex_lock(&authority->gate);
     if (owned->state != XR_MODULE_GENERATION_RETIRED ||
-        owned->total_pins != 0 || authority->live_generations == 0) {
+        owned->total_pins != 0 || authority->live_generations == 0 ||
+        !active_manifest_absent(owned)) {
         xr_mutex_unlock(&authority->gate);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
                     "generation changed while its cache was released");

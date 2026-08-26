@@ -1225,6 +1225,42 @@ static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target) {
             xr_module_generation_verify(first, diagnostic, sizeof(diagnostic)) &&
             xr_module_generation_verify(second, diagnostic, sizeof(diagnostic)) &&
             xr_module_generation_activate(first, diagnostic, sizeof(diagnostic));
+    XrRuntimeGenerationLiveManifest first_manifest = {0};
+    XrRuntimeGenerationLiveManifest second_manifest = {0};
+    if (exact) {
+        exact = xr_runtime_generation_live_manifest_snapshot(first, &first_manifest) &&
+                first_manifest.program_target_plan == target &&
+                first_manifest.active_generation_count == 1u &&
+                memcmp(&first_manifest.identity, &first->identity,
+                       sizeof(first->identity)) == 0 &&
+                !xr_runtime_generation_live_manifest_snapshot(second,
+                                                               &second_manifest);
+    }
+    if (exact) {
+        size_t last = sizeof(second->identity.generation_closure_id) - 1u;
+        second->identity.generation_closure_id[last] ^= 1u;
+        bool rejected = !xr_module_generation_activate(
+                            second, diagnostic, sizeof(diagnostic)) &&
+                        strstr(diagnostic, "XR_EXEC_5008") != NULL &&
+                        !xr_runtime_generation_live_manifest_snapshot(
+                            second, &second_manifest);
+        second->identity.generation_closure_id[last] ^= 1u;
+        exact = rejected &&
+                xr_module_generation_verify(second, diagnostic,
+                                            sizeof(diagnostic)) &&
+                xr_module_generation_activate(second, diagnostic,
+                                              sizeof(diagnostic)) &&
+                xr_runtime_generation_live_manifest_snapshot(
+                    first, &first_manifest) &&
+                xr_runtime_generation_live_manifest_snapshot(
+                    second, &second_manifest) &&
+                first_manifest.program_target_plan == target &&
+                second_manifest.program_target_plan == target &&
+                first_manifest.active_generation_count == 2u &&
+                second_manifest.active_generation_count == 2u &&
+                memcmp(&second_manifest.identity, &second->identity,
+                       sizeof(second->identity)) == 0;
+    }
     XrVmDecodedCacheStats stats = {0};
     if (exact) {
         XrFingerprint module_set_fingerprint = {{0}};
@@ -1297,11 +1333,16 @@ static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target) {
     }
     if (first) {
         exact = xr_module_generation_begin_drain(first, diagnostic, sizeof(diagnostic)) &&
+                !xr_runtime_generation_live_manifest_snapshot(first, &first_manifest) &&
+                xr_runtime_generation_live_manifest_snapshot(second, &second_manifest) &&
+                second_manifest.active_generation_count == 1u &&
                 xr_module_generation_retire(first, diagnostic, sizeof(diagnostic)) &&
                 xr_module_generation_unload(&first, diagnostic, sizeof(diagnostic)) && exact;
     }
     if (second) {
         exact = xr_module_generation_rollback(second, diagnostic, sizeof(diagnostic)) &&
+                !xr_runtime_generation_live_manifest_snapshot(second, &second_manifest) &&
+                xr_module_generation_retire(second, diagnostic, sizeof(diagnostic)) &&
                 xr_module_generation_unload(&second, diagnostic, sizeof(diagnostic)) && exact;
     }
     if (authority)

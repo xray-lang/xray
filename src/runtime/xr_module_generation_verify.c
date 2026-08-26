@@ -138,6 +138,37 @@ static void locked_snapshot(const XrLoadedModuleGeneration *generation,
            sizeof(snapshot->poison_fingerprint));
 }
 
+static bool verifier_live_manifest_exact_locked(
+    const XrLoadedModuleGeneration *generation) {
+    const XrRuntimeGenerationAuthority *authority = generation->authority;
+    uint32_t count = 0;
+    uint32_t matches = 0;
+    for (const XrLoadedModuleGeneration *current =
+             authority->active_generations;
+         current; current = current->active_next) {
+        count++;
+        matches += current == generation ? 1u : 0u;
+        if (count > authority->budget.max_loaded_generations ||
+            current->authority != authority ||
+            current->state != XR_MODULE_GENERATION_ACTIVE ||
+            !current->active_manifest_published ||
+            current->active_program_target_plan != current->plan ||
+            memcmp(&current->active_identity, &current->identity,
+                   sizeof(current->identity)) != 0)
+            return false;
+    }
+    if (count != authority->active_generation_count ||
+        count > authority->live_generations || matches > 1u)
+        return false;
+    if (generation->state == XR_MODULE_GENERATION_ACTIVE)
+        return matches == 1u && generation->active_manifest_published;
+    return matches == 0u && !generation->active_manifest_published &&
+           generation->active_next == NULL &&
+           generation->active_program_target_plan == NULL &&
+           !nonzero_bytes((const uint8_t *) &generation->active_identity,
+                          sizeof(generation->active_identity));
+}
+
 static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
                                    char *diagnostic,
                                    size_t diagnostic_size) {
@@ -361,7 +392,8 @@ XRAY_API bool xr_module_generation_verify(
         budget_ok = budget_ok &&
                     snapshot.pins_by_kind[i] <=
                         authority->budget.max_pins_by_kind[i];
-    bool identity_ok = shape_ok && budget_ok &&
+    bool manifest_ok = verifier_live_manifest_exact_locked(generation);
+    bool identity_ok = shape_ok && budget_ok && manifest_ok &&
                        verify_native_identity(generation, diagnostic,
                                               diagnostic_size);
     bool unavailable_state =
@@ -379,9 +411,9 @@ XRAY_API bool xr_module_generation_verify(
                                 &generation->identity) == XR_VM_DECODED_CACHE_OK;
     }
     xr_mutex_unlock(&authority->gate);
-    if (!shape_ok || !budget_ok)
+    if (!shape_ok || !budget_ok || !manifest_ok)
         return reject(diagnostic, diagnostic_size, "XR_EXEC_5008",
-                      "generation state or counter invariant is invalid");
+                      "generation state, counter, or live-manifest invariant is invalid");
     if (!identity_ok)
         return false;
     if (!cache_identity_ok)

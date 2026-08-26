@@ -27,7 +27,12 @@ authority.
    DRAINING -> RETIRED -> UNLOADED`. A healthy ACTIVE generation alone may
    acquire pins. ACTIVE and DRAINING may release matched pins. Retirement and
    unload require every generic, in-flight call, callback, destructor, and
-   static-root pin to be zero.
+   static-root pin to be zero. ACTIVE publication also inserts the generation
+   into one authority-owned, dynamically linked live manifest. That manifest
+   loans the generation's retained Program TargetPlan and freezes the complete
+   schema-v3 identity, including the program fingerprint, canonical module-set
+   fingerprint, and 16-byte GCI. It has no fixed module-count layout and is
+   removed atomically when ACTIVE begins draining or rolls back.
 4. Poisoning requires a nonzero stable diagnostic fingerprint and cannot be
    overwritten by a conflicting fingerprint. Rollback is an explicit failure
    branch: a pre-activation generation becomes RETIRED with zero pins, ACTIVE
@@ -88,7 +93,11 @@ authority.
    export entry.
 7. The independent verifier re-derives immutable plan/native identity, stable
    generation fingerprint, state/poison invariants, counter sums, per-kind and
-   global budgets. For every READY, ACTIVE, or DRAINING generation it separately
+   global budgets. It also independently walks the bounded live-manifest list:
+   every row must be ACTIVE, belong to the same authority, retain the same
+   Program TargetPlan, and match the generation's complete identity; ACTIVE
+   must occur exactly once and every other lifecycle state must occur zero
+   times. For every READY, ACTIVE, or DRAINING generation it separately
    reconstructs the ordinary sole-scalar or bounded program-graph eligibility
    without calling the production PREPARE helper and requires one exact
    published decoded cache. A graph cache hit binds the same retained TargetPlan
@@ -102,7 +111,10 @@ authority.
    in-flight pin prevents unload during reuse. UNLOAD destroys the cache before
    releasing the retained plan. Its transition model rejects identity mutation,
    skipped/repeated states, mismatched pins, illegal rollback, and revision
-   mutation.
+   mutation. Program-graph ACTIVATE invokes this independent verifier before
+   live publication, then rechecks the exact decoded cache while holding the
+   authority gate; a wrong GCI or edited/foreign plan remains READY and is never
+   published.
 8. The standalone public header and lifecycle/scalar-execution symbols, plus the
    internal production entry-cell implementation, are shipped by the Core
    component and link from `xray_vm` without compiler builders, encoders,
@@ -241,9 +253,9 @@ authority.
     deterministic ownership on every failure.
 
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
-anchor-sha256: src/runtime/xr_module_generation_internal.h 892b04cdd946296e3812a68147bc68e541848f22086c460494fc699f1871b5d9
-anchor-sha256: src/runtime/xr_module_generation.c c2beeac1f0f94f55fde6455458a86d68109cc7d097f4623f7e334e53f6177003
-anchor-sha256: src/runtime/xr_module_generation_verify.c 5f1e82e67d038c6d74e1473c98c8f6953e79514f8b998a8e8065d2b496a3c29a
+anchor-sha256: src/runtime/xr_module_generation_internal.h f6695aeb3c557d542bc78bd0858c5f39b6ffb7f037b383a2d550c1ec6b5678e2
+anchor-sha256: src/runtime/xr_module_generation.c 5f8d48759b9d366e2686137489b0384fb2fa0495ec87254daba22f77404fff5f
+anchor-sha256: src/runtime/xr_module_generation_verify.c 0cf15a45c4af1498d8d1f26f8bd078042fd499c4d3258e0ef4fbe64b97556156
 anchor-sha256: src/vm/xr_typed_dispatch.h acd1095b3a2d9e5607d007992b68b714d2e22fe394bfa8543611ea061ab40f43
 anchor-sha256: src/vm/xr_typed_dispatch.c 1fa2d59ce6df94d4d983c2b0fb7e3af48ad30a2dcceb7526bd147f57f52c714f
 anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0

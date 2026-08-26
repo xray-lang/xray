@@ -19,6 +19,12 @@
 typedef struct XrRuntimeEntryRegistry XrRuntimeEntryRegistry;
 typedef struct XrRuntimeDynamicEntryCache XrRuntimeDynamicEntryCache;
 
+typedef struct XrRuntimeGenerationLiveManifest {
+    const XrTargetPlan *program_target_plan;
+    XrModuleGenerationIdentity identity;
+    uint32_t active_generation_count;
+} XrRuntimeGenerationLiveManifest;
+
 typedef enum XrModuleGenerationMutation {
     XR_MODULE_GENERATION_MUTATION_VERIFY = 0,
     XR_MODULE_GENERATION_MUTATION_PREPARE,
@@ -38,7 +44,9 @@ struct XrRuntimeGenerationAuthority {
     XrRuntimeGenerationBudget budget;
     uint64_t next_generation;
     uint32_t live_generations;
+    uint32_t active_generation_count;
     uint32_t total_pins;
+    XrLoadedModuleGeneration *active_generations;
     XrRuntimeEntryRegistry *entry_registry;
     XrVmDynamicEntryLease *dynamic_entry_leases;
     uint32_t dynamic_entry_lease_count;
@@ -59,7 +67,16 @@ struct XrLoadedModuleGeneration {
     bool poisoned;
     bool rollback_requested;
     uint8_t poison_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
+    XrLoadedModuleGeneration *active_next;
+    XrTargetPlan *active_program_target_plan;
+    XrModuleGenerationIdentity active_identity;
+    bool active_manifest_published;
 };
+
+/* Internal-only inspection for the product-unreachable source-graph KAT. */
+XR_FUNC bool xr_runtime_generation_live_manifest_snapshot(
+    const XrLoadedModuleGeneration *generation,
+    XrRuntimeGenerationLiveManifest *manifest);
 
 XR_FUNC bool xr_module_generation_verify_transition(
     const XrModuleGenerationSnapshot *before,
