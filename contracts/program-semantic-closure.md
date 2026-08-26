@@ -204,8 +204,8 @@ projection defined below; they never imply TargetPlan admission on their own.
     C-emission binding from global TargetPlan rows to unique PSC-bound Xi nodes.
     For the exact two-module scalar graph, that single binding also freezes the
     complete C value and ABI rows for caller, callee, and module initializers,
-    and product CGen mechanically consumes it through native execution. It does
-    also grants the installed public `XrProgram` load/execute/unload facade backed
+    and product CGen mechanically consumes it through native execution. It also
+    grants the installed public `XrProgram` load/execute/unload facade backed
     by the same plan, live manifest, decoded cache, program fingerprint,
     module-set fingerprint, and GCI. It does not grant container, coroutine,
     another graph family, dynamic reload, concurrent unload, or general
