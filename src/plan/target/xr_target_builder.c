@@ -2519,6 +2519,9 @@ semantic_leaf_program_provenance(const XrSemanticPlan *plan) {
         provenance->program_schema != XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
         provenance->type_count != 2 || provenance->type_field_count != 2 ||
         provenance->function_count != 2 || provenance->call_count != 1 ||
+        provenance->module_count != 1 || provenance->dependency_count != 0 ||
+        provenance->program_module_row != 0 ||
+        provenance->program_dependency_binding_count != 0 ||
         provenance->reserved != 0 ||
         provenance->type_count != xr_semantic_plan_program_type_binding_count(plan) ||
         provenance->type_field_count != xr_semantic_plan_program_type_field_binding_count(plan) ||
@@ -14384,6 +14387,12 @@ static bool builder_new(const XrSemanticPlan *semantic_plan, XrTargetProfile *pr
         *out = NULL;
     if (!semantic_plan || !profile || !out)
         return fail(error, error_size, "XR_TARGET_1000", "target builder input is missing");
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(semantic_plan);
+    if (program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "graph SemanticPlan execution is outside TargetPlan coverage");
     if (dependency_count > 1024u ||
         dependency_count != xr_semantic_plan_dependency_count(semantic_plan))
         return fail(error, error_size, "XR_TARGET_1000", "semantic plan is not verified");

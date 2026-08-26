@@ -2262,7 +2262,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "978db8950e46c4bf32918c35d528bfec5efcbcea1082a949f4106f95f20ca913") == 0);
+                   "073036a9bc49290a6e30120eb6b21cca95dbf784dafd3e929b64f15d2ebd0524") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -3993,7 +3993,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=41:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=42:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&
@@ -4220,7 +4220,7 @@ static void test_channel_close_call_authority(void) {
 
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "6acb78434de3181109383602c1ced163b54c52427d5877225d1117f86a2e0e64") ==
+    REQUIRE(strcmp(call_hex, "8671a71b21b3590f7d4d9d3dab3d9e9f3ec082e44ad83db67ddd126855e65e6d") ==
             0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
@@ -4971,7 +4971,7 @@ static void test_direct_local_call_adapter_family(void) {
     REQUIRE(xr_fingerprint_equal(first->fingerprint, second->fingerprint));
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
-    REQUIRE(strcmp(call_hex, "416f91628d1cb9ad8b59e1162a9cdac802e898d620e6b70fd2c9f44616b56698") ==
+    REQUIRE(strcmp(call_hex, "44270c97b3263a218be4bd5ac9ff240225d040c5b5a2ea894d202cc83a7d5188") ==
             0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
@@ -5306,7 +5306,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
             plan->functions[tail_call->caller_function].coroutine_count == 0);
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
-    REQUIRE(strcmp(tail_hex, "bad1688f88d763ce2a6267677114ded3046d45c41bc7c1cd70e3a488919110a4") ==
+    REQUIRE(strcmp(tail_hex, "2fc0ee8807090c0d3e4386b46bce28db06547da286c69785c4462715b142873f") ==
             0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;

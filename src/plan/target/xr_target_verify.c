@@ -155,7 +155,9 @@ static bool verify_leaf_program_provenance(const XrSemanticPlan *semantic) {
            row->schema == XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION &&
            row->program_schema == XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION &&
            row->type_count == 2 && row->type_field_count == 2 && row->function_count == 2 &&
-           row->call_count == 1 && row->reserved == 0 &&
+           row->call_count == 1 && row->module_count == 1 && row->dependency_count == 0 &&
+           row->program_module_row == 0 && row->program_dependency_binding_count == 0 &&
+           row->reserved == 0 &&
            !fingerprint_is_zero(row->program_fingerprint) &&
            xr_stable_id_equal(row->generation_identity, generation) &&
            row->type_count == xr_semantic_plan_program_type_binding_count(semantic) &&
@@ -8646,6 +8648,12 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
     if (plan->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES)
         return report(error, error_size, "XR_TARGET_1001",
                       "TargetPlan family coverage is incomplete or unsupported");
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(plan->semantic_plan);
+    if (program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
+        return report(error, error_size, "XR_TARGET_1001",
+                      "graph SemanticPlan execution is outside TargetPlan coverage");
     char nested_error[512] = {0};
     bool semantic_verified =
         plan->semantic_dependency_count == 0

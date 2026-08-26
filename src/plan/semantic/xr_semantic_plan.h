@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 #define XR_SEMANTIC_INDEX_NONE UINT32_MAX
-#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(2)
+#define XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION UINT32_C(3)
 
 typedef struct XrSemanticPlan XrSemanticPlan;
 typedef struct XrOwnershipCertificate XrOwnershipCertificate;
@@ -561,10 +561,22 @@ typedef struct XrSemanticProgramProvenance {
     uint32_t type_field_count;
     uint32_t function_count;
     uint32_t call_count;
+    uint32_t module_count;
+    uint32_t dependency_count;
+    uint32_t program_module_row;
+    uint32_t program_dependency_binding_count;
     uint32_t reserved;
     XrFingerprint program_fingerprint;
     XrStableId generation_identity;
+    XrStableId program_module;
 } XrSemanticProgramProvenance;
+
+typedef struct XrSemanticProgramDependencyBinding {
+    XrStableId resolver_binding;
+    uint32_t program_row;
+    uint32_t semantic_dependency;
+    uint32_t reserved;
+} XrSemanticProgramDependencyBinding;
 
 typedef struct XrSemanticProgramTypeBinding {
     XrStableId program_type;
@@ -601,9 +613,11 @@ typedef struct XrSemanticProgramCallBinding {
     XrStableId callsite;
     XrStableId caller_program_function;
     XrStableId callee_program_function;
+    XrStableId resolver_binding;
     uint32_t operation;
     uint32_t program_row;
     uint32_t target_function;
+    uint32_t program_dependency;
     uint32_t reserved;
 } XrSemanticProgramCallBinding;
 
@@ -662,9 +676,12 @@ xr_semantic_plan_program_type_for_row(const XrSemanticPlan *plan, uint32_t progr
 XR_FUNC const XrSemanticProgramTypeBinding *
 xr_semantic_plan_program_type_for_semantic_type(const XrSemanticPlan *plan, uint32_t semantic_type);
 XR_FUNC size_t xr_semantic_plan_program_function_binding_count(const XrSemanticPlan *plan);
+XR_FUNC size_t xr_semantic_plan_program_dependency_binding_count(const XrSemanticPlan *plan);
 XR_FUNC size_t xr_semantic_plan_program_call_binding_count(const XrSemanticPlan *plan);
 XR_FUNC const XrSemanticProgramFunctionBinding *
 xr_semantic_plan_program_function_binding(const XrSemanticPlan *plan, uint32_t index);
+XR_FUNC const XrSemanticProgramDependencyBinding *
+xr_semantic_plan_program_dependency_binding(const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticProgramCallBinding *
 xr_semantic_plan_program_call_binding(const XrSemanticPlan *plan, uint32_t index);
 XR_FUNC const XrSemanticProgramFunctionBinding *

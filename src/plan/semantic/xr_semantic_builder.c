@@ -117,12 +117,15 @@ typedef struct XrSemanticBuildContext {
     const XrProgramSemanticClosure *program_closure;
     const XrScalarCallDecision *construction_decision;
     const XrTargetProfile *construction_target_profile;
+    uint32_t program_module_row;
     XrSemanticProgramTypeBinding *program_type_bindings;
     uint32_t program_type_binding_count;
     XrSemanticProgramTypeFieldBinding *program_type_field_bindings;
     uint32_t program_type_field_binding_count;
     XrSemanticProgramFunctionBinding *program_function_bindings;
     uint32_t program_function_binding_count;
+    XrSemanticProgramDependencyBinding *program_dependency_bindings;
+    uint32_t program_dependency_binding_count;
     XrSemanticProgramCallBinding *program_call_bindings;
     uint32_t program_call_binding_count;
     char *error;
@@ -185,14 +188,16 @@ static bool prepare_program_authority(XrSemanticBuildContext *ctx, const XiFunc 
         xr_program_semantic_closure_family(module->program_semantic_closure);
     bool scalar = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     bool aggregate = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
-    if ((!scalar && !aggregate) || (scalar && (!decision || !profile)) ||
-        (aggregate && (decision || profile)) ||
-        !xi_program_semantic_verify(module, scalar ? module->scalar_target_profile : NULL,
-                                    ctx->error, ctx->error_size))
+    bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    if ((!scalar && !aggregate && !graph) || (scalar && (!decision || !profile)) ||
+        ((aggregate || graph) && (decision || profile)) ||
+        !xi_program_semantic_verify_partition(
+            module, scalar ? module->scalar_target_profile : NULL, ctx->error, ctx->error_size))
         return fail(ctx, "XR_SEM_0019", "SemanticPlan construction family is inconsistent");
     ctx->program_closure = module->program_semantic_closure;
     ctx->construction_decision = scalar ? module->scalar_call_decision : NULL;
     ctx->construction_target_profile = scalar ? module->scalar_target_profile : NULL;
+    ctx->program_module_row = module->psc_module_index;
     return true;
 }
 
@@ -3495,6 +3500,17 @@ static bool append_call_target(XrSemanticBuildContext *ctx, const XiValue *value
     uint32_t before = ctx->plan->call_target_count;
     uint32_t caller = ctx->plan->operations[operation].function;
     bool program_bound = ctx->program_closure != NULL && value->psc_call_index != XI_PSC_ROW_NONE;
+    bool graph_program =
+        program_bound && xr_program_semantic_closure_family(ctx->program_closure) ==
+                             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    if (graph_program) {
+        if (value->op != XI_CALL || !append_source_export_call_target(ctx, value, operation) ||
+            ctx->plan->call_target_count != before + 1u ||
+            ctx->plan->call_targets[before].kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+            return fail(ctx, "XR_SEM_0019",
+                        "graph program call has no exact source-export target");
+        return true;
+    }
     if (!program_bound) {
         if (!append_source_export_call_target(ctx, value, operation))
             return false;
@@ -4904,6 +4920,8 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
         return true;
     uint32_t function_count = xr_program_semantic_closure_function_count(ctx->program_closure);
     uint32_t call_count = xr_program_semantic_closure_call_count(ctx->program_closure);
+    uint32_t dependency_count =
+        xr_program_semantic_closure_dependency_count(ctx->program_closure);
     uint32_t type_count = xr_program_semantic_closure_type_count(ctx->program_closure);
     uint32_t type_field_count = xr_program_semantic_closure_type_field_count(ctx->program_closure);
     ctx->program_type_bindings = type_count ? (XrSemanticProgramTypeBinding *) xr_calloc(
@@ -4917,6 +4935,11 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
         function_count ? (XrSemanticProgramFunctionBinding *) xr_malloc(
                              (size_t) function_count * sizeof(*ctx->program_function_bindings))
                        : NULL;
+    ctx->program_dependency_bindings =
+        dependency_count ? (XrSemanticProgramDependencyBinding *) xr_malloc(
+                               (size_t) dependency_count *
+                               sizeof(*ctx->program_dependency_bindings))
+                         : NULL;
     ctx->program_call_bindings =
         call_count ? (XrSemanticProgramCallBinding *) xr_malloc((size_t) call_count *
                                                                 sizeof(*ctx->program_call_bindings))
@@ -4924,6 +4947,7 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
     if ((type_count && !ctx->program_type_bindings) ||
         (type_field_count && !ctx->program_type_field_bindings) ||
         (function_count && !ctx->program_function_bindings) ||
+        (dependency_count && !ctx->program_dependency_bindings) ||
         (call_count && !ctx->program_call_bindings))
         return fail(ctx, "XR_EXEC_5003", "program authority row allocation failed");
     for (uint32_t program_row = 0; program_row < type_count; program_row++) {
@@ -5005,7 +5029,17 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                 .flags = row->flags,
             };
     }
-    if (ctx->program_function_binding_count != function_count)
+    const XrProgramSemanticModuleRecord *program_module =
+        xr_program_semantic_closure_module(ctx->program_closure, ctx->program_module_row);
+    uint32_t expected_local_functions = 0;
+    for (uint32_t row = 0; program_module && row < function_count; row++) {
+        const XrProgramSemanticFunctionRecord *function =
+            xr_program_semantic_closure_function(ctx->program_closure, row);
+        if (function && xr_stable_id_equal(function->module_identity,
+                                           program_module->module_identity))
+            expected_local_functions++;
+    }
+    if (!program_module || ctx->program_function_binding_count != expected_local_functions)
         return fail(ctx, "XR_SEM_0019", "program function binding table is incomplete");
     uint32_t operation = 0;
     for (uint32_t f = 0; f < ctx->function_count; f++) {
@@ -5031,24 +5065,90 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                     const XrProgramSemanticCallRecord *row = xr_program_semantic_closure_call(
                         ctx->program_closure, value->psc_call_index);
                     uint32_t target = XR_SEMANTIC_INDEX_NONE;
-                    if (!row || ctx->program_call_binding_count >= call_count ||
-                        !program_direct_local_callee(ctx, f, value, &target))
-                        return false;
+                    bool graph = xr_program_semantic_closure_family(ctx->program_closure) ==
+                                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+                    uint32_t program_dependency = XR_SEMANTIC_INDEX_NONE;
+                    XrStableId resolver = {{0}};
+                    if (!row || ctx->program_call_binding_count >= call_count)
+                        return fail(ctx, "XR_SEM_0019", "program call binding is incomplete");
+                    if (!graph) {
+                        if (!program_direct_local_callee(ctx, f, value, &target))
+                            return false;
+                    } else {
+                        const XiImportRef *ref = value->nargs > 0 && value->args
+                                                     ? resolve_source_import_callee(
+                                                           ctx, function, value->args[0])
+                                                     : NULL;
+                        const XrProgramSemanticDependencyRecord *dependency =
+                            ref ? xr_program_semantic_closure_dependency(
+                                      ctx->program_closure, ref->psc_dependency_index)
+                                : NULL;
+                        const XrSemanticCallTargetRecord *source_target = NULL;
+                        for (uint32_t t = 0; t < ctx->plan->call_target_count; t++) {
+                            const XrSemanticCallTargetRecord *candidate =
+                                &ctx->plan->call_targets[t];
+                            if (candidate->operation != operation ||
+                                candidate->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT)
+                                continue;
+                            if (source_target)
+                                return fail(ctx, "XR_SEM_0019",
+                                            "graph source-export target is ambiguous");
+                            source_target = candidate;
+                        }
+                        if (!ref || !dependency || !source_target ||
+                            source_target->dependency >= ctx->plan->dependency_count ||
+                            !xr_stable_id_equal(dependency->resolver_binding,
+                                                row->resolver_binding) ||
+                            !xr_stable_id_equal(ref->psc_resolver_binding,
+                                                row->resolver_binding) ||
+                            ctx->program_dependency_binding_count != 0)
+                            return fail(ctx, "XR_SEM_0019",
+                                        "graph program dependency join is incomplete");
+                        resolver = row->resolver_binding;
+                        program_dependency = ctx->program_dependency_binding_count;
+                        ctx->program_dependency_bindings
+                            [ctx->program_dependency_binding_count++] =
+                            (XrSemanticProgramDependencyBinding) {
+                                .resolver_binding = dependency->resolver_binding,
+                                .program_row = ref->psc_dependency_index,
+                                .semantic_dependency = source_target->dependency,
+                            };
+                    }
                     ctx->program_call_bindings[ctx->program_call_binding_count++] =
-                        (XrSemanticProgramCallBinding) {row->id,
-                                                        row->callsite_identity,
-                                                        row->caller_function,
-                                                        row->callee_function,
-                                                        operation,
-                                                        value->psc_call_index,
-                                                        target,
-                                                        0};
+                        (XrSemanticProgramCallBinding) {
+                            .program_call = row->id,
+                            .callsite = row->callsite_identity,
+                            .caller_program_function = row->caller_function,
+                            .callee_program_function = row->callee_function,
+                            .resolver_binding = resolver,
+                            .operation = operation,
+                            .program_row = value->psc_call_index,
+                            .target_function = target,
+                            .program_dependency = program_dependency,
+                        };
                 }
                 operation++;
             }
         }
     }
-    if (operation != ctx->plan->operation_count || ctx->program_call_binding_count != call_count)
+    uint32_t expected_local_calls = 0;
+    for (uint32_t row = 0; program_module && row < call_count; row++) {
+        const XrProgramSemanticCallRecord *call =
+            xr_program_semantic_closure_call(ctx->program_closure, row);
+        const XrProgramSemanticFunctionRecord *caller = NULL;
+        for (uint32_t f = 0; call && f < function_count; f++) {
+            const XrProgramSemanticFunctionRecord *candidate =
+                xr_program_semantic_closure_function(ctx->program_closure, f);
+            if (candidate && xr_stable_id_equal(candidate->id, call->caller_function))
+                caller = candidate;
+        }
+        if (caller && xr_stable_id_equal(caller->module_identity,
+                                         program_module->module_identity))
+            expected_local_calls++;
+    }
+    if (operation != ctx->plan->operation_count ||
+        ctx->program_call_binding_count != expected_local_calls ||
+        ctx->program_dependency_binding_count > dependency_count)
         return fail(ctx, "XR_SEM_0019", "program operation binding table is incomplete");
     if (xr_program_semantic_closure_family(ctx->program_closure) ==
         XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
@@ -5084,15 +5184,25 @@ static bool install_program_provenance(XrSemanticBuildContext *ctx) {
         .program_family = xr_program_semantic_closure_family(ctx->program_closure),
         .type_count = ctx->program_type_binding_count,
         .type_field_count = ctx->program_type_field_binding_count,
-        .function_count = ctx->program_function_binding_count,
-        .call_count = ctx->program_call_binding_count,
+        .function_count = xr_program_semantic_closure_function_count(ctx->program_closure),
+        .call_count = xr_program_semantic_closure_call_count(ctx->program_closure),
+        .module_count = xr_program_semantic_closure_module_count(ctx->program_closure),
+        .dependency_count = xr_program_semantic_closure_dependency_count(ctx->program_closure),
+        .program_module_row = ctx->program_module_row,
+        .program_dependency_binding_count = ctx->program_dependency_binding_count,
         .program_fingerprint = xr_program_semantic_closure_fingerprint(ctx->program_closure),
     };
+    const XrProgramSemanticModuleRecord *module =
+        xr_program_semantic_closure_module(ctx->program_closure, ctx->program_module_row);
+    if (!module)
+        return fail(ctx, "XR_SEM_0019", "program module provenance is incomplete");
+    provenance.program_module = module->module_identity;
     memcpy(provenance.generation_identity.bytes, generation.bytes, sizeof(generation.bytes));
     if (!xr_semantic_plan_set_program_provenance(
             ctx->plan, &provenance, ctx->program_type_bindings, ctx->program_type_binding_count,
             ctx->program_type_field_bindings, ctx->program_type_field_binding_count,
             ctx->program_function_bindings, ctx->program_function_binding_count,
+            ctx->program_dependency_bindings, ctx->program_dependency_binding_count,
             ctx->program_call_bindings, ctx->program_call_binding_count))
         return fail(ctx, "XR_EXEC_5003", "program provenance installation failed");
     return true;
@@ -5965,11 +6075,9 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
         goto failure;
     if (!xr_semantic_plan_freeze(ctx.plan, error, error_size))
         goto failure;
-    if (ctx.plan->dependency_count == 0
-            ? !xr_semantic_plan_verify(ctx.plan, error, error_size)
-            : !xr_semantic_plan_verify_module_set(
-                  ctx.plan, (const XrSemanticPlan *const *) ctx.plan->dependency_plans,
-                  ctx.plan->dependency_plan_count, error, error_size))
+    if (!xr_semantic_plan_verify_module_set(
+            ctx.plan, (const XrSemanticPlan *const *) ctx.plan->dependency_plans,
+            ctx.plan->dependency_plan_count, error, error_size))
         goto failure;
     if (ctx.program_closure &&
         !xi_program_semantic_plan_verify(root, ctx.plan, ctx.construction_target_profile, error,
@@ -5990,6 +6098,7 @@ static bool semantic_plan_build_with_dependencies(const XiFunc *root, XiModule *
     xr_free(ctx.program_type_bindings);
     xr_free(ctx.program_type_field_bindings);
     xr_free(ctx.program_function_bindings);
+    xr_free(ctx.program_dependency_bindings);
     xr_free(ctx.program_call_bindings);
     for (uint32_t i = 0; i < ctx.suspendability_count; i++)
         xr_free(ctx.suspendability[i].functions);
@@ -6005,6 +6114,7 @@ failure:
     xr_free(ctx.program_type_bindings);
     xr_free(ctx.program_type_field_bindings);
     xr_free(ctx.program_function_bindings);
+    xr_free(ctx.program_dependency_bindings);
     xr_free(ctx.program_call_bindings);
     for (uint32_t i = 0; i < ctx.suspendability_count; i++)
         xr_free(ctx.suspendability[i].functions);

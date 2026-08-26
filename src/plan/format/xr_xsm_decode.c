@@ -47,6 +47,7 @@ typedef struct XrXsmCounts {
     uint32_t program_types;
     uint32_t program_type_fields;
     uint32_t program_functions;
+    uint32_t program_dependencies;
     uint32_t program_calls;
 } XrXsmCounts;
 
@@ -200,6 +201,7 @@ static bool counts_fit_storage_budget(XrXsmCounts count, size_t *storage_bytes) 
     XR_COUNT_STORAGE(program_types, XrSemanticProgramTypeBinding);
     XR_COUNT_STORAGE(program_type_fields, XrSemanticProgramTypeFieldBinding);
     XR_COUNT_STORAGE(program_functions, XrSemanticProgramFunctionBinding);
+    XR_COUNT_STORAGE(program_dependencies, XrSemanticProgramDependencyBinding);
     XR_COUNT_STORAGE(program_calls, XrSemanticProgramCallBinding);
 #undef XR_COUNT_STORAGE
     if (storage_bytes)
@@ -250,9 +252,10 @@ static bool counts_fit_payload_minimum(XrXsmCounts count, size_t remaining) {
     XR_MINIMUM_PAYLOAD(program_types, 52u);
     XR_MINIMUM_PAYLOAD(program_type_fields, 48u);
     XR_MINIMUM_PAYLOAD(program_functions, 28u);
-    XR_MINIMUM_PAYLOAD(program_calls, 80u);
+    XR_MINIMUM_PAYLOAD(program_dependencies, 28u);
+    XR_MINIMUM_PAYLOAD(program_calls, 100u);
 #undef XR_MINIMUM_PAYLOAD
-    return minimum <= remaining && minimum <= SIZE_MAX - 80u && minimum + 80u <= remaining;
+    return minimum <= remaining && minimum <= SIZE_MAX - 112u && minimum + 112u <= remaining;
 }
 
 static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certificate,
@@ -290,6 +293,8 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
                    XrSemanticProgramTypeFieldBinding);
     XR_ALLOC_TABLE(program_function_bindings, count.program_functions,
                    XrSemanticProgramFunctionBinding);
+    XR_ALLOC_TABLE(program_dependency_bindings, count.program_dependencies,
+                   XrSemanticProgramDependencyBinding);
     XR_ALLOC_TABLE(program_call_bindings, count.program_calls, XrSemanticProgramCallBinding);
 #undef XR_ALLOC_TABLE
 #define XR_ALLOC_CERT(field, count_value, type)                                                    \
@@ -326,6 +331,7 @@ static bool allocate_tables(XrSemanticPlan *plan, XrOwnershipCertificate *certif
     plan->program_type_binding_count = count.program_types;
     plan->program_type_field_binding_count = count.program_type_fields;
     plan->program_function_binding_count = count.program_functions;
+    plan->program_dependency_binding_count = count.program_dependencies;
     plan->program_call_binding_count = count.program_calls;
     certificate->owner_count = certificate->owner_capacity = count.owners;
     certificate->event_count = certificate->event_capacity = count.events;
@@ -361,6 +367,7 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
     count->program_types = xr_xsm_take_u32(reader);
     count->program_type_fields = xr_xsm_take_u32(reader);
     count->program_functions = xr_xsm_take_u32(reader);
+    count->program_dependencies = xr_xsm_take_u32(reader);
     count->program_calls = xr_xsm_take_u32(reader);
     return !reader->failed && count->types <= 1000000u && count->source_classes <= 100000u &&
            count->source_methods <= 100000u && count->functions <= 100000u &&
@@ -381,6 +388,8 @@ static bool take_counts(XrXsmReader *reader, XrXsmCounts *count) {
            count->program_type_fields <= count->type_children &&
            count->program_functions <= XR_PROGRAM_SEMANTIC_CLOSURE_MAX_FUNCTIONS &&
            count->program_functions <= count->functions &&
+           count->program_dependencies <= XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES &&
+           count->program_dependencies <= count->dependencies &&
            count->program_calls <= XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS &&
            count->program_calls <= count->operations;
 }
@@ -412,11 +421,17 @@ static void decode_program_provenance(XrXsmReader *reader, XrSemanticPlan *plan)
     provenance->type_field_count = xr_xsm_take_u32(reader);
     provenance->function_count = xr_xsm_take_u32(reader);
     provenance->call_count = xr_xsm_take_u32(reader);
+    provenance->module_count = xr_xsm_take_u32(reader);
+    provenance->dependency_count = xr_xsm_take_u32(reader);
+    provenance->program_module_row = xr_xsm_take_u32(reader);
+    provenance->program_dependency_binding_count = xr_xsm_take_u32(reader);
     provenance->reserved = xr_xsm_take_u32(reader);
     xr_xsm_take_bytes(reader, provenance->program_fingerprint.bytes,
                       sizeof(provenance->program_fingerprint.bytes));
     xr_xsm_take_bytes(reader, provenance->generation_identity.bytes,
                       sizeof(provenance->generation_identity.bytes));
+    xr_xsm_take_bytes(reader, provenance->program_module.bytes,
+                      sizeof(provenance->program_module.bytes));
     for (uint32_t i = 0; i < plan->program_type_binding_count; i++) {
         XrSemanticProgramTypeBinding *binding = &plan->program_type_bindings[i];
         xr_xsm_take_bytes(reader, binding->program_type.bytes, sizeof(binding->program_type.bytes));
@@ -451,6 +466,14 @@ static void decode_program_provenance(XrXsmReader *reader, XrSemanticPlan *plan)
         binding->flags = xr_xsm_take_u8(reader);
         xr_xsm_take_bytes(reader, binding->reserved, sizeof(binding->reserved));
     }
+    for (uint32_t i = 0; i < plan->program_dependency_binding_count; i++) {
+        XrSemanticProgramDependencyBinding *binding = &plan->program_dependency_bindings[i];
+        xr_xsm_take_bytes(reader, binding->resolver_binding.bytes,
+                          sizeof(binding->resolver_binding.bytes));
+        binding->program_row = xr_xsm_take_u32(reader);
+        binding->semantic_dependency = xr_xsm_take_u32(reader);
+        binding->reserved = xr_xsm_take_u32(reader);
+    }
     for (uint32_t i = 0; i < plan->program_call_binding_count; i++) {
         XrSemanticProgramCallBinding *binding = &plan->program_call_bindings[i];
         xr_xsm_take_bytes(reader, binding->program_call.bytes, sizeof(binding->program_call.bytes));
@@ -459,9 +482,12 @@ static void decode_program_provenance(XrXsmReader *reader, XrSemanticPlan *plan)
                           sizeof(binding->caller_program_function.bytes));
         xr_xsm_take_bytes(reader, binding->callee_program_function.bytes,
                           sizeof(binding->callee_program_function.bytes));
+        xr_xsm_take_bytes(reader, binding->resolver_binding.bytes,
+                          sizeof(binding->resolver_binding.bytes));
         binding->operation = xr_xsm_take_u32(reader);
         binding->program_row = xr_xsm_take_u32(reader);
         binding->target_function = xr_xsm_take_u32(reader);
+        binding->program_dependency = xr_xsm_take_u32(reader);
         binding->reserved = xr_xsm_take_u32(reader);
     }
 }
@@ -928,9 +954,7 @@ static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *
         xr_semantic_plan_free(plan);
         return false;
     }
-    if (plan->dependency_count != 0 &&
-        (!module_set || !xr_semantic_plan_verify_module_set(plan, dependencies, dependency_count,
-                                                            error, error_size))) {
+    if (plan->dependency_count != 0 && !module_set) {
         if (!module_set)
             report(error, error_size, "XR_ARTIFACT_2004",
                    "dependency-bearing XSM requires exact module-set authority");
@@ -941,6 +965,11 @@ static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *
         xr_semantic_plan_free(plan);
         return report(error, error_size, "XR_ARTIFACT_2004",
                       "XSM module-set dependency coverage is not exact");
+    }
+    if (!xr_semantic_plan_verify_module_set(plan, dependencies, dependency_count, error,
+                                            error_size)) {
+        xr_semantic_plan_free(plan);
+        return false;
     }
     plan->verified = true;
     plan->module_set_verified = plan->dependency_count != 0;

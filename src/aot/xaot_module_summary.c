@@ -524,7 +524,9 @@ static const XrSemanticPlan *module_semantic_plan(const XiModule *module) {
 }
 
 static const XrProgramSemanticModuleRecord *program_module_for_spec(
-    const XrProgramSemanticClosure *closure, const XrModuleSpec *spec) {
+    const XrProgramSemanticClosure *closure, const XrModuleSpec *spec, uint32_t *row_out) {
+    if (row_out)
+        *row_out = UINT32_MAX;
     XrProgramSemanticModuleInput source;
     if (!closure || !spec || !spec->canonical ||
         !xr_source_semantic_module_authority(spec->canonical,
@@ -546,6 +548,8 @@ static const XrProgramSemanticModuleRecord *program_module_for_spec(
          * verified PSC family owns its exact empty or typed export fingerprint;
          * the complete PSC/GCI keys every XSM below. */
         match = candidate;
+        if (row_out)
+            *row_out = row;
     }
     return match;
 }
@@ -560,11 +564,22 @@ static bool add_module_node(XaotModuleSummaryBuild *build, int topo_index,
             xr_program_semantic_closure_fingerprint(build->program_closure);
         XrGenerationClosureId generation =
             xr_program_semantic_closure_generation_id(build->program_closure);
-        if (!program_module_for_spec(build->program_closure, spec) ||
-            (program && program->schema != 0 &&
-             (!xr_fingerprint_equal(program->program_fingerprint, product) ||
-              memcmp(program->generation_identity.bytes, generation.bytes,
-                     sizeof(generation.bytes)) != 0))) {
+        uint32_t program_module_row = UINT32_MAX;
+        const XrProgramSemanticModuleRecord *program_module = program_module_for_spec(
+            build->program_closure, spec, &program_module_row);
+        if (!program_module || !program ||
+            program->schema != XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+            program->program_schema != xr_program_semantic_closure_schema(build->program_closure) ||
+            program->program_family != xr_program_semantic_closure_family(build->program_closure) ||
+            program->module_count !=
+                xr_program_semantic_closure_module_count(build->program_closure) ||
+            program->dependency_count !=
+                xr_program_semantic_closure_dependency_count(build->program_closure) ||
+            program->program_module_row != program_module_row ||
+            !xr_stable_id_equal(program->program_module, program_module->module_identity) ||
+            !xr_fingerprint_equal(program->program_fingerprint, product) ||
+            memcmp(program->generation_identity.bytes, generation.bytes,
+                   sizeof(generation.bytes)) != 0) {
             fprintf(stderr, "Error: product program authority does not bind module '%s'\n",
                     spec && spec->canonical ? spec->canonical : "<unknown>");
             return false;

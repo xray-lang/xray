@@ -874,6 +874,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, profile, 0,
                                                  error, sizeof(error)));
     ASSERT_NULL(closure);
@@ -917,8 +918,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
 
     dce_and_mark_tree_optimized(root);
-    ASSERT_TRUE(
-        xi_module_set_identity(root->module, "memory-module-v1:id=26:xi-scalar-semantic-plan-v1"));
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     XrSemanticPlan *semantic = NULL;
     bool semantic_built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
     ASSERT_TRUE(semantic_built);
@@ -1300,6 +1300,7 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     char error[512] = {0};
     ASSERT_TRUE(
         xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
@@ -1308,8 +1309,7 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
 
     prepare_leaf_tree_for_semantic_plan(root);
-    ASSERT_TRUE(xi_module_set_identity(
-        root->module, "memory-module-v1:id=35:xi-leaf-aggregate-shape-mismatch-v1"));
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     XrSemanticPlan *semantic = NULL;
     ASSERT_MSG(xr_semantic_plan_build(root, &semantic, error, sizeof(error)), error);
     ASSERT_NOT_NULL(semantic);
@@ -1368,6 +1368,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     char error[512] = {0};
 
     ScalarFixture foreign_authority_fixture;
@@ -1626,8 +1627,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
 
     prepare_leaf_tree_for_semantic_plan(root);
-    ASSERT_TRUE(
-        xi_module_set_identity(root->module, "memory-module-v1:id=27:xi-program-semantic-leaf-v1"));
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     XrType *saved_callee_return_type = callee->return_type;
     XrType hostile_scalar_carrier = *saved_callee_return_type;
     hostile_scalar_carrier.scalar_rep = XR_NATIVE_I64;
@@ -1746,8 +1746,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_TRUE(xi_module_set_identity(root->module, "memory-module-v1:id=7:hostile"));
     ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
     ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, NULL, error, sizeof(error)));
-    ASSERT_TRUE(
-        xi_module_set_identity(root->module, "memory-module-v1:id=27:xi-program-semantic-leaf-v1"));
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, NULL, error, sizeof(error)));
 
     XrFingerprint original = xr_semantic_plan_fingerprint(semantic);

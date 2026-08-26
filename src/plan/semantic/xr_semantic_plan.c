@@ -454,7 +454,7 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_string(&ctx, constant->string);
     }
     if (plan->program_provenance.schema != 0) {
-        static const uint8_t provenance_domain[] = "xray-semantic-program-provenance-v2";
+        static const uint8_t provenance_domain[] = "xray-semantic-program-provenance-v3";
         const XrSemanticProgramProvenance *provenance = &plan->program_provenance;
         hash_bytes(&ctx, provenance_domain, sizeof(provenance_domain) - 1);
         hash_u64(&ctx, provenance->schema);
@@ -464,11 +464,16 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
         hash_u64(&ctx, provenance->type_field_count);
         hash_u64(&ctx, provenance->function_count);
         hash_u64(&ctx, provenance->call_count);
+        hash_u64(&ctx, provenance->module_count);
+        hash_u64(&ctx, provenance->dependency_count);
+        hash_u64(&ctx, provenance->program_module_row);
+        hash_u64(&ctx, provenance->program_dependency_binding_count);
         hash_u64(&ctx, provenance->reserved);
         hash_bytes(&ctx, provenance->program_fingerprint.bytes,
                    sizeof(provenance->program_fingerprint.bytes));
         hash_bytes(&ctx, provenance->generation_identity.bytes,
                    sizeof(provenance->generation_identity.bytes));
+        hash_bytes(&ctx, provenance->program_module.bytes, sizeof(provenance->program_module.bytes));
         hash_u64(&ctx, plan->program_type_binding_count);
         for (uint32_t i = 0; i < plan->program_type_binding_count; i++) {
             const XrSemanticProgramTypeBinding *binding = &plan->program_type_bindings[i];
@@ -507,6 +512,16 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
             hash_u64(&ctx, binding->flags);
             hash_bytes(&ctx, binding->reserved, sizeof(binding->reserved));
         }
+        hash_u64(&ctx, plan->program_dependency_binding_count);
+        for (uint32_t i = 0; i < plan->program_dependency_binding_count; i++) {
+            const XrSemanticProgramDependencyBinding *binding =
+                &plan->program_dependency_bindings[i];
+            hash_bytes(&ctx, binding->resolver_binding.bytes,
+                       sizeof(binding->resolver_binding.bytes));
+            hash_u64(&ctx, binding->program_row);
+            hash_u64(&ctx, binding->semantic_dependency);
+            hash_u64(&ctx, binding->reserved);
+        }
         hash_u64(&ctx, plan->program_call_binding_count);
         for (uint32_t i = 0; i < plan->program_call_binding_count; i++) {
             const XrSemanticProgramCallBinding *binding = &plan->program_call_bindings[i];
@@ -516,9 +531,12 @@ void xr_semantic_plan_compute_fingerprint(const XrSemanticPlan *plan, XrFingerpr
                        sizeof(binding->caller_program_function.bytes));
             hash_bytes(&ctx, binding->callee_program_function.bytes,
                        sizeof(binding->callee_program_function.bytes));
+            hash_bytes(&ctx, binding->resolver_binding.bytes,
+                       sizeof(binding->resolver_binding.bytes));
             hash_u64(&ctx, binding->operation);
             hash_u64(&ctx, binding->program_row);
             hash_u64(&ctx, binding->target_function);
+            hash_u64(&ctx, binding->program_dependency);
             hash_u64(&ctx, binding->reserved);
         }
     }
@@ -623,21 +641,25 @@ bool xr_semantic_plan_set_program_provenance(
     const XrSemanticProgramTypeBinding *type_bindings, uint32_t type_binding_count,
     const XrSemanticProgramTypeFieldBinding *type_field_bindings, uint32_t type_field_binding_count,
     const XrSemanticProgramFunctionBinding *function_bindings, uint32_t function_binding_count,
+    const XrSemanticProgramDependencyBinding *dependency_bindings,
+    uint32_t dependency_binding_count,
     const XrSemanticProgramCallBinding *call_bindings, uint32_t call_binding_count) {
     if (!plan || plan->frozen || !provenance ||
         provenance->schema != XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
         provenance->program_schema != XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
         provenance->type_count != type_binding_count ||
         provenance->type_field_count != type_field_binding_count ||
-        provenance->function_count != function_binding_count ||
-        provenance->call_count != call_binding_count || provenance->reserved != 0 ||
+        provenance->program_dependency_binding_count != dependency_binding_count ||
+        provenance->reserved != 0 ||
         type_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPES ||
         type_field_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_TYPE_FIELDS ||
         function_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_FUNCTIONS ||
+        dependency_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES ||
         call_binding_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS ||
         type_binding_count > plan->type_count ||
         type_field_binding_count > plan->type_child_count ||
         function_binding_count > plan->function_count ||
+        dependency_binding_count > plan->dependency_count ||
         call_binding_count > plan->operation_count ||
         (type_binding_count &&
          sizeof(XrSemanticProgramTypeBinding) > SIZE_MAX / type_binding_count) ||
@@ -645,15 +667,19 @@ bool xr_semantic_plan_set_program_provenance(
          sizeof(XrSemanticProgramTypeFieldBinding) > SIZE_MAX / type_field_binding_count) ||
         (function_binding_count &&
          sizeof(XrSemanticProgramFunctionBinding) > SIZE_MAX / function_binding_count) ||
+        (dependency_binding_count &&
+         sizeof(XrSemanticProgramDependencyBinding) > SIZE_MAX / dependency_binding_count) ||
         (call_binding_count &&
          sizeof(XrSemanticProgramCallBinding) > SIZE_MAX / call_binding_count) ||
         (type_binding_count != 0 && !type_bindings) ||
         (type_field_binding_count != 0 && !type_field_bindings) ||
         (function_binding_count != 0 && !function_bindings) ||
+        (dependency_binding_count != 0 && !dependency_bindings) ||
         (call_binding_count != 0 && !call_bindings) || plan->program_provenance.schema != 0 ||
         plan->program_type_bindings || plan->program_type_binding_count != 0 ||
         plan->program_type_field_bindings || plan->program_type_field_binding_count != 0 ||
         plan->program_function_bindings || plan->program_function_binding_count != 0 ||
+        plan->program_dependency_bindings || plan->program_dependency_binding_count != 0 ||
         plan->program_call_bindings || plan->program_call_binding_count != 0)
         return false;
     XrSemanticProgramTypeBinding *type_copy =
@@ -672,11 +698,18 @@ bool xr_semantic_plan_set_program_provenance(
         call_binding_count ? (XrSemanticProgramCallBinding *) xr_malloc(
                                  (size_t) call_binding_count * sizeof(*call_copy))
                            : NULL;
+    XrSemanticProgramDependencyBinding *dependency_copy =
+        dependency_binding_count ? (XrSemanticProgramDependencyBinding *) xr_malloc(
+                                       (size_t) dependency_binding_count *
+                                       sizeof(*dependency_copy))
+                                 : NULL;
     if ((type_binding_count && !type_copy) || (type_field_binding_count && !type_field_copy) ||
-        (function_binding_count && !function_copy) || (call_binding_count && !call_copy)) {
+        (function_binding_count && !function_copy) ||
+        (dependency_binding_count && !dependency_copy) || (call_binding_count && !call_copy)) {
         xr_free(type_copy);
         xr_free(type_field_copy);
         xr_free(function_copy);
+        xr_free(dependency_copy);
         xr_free(call_copy);
         return false;
     }
@@ -688,6 +721,9 @@ bool xr_semantic_plan_set_program_provenance(
     if (function_binding_count)
         memcpy(function_copy, function_bindings,
                (size_t) function_binding_count * sizeof(*function_copy));
+    if (dependency_binding_count)
+        memcpy(dependency_copy, dependency_bindings,
+               (size_t) dependency_binding_count * sizeof(*dependency_copy));
     if (call_binding_count)
         memcpy(call_copy, call_bindings, (size_t) call_binding_count * sizeof(*call_copy));
     plan->program_provenance = *provenance;
@@ -697,6 +733,8 @@ bool xr_semantic_plan_set_program_provenance(
     plan->program_type_field_binding_count = type_field_binding_count;
     plan->program_function_bindings = function_copy;
     plan->program_function_binding_count = function_binding_count;
+    plan->program_dependency_bindings = dependency_copy;
+    plan->program_dependency_binding_count = dependency_binding_count;
     plan->program_call_bindings = call_copy;
     plan->program_call_binding_count = call_binding_count;
     return true;
@@ -774,6 +812,7 @@ void xr_semantic_plan_free(XrSemanticPlan *plan) {
     xr_free(plan->program_type_bindings);
     xr_free(plan->program_type_field_bindings);
     xr_free(plan->program_function_bindings);
+    xr_free(plan->program_dependency_bindings);
     xr_free(plan->program_call_bindings);
     xr_ownership_certificate_free(plan->ownership);
     xr_free(plan);
@@ -830,6 +869,8 @@ XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_type_field_binding_count,
                        program_type_field_binding_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_function_binding_count,
                        program_function_binding_count)
+XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_dependency_binding_count,
+                       program_dependency_binding_count)
 XR_PLAN_COUNT_ACCESSOR(xr_semantic_plan_program_call_binding_count, program_call_binding_count)
 #undef XR_PLAN_COUNT_ACCESSOR
 
@@ -867,6 +908,9 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_type_field_binding,
                         program_type_field_binding_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_function_binding, XrSemanticProgramFunctionBinding,
                         program_function_bindings, program_function_binding_count)
+XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_dependency_binding,
+                        XrSemanticProgramDependencyBinding, program_dependency_bindings,
+                        program_dependency_binding_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_call_binding, XrSemanticProgramCallBinding,
                         program_call_bindings, program_call_binding_count)
 #undef XR_PLAN_RECORD_ACCESSOR

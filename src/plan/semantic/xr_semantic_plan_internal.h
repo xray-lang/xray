@@ -101,6 +101,8 @@ struct XrSemanticPlan {
     uint32_t program_type_field_binding_count;
     XrSemanticProgramFunctionBinding *program_function_bindings;
     uint32_t program_function_binding_count;
+    XrSemanticProgramDependencyBinding *program_dependency_bindings;
+    uint32_t program_dependency_binding_count;
     XrSemanticProgramCallBinding *program_call_bindings;
     uint32_t program_call_binding_count;
 };
@@ -118,6 +120,8 @@ XR_FUNC bool xr_semantic_plan_set_program_provenance(
     const XrSemanticProgramTypeBinding *type_bindings, uint32_t type_binding_count,
     const XrSemanticProgramTypeFieldBinding *type_field_bindings, uint32_t type_field_binding_count,
     const XrSemanticProgramFunctionBinding *function_bindings, uint32_t function_binding_count,
+    const XrSemanticProgramDependencyBinding *dependency_bindings,
+    uint32_t dependency_binding_count,
     const XrSemanticProgramCallBinding *call_bindings, uint32_t call_binding_count);
 
 #endif  // XR_SEMANTIC_PLAN_INTERNAL_H

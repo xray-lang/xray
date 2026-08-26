@@ -40,6 +40,7 @@
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_program_semantic.h"
+#include "../ir/xi_program_semantic_plan.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
 #include "xi_cgen_verify_output.h"
@@ -2457,6 +2458,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         /* Compile using the shared analyzer (has cross-module type info) */
         cfg.source_file = spec->source_path;
         cfg.module_identity = spec->canonical;
+        cfg.module_name = mod_names[ti];
         cfg.global_evidence_module_id = (uint32_t) (ti + 1);
         /* Topological order means modules[0..ti-1] (every dependency) are
          * already compiled, so the pipeline can resolve this module's import
@@ -2481,11 +2483,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
 
-    if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
-                                       source_program_closure, options,
-                                       evidence_cache_verbose, &result->module_summary_cache))
-        goto fail_free_ir;
-
     /* Xi values and AOT plans retain pointers into the analyzer-owned type
      * pool. Keep that pool alive through import resolution, prepare, verify,
      * and C emission; releasing it here turns non-singleton types into dangling
@@ -2505,7 +2502,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                                             : "incomplete resolved module-set authority");
             goto fail_free_ir;
         }
+        if (!xi_program_semantic_plan_verify_module_set(
+                modules, (uint32_t) nmodules, (uint32_t) entry_index,
+                graph_semantic_error, sizeof(graph_semantic_error))) {
+            fprintf(stderr, "Error: SemanticPlan graph PSC verification failed: %s\n",
+                    graph_semantic_error[0] ? graph_semantic_error
+                                            : "incomplete resolved module-set authority");
+            goto fail_free_ir;
+        }
     }
+    if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
+                                       source_program_closure, options,
+                                       evidence_cache_verbose, &result->module_summary_cache))
+        goto fail_free_ir;
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
 

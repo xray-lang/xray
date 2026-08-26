@@ -22,6 +22,9 @@ struct XrTargetProfile;
 XR_FUNC bool xi_program_semantic_plan_verify(const XiFunc *root, const XrSemanticPlan *plan,
                                              const struct XrTargetProfile *target_profile,
                                              char *error, size_t error_size);
+XR_FUNC bool xi_program_semantic_plan_verify_module_set(
+    struct XiModule *const *modules, uint32_t module_count, uint32_t entry_index, char *error,
+    size_t error_size);
 
 /* Snapshot-safe leaf authority join for post-pipeline consumers.  The semantic
  * snapshot intentionally removes analyzer lookup tables, so this verifier uses

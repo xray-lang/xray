@@ -585,6 +585,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_tagged_boundary();
     cfg.module_identity = NULL;
+    cfg.module_name = NULL;
     return cfg;
 }
 
@@ -602,6 +603,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_emit = false;
     cfg.run_canonicalize = true;
     cfg.module_identity = NULL;
+    cfg.module_name = NULL;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.rep_policy = xi_rep_policy_native_boundary();
@@ -1082,6 +1084,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_func(struct AstNode *func_node,
         xi_set_source_file_recursive(ir, cfg->source_file);
     if (ir && ir->module) {
         ir->module->path = cfg->source_file;
+        ir->module->name = cfg->module_name;
         if (!xi_module_set_identity(ir->module, cfg->module_identity)) {
             xi_func_free(ir);
             memset(&gate, 0, sizeof(gate));
@@ -1151,7 +1154,8 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     const XrProgramSemanticClosure *published =
         xa_typed_program_program_semantic_closure(typed.program);
     if (cfg->program_semantic_closure) {
-        if (xa_typed_program_scalar_authority(typed.program) || published ||
+        if (!cfg->module_name || !cfg->module_name[0] ||
+            xa_typed_program_scalar_authority(typed.program) || published ||
             xr_program_semantic_closure_family(cfg->program_semantic_closure) !=
                 XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
             !xr_program_semantic_closure_verify(cfg->program_semantic_closure, scalar_error,
@@ -1232,6 +1236,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
         xi_set_source_file_recursive(ir, cfg->source_file);
     if (ir && ir->module) {
         ir->module->path = cfg->source_file;
+        ir->module->name = cfg->module_name;
         if (!xi_module_set_identity(ir->module, cfg->module_identity)) {
             xi_func_free(ir);
             ir = NULL;

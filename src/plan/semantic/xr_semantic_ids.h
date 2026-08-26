@@ -17,7 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(41)
+#define XR_SEMANTIC_SCHEMA_VERSION UINT32_C(42)
 
 XR_FUNC bool xr_stable_id_from_key(const char *canonical_key, XrStableId *id,
                                    XrFingerprint *key_digest);

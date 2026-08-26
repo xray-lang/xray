@@ -631,6 +631,9 @@ static bool instruction_semantic_is_leaf_program(const XrSemanticPlan *semantic)
            provenance->program_schema == XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION &&
            provenance->type_count == 2 && provenance->type_field_count == 2 &&
            provenance->function_count == 2 && provenance->call_count == 1 &&
+           provenance->module_count == 1 && provenance->dependency_count == 0 &&
+           provenance->program_module_row == 0 &&
+           provenance->program_dependency_binding_count == 0 &&
            provenance->reserved == 0 &&
            xr_semantic_plan_program_type_binding_count(semantic) == 2 &&
            xr_semantic_plan_program_type_field_binding_count(semantic) == 2 &&

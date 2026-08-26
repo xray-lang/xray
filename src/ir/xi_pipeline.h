@@ -124,6 +124,7 @@ typedef struct XiPipelineConfig {
                               * Default: false (script-mode shared array path). */
     const char *source_file; /* Source path propagated to emitted XrProto debug info. */
     const char *module_identity; /* Durable identity; never a physical source path. */
+    const char *module_name; /* Stable C-safe module name installed before plan construction. */
     XiRepPolicy rep_policy;  /* policy for representation boundary insertion */
     XiOptDisableMask disabled_opt_passes;
     bool preserve_wide_vector_boundaries; /* keep target-specific wide SIMD behind call edges */
