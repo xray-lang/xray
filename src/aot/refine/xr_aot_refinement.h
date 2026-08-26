@@ -21,7 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(4)
+#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(5)
 #define XR_AOT_REFINEMENT_MAX_RECORDS UINT32_C(1048576)
 
 typedef enum XrAotInvariant {
@@ -135,12 +135,14 @@ typedef struct XrAotDirectCallRequest {
 } XrAotDirectCallRequest;
 
 /* A statically bound direct call, re-derived from the verified TargetPlan and
- * its SemanticPlan rather than copied from whatever proposed the binding.
- * A record is only APPLIED when the callee identity is closed and the
- * parameter, return, error, ownership, environment and generation mappings
- * are each discharged against the callee's semantic contract. */
+ * the semantic module that owns each global function rather than copied from
+ * whatever proposed the binding. A record is only APPLIED when the exact
+ * global call instruction, caller/callee symbol identities, parameter,
+ * return, error, ownership, environment and generation mappings are each
+ * discharged against their owning semantic contracts. */
 typedef struct XrAotDirectCallRecord {
     uint32_t target_call_index;
+    uint32_t target_instruction;
     uint32_t caller_function;
     uint32_t callee_function;
     uint32_t semantic_call_target;
@@ -163,6 +165,7 @@ typedef struct XrAotDirectCallRecord {
     uint8_t semantic_target_kind;
     uint8_t environment_required;
     uint8_t generation_required;
+    XrStableId caller_identity;
     XrStableId callee_identity;
     XrStableId operation_id;
     XrFingerprint argument_map_fingerprint;
@@ -297,9 +300,9 @@ XR_FUNC bool xr_aot_refinement_try_representation_adapter(
     XrAotRefinementDiagnostic *diag);
 /* Production entry point: record one direct-call transformation per call row
  * of the verified TargetPlan, then freeze and independently verify the plan.
- * Rows whose binding cannot be proved are recorded as refusals with a stable
- * diagnostic, which keeps the baseline TargetPlan lowering legal; only a
- * checker-detected inconsistency makes this fail. */
+ * Non-program rows whose binding cannot be proved are recorded as refusals
+ * with a stable diagnostic. PROGRAM_DIRECT is already a static program-graph
+ * commitment, so it must produce one APPLIED global binding or fail closed. */
 XR_FUNC bool xr_aot_refinement_direct_call_authority_build(
     const XrTargetPlan *target_plan, uint32_t pass_id,
     XrAotRefinementPlan **out_plan, XrAotRefinementDiagnostic *diag);

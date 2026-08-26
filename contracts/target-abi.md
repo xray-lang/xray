@@ -418,12 +418,20 @@ module set, with global function, slot, representation, instruction, call, and
 argument rows plus pointer-free module partitions. Its only cross-partition ABI
 edge is the exact trivial signed-`i64` `PROGRAM_DIRECT` call and
 `CALL_DIRECT_I64` instruction; caller and callee slots and representations are
-rows of the same plan. AOT must not construct `target_plans[]`, select authority
-by module name, translate through legacy `XaotFuncAbi`, or join fingerprints
-from separate plans. The current product therefore verifies this program plan
-and fails closed before per-module TargetPlan preparation or C emission. No
-cross-module native ABI claim exists until AOT consumes partition views of that
-same plan end to end; VM must use the same authority for parity.
+rows of the same plan. The schema-5 AOT direct-call refinement now consumes that
+single plan as lower translation authority: it resolves both global function
+rows through their owning semantic partitions, binds the stable entry and
+producer program-function identities, and records the unique global
+`CALL_DIRECT_I64` row. Its verifier independently reconstructs those joins from
+the same plan. A `PROGRAM_DIRECT` row must yield exactly one applied binding or
+the consumer fails; there is no refused, legacy, or per-module executable path.
+AOT must not construct `target_plans[]`, select authority by module name,
+translate through legacy `XaotFuncAbi`, or join fingerprints from separate
+plans. The current source product still fails closed before per-module
+TargetPlan preparation or C emission. This lower binding alone grants no
+cross-module native ABI or binary claim; the remaining emitter and product
+integration must consume the same global authority end to end, and VM must use
+the same plan for parity.
 
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
 function is identified through its owning module's frozen PSC v5 row:

@@ -60,11 +60,21 @@ producer plan, or expose the producer as a second root. Cold execution repeats
 independent TargetPlan verification; warm execution requires an exact decoded
 cache retaining that same plan and fingerprint.
 
-The graph XTP route preserves the same executable VM authority. Schema 48
-appends exact graph and partition sections, mutually excludes ordinary and
-graph directory shapes, binds the header semantic fingerprint to the full
-canonical module set, and materializes only through that set plus the exact
-target profile.
+The AOT direct-call refinement is the first lower consumer of this graph
+authority. Schema 5 resolves the caller and callee global function rows through
+their owning semantic partitions, records their stable program-function symbol
+identities, and binds the unique global `CALL_DIRECT_I64` instruction to the
+`PROGRAM_DIRECT` call. Freeze and independent verification re-derive those
+facts from the same TargetPlan. A committed program-direct row cannot become a
+refusal, legacy resolution, or per-module executable plan: missing or
+contradictory evidence fails the consumer. This is lower translation authority,
+not C emission or native execution authority.
+
+The graph XTP route preserves the same executable VM authority and AOT lower
+authority. Schema 48 appends exact graph and partition sections, mutually
+excludes ordinary and graph directory shapes, binds the header semantic
+fingerprint to the full canonical module set, and materializes only through that
+set plus the exact target profile.
 `MODULE_PARTITIONS` is a fixed 208-byte row format with at most 256 rows;
 `PROGRAM_GRAPHS` is a fixed 340-byte row format with at most one row. Round-trip
 is byte-identical, while wrong count/order, duplicate/missing modules, re-signed
@@ -662,8 +672,10 @@ Evidence:
   and a `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge, rejects independently mutated
   or re-signed inner authority, executes its graph-owned entry through both VM
   providers in cold and exact-cache modes, rejects the producer as a second
-  root, round-trips and executes graph XTP byte-identically, and keeps the
-  ordinary runtime loader fail closed.
+  root, round-trips and executes graph XTP byte-identically, derives one
+  independently verified AOT lower binding from the global function, symbol,
+  call, argument, and instruction rows, rejects altered binding facts, and keeps
+  the ordinary runtime loader fail closed.
 - `run_module_summary_determinism.py` proves cold, warm, dependency-edit, and
   dependency-revert products reach a verified program TargetPlan before cache
   publication, then stop at the explicit same-plan VM/AOT execution fence and
@@ -698,8 +710,8 @@ anchor-sha256: tests/unit/vm/test_typed_dispatch.c 3556b4e30fe1464e82b1fd8c4a23a
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: tests/unit/plan/test_xtp_format.c e994e527df3931be8ad94a395345f8f11d34805cd4cfe603193d1c4bfa2c5c8b
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f5696c866f372448e15798d3ba16c61861940e357507340c15b0bf0c353fdeb1
 anchor-sha256: tests/aot/run_module_summary_determinism.py f354af59bb3884145691f0ebe0319adc9dfe2b3c5f9438e2de4f4c79036c1ea0
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c bd79918a5285a87aa1c47298b5663df91ab494283c15f1b48910e5f6d0dae7da
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2

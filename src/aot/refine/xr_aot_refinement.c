@@ -11,6 +11,7 @@
 #include "xr_aot_refinement.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
+#include "../../plan/semantic/xr_semantic_type_admission_shape.h"
 #include "../../plan/target/xr_target_verify.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
@@ -517,6 +518,7 @@ static uint32_t direct_call_record_mismatch(
     const XrAotDirectCallRecord *actual,
     const XrAotDirectCallRecord *derived) {
     if (actual->target_call_index != derived->target_call_index ||
+        actual->target_instruction != derived->target_instruction ||
         actual->caller_function != derived->caller_function ||
         actual->callee_function != derived->callee_function ||
         actual->semantic_call_target != derived->semantic_call_target ||
@@ -524,6 +526,7 @@ static uint32_t direct_call_record_mismatch(
         actual->target_kind != derived->target_kind ||
         actual->calling_convention != derived->calling_convention ||
         actual->semantic_target_kind != derived->semantic_target_kind ||
+        !xr_stable_id_equal(actual->caller_identity, derived->caller_identity) ||
         !xr_stable_id_equal(actual->callee_identity, derived->callee_identity) ||
         !xr_stable_id_equal(actual->operation_id, derived->operation_id))
         return XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
@@ -560,7 +563,7 @@ static uint32_t direct_call_record_mismatch(
 
 static void direct_call_record_fingerprint(const XrAotBaselineRef *baseline,
                                            XrAotDirectCallRecord *record) {
-    static const uint8_t domain[] = "xray-aot-direct-call-record-v1\0";
+    static const uint8_t domain[] = "xray-aot-direct-call-record-v2\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -569,6 +572,7 @@ static void direct_call_record_fingerprint(const XrAotBaselineRef *baseline,
     xr_sha256_update(&ctx, baseline->semantic_fingerprint.bytes,
                      sizeof(baseline->semantic_fingerprint.bytes));
     hash_u32(&ctx, record->target_call_index);
+    hash_u32(&ctx, record->target_instruction);
     hash_u32(&ctx, record->caller_function);
     hash_u32(&ctx, record->callee_function);
     hash_u32(&ctx, record->semantic_call_target);
@@ -591,6 +595,8 @@ static void direct_call_record_fingerprint(const XrAotBaselineRef *baseline,
     hash_u32(&ctx, record->semantic_target_kind);
     hash_u32(&ctx, record->environment_required);
     hash_u32(&ctx, record->generation_required);
+    xr_sha256_update(&ctx, record->caller_identity.bytes,
+                     sizeof(record->caller_identity.bytes));
     xr_sha256_update(&ctx, record->callee_identity.bytes,
                      sizeof(record->callee_identity.bytes));
     xr_sha256_update(&ctx, record->operation_id.bytes,
@@ -649,9 +655,9 @@ static bool refinement_direct_array_ref_type_is_exact(
 }
 
 static uint32_t direct_call_argument_map(
-    const XrTargetPlan *target_plan, const XrSemanticPlan *semantic,
-    const XrTargetCallRecord *call,
-    const XrSemanticFunctionRecord *callee,
+    const XrTargetPlan *target_plan, const XrSemanticPlan *caller_semantic,
+    const XrSemanticPlan *callee_semantic, uint32_t callee_semantic_function,
+    const XrTargetCallRecord *call, const XrSemanticFunctionRecord *callee,
     XrFingerprint *out_fingerprint, uint32_t *out_argument) {
     uint32_t argument_total = 0;
     const XrTargetCallArgumentRecord *arguments =
@@ -667,7 +673,7 @@ static uint32_t direct_call_argument_map(
      * argument rows leave the callee frame unproven. */
     if (call->argument_count != callee->parameter_count)
         return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
-    size_t parameter_total = xr_semantic_plan_parameter_count(semantic);
+    size_t parameter_total = xr_semantic_plan_parameter_count(callee_semantic);
     if ((uint64_t) callee->parameter_begin + callee->parameter_count >
         (uint64_t) parameter_total)
         return XR_AOT_REFINEMENT_PLAN_STATE;
@@ -681,15 +687,15 @@ static uint32_t direct_call_argument_map(
         const XrTargetCallArgumentRecord *argument = &arguments[argument_index];
         uint32_t parameter_index = callee->parameter_begin + i;
         const XrSemanticParameterRecord *parameter =
-            xr_semantic_plan_parameter(semantic, parameter_index);
+            xr_semantic_plan_parameter(callee_semantic, parameter_index);
         *out_argument = argument_index;
         if (!parameter)
             return XR_AOT_REFINEMENT_PLAN_STATE;
         const XrSemanticOperationRecord *operation =
-            xr_semantic_plan_operation(semantic, call->semantic_operation);
+            xr_semantic_plan_operation(caller_semantic, call->semantic_operation);
         uint32_t operand_total = 0;
         const XrSemanticOperandRecord *operands =
-            xr_semantic_plan_operands(semantic, &operand_total);
+            xr_semantic_plan_operands(caller_semantic, &operand_total);
         uint32_t semantic_operand =
             operation ? operation->operand_begin + i + 1u
                       : XR_SEMANTIC_INDEX_NONE;
@@ -699,9 +705,10 @@ static uint32_t direct_call_argument_map(
                 : NULL;
         uint8_t array_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         bool array_ref =
-            operation && operand && parameter->type == operand->type &&
+            caller_semantic == callee_semantic && operation && operand &&
+            parameter->type == operand->type &&
             refinement_direct_array_ref_type_is_exact(
-                semantic, parameter->type, &array_storage) &&
+                callee_semantic, parameter->type, &array_storage) &&
             parameter->mode == XR_PARAM_REF &&
             parameter->ownership == XI_OWN_BORROWED &&
             parameter->transfer_mode == XR_TRANSFER_SHARE &&
@@ -722,8 +729,16 @@ static uint32_t direct_call_argument_map(
          * ordinal; anything else is an unproven permutation of the frame. */
         if (argument->call != call->id || argument->ordinal != i ||
             argument->callee_parameter != parameter_index ||
-            parameter->function != call->callee_function ||
+            parameter->function != callee_semantic_function ||
             parameter->ordinal != i)
+            return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
+        const XrSemanticTypeRecord *parameter_type =
+            xr_semantic_plan_type(callee_semantic, parameter->type);
+        const XrSemanticTypeRecord *argument_type =
+            operand ? xr_semantic_plan_type(caller_semantic, operand->type) : NULL;
+        if (!parameter_type || !argument_type ||
+            !xr_semantic_parameter_type_admits_argument(
+                callee_semantic, parameter_type, argument_type))
             return XR_AOT_REFINEMENT_DIRECT_CALL_ARGUMENT_MAPPING;
         /* Transfer mode must match the callee's declared contract: a mismatch
          * is a lost or duplicated obligation at the callee boundary. The
@@ -769,6 +784,35 @@ static uint32_t direct_call_argument_map(
     return XR_AOT_REFINEMENT_OK;
 }
 
+static uint32_t direct_call_instruction_row(
+    const XrTargetPlan *target_plan, const XrTargetCallRecord *call,
+    uint32_t *out_instruction) {
+    if (out_instruction)
+        *out_instruction = XR_SEMANTIC_INDEX_NONE;
+    if (!target_plan || !call || !out_instruction)
+        return XR_AOT_REFINEMENT_INVALID_ARGUMENT;
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(target_plan, &instruction_count);
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; instructions && i < instruction_count; i++) {
+        const XrTargetInstructionRecord *instruction = &instructions[i];
+        if (instruction->opcode != XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+            instruction->immediate_bits != call->id)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE ||
+            instruction->id != i ||
+            instruction->function != call->caller_function ||
+            instruction->result_slot != call->result_slot)
+            return XR_AOT_REFINEMENT_PLAN_STATE;
+        match = i;
+    }
+    if (match == XR_SEMANTIC_INDEX_NONE)
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+    *out_instruction = match;
+    return XR_AOT_REFINEMENT_OK;
+}
+
 /* Recompute a direct-call binding from the verified baseline alone.
  *
  * The return value separates the two outcomes the protocol must never blur:
@@ -781,16 +825,13 @@ static uint32_t derive_direct_call_record(const XrAotBaselineRef *baseline,
                                           XrAotDirectCallRecord *out_record,
                                           uint32_t *out_argument) {
     memset(out_record, 0, sizeof(*out_record));
+    out_record->target_instruction = XR_SEMANTIC_INDEX_NONE;
     *out_argument = 0;
     uint32_t call_total = 0;
     const XrTargetCallRecord *calls =
         xr_target_plan_calls(target_plan, &call_total);
     if (!calls || request->target_call_index >= call_total)
         return XR_AOT_REFINEMENT_INVALID_ARGUMENT;
-    const XrSemanticPlan *semantic =
-        xr_target_plan_semantic_plan(target_plan);
-    if (!semantic)
-        return XR_AOT_REFINEMENT_PLAN_STATE;
     const XrTargetCallRecord *call = &calls[request->target_call_index];
     out_record->target_call_index = request->target_call_index;
     out_record->caller_function = call->caller_function;
@@ -812,73 +853,129 @@ static uint32_t derive_direct_call_record(const XrAotBaselineRef *baseline,
     out_record->result_ownership = call->result_ownership;
     out_record->error_mode = call->error_mode;
 
-    /* Closed-target evidence, decided from the call row alone and before any
-     * table walk. Export, builtin-member and runtime-receiver rows keep their
-     * planned dispatch and legitimately leave the callee, dependency and
-     * export fields unset, so they must be refused here rather than tripping
-     * the structural checks that follow. */
+    bool local_direct =
+        call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
+        call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL;
+    bool program_direct =
+        call->target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+        call->calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT;
     if (call->id != request->target_call_index ||
-        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
-        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
-        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
-        call->source_export != XR_SEMANTIC_INDEX_NONE)
+        (!local_direct && !program_direct))
         return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;
 
-    /* From here the row claims a closed local callee, so every index it names
-     * must resolve; a dangling one is a baseline the verifier should already
-     * have rejected. */
-    size_t call_target_total = xr_semantic_plan_call_target_count(semantic);
+    const XrSemanticPlan *caller_semantic = NULL;
+    const XrSemanticPlan *callee_semantic = NULL;
+    uint32_t caller_semantic_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t callee_semantic_function = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_target_plan_function_semantic_binding(
+            target_plan, call->caller_function, &caller_semantic,
+            &caller_semantic_function) ||
+        !xr_target_plan_function_semantic_binding(
+            target_plan, call->callee_function, &callee_semantic,
+            &callee_semantic_function))
+        return XR_AOT_REFINEMENT_PLAN_STATE;
+
+    const XrTargetProgramGraphRecord *program_graph = NULL;
+    if (local_direct) {
+        if (caller_semantic != callee_semantic ||
+            call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+            call->source_export != XR_SEMANTIC_INDEX_NONE)
+            return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;
+    } else {
+        uint32_t graph_count = 0;
+        const XrTargetProgramGraphRecord *graphs =
+            xr_target_plan_program_graphs(target_plan, &graph_count);
+        program_graph = graph_count == 1u && graphs ? &graphs[0] : NULL;
+        if (!program_graph ||
+            program_graph->target_call != request->target_call_index ||
+            program_graph->entry_target_function != call->caller_function ||
+            program_graph->producer_target_function != call->callee_function ||
+            program_graph->entry_semantic_function != caller_semantic_function ||
+            program_graph->producer_semantic_function != callee_semantic_function ||
+            xr_target_plan_semantic_module(target_plan,
+                                           program_graph->entry_partition) !=
+                caller_semantic ||
+            xr_target_plan_semantic_module(target_plan,
+                                           program_graph->producer_partition) !=
+                callee_semantic ||
+            call->source_dependency !=
+                program_graph->entry_semantic_dependency ||
+            call->source_export != program_graph->producer_semantic_export)
+            return XR_AOT_REFINEMENT_PLAN_STATE;
+    }
+
+    size_t call_target_total =
+        xr_semantic_plan_call_target_count(caller_semantic);
     if (call->semantic_call_target >= (uint32_t) call_target_total)
         return XR_AOT_REFINEMENT_PLAN_STATE;
     const XrSemanticCallTargetRecord *semantic_target =
-        xr_semantic_plan_call_target(semantic, call->semantic_call_target);
+        xr_semantic_plan_call_target(caller_semantic,
+                                     call->semantic_call_target);
     if (!semantic_target)
         return XR_AOT_REFINEMENT_PLAN_STATE;
     out_record->semantic_target_kind = semantic_target->kind;
-    /* The semantic layer must agree that the callee is closed: an open or
-     * indirect target would need devirtualization evidence this baseline does
-     * not carry. */
-    if (semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
-        semantic_target->dependency != XR_SEMANTIC_INDEX_NONE ||
-        semantic_target->source_export != XR_SEMANTIC_INDEX_NONE)
+    if (local_direct) {
+        if (semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL ||
+            semantic_target->dependency != XR_SEMANTIC_INDEX_NONE ||
+            semantic_target->source_export != XR_SEMANTIC_INDEX_NONE ||
+            semantic_target->function != callee_semantic_function)
+            return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;
+    } else if (semantic_target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+               semantic_target->dependency != call->source_dependency ||
+               semantic_target->source_export != call->source_export ||
+               !xr_stable_id_equal(semantic_target->export_identity,
+                                   call->source_export_identity) ||
+               !xr_stable_id_equal(semantic_target->callee_function,
+                                   call->source_callee_identity) ||
+               !xr_stable_id_equal(program_graph->export_identity,
+                                   call->source_export_identity) ||
+               !xr_stable_id_equal(program_graph->exported_function_identity,
+                                   call->source_callee_identity)) {
         return XR_AOT_REFINEMENT_DIRECT_CALL_TARGET_NOT_CLOSED;
+    }
 
-    size_t function_total = xr_semantic_plan_function_count(semantic);
-    if (call->callee_function >= (uint32_t) function_total ||
-        call->caller_function >= (uint32_t) function_total)
-        return XR_AOT_REFINEMENT_PLAN_STATE;
     const XrSemanticFunctionRecord *callee =
-        xr_semantic_plan_function(semantic, call->callee_function);
-    if (!callee)
+        xr_semantic_plan_function(callee_semantic, callee_semantic_function);
+    const XrSemanticFunctionRecord *caller =
+        xr_semantic_plan_function(caller_semantic, caller_semantic_function);
+    if (!caller || !callee)
         return XR_AOT_REFINEMENT_PLAN_STATE;
-    /* The target row must bind the same callee the semantic layer proved.
-     * A local target identifies its callee by index, and only the export-style
-     * targets also carry a callee stable id; when that id is present it has to
-     * agree, and the derived record below re-anchors the identity either way. */
     static const XrStableId unset_callee = {{0}};
-    if (semantic_target->function != call->callee_function ||
+    if (local_direct &&
         (!xr_stable_id_equal(semantic_target->callee_function, unset_callee) &&
          !xr_stable_id_equal(semantic_target->callee_function, callee->id)))
         return XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
-    out_record->callee_identity = callee->id;
+    out_record->caller_identity =
+        program_direct ? program_graph->entry_function_identity : caller->id;
+    out_record->callee_identity =
+        program_direct ? program_graph->producer_function_identity : callee->id;
     out_record->parameter_count = callee->parameter_count;
 
-    size_t operation_total = xr_semantic_plan_operation_count(semantic);
+    size_t operation_total =
+        xr_semantic_plan_operation_count(caller_semantic);
     if (call->semantic_operation >= (uint32_t) operation_total)
         return XR_AOT_REFINEMENT_PLAN_STATE;
     const XrSemanticOperationRecord *operation =
-        xr_semantic_plan_operation(semantic, call->semantic_operation);
+        xr_semantic_plan_operation(caller_semantic,
+                                   call->semantic_operation);
     if (!operation)
         return XR_AOT_REFINEMENT_PLAN_STATE;
     out_record->operation_id = operation->id;
-    if (operation->function != call->caller_function ||
+    if (operation->function != caller_semantic_function ||
         semantic_target->operation != call->semantic_operation)
         return XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
 
-    uint32_t issue = direct_call_argument_map(target_plan, semantic, call,
-                                              callee,
-                                              &out_record->argument_map_fingerprint,
-                                              out_argument);
+    uint32_t issue = XR_AOT_REFINEMENT_OK;
+    if (program_direct) {
+        issue = direct_call_instruction_row(
+            target_plan, call, &out_record->target_instruction);
+        if (issue != XR_AOT_REFINEMENT_OK)
+            return issue;
+    }
+    issue = direct_call_argument_map(
+        target_plan, caller_semantic, callee_semantic,
+        callee_semantic_function, call, callee,
+        &out_record->argument_map_fingerprint, out_argument);
     if (issue != XR_AOT_REFINEMENT_OK)
         return issue;
 
@@ -1297,11 +1394,26 @@ bool xr_aot_refinement_try_direct_call(
     uint32_t issue = derive_direct_call_record(&builder->baseline, target_plan,
                                                request, &binding,
                                                &argument_index);
+    uint32_t target_call_count = 0;
+    const XrTargetCallRecord *target_calls =
+        xr_target_plan_calls(target_plan, &target_call_count);
+    bool program_direct =
+        target_calls && request->target_call_index < target_call_count &&
+        target_calls[request->target_call_index].target_kind ==
+            XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+        target_calls[request->target_call_index].calling_convention ==
+            XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT;
     /* A structural fault means the verified baseline disagrees with itself,
-     * which the checker must surface as a failure rather than a refusal. */
+     * which the checker must surface as a failure rather than a refusal. A
+     * PROGRAM_DIRECT row has already committed the program graph to static
+     * lowering, so this consumer must either prove its one binding or fail;
+     * silently retaining another executable path would create dual authority. */
     if (issue == XR_AOT_REFINEMENT_INVALID_ARGUMENT ||
-        issue == XR_AOT_REFINEMENT_PLAN_STATE) {
-        fail_diag(diag, issue, builder->record_count, protocol->pass_id,
+        issue == XR_AOT_REFINEMENT_PLAN_STATE ||
+        (program_direct && issue != XR_AOT_REFINEMENT_OK)) {
+        uint32_t failure = program_direct ? XR_AOT_REFINEMENT_PLAN_STATE
+                                          : issue;
+        fail_diag(diag, failure, builder->record_count, protocol->pass_id,
                   request->target_call_index);
         if (diag)
             diag->semantic_operation = argument_index;

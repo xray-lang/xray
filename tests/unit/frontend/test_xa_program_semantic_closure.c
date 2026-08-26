@@ -23,6 +23,7 @@
 #include "frontend/parser/xparse.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
+#include "aot/refine/xr_aot_refinement.h"
 #include "ir/xi_import_resolve.h"
 #include "ir/xi_pipeline.h"
 #include "ir/xi_program_semantic.h"
@@ -73,6 +74,9 @@ static XrVMRuntime *g_isolate;
 static char g_scalar_graph_directory[256];
 static char g_scalar_graph_producer_path[320];
 static char g_scalar_graph_entry_path[320];
+
+static bool scalar_graph_aot_direct_call_is_exact(
+    const XrTargetPlan *target);
 
 static void cleanup_registered_scalar_graph_fixture(void) {
     if (g_scalar_graph_producer_path[0])
@@ -1636,8 +1640,91 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
     if (exact)
         exact = xr_target_plan_verify(target, error, sizeof(error)) &&
                 xr_target_plan_fingerprint_is_intact(target);
+    if (exact)
+        exact = scalar_graph_aot_direct_call_is_exact(target);
     xr_target_plan_free(target);
     xr_target_profile_free(profile);
+    return exact;
+}
+
+static bool scalar_graph_aot_direct_call_is_exact(
+    const XrTargetPlan *target) {
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *refinement = NULL;
+    if (!xr_aot_refinement_direct_call_authority_build(
+            target, UINT32_C(28603), &refinement, &diag))
+        return false;
+
+    XrAotRefinementPlanView view =
+        xr_aot_refinement_plan_view(refinement);
+    uint32_t graph_count = 0, call_count = 0, instruction_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(target, &graph_count);
+    const XrTargetCallRecord *calls =
+        xr_target_plan_calls(target, &call_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(target, &instruction_count);
+    XrFingerprint empty_fingerprint = {{0}};
+    bool exact = view.frozen && view.verified &&
+                 view.schema_version == XR_AOT_REFINEMENT_SCHEMA_VERSION &&
+                 view.record_count == 1u && graphs && graph_count == 1u &&
+                 calls && call_count == 1u && instructions;
+    if (exact) {
+        const XrTargetProgramGraphRecord *graph = &graphs[0];
+        const XrTargetCallRecord *call = &calls[graph->target_call];
+        const XrAotTransformationRecord *record = &view.records[0];
+        const XrAotDirectCallRecord *binding =
+            &record->direct_call_binding;
+        const XrTargetInstructionRecord *instruction =
+            binding->target_instruction < instruction_count
+                ? &instructions[binding->target_instruction]
+                : NULL;
+        exact = record->decision == XR_AOT_REFINEMENT_APPLIED &&
+                record->diagnostic_issue == XR_AOT_REFINEMENT_OK &&
+                record->transform_kind == XR_AOT_TRANSFORM_DIRECT_CALL &&
+                binding->target_call_index == graph->target_call &&
+                binding->caller_function == graph->entry_target_function &&
+                binding->callee_function == graph->producer_target_function &&
+                binding->target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+                binding->calling_convention ==
+                    XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT &&
+                binding->semantic_target_kind ==
+                    XR_SEM_CALL_TARGET_SOURCE_EXPORT &&
+                xr_stable_id_equal(binding->caller_identity,
+                                   graph->entry_function_identity) &&
+                xr_stable_id_equal(binding->callee_identity,
+                                   graph->producer_function_identity) &&
+                !xr_fingerprint_equal(binding->argument_map_fingerprint,
+                                      empty_fingerprint) &&
+                instruction && instruction->id == binding->target_instruction &&
+                instruction->function == graph->entry_target_function &&
+                instruction->opcode ==
+                    XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+                instruction->result_slot == call->result_slot &&
+                instruction->immediate_bits == graph->target_call &&
+                xr_aot_refinement_verify(&view, target, &diag);
+    }
+    if (exact) {
+        XrAotTransformationRecord mutated = view.records[0];
+        XrAotRefinementPlanView hostile = view;
+        hostile.records = &mutated;
+        mutated.direct_call_binding.caller_identity.bytes[0] ^=
+            UINT8_C(0x80);
+        exact = !xr_aot_refinement_verify(&hostile, target, &diag) &&
+                diag.issue ==
+                    XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
+    }
+    if (exact) {
+        XrAotTransformationRecord mutated = view.records[0];
+        XrAotRefinementPlanView hostile = view;
+        hostile.records = &mutated;
+        mutated.direct_call_binding.target_instruction =
+            XR_SEMANTIC_INDEX_NONE;
+        exact = !xr_aot_refinement_verify(&hostile, target, &diag) &&
+                diag.issue ==
+                    XR_AOT_REFINEMENT_DIRECT_CALL_CALLEE_IDENTITY;
+    }
+    xr_aot_refinement_plan_free(refinement);
     return exact;
 }
 

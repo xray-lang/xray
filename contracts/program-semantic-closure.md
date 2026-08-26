@@ -173,11 +173,15 @@ projection defined below; they never imply TargetPlan admission on their own.
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
     after independent TargetPlan verification may per-module summary cache
-    authority publish. This grants graph TargetPlan and exact XTP
-    materialization authority and the bounded typed VM execution described
-    below, but not native AOT, container, coroutine, or public-ABI execution
-    authority. The product fails closed after cache publication at the explicit
-    same-plan AOT coverage boundary; no consumer
+    authority publish. AOT direct-call refinement may derive one lower binding
+    from that same plan by resolving both global functions through their owning
+    partitions and binding the unique `CALL_DIRECT_I64` row plus stable program
+    function identities. `PROGRAM_DIRECT` cannot become a refusal or a legacy
+    path. This grants graph TargetPlan, exact XTP materialization, bounded typed
+    VM execution, and bounded AOT lower-binding authority, but not native AOT,
+    container, coroutine, or public-ABI execution authority. The product fails
+    closed after cache publication at the explicit same-plan native-AOT coverage
+    boundary; no consumer
     may skip, stitch per-module plans, fall back, or reconstruct missing facts
     from names, function bodies, tags, or legacy readers.
 19. The first single-module TargetPlan consumer admits only the exact
@@ -250,10 +254,13 @@ projection defined below; they never imply TargetPlan admission on their own.
     same plan's global rows, and rejects direct producer entry. Cold execution
     reruns independent TargetPlan verification; warm execution requires an exact
     decoded cache bound to that same plan and fingerprint. It never builds,
-    stitches, or translates per-module executable plans. Native AOT remains
-    outside this bounded family until it consumes the same verified program
-    plan; the source product publishes module summaries and then fails closed
-    without a binary at that AOT execution boundary.
+    stitches, or translates per-module executable plans. The AOT lower
+    refinement consumes that same plan and independently re-derives the global
+    caller, callee, instruction, argument, and stable program-function symbol
+    joins. Native AOT remains outside this bounded family until C emission and
+    execution consume the same verified program plan end to end; the source
+    product publishes module summaries and then fails closed without a binary
+    at that native-AOT execution boundary.
 
 ## Digest anchors
 
@@ -311,7 +318,7 @@ anchor-sha256: src/ir/xi_program_semantic_plan.c 42e2fa994d177b8e37aa88fdb7a300b
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c aa2bff8af087b730168b25faf26ffb08cd69ace09963fb8c762c1071bac6796e
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 83dd97975c5b7a9e3def44f72a5f2f5e39cd1f009972365c4c55d7b859a63b6c
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f5696c866f372448e15798d3ba16c61861940e357507340c15b0bf0c353fdeb1
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c bd79918a5285a87aa1c47298b5663df91ab494283c15f1b48910e5f6d0dae7da
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c d1457dfbd2efe8490fd7a03c6372a70715588a7fd043e0777b3edf3946f8f7b5
