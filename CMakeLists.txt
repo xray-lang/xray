@@ -3093,6 +3093,9 @@ if(BUILD_TESTS)
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_module_summary_determinism.py
                 $<TARGET_FILE:xray>
+                --harness-cc "${CMAKE_C_COMPILER}"
+                --harness-compiler-id "${CMAKE_C_COMPILER_ID}"
+                --harness-frontend "${CMAKE_C_COMPILER_FRONTEND_VARIANT}"
                 ${AOT_MODULE_SUMMARY_PROVIDER_ARGS}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -3101,6 +3104,24 @@ if(BUILD_TESTS)
         SKIP_RETURN_CODE 77
         COST 90
         TIMEOUT 240
+    )
+    add_test(
+        NAME aot_program_graph_native_execution
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_module_summary_determinism.py
+                $<TARGET_FILE:xray>
+                --harness-cc "${CMAKE_C_COMPILER}"
+                --harness-compiler-id "${CMAKE_C_COMPILER_ID}"
+                --harness-frontend "${CMAKE_C_COMPILER_FRONTEND_VARIANT}"
+                --scenario product-graph-identity
+                ${AOT_MODULE_SUMMARY_PROVIDER_ARGS}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_program_graph_native_execution PROPERTIES
+        LABELS "aot;program-graph;generated-c;native;incremental"
+        SKIP_RETURN_CODE 77
+        COST 45
+        TIMEOUT 180
     )
 
     add_test(

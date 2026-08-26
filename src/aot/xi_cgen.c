@@ -19,6 +19,7 @@
  */
 #include "xi_cgen.h"
 #include "emit_c/xr_c_emission_plan.h"
+#include "emit_c/xr_c_program_emission.h"
 #include "emit_c/xr_c_emission_rule_ids_gen.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "xaot_bundle.h"
@@ -789,6 +790,9 @@ struct XiCgenCtx {
     uint32_t coro_emit_seen_cap;
     uint32_t coro_emit_seen_count;
     const XaotBundle *aot_bundle;
+    XrCProgramDirectI64EmissionBinding program_direct_i64;
+    bool program_direct_i64_required;
+    bool program_direct_i64_bound;
     CgValueEmissionRegistryEntry *value_emission_registry; /* owned index; plans borrowed */
     uint32_t value_emission_registry_count;
     const CgValueEmissionRegistryEntry *value_emission_registry_last;
@@ -1389,6 +1393,42 @@ static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
     return ctx ? ctx->aot_bundle : NULL;
 }
 
+static const XrCProgramXiFunctionBinding *
+cg_program_direct_i64_function_binding(const XiCgenCtx *ctx, const XiFunc *function) {
+    if (!ctx || !ctx->program_direct_i64_required || !ctx->program_direct_i64_bound ||
+        !function)
+        return NULL;
+    return xr_c_program_direct_i64_function_binding(&ctx->program_direct_i64,
+                                                     function);
+}
+
+static bool cg_program_direct_i64_function_is_initializer(
+    const XiCgenCtx *ctx, const XiFunc *function) {
+    if (!ctx || !function || !ctx->program_direct_i64_required ||
+        !ctx->program_direct_i64_bound || !ctx->program_direct_i64.verified ||
+        !ctx->program_direct_i64.initializers)
+        return false;
+    for (uint32_t i = 0; i < ctx->program_direct_i64.initializer_count; i++)
+        if (ctx->program_direct_i64.initializers[i].xi_function == function)
+            return true;
+    return false;
+}
+
+static const char *cg_program_direct_i64_symbol(const XiCgenCtx *ctx,
+                                                const XiFunc *function) {
+    const XrCProgramXiFunctionBinding *binding =
+        cg_program_direct_i64_function_binding(ctx, function);
+    return binding && binding->c_symbol[0] ? binding->c_symbol : NULL;
+}
+
+static bool cg_program_direct_i64_callee_operand_is_elided(
+    const XiCgenCtx *ctx, const XiFunc *function, const XiValue *value) {
+    return ctx && ctx->program_direct_i64_required &&
+           ctx->program_direct_i64_bound &&
+           xr_c_program_direct_i64_callee_operand_is_elided(
+               &ctx->program_direct_i64, function, value);
+}
+
 static void cg_writer_reset(XiCgenCtx *ctx) {
     if (!ctx)
         return;
@@ -1920,6 +1960,12 @@ static bool cg_func_needs_external_linkage(const XiCgenCtx *ctx, const XiFunc *f
                                            const char *prefix) {
     if (!ctx || !ctx->extern_linkage || !f)
         return false;
+    if (ctx->program_direct_i64_required) {
+        const XrCProgramXiFunctionBinding *binding =
+            cg_program_direct_i64_function_binding(ctx, f);
+        return binding && binding->c_symbol[0] != '\0' &&
+               memchr(binding->c_symbol, '\0', sizeof(binding->c_symbol)) != NULL;
+    }
     if (!prefix || !prefix[0])
         return true;
     if (!ctx->module || !ctx->module->name || strcmp(prefix, ctx->module->name) != 0)
@@ -1963,6 +2009,27 @@ static bool cg_func_c_name(XiCgenCtx *ctx, const char *prefix, const XiFunc *f, 
                            size_t bufsz) {
     if (!ctx || !f || !buf || bufsz == 0)
         return false;
+
+    if (ctx->program_direct_i64_required) {
+        const XrCProgramXiFunctionBinding *binding =
+            cg_program_direct_i64_function_binding(ctx, f);
+        if (!binding) {
+            ctx->error = true;
+            return false;
+        }
+        const void *terminator = memchr(binding->c_symbol, '\0',
+                                        sizeof(binding->c_symbol));
+        if (!binding->c_symbol[0] || !terminator) {
+            ctx->error = true;
+            return false;
+        }
+        int written = snprintf(buf, bufsz, "%s", binding->c_symbol);
+        if (written <= 0 || (size_t) written >= bufsz) {
+            ctx->error = true;
+            return false;
+        }
+        return true;
+    }
 
     bool have_prefix = prefix && prefix[0];
     if (ctx->extern_linkage && have_prefix && cg_func_stable_cname(ctx, f, prefix, buf, bufsz))
@@ -2613,25 +2680,53 @@ static CgValueEmissionStatus cg_value_emission_fail(XiCgenCtx *ctx, const char *
     return CG_VALUE_EMISSION_ERROR;
 }
 
-/* Resolve only values that existed in the frozen SemanticPlan snapshot.
- * Backend-only temporaries have ids beyond that snapshot and remain owned by
- * the legacy, non-migrated lowering families. Every frozen value requires the
- * exact TargetPlan/C-emission pair, even when the value belongs to a family
- * that still lowers through Xaot. */
+static CgValueEmissionStatus cg_program_direct_i64_value_emission(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (!ctx || !function || !value || !out)
+        return cg_value_emission_fail(
+            ctx, "program direct-i64 value consumer input is missing");
+    if (xr_c_program_direct_i64_value_view(
+            &ctx->program_direct_i64, function, value, out))
+        return CG_VALUE_EMISSION_FOUND;
+
+    return cg_value_emission_fail(
+        ctx, "program direct-i64 C value binding is missing");
+}
+
+/* Resolve every program-owned value from the verified program binding. A
+ * missing row is an authority failure: neither Xi-id shape nor a legacy Xaot
+ * representation adapter may synthesize a second C answer. */
 static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc *function,
                                                     const XiValue *value,
                                                     XrCValueEmissionView *out) {
     if (out)
         memset(out, 0, sizeof(*out));
-    if (!ctx || (!ctx->value_emission_registry && ctx->value_emission_registry_count == 0))
-        return CG_VALUE_EMISSION_NOT_CONFIGURED;
-    if (!ctx->value_emission_registry || ctx->value_emission_registry_count == 0 || !value || !out)
-        return cg_value_emission_fail(ctx, "C value emission consumer input is missing");
+    if (!ctx || !value || !out)
+        return cg_value_emission_fail(
+            ctx, "C value emission consumer input is missing");
 
+    if (ctx->program_direct_i64_required &&
+        !ctx->program_direct_i64_bound)
+        return cg_value_emission_fail(
+            ctx, "program direct-i64 C-emission binding is missing");
     if (!function && value->block)
         function = value->block->func;
+    if (ctx->program_direct_i64_required && !function)
+        return cg_value_emission_fail(
+            ctx, "program direct-i64 value has no owning Xi function");
     if (!function)
         return CG_VALUE_EMISSION_BACKEND_ONLY;
+    if (ctx->program_direct_i64_required)
+        return cg_program_direct_i64_value_emission(
+            ctx, function, value, out);
+    if (!ctx->value_emission_registry &&
+        ctx->value_emission_registry_count == 0)
+        return CG_VALUE_EMISSION_NOT_CONFIGURED;
+    if (!ctx->value_emission_registry ||
+        ctx->value_emission_registry_count == 0)
+        return cg_value_emission_fail(
+            ctx, "C value emission consumer input is missing");
 
     const XrTargetPlan *leaf_target = NULL;
     uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
@@ -2684,7 +2779,7 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     const XrTargetPlan *target_plan = entry->target_plan;
     const XrCEmissionPlan *emission_plan = entry->emission_plan;
 
-    const XrSemanticPlan *semantic_plan = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticPlan *semantic_plan = entry->semantic_plan;
     if (!semantic_plan ||
         (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
              ? target_plan != leaf_target
@@ -2708,14 +2803,18 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     }
 
     if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
-        !xr_aot_scalar_semantic_value_id(target_plan, function, value, &semantic_function_id,
-                                         &semantic_value, error, sizeof(error)))
+               !xr_aot_scalar_semantic_value_id(
+                   target_plan, function, value, &semantic_function_id,
+                   &semantic_value, error, sizeof(error))) {
         return cg_value_emission_fail(ctx, error[0] ? error : "C value identity lookup failed");
+    }
     if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
         semantic_function_id != function->semantic_plan_function_index)
         return cg_value_emission_fail(ctx, "C value semantic function identity changed");
 
-    if (!xr_target_plan_value_rep(target_plan, semantic_value))
+    const XrTargetValueRepRecord *target_value =
+        xr_target_plan_value_rep(target_plan, semantic_value);
+    if (!target_value)
         return CG_VALUE_EMISSION_NOT_COVERED;
     /* Registry installation independently proved exact supported-row coverage.
      * Absence here therefore identifies the verified unsupported partition; it
@@ -2745,7 +2844,25 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const X
                                  uint32_t *out) {
     if (out)
         *out = XR_SEMANTIC_INDEX_NONE;
-    if (!ctx || !function || !value || !out || !function->semantic_plan)
+    if (!ctx || !function || !value || !out)
+        return false;
+    if (ctx->program_direct_i64_required) {
+        if (!ctx->program_direct_i64_bound) {
+            (void) cg_value_emission_fail(
+                ctx, "program direct-i64 C-emission binding is missing");
+            return false;
+        }
+        XrCValueEmissionView view = {0};
+        if (xr_c_program_direct_i64_value_view(
+                &ctx->program_direct_i64, function, value, &view)) {
+            *out = view.semantic_value;
+            return true;
+        }
+        (void) cg_value_emission_fail(
+            ctx, "program direct-i64 semantic value binding is missing");
+        return false;
+    }
+    if (!function->semantic_plan)
         return false;
     const CgValueEmissionRegistryEntry *entry = NULL;
     for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
@@ -2759,15 +2876,19 @@ static bool cg_value_semantic_id(XiCgenCtx *ctx, const XiFunc *function, const X
     char error[256] = {0};
     if (!entry)
         return false;
-    if (xr_aot_scalar_semantic_value_id(entry->target_plan, function, value, &semantic_function,
-                                        out, error, sizeof(error)))
+    bool exact = xr_aot_scalar_semantic_value_id(
+        entry->target_plan, function, value, &semantic_function, out, error,
+        sizeof(error));
+    if (exact)
         return semantic_function == function->semantic_plan_function_index;
     const XaotValuePlan *adapter = xaot_bundle_find_value_plan(ctx->aot_bundle, value);
     if (!adapter || !xaot_value_plan_is_exact_rep_adapter(ctx->aot_bundle, adapter) ||
         value->nargs != 1 || !value->args || !value->args[0])
         return false;
-    return xr_aot_scalar_semantic_value_id(entry->target_plan, function, value->args[0],
-                                           &semantic_function, out, error, sizeof(error)) &&
+    exact = xr_aot_scalar_semantic_value_id(
+        entry->target_plan, function, value->args[0], &semantic_function, out,
+        error, sizeof(error));
+    return exact &&
            semantic_function == function->semantic_plan_function_index;
 }
 
@@ -3042,9 +3163,13 @@ static bool cg_scalar_addressable_alias_recipe_source(XiCgenCtx *ctx, const XiFu
 }
 
 static const XrCEmissionPlan *cg_function_c_emission_plan(XiCgenCtx *ctx, const XiFunc *function) {
-    return ctx && function
-               ? xaot_bundle_emission_plan_for_func(ctx->aot_bundle, function)
-               : NULL;
+    if (!ctx || !function)
+        return NULL;
+    if (ctx->program_direct_i64_required) {
+        ctx->error = true;
+        return NULL;
+    }
+    return xaot_bundle_emission_plan_for_func(ctx->aot_bundle, function);
 }
 
 static bool cg_direct_local_tagged_ref_argument_emission(
@@ -6223,8 +6348,9 @@ cg_shared_slot_reach_memo_entry(XiCgenCtx *ctx, const XiModule *module, int slot
     return entry;
 }
 
-static bool cg_func_body_gets_shared_slot(const XiFunc *f, int slot) {
-    if (!f || slot < 0)
+static bool cg_func_body_gets_shared_slot(XiCgenCtx *ctx, const XiFunc *f,
+                                          int slot) {
+    if (!ctx || !f || slot < 0)
         return false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -6232,7 +6358,8 @@ static bool cg_func_body_gets_shared_slot(const XiFunc *f, int slot) {
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (v && v->op == XI_GET_SHARED && (int) v->aux_int == slot)
+            if (v && v->op == XI_GET_SHARED && (int) v->aux_int == slot &&
+                !cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
                 return true;
         }
     }
@@ -6253,7 +6380,8 @@ static bool cg_reachable_func_tree_gets_shared_slot(XiCgenCtx *ctx, const XiModu
     bool source_reachable = cg_func_body_is_reachable_from_roots(ctx, source, depth + 1);
     if (!source_reachable)
         return false;
-    if (cg_module_for_func(ctx, source) == owner_mod && cg_func_body_gets_shared_slot(source, slot))
+    if (cg_module_for_func(ctx, source) == owner_mod &&
+        cg_func_body_gets_shared_slot(ctx, source, slot))
         return true;
     for (uint16_t ci = 0; ci < source->nchildren; ci++) {
         if (cg_reachable_func_tree_gets_shared_slot(ctx, owner_mod, source->children[ci], slot,
@@ -6315,6 +6443,8 @@ static bool cg_import_ref_value_use_requires_runtime_value(XiCgenCtx *ctx, const
         return false;
     if (depth > 16)
         return true;
+    if (cg_program_direct_i64_callee_operand_is_elided(ctx, owner, ref))
+        return false;
     const XiModule *owner_mod = cg_module_for_func(ctx, owner);
     for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
         const XiBlock *blk = owner->blocks[bi];
@@ -8997,6 +9127,8 @@ static bool cg_module_namespace_field_ignores_receiver(XiCgenCtx *ctx, const XiF
 static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!ctx || !f || !v || v->op != XI_IMPORT_REF || !v->aux)
         return false;
+    if (cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
+        return true;
     bool seen_use = false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -9039,6 +9171,8 @@ static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, 
 static bool cg_shared_load_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (!ctx || !f || !v || v->op != XI_GET_SHARED || v->aux_int < 0)
         return false;
+    if (cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
+        return true;
     const XiModule *owner_mod = cg_module_for_func(ctx, f);
     if (!owner_mod || v->aux_int >= owner_mod->nslots)
         return false;
@@ -14276,9 +14410,19 @@ static bool cg_static_func_ref_use_requires_body(XiCgenCtx *ctx, const XiFunc *o
 static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *target, int depth);
 
 static bool cg_func_has_forced_body_root(XiCgenCtx *ctx, const XiFunc *f) {
-    const XiModule *mod = cg_module_for_func(ctx, f);
     if (!f)
         return false;
+    /* The verified program binding owns the entire bounded function graph.
+     * Only lifecycle initializers are implicit roots; its ordinary caller is
+     * seeded explicitly below and no export/class/link metadata may add a
+     * parallel product root. */
+    if (ctx->program_direct_i64_required) {
+        if (!cg_program_direct_i64_function_binding(ctx, f))
+            return false;
+        return cg_program_direct_i64_function_is_initializer(ctx, f) &&
+               ctx->c_dialect != XI_CGEN_C_DIALECT_C90;
+    }
+    const XiModule *mod = cg_module_for_func(ctx, f);
     if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), f))
         return false;
     if (mod && mod->init == f)
@@ -14324,8 +14468,14 @@ static void cg_func_reach_collect_tree(XiCgenCtx *ctx, const XiFunc *f) {
 }
 
 static void cg_func_reach_mark_root(XiCgenCtx *ctx, const XiFunc *f) {
-    if (!ctx || !f || !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), f))
+    if (!ctx || !f)
         return;
+    if (ctx->program_direct_i64_required) {
+        if (!cg_program_direct_i64_function_binding(ctx, f))
+            return;
+    } else if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), f)) {
+        return;
+    }
     cg_func_reach_collect_tree(ctx, f);
     CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, f, true);
     if (memo) {
@@ -14500,9 +14650,14 @@ static void cg_func_reach_mark_generic_body_roots(XiCgenCtx *ctx) {
 }
 
 static bool cg_func_reach_mark_edge(XiCgenCtx *ctx, const XiFunc *target) {
-    if (!ctx || !target ||
-        !xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
+    if (!ctx || !target)
         return false;
+    if (ctx->program_direct_i64_required) {
+        if (!cg_program_direct_i64_function_binding(ctx, target))
+            return false;
+    } else if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target)) {
+        return false;
+    }
     CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, false);
     if (!memo || memo->reachable)
         return false;
@@ -14514,6 +14669,31 @@ static bool cg_func_reach_mark_edge(XiCgenCtx *ctx, const XiFunc *target) {
 static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, const XiValue *v) {
     if (!ctx || !owner || !v)
         return false;
+
+    /* Program reachability is the closure of the verified direct edge, not a
+     * union with the legacy class/name/shared/parallel resolvers below. Any
+     * other call in the frozen bounded family is an authority mismatch and is
+     * rejected by the same program call consumer used by emission. */
+    if (ctx->program_direct_i64_required) {
+        const XrCProgramDirectI64EmissionBinding *binding =
+            &ctx->program_direct_i64;
+        if (!ctx->program_direct_i64_bound || !binding->verified) {
+            ctx->error = true;
+            return false;
+        }
+        if (v->op != XI_CALL && v->op != XI_TAIL_CALL &&
+            v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT)
+            return false;
+        XaotDirectI64TargetView direct_i64 = {0};
+        XaotDirectI64TargetStatus status =
+            cg_direct_i64_call_view(ctx, owner, v, &direct_i64);
+        if (status != XAOT_DIRECT_I64_TARGET_FOUND)
+            return false;
+        return owner == binding->caller.xi_function &&
+               v == binding->xi_call &&
+               direct_i64.callee == binding->callee.xi_function &&
+               cg_func_reach_mark_edge(ctx, binding->callee.xi_function);
+    }
     bool changed = false;
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
 
@@ -14638,7 +14818,10 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         changed |= cg_func_reach_mark_edge(
             ctx, cg_class_native_resolve_getter_field_method(ctx, owner, v, NULL, NULL));
 
-    const XiFunc *ref_target = cg_value_static_func_target(ctx, owner, v);
+    const XiFunc *ref_target =
+        cg_program_direct_i64_callee_operand_is_elided(ctx, owner, v)
+            ? NULL
+            : cg_value_static_func_target(ctx, owner, v);
     if (ref_target && cg_static_func_ref_use_requires_body(ctx, owner, v, ref_target, 0))
         changed |= cg_func_reach_mark_edge(ctx, ref_target);
     return changed;
@@ -14652,8 +14835,9 @@ static bool cg_func_reach_mark_body_edges(XiCgenCtx *ctx, const XiFunc *source) 
         const XiBlock *block = source->blocks[bi];
         if (!block)
             continue;
-        changed |=
-            cg_func_reach_mark_edge(ctx, cg_value_static_func_target(ctx, source, block->control));
+        if (!ctx->program_direct_i64_required)
+            changed |= cg_func_reach_mark_edge(
+                ctx, cg_value_static_func_target(ctx, source, block->control));
         for (uint32_t vi = 0; vi < block->nvalues; vi++)
             changed |= cg_func_reach_mark_value_edges(ctx, source, block->values[vi]);
     }
@@ -14663,6 +14847,11 @@ static bool cg_func_reach_mark_body_edges(XiCgenCtx *ctx, const XiFunc *source) 
 static bool cg_func_reach_mark_body_edges_in_owner_module(XiCgenCtx *ctx, const XiFunc *source) {
     if (!ctx || !source)
         return false;
+    /* Program edges are fully described by stable pointers in the verified
+     * binding. They do not require switching module scan state or registering
+     * imported class/name metadata. */
+    if (ctx->program_direct_i64_required)
+        return cg_func_reach_mark_body_edges(ctx, source);
     const XiModule *owner = cg_module_for_func(ctx, source);
     if (!owner || owner == ctx->module)
         return cg_func_reach_mark_body_edges(ctx, source);
@@ -14699,8 +14888,26 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
     } else if (ctx->module && ctx->module->init) {
         cg_func_reach_collect_tree(ctx, ctx->module->init);
     }
-    cg_func_reach_mark_hash_eq_roots(ctx);
-    cg_func_reach_mark_generic_body_roots(ctx);
+    /* A program graph has one product entry root. The callee must become live
+     * only through the verified direct-call edge; seeding it here as a second
+     * root would hide a missing or corrupt call binding. */
+    if (ctx->program_direct_i64_required) {
+        if (!ctx->program_direct_i64_bound ||
+            !ctx->program_direct_i64.verified ||
+            !ctx->program_direct_i64.caller.xi_function) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: XR_TARGET_1001: verified program graph "
+                    "reachability binding is missing or stale\n");
+            ctx->error = true;
+        } else {
+            cg_func_reach_mark_root(
+                ctx, ctx->program_direct_i64.caller.xi_function);
+        }
+    }
+    if (!ctx->program_direct_i64_required) {
+        cg_func_reach_mark_hash_eq_roots(ctx);
+        cg_func_reach_mark_generic_body_roots(ctx);
+    }
 
     bool changed;
     do {
@@ -14714,9 +14921,11 @@ static void cg_func_reachability_compute(XiCgenCtx *ctx) {
                 continue;
             changed |= cg_func_reach_mark_body_edges_in_owner_module(ctx, source);
         }
-        changed |= cg_func_reach_mark_dispatch_edges(ctx);
-        changed |= cg_func_reach_mark_itable_edges(ctx);
-        changed |= cg_func_reach_mark_sym_table_edges(ctx);
+        if (!ctx->program_direct_i64_required) {
+            changed |= cg_func_reach_mark_dispatch_edges(ctx);
+            changed |= cg_func_reach_mark_itable_edges(ctx);
+            changed |= cg_func_reach_mark_sym_table_edges(ctx);
+        }
     } while (changed);
 
     for (int i = 0; i < ctx->nfunc_reach_memo; i++)
@@ -14729,8 +14938,12 @@ static bool cg_func_body_is_reachable_from_roots(XiCgenCtx *ctx, const XiFunc *t
     (void) depth;
     if (!ctx || !target)
         return false;
-    if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target))
+    if (ctx->program_direct_i64_required) {
+        if (!cg_program_direct_i64_function_binding(ctx, target))
+            return false;
+    } else if (!xaot_callable_func_has_executable_body_plan(cg_ctx_aot_bundle(ctx), target)) {
         return false;
+    }
     if (!ctx->func_reachability_valid && !ctx->func_reachability_computing)
         cg_func_reachability_compute(ctx);
     CgFuncReachMemo *memo = cg_func_reach_memo_entry(ctx, target, false);

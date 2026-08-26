@@ -2074,10 +2074,11 @@ static void print_aot_codegen_stats(const XaotBuildResult *result) {
 static void print_aot_prepare_stats(const XaotBuildResult *result) {
     XR_DCHECK(result != NULL, "AOT result is NULL");
     const XaotPrepareStats *stats = &result->prepare_stats;
-    printf("[xi-native] AOT prepare: functions=%u native=%u tagged=%u coro=%u values=%u "
+    printf("[xi-native] AOT prepare: functions=%u target-plan=%u native=%u tagged=%u coro=%u values=%u "
            "boundaries=%u value_scalar=%u value_tagged=%u value_ptr=%u value_aggregate=%u "
            "value_vector=%u value_view=%u value_void=%u\n",
-           stats->functions_total, stats->functions_native_abi, stats->functions_tagged_abi,
+           stats->functions_total, stats->functions_target_plan_abi,
+           stats->functions_native_abi, stats->functions_tagged_abi,
            stats->functions_coro_abi, stats->values_total, stats->boundary_count,
            stats->values_scalar, stats->values_tagged, stats->values_ptr, stats->values_aggregate,
            stats->values_vector, stats->values_view, stats->values_void);

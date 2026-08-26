@@ -119,7 +119,7 @@ typedef enum XiCgenCDialect {
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
-XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
+XR_FUNC bool xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
 /* Attach one immutable value projection for every module in the already
  * installed AOT bundle. The pointer array is copied; plans remain borrowed and
  * must outlive ctx. A successful install seals both bundle and registry.
@@ -166,8 +166,10 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, struct XiModule *module)
 /* Emit the common C header (includes, defines). Call once per file. */
 XR_FUNC void xi_cgen_header(XiCgenCtx *ctx, FILE *out);
 
-/* Resolve cross-module imports.  Populates ctx internal import table
- * from the module graph.  Must be called before C generation. */
+/* Install the module set used by C generation. Legacy families also populate
+ * the internal name/path import table. A verified program-direct family keeps
+ * that table empty because its program C-emission binding is the sole
+ * cross-module resolver and symbol authority. */
 XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, struct XiModule **modules,
                                             int nmodules);
 

@@ -479,9 +479,16 @@ one exact plan per Xi partition. The zero-dependency producer carries its pure
 unary function/export authority; the entry carries its pure nullary function,
 ordered dependency, resolver binding, program call, and `SOURCE_EXPORT` target.
 Xi and SemanticPlan module-set verifiers independently rejoin both live
-partitions before XSM/cache publication. TargetPlan, VM, and native AOT effect
-execution are not admitted for this graph family and reject it at the Target
-boundary with `XR_TARGET_1001`.
+partitions before XSM/cache publication. Semantic effect rows do not themselves
+own target layout, ABI, dispatch, or execution answers. Their typed authority is
+instead joined once into the unique Program TargetPlan. Same-plan VM lowering
+and the bounded source-AOT `PROGRAM_DIRECT`/`CALL_DIRECT_I64` path consume that
+target authority. For the exact two-module scalar graph, the verified program
+C-emission binding mechanically supplies caller/callee/initializer value and
+ABI views, the canonical direct symbol and reachability edge, and the exact
+elided shared carrier; its generated-C/native cold, warm, edit, and revert
+oracle is admitted as `execution=cgen-ready`. This does not admit general graph
+execution, a public runtime manifest/loader route, or `PRODUCT_ACTIVE`.
 These schemas retain no compiler pointer or target-specific bytes. They
 serialize and fingerprint the PSC schema/family/fingerprint,
 GenerationClosureId, exact type/type-field/function/dependency/call row bindings, preserved
@@ -494,9 +501,11 @@ back to PSC and Xi. For each covered `XI_CALL`, neither verifier invokes the
 generic direct, native, namespace, indirect, class, method, name, or body
 resolver. The operation retains generated conservative CALL effects. Missing,
 mixed bound/unbound, reordered, or mismatched authority fails closed rather than
-falling back to another call-target or effect interpretation. This semantic
-projection supplies no aggregate layout, slot, ABI, TargetPlan, VM, or AOT
-authority.
+falling back to another call-target or effect interpretation. The semantic
+projection supplies no aggregate layout, slot, ABI, VM, or AOT answer by
+itself; those answers exist only after the independent Program TargetPlan and
+downstream execution bindings have joined and verified the typed rows for an
+admitted family.
 
 ## Digest anchors
 

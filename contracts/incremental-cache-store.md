@@ -133,12 +133,14 @@ invalidation, compiler-session ownership, or any compatibility reader.
     provenance row may only confirm the identical PSC/GCI. The claimed product
     predicate cannot fall back to the zero-authority key state, a path/name
     reconstruction, an old key reader, or a second cache lookup path. Cache
-    publication grants no VM or AOT execution authority: after the module
-    summaries are published, the product runner must fail at
-    `XR_TARGET_1001: verified program TargetPlan execution is outside same-plan
-    VM/AOT coverage` and produce no binary. Cold, warm, dependency-edit, and
-    dependency-revert runs must retain the same cache publication and
-    invalidation behavior at this explicit execution fence.
+    publication grants no execution authority by itself. The exact bounded
+    graph may proceed only after its same-plan AOT direct-call and program
+    C-emission bindings independently verify the global rows and Xi joins.
+    Cold, warm, dependency-edit, and dependency-revert runs retain the same
+    cache publication and invalidation behavior while their real generated-C
+    binaries execute 42/42/43/42. Missing or hostile program C authority fails
+    closed and cannot turn a cache hit into a per-module, name-based, or legacy
+    execution path.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup,
@@ -158,7 +160,7 @@ anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57
 anchor-sha256: src/aot/xaot_module_summary.h ab160517cfb59565b24f75f1273afb08e0c5d6c2370f282a1c09c7f45846adcc
 anchor-sha256: src/aot/xaot_module_summary.c c618aecfcbadf2cd1b0c6d17d4e05760dcd5111f63d823d7fe672a104f32dc31
 anchor-sha256: src/aot/xaot_driver.h bbf2dba4ad268d09cf45c32080a79202e85355600a793ea3571462822719e88d
-anchor-sha256: src/aot/xaot_driver.c 4c2c8bf0323d6d59c00647dc24f996f8ffb3d6d43e9b29b764336320f67bb7d1
+anchor-sha256: src/aot/xaot_driver.c 225c535b8b9ac5751ad5d413712105c446910244593be7c0a9f44a4c8f54fe32
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
@@ -167,6 +169,6 @@ anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c c9819052135b2
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 55297a8a70bcb0c463dd03512699ecd7bc7723fd505ac75b102c585ed4c4857f
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 117a7c617160868de286912287b70b97dc79d07f685b740deb08d1e79e3f704e
-anchor-sha256: tests/aot/run_module_summary_determinism.py ab111483920e1059375226da9d9cf84fb96e2474c0608418083aff403cf85d87
+anchor-sha256: tests/aot/run_module_summary_determinism.py dd5f9493c43dbe11e3ca4870df40d0859ee5575f1459a67e3d7a180a657fe50d
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 067bc64b28de1e058dc91b49bd78d80c290bfdab73cd97bfdb3e2fc98920339d
 anchor-sha256: tests/unit/os/test_fs_atomic.c 3166bf0113590778cf46f874a7205476819e043699bb99d9881549579237ce12

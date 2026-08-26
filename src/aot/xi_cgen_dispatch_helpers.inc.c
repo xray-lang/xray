@@ -5453,25 +5453,104 @@ static bool xicgen_generic_body_call_preflight(XiCgenCtx *ctx, FILE *out, const 
     return false;
 }
 
+static bool xicgen_emit_program_direct_i64_call(
+    XiCgenCtx *ctx, FILE *out, const XiFunc *caller, const XiValue *call,
+    const XaotDirectI64TargetView *direct_i64, const char *callee_symbol) {
+    XrCFunctionAbiEmissionView return_abi = {0};
+    XrCFunctionAbiEmissionView parameter_abi = {0};
+    XrCValueEmissionView result_emission = {0};
+    XrCValueEmissionView argument_emission = {0};
+    const XiValue *argument = call && call->nargs == 2u ? call->args[1] : NULL;
+    bool exact = ctx && ctx->program_direct_i64_required &&
+                 ctx->program_direct_i64_bound && out && caller && call &&
+                 direct_i64 && direct_i64->callee && argument &&
+                 direct_i64->argument_value == argument && callee_symbol &&
+                 callee_symbol[0] != '\0' &&
+                 cg_program_direct_i64_abi_emission(
+                     ctx, direct_i64->callee, 0u, &return_abi) &&
+                 cg_program_direct_i64_abi_emission(
+                     ctx, direct_i64->callee, 1u, &parameter_abi) &&
+                 cg_value_emission_view(ctx, caller, call, &result_emission) ==
+                     CG_VALUE_EMISSION_FOUND &&
+                 cg_value_emission_view(ctx, caller, argument,
+                                        &argument_emission) ==
+                     CG_VALUE_EMISSION_FOUND &&
+                 return_abi.ordinal == 0u && return_abi.parameter_count == 1u &&
+                 return_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
+                 return_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
+                 return_abi.rep == XR_C_VALUE_REP_I64 && return_abi.c_type &&
+                 strcmp(return_abi.c_type, "int64_t") == 0 &&
+                 parameter_abi.ordinal == 1u &&
+                 parameter_abi.parameter_count == 1u &&
+                 parameter_abi.slot_class == XR_C_ABI_SLOT_VALUE &&
+                 parameter_abi.boundary_kind == XR_C_ABI_BOUNDARY_NATIVE &&
+                 parameter_abi.rep == XR_C_VALUE_REP_I64 &&
+                 parameter_abi.c_type &&
+                 strcmp(parameter_abi.c_type, "int64_t") == 0 &&
+                 result_emission.rep == XR_C_VALUE_REP_I64 &&
+                 result_emission.c_type &&
+                 strcmp(result_emission.c_type, "int64_t") == 0 &&
+                 argument_emission.rep == XR_C_VALUE_REP_I64 &&
+                 argument_emission.c_type &&
+                 strcmp(argument_emission.c_type, "int64_t") == 0;
+    if (!exact) {
+        if (ctx)
+            ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_TARGET_1001: program direct-i64 C binding "
+                "is incomplete\n");
+        emit_codegen_abort_expr(out);
+        return false;
+    }
+    fprintf(out, "%s(NULL, ", callee_symbol);
+    emit_vref(out, argument);
+    fprintf(out, ")");
+    return true;
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
     XiValue *callee = v->args[0];
     XaotLeafAggregateTargetView leaf_aggregate = {0};
     XaotLeafAggregateTargetStatus leaf_status =
-        cg_leaf_aggregate_call_view(ctx, f, v, &leaf_aggregate);
+        ctx->program_direct_i64_required
+            ? XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
+            : cg_leaf_aggregate_call_view(ctx, f, v, &leaf_aggregate);
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
         emit_codegen_abort_expr(out);
         return;
     }
-    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED &&
-        xicgen_emit_stdlib_import_call(ctx, out, f, v))
-        return;
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status =
         cg_direct_i64_call_view(ctx, f, v, &direct_i64);
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         emit_codegen_abort_expr(out);
+        return;
+    }
+    if (!ctx->program_direct_i64_required &&
+        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED &&
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED &&
+        xicgen_emit_stdlib_import_call(ctx, out, f, v))
+        return;
+    const char *program_call_symbol =
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
+            ? cg_program_direct_i64_symbol(ctx, direct_i64.callee)
+            : NULL;
+    if (ctx->program_direct_i64_required &&
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND &&
+        !program_call_symbol) {
+        fprintf(stderr,
+                "[xi_cgen] ERROR: XR_TARGET_1001: canonical program callee "
+                "C symbol is missing\n");
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (ctx->program_direct_i64_required &&
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+        (void) xicgen_emit_program_direct_i64_call(
+            ctx, out, f, v, &direct_i64, program_call_symbol);
         return;
     }
     CgStaticFunctionCall static_call =
@@ -5480,7 +5559,9 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                                       cg_module_prefix_for_func(ctx, leaf_aggregate.callee))
         : direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
             ? cg_static_function_call(direct_i64.callee,
-                                      cg_module_prefix_for_func(ctx, direct_i64.callee))
+                                      ctx->program_direct_i64_required
+                                          ? program_call_symbol
+                                          : cg_module_prefix_for_func(ctx, direct_i64.callee))
             : cg_resolve_static_function_call(ctx, f, callee);
     const XiFunc *target = static_call.func;
     const char *call_prefix = static_call.prefix;

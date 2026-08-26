@@ -135,7 +135,7 @@ failure is a null result with no error allocation or pending-error traffic.
 
 ## Digest anchors
 
-anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c 252cb973f45aab4b41c5dc76ec039b924487b7162b1fadbabd0242ea38fe79ba
-anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 090e4c6a5657f9c5e562b811727fa211125d2908e75c102952ea170c473292f8
+anchor-sha256: src/aot/xi_cgen.h f318692646715ed68d8ffc52070ac6702ab99d64ad5fff3298d6b086523b8c13
+anchor-sha256: src/aot/xi_cgen.c fc8180aa84d2a2ddc1a5382064ac50523f26016525ed5a4e74b96d22c1cbb572
+anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c 325ba4faa1d79320f0f63ae76e52ce9e0a166697b33904c7a34abf4102e2321d
 anchor-sha256: src/app/cli/xcmd_verify.c 25c38ae1b1081368f5acb29436f9aa49f906b24620c0951cc314e2a07d9416de

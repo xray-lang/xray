@@ -98,31 +98,56 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->enum_scalar_sidecar_used);
     xr_free(ctx->stdlib_enum_scalar_sidecar_used);
     xr_free(ctx->value_emission_registry);
+    xr_c_program_direct_i64_emission_release(&ctx->program_direct_i64);
     xr_free(ctx);
 }
 
-XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle) {
+XR_FUNC bool xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle) {
     if (!ctx)
-        return;
+        return false;
     if (ctx->error || ctx->value_emission_registry) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: XR_TARGET_1001: C value emission registry is sealed\n");
         ctx->error = true;
-        return;
+        return false;
     }
+    xr_c_program_direct_i64_emission_release(&ctx->program_direct_i64);
     ctx->aot_bundle = bundle;
+    ctx->program_direct_i64_required = false;
+    ctx->program_direct_i64_bound = false;
+    const XrTargetPlan *program_target = xaot_bundle_program_target_plan(bundle);
+    uint32_t program_graph_count = 0;
+    const XrTargetProgramGraphRecord *program_graphs =
+        program_target ? xr_target_plan_program_graphs(program_target, &program_graph_count) : NULL;
+    if (program_graph_count > 0) {
+        char binding_error[256] = {0};
+        ctx->program_direct_i64_required = true;
+        if (!program_graphs || program_graph_count != 1u || !bundle || !bundle->modules ||
+            !xr_c_program_direct_i64_emission_bind(
+                program_target, bundle->modules, bundle->nmodules,
+                &ctx->program_direct_i64, binding_error, sizeof(binding_error))) {
+            fprintf(stderr, "[xi_cgen] ERROR: %s\n",
+                    binding_error[0]
+                        ? binding_error
+                        : "XR_TARGET_1001: verified program C-emission binding is missing");
+            ctx->error = true;
+            return false;
+        }
+        ctx->program_direct_i64_bound = true;
+    }
     uint32_t need = bundle ? bundle->nenum_plans : 0;
     if (need > ctx->enum_scalar_sidecar_cap) {
         uint8_t *used = (uint8_t *) xr_realloc(ctx->enum_scalar_sidecar_used, need);
         if (!used) {
             ctx->error = true;
-            return;
+            return false;
         }
         ctx->enum_scalar_sidecar_used = used;
         ctx->enum_scalar_sidecar_cap = need;
     }
     if (ctx->enum_scalar_sidecar_used && ctx->enum_scalar_sidecar_cap > 0)
         memset(ctx->enum_scalar_sidecar_used, 0, ctx->enum_scalar_sidecar_cap);
+    return true;
 }
 
 XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(

@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -58,11 +59,13 @@ PROGRAM_RE = re.compile(
 )
 PROGRAM_PLAN_GATE = (
     "[program-semantic-plan] modules=2 entry=1 xi=verified "
-    "semantic=verified target=verified aot-binding=verified execution=pending"
+    "semantic=verified target=verified aot-binding=verified execution=cgen-ready"
 )
-GRAPH_TARGET_REJECTION = (
-    "XR_TARGET_1001: verified program TargetPlan execution is outside "
-    "same-plan VM/AOT coverage"
+PROGRAM_FUNCTION_RE = re.compile(
+    r"int64_t\s+(xr_pf_[0-9a-f]{32})\(xrt_closure_t \*_cl(?P<params>[^)]*)\)\s*\{"
+)
+PROGRAM_INITIALIZER_RE = re.compile(
+    r"XrValue\s+(xr_pf_[0-9a-f]{32})\(xrt_closure_t \*_cl\)\s*\{"
 )
 
 SOLO_V1 = "fn scale(x: i64) -> i64 {\n    return x * 3\n}\n\nprint(scale(14))\n"
@@ -129,6 +132,8 @@ class Config:
     timeout: float | None
     toolchain: str | None
     cc: str | None
+    harness_cc: Path
+    harness_driver: str
 
 
 def build(config: Config, cache: Path, entry: Path, out: Path,
@@ -194,24 +199,204 @@ def expect_output(rec: Recorder, config: Config, binary: Path, want: str, label:
     expect(rec, got == want, f"{label}: output {want!r}", f"got {got!r}")
 
 
-def expect_product_target_boundary(rec: Recorder, result: proc.ProcResult,
-                                   output: Path, label: str) -> None:
+def _kept_c_sources(result: proc.ProcResult) -> list[Path]:
+    sources: list[Path] = []
+    for line in result.combined_text().splitlines():
+        if not line.startswith("Kept C source: "):
+            continue
+        path = Path(line.removeprefix("Kept C source: ").strip())
+        sources.append(path if path.is_absolute() else PROJECT_DIR / path)
+    return sources
+
+
+def _generated_function_body(text: str, symbol: str) -> str | None:
+    match = re.search(
+        rf"int64_t\s+{re.escape(symbol)}\(xrt_closure_t \*_cl[^)]*\)\s*\{{",
+        text,
+    )
+    if not match:
+        return None
+    depth = 1
+    index = match.end()
+    while index < len(text) and depth:
+        if text[index] == "{":
+            depth += 1
+        elif text[index] == "}":
+            depth -= 1
+        index += 1
+    return text[match.end():index - 1] if depth == 0 else None
+
+
+def _msvc_developer_command(config: Config, directory: Path,
+                            argv: list[str]) -> list[str]:
+    for parent in config.harness_cc.parents:
+        vsdevcmd = parent / "Common7" / "Tools" / "VsDevCmd.bat"
+        if vsdevcmd.is_file():
+            script = directory / "program-graph-native-oracle-build.cmd"
+            script.write_text(
+                "@echo off\n"
+                f'call "{vsdevcmd}" -arch=x64 -host_arch=x64 >nul\n'
+                "if errorlevel 1 exit /b 1\n"
+                f"{subprocess.list2cmdline(argv)}\n",
+                encoding="utf-8",
+                newline="\r\n",
+            )
+            return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", script]
+    return argv
+
+
+def _compile_product_oracle(config: Config, directory: Path, entry_c: Path,
+                            other_sources: list[Path], caller: str,
+                            expected: int) -> proc.ProcResult:
+    harness = directory / "program-graph-native-oracle.c"
+    harness.write_text(
+        "#define main xray_generated_main\n"
+        f'#include "{entry_c.as_posix()}"\n'
+        "#undef main\n\n"
+        "int main(void) {\n"
+        f"    return {caller}(NULL) == INT64_C({expected}) ? 0 : 1;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    executable = directory / platform.exe_name("program-graph-native-oracle")
+    include_dirs = (
+        PROJECT_DIR / "src" / "aot",
+        PROJECT_DIR / "include",
+        config.xray.parent / "generated",
+    )
+    if config.harness_driver == "msvc":
+        argv = [
+            str(config.harness_cc), "/nologo", "/O2", "/std:c11",
+            "/experimental:c11atomics", "/utf-8",
+            *(f"/I{path}" for path in include_dirs),
+            str(harness), *(str(path) for path in other_sources),
+            f"/Fe:{executable}",
+        ]
+        argv = _msvc_developer_command(config, directory, argv)
+    else:
+        argv = [
+            str(config.harness_cc), "-std=c11", "-O2",
+            *(f"-I{path}" for path in include_dirs),
+            str(harness), *(str(path) for path in other_sources),
+            "-o", str(executable),
+        ]
+        if not platform.IS_WINDOWS:
+            argv.extend(("-lm", "-pthread"))
+    compiled = proc.run(argv, cwd=directory, timeout=config.timeout)
+    if not compiled.ok:
+        return compiled
+    return proc.run([executable], cwd=directory, timeout=config.timeout)
+
+
+def expect_product_native(rec: Recorder, config: Config, result: proc.ProcResult,
+                          output: Path, expected: int, label: str,
+                          exact_cached_sources: Sequence[Path] = ()) -> None:
+    native_output = output
     stdout = result.stdout_text("replace")
-    stderr = result.stderr_text("replace")
     gate_at = stdout.find(PROGRAM_PLAN_GATE)
     summary_at = stdout.find("[module-summary]")
     closure_at = stdout.find("[program-closure]")
     forbidden = ("legacy success", "legacy fallback", "fallback succeeded")
-    expect(rec, not result.ok and not result.timed_out and GRAPH_TARGET_REJECTION in stderr,
-           f"{label}: verified graph reaches the exact Target fail-closed boundary",
+    expect(rec, result.ok and not result.timed_out and native_output.is_file(),
+           f"{label}: verified graph emits and links a native product",
            result.combined_text())
-    expect(rec, 0 <= gate_at < summary_at < closure_at,
-           f"{label}: verified program target precedes cache publication and execution fence",
+    expect(rec, 0 <= summary_at < closure_at < gate_at,
+           f"{label}: CGen readiness is published only after program target/cache authority",
            stdout)
-    expect(rec, not output.exists(),
-           f"{label}: Target rejection publishes no native binary", str(output))
     expect(rec, all(marker not in result.combined_text().lower() for marker in forbidden),
-           f"{label}: Target rejection has no legacy recovery", result.combined_text())
+           f"{label}: native graph has no legacy recovery", result.combined_text())
+    expect(rec, "AOT prepare: functions=4 target-plan=4 native=2 tagged=2 coro=0" in stdout,
+           f"{label}: all functions have program-owned authority and exact ABI shapes",
+           stdout)
+    if not result.ok or not native_output.is_file():
+        return
+
+    sources = _kept_c_sources(result)
+    if not sources:
+        sources = list(exact_cached_sources)
+    definitions: list[tuple[str, str, Path, str]] = []
+    for source in sources:
+        if not source.is_file():
+            continue
+        text = source.read_text(encoding="utf-8")
+        for match in PROGRAM_FUNCTION_RE.finditer(text):
+            definitions.append((match.group(1), match.group("params"), source, text))
+    callers = [row for row in definitions if not row[1].strip()]
+    callees = [row for row in definitions if row[1].strip() == ", int64_t p0"]
+    shape_ok = len(callers) == 1 and len(callees) == 1 and callers[0][2] != callees[0][2]
+    expect(rec, shape_ok,
+           f"{label}: generated C contains one global caller and one cross-module callee",
+           "\n".join(f"{symbol} params={params!r} file={path}"
+                     for symbol, params, path, _ in definitions))
+    if not shape_ok:
+        return
+    caller, _, entry_c, entry_text = callers[0]
+    callee, _, producer_c, _ = callees[0]
+    initializer_symbols = [
+        match.group(1)
+        for source in sources if source.is_file()
+        for match in PROGRAM_INITIALIZER_RE.finditer(
+            source.read_text(encoding="utf-8"))
+    ]
+    expect(rec, len(initializer_symbols) == 2 and
+           len(set(initializer_symbols)) == 2 and
+           caller not in initializer_symbols and callee not in initializer_symbols,
+           f"{label}: both initializer definitions use distinct canonical program symbols",
+           repr(initializer_symbols))
+    kept_program_c = "\n".join(
+        source.read_text(encoding="utf-8")
+        for source in sources if source.is_file()
+    )
+    initializer_call_counts = {
+        symbol: len(re.findall(rf"\b{re.escape(symbol)}\(NULL\)", kept_program_c))
+        for symbol in initializer_symbols
+    }
+    expect(rec, len(initializer_call_counts) == 2 and
+           all(count == 1 for count in initializer_call_counts.values()),
+           f"{label}: both canonical initializer symbols are called exactly once",
+           repr(initializer_call_counts))
+    legacy_initializer_names = re.findall(
+        r"\b[A-Za-z_][A-Za-z0-9_]*_modinit\b", kept_program_c)
+    expect(rec, not legacy_initializer_names,
+           f"{label}: kept C has no module-derived initializer symbol",
+           repr(legacy_initializer_names))
+    caller_body = _generated_function_body(entry_text, caller)
+    direct_re = re.compile(
+        rf"\b{re.escape(callee)}\(NULL,\s*(?:INT64_C\(\d+\)|v\d+|p\d+)\)"
+    )
+    direct = direct_re.search(caller_body or "")
+    expect(rec, direct is not None,
+           f"{label}: caller uses the canonical global callee symbol directly",
+           caller_body or "caller body missing")
+    prototype_re = re.compile(
+        rf"\bint64_t\s+{re.escape(callee)}\(xrt_closure_t \*_cl,\s*int64_t p0\);"
+    )
+    prototypes = list(prototype_re.finditer(entry_text))
+    caller_definition_match = re.search(
+        rf"\bint64_t\s+{re.escape(caller)}\(xrt_closure_t \*_cl\)\s*\{{",
+        entry_text,
+    )
+    caller_definition = (caller_definition_match.start()
+                         if caller_definition_match else -1)
+    expect(rec, len(prototypes) == 1 and caller_definition >= 0 and
+           prototypes[0].start() < caller_definition,
+           f"{label}: caller unit has one canonical callee prototype before the caller",
+           f"prototype_count={len(prototypes)} caller_definition={caller_definition}")
+    legacy_tokens = (
+        "xrt_shared", "xrt_module", "xrt_import", "xrt_export",
+        "get_shared", "load_module", "producer", "add1",
+    )
+    expect(rec, caller_body is not None and
+           all(token not in caller_body for token in legacy_tokens),
+           f"{label}: caller body contains no legacy shared/module/name lookup",
+           caller_body or "caller body missing")
+    if direct is None or caller_body is None:
+        return
+    oracle = _compile_product_oracle(
+        config, output.parent, entry_c, [producer_c], caller, expected)
+    expect(rec, oracle.ok,
+           f"{label}: independent native harness returns {expected}",
+           oracle.combined_text())
 
 
 def run_determinism(rec: Recorder, config: Config, ws: workspace.Workspace) -> None:
@@ -379,10 +564,11 @@ def run_product_graph_identity(rec: Recorder, config: Config,
     producer.write_text(PRODUCT_PRODUCER_V1, encoding="utf-8")
     entry.write_text(PRODUCT_ENTRY, encoding="utf-8")
 
-    cold_output = d / "product1"
-    cold_result = build(config, cache, entry, cold_output)
-    expect_product_target_boundary(rec, cold_result, cold_output, "product-cold")
-    cold = parse_summary(rec, cold_result, "product-cold", False)
+    cold_output = d / platform.exe_name("product1")
+    cold_result = build(config, cache, entry, cold_output, ("--keep-c",))
+    expect_product_native(rec, config, cold_result, cold_output, 42, "product-cold")
+    cold_sources = _kept_c_sources(cold_result)
+    cold = parse_summary(rec, cold_result, "product-cold")
     cold_program = parse_program_closure(rec, cold_result, "product-cold")
     if not cold or not cold_program:
         return
@@ -400,10 +586,11 @@ def run_product_graph_identity(rec: Recorder, config: Config,
            "product-cold: one immutable XSM object exists per module",
            str(cold_inventory))
 
-    warm_output = d / "product2"
-    warm_result = build(config, cache, entry, warm_output)
-    expect_product_target_boundary(rec, warm_result, warm_output, "product-warm")
-    warm = parse_summary(rec, warm_result, "product-warm", False)
+    warm_output = d / platform.exe_name("product2")
+    warm_result = build(config, cache, entry, warm_output, ("--keep-c",))
+    expect_product_native(rec, config, warm_result, warm_output, 42, "product-warm",
+                          cold_sources)
+    warm = parse_summary(rec, warm_result, "product-warm")
     warm_program = parse_program_closure(rec, warm_result, "product-warm")
     if not warm or not warm_program:
         return
@@ -416,10 +603,10 @@ def run_product_graph_identity(rec: Recorder, config: Config,
            str(warm))
 
     producer.write_text(PRODUCT_PRODUCER_V2, encoding="utf-8")
-    edited_output = d / "product3"
-    edited_result = build(config, cache, entry, edited_output)
-    expect_product_target_boundary(rec, edited_result, edited_output, "product-edit")
-    edited = parse_summary(rec, edited_result, "product-edit", False)
+    edited_output = d / platform.exe_name("product3")
+    edited_result = build(config, cache, entry, edited_output, ("--keep-c",))
+    expect_product_native(rec, config, edited_result, edited_output, 43, "product-edit")
+    edited = parse_summary(rec, edited_result, "product-edit")
     edited_program = parse_program_closure(rec, edited_result, "product-edit")
     if not edited or not edited_program:
         return
@@ -440,10 +627,11 @@ def run_product_graph_identity(rec: Recorder, config: Config,
            str(edited_inventory))
 
     producer.write_text(PRODUCT_PRODUCER_V1, encoding="utf-8")
-    restored_output = d / "product4"
-    restored_result = build(config, cache, entry, restored_output)
-    expect_product_target_boundary(rec, restored_result, restored_output, "product-revert")
-    restored = parse_summary(rec, restored_result, "product-revert", False)
+    restored_output = d / platform.exe_name("product4")
+    restored_result = build(config, cache, entry, restored_output, ("--keep-c",))
+    expect_product_native(rec, config, restored_result, restored_output, 42,
+                          "product-revert", cold_sources)
+    restored = parse_summary(rec, restored_result, "product-revert")
     restored_program = parse_program_closure(rec, restored_result, "product-revert")
     if not restored or not restored_program:
         return
@@ -468,6 +656,10 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--xray", default=None)
     ap.add_argument("--toolchain", default=None)
     ap.add_argument("--cc", default=None)
+    ap.add_argument("--harness-cc", required=True)
+    ap.add_argument("--harness-compiler-id", required=True)
+    ap.add_argument("--harness-frontend", default="")
+    ap.add_argument("--scenario", action="append", choices=tuple(SCENARIOS))
     ap.add_argument("xray_positional", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])
 
@@ -488,12 +680,19 @@ def main(argv: list[str]) -> int:
         print(f"FAIL: xray binary not executable: {xray}")
         return 1
 
+    harness_driver = (
+        "msvc" if ns.harness_compiler_id == "MSVC" or
+        ns.harness_frontend == "MSVC" else "gnu"
+    )
     config = Config(xray=xray, opt_level=opt_level, timeout=timeout,
-                    toolchain=ns.toolchain, cc=ns.cc)
+                    toolchain=ns.toolchain, cc=ns.cc,
+                    harness_cc=Path(ns.harness_cc),
+                    harness_driver=harness_driver)
     rec = Recorder()
     with workspace.Workspace("xray_module_summary") as ws:
-        for runner in SCENARIOS.values():
-            runner(rec, config, ws)
+        selected = ns.scenario or list(SCENARIOS)
+        for name in selected:
+            SCENARIOS[name](rec, config, ws)
             print("")
 
     print(f"=== Results: {rec.passed} passed, {rec.failed} failed ===")

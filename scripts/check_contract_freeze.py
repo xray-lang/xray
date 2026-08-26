@@ -541,6 +541,8 @@ CONTRACT_SPECS = (
             "src/aot/emit_c/xr_c_program_emission.h",
             "src/aot/emit_c/xr_c_program_emission.c",
             "src/aot/xi_cgen.c",
+            "src/aot/xi_cgen_call_resolve.inc.c",
+            "src/aot/xi_cgen_import_helpers.inc.c",
             "src/aot/xi_cgen_abi_helpers.inc.c",
             "src/aot/xi_cgen_dispatch_helpers.inc.c",
             "src/aot/xi_cgen_program_entry.inc.c",

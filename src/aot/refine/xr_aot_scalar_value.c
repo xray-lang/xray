@@ -129,9 +129,12 @@ static bool semantic_value_shape_is_exact(const XrSemanticPlan *plan, uint32_t f
     return false;
 }
 
-bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan, const XiFunc *function,
-                                     const XiValue *value, uint32_t *out_semantic_function,
-                                     uint32_t *out_semantic_value, char *error, size_t error_size) {
+static bool scalar_semantic_value_id(const XrTargetPlan *target_plan,
+                                     const XrSemanticPlan *semantic_plan,
+                                     const XiFunc *function, const XiValue *value,
+                                     uint32_t *out_semantic_function,
+                                     uint32_t *out_semantic_value, char *error,
+                                     size_t error_size) {
     if (out_semantic_function)
         *out_semantic_function = XR_SEMANTIC_INDEX_NONE;
     if (out_semantic_value)
@@ -140,7 +143,6 @@ bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan, const XiFu
         return fail(error, error_size, "scalar semantic identity input is missing");
     if (!xr_target_plan_is_verified(target_plan))
         return fail(error, error_size, "scalar semantic identity requires a verified TargetPlan");
-    const XrSemanticPlan *semantic_plan = xr_target_plan_semantic_plan(target_plan);
     bool semantic_authority = semantic_plan && function->semantic_plan == semantic_plan;
     if (!semantic_authority && semantic_plan && function->semantic_snapshot_detached) {
         const XiFunc *root = function;
@@ -173,6 +175,42 @@ bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan, const XiFu
     *out_semantic_function = function_index;
     *out_semantic_value = semantic_value;
     return true;
+}
+
+bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan,
+                                     const XiFunc *function, const XiValue *value,
+                                     uint32_t *out_semantic_function,
+                                     uint32_t *out_semantic_value, char *error,
+                                     size_t error_size) {
+    return scalar_semantic_value_id(target_plan,
+                                    xr_target_plan_semantic_plan(target_plan), function,
+                                    value, out_semantic_function, out_semantic_value,
+                                    error, error_size);
+}
+
+bool xr_aot_scalar_program_semantic_value_id(
+    const XrTargetPlan *target_plan, uint32_t partition,
+    uint32_t target_function, const XiFunc *function, const XiValue *value,
+    uint32_t *out_semantic_function, uint32_t *out_semantic_value,
+    char *error, size_t error_size) {
+    const XrSemanticPlan *semantic =
+        target_plan ? xr_target_plan_semantic_module(target_plan, partition) : NULL;
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions =
+        target_plan ? xr_target_plan_functions(target_plan, &function_count) : NULL;
+    const XrSemanticPlan *bound_semantic = NULL;
+    uint32_t bound_function = XR_SEMANTIC_INDEX_NONE;
+    if (!semantic || !functions || target_function >= function_count ||
+        functions[target_function].id != target_function ||
+        !xr_target_plan_function_semantic_binding(target_plan, target_function,
+                                                   &bound_semantic, &bound_function) ||
+        bound_semantic != semantic || !function || function->semantic_plan != semantic ||
+        function->semantic_plan_function_index != bound_function)
+        return fail(error, error_size,
+                    "program scalar value lacks an exact global function binding");
+    return scalar_semantic_value_id(target_plan, semantic, function, value,
+                                    out_semantic_function, out_semantic_value,
+                                    error, error_size);
 }
 
 static bool adapter_origin_matches(const XiValue *value) {

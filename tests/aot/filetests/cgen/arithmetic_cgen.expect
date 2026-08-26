@@ -5,4 +5,4 @@ c_contains=while ((phi
 c_regex=int64_t v[0-9]+ = arithmetic_cgen_[0-9a-f]+_hot_[0-9]+\(NULL, v[0-9]+\);
 c_contains=printf("%lld", (long long)
 c_count=1:xrt_has_pending_error()
-contains=stats functions=2 native=1 tagged=1 coro=0
+regex=stats functions=2 target-plan=[0-9]+ native=1 tagged=1 coro=0

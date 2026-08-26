@@ -1203,6 +1203,68 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     xr_free(unitbuf);
 }
 
+/* The bounded program graph writes its cross-module call from the verified
+ * program binding rather than through emit_fname(), so the legacy xmod/name
+ * collector never sees (and must not rediscover) the callee.  Emit the one
+ * imported prototype mechanically from the same binding in the caller unit.
+ * The initializer bindings are ordered by canonical program partition, which
+ * is not necessarily the bundle/TU module order.  Resolve that exact partition
+ * through the bundle's verified module-to-partition join; matching its frozen
+ * partition id identifies the caller unit without a module-name or live
+ * import-table lookup. */
+static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
+                                                    int mod_index) {
+    if (!ctx || !out || !ctx->program_direct_i64_required)
+        return true;
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    uint32_t partition = UINT32_MAX;
+    if (!ctx->program_direct_i64_bound || !bundle || mod_index < 0 ||
+        (uint32_t) mod_index >= bundle->nmodules ||
+        !xaot_bundle_program_partition_for_module(bundle, (uint32_t) mod_index,
+                                                   &partition) ||
+        partition >= ctx->program_direct_i64.initializer_count ||
+        !ctx->program_direct_i64.initializers || !bundle->modules ||
+        !bundle->modules[mod_index] || !bundle->modules[mod_index]->init) {
+        if (ctx)
+            ctx->error = true;
+        return false;
+    }
+
+    const XrCProgramXiFunctionBinding *initializer =
+        &ctx->program_direct_i64.initializers[partition];
+    const XrCProgramXiFunctionBinding *caller = &ctx->program_direct_i64.caller;
+    const XrCProgramXiFunctionBinding *callee = &ctx->program_direct_i64.callee;
+    if (initializer->target_partition != partition ||
+        initializer->xi_function != bundle->modules[mod_index]->init) {
+        ctx->error = true;
+        return false;
+    }
+    if (initializer->target_partition != caller->target_partition)
+        return true;
+
+    XrCFunctionAbiEmissionView return_view = {0};
+    XrCFunctionAbiEmissionView parameter_view = {0};
+    const void *symbol_end = memchr(callee->c_symbol, '\0', sizeof(callee->c_symbol));
+    if (!callee->xi_function || !callee->c_symbol[0] || !symbol_end ||
+        !xr_c_program_direct_i64_function_abi_view(
+            &ctx->program_direct_i64, callee->xi_function, 0u, &return_view) ||
+        !xr_c_program_direct_i64_function_abi_view(
+            &ctx->program_direct_i64, callee->xi_function, 1u, &parameter_view) ||
+        return_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
+        parameter_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
+        return_view.parameter_count != 1u || parameter_view.parameter_count != 1u ||
+        return_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
+        parameter_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
+        !return_view.c_type || !parameter_view.c_type) {
+        ctx->error = true;
+        return false;
+    }
+
+    fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl, %s p0);\n",
+            return_view.c_type, callee->c_symbol, parameter_view.c_type);
+    return true;
+}
+
 /* Emit one self-contained translation unit for modules[mod_index], suitable
  * for independent compilation into its own object file (114 separate
  * compilation).  Cross-module symbols use external linkage: every module's
@@ -1409,6 +1471,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
     if (cg_writer_enter(ctx, unit, CG_WRITER_PHASE_INTERNAL_DECLS)) {
         emit_extern_closure_adapter_decls(ctx, unit);
         emit_forward_decls(ctx, unit, module->init, prefix);
+        (void) cg_emit_program_direct_i64_callee_decl(ctx, unit, mod_index);
         for (int i = 0; i < ctx->n_xmod_refs; i++)
             emit_one_forward_decl(ctx, unit, ctx->xmod_ref_funcs[i], ctx->xmod_ref_prefixes[i],
                                   true);

@@ -65,6 +65,18 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
     if (ctx->shared_native_exports)
         memset(ctx->shared_native_exports, 0,
                (size_t) ctx->shared_native_exports_cap * sizeof(CgSharedNativeExport));
+
+    /* The bounded program family has already joined the exact dependency,
+     * resolver, export, shared carrier, callee, and C symbol in its verified
+     * program emission binding. Building the legacy name/path import table
+     * here would install a second cross-module answer even if the dedicated
+     * emitter never happened to consume it. A program context is fresh at
+     * this point; any preinstalled legacy import is an authority conflict. */
+    if (ctx->program_direct_i64_required) {
+        if (!ctx->program_direct_i64_bound || ctx->nimports != 0)
+            ctx->error = true;
+        return;
+    }
     if (!modules || nmodules <= 1)
         return;
 

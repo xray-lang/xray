@@ -5,7 +5,7 @@ contains=module 1 name=module_link
 contains=function 1 name=triple module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
 contains=function 2 name=add_one module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
 contains=function 3 name=<main> module=1 depth=0 abi=tagged boundary=module-init
-contains=stats functions=4 native=2 tagged=2 coro=0
+regex=stats functions=4 target-plan=[0-9]+ native=2 tagged=2 coro=0
 contains=  "target": {
 regex=    "name": "(aarch64|x86_64)-(apple-darwin|linux-gnu|windows-msvc)"
 regex=    "arch": "(aarch64|x86_64)"

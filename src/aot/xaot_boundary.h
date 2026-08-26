@@ -12,6 +12,7 @@
 #define XAOT_BOUNDARY_H
 
 #include "xaot_rep.h"
+#include "emit_c/xr_c_emission_schema.h"
 #include "../ir/xi.h"
 #include "../base/xdefs.h"
 #include "../plan/target/xr_target_plan.h"
@@ -117,10 +118,12 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
     const struct XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
     const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len);
 
-/* Narrows execution coverage to functions whose every inbound ABI edge is
- * also covered, so the legacy XaotFuncAbi owner can be omitted atomically. */
+/* Resolves exact TargetPlan/program C ABI ownership independently from
+ * function execution coverage.  FOUND returns the effective C ABI boundary;
+ * every other status leaves it INVALID and cannot retain legacy ABI state. */
 XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
-    const struct XaotBundle *bundle, const XiFunc *function, char *errbuf, size_t errbuf_len);
+    const struct XaotBundle *bundle, const XiFunc *function,
+    XrCAbiBoundaryKind *boundary_out, char *errbuf, size_t errbuf_len);
 
 /* Resolves one covered call exclusively through verified TargetPlan identities
  * and rows.  INVALID is fail-closed and must never fall through to a legacy

@@ -26,4 +26,4 @@ c_not_contains=xrt_getprop_name(
 c_not_contains=xrt_setprop_name(
 c_not_contains=xrt_map_get(
 c_not_contains=xrt_map_set(
-contains=stats functions=5 native=4 tagged=1 coro=0
+regex=stats functions=5 target-plan=[0-9]+ native=4 tagged=1 coro=0

@@ -1529,6 +1529,7 @@ typedef struct XaotLinkDependencyPlan {
 
 typedef struct XaotPrepareStats {
     uint32_t functions_total;
+    uint32_t functions_target_plan_abi;
     uint32_t functions_native_abi;
     uint32_t functions_tagged_abi;
     uint32_t functions_coro_abi;

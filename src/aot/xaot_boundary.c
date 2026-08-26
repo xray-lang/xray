@@ -10,6 +10,7 @@
 
 #include "xaot_boundary.h"
 #include "xaot_bundle.h"
+#include "emit_c/xr_c_program_emission.h"
 #include "refine/xr_aot_scalar_value.h"
 #include "xr_target_aggregate_c_projection.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
@@ -94,7 +95,60 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
 }
 
 XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
-    const XaotBundle *bundle, const XiFunc *function, char *errbuf, size_t errbuf_len) {
+    const XaotBundle *bundle, const XiFunc *function,
+    XrCAbiBoundaryKind *boundary_out, char *errbuf, size_t errbuf_len) {
+    if (boundary_out)
+        *boundary_out = XR_C_ABI_BOUNDARY_INVALID;
+    uint32_t partition = UINT32_MAX;
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, function, &partition);
+    const XrTargetPlan *program_target =
+        semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
+    uint32_t program_graph_count = 0;
+    const XrTargetProgramGraphRecord *program_graphs =
+        program_target
+            ? xr_target_plan_program_graphs(program_target,
+                                            &program_graph_count)
+            : NULL;
+    if (program_graph_count != 0u) {
+        XrCProgramDirectI64EmissionBinding binding = {0};
+        XrCFunctionAbiEmissionView return_abi = {0};
+        char error[256] = {0};
+        uint32_t function_count = 0;
+        const XrTargetFunctionRecord *functions =
+            xr_target_plan_functions(program_target, &function_count);
+        bool bound = program_graphs && program_graph_count == 1u &&
+                     bundle && bundle->modules &&
+                     xr_c_program_direct_i64_emission_bind(
+                         program_target, bundle->modules, bundle->nmodules,
+                         &binding, error, sizeof(error));
+        const XrCProgramXiFunctionBinding *function_binding =
+            bound ? xr_c_program_direct_i64_function_binding(&binding,
+                                                              function)
+                  : NULL;
+        bool exact = function_binding && functions &&
+                     function_binding->target_partition == partition &&
+                     function_binding->target_function < function_count &&
+                     functions[function_binding->target_function].id ==
+                         function_binding->target_function &&
+                     functions[function_binding->target_function]
+                             .semantic_function ==
+                         function_binding->semantic_function &&
+                     xr_c_program_direct_i64_function_abi_view(
+                         &binding, function, 0u, &return_abi) &&
+                     return_abi.semantic_function ==
+                         function_binding->semantic_function;
+        xr_c_program_direct_i64_emission_release(&binding);
+        if (!exact)
+            return direct_i64_error(
+                errbuf, errbuf_len,
+                error[0] ? error
+                         : "program direct-i64 ABI has no exact global binding");
+        if (boundary_out)
+            *boundary_out = return_abi.boundary_kind;
+        return XAOT_DIRECT_I64_TARGET_FOUND;
+    }
+
     const XrTargetPlan *target = NULL;
     const XrTargetFunctionRecord *function_row = NULL;
     XaotDirectI64TargetStatus status = xaot_boundary_direct_i64_function_status(
@@ -130,6 +184,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
             return direct_i64_error(errbuf, errbuf_len,
                                     "direct-i64 inbound instruction authority is inexact");
     }
+    if (boundary_out)
+        *boundary_out = XR_C_ABI_BOUNDARY_NATIVE;
     return XAOT_DIRECT_I64_TARGET_FOUND;
 }
 
@@ -147,6 +203,39 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
         bundle, caller, &target, &caller_row, errbuf, errbuf_len);
     if (status != XAOT_DIRECT_I64_TARGET_FOUND)
         return status;
+    uint32_t program_graph_count = 0;
+    const XrTargetProgramGraphRecord *program_graphs =
+        xr_target_plan_program_graphs(target, &program_graph_count);
+    if (program_graph_count != 0u) {
+        XrCProgramDirectI64EmissionBinding binding = {0};
+        char error[256] = {0};
+        bool bound = program_graphs && program_graph_count == 1u &&
+                     bundle->modules &&
+                     xr_c_program_direct_i64_emission_bind(
+                         target, bundle->modules, bundle->nmodules, &binding,
+                         error, sizeof(error));
+        bool exact = bound &&
+                     xr_c_program_direct_i64_call_is_exact(&binding, caller, call) &&
+                     caller_row == binding.caller_target_row;
+        if (!exact) {
+            xr_c_program_direct_i64_emission_release(&binding);
+            return direct_i64_error(
+                errbuf, errbuf_len,
+                error[0] ? error
+                         : "program direct-i64 call has no exact global binding");
+        }
+        out->target_plan = target;
+        out->caller_function = binding.caller_target_row;
+        out->callee_function = binding.callee_target_row;
+        out->call = binding.call_row;
+        out->argument = binding.argument_row;
+        out->call_instruction = binding.instruction_row;
+        out->callee = binding.callee.xi_function;
+        out->argument_value = binding.xi_argument;
+        out->target_fingerprint = binding.target_fingerprint;
+        xr_c_program_direct_i64_emission_release(&binding);
+        return XAOT_DIRECT_I64_TARGET_FOUND;
+    }
     if (call->op != XI_CALL || call->nargs != 2 || !call->args || !call->args[1])
         return direct_i64_error(errbuf, errbuf_len,
                                 "covered direct-i64 call has invalid live binding");

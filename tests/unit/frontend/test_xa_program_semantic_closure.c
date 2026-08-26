@@ -24,12 +24,14 @@
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
 #include "aot/xaot_bundle.h"
+#include "aot/xaot_boundary.h"
 #include "aot/emit_c/xr_c_program_emission.h"
 #include "aot/refine/xr_aot_refinement.h"
 #include "ir/xi_import_resolve.h"
 #include "ir/xi_pipeline.h"
 #include "ir/xi_program_semantic.h"
 #include "ir/xi_program_semantic_plan.h"
+#include "ir/xi_value_query.h"
 #include "module/xmodule.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
@@ -1401,6 +1403,14 @@ static bool scalar_graph_bundle_owner_is_exact(
                      scalar_graph_plan(fixture, 0u) &&
                  xaot_bundle_program_semantic_for_module(&bundle, 1u) ==
                      scalar_graph_plan(fixture, 1u);
+    for (uint32_t module = 0; exact && module < 2u; module++) {
+        XrCAbiBoundaryKind boundary = XR_C_ABI_BOUNDARY_INVALID;
+        exact = fixture->modules[module] && fixture->modules[module]->init &&
+                xaot_boundary_direct_i64_abi_status(
+                    &bundle, fixture->modules[module]->init, &boundary,
+                    NULL, 0) == XAOT_DIRECT_I64_TARGET_FOUND &&
+                boundary == XR_C_ABI_BOUNDARY_TAGGED;
+    }
     if (exact) {
         uint32_t partitions[2] = {UINT32_MAX, UINT32_MAX};
         for (uint32_t module = 0; exact && module < 2u; module++) {
@@ -1429,10 +1439,15 @@ static bool scalar_graph_bundle_owner_is_exact(
         fixture->modules[fixture->entry_index],
     };
     XaotBundle collision = {0};
+    XrCAbiBoundaryKind rejected_boundary = XR_C_ABI_BOUNDARY_NATIVE;
     bool collision_rejected =
         xaot_bundle_init(&collision, colliding_modules, 2u, 0u) &&
         !xaot_bundle_set_program_target_plan(&collision, target) &&
-        xaot_bundle_program_target_plan(&collision) == NULL;
+        xaot_bundle_program_target_plan(&collision) == NULL &&
+        xaot_boundary_direct_i64_abi_status(
+            &collision, colliding_modules[0]->init, &rejected_boundary,
+            NULL, 0) != XAOT_DIRECT_I64_TARGET_FOUND &&
+        rejected_boundary == XR_C_ABI_BOUNDARY_INVALID;
     xaot_bundle_free(&collision);
     return exact && collision_rejected;
 }
@@ -1964,10 +1979,8 @@ static bool scalar_graph_c_emission_binding_is_exact(
     char error[512] = {0};
     XrCProgramDirectI64EmissionBinding binding = {0};
     if (!xr_c_program_direct_i64_emission_bind(
-            target, fixture->modules, 2u, &binding, error, sizeof(error))) {
-        fprintf(stderr, "  program C-emission binding failed: %s\n", error);
+            target, fixture->modules, 2u, &binding, error, sizeof(error)))
         return false;
-    }
     uint32_t graph_count = 0;
     const XrTargetProgramGraphRecord *graphs =
         xr_target_plan_program_graphs(target, &graph_count);
@@ -1989,6 +2002,8 @@ static bool scalar_graph_c_emission_binding_is_exact(
                      entry->functions[0]->psc_function_index &&
                  binding.callee.program_function ==
                      producer->functions[0]->psc_function_index &&
+                 binding.initializers && binding.initializer_count == 2u &&
+                 binding.function_abi_count == 5u &&
                  binding.program_call == binding.xi_call->psc_call_index &&
                  xr_stable_id_equal(binding.caller.identity,
                                     graphs[0].entry_function_identity) &&
@@ -2001,6 +2016,234 @@ static bool scalar_graph_c_emission_binding_is_exact(
                  strcmp(binding.caller.c_symbol, binding.callee.c_symbol) != 0 &&
                  (!entry->name || !strstr(binding.caller.c_symbol, entry->name)) &&
                  (!producer->name || !strstr(binding.callee.c_symbol, producer->name));
+
+    for (uint32_t i = 0; exact && i < binding.initializer_count; i++) {
+        const XrCProgramXiFunctionBinding *initializer =
+            &binding.initializers[i];
+        uint32_t partition_count = 0;
+        const XrTargetModulePartitionRecord *partitions =
+            xr_target_plan_module_partitions(target, &partition_count);
+        const XrSemanticPlan *semantic =
+            xr_target_plan_semantic_module(target, i);
+        const XrSemanticFunctionRecord *semantic_initializer =
+            semantic && initializer->semantic_function != XR_SEMANTIC_INDEX_NONE
+                ? xr_semantic_plan_function(semantic,
+                                            initializer->semantic_function)
+                : NULL;
+        XrStableId expected_identity = {{0}};
+        exact = initializer->xi_function &&
+                initializer->xi_function->module &&
+                initializer->xi_function == initializer->xi_function->module->init &&
+                initializer->target_partition == i &&
+                initializer->program_function == XR_SEMANTIC_INDEX_NONE &&
+                semantic_initializer && semantic_initializer->is_module_initializer &&
+                partitions && partition_count == binding.initializer_count &&
+                xr_c_program_initializer_symbol_identity(
+                    partitions[i].module_identity, semantic_initializer->id,
+                    &expected_identity) &&
+                xr_stable_id_equal(initializer->identity,
+                                   expected_identity) &&
+                c_program_symbol_is_canonical(initializer->c_symbol) &&
+                (!initializer->xi_function->module->name ||
+                 !strstr(initializer->c_symbol,
+                         initializer->xi_function->module->name)) &&
+                xr_c_program_direct_i64_function_binding(
+                    &binding, initializer->xi_function) == initializer;
+    }
+    exact = exact && xr_c_program_direct_i64_emission_verify(
+                         &binding, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    XrStableId saved_initializer_identity = binding.initializers[0].identity;
+    char saved_initializer_symbol[XR_C_PROGRAM_FUNCTION_SYMBOL_CAPACITY];
+    memcpy(saved_initializer_symbol, binding.initializers[0].c_symbol,
+           sizeof(saved_initializer_symbol));
+    const char *saved_module_name = fixture->modules[0]->name;
+    const char *saved_initializer_name = fixture->modules[0]->init->name;
+    fixture->modules[0]->name = "hostile_module_name_after_binding";
+    fixture->modules[0]->init->name = "hostile_initializer_name_after_binding";
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                          &binding, target, fixture->modules, 2u, error,
+                          sizeof(error)) &&
+            c_program_symbol_is_canonical(binding.initializers[0].c_symbol) &&
+            !strstr(binding.initializers[0].c_symbol, "hostile");
+    fixture->modules[0]->name = saved_module_name;
+    fixture->modules[0]->init->name = saved_initializer_name;
+    exact = exact && xr_c_program_direct_i64_emission_verify(
+                         &binding, target, fixture->modules, 2u, error,
+                         sizeof(error)) &&
+            xr_stable_id_equal(binding.initializers[0].identity,
+                               saved_initializer_identity) &&
+            strcmp(binding.initializers[0].c_symbol,
+                   saved_initializer_symbol) == 0;
+    for (uint32_t i = 0; exact && i < binding.value_count; i++) {
+        XrCValueEmissionView view = {0};
+        exact = xr_c_program_direct_i64_value_view(
+                    &binding, binding.values[i].xi_function,
+                    binding.values[i].xi_value, &view) &&
+                view.semantic_value == binding.values[i].emission.semantic_value &&
+                view.rep == binding.values[i].emission.rep && view.c_type &&
+                binding.values[i].emission.c_type &&
+                strcmp(view.c_type, binding.values[i].emission.c_type) == 0;
+    }
+    for (uint32_t i = 0; exact && i < binding.function_abi_count; i++) {
+        XrCFunctionAbiEmissionView view = {0};
+        exact = xr_c_program_direct_i64_function_abi_view(
+                    &binding, binding.function_abis[i].xi_function,
+                    binding.function_abis[i].emission.ordinal, &view) &&
+                view.semantic_function ==
+                    binding.function_abis[i].emission.semantic_function &&
+                view.semantic_value ==
+                    binding.function_abis[i].emission.semantic_value &&
+                view.ordinal == binding.function_abis[i].emission.ordinal &&
+                view.rep == binding.function_abis[i].emission.rep && view.c_type &&
+                binding.function_abis[i].emission.c_type &&
+                strcmp(view.c_type,
+                       binding.function_abis[i].emission.c_type) == 0;
+    }
+
+    XrCProgramDirectI64EmissionBinding hostile = binding;
+    hostile.values = NULL;
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                         &hostile, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    hostile = binding;
+    hostile.function_abis = NULL;
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                         &hostile, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    hostile = binding;
+    hostile.initializers = NULL;
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                         &hostile, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    hostile = binding;
+    memset(hostile.caller.c_symbol, 'x', sizeof(hostile.caller.c_symbol));
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                         &hostile, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    hostile = binding;
+    memset(hostile.caller.c_symbol, 0, sizeof(hostile.caller.c_symbol));
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                         &hostile, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    if (binding.value_count > 0u) {
+        uint8_t saved_rep = binding.values[0].emission.rep;
+        binding.values[0].emission.rep = XR_C_VALUE_REP_VOID;
+        exact = exact && !xr_c_program_direct_i64_emission_verify(
+                             &binding, target, fixture->modules, 2u, error,
+                             sizeof(error));
+        binding.values[0].emission.rep = saved_rep;
+
+        XiValue *hostile_value = (XiValue *) binding.values[0].xi_value;
+        uint16_t saved_op = hostile_value->op;
+        hostile_value->op = saved_op == XI_PARAM ? XI_CONST : XI_PARAM;
+        exact = exact && !xr_c_program_direct_i64_emission_verify(
+                             &binding, target, fixture->modules, 2u, error,
+                             sizeof(error));
+        hostile_value->op = saved_op;
+    } else {
+        exact = false;
+    }
+    if (binding.function_abi_count > 0u) {
+        uint8_t saved_boundary =
+            binding.function_abis[0].emission.boundary_kind;
+        binding.function_abis[0].emission.boundary_kind =
+            XR_C_ABI_BOUNDARY_TAGGED;
+        exact = exact && !xr_c_program_direct_i64_emission_verify(
+                             &binding, target, fixture->modules, 2u, error,
+                             sizeof(error));
+        binding.function_abis[0].emission.boundary_kind = saved_boundary;
+    } else {
+        exact = false;
+    }
+    uint32_t initializer_value = UINT32_MAX;
+    for (uint32_t i = 0; i < binding.value_count; i++) {
+        if (binding.values[i].xi_function == binding.initializers[0].xi_function) {
+            initializer_value = i;
+            break;
+        }
+    }
+    if (initializer_value != UINT32_MAX) {
+        uint32_t saved_partition =
+            binding.values[initializer_value].target_partition;
+        binding.values[initializer_value].target_partition ^= 1u;
+        exact = exact && !xr_c_program_direct_i64_emission_verify(
+                             &binding, target, fixture->modules, 2u, error,
+                             sizeof(error));
+        binding.values[initializer_value].target_partition = saved_partition;
+    } else {
+        exact = false;
+    }
+    uint8_t saved_initializer_boundary =
+        binding.function_abis[3].emission.boundary_kind;
+    binding.function_abis[3].emission.boundary_kind =
+        XR_C_ABI_BOUNDARY_NATIVE;
+    exact = exact && !xr_c_program_direct_i64_emission_verify(
+                         &binding, target, fixture->modules, 2u, error,
+                         sizeof(error));
+    binding.function_abis[3].emission.boundary_kind =
+        saved_initializer_boundary;
+    XiValue *callee_operand = (XiValue *) binding.xi_callee_operand;
+    int64_t saved_callee_slot = callee_operand ? callee_operand->aux_int : -1;
+    if (callee_operand) {
+        callee_operand->aux_int = INT64_MAX;
+        bool bounds_rejected = !xr_c_program_direct_i64_emission_verify(
+            &binding, target, fixture->modules, 2u, error, sizeof(error));
+        exact = exact && bounds_rejected;
+        callee_operand->aux_int = saved_callee_slot;
+
+        XiModule *caller_module = entry;
+        XiImportRef *resolved_import =
+            (XiImportRef *) xi_value_import_ref(binding.caller.xi_function,
+                                                callee_operand);
+        if (caller_module && caller_module->slot_imports &&
+            saved_callee_slot >= 0 &&
+            saved_callee_slot < caller_module->nslots && resolved_import) {
+            if (caller_module->nslots > 1u) {
+                int64_t wrong_slot =
+                    saved_callee_slot == 0 ? 1 : 0;
+                callee_operand->aux_int = wrong_slot;
+                exact = exact && !xr_c_program_direct_i64_emission_verify(
+                                     &binding, target, fixture->modules, 2u,
+                                     error, sizeof(error));
+                callee_operand->aux_int = saved_callee_slot;
+            } else {
+                exact = false;
+            }
+            XiImportRef *saved_slot_import =
+                caller_module->slot_imports[saved_callee_slot];
+            caller_module->slot_imports[saved_callee_slot] = NULL;
+            bool slot_rejected = !xr_c_program_direct_i64_emission_verify(
+                &binding, target, fixture->modules, 2u, error, sizeof(error));
+            exact = exact && slot_rejected;
+            caller_module->slot_imports[saved_callee_slot] = saved_slot_import;
+
+            resolved_import->psc_resolver_binding.bytes[0] ^= UINT8_C(0x80);
+            bool resolver_rejected = !xr_c_program_direct_i64_emission_verify(
+                &binding, target, fixture->modules, 2u, error, sizeof(error));
+            exact = exact && resolver_rejected;
+            resolved_import->psc_resolver_binding.bytes[0] ^= UINT8_C(0x80);
+        } else {
+            exact = false;
+        }
+    } else {
+        exact = false;
+    }
+    exact = exact && xr_c_program_direct_i64_callee_operand_is_elided(
+                         &binding, binding.caller.xi_function,
+                         binding.xi_callee_operand) &&
+            !xr_c_program_direct_i64_call_is_exact(
+                &binding, binding.callee.xi_function, binding.xi_call) &&
+            !xr_c_program_direct_i64_call_is_exact(
+                &binding, binding.initializers[0].xi_function,
+                binding.xi_call);
+    hostile = binding;
+    hostile.instruction_row = NULL;
+    bool edge_rejected = !xr_c_program_direct_i64_emission_verify(
+        &hostile, target, fixture->modules, 2u, error, sizeof(error));
+    exact = exact && edge_rejected &&
+            !xr_c_program_direct_i64_call_is_exact(
+                &hostile, binding.caller.xi_function, binding.xi_call);
 
     XrCProgramDirectI64EmissionBinding rebound = {0};
     XiModule *missing[2] = {fixture->modules[0], NULL};
@@ -2036,8 +2279,11 @@ static bool scalar_graph_c_emission_binding_is_exact(
             bound_call = bound_block->values[value_index];
             break;
         }
-    if (!bound_call)
+    if (!bound_call) {
+        xr_c_program_direct_i64_emission_release(&rebound);
+        xr_c_program_direct_i64_emission_release(&binding);
         return false;
+    }
     uint32_t saved_bound_program_call = bound_call->psc_call_index;
     bound_call->psc_call_index = XI_PSC_ROW_NONE;
     exact = exact &&
@@ -2057,8 +2303,11 @@ static bool scalar_graph_c_emission_binding_is_exact(
                 break;
             }
     }
-    if (!duplicate_call)
+    if (!duplicate_call) {
+        xr_c_program_direct_i64_emission_release(&rebound);
+        xr_c_program_direct_i64_emission_release(&binding);
         return false;
+    }
     uint32_t saved_program_call = duplicate_call->psc_call_index;
     duplicate_call->psc_call_index = binding.program_call;
     exact = exact &&
@@ -2066,8 +2315,12 @@ static bool scalar_graph_c_emission_binding_is_exact(
             !xr_c_program_direct_i64_emission_bind(
                 target, fixture->modules, 2u, &rebound, error, sizeof(error));
     duplicate_call->psc_call_index = saved_program_call;
-    return exact && xr_c_program_direct_i64_emission_bind(
-                        target, fixture->modules, 2u, &rebound, error, sizeof(error));
+    exact = exact && xr_c_program_direct_i64_emission_bind(
+                         target, fixture->modules, 2u, &rebound, error,
+                         sizeof(error));
+    xr_c_program_direct_i64_emission_release(&rebound);
+    xr_c_program_direct_i64_emission_release(&binding);
+    return exact;
 }
 
 static void expect_strict_call_locator_rejection(bool match_caller_end, const char *namespace_id) {

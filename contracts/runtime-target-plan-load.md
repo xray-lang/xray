@@ -341,9 +341,12 @@ roots, or general module activation.
    cache only after that cache is bound to the exact runtime generation,
    canonical module-set fingerprint, program fingerprint, and GCI; the cache
    does not copy a fixed two-partition schema or construct per-module plans. The
-   installed loader, native AOT, and
-   product publication remain unavailable until their own graph consumers are
-   complete; none may reconstruct per-module executable plans.
+   The installed loader and public runtime-manifest product route remain
+   unavailable. The compiler's separately governed bounded source-AOT lane may
+   consume the same plan through its independently verified program C-emission
+   binding for the exact two-module scalar graph only; it constructs no
+   per-module executable plans. No installed or public loader may infer that
+   compiler-internal authority or reconstruct a graph from module names.
 6. Installed runtimes construct artifact authority only from exact XSM bytes.
    XSM decoding applies the current schema, operation-registry fingerprint,
    payload digest, ownership replay, semantic fingerprint, and independent
@@ -403,7 +406,7 @@ roots, or general module activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt a6aa0e036427fc6ff50bd718db5f627fcebe87f6ac2742b5aabd0905ab5f2458
+anchor-sha256: CMakeLists.txt 3c6ab58162ec5d226a8f22d40eca5a0ace7041150617943d93784cc807869571
 anchor-sha256: include/xray_target_plan_load.h b5b85159f9c825b5239c26c0bb5e037a5e678d8386c2a771b5e27026b6268c72
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
@@ -443,7 +446,7 @@ anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837
 anchor-sha256: tests/unit/plan/test_target_plan.c 934176e9e784ccf2588fcb7bc205042e0a8530e394fc003355428976c56ebfd1
 anchor-sha256: tests/unit/plan/test_xtp_format.c c1e4045afcef05e4f74bcfd155558191c14ac9451ce840dd0cdd022e5d131d3c
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 53e5b8fa4bbf6ae204c0b8f720792bd9580c559684daa2539077fd786d111ce5
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c be66579e2c72c13e5dadfc8bb00f3101c1b4366aa3d29cf9b811e7e4be06f17d
 anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f

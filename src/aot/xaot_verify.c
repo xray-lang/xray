@@ -90,9 +90,17 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
                          "AOT leaf-aggregate value lacks exact PSC identity");
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         target_plan = leaf_target;
-    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
-        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
-                                         &semantic_value, target_error, sizeof(target_error))) {
+    uint32_t target_function = UINT32_MAX;
+    bool scalar_identity =
+        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        (xr_target_plan_find_function(
+             target_plan, semantic, func->semantic_plan_function_index,
+             &target_function) &&
+         xr_aot_scalar_program_semantic_value_id(
+             target_plan, partition, target_function, func, value,
+             &semantic_function, &semantic_value, target_error,
+             sizeof(target_error)));
+    if (!scalar_identity) {
         if (!xr_aot_rep_adapter_value_is_exact(target_plan, func, value, target_error,
                                                sizeof(target_error)))
             return set_error(errbuf, errbuf_len,
@@ -7257,14 +7265,30 @@ static bool verify_func_values_have_plans_recursive(const XaotBundle *bundle, co
     return true;
 }
 
+static bool verify_zero_value_rep(XaotValueRep rep) {
+    return rep.kind == (XaotValueKind) 0 && rep.rep == (XaotRep) 0 &&
+           rep.type == NULL && rep.c_type == NULL && rep.flags == 0u &&
+           rep.vector_native_type == 0u && rep.vector_lanes == 0u &&
+           rep.vector_width_bytes == 0u;
+}
+
+static bool verify_target_owned_abi_is_empty(const XaotFuncAbi *abi) {
+    return abi && abi->kind == XAOT_ABI_NATIVE &&
+           abi->ret.cls == XAOT_ARG_VOID &&
+           verify_zero_value_rep(abi->ret.rep) &&
+           verify_zero_value_rep(abi->ret.pointee_rep) &&
+           abi->ret.c_type == NULL && abi->ret.flags == 0u &&
+           abi->params == NULL && abi->nparams == 0u &&
+           abi->boundary_reason == XAOT_BOUNDARY_NONE;
+}
+
 static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, char *errbuf,
                             size_t errbuf_len) {
     uint16_t pi;
     if (!plan || !plan->func)
         return set_error(errbuf, errbuf_len, "AOT function plan has no Xi function");
     if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN) {
-        XaotFuncAbi empty = {0};
-        if (memcmp(&plan->abi, &empty, sizeof(empty)) != 0)
+        if (!verify_target_owned_abi_is_empty(&plan->abi))
             return set_error(errbuf, errbuf_len,
                              "TargetPlan-owned function retains legacy AOT ABI state");
         XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_abi_status(
@@ -7272,7 +7296,8 @@ static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, 
         if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
             return false;
         if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
-            xaot_boundary_direct_i64_abi_status(bundle, plan->func, errbuf, errbuf_len) !=
+            xaot_boundary_direct_i64_abi_status(bundle, plan->func, NULL,
+                                                errbuf, errbuf_len) !=
                 XAOT_DIRECT_I64_TARGET_FOUND)
             return set_error(errbuf, errbuf_len,
                              "TargetPlan-owned function authority is invalid");

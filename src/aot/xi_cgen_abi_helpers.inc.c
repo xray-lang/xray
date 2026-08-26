@@ -395,6 +395,17 @@ static bool cg_function_semantic_index(XiCgenCtx *ctx, const XiFunc *f, uint32_t
         *out = XR_SEMANTIC_INDEX_NONE;
     if (!ctx || !f || !out)
         return false;
+    if (ctx->program_direct_i64_required) {
+        XrCFunctionAbiEmissionView view = {0};
+        if (!ctx->program_direct_i64_bound ||
+            !xr_c_program_direct_i64_function_abi_view(
+                &ctx->program_direct_i64, f, 0u, &view)) {
+            ctx->error = true;
+            return false;
+        }
+        *out = view.semantic_function;
+        return true;
+    }
     const XrTargetFunctionRecord *leaf_function = NULL;
     XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_function_status(
         ctx->aot_bundle, f, NULL, &leaf_function, NULL, 0);
@@ -428,10 +439,27 @@ static bool cg_func_uses_typed_abi(XiCgenCtx *ctx, const XiFunc *f) {
            view.boundary_kind == (uint8_t) XR_C_ABI_BOUNDARY_NATIVE;
 }
 
+static bool cg_program_direct_i64_abi_emission(
+    XiCgenCtx *ctx, const XiFunc *f, uint16_t ordinal,
+    XrCFunctionAbiEmissionView *out) {
+    if (!ctx || !ctx->program_direct_i64_required ||
+        !ctx->program_direct_i64_bound ||
+        !xr_c_program_direct_i64_function_abi_view(
+            &ctx->program_direct_i64, f, ordinal, out)) {
+        if (ctx && ctx->program_direct_i64_required)
+            ctx->error = true;
+        return false;
+    }
+    return true;
+}
+
 /* The signature table's answer for one parameter, when it has one. Ordinal
  * zero is the return, so a declaration index shifts by one. */
 static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t param_idx,
                                        XrCFunctionAbiEmissionView *out) {
+    if (ctx && ctx->program_direct_i64_required)
+        return cg_program_direct_i64_abi_emission(
+            ctx, f, (uint16_t) (param_idx + 1u), out);
     char error[256] = {0};
     const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
@@ -496,6 +524,8 @@ static bool cg_abi_emission_storage_rep(const XrCFunctionAbiEmissionView *view, 
 /* The signature table's row for a return is ordinal zero. */
 static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
                                         XrCFunctionAbiEmissionView *out) {
+    if (ctx && ctx->program_direct_i64_required)
+        return cg_program_direct_i64_abi_emission(ctx, f, 0u, out);
     char error[256] = {0};
     const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
@@ -509,6 +539,15 @@ static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
  * construction rather than about any call, so it is stated here. Anything the
  * plan has no row for is not a boundary this emitter can describe. */
 static XrRep cg_func_return_abi_rep(XiCgenCtx *ctx, const XiFunc *f) {
+    if (ctx && ctx->program_direct_i64_required) {
+        XrCFunctionAbiEmissionView view = {0};
+        XrRep rep = XR_REP_VOID;
+        if (cg_func_return_abi_emission(ctx, f, &view) &&
+            cg_abi_emission_storage_rep(&view, &rep))
+            return rep;
+        ctx->error = true;
+        return XR_REP_VOID;
+    }
     if (cg_class_func_is_native_constructor(ctx, f))
         return XR_REP_PTR;
     XrCFunctionAbiEmissionView view;

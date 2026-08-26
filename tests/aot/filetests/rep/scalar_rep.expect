@@ -8,5 +8,5 @@ c_regex=static (XRT_FN_[A-Z]+ )?uint8_t scalar_rep_[0-9a-f]+_narrow_[0-9]+\(xrt_
 contains=function 2 name=total module=0 semantic_function=2 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 contains=  param 0 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
-contains=stats functions=3 native=2 tagged=1 coro=0
+regex=stats functions=3 target-plan=[0-9]+ native=2 tagged=1 coro=0
 contains=value-stats scalar=

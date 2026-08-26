@@ -109,9 +109,16 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
     }
     if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         target_plan = leaf_target;
-    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
-        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
-                                         &semantic_value, error, sizeof(error))) {
+    uint32_t target_function = UINT32_MAX;
+    bool scalar_identity =
+        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        (xr_target_plan_find_function(
+             target_plan, semantic, func->semantic_plan_function_index,
+             &target_function) &&
+         xr_aot_scalar_program_semantic_value_id(
+             target_plan, partition, target_function, func, value,
+             &semantic_function, &semantic_value, error, sizeof(error)));
+    if (!scalar_identity) {
         if (xr_aot_rep_adapter_value_is_exact(target_plan, func, value, error, sizeof(error)))
             return true;
         bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
@@ -5769,6 +5776,7 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     XaotFuncPlan *plan;
     const XgBodySummary *body;
     uint16_t ci;
+    XrCAbiBoundaryKind direct_i64_boundary = XR_C_ABI_BOUNDARY_INVALID;
 
     if (!bundle || !func)
         return false;
@@ -5787,7 +5795,8 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     }
     XaotDirectI64TargetStatus direct_i64_status =
         leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
-            ? xaot_boundary_direct_i64_abi_status(bundle, func, NULL, 0)
+            ? xaot_boundary_direct_i64_abi_status(bundle, func,
+                                                  &direct_i64_boundary, NULL, 0)
             : XAOT_DIRECT_I64_TARGET_UNCOVERED;
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         bundle->error_msg = "AOT function has invalid direct-i64 TargetPlan authority";
@@ -5805,13 +5814,29 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     }
 
     bundle->stats.functions_total++;
-    if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN ||
-        plan->abi.kind == XAOT_ABI_NATIVE)
+    if (plan->abi_authority == XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN) {
+        XrCAbiBoundaryKind effective_boundary =
+            leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
+                ? XR_C_ABI_BOUNDARY_NATIVE
+                : direct_i64_boundary;
+        bundle->stats.functions_target_plan_abi++;
+        if (effective_boundary == XR_C_ABI_BOUNDARY_NATIVE)
+            bundle->stats.functions_native_abi++;
+        else if (effective_boundary == XR_C_ABI_BOUNDARY_COROUTINE)
+            bundle->stats.functions_coro_abi++;
+        else if (effective_boundary == XR_C_ABI_BOUNDARY_TAGGED)
+            bundle->stats.functions_tagged_abi++;
+        else {
+            bundle->error_msg = "TargetPlan-owned function has invalid C ABI boundary";
+            return false;
+        }
+    } else if (plan->abi.kind == XAOT_ABI_NATIVE) {
         bundle->stats.functions_native_abi++;
-    else if (plan->abi.kind == XAOT_ABI_CORO)
+    } else if (plan->abi.kind == XAOT_ABI_CORO) {
         bundle->stats.functions_coro_abi++;
-    else
+    } else {
         bundle->stats.functions_tagged_abi++;
+    }
 
     body = prepare_find_body_summary_for_func(bundle, func, module_index, is_module_init);
 

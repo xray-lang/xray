@@ -7,4 +7,4 @@ regex=  value v[0-9]+ op=CALL kind=scalar rep=u8 c_type=uint8_t
 regex=boundary [0-9]+ kind=direct-call-arg func=wrap_byte value=v[0-9]+ input=v[0-9]+ reason=direct-call target=inner arg=0 from=scalar/u8 to=tagged/tagged
 regex=boundary [0-9]+ kind=direct-call-ret func=wrap_byte value=v[0-9]+ input=- reason=direct-call target=inner arg=- from=tagged/tagged to=scalar/u8
 c_regex=uint8_t v[0-9]+ = XR_TO_INT\(direct_call_closure_u8_[0-9a-f]+_inner_[0-9]+\(\(xrt_closure_t\*\)v[0-9]+\.ptr, XR_FROM_INT\(v[0-9]+\)\)\);
-contains=stats functions=3 native=1 tagged=2 coro=0
+regex=stats functions=3 target-plan=[0-9]+ native=1 tagged=2 coro=0

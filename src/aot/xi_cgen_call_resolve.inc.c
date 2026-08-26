@@ -11,6 +11,31 @@
 static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *call,
                                                          XaotDirectI64TargetView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (ctx && ctx->program_direct_i64_required) {
+        const XrCProgramDirectI64EmissionBinding *binding = &ctx->program_direct_i64;
+        if (!ctx->program_direct_i64_bound)
+            goto invalid_program_binding;
+        if (current == binding->callee.xi_function)
+            goto invalid_program_binding;
+        if (current != binding->caller.xi_function)
+            goto invalid_program_binding;
+        const XrTargetPlan *target = xaot_bundle_program_target_plan(ctx->aot_bundle);
+        if (!out || !target ||
+            !xr_c_program_direct_i64_call_is_exact(binding, current, call))
+            goto invalid_program_binding;
+        out->target_plan = target;
+        out->caller_function = binding->caller_target_row;
+        out->callee_function = binding->callee_target_row;
+        out->call = binding->call_row;
+        out->argument = binding->argument_row;
+        out->call_instruction = binding->instruction_row;
+        out->callee = binding->callee.xi_function;
+        out->argument_value = binding->xi_argument;
+        out->target_fingerprint = binding->target_fingerprint;
+        return XAOT_DIRECT_I64_TARGET_FOUND;
+    }
     char error[256] = {0};
     XaotDirectI64TargetStatus status = xaot_boundary_direct_i64_call_view(
         cg_ctx_aot_bundle(ctx), current, call, out, error, sizeof(error));
@@ -21,6 +46,13 @@ static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const X
             ctx->error = true;
     }
     return status;
+
+invalid_program_binding:
+    fprintf(stderr,
+            "[xi_cgen] ERROR: XR_TARGET_1001: program direct-i64 C-emission authority mismatch\n");
+    if (ctx)
+        ctx->error = true;
+    return XAOT_DIRECT_I64_TARGET_INVALID;
 }
 
 static XaotLeafAggregateTargetStatus cg_leaf_aggregate_call_view(
@@ -243,6 +275,8 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
         xaot_boundary_leaf_aggregate_function_status(cg_ctx_aot_bundle(ctx), current, NULL, NULL,
                                                      NULL, 0);
     if (leaf_aggregate != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
+        return cg_no_static_function_call();
+    if (cg_program_direct_i64_function_binding(ctx, current))
         return cg_no_static_function_call();
     XaotDirectI64TargetStatus direct_i64 = xaot_boundary_direct_i64_function_status(
         cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);

@@ -196,14 +196,15 @@ projection defined below; they never imply TargetPlan admission on their own.
     partitions and binding the unique `CALL_DIRECT_I64` row plus stable program
     function identities. `PROGRAM_DIRECT` cannot become a refusal or a legacy
     path. This grants graph TargetPlan, exact XTP materialization, bounded typed
-    VM execution, bounded AOT lower-binding authority, and an exact transient
-    C-emission binding from global TargetPlan rows to unique PSC-bound Xi nodes,
-    but not generated C, native AOT, container, coroutine, or public-ABI
-    execution authority. The product fails
-    closed after cache publication at the explicit same-plan native-AOT coverage
-    boundary; no consumer
-    may skip, stitch per-module plans, fall back, or reconstruct missing facts
-    from names, function bodies, tags, or legacy readers.
+    VM execution, bounded AOT lower-binding authority, and an exact program
+    C-emission binding from global TargetPlan rows to unique PSC-bound Xi nodes.
+    For the exact two-module scalar graph, that single binding also freezes the
+    complete C value and ABI rows for caller, callee, and module initializers,
+    and product CGen mechanically consumes it through native execution. It does
+    not grant container, coroutine, installed-loader, public-manifest, another
+    graph-family, or general product-activation authority. No consumer may skip,
+    stitch per-module plans, fall back, or reconstruct missing facts from names,
+    function bodies, tags, local semantic indexes, or legacy readers.
 19. The first single-module TargetPlan consumer admits only the exact
     leaf-aggregate family from the public SemanticPlan program provenance and
     type, field, function, and call bindings. It projects those rows into the
@@ -284,16 +285,25 @@ projection defined below; they never imply TargetPlan admission on their own.
     joins. A transient C-emission binding independently validates the same
     global partitions, functions, call, argument, and instruction, joins only
     through SemanticPlan program bindings and unique PSC row indexes, and derives
-    deterministic C symbols from stable function identities. It constructs no
-    executable plan and performs no module-name lookup or fallback. Native AOT
-    remains outside this bounded family until generated C and execution consume
-    the same verified program plan end to end; the source
-    product publishes module summaries and then fails closed without a binary
-    at that native-AOT execution boundary.
+    deterministic C symbols from stable function identities. The binding owns
+    complete value and function-ABI projections for caller, callee, and every
+    module initializer, independently verifies the exact `GET_SHARED` callee
+    carrier and its unique operand-zero use, and constructs no executable plan.
+    Product CGen consumes only those stable-indexed views, elides that carrier
+    from C materialization and legacy shared/static reachability. Required
+    module initializers remain lifecycle roots, but only the caller is an
+    ordinary product-body root; the callee is reached through the verified
+    direct edge alone. It performs
+    no module-name, local-index, per-module emission-plan, or legacy ABI lookup.
+    The source product publishes deterministic module summaries, emits real C,
+    and executes native cold/warm/dependency-edit/dependency-revert results
+    42/42/43/42. This native closure remains exclusive to the exact bounded
+    graph; installed loading, public runtime manifests, other graph shapes,
+    containers, coroutines, and general product activation remain unavailable.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt a6aa0e036427fc6ff50bd718db5f627fcebe87f6ac2742b5aabd0905ab5f2458
+anchor-sha256: CMakeLists.txt 3c6ab58162ec5d226a8f22d40eca5a0ace7041150617943d93784cc807869571
 anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec4338998ade7753489d2313dff2fc0d2
 anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365
@@ -344,17 +354,17 @@ anchor-sha256: src/ir/xi_program_semantic_verify.c fd47f412edf01c83b24490e075253
 anchor-sha256: src/ir/xi_own.c d36d0c84c81224d366afa7971390af9b2a58e65f06fc95e29a25a38c74979d7d
 anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4aecb8cfac217dad32f1954a7a66a7ee7ae
 anchor-sha256: src/ir/xi_program_semantic_plan.c 9ed71948f17cefaa72e992a4f68aa50447e074bc069102bcd3e9b678e474445e
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.h a7d5194433358ddfccb1d69eeda9778308ce78b63d57ae402299b0efb0f393a2
-anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 037a09b24bc4ba417d0e59966da396916fe5f2071e838cbb6782953d2c851591
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c e8ad9cbcaf1f69de191165ff8736253241b8bc1c5f1fed94a0d9abebecc5c262
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c ff9ef7e0b8a4c640d211bf05150d84bdafd6920e1314741b8cc13ee1afb57554
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 53e5b8fa4bbf6ae204c0b8f720792bd9580c559684daa2539077fd786d111ce5
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c be66579e2c72c13e5dadfc8bb00f3101c1b4366aa3d29cf9b811e7e4be06f17d
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c cb908edaf692e03a29b77ada7c3d30386612c4ff673eb6777f76dd4e6f152123
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
 anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
-anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7
-anchor-sha256: src/aot/xaot_boundary.c 15778b2d1dc0ae7bf54386a8a09e9b8ffe60eb6bc02bf26c5de7a600cd0f81b9
-anchor-sha256: src/aot/xaot_bundle.c 80415f8dab7b601ded70e012c4cd1432974a6647ee9b4f79ba77768ad68a6bb3
+anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
+anchor-sha256: src/aot/xaot_boundary.c a058e500a1dc183f7e167ffcf648189cfbcda66c5362529b3d848e0e902f8c8c
+anchor-sha256: src/aot/xaot_bundle.c 574b54ef26a357d0779a38da5797eee39303de7621e6967d9b8b9989ab231d03

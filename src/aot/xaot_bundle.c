@@ -8637,9 +8637,10 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     }
 
     fprintf(out,
-            "stats functions=%u native=%u tagged=%u coro=%u values=%u boundaries=%u "
-            "containers=%u\n",
-            bundle->stats.functions_total, bundle->stats.functions_native_abi,
+            "stats functions=%u target-plan=%u native=%u tagged=%u coro=%u values=%u "
+            "boundaries=%u containers=%u\n",
+            bundle->stats.functions_total, bundle->stats.functions_target_plan_abi,
+            bundle->stats.functions_native_abi,
             bundle->stats.functions_tagged_abi, bundle->stats.functions_coro_abi,
             bundle->stats.values_total, bundle->stats.boundary_count,
             bundle->stats.containers_total);
