@@ -178,8 +178,10 @@ projection defined below; they never imply TargetPlan admission on their own.
     partitions and binding the unique `CALL_DIRECT_I64` row plus stable program
     function identities. `PROGRAM_DIRECT` cannot become a refusal or a legacy
     path. This grants graph TargetPlan, exact XTP materialization, bounded typed
-    VM execution, and bounded AOT lower-binding authority, but not native AOT,
-    container, coroutine, or public-ABI execution authority. The product fails
+    VM execution, bounded AOT lower-binding authority, and an exact transient
+    C-emission binding from global TargetPlan rows to unique PSC-bound Xi nodes,
+    but not generated C, native AOT, container, coroutine, or public-ABI
+    execution authority. The product fails
     closed after cache publication at the explicit same-plan native-AOT coverage
     boundary; no consumer
     may skip, stitch per-module plans, fall back, or reconstruct missing facts
@@ -261,8 +263,13 @@ projection defined below; they never imply TargetPlan admission on their own.
     builds, stitches, or translates per-module executable plans. The AOT lower
     refinement consumes that same plan and independently re-derives the global
     caller, callee, instruction, argument, and stable program-function symbol
-    joins. Native AOT remains outside this bounded family until C emission and
-    execution consume the same verified program plan end to end; the source
+    joins. A transient C-emission binding independently validates the same
+    global partitions, functions, call, argument, and instruction, joins only
+    through SemanticPlan program bindings and unique PSC row indexes, and derives
+    deterministic C symbols from stable function identities. It constructs no
+    executable plan and performs no module-name lookup or fallback. Native AOT
+    remains outside this bounded family until generated C and execution consume
+    the same verified program plan end to end; the source
     product publishes module summaries and then fails closed without a binary
     at that native-AOT execution boundary.
 
@@ -313,12 +320,14 @@ anchor-sha256: src/ir/xi_lower.c e76300335b9c149808a2bd3c4c55d783cce6848e4f3d11b
 anchor-sha256: src/ir/xi_lower_expr.c 81236b56bc9c8e4a725c6d37e581c3592da0969584c896e673aeed7a26cf4670
 anchor-sha256: src/ir/xi_lower_stmt.c 063e8ead6151fd583b84554e1e4d8c23892d53c537f1b287d541337b72845c32
 anchor-sha256: src/ir/xi_pipeline.c fcd087786a75ad823d651f1e8d3632ab9f13516a7356eff3a1300ec8c3e2b639
-anchor-sha256: src/ir/xi_program_semantic.h e21715517c57d349d83fe202f3e9cfc2348779eeaf5b2795e6b900e12bfd58c4
-anchor-sha256: src/ir/xi_program_semantic.c 343744073110f6a559ba1b78d5ca277c6becc05d867d5eacb7308e3e932e94cf
-anchor-sha256: src/ir/xi_program_semantic_verify.c b5f5ac6d1fd126ba35bbfb4cf49fdf1e0bb297ba8a6ecb90b21054a9adbbd298
+anchor-sha256: src/ir/xi_program_semantic.h 8fac41dc1783958c8794aca6721c843356112538fce8ba620f1c4aa9924cc12f
+anchor-sha256: src/ir/xi_program_semantic.c c930e5d667b7d70ea95c0fb9f6289aab95a5955cef8c181ac3f6d4d450f285a1
+anchor-sha256: src/ir/xi_program_semantic_verify.c e9eb1c5ea769f8618e7ceb8f418bf2ccf47a580244cf4b2f676c7130869691ac
 anchor-sha256: src/ir/xi_own.c c8dda6cd586f03723baf676601306338d0cd7b6675a514670c558d96091a681e
 anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4aecb8cfac217dad32f1954a7a66a7ee7ae
 anchor-sha256: src/ir/xi_program_semantic_plan.c 42e2fa994d177b8e37aa88fdb7a300b9ef0429cebbd22e5524a36d5143c632fe
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.h a7d5194433358ddfccb1d69eeda9778308ce78b63d57ae402299b0efb0f393a2
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 037a09b24bc4ba417d0e59966da396916fe5f2071e838cbb6782953d2c851591
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c aa2bff8af087b730168b25faf26ffb08cd69ace09963fb8c762c1071bac6796e
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c 83dd97975c5b7a9e3def44f72a5f2f5e39cd1f009972365c4c55d7b859a63b6c

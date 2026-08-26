@@ -546,6 +546,38 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
            scalar_fail(error, error_size, "Xi PSC type bindings are incomplete");
 }
 
+const XiFunc *xi_program_semantic_function_for_row(const XiModule *module,
+                                                   uint32_t program_function) {
+    const XiFunc *match = NULL;
+    for (uint16_t i = 0; module && i < module->nfuncs; i++) {
+        const XiFunc *candidate = module->functions ? module->functions[i] : NULL;
+        if (!candidate || candidate->psc_function_index != program_function)
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+const XiValue *xi_program_semantic_call_for_row(const XiFunc *function,
+                                                uint32_t program_call) {
+    const XiValue *match = NULL;
+    for (uint32_t block_index = 0; function && block_index < function->nblocks;
+         block_index++) {
+        const XiBlock *block = function->blocks[block_index];
+        for (uint32_t value_index = 0; block && value_index < block->nvalues; value_index++) {
+            const XiValue *candidate = block->values[value_index];
+            if (!candidate || candidate->psc_call_index != program_call)
+                continue;
+            if (match)
+                return NULL;
+            match = candidate;
+        }
+    }
+    return match;
+}
+
 bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure **closure,
                                       const XrScalarCallDecision *decision,
                                       const XrTargetProfile *target_profile, uint32_t module_index,

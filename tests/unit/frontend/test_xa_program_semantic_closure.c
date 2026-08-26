@@ -24,6 +24,7 @@
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
 #include "aot/xaot_bundle.h"
+#include "aot/emit_c/xr_c_program_emission.h"
 #include "aot/refine/xr_aot_refinement.h"
 #include "ir/xi_import_resolve.h"
 #include "ir/xi_pipeline.h"
@@ -334,6 +335,9 @@ typedef struct ScalarGraphPlanFixture {
     uint32_t entry_index;
     uint32_t producer_index;
 } ScalarGraphPlanFixture;
+
+static bool scalar_graph_c_emission_binding_is_exact(
+    ScalarGraphPlanFixture *fixture, const XrTargetPlan *target);
 
 static bool write_source_file(const char *path, const char *source) {
     FILE *file = fopen(path, "wb");
@@ -1454,6 +1458,7 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
         exact = exact && direct == 1u && dynamic == 0u;
     }
     exact = exact && scalar_graph_bundle_owner_is_exact(fixture, target) &&
+            scalar_graph_c_emission_binding_is_exact(fixture, target) &&
             scalar_graph_typed_vm_is_exact(target) &&
             scalar_graph_xtp_roundtrip(target, modules, profile) &&
             scalar_graph_typed_vm_rejects_resigned_authority(target);
@@ -1890,6 +1895,132 @@ static bool scalar_graph_aot_direct_call_is_exact(
     }
     xr_aot_refinement_plan_free(refinement);
     return exact;
+}
+
+static bool c_program_symbol_is_canonical(const char *symbol) {
+    static const char prefix[] = "xr_pf_";
+    if (!symbol || strncmp(symbol, prefix, sizeof(prefix) - 1u) != 0 ||
+        strlen(symbol) != XR_C_PROGRAM_FUNCTION_SYMBOL_CAPACITY - 1u)
+        return false;
+    for (size_t i = sizeof(prefix) - 1u; symbol[i]; i++)
+        if (!((symbol[i] >= '0' && symbol[i] <= '9') ||
+              (symbol[i] >= 'a' && symbol[i] <= 'f')))
+            return false;
+    return true;
+}
+
+static bool scalar_graph_c_emission_binding_is_exact(
+    ScalarGraphPlanFixture *fixture, const XrTargetPlan *target) {
+    if (!fixture || !target || fixture->entry_index >= 2u ||
+        fixture->producer_index >= 2u)
+        return false;
+    char error[512] = {0};
+    XrCProgramDirectI64EmissionBinding binding = {0};
+    if (!xr_c_program_direct_i64_emission_bind(
+            target, fixture->modules, 2u, &binding, error, sizeof(error))) {
+        fprintf(stderr, "  program C-emission binding failed: %s\n", error);
+        return false;
+    }
+    uint32_t graph_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(target, &graph_count);
+    XiModule *entry = fixture->modules[fixture->entry_index];
+    XiModule *producer = fixture->modules[fixture->producer_index];
+    bool exact = graphs && graph_count == 1u && entry && producer &&
+                 entry->nfuncs == 1u && producer->nfuncs == 1u &&
+                 binding.caller.xi_function == entry->functions[0] &&
+                 binding.callee.xi_function == producer->functions[0] &&
+                 binding.xi_call == xi_program_semantic_call_for_row(
+                                        entry->functions[0], binding.program_call) &&
+                 binding.target_call == graphs[0].target_call &&
+                 binding.target_argument == graphs[0].target_argument &&
+                 binding.caller.target_function == graphs[0].entry_target_function &&
+                 binding.callee.target_function == graphs[0].producer_target_function &&
+                 binding.caller.target_partition == graphs[0].entry_partition &&
+                 binding.callee.target_partition == graphs[0].producer_partition &&
+                 binding.caller.program_function ==
+                     entry->functions[0]->psc_function_index &&
+                 binding.callee.program_function ==
+                     producer->functions[0]->psc_function_index &&
+                 binding.program_call == binding.xi_call->psc_call_index &&
+                 xr_stable_id_equal(binding.caller.identity,
+                                    graphs[0].entry_function_identity) &&
+                 xr_stable_id_equal(binding.callee.identity,
+                                    graphs[0].producer_function_identity) &&
+                 fingerprint_equal(binding.target_fingerprint,
+                                   xr_target_plan_fingerprint(target)) &&
+                 c_program_symbol_is_canonical(binding.caller.c_symbol) &&
+                 c_program_symbol_is_canonical(binding.callee.c_symbol) &&
+                 strcmp(binding.caller.c_symbol, binding.callee.c_symbol) != 0 &&
+                 (!entry->name || !strstr(binding.caller.c_symbol, entry->name)) &&
+                 (!producer->name || !strstr(binding.callee.c_symbol, producer->name));
+
+    XrCProgramDirectI64EmissionBinding rebound = {0};
+    XiModule *missing[2] = {fixture->modules[0], NULL};
+    XiModule *duplicate[2] = {fixture->modules[0], fixture->modules[0]};
+    exact = exact && !xr_c_program_direct_i64_emission_bind(
+                         target, missing, 2u, &rebound, error, sizeof(error)) &&
+            !xr_c_program_direct_i64_emission_bind(
+                target, duplicate, 2u, &rebound, error, sizeof(error));
+
+    uint32_t saved_program_function = entry->functions[0]->psc_function_index;
+    entry->functions[0]->psc_function_index = XI_PSC_ROW_NONE;
+    exact = exact && !xr_c_program_direct_i64_emission_bind(
+                         target, fixture->modules, 2u, &rebound, error, sizeof(error));
+    entry->functions[0]->psc_function_index = saved_program_function;
+
+    XiFunc **saved_functions = entry->functions;
+    uint16_t saved_function_count = entry->nfuncs;
+    XiFunc *duplicate_functions[2] = {saved_functions[0], saved_functions[0]};
+    entry->functions = duplicate_functions;
+    entry->nfuncs = 2u;
+    exact = exact &&
+            xi_program_semantic_function_for_row(entry, saved_program_function) == NULL &&
+            !xr_c_program_direct_i64_emission_bind(
+                target, fixture->modules, 2u, &rebound, error, sizeof(error));
+    entry->functions = saved_functions;
+    entry->nfuncs = saved_function_count;
+
+    XiValue *bound_call = NULL;
+    XiBlock *bound_block = binding.xi_call->block;
+    for (uint32_t value_index = 0; bound_block && value_index < bound_block->nvalues;
+         value_index++)
+        if (bound_block->values[value_index] == binding.xi_call) {
+            bound_call = bound_block->values[value_index];
+            break;
+        }
+    if (!bound_call)
+        return false;
+    uint32_t saved_bound_program_call = bound_call->psc_call_index;
+    bound_call->psc_call_index = XI_PSC_ROW_NONE;
+    exact = exact &&
+            xi_program_semantic_call_for_row(entry->functions[0], binding.program_call) == NULL &&
+            !xr_c_program_direct_i64_emission_bind(
+                target, fixture->modules, 2u, &rebound, error, sizeof(error));
+    bound_call->psc_call_index = saved_bound_program_call;
+
+    XiValue *duplicate_call = NULL;
+    for (uint32_t block_index = 0;
+         entry->functions[0] && block_index < entry->functions[0]->nblocks && !duplicate_call;
+         block_index++) {
+        XiBlock *block = entry->functions[0]->blocks[block_index];
+        for (uint32_t value_index = 0; block && value_index < block->nvalues; value_index++)
+            if (block->values[value_index] && block->values[value_index] != binding.xi_call) {
+                duplicate_call = block->values[value_index];
+                break;
+            }
+    }
+    if (!duplicate_call)
+        return false;
+    uint32_t saved_program_call = duplicate_call->psc_call_index;
+    duplicate_call->psc_call_index = binding.program_call;
+    exact = exact &&
+            xi_program_semantic_call_for_row(entry->functions[0], binding.program_call) == NULL &&
+            !xr_c_program_direct_i64_emission_bind(
+                target, fixture->modules, 2u, &rebound, error, sizeof(error));
+    duplicate_call->psc_call_index = saved_program_call;
+    return exact && xr_c_program_direct_i64_emission_bind(
+                        target, fixture->modules, 2u, &rebound, error, sizeof(error));
 }
 
 static void expect_strict_call_locator_rejection(bool match_caller_end, const char *namespace_id) {

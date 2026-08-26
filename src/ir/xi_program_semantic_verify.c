@@ -828,39 +828,6 @@ static bool verify_graph_partition(const XiModule *module, char *error, size_t e
     return true;
 }
 
-static const XiFunc *graph_function_by_row(const XiModule *module, uint32_t row_index) {
-    if (!module)
-        return NULL;
-    const XiFunc *match = NULL;
-    for (uint16_t i = 0; i < module->nfuncs; i++) {
-        const XiFunc *candidate = module->functions ? module->functions[i] : NULL;
-        if (!candidate || candidate->psc_function_index != row_index)
-            continue;
-        if (match)
-            return NULL;
-        match = candidate;
-    }
-    return match;
-}
-
-static const XiValue *graph_call_by_row(const XiFunc *function, uint32_t row_index) {
-    const XiValue *match = NULL;
-    if (!function)
-        return NULL;
-    for (uint32_t b = 0; b < function->nblocks; b++) {
-        const XiBlock *block = function->blocks[b];
-        for (uint32_t i = 0; block && i < block->nvalues; i++) {
-            const XiValue *candidate = block->values[i];
-            if (!candidate || candidate->psc_call_index != row_index)
-                continue;
-            if (match)
-                return NULL;
-            match = candidate;
-        }
-    }
-    return match;
-}
-
 bool xi_program_semantic_verify_partition(const XiModule *module,
                                           const XrTargetProfile *target_profile, char *error,
                                           size_t error_size) {
@@ -943,9 +910,11 @@ bool xi_program_semantic_verify_module_set(XiModule *const *module_set, uint32_t
         caller_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
         callee_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)
         return verify_fail(error, error_size, "Xi graph PSC roles are not exact");
-    const XiFunc *caller = graph_function_by_row(modules[source_index], caller_index);
-    const XiFunc *callee = graph_function_by_row(modules[dependency_index], callee_index);
-    const XiValue *xi_call = graph_call_by_row(caller, 0);
+    const XiFunc *caller =
+        xi_program_semantic_function_for_row(modules[source_index], caller_index);
+    const XiFunc *callee =
+        xi_program_semantic_function_for_row(modules[dependency_index], callee_index);
+    const XiValue *xi_call = xi_program_semantic_call_for_row(caller, 0);
     const XiImportRef *ref = xi_call && xi_call->nargs > 0 && xi_call->args
                                  ? xi_value_import_ref(caller, xi_call->args[0])
                                  : NULL;

@@ -73,7 +73,14 @@ identities, and binds the unique global `CALL_DIRECT_I64` instruction to the
 facts from the same TargetPlan. A committed program-direct row cannot become a
 refusal, legacy resolution, or per-module executable plan: missing or
 contradictory evidence fails the consumer. This is lower translation authority,
-not C emission or native execution authority.
+not native execution authority. The independent transient C-emission binding
+then consumes that same verified program TargetPlan: it matches each partition
+to exactly one Xi module through its PSC row and attached SemanticPlan, joins
+global functions and the direct call to unique Xi nodes through PSC program-row
+indexes, and derives deterministic C symbols from stable function identities.
+Missing or duplicate modules, functions, or calls fail closed. This binding is
+not a second executable plan and does not authorize generated C until product
+CGen and bundle orchestration consume it.
 
 The graph XTP route preserves the same executable VM authority and AOT lower
 authority. Schema 48 appends exact graph and partition sections, mutually
@@ -770,6 +777,8 @@ anchor-sha256: src/aot/xaot_verify.c fa8bbbeb5af03dded414f768b7ff71f5cbc4d0585cf
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c d1b876cf1600462e2fe42a9479e19da490300b672a1f14ce08c44468c3aca22b
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e0afec5542188381add3de02f74fab76d983a70da33d69b17e206d847e49eff5
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.h a7d5194433358ddfccb1d69eeda9778308ce78b63d57ae402299b0efb0f393a2
+anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 037a09b24bc4ba417d0e59966da396916fe5f2071e838cbb6782953d2c851591
 anchor-sha256: src/aot/xi_cgen.c 252cb973f45aab4b41c5dc76ec039b924487b7162b1fadbabd0242ea38fe79ba
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c58bde5be23a2b2509a369632eb2e830015e644495079f7fa5d7e283d2cfaab9
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 283d4f75e19ace0f068d040c12a4633726038dd6c4eafffc35df0bba9acdca15

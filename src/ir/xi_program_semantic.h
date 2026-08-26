@@ -52,6 +52,13 @@ XR_FUNC bool xi_program_semantic_bind_import(XiImportRef *ref,
 XR_FUNC bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *input,
                                           char *error, size_t error_size);
 
+/* Exact numeric joins for post-lowering consumers. A missing or duplicate PSC
+ * row has no usable Xi binding; source and module names never participate. */
+XR_FUNC const XiFunc *xi_program_semantic_function_for_row(const XiModule *module,
+                                                           uint32_t program_function);
+XR_FUNC const XiValue *xi_program_semantic_call_for_row(const XiFunc *function,
+                                                        uint32_t program_call);
+
 /* Atomically transfers the caller's original PSC reference and a heap-owned
  * copy of the pointer-free decision. Failure changes neither owner. */
 XR_FUNC bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure **closure,
