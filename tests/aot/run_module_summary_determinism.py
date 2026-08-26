@@ -127,13 +127,20 @@ class Config:
     xray: Path
     opt_level: str
     timeout: float | None
+    toolchain: str | None
+    cc: str | None
 
 
 def build(config: Config, cache: Path, entry: Path, out: Path,
           extra: Sequence = ()) -> proc.ProcResult:
+    provider_args: list[str] = []
+    if config.toolchain:
+        provider_args.extend(["--toolchain", config.toolchain])
+    if config.cc:
+        provider_args.extend(["--cc", config.cc])
     return proc.run(
         [config.xray, "build", "--native", "-O", config.opt_level, "--verbose",
-         "--cache-dir", cache, *extra, "-o", out, entry],
+         "--cache-dir", cache, *provider_args, *extra, "-o", out, entry],
         timeout=config.timeout,
     )
 
@@ -459,8 +466,13 @@ SCENARIOS = {
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="Module summary determinism suite")
     ap.add_argument("--xray", default=None)
+    ap.add_argument("--toolchain", default=None)
+    ap.add_argument("--cc", default=None)
     ap.add_argument("xray_positional", nargs="?", default=None)
     ns = ap.parse_args(argv[1:])
+
+    if ns.cc and not ns.toolchain:
+        ap.error("--cc requires --toolchain")
 
     xray_raw = ns.xray or ns.xray_positional or os.environ.get("XRAY_BIN")
     if not xray_raw:
@@ -476,7 +488,8 @@ def main(argv: list[str]) -> int:
         print(f"FAIL: xray binary not executable: {xray}")
         return 1
 
-    config = Config(xray=xray, opt_level=opt_level, timeout=timeout)
+    config = Config(xray=xray, opt_level=opt_level, timeout=timeout,
+                    toolchain=ns.toolchain, cc=ns.cc)
     rec = Recorder()
     with workspace.Workspace("xray_module_summary") as ws:
         for runner in SCENARIOS.values():

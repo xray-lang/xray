@@ -3074,11 +3074,26 @@ if(BUILD_TESTS)
 
     # Module summaries: identical sources must publish one identical dependency
     # graph identity cold, warm, and under --rebuild, and an edit must move it.
+    # Instrumented builds must select a GNU-driver provider before the native
+    # build starts.  Pass the configuring compiler explicitly so a user-level
+    # provider preference cannot redirect this CTest to MSVC.
+    set(AOT_MODULE_SUMMARY_PROVIDER_ARGS)
+    if(ENABLE_SANITIZERS OR ENABLE_ASAN OR ENABLE_UBSAN OR ENABLE_TSAN OR ENABLE_MSAN)
+        if(CMAKE_C_COMPILER_ID MATCHES "Clang|AppleClang" AND
+           NOT CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+            list(APPEND AOT_MODULE_SUMMARY_PROVIDER_ARGS
+                 --toolchain clang --cc "${CMAKE_C_COMPILER}")
+        elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+            list(APPEND AOT_MODULE_SUMMARY_PROVIDER_ARGS
+                 --toolchain gcc --cc "${CMAKE_C_COMPILER}")
+        endif()
+    endif()
     add_test(
         NAME aot_module_summary_determinism
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_module_summary_determinism.py
                 $<TARGET_FILE:xray>
+                ${AOT_MODULE_SUMMARY_PROVIDER_ARGS}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(aot_module_summary_determinism PROPERTIES
