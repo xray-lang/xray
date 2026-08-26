@@ -691,6 +691,256 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_a
     return XA_PROGRAM_SEMANTIC_CLOSURE_READY;
 }
 
+enum {
+    XA_LEAF_PRODUCT_MEMBER_COUNT = 6,
+    XA_LEAF_PRODUCT_FUNCTION_COUNT = 3,
+    XA_LEAF_PRODUCT_CALL_COUNT = 2,
+};
+
+typedef struct XaLeafProductSource {
+    XrProgramSemanticModuleInput module;
+    const AstNode *functions[XA_LEAF_PRODUCT_FUNCTION_COUNT];
+    const XaSymbol *symbols[XA_LEAF_PRODUCT_FUNCTION_COUNT];
+    const AstNode *calls[XA_LEAF_PRODUCT_CALL_COUNT];
+    uint32_t callers[XA_LEAF_PRODUCT_CALL_COUNT];
+    XrFingerprint effects[XA_LEAF_PRODUCT_FUNCTION_COUNT];
+    uint32_t callee;
+} XaLeafProductSource;
+
+static bool leaf_product_type_exact(const XrType *type) {
+    static const uint8_t expected[XA_LEAF_PRODUCT_MEMBER_COUNT] = {
+        XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_U8,
+        XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_I64,
+    };
+    if (!type || type->kind != XR_KIND_TUPLE || type->is_nullable || type->is_const ||
+        type->is_literal || xr_type_tuple_count((XrType *) type) != XA_LEAF_PRODUCT_MEMBER_COUNT)
+        return false;
+    for (uint32_t i = 0; i < XA_LEAF_PRODUCT_MEMBER_COUNT; i++) {
+        const XrExactScalarDesc *scalar =
+            leaf_exact_scalar(xr_type_tuple_get((XrType *) type, (int) i));
+        if (!scalar || scalar->id != expected[i])
+            return false;
+    }
+    return true;
+}
+
+static XaLeafAuthorityStatus leaf_product_function_candidate(
+    const XaAnalyzer *analyzer, const AstNode *node, const XaSymbol **symbol_out,
+    XrFingerprint *effect_out) {
+    const FunctionDeclNode *function =
+        node && node->type == AST_FUNCTION_DECL ? &node->as.function_decl : NULL;
+    const XaSymbol *symbol =
+        function && function->symbol_id
+            ? xa_analyzer_symbol_by_id((XaAnalyzer *) analyzer, function->symbol_id)
+            : NULL;
+    const XrType *type = symbol ? symbol->links.type : NULL;
+    if (!function || function->type_param_count != 0 || function->is_generator ||
+        function->is_extern || !function->body || function->param_count != 0 || node->is_exported)
+        return XA_LEAF_AUTHORITY_OUTSIDE;
+    if (!symbol || symbol->links.summary_owner != analyzer ||
+        symbol->links.function_decl_node != node)
+        return XA_LEAF_AUTHORITY_INVALID;
+    if (symbol->kind != XA_SYM_FUNCTION || symbol->is_builtin || symbol->is_imported ||
+        symbol->is_exported || symbol->parent || !type || type->kind != XR_KIND_FUNCTION ||
+        type->function.param_count != 0 || type->function.min_params != 0 ||
+        type->function.is_variadic || type->function.is_c_abi ||
+        type->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
+        type->function.type_param_count != 0 || !leaf_product_type_exact(type->function.return_type))
+        return XA_LEAF_AUTHORITY_OUTSIDE;
+    if (!leaf_locator_valid(leaf_locator(node)))
+        return XA_LEAF_AUTHORITY_INVALID;
+    XaLeafAuthorityStatus effect = leaf_effect_fingerprint(analyzer, symbol, effect_out);
+    if (effect == XA_LEAF_AUTHORITY_READY)
+        *symbol_out = symbol;
+    return effect;
+}
+
+static XaProgramSemanticClosurePublishStatus leaf_product_collect(
+    XaAnalyzer *analyzer, const AstNode *syntax, const XrModuleSpec *module_spec,
+    XaLeafProductSource *source) {
+    if (!analyzer || !syntax || !source || syntax->type != AST_PROGRAM ||
+        syntax->as.program.count != XA_LEAF_PRODUCT_FUNCTION_COUNT ||
+        !syntax->as.program.statements)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
+    memset(source, 0, sizeof(*source));
+    source->callee = UINT32_MAX;
+    uint32_t call_count = 0;
+    for (uint32_t i = 0; i < XA_LEAF_PRODUCT_FUNCTION_COUNT; i++) {
+        source->functions[i] = syntax->as.program.statements[i];
+        XaLeafAuthorityStatus status = leaf_product_function_candidate(
+            analyzer, source->functions[i], &source->symbols[i], &source->effects[i]);
+        if (status != XA_LEAF_AUTHORITY_READY)
+            return status == XA_LEAF_AUTHORITY_INVALID ? XA_PROGRAM_SEMANTIC_CLOSURE_INVALID
+                                                       : XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
+        XaLeafCallScan scan = {0};
+        if (!leaf_scan_calls(source->functions[i]->as.function_decl.body, &scan) ||
+            scan.unsupported)
+            return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
+        if (!scan.call) {
+            if (source->callee != UINT32_MAX)
+                return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
+            source->callee = i;
+        } else if (call_count < XA_LEAF_PRODUCT_CALL_COUNT) {
+            source->calls[call_count] = scan.call;
+            source->callers[call_count++] = i;
+        } else {
+            return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
+        }
+    }
+    if (source->callee == UINT32_MAX || call_count != XA_LEAF_PRODUCT_CALL_COUNT)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
+    for (uint32_t i = 0; i < XA_LEAF_PRODUCT_CALL_COUNT; i++) {
+        const AstNode *call = source->calls[i];
+        const XaResolvedCall *resolved = xa_analyzer_get_resolved_call(analyzer, call);
+        if (!call || call->as.call_expr.arg_count != 0 ||
+            !call->as.call_expr.callee || call->as.call_expr.callee->type != AST_VARIABLE ||
+            !resolved || resolved->reason != XA_RESOLVED_CALL_REASON_RESOLVED ||
+            resolved->source_node_id != call->node_id ||
+            resolved->target_symbol_id != source->symbols[source->callee]->id ||
+            resolved->intrinsic_id != XA_INTRINSIC_NONE || resolved->flags != 0 ||
+            !leaf_product_type_exact(xa_analyzer_get_node_type(analyzer, call)))
+            return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    }
+    if (!leaf_module_authority(module_spec, &source->module) || module_spec->ast != syntax)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    return XA_PROGRAM_SEMANTIC_CLOSURE_READY;
+}
+
+static XrStableId leaf_product_declaration(
+    const XrProgramSemanticModuleInput *module,
+    const XrProgramSemanticTypeFieldInput fields[XA_LEAF_PRODUCT_MEMBER_COUNT]) {
+    XrSHA256Context context;
+    leaf_hash_begin(&context, "xray-source-leaf-value-product-v1");
+    leaf_hash_id(&context, module->module_identity);
+    leaf_hash_fingerprint(&context, module->source_fingerprint);
+    leaf_hash_u32(&context, XA_LEAF_PRODUCT_MEMBER_COUNT);
+    for (uint32_t i = 0; i < XA_LEAF_PRODUCT_MEMBER_COUNT; i++) {
+        leaf_hash_u32(&context, fields[i].declaration_ordinal);
+        leaf_hash_id(&context, fields[i].field_type);
+    }
+    return leaf_finish_id(&context);
+}
+
+static XrStableId leaf_product_instance(XrStableId declaration) {
+    XrSHA256Context context;
+    leaf_hash_begin(&context, "xray-source-nongeneric-leaf-value-product-v1");
+    leaf_hash_id(&context, declaration);
+    return leaf_finish_id(&context);
+}
+
+static XrFingerprint leaf_product_policy(void) {
+    XrSHA256Context context;
+    leaf_hash_begin(&context, "xray-leaf-value-product-direct-call-policy-v1");
+    leaf_hash_u32(&context, 1);
+    leaf_hash_u32(&context, XA_LEAF_PRODUCT_FUNCTION_COUNT);
+    leaf_hash_u32(&context, XA_LEAF_PRODUCT_CALL_COUNT);
+    leaf_hash_u32(&context, XA_LEAF_PRODUCT_MEMBER_COUNT);
+    return leaf_finish_fingerprint(&context);
+}
+
+XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_product(
+    XaAnalyzer *analyzer, const AstNode *syntax, const XrModuleSpec *module_spec,
+    XrProgramSemanticClosure **out, char *error, size_t error_size) {
+    if (out)
+        *out = NULL;
+    if (!out)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    XaLeafProductSource source;
+    XaProgramSemanticClosurePublishStatus status =
+        leaf_product_collect(analyzer, syntax, module_spec, &source);
+    if (status != XA_PROGRAM_SEMANTIC_CLOSURE_READY)
+        return status;
+    XrProgramSemanticClosureLimits limits = {
+        .max_modules = 1, .max_types = 3,
+        .max_type_fields = XA_LEAF_PRODUCT_MEMBER_COUNT,
+        .max_functions = XA_LEAF_PRODUCT_FUNCTION_COUNT,
+        .max_calls = XA_LEAF_PRODUCT_CALL_COUNT,
+    };
+    XrProgramSemanticClosure *closure = NULL;
+    if (!xr_program_semantic_closure_create(&limits, leaf_product_policy(), &closure, error,
+                                            error_size))
+        return XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
+    bool ok = xr_program_semantic_closure_set_family(
+                  closure, XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL, error,
+                  error_size) &&
+              xr_program_semantic_closure_add_module(closure, &source.module, error, error_size);
+    XrStableId scalar_types[2] = {{{0}}, {{0}}};
+    static const uint8_t scalars[2] = {XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_U8};
+    for (uint32_t i = 0; ok && i < 2; i++) {
+        XrProgramSemanticTypeInput input;
+        ok = xr_program_semantic_exact_scalar_type_input(scalars[i], &input) &&
+             xr_program_semantic_closure_add_type(closure, &input, &scalar_types[i], error,
+                                                  error_size);
+    }
+    XrProgramSemanticTypeFieldInput fields[XA_LEAF_PRODUCT_MEMBER_COUNT] = {0};
+    for (uint32_t i = 0; i < XA_LEAF_PRODUCT_MEMBER_COUNT; i++)
+        fields[i] = (XrProgramSemanticTypeFieldInput) {
+            .field_type = scalar_types[i == 2 ? 1 : 0], .declaration_ordinal = i,
+        };
+    XrStableId product_type = {{0}};
+    XrStableId product_declaration = leaf_product_declaration(&source.module, fields);
+    XrProgramSemanticTypeInput product = {
+        .module_identity = source.module.module_identity,
+        .declaration_identity = product_declaration,
+        .concrete_instance_identity = leaf_product_instance(product_declaration),
+        .fields = fields,
+        .field_count = XA_LEAF_PRODUCT_MEMBER_COUNT,
+        .kind = XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT,
+        .flags = XR_PROGRAM_SEMANTIC_TYPE_NONNULLABLE | XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC |
+                 XR_PROGRAM_SEMANTIC_TYPE_VALUE | XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE,
+    };
+    ok = ok && xr_program_semantic_closure_add_type(closure, &product, &product_type, error,
+                                                    error_size);
+    XrStableId function_ids[XA_LEAF_PRODUCT_FUNCTION_COUNT] = {{{0}}};
+    XrFingerprint signature = leaf_signature(product_type, 0);
+    for (uint32_t i = 0; ok && i < XA_LEAF_PRODUCT_FUNCTION_COUNT; i++) {
+        XrProgramSemanticSourceLocator locator = leaf_locator(source.functions[i]);
+        XrStableId declaration = leaf_function_declaration(&source.module, locator, signature);
+        XrProgramSemanticFunctionInput input = {
+            .module_identity = source.module.module_identity,
+            .declaration_identity = declaration,
+            .concrete_instance_identity = leaf_function_instance(declaration, signature),
+            .declaration_locator = locator,
+            .signature_fingerprint = signature,
+            .effect_fingerprint = source.effects[i],
+            .return_type = product_type,
+            .flags = i == source.callee ? 0 : XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY,
+        };
+        ok = xr_program_semantic_closure_add_function(closure, &input, &function_ids[i], error,
+                                                      error_size);
+    }
+    for (uint32_t i = 0; ok && i < XA_LEAF_PRODUCT_CALL_COUNT; i++) {
+        uint32_t caller = source.callers[i];
+        XrProgramSemanticSourceLocator locator = leaf_locator(source.calls[i]);
+        XrStableId caller_declaration =
+            leaf_function_declaration(&source.module, leaf_locator(source.functions[caller]),
+                                      signature);
+        XrProgramSemanticCallInput input = {
+            .callsite_identity = leaf_callsite(&source.module, caller_declaration, locator),
+            .locator = locator,
+            .caller_function = function_ids[caller],
+            .callee_function = function_ids[source.callee],
+            .contract_fingerprint =
+                leaf_call_contract(product_type, signature, source.effects[source.callee]),
+        };
+        XrStableId call_identity;
+        ok = xr_program_semantic_closure_add_call(closure, &input, &call_identity, error,
+                                                  error_size);
+    }
+    ok = ok && xr_program_semantic_closure_freeze(closure, error, error_size) &&
+         xr_program_semantic_closure_verify(closure, error, error_size);
+    if (!ok) {
+        XrProgramSemanticClosureFailureKind failure =
+            xr_program_semantic_closure_failure_kind(closure);
+        xr_program_semantic_closure_free(closure);
+        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE
+                   ? XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
+                   : XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    }
+    *out = closure;
+    return XA_PROGRAM_SEMANTIC_CLOSURE_READY;
+}
+
 static XrStableId scalar_graph_function_declaration(
     const XrProgramSemanticModuleInput *module, XrProgramSemanticSourceLocator locator,
     XrFingerprint signature) {

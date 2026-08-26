@@ -6,7 +6,7 @@ storage, ABI, TargetProfile, executor recipe, or standalone artifact codec.
 Its verified rows may enter Xi and then the pointer-free SemanticPlan/XSM
 projection defined below; they never imply TargetPlan admission on their own.
 
-1. ProgramSemanticClosure schema v5 has one mutable builder, one explicit
+1. ProgramSemanticClosure schema v6 has one mutable builder, one explicit
    `XrProgramSemanticFamily`, bounded module/dependency/type/type-field/
    function/function-parameter/call tables, and a typed failure kind. The
    builder canonicalizes all rows before freeze and cannot be reopened after
@@ -20,14 +20,18 @@ projection defined below; they never imply TargetPlan admission on their own.
    resolver binding, and independently reconstructable contract. The dependency
    graph is acyclic and every module is reachable from the canonical
    entry/export root module set.
-3. Type rows are explicitly `OPAQUE`, registry-owned `EXACT_SCALAR`, or
-   `LEAF_VALUE_AGGREGATE`. Opaque rows retain producer-supplied nonzero shape
-   and ownership fingerprints. Typed rows require exactly the frozen
+3. Type rows are explicitly `OPAQUE`, registry-owned `EXACT_SCALAR`,
+   `LEAF_VALUE_AGGREGATE`, or `LEAF_VALUE_PRODUCT`. Opaque rows retain
+   producer-supplied nonzero shape and ownership fingerprints. Typed rows require exactly the frozen
    nonnullable, nongeneric, value, pointer-free flags and supply zero
    fingerprints; PSC derives their shape and trivial copy/move, no-drop,
    no-root ownership fingerprints. A leaf aggregate contains a nonempty,
    gap-free, declaration-ordered field range whose children are already-present
-   exact-scalar rows. Dense indexes, insertion order, names, target profiles,
+   exact-scalar rows. A leaf value product uses the same ordered child domain
+   but has an empty declaration locator: its declaration and instance identity
+   are reconstructed from module identity, source fingerprint, arity, ordinal,
+   and member TypeIds rather than a synthetic class, name, or source locator.
+   Dense indexes, insertion order, names, target profiles,
    layouts, and ABI facts never enter a type identity.
 4. Every function row binds its exact module, declaration and concrete instance,
    a complete semantic signature/effect/capability contract, one complete
@@ -43,7 +47,7 @@ projection defined below; they never imply TargetPlan admission on their own.
    zero. Its source kind and complete locator participate in the closed-world
    evidence. A cross-module call requires an exact dependency; every function
    and module must be reachable from an explicit entry/export root.
-6. Freeze hashes schema v5, family, complete policy, every canonical row and
+6. Freeze hashes schema v6, family, complete policy, every canonical row and
    locator, then derives `XrGenerationClosureId` from the full closure
    fingerprint. The independent verifier reconstructs typed fingerprints,
    identities, ordered type-field and function-parameter domains, graph
@@ -83,6 +87,14 @@ projection defined below; they never imply TargetPlan admission on their own.
     effect, or ownership evidence is `INVALID`; allocation exhaustion is a
     distinct resource failure. Neither condition is converted into a looser
     family, default identity, fallback, alias, or compatibility path.
+    The additional leaf-value-product family is currently an explicit internal
+    source-backed publication only: exactly three nullary pure functions return
+    `[i64, i64, u8, i64, i64, i64]`; two distinct same-module entry callers each
+    make one direct-local call to the third function. Its independent verifier
+    requires exactly three type rows, six ordered member rows, three functions,
+    two calls, one shared callee, and complete caller coverage. It is not wired
+    into ordinary TypedProgram, Xi, SemanticPlan, TargetPlan, VM, or AOT yet, so
+    this PSC proof cannot be interpreted as tuple6 execution admission.
 11. Only the scalar family builds `XrScalarCallDecision`. It requires the exact
     verified scalar PSC/GCI/TargetProfile and freezes native ABI,
     `DIRECT_LOCAL`, `STATIC_DIRECT`, `I64`, register-only argument/result, and
@@ -164,7 +176,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     ordinal, stable type or source-class identity, family, flag, reserved,
     fingerprint, or join mutations fail closed even when outer framing is
     otherwise valid.
-18. The semantic boundary closes source -> PSC v5 -> Xi -> SemanticPlan 42 ->
+18. The implemented execution boundary closes source -> PSC v6 -> Xi -> SemanticPlan 42 ->
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
@@ -290,12 +302,12 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.h beff336ef2725
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26adf137848c56d923d52b7bd85439105bcae1a48de736f989fc64685bcea17
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c 57e0d760a7d12f1cc5763ba3768eba48ae6859356018c37b9353d3d1e329113a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 19d2eab8e1b2b36e6ef2bdc6452e246a63a056704d7785cec8c5d25274900f40
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 15ce506179036ab9708aa8cd1fb983ba4067149b0aa0c5b33241bd9c2e3b7f3b
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 8f7403b7918cd9ed6ec595cd9a3b4047d964d1ccdf19c5762d4692c88212807c
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 32016f420b187487a6ba15f1966c16a17f9743e24b00dc57279ba7841a7e619e
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 8d7fc426f6c8211c38ca5e4775b56d4ed3ec1040669def073d2176f5cc626e3a
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 99dc9286532aaf0b27d976b5f4f790c5e84e4a367fe2600c0d6ffab1bb558fa6
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h c3ad1a30189f93bd9fb5d58fc0587738a55a93cfefa32f6681ff27a5e4a49a2f
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 006da5f6b47f362c7e0296f648638bb396db27d6bcd9df65f58ae9cde1d5b03e
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 561413c6e6335cbff878b8007c64a0d70cbb199ad337f58ac20dab1c2eeedb8f
-anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 2792df0bd7d046e226971e2e8f459c069de93f2cdb4cda6429c349d7e636ab71
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c b9d4cda5dbc77fc427bbdada3219bd1a4d9fc7dfe6f65eecf6dd12d6ed7d6684
+anchor-sha256: src/plan/semantic/xr_program_semantic_closure_verify.c 95051aaf166846cc3e27053adadf50b773839daba5f7f3b3e22c340921ade677
 anchor-sha256: src/plan/semantic/xr_source_semantic_identity.h fec2785aa50e9285d3071c8463555f03f0dfdf99c6dfd21bb3cd84fa4f00e836
 anchor-sha256: src/plan/semantic/xr_source_semantic_identity.c 3978515423419fbf4e83b35893d709ab3c6bb487fae2093b1cb1ce26f0b34f95
 anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.h ea50939c04efe67bdd8c885f002275e12ecfb2863acf7bfe4596e6fe28d9a99c
@@ -328,10 +340,10 @@ anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4a
 anchor-sha256: src/ir/xi_program_semantic_plan.c 42e2fa994d177b8e37aa88fdb7a300b9ef0429cebbd22e5524a36d5143c632fe
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h a7d5194433358ddfccb1d69eeda9778308ce78b63d57ae402299b0efb0f393a2
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 037a09b24bc4ba417d0e59966da396916fe5f2071e838cbb6782953d2c851591
-anchor-sha256: tests/unit/plan/test_program_semantic_closure.c aa2bff8af087b730168b25faf26ffb08cd69ace09963fb8c762c1071bac6796e
+anchor-sha256: tests/unit/plan/test_program_semantic_closure.c e8ad9cbcaf1f69de191165ff8736253241b8bc1c5f1fed94a0d9abebecc5c262
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
-anchor-sha256: tests/unit/plan/test_semantic_plan.c 83dd97975c5b7a9e3def44f72a5f2f5e39cd1f009972365c4c55d7b859a63b6c
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 39966f66260186d74864a1e41fd8afbd4283cffd34763ee4af448d81c0b32f4e
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 51d8d46a551ad9516b069bde501aee72649d0290ec419a073997f197b0109f47
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 53e5b8fa4bbf6ae204c0b8f720792bd9580c559684daa2539077fd786d111ce5
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3ea53772f142cfcf2a40f0e7dfa52607183049f6d1412b175bc4b41f5d304101

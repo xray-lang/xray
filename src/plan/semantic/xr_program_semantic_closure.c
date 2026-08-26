@@ -110,7 +110,7 @@ static XrStableId derive_type_identity(XrFingerprint policy_fingerprint,
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
-    /* Opaque and aggregate rows use the current general type identity frame. */
+    /* Opaque and structural rows use the current general type identity frame. */
     hash_u32(&context, UINT32_C(1));
     hash_fingerprint(&context, policy_fingerprint);
     hash_stable_id(&context, input->module_identity);
@@ -201,6 +201,7 @@ static void derive_typed_type_fingerprints(const XrProgramSemanticTypeInput *inp
 }
 
 static bool locator_is_valid(XrProgramSemanticSourceLocator locator);
+static bool locator_is_empty(XrProgramSemanticSourceLocator locator);
 
 static bool typed_type_input_is_valid(const XrProgramSemanticClosure *closure,
                                       const XrProgramSemanticTypeInput *input) {
@@ -218,9 +219,12 @@ static bool typed_type_input_is_valid(const XrProgramSemanticClosure *closure,
                input->declaration_locator.start_column == 0 &&
                input->declaration_locator.end_line == 0 &&
                input->declaration_locator.end_column == 0;
-    if (input->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
+    bool aggregate = input->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
+    bool product = input->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT;
+    if ((!aggregate && !product) ||
         input->exact_scalar != XR_EXACT_SCALAR_NONE || input->field_count == 0 || !input->fields ||
-        !locator_is_valid(input->declaration_locator) ||
+        (aggregate ? !locator_is_valid(input->declaration_locator)
+                   : !locator_is_empty(input->declaration_locator)) ||
         input->field_count > closure->limits.max_type_fields - closure->type_field_count)
         return false;
     for (uint32_t i = 0; i < input->field_count; i++) {
@@ -632,6 +636,7 @@ bool xr_program_semantic_closure_add_function(XrProgramSemanticClosure *closure,
          ~(XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY | XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)) != 0 ||
         memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) != 0 ||
         ((closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+          closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
           closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
              ? (stable_id_is_zero(input->return_type) || input->parameter_count > 1 ||
                 input->parameter_count > closure->limits.max_function_parameters ||
@@ -863,7 +868,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v5\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v6\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);

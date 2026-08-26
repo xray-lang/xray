@@ -40,6 +40,14 @@ XR_FUNC XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publis
     const struct XrModuleSpec *module_spec, XrProgramSemanticClosure **out, char *error,
     size_t error_size);
 
+/* Publish the anonymous pointer-free tuple6 return family and every bounded
+ * same-module direct-local caller. No declaration locator or class identity is
+ * synthesized for the value product. */
+XR_FUNC XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_product(
+    struct XaAnalyzer *analyzer, const struct AstNode *syntax,
+    const struct XrModuleSpec *module_spec, XrProgramSemanticClosure **out, char *error,
+    size_t error_size);
+
 /* Publish the bounded two-source-module scalar graph while the shared analyzer
  * and its exact import/export joins are live. A structurally matching graph is
  * fail-closed: missing dependency, target, type, effect, or source authority is

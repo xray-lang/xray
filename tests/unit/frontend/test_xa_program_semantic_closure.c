@@ -67,6 +67,12 @@ static const char kLeafAggregateSource[] =
     "fn swap(value: Pair) -> Pair { return Pair{left: value.right, right: value.left} }\n"
     "fn root() -> Pair { return swap(Pair{left: 1, right: 41}) }\n";
 
+static const char kLeafProductSource[] =
+    "fn scan() -> (i64, i64, u8, i64, i64, i64) { "
+    "return (1, 2, 3 as u8, 4, 5, 6) }\n"
+    "fn decodePath() -> (i64, i64, u8, i64, i64, i64) { return scan() }\n"
+    "fn validatePath() -> (i64, i64, u8, i64, i64, i64) { return scan() }\n";
+
 typedef struct ScalarFixture {
     XrModuleGraph *graph;
     XrModuleSpec *spec;
@@ -2236,6 +2242,109 @@ TEST(source_backed_leaf_aggregate_publishes_typed_psc) {
     fixture_cleanup(&fixture);
 }
 
+TEST(source_backed_leaf_product_freezes_all_direct_local_callers) {
+    ScalarFixture fixture;
+    ASSERT_TRUE(fixture_analyze(&fixture, kLeafProductSource, "psc-leaf-product"));
+    char error[256] = {0};
+    XrProgramSemanticClosure *closure = NULL;
+    ASSERT_EQ_INT(xa_program_semantic_closure_publish_leaf_product(
+                      fixture.analyzer, fixture.spec->ast, fixture.spec, &closure, error,
+                      sizeof(error)),
+                  XA_PROGRAM_SEMANTIC_CLOSURE_READY);
+    ASSERT_NOT_NULL(closure);
+    ASSERT_TRUE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(closure),
+                   XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_type_count(closure), 3);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_type_field_count(closure), 6);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_function_count(closure), 3);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_function_parameter_count(closure), 0);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_call_count(closure), 2);
+    XrProgramSemanticTypeRecord *product = NULL;
+    XrStableId i64_type = {{0}};
+    XrStableId u8_type = {{0}};
+    for (uint32_t i = 0; i < closure->type_count; i++) {
+        XrProgramSemanticTypeRecord *row = &closure->types[i];
+        if (row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
+            ASSERT_NULL(product);
+            product = row;
+            ASSERT_EQ_UINT(row->field_count, 6);
+            ASSERT_EQ_UINT(row->declaration_locator.kind, 0);
+            ASSERT_EQ_UINT(row->declaration_locator.start_line, 0);
+            ASSERT_EQ_UINT(row->declaration_locator.start_column, 0);
+            ASSERT_EQ_UINT(row->declaration_locator.end_line, 0);
+            ASSERT_EQ_UINT(row->declaration_locator.end_column, 0);
+        } else {
+            ASSERT_EQ_UINT(row->kind, XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR);
+            if (row->exact_scalar == XR_EXACT_SCALAR_I64)
+                i64_type = row->id;
+            else {
+                ASSERT_EQ_UINT(row->exact_scalar, XR_EXACT_SCALAR_U8);
+                u8_type = row->id;
+            }
+        }
+    }
+    ASSERT_NOT_NULL(product);
+    ASSERT_FALSE(memcmp(i64_type.bytes, (uint8_t[XR_STABLE_ID_BYTES]) {0},
+                        sizeof(i64_type.bytes)) == 0);
+    ASSERT_FALSE(memcmp(u8_type.bytes, (uint8_t[XR_STABLE_ID_BYTES]) {0},
+                        sizeof(u8_type.bytes)) == 0);
+    for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+        const XrProgramSemanticTypeFieldRecord *field =
+            &closure->type_fields[product->field_begin + ordinal];
+        ASSERT_EQ_UINT(field->declaration_ordinal, ordinal);
+        XrStableId expected = ordinal == 2 ? u8_type : i64_type;
+        ASSERT_TRUE(memcmp(field->field_type.bytes, expected.bytes, sizeof(expected.bytes)) == 0);
+    }
+    XrStableId callee = {{0}};
+    XrStableId callers[2] = {{{0}}, {{0}}};
+    uint32_t caller_count = 0;
+    for (uint32_t i = 0; i < closure->function_count; i++) {
+        const XrProgramSemanticFunctionRecord *row = &closure->functions[i];
+        ASSERT_EQ_UINT(row->parameter_count, 0);
+        ASSERT_TRUE(memcmp(row->return_type.bytes, product->id.bytes,
+                           sizeof(product->id.bytes)) == 0);
+        if (row->flags == 0)
+            callee = row->id;
+        else {
+            ASSERT_EQ_UINT(row->flags, XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY);
+            ASSERT_TRUE(caller_count < 2);
+            callers[caller_count++] = row->id;
+        }
+    }
+    ASSERT_EQ_UINT(caller_count, 2);
+    uint32_t caller_hits[2] = {0};
+    for (uint32_t i = 0; i < closure->call_count; i++) {
+        const XrProgramSemanticCallRecord *call = &closure->calls[i];
+        ASSERT_TRUE(memcmp(call->callee_function.bytes, callee.bytes, sizeof(callee.bytes)) == 0);
+        for (uint32_t caller = 0; caller < 2; caller++)
+            caller_hits[caller] += memcmp(call->caller_function.bytes, callers[caller].bytes,
+                                          sizeof(callers[caller].bytes)) == 0;
+    }
+    ASSERT_EQ_UINT(caller_hits[0], 1);
+    ASSERT_EQ_UINT(caller_hits[1], 1);
+
+    uint32_t field_count = product->field_count;
+    product->field_count = 5;
+    ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    product->field_count = field_count;
+    XrProgramSemanticSourceLocator locator = product->declaration_locator;
+    product->declaration_locator.kind = AST_STRUCT_DECL;
+    ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    product->declaration_locator = locator;
+    XrStableId member = closure->type_fields[product->field_begin + 2u].field_type;
+    closure->type_fields[product->field_begin + 2u].field_type = i64_type;
+    ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    closure->type_fields[product->field_begin + 2u].field_type = member;
+    XrStableId second_caller = closure->calls[1].caller_function;
+    closure->calls[1].caller_function = closure->calls[0].caller_function;
+    ASSERT_FALSE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    closure->calls[1].caller_function = second_caller;
+    ASSERT_TRUE(xr_program_semantic_closure_verify(closure, error, sizeof(error)));
+    xr_program_semantic_closure_free(closure);
+    fixture_cleanup(&fixture);
+}
+
 TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ScalarGraphFixture fixture;
     ASSERT_TRUE(scalar_graph_fixture_build(&fixture, "41"));
@@ -2374,17 +2483,17 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
         scalar_graph_outer_resign_rejects(closure, SCALAR_GRAPH_OUTER_RESIGN_WRONG_IMPORT_LOCATOR));
 
     static const uint8_t expected_resolver_binding[16] = {
-        0x5e, 0x67, 0x57, 0x46, 0x54, 0xf5, 0x51, 0x28,
-        0x14, 0x26, 0xbf, 0x7c, 0x2a, 0x9a, 0x16, 0x83,
+        0x9a, 0x44, 0x41, 0xa1, 0x00, 0x7a, 0x04, 0x95,
+        0x09, 0xda, 0x48, 0xe0, 0xa2, 0x2e, 0x75, 0xdb,
     };
     static const uint8_t expected_fingerprint[32] = {
-        0xc1, 0xb2, 0x50, 0x3c, 0xcf, 0xf1, 0x19, 0x54, 0x45, 0x47, 0x9a,
-        0xf2, 0x37, 0x46, 0x57, 0x10, 0xe3, 0x4d, 0x31, 0x31, 0x90, 0x81,
-        0x6e, 0x21, 0x98, 0x04, 0xde, 0xd5, 0xfc, 0x32, 0x14, 0x99,
+        0x5a, 0xbc, 0x8d, 0xd1, 0x63, 0x23, 0xb4, 0xbe, 0x49, 0xf9, 0xe1,
+        0xb2, 0xf3, 0xcb, 0xfe, 0x1e, 0x2c, 0x51, 0xb6, 0xcd, 0xb0, 0xbd,
+        0xee, 0x59, 0x1a, 0x21, 0x77, 0xe5, 0xac, 0xc2, 0x4a, 0x55,
     };
     static const uint8_t expected_generation_id[16] = {
-        0xea, 0x39, 0x98, 0x2c, 0x91, 0x2f, 0xdd, 0xd5,
-        0x3e, 0x01, 0x00, 0xd5, 0x3c, 0x25, 0xa9, 0xcc,
+        0x3c, 0x2b, 0x45, 0x7e, 0xe6, 0x37, 0xd1, 0x6c,
+        0x1d, 0x9e, 0xb0, 0xdb, 0xb3, 0x6b, 0xb8, 0x17,
     };
     XrFingerprint fingerprint = xr_program_semantic_closure_fingerprint(closure);
     XrGenerationClosureId generation_id =
@@ -2597,6 +2706,7 @@ setup();
 RUN_TEST_SUITE("source-backed program semantic closure");
 RUN_TEST(source_backed_scalar_snapshot_builds_verified_closure);
 RUN_TEST(source_backed_leaf_aggregate_publishes_typed_psc);
+RUN_TEST(source_backed_leaf_product_freezes_all_direct_local_callers);
 RUN_TEST(two_source_module_scalar_graph_publishes_complete_authority);
 RUN_TEST(strict_call_locator_boundaries_fail_after_source_republication);
 RUN_TEST(published_snapshot_is_pointer_free_and_ignores_node_ids);

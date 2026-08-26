@@ -159,6 +159,36 @@ static XrStableId verifier_leaf_aggregate_instance(XrStableId declaration) {
     return verifier_finish_id(&context);
 }
 
+static XrStableId verifier_leaf_product_declaration(
+    const XrProgramSemanticClosure *closure, const XrProgramSemanticTypeRecord *row,
+    const XrProgramSemanticModuleRecord *module) {
+    static const uint8_t domain[] = "xray-source-leaf-value-product-v1";
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    verifier_hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_framed_id(&context, module->module_identity);
+    verifier_hash_framed_fingerprint(&context, module->source_fingerprint);
+    verifier_hash_u32(&context, row->field_count);
+    for (uint32_t i = 0; i < row->field_count; i++) {
+        const XrProgramSemanticTypeFieldRecord *field =
+            &closure->type_fields[row->field_begin + i];
+        verifier_hash_u32(&context, field->declaration_ordinal);
+        verifier_hash_framed_id(&context, field->field_type);
+    }
+    return verifier_finish_id(&context);
+}
+
+static XrStableId verifier_leaf_product_instance(XrStableId declaration) {
+    static const uint8_t domain[] = "xray-source-nongeneric-leaf-value-product-v1";
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    verifier_hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_framed_id(&context, declaration);
+    return verifier_finish_id(&context);
+}
+
 static XrStableId verifier_leaf_function_declaration(const XrProgramSemanticModuleRecord *module,
                                                      const XrProgramSemanticFunctionRecord *row) {
     static const uint8_t domain[] = "xray-source-leaf-value-function-declaration-v1";
@@ -649,7 +679,8 @@ static bool verify_module_rows(const XrProgramSemanticClosure *closure, char *er
             verifier_fingerprint_zero(row->source_fingerprint) ||
             verifier_fingerprint_zero(row->export_fingerprint) ||
             ((closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL ||
-              closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) &&
+              closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+              closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) &&
              !verifier_fingerprint_equal(row->export_fingerprint, expected_exports)) ||
             (i && verifier_id_compare(closure->modules[i - 1u].module_identity,
                                       row->module_identity) >= 0))
@@ -702,7 +733,8 @@ static bool verify_type_rows(const XrProgramSemanticClosure *closure, char *erro
         bool opaque = row->kind == XR_PROGRAM_SEMANTIC_TYPE_OPAQUE;
         bool scalar = row->kind == XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR;
         bool aggregate = row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
-        bool typed_shape = scalar || aggregate;
+        bool product = row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT;
+        bool typed_shape = scalar || aggregate || product;
         bool locator_empty =
             row->declaration_locator.kind == 0 && row->declaration_locator.start_line == 0 &&
             row->declaration_locator.start_column == 0 && row->declaration_locator.end_line == 0 &&
@@ -724,6 +756,9 @@ static bool verify_type_rows(const XrProgramSemanticClosure *closure, char *erro
                   verifier_exact_scalar_instance(scalar_declaration, row->exact_scalar)))) ||
             (aggregate &&
              (row->field_count == 0 || !verifier_type_locator_valid(row->declaration_locator) ||
+              row->exact_scalar != XR_EXACT_SCALAR_NONE || row->flags != required)) ||
+            (product &&
+             (row->field_count == 0 || !locator_empty ||
               row->exact_scalar != XR_EXACT_SCALAR_NONE || row->flags != required)))
             return reject(error, error_size, "XR_SEM_0013",
                           "concrete type row bounds or kind are invalid");
@@ -731,20 +766,25 @@ static bool verify_type_rows(const XrProgramSemanticClosure *closure, char *erro
         XrFingerprint expected_ownership = {{0}};
         if (typed_shape)
             verifier_typed_type_fingerprints(closure, row, &expected_shape, &expected_ownership);
-        int aggregate_module = aggregate ? find_module(closure, row->module_identity) : -1;
+        int structural_module =
+            aggregate || product ? find_module(closure, row->module_identity) : -1;
         XrStableId expected_declaration = row->declaration_identity;
         XrStableId expected_instance = row->concrete_instance_identity;
-        if (aggregate_module >= 0) {
+        if (aggregate && structural_module >= 0) {
             expected_declaration = verifier_leaf_aggregate_declaration(
-                closure, row, &closure->modules[(uint32_t) aggregate_module]);
+                closure, row, &closure->modules[(uint32_t) structural_module]);
             expected_instance = verifier_leaf_aggregate_instance(expected_declaration);
+        } else if (product && structural_module >= 0) {
+            expected_declaration = verifier_leaf_product_declaration(
+                closure, row, &closure->modules[(uint32_t) structural_module]);
+            expected_instance = verifier_leaf_product_instance(expected_declaration);
         }
         if (verifier_stable_id_zero(row->declaration_identity) ||
             verifier_stable_id_zero(row->concrete_instance_identity) ||
             verifier_fingerprint_zero(row->shape_fingerprint) ||
             verifier_fingerprint_zero(row->ownership_fingerprint) ||
             (!scalar && find_module(closure, row->module_identity) < 0) ||
-            (aggregate &&
+            ((aggregate || product) &&
              (!verifier_id_equal(row->declaration_identity, expected_declaration) ||
               !verifier_id_equal(row->concrete_instance_identity, expected_instance))) ||
             !verifier_id_equal(row->id, verifier_type_identity(closure->policy_fingerprint, row)) ||
@@ -794,6 +834,45 @@ static bool verify_bounded_family_types(const XrProgramSemanticClosure *closure,
                 row->exact_scalar == XR_EXACT_SCALAR_I64 && row->field_count == 0) ||
                reject(error, error_size, "XR_SEM_0019",
                       "scalar module graph requires exactly the sealed i64 type row");
+    }
+    if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) {
+        static const uint8_t expected[6] = {
+            XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_U8,
+            XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_I64, XR_EXACT_SCALAR_I64,
+        };
+        const XrProgramSemanticTypeRecord *product = NULL;
+        uint32_t scalar_count = 0;
+        bool saw_i64 = false;
+        bool saw_u8 = false;
+        for (uint32_t i = 0; i < closure->type_count; i++) {
+            const XrProgramSemanticTypeRecord *row = &closure->types[i];
+            if (row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT) {
+                if (product)
+                    return reject(error, error_size, "XR_SEM_0019",
+                                  "leaf value product type is duplicated");
+                product = row;
+                continue;
+            }
+            if (row->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR)
+                return reject(error, error_size, "XR_SEM_0019",
+                              "leaf value product has an unsupported member type");
+            scalar_count++;
+            saw_i64 |= row->exact_scalar == XR_EXACT_SCALAR_I64;
+            saw_u8 |= row->exact_scalar == XR_EXACT_SCALAR_U8;
+        }
+        if (!product || product->field_count != 6 || scalar_count != 2 || !saw_i64 || !saw_u8)
+            return reject(error, error_size, "XR_SEM_0019",
+                          "leaf value product type coverage is not exact");
+        for (uint32_t ordinal = 0; ordinal < 6; ordinal++) {
+            const XrProgramSemanticTypeFieldRecord *field =
+                &closure->type_fields[product->field_begin + ordinal];
+            int child = find_type(closure, field->field_type);
+            if (child < 0 || closure->types[child].kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+                closure->types[child].exact_scalar != expected[ordinal])
+                return reject(error, error_size, "XR_SEM_0019",
+                              "leaf value product member sequence is not exact");
+        }
+        return true;
     }
     if (closure->family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
         return true;
@@ -881,6 +960,21 @@ static XrFingerprint verifier_leaf_policy(void) {
     return result;
 }
 
+static XrFingerprint verifier_leaf_product_policy(void) {
+    static const uint8_t domain[] = "xray-leaf-value-product-direct-call-policy-v1";
+    XrSHA256Context context;
+    XrFingerprint result;
+    xr_sha256_init(&context);
+    verifier_hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_u32(&context, 1);
+    verifier_hash_u32(&context, 3);
+    verifier_hash_u32(&context, 2);
+    verifier_hash_u32(&context, 6);
+    xr_sha256_final(&context, result.bytes);
+    return result;
+}
+
 static XrFingerprint verifier_leaf_call_contract(XrStableId aggregate_type, XrFingerprint signature,
                                                  XrFingerprint effect) {
     static const uint8_t domain[] = "xray-leaf-value-direct-call-contract-v1";
@@ -901,6 +995,8 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
     uint32_t roots = 0;
     uint32_t leaf_entries = 0;
     uint32_t leaf_callees = 0;
+    uint32_t product_entries = 0;
+    uint32_t product_callees = 0;
     uint32_t scalar_entries = 0;
     uint32_t scalar_callees = 0;
     uint32_t graph_entries = 0;
@@ -909,9 +1005,11 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
     for (uint32_t i = 0; i < closure->function_count; i++) {
         const XrProgramSemanticFunctionRecord *row = &closure->functions[i];
         bool leaf = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+        bool product =
+            closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
         bool scalar = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
         bool graph = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
-        bool typed = leaf || graph;
+        bool typed = leaf || product || graph;
         bool leaf_entry = leaf && (row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
         if (row->parameter_begin > closure->function_parameter_count ||
             row->parameter_count > closure->function_parameter_count - row->parameter_begin ||
@@ -923,18 +1021,19 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
         const XrProgramSemanticFunctionParameterRecord *parameters =
             row->parameter_count ? &closure->function_parameters[row->parameter_begin] : NULL;
         XrFingerprint expected_signature =
-            leaf     ? verifier_leaf_signature(row->return_type, parameters, row->parameter_count)
+            (leaf || product)
+                ? verifier_leaf_signature(row->return_type, parameters, row->parameter_count)
             : scalar ? verifier_scalar_signature(
                            row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 0u : 1u)
             : graph  ? verifier_scalar_signature(row->parameter_count)
                      : row->signature_fingerprint;
-        XrFingerprint expected_effect = leaf                ? verifier_leaf_effect()
+        XrFingerprint expected_effect = (leaf || product)   ? verifier_leaf_effect()
                                         : (scalar || graph) ? verifier_scalar_effect()
                                                             : row->effect_fingerprint;
         int function_module = find_module(closure, row->module_identity);
         XrStableId expected_declaration = row->declaration_identity;
         XrStableId expected_instance = row->concrete_instance_identity;
-        if (leaf && function_module >= 0) {
+        if ((leaf || product) && function_module >= 0) {
             expected_declaration = verifier_leaf_function_declaration(
                 &closure->modules[(uint32_t) function_module], row);
             expected_instance =
@@ -958,7 +1057,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
             verifier_fingerprint_zero(row->effect_fingerprint) ||
             !verifier_fingerprint_equal(row->signature_fingerprint, expected_signature) ||
             !verifier_fingerprint_equal(row->effect_fingerprint, expected_effect) ||
-            ((leaf || scalar || graph) &&
+            ((leaf || product || scalar || graph) &&
              (!verifier_id_equal(row->declaration_identity, expected_declaration) ||
               !verifier_id_equal(row->concrete_instance_identity, expected_instance))) ||
             (leaf && (find_type(closure, row->return_type) < 0 ||
@@ -967,6 +1066,12 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
                       row->capability_mask != 0 ||
                       (leaf_entry ? row->parameter_count != 0
                                   : row->flags != 0 || row->parameter_count != 1))) ||
+            (product &&
+             (find_type(closure, row->return_type) < 0 ||
+              closure->types[find_type(closure, row->return_type)].kind !=
+                  XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_PRODUCT ||
+              row->capability_mask != 0 || row->parameter_count != 0 ||
+              (row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && row->flags != 0))) ||
             (scalar && (row->parameter_count != 0 || !verifier_stable_id_zero(row->return_type) ||
                         (row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && row->flags != 0) ||
                         row->capability_mask != 0)) ||
@@ -1029,6 +1134,10 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
             leaf_entries += leaf_entry ? 1u : 0u;
             leaf_callees += row->flags == 0 ? 1u : 0u;
         }
+        if (product) {
+            product_entries += row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
+            product_callees += row->flags == 0 ? 1u : 0u;
+        }
         if (scalar) {
             scalar_entries += row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
             scalar_callees += row->flags == 0 ? 1u : 0u;
@@ -1045,6 +1154,10 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
         (leaf_entries != 1u || leaf_callees != 1u || roots != 1u))
         return reject(error, error_size, "XR_SEM_0019",
                       "leaf aggregate family requires one entry and one unary callee");
+    if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+        (product_entries != 2u || product_callees != 1u || roots != 2u))
+        return reject(error, error_size, "XR_SEM_0019",
+                      "leaf value product family requires two callers and one callee");
     if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL &&
         (scalar_entries != 1u || scalar_callees != 1u || roots != 1u))
         return reject(error, error_size, "XR_SEM_0019",
@@ -1065,7 +1178,8 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
         int callee = find_function(closure, row->callee_function);
         XrFingerprint expected_contract = row->contract_fingerprint;
         if (callee >= 0 &&
-            closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
+            (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+             closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)) {
             const XrProgramSemanticFunctionRecord *callee_row =
                 &closure->functions[(uint32_t) callee];
             expected_contract = verifier_leaf_call_contract(callee_row->return_type,
@@ -1098,6 +1212,13 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
              callee_row->parameter_count != 1))
             return reject(error, error_size, "XR_SEM_0019",
                           "leaf aggregate call does not join entry to unary callee");
+        if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+            (caller_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+             caller_row->parameter_count != 0 || callee_row->flags != 0 ||
+             callee_row->parameter_count != 0 ||
+             !verifier_id_equal(caller_row->module_identity, callee_row->module_identity)))
+            return reject(error, error_size, "XR_SEM_0019",
+                          "leaf value product call is not same-module direct-local");
         if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
             (caller_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
              caller_row->parameter_count != 0 ||
@@ -1134,6 +1255,34 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
             !has_direct_dependency(closure, caller_module, callee_module))
             return reject(error, error_size, "XR_SEM_0019",
                           "cross-module call lacks an exact dependency contract");
+    }
+    return true;
+}
+
+static bool verify_leaf_product_calls(const XrProgramSemanticClosure *closure, char *error,
+                                      size_t error_size) {
+    if (closure->family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+        return true;
+    const XrProgramSemanticFunctionRecord *callee = NULL;
+    for (uint32_t i = 0; i < closure->function_count; i++)
+        if (closure->functions[i].flags == 0)
+            callee = &closure->functions[i];
+    if (!callee)
+        return reject(error, error_size, "XR_SEM_0019",
+                      "leaf value product callee is missing");
+    for (uint32_t i = 0; i < closure->function_count; i++) {
+        const XrProgramSemanticFunctionRecord *caller = &closure->functions[i];
+        if (caller->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY)
+            continue;
+        uint32_t coverage = 0;
+        for (uint32_t call = 0; call < closure->call_count; call++)
+            coverage += verifier_id_equal(closure->calls[call].caller_function, caller->id) &&
+                        verifier_id_equal(closure->calls[call].callee_function, callee->id)
+                            ? 1u
+                            : 0u;
+        if (coverage != 1u)
+            return reject(error, error_size, "XR_SEM_0019",
+                          "leaf value product callers do not cover the callee exactly once");
     }
     return true;
 }
@@ -1346,7 +1495,7 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure, char *err
 
 static void verifier_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                          XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v5\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v6\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -1511,6 +1660,13 @@ bool xr_program_semantic_closure_verify(const XrProgramSemanticClosure *closure,
           closure->type_field_count == 0 || closure->function_count != 2 ||
           closure->function_parameter_count != 1 || closure->call_count != 1 ||
           !verifier_fingerprint_equal(closure->policy_fingerprint, verifier_leaf_policy()))) ||
+        (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
+         (closure->module_count != 1 || closure->dependency_count != 0 ||
+          closure->type_count != 3 || closure->type_field_count != 6 ||
+          closure->function_count != 3 || closure->function_parameter_count != 0 ||
+          closure->call_count != 2 ||
+          !verifier_fingerprint_equal(closure->policy_fingerprint,
+                                      verifier_leaf_product_policy()))) ||
         (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
          (closure->module_count != 2 || closure->dependency_count != 1 ||
           closure->type_count != 1 || closure->type_field_count != 0 ||
@@ -1525,6 +1681,7 @@ bool xr_program_semantic_closure_verify(const XrProgramSemanticClosure *closure,
         !verify_bounded_family_types(closure, error, error_size) ||
         !verify_function_rows(closure, error, error_size) ||
         !verify_call_rows(closure, error, error_size) ||
+        !verify_leaf_product_calls(closure, error, error_size) ||
         !verify_scalar_module_graph_rows(closure, error, error_size) ||
         !verify_module_graph(closure, error, error_size) ||
         !verify_call_graph(closure, error, error_size))
