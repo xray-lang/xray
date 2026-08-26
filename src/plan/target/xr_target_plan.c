@@ -677,6 +677,19 @@ bool xr_target_semantic_module_set_fingerprint(
     return valid;
 }
 
+bool xr_target_plan_program_module_set_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!plan || !out || plan->program_graphs_count != 1u ||
+        plan->module_partitions_count != plan->semantic_module_count ||
+        plan->semantic_module_count != plan->program_graphs[0].module_count)
+        return false;
+    const XrSemanticPlan *const *modules = (const XrSemanticPlan *const *) plan->semantic_modules;
+    if (!xr_target_semantic_module_set_fingerprint(modules, plan->semantic_module_count, out))
+        return false;
+    return xr_fingerprint_equal(*out, plan->semantic_fingerprint);
+}
+
 typedef enum XrTargetOwnedTable {
     XR_TARGET_OWNED_LAYOUT,
     XR_TARGET_OWNED_CALL,

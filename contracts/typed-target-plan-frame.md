@@ -169,7 +169,10 @@ authority to choose blocks or edges. An uncached dispatcher asks the frame to
 reconstruct the next instruction and block entry from the verified rows. After
 an exact immutable decoded cache has already been bound to the same plan, the
 dispatcher may instead pass that cache's instruction and block-entry identities
-through the frame's O(1) decoded-entry operation. That operation only updates
+through the frame's O(1) decoded-entry operation. A program-graph cache must
+also bind the exact runtime generation, program fingerprint, canonical
+module-set fingerprint, and GCI before any frame entry. That operation only
+updates
 frame context; it cannot build a cache, choose a successor, or make an invalid
 plan executable. The frame's supported family mask is the exact
 completed closure the production builder emits, so a plan built for any other
@@ -358,7 +361,7 @@ Evidence:
 anchor-sha256: src/plan/target/xr_target_plan.h 3a46929e884bd66c4ba2a5466b4e9a95ab381821c3f756a74b2ca7efa5237ff2
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
-anchor-sha256: src/vm/xr_typed_dispatch.c b2d56b254da8cc9e6e391664c0583ca0042ca9b1e976b71d2fcad0e894de9a34
+anchor-sha256: src/vm/xr_typed_dispatch.c 1fa2d59ce6df94d4d983c2b0fb7e3af48ad30a2dcceb7526bd147f57f52c714f
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041
@@ -369,7 +372,7 @@ anchor-sha256: src/vm/audit/xr_typed_lifecycle_audit.c 291e460b9004adfe43491e1f1
 anchor-sha256: tests/unit/vm/test_typed_frame.c 900c5800d9fce2a12188425f19c83648749c13b7d612c2e8fc7ef3d7f046e2da
 anchor-sha256: tests/unit/runtime/test_typed_lifecycle_audit.c 4770e678fcb3b588ec6ab45f3b24c83f5b82693d8c3f37dd92a714252936c2c6
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 314197abf0562d4ec4954bae52c3504fc9215d6d6aeb9b69b93eb3124c719895
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c f4422072f94b01c4411b4677cb62ba72304553753c9225074d981b6b20f43fa3
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c ad03d77d583441969756a1f2d1be2cde504624c0cd4ed26ddae96a50c8a79ed5
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2

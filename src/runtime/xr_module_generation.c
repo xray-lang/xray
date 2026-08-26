@@ -20,6 +20,7 @@
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../plan/target/xr_target_capability.h"
 #include "../plan/target/xr_target_plan.h"
+#include "../plan/target/xr_target_plan_internal.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../vm/xr_typed_dispatch.h"
@@ -29,6 +30,9 @@
 #include "xr_dynamic_entry_runtime.h"
 #include <stdio.h>
 #include <string.h>
+
+XR_STATIC_ASSERT(XR_RUNTIME_GENERATION_CLOSURE_ID_SIZE == XR_STABLE_ID_BYTES,
+                 "runtime generation GCI width must match stable identities");
 
 static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
                  const char *detail) {
@@ -59,7 +63,7 @@ static void hash_u64(XrSHA256Context *context, uint64_t value) {
 }
 
 static void compute_generation_fingerprint(XrModuleGenerationIdentity *identity) {
-    static const uint8_t domain[] = "xray-module-generation-v2\0";
+    static const uint8_t domain[] = "xray-module-generation-v3\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -70,6 +74,12 @@ static void compute_generation_fingerprint(XrModuleGenerationIdentity *identity)
     hash_u64(&context, identity->required_capability_mask);
     xr_sha256_update(&context, identity->semantic_fingerprint,
                      XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
+    xr_sha256_update(&context, identity->program_fingerprint,
+                     XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
+    xr_sha256_update(&context, identity->program_module_set_fingerprint,
+                     XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
+    xr_sha256_update(&context, identity->generation_closure_id,
+                     sizeof(identity->generation_closure_id));
     xr_sha256_update(&context, identity->target_profile_fingerprint,
                      XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
     xr_sha256_update(&context, identity->target_plan_fingerprint,
@@ -149,6 +159,24 @@ static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_numb
     memcpy(identity->semantic_fingerprint,
            xr_target_plan_semantic_fingerprint(plan).bytes,
            XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    const XrTargetProgramGraphRecord *graphs = xr_target_plan_program_graphs(plan, &graph_count);
+    (void) xr_target_plan_module_partitions(plan, &partition_count);
+    if (graph_count || partition_count) {
+        XrFingerprint module_set_fingerprint = {{0}};
+        if (!graphs || graph_count != 1u || partition_count != 2u ||
+            graphs[0].module_count != partition_count ||
+            !xr_target_plan_program_module_set_fingerprint(plan, &module_set_fingerprint))
+            return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
+                        "program generation identity is not a canonical two-module set");
+        memcpy(identity->program_fingerprint, graphs[0].program_fingerprint.bytes,
+               XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
+        memcpy(identity->program_module_set_fingerprint, module_set_fingerprint.bytes,
+               XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
+        memcpy(identity->generation_closure_id, graphs[0].generation_identity.bytes,
+               sizeof(identity->generation_closure_id));
+    }
     memcpy(identity->target_profile_fingerprint,
            xr_target_profile_fingerprint(profile).bytes,
            XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
@@ -551,8 +579,8 @@ static XrVmDecodedCacheStatus generation_cache_require_exact(
     if (!generation)
         return XR_VM_DECODED_CACHE_INVALID_ARGUMENT;
     XrFingerprint fingerprint = generation_plan_fingerprint(generation);
-    return xr_typed_decoded_cache_require_exact(
-        generation->decoded_cache, generation->plan, &fingerprint);
+    return xr_typed_decoded_cache_require_exact(generation->decoded_cache, generation->plan,
+                                                &fingerprint, &generation->identity);
 }
 
 XRAY_API bool xr_module_generation_prepare(
@@ -579,7 +607,7 @@ XRAY_API bool xr_module_generation_prepare(
     XrFingerprint fingerprint = generation_plan_fingerprint(generation);
     XrVmDecodedCache *decoded_cache = NULL;
     XrVmDecodedCacheStatus cache_status = xr_typed_decoded_cache_create(
-        generation->plan, &fingerprint, &decoded_cache);
+        generation->plan, &fingerprint, &generation->identity, &decoded_cache);
     if (cache_status != XR_VM_DECODED_CACHE_OK) {
         xr_mutex_unlock(&authority->gate);
         return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);

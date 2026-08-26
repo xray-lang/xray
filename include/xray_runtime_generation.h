@@ -25,8 +25,9 @@ typedef struct XrTargetPlan XrTargetPlan;
 typedef struct XrRuntimeGenerationAuthority XrRuntimeGenerationAuthority;
 typedef struct XrLoadedModuleGeneration XrLoadedModuleGeneration;
 
-#define XR_RUNTIME_GENERATION_SCHEMA_VERSION UINT32_C(2)
+#define XR_RUNTIME_GENERATION_SCHEMA_VERSION UINT32_C(3)
 #define XR_RUNTIME_GENERATION_FINGERPRINT_SIZE 32u
+#define XR_RUNTIME_GENERATION_CLOSURE_ID_SIZE 16u
 
 typedef enum XrModuleGenerationState {
     XR_MODULE_GENERATION_LOADING = 0,
@@ -63,6 +64,9 @@ typedef struct XrModuleGenerationIdentity {
     uint64_t completed_family_mask;
     uint64_t required_capability_mask;
     uint8_t semantic_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
+    uint8_t program_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
+    uint8_t program_module_set_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
+    uint8_t generation_closure_id[XR_RUNTIME_GENERATION_CLOSURE_ID_SIZE];
     uint8_t target_profile_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
     uint8_t target_plan_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];
     uint8_t runtime_abi_fingerprint[XR_RUNTIME_GENERATION_FINGERPRINT_SIZE];

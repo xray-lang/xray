@@ -16,8 +16,12 @@
 #include "xr_vm_decoded_cache.h"
 #include "../base/xmalloc.h"
 #include "../plan/target/xr_target_instruction_verify.h"
+#include "../plan/target/xr_target_plan_internal.h"
 #include "../plan/target/xr_target_verify.h"
 #include <string.h>
+
+XR_STATIC_ASSERT(XR_RUNTIME_GENERATION_CLOSURE_ID_SIZE == XR_STABLE_ID_BYTES,
+                 "decoded cache GCI width must match stable identities");
 
 typedef struct XrVmDecodedFunction {
     uint32_t instruction_begin;
@@ -30,7 +34,13 @@ typedef struct XrVmDecodedFunction {
 struct XrVmDecodedCache {
     XrTargetPlan *plan;
     XrFingerprint plan_fingerprint;
+    XrFingerprint program_fingerprint;
+    XrFingerprint program_module_set_fingerprint;
+    XrStableId generation_closure_id;
+    XrModuleGenerationIdentity generation_identity;
+    XrTargetProgramGraphRecord program_graph;
     uint32_t plan_schema_version;
+    uint32_t program_module_count;
     uint32_t function_count;
     uint32_t instruction_count;
     uint32_t block_count;
@@ -38,7 +48,81 @@ struct XrVmDecodedCache {
     XrVmDecodedFunction *functions;
     XrVmDecodedInstruction *instructions;
     XrVmDecodedBlock *blocks;
+    bool generation_bound;
 };
+
+static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
+    uint8_t combined = 0;
+    for (size_t i = 0; i < size; i++)
+        combined |= bytes[i];
+    return combined == 0;
+}
+
+static bool generation_identity_equal(const XrModuleGenerationIdentity *left,
+                                      const XrModuleGenerationIdentity *right) {
+    return left && right && left->schema_version == right->schema_version &&
+           left->target_plan_schema_version == right->target_plan_schema_version &&
+           left->generation_number == right->generation_number &&
+           left->completed_family_mask == right->completed_family_mask &&
+           left->required_capability_mask == right->required_capability_mask &&
+           memcmp(left->semantic_fingerprint, right->semantic_fingerprint,
+                  sizeof(left->semantic_fingerprint)) == 0 &&
+           memcmp(left->program_fingerprint, right->program_fingerprint,
+                  sizeof(left->program_fingerprint)) == 0 &&
+           memcmp(left->program_module_set_fingerprint, right->program_module_set_fingerprint,
+                  sizeof(left->program_module_set_fingerprint)) == 0 &&
+           memcmp(left->generation_closure_id, right->generation_closure_id,
+                  sizeof(left->generation_closure_id)) == 0 &&
+           memcmp(left->target_profile_fingerprint, right->target_profile_fingerprint,
+                  sizeof(left->target_profile_fingerprint)) == 0 &&
+           memcmp(left->target_plan_fingerprint, right->target_plan_fingerprint,
+                  sizeof(left->target_plan_fingerprint)) == 0 &&
+           memcmp(left->runtime_abi_fingerprint, right->runtime_abi_fingerprint,
+                  sizeof(left->runtime_abi_fingerprint)) == 0 &&
+           memcmp(left->provider_set_fingerprint, right->provider_set_fingerprint,
+                  sizeof(left->provider_set_fingerprint)) == 0 &&
+           memcmp(left->object_header_fingerprint, right->object_header_fingerprint,
+                  sizeof(left->object_header_fingerprint)) == 0 &&
+           memcmp(left->generation_fingerprint, right->generation_fingerprint,
+                  sizeof(left->generation_fingerprint)) == 0;
+}
+
+static bool generation_identity_matches_plan(const XrModuleGenerationIdentity *identity,
+                                             const XrTargetPlan *plan, XrFingerprint fingerprint,
+                                             const XrTargetProgramGraphRecord *graph,
+                                             uint32_t module_count) {
+    const XrTargetProfile *profile = xr_target_plan_profile(plan);
+    XrFingerprint semantic = xr_target_plan_semantic_fingerprint(plan);
+    XrFingerprint profile_fingerprint =
+        profile ? xr_target_profile_fingerprint(profile) : (XrFingerprint) {{0}};
+    if (!identity || !profile || identity->schema_version != XR_RUNTIME_GENERATION_SCHEMA_VERSION ||
+        identity->target_plan_schema_version != xr_target_plan_schema_version(plan) ||
+        identity->generation_number == 0 ||
+        identity->completed_family_mask != xr_target_plan_completed_family_mask(plan) ||
+        memcmp(identity->semantic_fingerprint, semantic.bytes, sizeof(semantic.bytes)) != 0 ||
+        memcmp(identity->target_profile_fingerprint, profile_fingerprint.bytes,
+               sizeof(profile_fingerprint.bytes)) != 0 ||
+        memcmp(identity->target_plan_fingerprint, fingerprint.bytes, sizeof(fingerprint.bytes)) !=
+            0 ||
+        bytes_are_zero(identity->generation_fingerprint, sizeof(identity->generation_fingerprint)))
+        return false;
+    if (!graph)
+        return bytes_are_zero(identity->program_fingerprint,
+                              sizeof(identity->program_fingerprint)) &&
+               bytes_are_zero(identity->program_module_set_fingerprint,
+                              sizeof(identity->program_module_set_fingerprint)) &&
+               bytes_are_zero(identity->generation_closure_id,
+                              sizeof(identity->generation_closure_id));
+    XrFingerprint module_set_fingerprint = {{0}};
+    return module_count == graph->module_count &&
+           xr_target_plan_program_module_set_fingerprint(plan, &module_set_fingerprint) &&
+           memcmp(identity->program_fingerprint, graph->program_fingerprint.bytes,
+                  sizeof(identity->program_fingerprint)) == 0 &&
+           memcmp(identity->program_module_set_fingerprint, module_set_fingerprint.bytes,
+                  sizeof(identity->program_module_set_fingerprint)) == 0 &&
+           memcmp(identity->generation_closure_id, graph->generation_identity.bytes,
+                  sizeof(identity->generation_closure_id)) == 0;
+}
 
 static bool add_bytes(size_t *total, uint32_t count, size_t item_size) {
     if (count > (XR_VM_DECODED_CACHE_MAX_BYTES - *total) / item_size)
@@ -253,9 +337,8 @@ static bool initialize_function_blocks(XrVmDecodedCache *cache,
 }
 
 XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
-    const XrTargetPlan *verified_plan,
-    const XrFingerprint *required_plan_fingerprint,
-    XrVmDecodedCache **cache) {
+    const XrTargetPlan *verified_plan, const XrFingerprint *required_plan_fingerprint,
+    const XrModuleGenerationIdentity *generation_identity, XrVmDecodedCache **cache) {
     if (cache)
         *cache = NULL;
     if (!verified_plan || !required_plan_fingerprint || !cache)
@@ -287,6 +370,28 @@ XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
     if (!xr_target_instruction_program_verify(verified_plan, error,
                                               sizeof(error)))
         return XR_VM_DECODED_CACHE_PROGRAM_INVALID;
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(verified_plan, &graph_count);
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(verified_plan, &partition_count);
+    const XrTargetProgramGraphRecord *graph = NULL;
+    XrFingerprint module_set_fingerprint = {{0}};
+    if (graph_count || partition_count) {
+        if (!graphs || graph_count != 1u || !partitions || partition_count == 0u ||
+            graphs[0].module_count != partition_count ||
+            !xr_target_plan_program_module_set_fingerprint(verified_plan, &module_set_fingerprint))
+            return XR_VM_DECODED_CACHE_PROGRAM_INVALID;
+        graph = &graphs[0];
+        if (!generation_identity_matches_plan(generation_identity, verified_plan,
+                                              *required_plan_fingerprint, graph, partition_count))
+            return XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    } else if (generation_identity &&
+               !generation_identity_matches_plan(generation_identity, verified_plan,
+                                                 *required_plan_fingerprint, NULL, 0)) {
+        return XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    }
     XrVmDecodedCache *created =
         (XrVmDecodedCache *) xr_calloc(1, sizeof(*created));
     if (!created)
@@ -295,6 +400,17 @@ XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
     created->instruction_count = instruction_count;
     created->plan_schema_version = xr_target_plan_schema_version(verified_plan);
     created->plan_fingerprint = xr_target_plan_fingerprint(verified_plan);
+    created->program_module_set_fingerprint = module_set_fingerprint;
+    if (graph) {
+        created->program_fingerprint = graph->program_fingerprint;
+        created->generation_closure_id = graph->generation_identity;
+        created->program_graph = *graph;
+        created->program_module_count = partition_count;
+    }
+    if (generation_identity) {
+        created->generation_identity = *generation_identity;
+        created->generation_bound = true;
+    }
     created->plan = xr_target_plan_retain((XrTargetPlan *) verified_plan);
     if (!created->plan)
         goto allocation_failed;
@@ -344,12 +460,15 @@ void xr_typed_decoded_cache_free(XrVmDecodedCache *cache) {
     dispose_storage(cache);
 }
 
-XrVmDecodedCacheStatus xr_typed_decoded_cache_require_exact(
-    const XrVmDecodedCache *cache, const XrTargetPlan *verified_plan,
-    const XrFingerprint *required_plan_fingerprint) {
+XrVmDecodedCacheStatus
+xr_typed_decoded_cache_require_exact(const XrVmDecodedCache *cache,
+                                     const XrTargetPlan *verified_plan,
+                                     const XrFingerprint *required_plan_fingerprint,
+                                     const XrModuleGenerationIdentity *generation_identity) {
     if (!cache || !verified_plan || !required_plan_fingerprint)
         return XR_VM_DECODED_CACHE_INVALID_ARGUMENT;
-    if (!xr_target_plan_is_verified(verified_plan))
+    if (!xr_target_plan_is_verified(verified_plan) ||
+        !xr_target_plan_fingerprint_is_intact(verified_plan))
         return XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED;
     if (cache->plan != verified_plan ||
         cache->plan_schema_version != xr_target_plan_schema_version(verified_plan) ||
@@ -358,6 +477,31 @@ XrVmDecodedCacheStatus xr_typed_decoded_cache_require_exact(
         !xr_fingerprint_equal(cache->plan_fingerprint,
                               *required_plan_fingerprint))
         return XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    if (cache->generation_bound != (generation_identity != NULL) ||
+        (cache->generation_bound &&
+         !generation_identity_equal(&cache->generation_identity, generation_identity)))
+        return XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    if (cache->program_module_count) {
+        uint32_t graph_count = 0;
+        uint32_t partition_count = 0;
+        const XrTargetProgramGraphRecord *graphs =
+            xr_target_plan_program_graphs(verified_plan, &graph_count);
+        const XrTargetModulePartitionRecord *partitions =
+            xr_target_plan_module_partitions(verified_plan, &partition_count);
+        XrFingerprint module_set_fingerprint = {{0}};
+        if (!graphs || graph_count != 1u || !partitions ||
+            partition_count != cache->program_module_count ||
+            graphs[0].module_count != partition_count ||
+            !xr_target_plan_program_module_set_fingerprint(verified_plan,
+                                                           &module_set_fingerprint) ||
+            memcmp(&cache->program_graph, graphs, sizeof(cache->program_graph)) != 0 ||
+            !xr_fingerprint_equal(cache->program_fingerprint, graphs[0].program_fingerprint) ||
+            !xr_fingerprint_equal(cache->program_module_set_fingerprint, module_set_fingerprint) ||
+            !xr_stable_id_equal(cache->generation_closure_id, graphs[0].generation_identity) ||
+            !generation_identity_matches_plan(generation_identity, verified_plan,
+                                              *required_plan_fingerprint, graphs, partition_count))
+            return XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    }
     return XR_VM_DECODED_CACHE_OK;
 }
 
@@ -392,6 +536,13 @@ bool xr_typed_decoded_cache_stats(const XrVmDecodedCache *cache,
         .block_count = cache->block_count,
         .total_bytes = cache->total_bytes,
         .plan_fingerprint = cache->plan_fingerprint,
+        .program_fingerprint = cache->program_fingerprint,
+        .program_module_set_fingerprint = cache->program_module_set_fingerprint,
+        .generation_closure_id = cache->generation_closure_id,
+        .runtime_generation_number =
+            cache->generation_bound ? cache->generation_identity.generation_number : 0,
+        .program_module_count = cache->program_module_count,
+        .generation_bound = cache->generation_bound ? 1u : 0u,
     };
     return true;
 }

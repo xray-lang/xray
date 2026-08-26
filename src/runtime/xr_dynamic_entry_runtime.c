@@ -271,30 +271,29 @@ static bool generation_identity_equal(
     const XrModuleGenerationIdentity *left,
     const XrModuleGenerationIdentity *right) {
     return left && right && left->schema_version == right->schema_version &&
-           left->target_plan_schema_version ==
-               right->target_plan_schema_version &&
+           left->target_plan_schema_version == right->target_plan_schema_version &&
            left->generation_number == right->generation_number &&
            left->completed_family_mask == right->completed_family_mask &&
            left->required_capability_mask == right->required_capability_mask &&
            memcmp(left->semantic_fingerprint, right->semantic_fingerprint,
                   sizeof(left->semantic_fingerprint)) == 0 &&
-           memcmp(left->target_profile_fingerprint,
-                  right->target_profile_fingerprint,
+           memcmp(left->program_fingerprint, right->program_fingerprint,
+                  sizeof(left->program_fingerprint)) == 0 &&
+           memcmp(left->program_module_set_fingerprint, right->program_module_set_fingerprint,
+                  sizeof(left->program_module_set_fingerprint)) == 0 &&
+           memcmp(left->generation_closure_id, right->generation_closure_id,
+                  sizeof(left->generation_closure_id)) == 0 &&
+           memcmp(left->target_profile_fingerprint, right->target_profile_fingerprint,
                   sizeof(left->target_profile_fingerprint)) == 0 &&
-           memcmp(left->target_plan_fingerprint,
-                  right->target_plan_fingerprint,
+           memcmp(left->target_plan_fingerprint, right->target_plan_fingerprint,
                   sizeof(left->target_plan_fingerprint)) == 0 &&
-           memcmp(left->runtime_abi_fingerprint,
-                  right->runtime_abi_fingerprint,
+           memcmp(left->runtime_abi_fingerprint, right->runtime_abi_fingerprint,
                   sizeof(left->runtime_abi_fingerprint)) == 0 &&
-           memcmp(left->provider_set_fingerprint,
-                  right->provider_set_fingerprint,
+           memcmp(left->provider_set_fingerprint, right->provider_set_fingerprint,
                   sizeof(left->provider_set_fingerprint)) == 0 &&
-           memcmp(left->object_header_fingerprint,
-                  right->object_header_fingerprint,
+           memcmp(left->object_header_fingerprint, right->object_header_fingerprint,
                   sizeof(left->object_header_fingerprint)) == 0 &&
-           memcmp(left->generation_fingerprint,
-                  right->generation_fingerprint,
+           memcmp(left->generation_fingerprint, right->generation_fingerprint,
                   sizeof(left->generation_fingerprint)) == 0;
 }
 

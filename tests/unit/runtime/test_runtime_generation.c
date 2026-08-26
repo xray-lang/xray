@@ -239,9 +239,9 @@ static void test_scalar_generation_lifecycle(XrTargetPlan *plan) {
                                          sizeof(diagnostic)));
     REQUIRE(generation->decoded_cache != NULL);
     XrFingerprint plan_fingerprint = xr_target_plan_fingerprint(plan);
-    REQUIRE(xr_typed_decoded_cache_require_exact(
-                generation->decoded_cache, generation->plan,
-                &plan_fingerprint) == XR_VM_DECODED_CACHE_OK);
+    REQUIRE(xr_typed_decoded_cache_require_exact(generation->decoded_cache, generation->plan,
+                                                 &plan_fingerprint,
+                                                 &generation->identity) == XR_VM_DECODED_CACHE_OK);
     REQUIRE(xr_module_generation_verify(generation, diagnostic,
                                         sizeof(diagnostic)));
     REQUIRE(xr_module_generation_snapshot(generation, &after));

@@ -121,6 +121,8 @@ XR_FUNC void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFing
 XR_FUNC bool xr_target_semantic_program_module_set_verify(
     const XrSemanticPlan *const *modules, uint32_t module_count,
     char *error, size_t error_size);
+XR_FUNC bool xr_target_plan_program_module_set_fingerprint(const XrTargetPlan *plan,
+                                                           XrFingerprint *out);
 XR_FUNC bool xr_target_semantic_program_module_verify_fragment(
     const XrSemanticPlan *const *modules, uint32_t module_count,
     uint32_t program_module_row, char *error, size_t error_size);

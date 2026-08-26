@@ -21,6 +21,7 @@
 #include "debug/xr_vm_debug_control_internal.h"
 #include "debug/xr_vm_trace_internal.h"
 #include "../plan/target/xr_target_instruction_verify.h"
+#include "../plan/target/xr_target_plan_internal.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xtransfer_mode.h"
@@ -462,51 +463,72 @@ static bool generation_identity_equal(
     const XrModuleGenerationIdentity *left,
     const XrModuleGenerationIdentity *right) {
     return left && right && left->schema_version == right->schema_version &&
-           left->target_plan_schema_version ==
-               right->target_plan_schema_version &&
+           left->target_plan_schema_version == right->target_plan_schema_version &&
            left->generation_number == right->generation_number &&
            left->completed_family_mask == right->completed_family_mask &&
            left->required_capability_mask == right->required_capability_mask &&
            memcmp(left->semantic_fingerprint, right->semantic_fingerprint,
                   sizeof(left->semantic_fingerprint)) == 0 &&
-           memcmp(left->target_profile_fingerprint,
-                  right->target_profile_fingerprint,
+           memcmp(left->program_fingerprint, right->program_fingerprint,
+                  sizeof(left->program_fingerprint)) == 0 &&
+           memcmp(left->program_module_set_fingerprint, right->program_module_set_fingerprint,
+                  sizeof(left->program_module_set_fingerprint)) == 0 &&
+           memcmp(left->generation_closure_id, right->generation_closure_id,
+                  sizeof(left->generation_closure_id)) == 0 &&
+           memcmp(left->target_profile_fingerprint, right->target_profile_fingerprint,
                   sizeof(left->target_profile_fingerprint)) == 0 &&
-           memcmp(left->target_plan_fingerprint,
-                  right->target_plan_fingerprint,
+           memcmp(left->target_plan_fingerprint, right->target_plan_fingerprint,
                   sizeof(left->target_plan_fingerprint)) == 0 &&
-           memcmp(left->runtime_abi_fingerprint,
-                  right->runtime_abi_fingerprint,
+           memcmp(left->runtime_abi_fingerprint, right->runtime_abi_fingerprint,
                   sizeof(left->runtime_abi_fingerprint)) == 0 &&
-           memcmp(left->provider_set_fingerprint,
-                  right->provider_set_fingerprint,
+           memcmp(left->provider_set_fingerprint, right->provider_set_fingerprint,
                   sizeof(left->provider_set_fingerprint)) == 0 &&
-           memcmp(left->object_header_fingerprint,
-                  right->object_header_fingerprint,
+           memcmp(left->object_header_fingerprint, right->object_header_fingerprint,
                   sizeof(left->object_header_fingerprint)) == 0 &&
-           memcmp(left->generation_fingerprint,
-                  right->generation_fingerprint,
+           memcmp(left->generation_fingerprint, right->generation_fingerprint,
                   sizeof(left->generation_fingerprint)) == 0;
 }
 
 static bool generation_identity_matches_plan(
     const XrModuleGenerationIdentity *identity, const XrTargetPlan *plan,
     XrFingerprint plan_fingerprint) {
+    if (!identity)
+        return false;
     const XrTargetProfile *profile = xr_target_plan_profile(plan);
     XrFingerprint semantic = xr_target_plan_semantic_fingerprint(plan);
     XrFingerprint profile_fingerprint =
         profile ? xr_target_profile_fingerprint(profile)
                 : (XrFingerprint) {{0}};
-    return identity && profile &&
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    const XrTargetProgramGraphRecord *graphs = xr_target_plan_program_graphs(plan, &graph_count);
+    (void) xr_target_plan_module_partitions(plan, &partition_count);
+    bool program_identity_exact = false;
+    if (graph_count == 0 && partition_count == 0) {
+        program_identity_exact =
+            bytes_are_zero(identity->program_fingerprint, sizeof(identity->program_fingerprint)) &&
+            bytes_are_zero(identity->program_module_set_fingerprint,
+                           sizeof(identity->program_module_set_fingerprint)) &&
+            bytes_are_zero(identity->generation_closure_id,
+                           sizeof(identity->generation_closure_id));
+    } else if (graphs && graph_count == 1u && partition_count == 2u &&
+               graphs[0].module_count == partition_count) {
+        XrFingerprint module_set_fingerprint = {{0}};
+        program_identity_exact =
+            xr_target_plan_program_module_set_fingerprint(plan, &module_set_fingerprint) &&
+            memcmp(identity->program_fingerprint, graphs[0].program_fingerprint.bytes,
+                   sizeof(identity->program_fingerprint)) == 0 &&
+            memcmp(identity->program_module_set_fingerprint, module_set_fingerprint.bytes,
+                   sizeof(identity->program_module_set_fingerprint)) == 0 &&
+            memcmp(identity->generation_closure_id, graphs[0].generation_identity.bytes,
+                   sizeof(identity->generation_closure_id)) == 0;
+    }
+    return profile && program_identity_exact &&
            identity->schema_version == XR_RUNTIME_GENERATION_SCHEMA_VERSION &&
-           identity->target_plan_schema_version ==
-               xr_target_plan_schema_version(plan) &&
-           identity->completed_family_mask ==
-               xr_target_plan_completed_family_mask(plan) &&
-           memcmp(identity->semantic_fingerprint, semantic.bytes,
-                  sizeof(semantic.bytes)) == 0 &&
-           memcmp(identity->target_profile_fingerprint,
-                  profile_fingerprint.bytes,
+           identity->target_plan_schema_version == xr_target_plan_schema_version(plan) &&
+           identity->completed_family_mask == xr_target_plan_completed_family_mask(plan) &&
+           memcmp(identity->semantic_fingerprint, semantic.bytes, sizeof(semantic.bytes)) == 0 &&
+           memcmp(identity->target_profile_fingerprint, profile_fingerprint.bytes,
                   sizeof(profile_fingerprint.bytes)) == 0 &&
            memcmp(identity->target_plan_fingerprint, plan_fingerprint.bytes,
                   sizeof(plan_fingerprint.bytes)) == 0 &&
@@ -1803,10 +1825,9 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
     bool decoded_cache_exact = false;
     if (request->decoded_cache) {
-        XrVmDecodedCacheStatus cache_status =
-            xr_typed_decoded_cache_require_exact(
-                request->decoded_cache, verified_plan,
-                required_plan_fingerprint);
+        XrVmDecodedCacheStatus cache_status = xr_typed_decoded_cache_require_exact(
+            request->decoded_cache, verified_plan, required_plan_fingerprint,
+            request->generation_identity);
         if (cache_status == XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH)
             return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
         if (cache_status != XR_VM_DECODED_CACHE_OK)
@@ -2090,9 +2111,8 @@ XrTypedDispatchStatus xr_typed_coroutine_i64_create(
         (XrTargetPlan *) request->verified_plan);
     if (!created->plan)
         goto allocation_failed;
-    if (xr_typed_decoded_cache_create(
-            created->plan, &created->fingerprint, &created->cache) !=
-        XR_VM_DECODED_CACHE_OK)
+    if (xr_typed_decoded_cache_create(created->plan, &created->fingerprint, NULL,
+                                      &created->cache) != XR_VM_DECODED_CACHE_OK)
         goto program_invalid;
     XrVmDecodedFunctionView view = {0};
     if (!xr_typed_decoded_cache_function(

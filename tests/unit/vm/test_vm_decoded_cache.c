@@ -4,6 +4,7 @@
 
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/os/os_thread.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
@@ -43,6 +44,20 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL,
                            .frozen = true,
                            .scalar_rep = XR_SCALAR_REP_NONE};
 
+static bool ensure_fixture_module_identity(XiFunc *root) {
+    if (!root)
+        return false;
+    if (!root->module) {
+        root->module = xi_module_new("fixture/vm_decoded_cache.xr",
+                                     root->name ? root->name : "vm_decoded_cache_fixture", root);
+        if (!root->module)
+            return false;
+    }
+    return root->module->identity ||
+           xi_module_set_identity(root->module,
+                                  "memory-module-v1:id=27:vm-decoded-cache-fixture-v1");
+}
+
 static CacheFixture build_branch_fixture(void) {
     CacheFixture fixture = {0};
     XiFunc *function = xi_func_new("decoded_cache_branch", &stub_int);
@@ -76,6 +91,7 @@ static CacheFixture build_branch_fixture(void) {
     function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(function));
     REQUIRE(xr_semantic_plan_build(function, &fixture.semantic, error,
                                    sizeof(error)));
     xi_func_free(function);
@@ -104,6 +120,7 @@ static CacheFixture build_divide_by_zero_fixture(void) {
     function->stage = XI_STAGE_OPTIMIZED;
 
     char error[512] = {0};
+    REQUIRE(ensure_fixture_module_identity(function));
     REQUIRE(xr_semantic_plan_build(function, &fixture.semantic, error,
                                    sizeof(error)));
     xi_func_free(function);
@@ -223,7 +240,7 @@ static void test_exact_metadata_and_budgets(void) {
     CacheFixture fixture = build_branch_fixture();
     XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture.plan);
     XrVmDecodedCache *cache = NULL;
-    REQUIRE(xr_typed_decoded_cache_create(fixture.plan, &fingerprint, &cache) ==
+    REQUIRE(xr_typed_decoded_cache_create(fixture.plan, &fingerprint, NULL, &cache) ==
             XR_VM_DECODED_CACHE_OK);
     REQUIRE(cache != NULL);
 
@@ -288,18 +305,15 @@ static void test_identity_and_invalid_plan_fail_closed(void) {
     XrFingerprint second_fingerprint = xr_target_plan_fingerprint(second.plan);
     REQUIRE(xr_fingerprint_equal(first_fingerprint, second_fingerprint));
     XrVmDecodedCache *cache = NULL;
-    REQUIRE(xr_typed_decoded_cache_create(first.plan, &first_fingerprint, &cache) ==
+    REQUIRE(xr_typed_decoded_cache_create(first.plan, &first_fingerprint, NULL, &cache) ==
             XR_VM_DECODED_CACHE_OK);
-    REQUIRE(xr_typed_decoded_cache_require_exact(
-                cache, first.plan, &first_fingerprint) ==
+    REQUIRE(xr_typed_decoded_cache_require_exact(cache, first.plan, &first_fingerprint, NULL) ==
             XR_VM_DECODED_CACHE_OK);
-    REQUIRE(xr_typed_decoded_cache_require_exact(
-                cache, second.plan, &second_fingerprint) ==
+    REQUIRE(xr_typed_decoded_cache_require_exact(cache, second.plan, &second_fingerprint, NULL) ==
             XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH);
 
     first_fingerprint.bytes[0] ^= 1u;
-    REQUIRE(xr_typed_decoded_cache_require_exact(
-                cache, first.plan, &first_fingerprint) ==
+    REQUIRE(xr_typed_decoded_cache_require_exact(cache, first.plan, &first_fingerprint, NULL) ==
             XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH);
     first_fingerprint.bytes[0] ^= 1u;
 
@@ -308,8 +322,7 @@ static void test_identity_and_invalid_plan_fail_closed(void) {
      * refused even though a prior cache exists for the original frozen image. */
     first.plan->instructions[0].immediate_bits ^= UINT64_C(1);
     XrVmDecodedCache *invalid = (XrVmDecodedCache *) (uintptr_t) 1;
-    REQUIRE(xr_typed_decoded_cache_create(first.plan, &first_fingerprint,
-                                       &invalid) ==
+    REQUIRE(xr_typed_decoded_cache_create(first.plan, &first_fingerprint, NULL, &invalid) ==
             XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED);
     REQUIRE(invalid == NULL);
     first.plan->instructions[0].immediate_bits ^= UINT64_C(1);
@@ -323,7 +336,7 @@ static void test_cached_and_uncached_execution_parity(void) {
     CacheFixture branch = build_branch_fixture();
     XrFingerprint fingerprint = xr_target_plan_fingerprint(branch.plan);
     XrVmDecodedCache *cache = NULL;
-    REQUIRE(xr_typed_decoded_cache_create(branch.plan, &fingerprint, &cache) ==
+    REQUIRE(xr_typed_decoded_cache_create(branch.plan, &fingerprint, NULL, &cache) ==
             XR_VM_DECODED_CACHE_OK);
     const int64_t cases[][2] = {{9, 4}, {4, 9}};
     for (uint32_t i = 0; i < 2; i++) {
@@ -350,7 +363,7 @@ static void test_cached_and_uncached_execution_parity(void) {
     CacheFixture divide = build_divide_by_zero_fixture();
     fingerprint = xr_target_plan_fingerprint(divide.plan);
     cache = NULL;
-    REQUIRE(xr_typed_decoded_cache_create(divide.plan, &fingerprint, &cache) ==
+    REQUIRE(xr_typed_decoded_cache_create(divide.plan, &fingerprint, NULL, &cache) ==
             XR_VM_DECODED_CACHE_OK);
     uncached = 91;
     cached = 92;
@@ -387,7 +400,7 @@ static void test_cached_and_uncached_execution_parity(void) {
                              sizeof(error)));
     fingerprint = xr_target_plan_fingerprint(loop);
     cache = NULL;
-    REQUIRE(xr_typed_decoded_cache_create(loop, &fingerprint, &cache) ==
+    REQUIRE(xr_typed_decoded_cache_create(loop, &fingerprint, NULL, &cache) ==
             XR_VM_DECODED_CACHE_OK);
     const int64_t loop_arguments[2] = {4, 9};
     uncached = 91;
@@ -408,15 +421,13 @@ static void *read_cache_concurrently(void *argument) {
     for (uint32_t iteration = 0; iteration < 10u; iteration++) {
         XrVmDecodedFunctionView function;
         XrVmDecodedCacheStats stats;
-        if (xr_typed_decoded_cache_require_exact(
-                probe->cache, probe->plan, &probe->fingerprint) !=
-                XR_VM_DECODED_CACHE_OK ||
+        if (xr_typed_decoded_cache_require_exact(probe->cache, probe->plan, &probe->fingerprint,
+                                                 NULL) != XR_VM_DECODED_CACHE_OK ||
             !xr_typed_decoded_cache_function(probe->cache, 0, &function) ||
             !xr_typed_decoded_cache_stats(probe->cache, &stats) ||
             function.instruction_count != stats.instruction_count ||
             function.block_count != stats.block_count ||
-            function.instructions[3].target_if_nonzero !=
-                function.blocks[1].first_row) {
+            function.instructions[3].target_if_nonzero != function.blocks[1].first_row) {
             probe->ok = false;
             break;
         }
@@ -437,7 +448,7 @@ static void test_concurrent_read_only_reuse(void) {
     CacheFixture fixture = build_branch_fixture();
     XrFingerprint fingerprint = xr_target_plan_fingerprint(fixture.plan);
     XrVmDecodedCache *cache = NULL;
-    REQUIRE(xr_typed_decoded_cache_create(fixture.plan, &fingerprint, &cache) ==
+    REQUIRE(xr_typed_decoded_cache_create(fixture.plan, &fingerprint, NULL, &cache) ==
             XR_VM_DECODED_CACHE_OK);
     xr_thread_t threads[THREAD_COUNT] = {0};
     ConcurrentProbe probes[THREAD_COUNT] = {0};

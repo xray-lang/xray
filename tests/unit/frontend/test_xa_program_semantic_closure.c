@@ -43,6 +43,7 @@
 #include "plan/target/xr_target_profile.h"
 #include "plan/target/xr_target_verify.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
+#include "runtime/xr_module_generation_internal.h"
 #include "runtime/xr_runtime_artifact_authority_internal.h"
 #include "shared/xr_exact_scalar_registry.h"
 #include "toolchain/xcompiler_session.h"
@@ -52,6 +53,9 @@
 #include "xray_vm.h"
 #include <stdio.h>
 #include <string.h>
+
+XR_STATIC_ASSERT(XR_RUNTIME_GENERATION_CLOSURE_ID_SIZE == XR_STABLE_ID_BYTES,
+                 "program cache KAT must cover the exact GCI width");
 
 static const char kScalarSource[] = "fn add1(value: i64) -> i64 { return value + 1 }\n"
                                     "fn root() -> i64 { return add1(41) }\n";
@@ -1158,10 +1162,6 @@ static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target) {
     if (!target || !graphs || graph_count != 1u)
         return false;
     XrFingerprint fingerprint = xr_target_plan_fingerprint(target);
-    XrVmDecodedCache *cache = NULL;
-    if (xr_typed_decoded_cache_create(target, &fingerprint, &cache) !=
-        XR_VM_DECODED_CACHE_OK)
-        return false;
     static const XrTypedDispatchProvider providers[] = {
         XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
         XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
@@ -1179,18 +1179,131 @@ static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target) {
         };
         exact = xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_OK &&
                 result == 42;
-        request.decoded_cache = cache;
-        result = -1;
-        exact = exact &&
-                xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_OK &&
-                result == 42;
         request.function = graphs[0].producer_target_function;
         result = -1;
         exact = exact && xr_typed_dispatch_execute_i64(&request) ==
                              XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE &&
                 result == 0;
     }
-    xr_typed_decoded_cache_free(cache);
+    const XrSemanticPlan *modules[2] = {
+        xr_target_plan_semantic_module(target, 0u),
+        xr_target_plan_semantic_module(target, 1u),
+    };
+    XrTargetPlan *foreign = NULL;
+    char diagnostic[512] = {0};
+    exact = exact && modules[0] && modules[1] &&
+            xr_target_plan_build_program_graph(modules, 2u,
+                                               (XrTargetProfile *) xr_target_plan_profile(target),
+                                               &foreign, diagnostic, sizeof(diagnostic)) &&
+            foreign && foreign != target &&
+            xr_fingerprint_equal(xr_target_plan_fingerprint(foreign), fingerprint);
+
+    XrRuntimeGenerationBudget budget = {
+        .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+        .max_loaded_generations = 2u,
+        .max_total_pins = 8u,
+        .max_pins_per_generation = 4u,
+        .max_pins_by_kind = {4u, 2u, 2u, 2u, 2u},
+    };
+    XrRuntimeGenerationAuthority *authority = NULL;
+    XrLoadedModuleGeneration *first = NULL;
+    XrLoadedModuleGeneration *second = NULL;
+    exact = exact &&
+            xr_runtime_generation_authority_create(&budget, &authority, diagnostic,
+                                                   sizeof(diagnostic)) &&
+            xr_module_generation_load_verified_target_plan(authority, target, &first, diagnostic,
+                                                           sizeof(diagnostic)) &&
+            xr_module_generation_load_verified_target_plan(authority, target, &second, diagnostic,
+                                                           sizeof(diagnostic)) &&
+            xr_module_generation_prepare(first, diagnostic, sizeof(diagnostic)) &&
+            xr_module_generation_prepare(second, diagnostic, sizeof(diagnostic)) &&
+            xr_module_generation_verify(first, diagnostic, sizeof(diagnostic)) &&
+            xr_module_generation_verify(second, diagnostic, sizeof(diagnostic)) &&
+            xr_module_generation_activate(first, diagnostic, sizeof(diagnostic));
+    XrVmDecodedCacheStats stats = {0};
+    if (exact) {
+        XrFingerprint module_set_fingerprint = {{0}};
+        exact =
+            xr_typed_decoded_cache_stats(first->decoded_cache, &stats) &&
+            xr_target_plan_program_module_set_fingerprint(target, &module_set_fingerprint) &&
+            stats.generation_bound == 1u &&
+            stats.runtime_generation_number == first->identity.generation_number &&
+            stats.program_module_count == 2u &&
+            xr_fingerprint_equal(stats.plan_fingerprint, fingerprint) &&
+            xr_fingerprint_equal(stats.program_fingerprint, graphs[0].program_fingerprint) &&
+            xr_fingerprint_equal(stats.program_module_set_fingerprint, module_set_fingerprint) &&
+            xr_stable_id_equal(stats.generation_closure_id, graphs[0].generation_identity) &&
+            xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                 &first->identity) == XR_VM_DECODED_CACHE_OK &&
+            xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                 &second->identity) ==
+                XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH &&
+            xr_typed_decoded_cache_require_exact(first->decoded_cache, foreign, &fingerprint,
+                                                 &first->identity) ==
+                XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    }
+    if (exact) {
+        size_t last = sizeof(first->identity.generation_closure_id) - 1u;
+        first->identity.generation_closure_id[last] ^= 1u;
+        exact = xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                     &first->identity) ==
+                XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+        first->identity.generation_closure_id[last] ^= 1u;
+    }
+    if (exact) {
+        target->program_graphs[0].generation_identity.bytes[0] ^= 1u;
+        exact = xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                     &first->identity) ==
+                XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED;
+        target->program_graphs[0].generation_identity.bytes[0] ^= 1u;
+        exact = exact &&
+                xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                     &first->identity) == XR_VM_DECODED_CACHE_OK;
+    }
+    if (exact) {
+        target->module_partitions[0].module_identity.bytes[0] ^= 1u;
+        exact = xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                     &first->identity) ==
+                XR_VM_DECODED_CACHE_PLAN_NOT_VERIFIED;
+        target->module_partitions[0].module_identity.bytes[0] ^= 1u;
+        exact = exact &&
+                xr_typed_decoded_cache_require_exact(first->decoded_cache, target, &fingerprint,
+                                                     &first->identity) == XR_VM_DECODED_CACHE_OK;
+    }
+    for (size_t provider = 0; exact && provider < sizeof(providers) / sizeof(providers[0]);
+         provider++) {
+        int64_t result = -1;
+        XrTypedDispatchI64Request request = {
+            .verified_plan = target,
+            .required_plan_fingerprint = &fingerprint,
+            .result = &result,
+            .decoded_cache = first->decoded_cache,
+            .generation_identity = &first->identity,
+            .provider = providers[provider],
+            .function = graphs[0].entry_target_function,
+        };
+        exact = xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_OK && result == 42;
+        request.generation_identity = &second->identity;
+        result = -1;
+        exact =
+            exact &&
+            xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH &&
+            result == 0;
+    }
+    if (first) {
+        exact = xr_module_generation_begin_drain(first, diagnostic, sizeof(diagnostic)) &&
+                xr_module_generation_retire(first, diagnostic, sizeof(diagnostic)) &&
+                xr_module_generation_unload(&first, diagnostic, sizeof(diagnostic)) && exact;
+    }
+    if (second) {
+        exact = xr_module_generation_rollback(second, diagnostic, sizeof(diagnostic)) &&
+                xr_module_generation_unload(&second, diagnostic, sizeof(diagnostic)) && exact;
+    }
+    if (authority)
+        exact =
+            xr_runtime_generation_authority_destroy(&authority, diagnostic, sizeof(diagnostic)) &&
+            exact;
+    xr_target_plan_free(foreign);
     return exact;
 }
 

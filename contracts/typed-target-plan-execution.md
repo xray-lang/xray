@@ -56,9 +56,14 @@ invalid after related row and plan fingerprints are recomputed. Typed VM
 accepts only the graph-owned entry target as an external root and follows its
 `CALL_DIRECT_I64` edge by creating the callee frame from the same plan and
 global row namespace. It does not translate local indexes, construct a
-producer plan, or expose the producer as a second root. Cold execution repeats
-independent TargetPlan verification; warm execution requires an exact decoded
-cache retaining that same plan and fingerprint.
+  producer plan, or expose the producer as a second root. Cold execution repeats
+  independent TargetPlan verification; warm execution requires the one decoded
+  cache owned by the exact runtime generation. That cache retains the same plan
+  object and binds its intact plan and program fingerprints, freshly recomputed
+  canonical module-set fingerprint, 16-byte GCI, exact generation identity, and
+  verified global graph rows. A wrong generation, foreign same-fingerprint
+  plan, or mutated graph/partition fails closed rather than becoming a miss,
+  fallback, or second executable plan.
 
 The AOT direct-call refinement is the first lower consumer of this graph
 authority. Schema 5 resolves the caller and callee global function rows through
@@ -235,9 +240,13 @@ table uses only standard C function pointers and sequential initialization so
 MSVC and the other supported C11 toolchains consume the same generated rows.
 Without a cache it independently
 recomputes target-content integrity and instruction validity. With a cache it
-requires the same plan pointer, schema, recorded fingerprint, and caller-required
-fingerprint before consuming any row; it never treats a miss or mismatch as
-authority to build or execute. Neither path inspects SemanticPlan or Xi. The verified rows are the only signature it honours: the
+requires the same plan pointer, schema, recorded fingerprint, and
+caller-required fingerprint before consuming any row. A program-graph cache
+additionally requires the complete same generation identity and re-derives the
+canonical module-set fingerprint and GCI from the retained intact plan; it never
+embeds a fixed partition-count array. It never treats a miss or mismatch as
+authority to build or execute. Neither path inspects Xi. The verified rows are
+the only signature it honours: the
 argument count must equal the number of parameter rows, and a shorter,
 longer, or absent vector is rejected before the frame exists rather than
 truncated, padded, or zero filled.
@@ -303,7 +312,12 @@ representation, call, adapter, allocation, root, cleanup, or ownership policy.
 Function, row, block, and byte totals have fixed hard ceilings checked before
 expensive construction and again against the exact allocation shape. Published
 storage is read-only, retains the exact plan for its whole lifetime, and may be
-shared concurrently. Cached and uncached dispatch use the same generated
+shared concurrently. The generation-owned program cache stores one graph row
+and canonical identity evidence, not copied per-module executable plans or a
+fixed partition array. Exact lookup rechecks TargetPlan integrity, the current
+graph and partition shape, the canonical module set, GCI, and the full
+generation identity before exposing a decoded row. Cached and uncached dispatch
+use the same generated
 handlers, frame operations, call-depth and step counters, error statuses, and
 result publication. Provider selection is in-process execution policy rather
 than serialized plan authority, so it changes no TargetPlan or XTP schema and
@@ -672,8 +686,10 @@ Evidence:
   verified schema-48 TargetPlan, uses global rows with exact module partitions
   and a `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge, rejects independently mutated
   or re-signed inner authority, executes its graph-owned entry through both VM
-  providers in cold and exact-cache modes, rejects the producer as a second
-  root, round-trips and executes graph XTP byte-identically, derives one
+  providers in cold and exact-generation-cache modes, rejects a wrong
+  generation, a foreign same-fingerprint plan, a last-byte GCI mutation, and
+  mutated graph or partition rows, and rejects the producer as a second root.
+  It round-trips and executes graph XTP byte-identically and derives one
   independently verified AOT lower binding from the global function, symbol,
   call, argument, and instruction rows, rejects altered binding facts, and keeps
   the ordinary runtime loader fail closed.
@@ -683,8 +699,8 @@ Evidence:
   publish no binary.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 3a46929e884bd66c4ba2a5466b4e9a95ab381821c3f756a74b2ca7efa5237ff2
-anchor-sha256: src/plan/target/xr_target_plan.c 254bec9c0c7a26cfe9b4e92d8b8d48610696ee1883e73059b43ec8eaaadb4a3f
-anchor-sha256: src/plan/target/xr_target_plan_internal.h 1dd57166c3841b8d7588dd5885edbd62ded060d872dec7f04666b0637eebb591
+anchor-sha256: src/plan/target/xr_target_plan.c 3f7ddfbe2c39750b2be31b5e1dee46eafa412165d2405eaac7d0752db0cf5ba5
+anchor-sha256: src/plan/target/xr_target_plan_internal.h 98b93650f62e5cfae811bbd8e357eccc5adbc316631a35de580358bfc11a038b
 anchor-sha256: src/plan/target/xr_target_builder.h 4d3d604216a064eb6be4a787afda9ee168f057dc640b5c6065f63f2829e6d05e
 anchor-sha256: src/plan/target/xr_target_builder.c 7d5f82fef73cb858412d4593c40847faaadb285b424614bb39825fcdbeb1e17c
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
@@ -703,25 +719,25 @@ anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 6079934e95208abe3b7b7251b4c4b59275c61776f20de0d0873b70617899a62a
 anchor-sha256: src/vm/xr_typed_dispatch.h acd1095b3a2d9e5607d007992b68b714d2e22fe394bfa8543611ea061ab40f43
-anchor-sha256: src/vm/xr_typed_dispatch.c b2d56b254da8cc9e6e391664c0583ca0042ca9b1e976b71d2fcad0e894de9a34
-anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
-anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9afae20ec066e588cc69e60f05c21
+anchor-sha256: src/vm/xr_typed_dispatch.c 1fa2d59ce6df94d4d983c2b0fb7e3af48ad30a2dcceb7526bd147f57f52c714f
+anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
+anchor-sha256: src/vm/xr_vm_decoded_cache.c f1f420b39d78f39e372b3378425809fb6c7049bad84aa02f84df5e542cfd83de
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 3556b4e30fe1464e82b1fd8c4a23a3ba04530a1ca918ef055454cf84a531884e
-anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
+anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 576c9e443c711070aff3ab58efbaac42266f89be6be64d49f84889dc9668723c
 anchor-sha256: tests/unit/plan/test_xtp_format.c e994e527df3931be8ad94a395345f8f11d34805cd4cfe603193d1c4bfa2c5c8b
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/aot/run_module_summary_determinism.py ab111483920e1059375226da9d9cf84fb96e2474c0608418083aff403cf85d87
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c bd79918a5285a87aa1c47298b5663df91ab494283c15f1b48910e5f6d0dae7da
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c a8bb133e671d13c255bf017fc9e05487754c499221aa98e6a86a33a80aa31743
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: tests/unit/ir/test_xi_cgen.c b6dfec7ed9a3c183ffd1bc37ee56d9efc8238df62f21f442048e310f23e734d0
 anchor-sha256: tests/unit/ir/test_xi_opt.c 96b1ceb9789cd6b7742bcf29757087e2a27c144cf1107eaa70c0547295086beb
-anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 33da22f5eec9a7889b25380fa99e070c807c19580569ac081a0f0558545eb8e3
-anchor-sha256: include/xray_runtime_generation.h ac482c4a6b3526a5060554b2f27ef13a1258c9807529f5e0cc914710bf890d91
-anchor-sha256: src/runtime/xr_module_generation.c eb3581c48d3a59230a9b4db38a87ada54785aeb366e8fb7151f4246f3da38974
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 314197abf0562d4ec4954bae52c3504fc9215d6d6aeb9b69b93eb3124c719895
+anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 8e8a3b987ae81542254495a889b838d7a325a9a2e06d5c80092bc9db92373aa5
+anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
+anchor-sha256: src/runtime/xr_module_generation.c c2beeac1f0f94f55fde6455458a86d68109cc7d097f4623f7e334e53f6177003
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c f4422072f94b01c4411b4677cb62ba72304553753c9225074d981b6b20f43fa3
 anchor-sha256: CMakeLists.txt a6aa0e036427fc6ff50bd718db5f627fcebe87f6ac2742b5aabd0905ab5f2458
 anchor-sha256: xisa/target/vm_ops.def 573b1beea387c7b5df58de4fdad39e61417ea51ff6d346417bda7f36e698bc15
 anchor-sha256: tools/xisagen/xisagen.py ca1bfeb87944eff4eebf4d478b514a8bd6ea9fc0adef95d1589d97d9116c923e
@@ -741,7 +757,7 @@ anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
 anchor-sha256: tests/unit/plan/test_target_plan.c f9328d8928498f48a88091b0a7b412f5119d4c126a44e3dc3ff896fbfab3fcef
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 8915b084f4a1de025340c94a2132d6d257c8b2ff3273faf3fd200bd2d5f6580f
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c ad03d77d583441969756a1f2d1be2cde504624c0cd4ed26ddae96a50c8a79ed5
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7

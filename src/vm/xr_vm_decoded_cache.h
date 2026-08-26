@@ -17,6 +17,7 @@
 #ifndef XR_VM_DECODED_CACHE_H
 #define XR_VM_DECODED_CACHE_H
 
+#include "../../include/xray_runtime_generation.h"
 #include "../plan/target/xr_target_plan.h"
 
 #define XR_VM_DECODED_CACHE_MAX_FUNCTIONS UINT32_C(100000)
@@ -66,18 +67,24 @@ typedef struct XrVmDecodedCacheStats {
     uint32_t block_count;
     size_t total_bytes;
     XrFingerprint plan_fingerprint;
+    XrFingerprint program_fingerprint;
+    XrFingerprint program_module_set_fingerprint;
+    XrStableId generation_closure_id;
+    uint64_t runtime_generation_number;
+    uint32_t program_module_count;
+    uint8_t generation_bound;
 } XrVmDecodedCacheStats;
 
 typedef struct XrVmDecodedCache XrVmDecodedCache;
 
 XR_FUNC XrVmDecodedCacheStatus xr_typed_decoded_cache_create(
-    const XrTargetPlan *verified_plan,
-    const XrFingerprint *required_plan_fingerprint,
-    XrVmDecodedCache **cache);
+    const XrTargetPlan *verified_plan, const XrFingerprint *required_plan_fingerprint,
+    const XrModuleGenerationIdentity *generation_identity, XrVmDecodedCache **cache);
 XR_FUNC void xr_typed_decoded_cache_free(XrVmDecodedCache *cache);
 XR_FUNC XrVmDecodedCacheStatus xr_typed_decoded_cache_require_exact(
     const XrVmDecodedCache *cache, const XrTargetPlan *verified_plan,
-    const XrFingerprint *required_plan_fingerprint);
+    const XrFingerprint *required_plan_fingerprint,
+    const XrModuleGenerationIdentity *generation_identity);
 XR_FUNC bool xr_typed_decoded_cache_function(
     const XrVmDecodedCache *cache, uint32_t function,
     XrVmDecodedFunctionView *view);

@@ -16,10 +16,13 @@ authority.
    cannot oversubscribe a checked budget.
 2. Loading accepts only an independently verified immutable TargetPlan. The
    runtime assigns a monotonic nonzero generation number and derives a stable
-   SHA-256 generation identity from the plan schema, completed family mask,
-   exact capability mask, semantic/profile/plan fingerprints, and the native
-   runtime/provider/object-header fingerprints. No pointer, path, host name,
-   legacy bytecode, or caller-authored machine fact participates in authority.
+   schema-v3 SHA-256 generation identity from the plan schema, completed family
+   mask, exact capability mask, semantic/profile/plan fingerprints, and the
+   native runtime/provider/object-header fingerprints. A bounded program graph
+   additionally binds its exact program fingerprint, canonical module-set
+   fingerprint, and 16-byte generation-closure identity. An ordinary plan
+   carries zero in all three program fields. No pointer, path, host name, legacy
+   bytecode, or caller-authored machine fact participates in authority.
 3. The normal state order is exactly `LOADING -> VERIFIED -> READY -> ACTIVE ->
    DRAINING -> RETIRED -> UNLOADED`. A healthy ACTIVE generation alone may
    acquire pins. ACTIVE and DRAINING may release matched pins. Retirement and
@@ -54,9 +57,14 @@ authority.
    Its sealed StringBuilder constructor call likewise remains non-executable
    at this scalar-only runtime boundary.
    PREPARE performs the complete plan and instruction verification before it
-   constructs and publishes one immutable decoded cache. READY is unreachable
-   if cache allocation or any hard function/row/block/byte budget fails; a
-   failed attempt leaves the generation VERIFIED and publishes nothing.
+   constructs and publishes one immutable decoded cache. For an ordinary plan,
+   the independent READY verifier retains the exact sole-function and zero-call
+   shape. The first program-graph capability is separately fenced to one graph,
+   two partitions, one `PROGRAM_DIRECT` call, and one argument; only its graph
+   entry and producer may carry scalar execution rows. READY is unreachable if
+   cache allocation, exact graph/GCI binding, or any hard
+   function/row/block/byte budget fails; a failed attempt leaves the generation
+   VERIFIED and publishes nothing.
 6. A healthy ACTIVE eligible generation alone may execute its sole function.
    Execution first acquires an `INFLIGHT_CALL` pin, binds the retained plan's
    exact generation identity fingerprint, requires the generation's exact
@@ -81,8 +89,14 @@ authority.
 7. The independent verifier re-derives immutable plan/native identity, stable
    generation fingerprint, state/poison invariants, counter sums, per-kind and
    global budgets. For every READY, ACTIVE, or DRAINING generation it separately
-   reconstructs the same plan-specific scalar eligibility without calling the
-   production PREPARE helper and requires an exact published decoded cache.
+   reconstructs the ordinary sole-scalar or bounded program-graph eligibility
+   without calling the production PREPARE helper and requires one exact
+   published decoded cache. A graph cache hit binds the same retained TargetPlan
+   object and intact fingerprint, the complete generation identity, the program
+   graph row, a freshly recomputed canonical module-set fingerprint, and the
+   exact GCI. A wrong generation, foreign same-fingerprint plan, or mutated graph
+   or partition fails closed; no per-module executable plan or second cache is
+   constructed.
    A pre-PREPARE VERIFIED generation may have no cache; once published, the
    cache remains generation-owned through drain and retirement, while the
    in-flight pin prevents unload during reuse. UNLOAD destroys the cache before
@@ -226,19 +240,19 @@ authority.
     rechecks RETIRED/zero-pin state before committing, preserving lock order and
     deterministic ownership on every failure.
 
-anchor-sha256: include/xray_runtime_generation.h ac482c4a6b3526a5060554b2f27ef13a1258c9807529f5e0cc914710bf890d91
+anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
 anchor-sha256: src/runtime/xr_module_generation_internal.h 892b04cdd946296e3812a68147bc68e541848f22086c460494fc699f1871b5d9
-anchor-sha256: src/runtime/xr_module_generation.c eb3581c48d3a59230a9b4db38a87ada54785aeb366e8fb7151f4246f3da38974
-anchor-sha256: src/runtime/xr_module_generation_verify.c 9876d7e6e9e67d26e8e36b87844558e911ebb3425bc58a203ae646cdf97ad945
+anchor-sha256: src/runtime/xr_module_generation.c c2beeac1f0f94f55fde6455458a86d68109cc7d097f4623f7e334e53f6177003
+anchor-sha256: src/runtime/xr_module_generation_verify.c 5f1e82e67d038c6d74e1473c98c8f6953e79514f8b998a8e8065d2b496a3c29a
 anchor-sha256: src/vm/xr_typed_dispatch.h acd1095b3a2d9e5607d007992b68b714d2e22fe394bfa8543611ea061ab40f43
-anchor-sha256: src/vm/xr_typed_dispatch.c b2d56b254da8cc9e6e391664c0583ca0042ca9b1e976b71d2fcad0e894de9a34
-anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
-anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9afae20ec066e588cc69e60f05c21
+anchor-sha256: src/vm/xr_typed_dispatch.c 1fa2d59ce6df94d4d983c2b0fb7e3af48ad30a2dcceb7526bd147f57f52c714f
+anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
+anchor-sha256: src/vm/xr_vm_decoded_cache.c f1f420b39d78f39e372b3378425809fb6c7049bad84aa02f84df5e542cfd83de
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
 anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e336922eca0965d234f40bb935aef6360bc5418ac51da9a
-anchor-sha256: tests/unit/runtime/test_runtime_generation.c 314197abf0562d4ec4954bae52c3504fc9215d6d6aeb9b69b93eb3124c719895
+anchor-sha256: tests/unit/runtime/test_runtime_generation.c f4422072f94b01c4411b4677cb62ba72304553753c9225074d981b6b20f43fa3
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
 anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 70d40dfa429c78f663381887bf4676c2b68c97334c55344554a6da587e886be8
@@ -249,9 +263,9 @@ anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c b7ef1d75a66f12b0b40
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0
 anchor-sha256: tests/unit/runtime/test_entry_cell_runtime_archive.c 34bc22820144f368a5e5914ac387f2a19db85ef4555d458b07215548eef1dca0
-anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
+anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 576c9e443c711070aff3ab58efbaac42266f89be6be64d49f84889dc9668723c
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
-anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 8915b084f4a1de025340c94a2132d6d257c8b2ff3273faf3fd200bd2d5f6580f
+anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e95fa04444b73cb1e3f8584b61544
 anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
 anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
