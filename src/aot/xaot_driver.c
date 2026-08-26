@@ -62,7 +62,7 @@
 #include "../toolchain/xcompiler_session.h"
 #include "../incremental/xr_cache_artifact_verify.h"
 #include "../incremental/xr_cache_store.h"
-#include "../incremental/xr_target_plan_tasks.h"
+#include "../incremental/xr_program_target_plan_build.h"
 #include "../plan/format/xr_xtp_schema.h"
 #include "../plan/target/xr_target_builder.h"
 #include <stdio.h>
@@ -1712,8 +1712,7 @@ static bool xaot_resolve_semantic_dependencies(const XaotBundle *bundle,
 
 static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *profile,
                                            XrCacheStore *cache_store, bool rebuild, bool verbose,
-                                           uint32_t worker_limit,
-                                           XrTargetPlanCancellationToken *cancellation,
+                                           XrProgramTargetPlanCancellationToken *cancellation,
                                            XaotTargetPlanCacheStats *stats) {
     if (!bundle || !profile || !bundle->modules || bundle->nmodules != 1u || !stats ||
         !xr_target_profile_verify(profile, NULL, 0)) {
@@ -1733,55 +1732,52 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
                                             &dependency_count))
         return false;
 
-    XrTargetPlanTaskInput input = {
+    XrProgramTargetPlanBuildRequest request = {
         .semantic_plan = semantic,
         .semantic_dependencies = dependencies,
         .semantic_dependency_count = dependency_count,
-    };
-    XrTargetPlanTaskResult task = {0};
-    XrTargetPlanTaskStats task_stats = {0};
-    char error[512] = {0};
-    XrTargetPlanTaskBatch batch = {
-        .inputs = &input,
-        .input_count = 1u,
         .profile = profile,
         .cache_store = cache_store,
         .optimization_budget = xaot_target_plan_optimization_budget(),
         .rebuild = rebuild,
-        .worker_limit = worker_limit,
         .cancellation = cancellation,
-        .results = &task,
     };
-    bool planned = xr_target_plan_tasks_run(&batch, &task_stats, error, sizeof(error));
-    stats->workers = task_stats.worker_count;
-    stats->hits = task_stats.hits;
-    stats->misses = task_stats.misses;
-    stats->rejected = task_stats.rejected;
-    stats->published = task_stats.published;
-    stats->cancelled = task_stats.cancelled;
+    XrProgramTargetPlanBuildResult build = {0};
+    char error[512] = {0};
+    bool planned = xr_program_target_plan_build(&request, &build, error,
+                                                sizeof(error));
+    if (build.cache_enabled &&
+        (build.cache_load_attempted || build.rebuild_requested)) {
+        stats->hits = build.cache_hit ? 1u : 0u;
+        stats->misses = build.cache_hit ? 0u : 1u;
+        stats->rejected = build.cache_candidate_rejected ? 1u : 0u;
+    }
+    stats->published = build.cache_published ? 1u : 0u;
+    stats->cancelled = build.cancelled ? 1u : 0u;
     if (!planned) {
         const char *name = module && module->name ? module->name : "?";
-        fprintf(stderr, "Error: program TargetPlan task failed for '%s': %s\n", name,
+        fprintf(stderr, "Error: program TargetPlan build failed for '%s': %s\n", name,
                 error[0] ? error : "unknown error");
-        xr_target_plan_task_results_release(&task, 1u);
+        xr_program_target_plan_build_result_release(&build);
         xr_free(dependencies);
         return false;
     }
 
     bool installed = true;
     const char *name = module && module->name ? module->name : "?";
-    if (verbose && task.cache_enabled) {
-        if (task.cache_hit)
+    if (verbose && build.cache_enabled) {
+        if (build.cache_hit)
             fprintf(stderr, "[target-plan-cache] hit %s\n", name);
-        else if (task.rebuild_requested)
+        else if (build.rebuild_requested)
             fprintf(stderr, "[target-plan-cache] rebuild %s\n", name);
         else
             fprintf(stderr, "[target-plan-cache] miss %s status=%d\n", name,
-                    (int) task.load_status);
-        if (task.cache_publish_attempted && task.publish_status == XR_CACHE_PUBLISH_IO_ERROR)
+                    (int) build.load_status);
+        if (build.cache_publish_attempted &&
+            build.publish_status == XR_CACHE_PUBLISH_IO_ERROR)
             fprintf(stderr, "[target-plan-cache] publish unavailable %s\n", name);
     }
-    if (!task.plan || !xaot_bundle_set_program_target_plan(bundle, task.plan)) {
+    if (!build.plan || !xaot_bundle_set_program_target_plan(bundle, build.plan)) {
         fprintf(stderr, "Error: program TargetPlan install failed for '%s': %s\n", name,
                 bundle->error_msg ? bundle->error_msg : "unknown error");
         installed = false;
@@ -1794,7 +1790,7 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
                 name, error[0] ? error : "missing exact profile authority");
         installed = false;
     }
-    xr_target_plan_task_results_release(&task, 1u);
+    xr_program_target_plan_build_result_release(&build);
     xr_free(dependencies);
     return installed;
 }
@@ -2685,8 +2681,9 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     if (!xaot_build_program_target_plan(
             &aot_bundle, options->target_profile, xr_compiler_session_cache_store(session),
-            evidence_cache_rebuild, evidence_cache_verbose, options->target_plan_workers,
-            options->target_plan_cancellation, &result->target_plan_cache)) {
+            evidence_cache_rebuild, evidence_cache_verbose,
+            options->program_target_plan_cancellation,
+            &result->target_plan_cache)) {
         fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
                 aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;

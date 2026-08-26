@@ -759,7 +759,7 @@ bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGra
                   "xray-module-summary-publish-order-v1");
         XrCompilerSessionModuleTaskBatch task_batch = {
             .dependency_graph = &summary_graph,
-            .worker_limit = options->target_plan_workers,
+            .worker_limit = options->module_summary_workers,
             .task_state_size = sizeof(XaotModuleSummaryTaskState),
             .prepare = prepare_module_summary_task,
             .preflight = preflight_module_summary_task,

@@ -35,7 +35,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-struct XrTargetPlanCancellationToken;
+struct XrProgramTargetPlanCancellationToken;
 struct XrLockfile;
 
 /* ========== Feature Set ========== */
@@ -116,7 +116,6 @@ typedef struct {
 } XaotModuleSource;
 
 typedef struct XaotTargetPlanCacheStats {
-    uint32_t workers;
     uint32_t hits;
     uint32_t misses;
     uint32_t rejected;
@@ -189,9 +188,10 @@ typedef struct XaotBuildOptions {
     const char *incremental_cache_dir;
     bool incremental_cache_rebuild;
     bool incremental_cache_verbose;
-    uint32_t target_plan_workers; /* zero selects the host CPU count */
+    uint32_t module_summary_workers; /* zero selects the host CPU count */
     /* Borrowed for xaot_build. Cancellation prevents partial plan install. */
-    struct XrTargetPlanCancellationToken *target_plan_cancellation;
+    struct XrProgramTargetPlanCancellationToken
+        *program_target_plan_cancellation;
     const char *const *imported_summary_payloads;
     uint32_t imported_summary_payload_count;
 } XaotBuildOptions;

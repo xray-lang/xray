@@ -5,7 +5,7 @@
 #include "../../../src/module/xmodule_graph.h"
 #include "../../../src/module/xmodule_resolver.h"
 #include "../../../src/module/xlockfile.h"
-#include "../../../src/incremental/xr_target_plan_tasks.h"
+#include "../../../src/incremental/xr_program_target_plan_build.h"
 #include "../../../src/app/toolchain/xtc_target_profile.h"
 #include "../../../src/os/os_dir.h"
 #include "../../../src/os/os_temp.h"
@@ -713,20 +713,18 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     options.imported_summary_payloads = payloads;
     options.imported_summary_payload_count = 1;
     options.incremental_cache_dir = cache_dir;
-    options.target_plan_workers = 8;
+    options.module_summary_workers = 8;
 
     ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump, imported_hash));
     ASSERT_TRUE(dump_contains_imported_package_link_dep(result.global_evidence_dump));
     ASSERT_TRUE(result.target_plan_cache.misses == 1);
     ASSERT_TRUE(result.target_plan_cache.published == 1);
-    ASSERT_TRUE(result.target_plan_cache.workers == 1);
 
     xaot_build_result_free(&result);
     ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
     ASSERT_TRUE(result.target_plan_cache.hits == 1);
     ASSERT_TRUE(result.target_plan_cache.misses == 0);
-    ASSERT_TRUE(result.target_plan_cache.workers == 1);
     xaot_build_result_free(&result);
     ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
     ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
@@ -1051,7 +1049,6 @@ static void test_driver_rejects_package_summary_graph_without_program_authority(
 
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
     ASSERT_TRUE(result.module_summary_cache.tasks == 0u);
-    ASSERT_TRUE(result.target_plan_cache.workers == 0u);
     ASSERT_TRUE(result.n_sources == 0);
     ASSERT_TRUE(result.sources == NULL);
     ASSERT_TRUE(result.total_compiled == 0);
@@ -1111,10 +1108,9 @@ static void test_driver_rejects_missing_canonical_program_target_plan_authority(
     ASSERT_TRUE(install_native_target_profile(&options, &target));
     options.incremental_cache_dir = cache_dir;
     options.lockfile = lockfile;
-    options.target_plan_workers = 8u;
+    options.module_summary_workers = 8u;
 
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
-    ASSERT_TRUE(result.target_plan_cache.workers == 0u);
     ASSERT_TRUE(result.target_plan_cache.hits == 0u);
     ASSERT_TRUE(result.target_plan_cache.misses == 0u);
     ASSERT_TRUE(result.target_plan_cache.rejected == 0u);
@@ -1196,7 +1192,6 @@ static void test_driver_rejects_package_dependency_graph_without_program_authori
 
     ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
     ASSERT_TRUE(result.module_summary_cache.tasks == 0u);
-    ASSERT_TRUE(result.target_plan_cache.workers == 0u);
     ASSERT_TRUE(result.n_sources == 0);
     ASSERT_TRUE(result.sources == NULL);
     ASSERT_TRUE(result.total_compiled == 0);
