@@ -427,9 +427,11 @@ the same plan. A `PROGRAM_DIRECT` row must yield exactly one applied binding or
 the consumer fails; there is no refused, legacy, or per-module executable path.
 AOT must not construct `target_plans[]`, select authority by module name,
 translate through legacy `XaotFuncAbi`, or join fingerprints from separate
-plans. The current source product still fails closed before per-module
-TargetPlan preparation or C emission. This lower binding alone grants no
-cross-module native ABI or binary claim; the remaining emitter and product
+plans. The source product now builds and independently verifies this global
+direct-call refinement from its one program TargetPlan before reporting the
+plan as product-ready. It still fails closed before per-module TargetPlan
+preparation or C emission. This product-side lower binding alone grants no
+cross-module native ABI or binary claim; the remaining bundle and emitter
 integration must consume the same global authority end to end, and VM must use
 the same plan for parity.
 
@@ -773,5 +775,5 @@ anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1b
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7
 anchor-sha256: src/aot/xaot_boundary.c 22b97cdfac8d0b22905dfe036190560ab29f4beb32abd660cb9a49dc2f4c6b09
-anchor-sha256: src/aot/xaot_driver.c fb514f46f8e5edd941c7196feda3afa133c49ef320b15cc5bf9ace5f45608b65
+anchor-sha256: src/aot/xaot_driver.c 54db213c959ee81fa0719a4be66d06e107325eb9126d67954713093c27c4d7fa
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 717147203998c04a1ab1653756994cbceb5ea37a138e02898cb5fd99505dee65

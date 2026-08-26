@@ -58,7 +58,7 @@ PROGRAM_RE = re.compile(
 )
 PROGRAM_PLAN_GATE = (
     "[program-semantic-plan] modules=2 entry=1 xi=verified "
-    "semantic=verified target=verified execution=pending"
+    "semantic=verified target=verified aot-binding=verified execution=pending"
 )
 GRAPH_TARGET_REJECTION = (
     "XR_TARGET_1001: verified program TargetPlan execution is outside "

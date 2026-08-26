@@ -80,11 +80,12 @@ set plus the exact target profile.
 is byte-identical, while wrong count/order, duplicate/missing modules, re-signed
 graph or partition mutations, and ordinary/graph substitution fail closed. The
 ordinary runtime loader accepts no graph plan. The source AOT product builds and
-verifies the graph plan, publishes deterministic module summaries, then stops
-with `XR_TARGET_1001` before legacy per-module TargetPlan preparation, C
-emission, or binary publication. Native AOT and product publication remain
-unavailable until AOT consumes this same verified program plan and its global
-rows end to end; the VM does not bypass that product fence.
+verifies the graph plan, builds and independently verifies its global AOT
+direct-call binding, publishes deterministic module summaries, then stops with
+`XR_TARGET_1001` before legacy per-module TargetPlan preparation, C emission,
+or binary publication. Native AOT and product publication remain unavailable
+until the bundle and emitter consume this same verified program plan and its
+global rows end to end; the VM does not bypass that product fence.
 
 The scalar representation boundary separately recognizes an exact unaliased
 SemanticPlan `Ptr` or `MutPtr` as TargetPlan `RAW_PTR`: its size and alignment
@@ -710,7 +711,7 @@ anchor-sha256: tests/unit/vm/test_typed_dispatch.c 3556b4e30fe1464e82b1fd8c4a23a
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: tests/unit/plan/test_xtp_format.c e994e527df3931be8ad94a395345f8f11d34805cd4cfe603193d1c4bfa2c5c8b
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/aot/run_module_summary_determinism.py f354af59bb3884145691f0ebe0319adc9dfe2b3c5f9438e2de4f4c79036c1ea0
+anchor-sha256: tests/aot/run_module_summary_determinism.py ab111483920e1059375226da9d9cf84fb96e2474c0608418083aff403cf85d87
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c bd79918a5285a87aa1c47298b5663df91ab494283c15f1b48910e5f6d0dae7da
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
@@ -747,7 +748,7 @@ anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a
 anchor-sha256: src/aot/xaot_boundary.c 22b97cdfac8d0b22905dfe036190560ab29f4beb32abd660cb9a49dc2f4c6b09
 anchor-sha256: src/aot/xaot_bundle.c 4fb0d68766ccbbd70ec14a084c6055e25c245d3298774e79f45d8eb85799acda
 anchor-sha256: src/aot/xaot_callable.c 87d39dadfdb7805e20d2a96b30bdaf01453fad7d821493f3c9a610efd5cc9049
-anchor-sha256: src/aot/xaot_driver.c fb514f46f8e5edd941c7196feda3afa133c49ef320b15cc5bf9ace5f45608b65
+anchor-sha256: src/aot/xaot_driver.c 54db213c959ee81fa0719a4be66d06e107325eb9126d67954713093c27c4d7fa
 anchor-sha256: src/aot/xaot_prepare.c d8cc4408a253218b585f9184a190918f8b29b3fd96dcba071fd9f2b2b0b7e558
 anchor-sha256: src/aot/xaot_verify.c 9bf9a829caae95fcc14cf9a4ab3e8e7a981dd88dca6c0173ae474ba8e5332e66
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311

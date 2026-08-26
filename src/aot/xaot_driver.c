@@ -1832,6 +1832,43 @@ static bool xaot_build_module_target_plans(XaotBundle *bundle, XrTargetProfile *
  * plan built by this stage is attributable in diagnostics. */
 #define XAOT_DIRECT_CALL_REFINEMENT_PASS_ID UINT32_C(27902)
 
+static bool xaot_verify_program_direct_call_authority(const XrTargetPlan *target_plan,
+                                                      char *error, size_t error_size) {
+    XrAotRefinementPlan *refinement = NULL;
+    XrAotRefinementDiagnostic diagnostic = {0};
+    bool verified = false;
+
+    if (error && error_size)
+        error[0] = '\0';
+    if (!target_plan || xr_target_plan_program_module_count(target_plan) < 2u) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_TARGET_1000: program direct-call TargetPlan authority is incomplete");
+        return false;
+    }
+    if (!xr_aot_refinement_direct_call_authority_build(
+            target_plan, XAOT_DIRECT_CALL_REFINEMENT_PASS_ID, &refinement, &diagnostic)) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "XR_TARGET_1000: program direct-call authority build failed: %s "
+                     "record=%u target-call=%u",
+                     xr_aot_refinement_issue_name(diagnostic.issue), diagnostic.record_index,
+                     diagnostic.target_call_index);
+        xr_aot_refinement_plan_free(refinement);
+        return false;
+    }
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
+    verified = xr_aot_refinement_verify(&view, target_plan, &diagnostic);
+    if (!verified && error && error_size)
+        snprintf(error, error_size,
+                 "XR_TARGET_1000: program direct-call authority verification failed: %s "
+                 "record=%u target-call=%u",
+                 xr_aot_refinement_issue_name(diagnostic.issue), diagnostic.record_index,
+                 diagnostic.target_call_index);
+    xr_aot_refinement_plan_free(refinement);
+    return verified;
+}
+
 /* Validate every planned call of every module against the verified TargetPlan
  * before C emission. A call whose direct binding cannot be proved is recorded
  * as an explicit refusal, which leaves the baseline lowering in force; only a
@@ -2589,9 +2626,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                         : "unverified source program target authority");
             goto fail_free_ir;
         }
+        if (!xaot_verify_program_direct_call_authority(
+                source_program_target_plan, graph_semantic_error,
+                sizeof(graph_semantic_error))) {
+            fprintf(stderr, "Error: program AOT direct-call authority failed: %s\n",
+                    graph_semantic_error[0]
+                        ? graph_semantic_error
+                        : "unverified source program AOT binding authority");
+            goto fail_free_ir;
+        }
         if (evidence_cache_verbose)
             printf("[program-semantic-plan] modules=%d entry=%d xi=verified "
-                   "semantic=verified target=verified execution=pending\n",
+                   "semantic=verified target=verified aot-binding=verified "
+                   "execution=pending\n",
                    nmodules, entry_index);
     }
     if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
