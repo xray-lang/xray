@@ -37,6 +37,7 @@
 #include "plan/target/xr_target_plan_internal.h"
 #include "plan/target/xr_target_profile.h"
 #include "plan/target/xr_target_verify.h"
+#include "runtime/class/xclass_info.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/xr_typed_dispatch.h"
@@ -1374,6 +1375,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_EQ_UINT(callee->params[0]->psc_type_index, aggregate_program);
     XiValue *aggregate_value = find_bound_type_value(root->module, aggregate_program, UINT16_MAX);
     ASSERT_NOT_NULL(aggregate_value);
+    ASSERT_NOT_NULL(aggregate_value->type);
 
     uint32_t saved_return = callee->psc_return_type_index;
     callee->psc_return_type_index = XI_PSC_ROW_NONE;
@@ -1396,6 +1398,8 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     XiClassData *aggregate_class = root->module->classes[0];
     ASSERT_NOT_NULL(aggregate_class);
     uint32_t saved_class_type = aggregate_class->psc_type_index;
+    aggregate_class->psc_type_index = XI_PSC_ROW_NONE;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
     aggregate_class->psc_type_index = scalar_program;
     ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
     aggregate_class->psc_type_index = saved_class_type;
@@ -1405,6 +1409,30 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     aggregate_class->class_info = NULL;
     ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
     aggregate_class->class_info = saved_class_info;
+
+    XrType *saved_aggregate_value_type = aggregate_value->type;
+    XrClassInfo foreign_same_shape_class = *saved_class_info;
+    XrType foreign_same_shape_type = *saved_aggregate_value_type;
+    foreign_same_shape_type.instance.class_ref = &foreign_same_shape_class;
+    aggregate_value->type = &foreign_same_shape_type;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    aggregate_value->type = saved_aggregate_value_type;
+
+    XrType hostile_modified_type = *saved_aggregate_value_type;
+    hostile_modified_type.is_nullable = true;
+    aggregate_value->type = &hostile_modified_type;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    hostile_modified_type = *saved_aggregate_value_type;
+    hostile_modified_type.is_const = true;
+    aggregate_value->type = &hostile_modified_type;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    XrType *hostile_type_arguments[] = {saved_aggregate_value_type};
+    hostile_modified_type = *saved_aggregate_value_type;
+    hostile_modified_type.instance.type_args = hostile_type_arguments;
+    hostile_modified_type.instance.type_arg_count = 1;
+    aggregate_value->type = &hostile_modified_type;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    aggregate_value->type = saved_aggregate_value_type;
 
     uint16_t saved_class_count = root->module->nclasses;
     root->module->nclasses = 0;
@@ -1439,12 +1467,23 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     phi_block->phis = previous_phis;
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
 
+    /* The analyzer may materialize expression-local XrType objects for one
+     * declaration. Their local cache identity and VALUE-site marker are not
+     * declaration authority: the frozen class PSC row is. Keep one such clone
+     * live through construction to prove all Pair sites intern to one type. */
+    XrType expression_local_pair_type = *saved_aggregate_value_type;
+    expression_local_pair_type.semantic_type_id = UINT32_C(0x28100001);
+    expression_local_pair_type.is_value_type = !saved_aggregate_value_type->is_value_type;
+    expression_local_pair_type.alias_name = "expression-local-pair";
+    aggregate_value->type = &expression_local_pair_type;
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+
     prepare_leaf_tree_for_semantic_plan(root);
     ASSERT_TRUE(
         xi_module_set_identity(root->module, "memory-module-v1:id=27:xi-program-semantic-leaf-v1"));
     XrSemanticPlan *semantic = NULL;
     bool semantic_built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
-    ASSERT_TRUE(semantic_built);
+    ASSERT_MSG(semantic_built, error);
     ASSERT_NOT_NULL(semantic);
     ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, NULL, error, sizeof(error)));
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(semantic);
@@ -1459,10 +1498,57 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_EQ_PTR(
         xr_semantic_plan_program_type_for_semantic_type(semantic, aggregate_binding->semantic_type),
         aggregate_binding);
+    ASSERT_TRUE(aggregate_binding->semantic_type < semantic->type_count);
+    const XrSemanticTypeRecord *aggregate_semantic_type =
+        &semantic->types[aggregate_binding->semantic_type];
+    ASSERT_EQ_UINT(aggregate_semantic_type->kind, XR_KIND_INSTANCE);
+    ASSERT_TRUE((aggregate_semantic_type->flags & XR_SEM_TYPE_VALUE) != 0);
+    ASSERT_TRUE(same_id(aggregate_semantic_type->source_class_identity,
+                        aggregate_binding->source_class_identity));
+    ASSERT_TRUE(strncmp(aggregate_semantic_type->canonical_key, "type-v3:", 8) == 0);
+    ASSERT_NOT_NULL(strstr(aggregate_semantic_type->canonical_key, ";program-type:"));
+    uint32_t declaration_type_count = 0;
+    for (uint32_t i = 0; i < semantic->type_count; i++) {
+        const XrSemanticTypeRecord *type = &semantic->types[i];
+        if (type->kind != XR_KIND_INSTANCE ||
+            !same_id(type->source_class_identity, aggregate_binding->source_class_identity))
+            continue;
+        declaration_type_count++;
+        ASSERT_EQ_UINT(i, aggregate_binding->semantic_type);
+    }
+    ASSERT_EQ_UINT(declaration_type_count, 1);
+
+    uint32_t aggregate_function_count = 0;
+    uint32_t aggregate_parameter_count = 0;
+    for (uint32_t i = 0; i < semantic->program_function_binding_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding = &semantic->program_function_bindings[i];
+        ASSERT_TRUE(binding->semantic_function < semantic->function_count);
+        const XrSemanticFunctionRecord *function = &semantic->functions[binding->semantic_function];
+        ASSERT_EQ_UINT(function->return_type, aggregate_binding->semantic_type);
+        aggregate_function_count++;
+        for (uint16_t p = 0; p < function->parameter_count; p++) {
+            ASSERT_TRUE(function->parameter_begin + p < semantic->parameter_count);
+            ASSERT_EQ_UINT(semantic->parameters[function->parameter_begin + p].type,
+                           aggregate_binding->semantic_type);
+            aggregate_parameter_count++;
+        }
+    }
+    ASSERT_EQ_UINT(aggregate_function_count, 2);
+    ASSERT_EQ_UINT(aggregate_parameter_count, 1);
     ASSERT_NOT_NULL(xr_semantic_plan_program_function_for_semantic_function(
         semantic, semantic->program_function_bindings[0].semantic_function));
-    ASSERT_NOT_NULL(xr_semantic_plan_program_call_for_operation(
-        semantic, semantic->program_call_bindings[0].operation));
+    const XrSemanticProgramCallBinding *aggregate_call_binding =
+        xr_semantic_plan_program_call_for_operation(semantic,
+                                                    semantic->program_call_bindings[0].operation);
+    ASSERT_NOT_NULL(aggregate_call_binding);
+    ASSERT_TRUE(aggregate_call_binding->operation < semantic->operation_count);
+    const XrSemanticOperationRecord *aggregate_call =
+        &semantic->operations[aggregate_call_binding->operation];
+    ASSERT_EQ_UINT(aggregate_call->result_type, aggregate_binding->semantic_type);
+    ASSERT_EQ_UINT(aggregate_call->operand_count, 2);
+    ASSERT_TRUE(aggregate_call->operand_begin + 1u < semantic->operand_count);
+    ASSERT_EQ_UINT(semantic->operands[aggregate_call->operand_begin + 1u].type,
+                   aggregate_binding->semantic_type);
 
     const char *saved_class_name = aggregate_class->class_name;
     ASSERT_NOT_NULL(saved_class_name);
@@ -1528,6 +1614,12 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_TRUE(xi_program_semantic_plan_verify(root, decoded, NULL, error, sizeof(error)));
     ASSERT_EQ_UINT(xr_semantic_plan_program_type_binding_count(decoded), 2);
     ASSERT_EQ_UINT(xr_semantic_plan_program_type_field_binding_count(decoded), 2);
+    const XrSemanticProgramTypeBinding *decoded_aggregate =
+        xr_semantic_plan_program_type_for_row(decoded, aggregate_program);
+    ASSERT_NOT_NULL(decoded_aggregate);
+    ASSERT_TRUE(decoded_aggregate->semantic_type < decoded->type_count);
+    ASSERT_TRUE(same_id(decoded->types[decoded_aggregate->semantic_type].source_class_identity,
+                        decoded_aggregate->source_class_identity));
     uint8_t *roundtrip = NULL;
     size_t roundtrip_size = 0;
     ASSERT_TRUE(xr_xsm_encode(decoded, &roundtrip, &roundtrip_size, error, sizeof(error)));

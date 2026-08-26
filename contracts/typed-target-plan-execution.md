@@ -551,10 +551,11 @@ Evidence:
   carrier restoration without array
   mutation.
 - `test_xi_program_semantic` proves the source-backed leaf aggregate instruction
-  groups and exact layout/value/slot/call joins, same-plan and same-fingerprint
-  parity through both typed VM providers and the AOT boundary, and fail-closed
-  field, layout, call, slot, instruction, PSC identity, and foreign-source
-  mutations.
+  groups, unique declaration-owned aggregate type identity, and exact
+  layout/value/slot/call joins; it proves same-plan and same-fingerprint parity
+  through both typed VM providers and the AOT boundary, plus fail-closed field,
+  layout, call, slot, instruction, PSC identity, type-modifier, foreign-shape,
+  and foreign-source mutations.
 - `test_xaot_driver` proves that the source-backed leaf aggregate functions use
   TargetPlan ABI ownership, publish no covered legacy value plans, emit the
   direct native aggregate call and field operations, and contain no covered
@@ -686,5 +687,5 @@ anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c58bde5be23a2b2509a369632eb2e83
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 283d4f75e19ace0f068d040c12a4633726038dd6c4eafffc35df0bba9acdca15
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ebc90392a842b12a97794a7bf3e0ea862e8340c58dde8ff215d65f6e75c7ffd3
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e6a3e2478b6bd78284cf29bce09ed2f6f886ec09451e798f02d75928ea8310cc
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 028625bf7b25003e5a59875d12da34bde4ff6af0ca5f1b3970be250dea085e26
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a6a9fe22bcb7e7c3df79d16f478f437c3ef1c8775169feaea9ff9323e2b148f8

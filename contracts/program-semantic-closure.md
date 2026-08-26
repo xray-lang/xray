@@ -113,8 +113,14 @@ projection defined below; they never imply TargetPlan admission on their own.
     `ENTRY`; call bindings join stable call/callsite/caller/callee identities to
     one semantic operation and exact direct-local target. Public accessors are
     borrowed indexed views into the frozen plan, not a second authority or
-    cache. Generic and external verifiers independently reject missing,
-    duplicate, ambiguous, reordered, or mismatched bindings.
+    cache. Before type-table freeze, every supported aggregate `XrType` joins
+    its unique source class to `XiClassData.psc_type_index` and the stable
+    source-class identity; that declaration row is the only identity owner for
+    return, parameter, construction, and call-result sites. Xi type-row
+    annotations are checked against this join but never supply a missing row.
+    A missing or ambiguous class, zero or different PSC row, foreign same-shape
+    class, nullable/const/generic modifier, duplicate binding, reordered row, or
+    mismatched join fails closed.
 17. XSM exact-version encoding serializes provenance followed by all program
     type, type-field, function, and call bindings. Their counts participate in
     decoder storage/payload budgets; every field participates in the
@@ -184,7 +190,7 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c 6ff4b7c3b998c73a8d7451989145d58d2d6745406c766acd40ea1bc02614bc61
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9e8659c4a7c586112cdef2235937b999f8600887754fe6f259a296e70bd16172
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c c9b28df840e80b94160b10ff14b6c66fb23e2dcc5db4f6ee11f47a5d4373e2e9
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c befed0f719e6b74021d31a256891eab98eac4772411eb37b8057279c52f48b44
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 5ccc28182a03acc01e6ab52fc150d97267b1c78da04913b3f69fd69c4a50d46c
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 95ebd25bb49476d4b9e4f6a374b5e1adabe242a5668073bee90843271d0f80c7
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h a1743ffdc68b1f47bca570c8835c27e8e187bff29d0fb4c9fb2f373c64fb3cc6
@@ -212,7 +218,7 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c a02d1f10431993c9efd64538f1eb
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 706228d7e49b9283705f21f9ed94e3f72cff3d701e47804bc2c581dabcb00943
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e6a3e2478b6bd78284cf29bce09ed2f6f886ec09451e798f02d75928ea8310cc
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 028625bf7b25003e5a59875d12da34bde4ff6af0ca5f1b3970be250dea085e26
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 1626ab33972df02d651bda9d2133b41128dd6633caffa0fc9df9ca58a316c721
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7
