@@ -43,7 +43,8 @@ invalidation, compiler-session ownership, or any compatibility reader.
    Corrupt, stale, rejected, or unverifiable bytes cannot activate an artifact,
    and there is no legacy cache format, compatibility fallback, or execution
    fallback in this storage boundary.
-8. An XTP cache request derives its key from the verified SemanticPlan, exact
+8. An XTP cache request derives its key from dedicated ProgramSemanticClosure
+   and GenerationClosureId fields, the verified SemanticPlan, exact
    TargetProfile, provider and runtime identities owned by that profile, the
    current planner schema and required-family mask, and the requested
    optimization budget. For a dependency-bearing SemanticPlan, its fingerprint
@@ -78,7 +79,8 @@ invalidation, compiler-session ownership, or any compatibility reader.
     operation's content-addressed entry.
 11. An XSM cache request derives its key from one module summary, and that
     summary is derived only from authorities their owners already verified: the
-    module's verified SemanticPlan identity, its ordered dependency and
+    module's ProgramSemanticClosure and GenerationClosureId, its verified
+    SemanticPlan identity, its ordered dependency and
     exported-declaration identities, the exact TargetProfile, the compiler
     build identity, and the build configuration selectors. A candidate is
     accepted only when the store-provided key equals the request's expected
@@ -95,7 +97,10 @@ invalidation, compiler-session ownership, or any compatibility reader.
     independent XSM verifier before publication begins. Only then are misses
     published in canonical task/member order and the candidate dependency graph
     installed. Worker completion order cannot affect artifact bytes,
-    diagnostics, recomputed-module counts, or publication order. A hit skips
+    diagnostics, recomputed-module counts, or publication order. Absence of
+    program provenance is a distinct zero-authority key state and cannot alias
+    a plan that owns program provenance; it is never reconstructed from a path,
+    name, or dependency spelling. A hit skips
     re-encoding and re-publication alone, while a miss or rejected candidate
     prepares a freshly encoded artifact. Because the key names the ordered
     dependency module/fingerprint digest independently, a source import or
@@ -115,25 +120,25 @@ verification is a contract change.
 ## Digest anchors
 
 anchor-sha256: src/incremental/xr_cache_artifact_verify.h 18a284780d2154a14b53ba5591140b92fa8555f6373b503ffa019f59bafc6026
-anchor-sha256: src/incremental/xr_cache_artifact_verify.c 086aeb19fad0a68ef2cca93eca6e51d83c97059663bab56801366a45f32b10b8
+anchor-sha256: src/incremental/xr_cache_artifact_verify.c a0b359e7aaa5042eaf6d1c1eb6d52db253fca91dad6ae7d18995585f50be9df3
 anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
 anchor-sha256: src/incremental/xr_target_plan_tasks.h b8898e83f64a5f3526199de7e2cdc1de081ccaf677007c2adf65b641b92aff5a
 anchor-sha256: src/incremental/xr_target_plan_tasks.c 97cb9d24a31e852506ace288f2b3c72fd7828a7cc1a1adb161f7a6a3c85377cc
-anchor-sha256: src/incremental/xr_module_summary_build.h 3ce01510e546f6c32bdfa2abf5432f36de55499007e4e46881f482016ecc3000
-anchor-sha256: src/incremental/xr_module_summary_build.c 2c117922f4e35c7354460803a140164b1fa36ce1e15a60cacaf621c8500857f1
+anchor-sha256: src/incremental/xr_module_summary_build.h 1d387ea9e943fa0fcebeba7222105b8d0677bdecf05cda3677dc0d400868279b
+anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57c51780e1ddb99dfe8e9bfbb38001abfb28ed29cc2
 anchor-sha256: src/aot/xaot_module_summary.h 356f61d193ecfb05a15c0d4ad14a36df8c540b49f841d09bb4375562f9c5d88f
-anchor-sha256: src/aot/xaot_module_summary.c 52e8778b271f0d7638d5a4b5895f917969df06c17ccba72b46f3666bdc173359
+anchor-sha256: src/aot/xaot_module_summary.c 5bfd96577bf690fdef7d7bf04ac2c04574d081245df9a67969f0f45ed6c7c1fc
 anchor-sha256: src/aot/xaot_driver.h a8f9bdd948287f0f28f2dad9548933bb41529ac05e901ca2a3deaeb2aa2fc156
 anchor-sha256: src/aot/xaot_driver.c e51ab59a4d37065f175170a13e1673a754a0fa11d26601515c53fa285d2d8287
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
-anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c dc50ca29db9c5631cfe172ee7e0ce70226347c29de916d0385fe3b33b6d8ac8a
+anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c c9819052135b26f8717a9746e3b496a6b4b799be54e8c5f9fd6fb83235ee549c
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 558d2917133a9dee2206b997d0a12139b63d561865431d960889c8d0d5b87d3c
-anchor-sha256: tests/unit/incremental/test_module_summary_build.c 661372e5984643a4471383f76014273d45ff4cbe1e1f3e364a3f1ca12417ac89
+anchor-sha256: tests/unit/incremental/test_module_summary_build.c 117a7c617160868de286912287b70b97dc79d07f685b740deb08d1e79e3f704e
 anchor-sha256: tests/aot/run_module_summary_determinism.py 3ab7a9b295c2b4ccc14bd80b9bf66485215251107a974222808f0b1a2f265c63
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a6a9fe22bcb7e7c3df79d16f478f437c3ef1c8775169feaea9ff9323e2b148f8
 anchor-sha256: tests/unit/os/test_fs_atomic.c 3166bf0113590778cf46f874a7205476819e043699bb99d9881549579237ce12

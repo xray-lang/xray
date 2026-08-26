@@ -103,6 +103,15 @@ bool xr_cache_xtp_key(const XrCacheXtpArtifactVerifyContext *context,
         return false;
 
     XrTargetCacheKeyInput input = {0};
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(context->semantic_plan);
+    if (program && program->schema != 0) {
+        copy_fingerprint(program->program_fingerprint,
+                         &input.program_semantic_closure);
+        xr_cache_fingerprint_bytes(program->generation_identity.bytes,
+                                   sizeof(program->generation_identity.bytes),
+                                   &input.generation_closure);
+    }
     copy_fingerprint(xr_semantic_plan_fingerprint(context->semantic_plan),
                      &input.semantic_plan);
     copy_fingerprint(xr_target_profile_fingerprint(context->target_profile),

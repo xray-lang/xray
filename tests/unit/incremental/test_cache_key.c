@@ -22,6 +22,8 @@ static XrCacheFingerprint fingerprint(const char *text) {
 static XrSemanticCacheKeyInput semantic_input(void) {
     XrSemanticCacheKeyInput input = {
         .normalized_source = fingerprint("source"),
+        .program_semantic_closure = fingerprint("program-semantics"),
+        .generation_closure = fingerprint("generation"),
         .compiler = fingerprint("compiler"),
         .semantic_schema = fingerprint("semantic-schema"),
         .contract = fingerprint("contract"),
@@ -41,6 +43,8 @@ TEST(semantic_key_is_deterministic_and_domain_separated) {
     ASSERT_TRUE(xr_cache_key_equal(first, second));
 
     XrTargetCacheKeyInput target = {
+        .program_semantic_closure = input.program_semantic_closure,
+        .generation_closure = input.generation_closure,
         .semantic_plan = input.normalized_source,
         .target_profile = input.compiler,
         .provider_capabilities = input.semantic_schema,
@@ -65,6 +69,16 @@ TEST(semantic_key_changes_only_for_explicit_input) {
     ASSERT_FALSE(xr_cache_key_equal(base_key, changed_key));
 
     changed = base;
+    changed.program_semantic_closure = fingerprint("program-semantics-2");
+    xr_cache_key_semantic(&changed, &changed_key);
+    ASSERT_FALSE(xr_cache_key_equal(base_key, changed_key));
+
+    changed = base;
+    changed.generation_closure = fingerprint("generation-2");
+    xr_cache_key_semantic(&changed, &changed_key);
+    ASSERT_FALSE(xr_cache_key_equal(base_key, changed_key));
+
+    changed = base;
     changed.semantic_dependencies = fingerprint("dependencies-2");
     xr_cache_key_semantic(&changed, &changed_key);
     ASSERT_FALSE(xr_cache_key_equal(base_key, changed_key));
@@ -72,6 +86,8 @@ TEST(semantic_key_changes_only_for_explicit_input) {
 
 TEST(target_key_tracks_target_contract_without_schema_copy) {
     XrTargetCacheKeyInput input = {
+        .program_semantic_closure = fingerprint("program-semantics"),
+        .generation_closure = fingerprint("generation"),
         .semantic_plan = fingerprint("semantic-plan"),
         .target_profile = fingerprint("target-profile"),
         .provider_capabilities = fingerprint("provider-capabilities"),
@@ -82,6 +98,16 @@ TEST(target_key_tracks_target_contract_without_schema_copy) {
     XrCacheKey base;
     XrCacheKey changed;
     xr_cache_key_target(&input, &base);
+    input.program_semantic_closure = fingerprint("program-semantics-2");
+    xr_cache_key_target(&input, &changed);
+    ASSERT_FALSE(xr_cache_key_equal(base, changed));
+
+    input.program_semantic_closure = fingerprint("program-semantics");
+    input.generation_closure = fingerprint("generation-2");
+    xr_cache_key_target(&input, &changed);
+    ASSERT_FALSE(xr_cache_key_equal(base, changed));
+
+    input.generation_closure = fingerprint("generation");
     input.provider_capabilities = fingerprint("provider-capabilities-2");
     xr_cache_key_target(&input, &changed);
     ASSERT_FALSE(xr_cache_key_equal(base, changed));

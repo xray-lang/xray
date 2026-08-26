@@ -23,6 +23,10 @@ static XrFingerprint fingerprint(const char *text) {
 static XrModuleSummaryFacts base_facts(void) {
     XrModuleSummaryFacts facts;
     memset(&facts, 0, sizeof(facts));
+    facts.program_semantics = fingerprint("program-semantics");
+    XrFingerprint generation = fingerprint("generation");
+    memcpy(facts.generation.bytes, generation.bytes,
+           sizeof(facts.generation.bytes));
     facts.semantics = fingerprint("semantics");
     facts.dependencies = fingerprint("dependencies");
     facts.declarations = fingerprint("declarations");
@@ -169,6 +173,28 @@ TEST(declaration_and_schema_identity_separate_the_cache_key) {
     xr_module_summary_finalize(&summary);
 }
 
+TEST(program_and_generation_authority_separate_the_cache_key) {
+    XrModuleSummaryFacts facts = base_facts();
+    XrModuleSummary summary;
+    XrCacheKey base_key;
+    XrCacheKey program_key;
+    XrCacheKey generation_key;
+
+    ASSERT_TRUE(xr_module_summary_build(&summary, &base_key, "app/main", &facts));
+    xr_module_summary_finalize(&summary);
+
+    facts.program_semantics = fingerprint("program-semantics-2");
+    ASSERT_TRUE(xr_module_summary_build(&summary, &program_key, "app/main", &facts));
+    xr_module_summary_finalize(&summary);
+    ASSERT_FALSE(xr_cache_key_equal(base_key, program_key));
+
+    facts = base_facts();
+    facts.generation.bytes[0] ^= UINT8_C(1);
+    ASSERT_TRUE(xr_module_summary_build(&summary, &generation_key, "app/main", &facts));
+    xr_module_summary_finalize(&summary);
+    ASSERT_FALSE(xr_cache_key_equal(base_key, generation_key));
+}
+
 TEST(distinct_modules_never_share_a_cache_identity) {
     XrModuleSummaryFacts facts = base_facts();
     XrModuleSummary first;
@@ -270,6 +296,7 @@ TEST_MAIN_BEGIN()
     RUN_TEST(target_change_moves_only_profile_owned_facets);
     RUN_TEST(module_resolution_change_rejects_stale_semantic_cache_identity);
     RUN_TEST(declaration_and_schema_identity_separate_the_cache_key);
+    RUN_TEST(program_and_generation_authority_separate_the_cache_key);
     RUN_TEST(distinct_modules_never_share_a_cache_identity);
     RUN_TEST(invalid_derivation_inputs_are_rejected);
     RUN_TEST(published_graph_propagates_a_leaf_change_to_every_consumer);

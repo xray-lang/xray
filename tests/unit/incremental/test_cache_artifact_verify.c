@@ -11,6 +11,7 @@
 #include "../../../src/incremental/xr_cache_artifact_verify.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/format/xr_xtp_schema.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
@@ -50,9 +51,16 @@ static XrSemanticPlan *build_semantic(const char *name, int64_t value) {
     REQUIRE(constant != NULL);
     xi_block_set_return(entry, constant);
     function->stage = XI_STAGE_OPTIMIZED;
+    function->module = xi_module_new("fixture/cache_artifact_verify.xr", name, function);
+    REQUIRE(function->module != NULL);
+    REQUIRE(xi_module_set_identity(
+        function->module, "memory-module-v1:id=29:cache-artifact-verify-fixture"));
     XrSemanticPlan *semantic = NULL;
     char error[512] = {0};
-    REQUIRE(xr_semantic_plan_build(function, &semantic, error, sizeof(error)));
+    bool built = xr_semantic_plan_build(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "semantic fixture build failed: %s\n", error);
+    REQUIRE(built);
     xi_func_free(function);
     return semantic;
 }

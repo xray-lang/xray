@@ -523,6 +523,12 @@ static const XrSemanticPlan *module_semantic_plan(const XiModule *module) {
 static bool add_module_node(XaotModuleSummaryBuild *build, int topo_index,
                             const XrModuleSpec *spec, const XrSemanticPlan *plan) {
     XrModuleSummaryFacts facts = build->shared;
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(plan);
+    if (program && program->schema != 0) {
+        facts.program_semantics = program->program_fingerprint;
+        facts.generation = program->generation_identity;
+    }
     facts.semantics = xr_semantic_plan_fingerprint(plan);
     facts.semantic_schema = xr_semantic_plan_schema(plan);
     dependency_fingerprint(plan, &facts.dependencies);

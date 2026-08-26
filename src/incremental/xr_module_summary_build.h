@@ -27,6 +27,8 @@
  * produced and verified by the layer that owns the fact; a caller that cannot
  * supply an exact fingerprint must fail instead of substituting a default. */
 typedef struct XrModuleSummaryFacts {
+    XrFingerprint program_semantics; /* verified ProgramSemanticClosure identity */
+    XrStableId generation;           /* exact GenerationClosureId */
     XrFingerprint semantics;     /* verified SemanticPlan identity */
     XrFingerprint dependencies;  /* ordered dependency module/fingerprint digest */
     XrFingerprint declarations;  /* ordered exported declaration identity digest */

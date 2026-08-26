@@ -39,6 +39,8 @@ typedef enum XrCacheArtifactKind {
 
 typedef struct XrSemanticCacheKeyInput {
     XrCacheFingerprint normalized_source;
+    XrCacheFingerprint program_semantic_closure;
+    XrCacheFingerprint generation_closure;
     XrCacheFingerprint compiler;
     XrCacheFingerprint semantic_schema;
     XrCacheFingerprint contract;
@@ -48,6 +50,8 @@ typedef struct XrSemanticCacheKeyInput {
 } XrSemanticCacheKeyInput;
 
 typedef struct XrTargetCacheKeyInput {
+    XrCacheFingerprint program_semantic_closure;
+    XrCacheFingerprint generation_closure;
     XrCacheFingerprint semantic_plan;
     XrCacheFingerprint target_profile;
     XrCacheFingerprint provider_capabilities;

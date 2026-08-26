@@ -13,8 +13,8 @@
 #include "../base/xsha256.h"
 #include <string.h>
 
-#define XR_SEMANTIC_CACHE_FIELD_COUNT 7u
-#define XR_TARGET_CACHE_FIELD_COUNT 6u
+#define XR_SEMANTIC_CACHE_FIELD_COUNT 9u
+#define XR_TARGET_CACHE_FIELD_COUNT 8u
 
 static void hash_u32(XrSHA256Context *ctx, uint32_t value) {
     uint8_t encoded[4];
@@ -67,6 +67,8 @@ void xr_cache_key_semantic(const XrSemanticCacheKeyInput *input, XrCacheKey *out
         return;
     XrCacheFingerprint fields[XR_SEMANTIC_CACHE_FIELD_COUNT] = {
         input->normalized_source,
+        input->program_semantic_closure,
+        input->generation_closure,
         input->compiler,
         input->semantic_schema,
         input->contract,
@@ -74,18 +76,19 @@ void xr_cache_key_semantic(const XrSemanticCacheKeyInput *input, XrCacheKey *out
         input->semantic_dependencies,
         input->declaration_identities,
     };
-    build_key("xray-semantic-cache-key-v1", fields, XR_SEMANTIC_CACHE_FIELD_COUNT, out);
+    build_key("xray-semantic-cache-key-v2", fields, XR_SEMANTIC_CACHE_FIELD_COUNT, out);
 }
 
 void xr_cache_key_target(const XrTargetCacheKeyInput *input, XrCacheKey *out) {
     if (!input || !out)
         return;
     XrCacheFingerprint fields[XR_TARGET_CACHE_FIELD_COUNT] = {
+        input->program_semantic_closure, input->generation_closure,
         input->semantic_plan,       input->target_profile,
         input->provider_capabilities, input->runtime_abi,
         input->planner_schema,     input->optimization_budget,
     };
-    build_key("xray-target-cache-key-v1", fields, XR_TARGET_CACHE_FIELD_COUNT, out);
+    build_key("xray-target-cache-key-v2", fields, XR_TARGET_CACHE_FIELD_COUNT, out);
 }
 
 bool xr_cache_key_equal(XrCacheKey left, XrCacheKey right) {

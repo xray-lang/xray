@@ -98,6 +98,11 @@ bool xr_module_summary_build(XrModuleSummary *out_summary, XrCacheKey *out_key,
     XrSemanticCacheKeyInput input;
     memset(&input, 0, sizeof(input));
     copy_cache_fingerprint(facts->semantics, &input.normalized_source);
+    copy_cache_fingerprint(facts->program_semantics,
+                           &input.program_semantic_closure);
+    xr_cache_fingerprint_bytes(facts->generation.bytes,
+                               sizeof(facts->generation.bytes),
+                               &input.generation_closure);
     copy_cache_fingerprint(facts->toolchain, &input.compiler);
     copy_cache_fingerprint(schema, &input.semantic_schema);
     copy_cache_fingerprint(facts->target, &input.contract);
