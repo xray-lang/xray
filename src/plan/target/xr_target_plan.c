@@ -9,6 +9,7 @@
  */
 
 #include "xr_target_plan_internal.h"
+#include "xr_target_instruction_verify.h"
 #include "xr_target_verify.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../base/xmalloc.h"
@@ -1477,9 +1478,31 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
         rows[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
         rows[3].opcode == XR_TARGET_INSTRUCTION_RETURN_UNIT)
         return (uint64_t) XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED;
-    /* PSC6 product rows are frozen TargetPlan authority, not an execution ABI.
-     * Any target-only row fences the whole function from every installed VM,
-     * AOT, CGen, or public typed-entry family. */
+    bool product_caller = count == 15u &&
+                          rows[0].opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE;
+    bool product_callee = count == 14u;
+    if (product_caller || product_callee) {
+        uint32_t scalar_begin = product_caller ? 1u : 0u;
+        uint32_t init = product_caller ? 7u : 6u;
+        bool exact = rows[init].opcode == XR_TARGET_INSTRUCTION_VALUE_PRODUCT_INIT &&
+                     rows[count - 1u].opcode == XR_TARGET_INSTRUCTION_RETURN_AGGREGATE;
+        for (uint32_t ordinal = 0; exact && ordinal < 6u; ordinal++) {
+            uint16_t scalar_opcode = product_caller
+                                         ? (ordinal == 2u
+                                                ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_GET_U8
+                                                : XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64)
+                                         : (ordinal == 2u ? XR_TARGET_INSTRUCTION_CONST_U8
+                                                          : XR_TARGET_INSTRUCTION_CONST_I64);
+            uint16_t set_opcode = ordinal == 2u
+                                      ? XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_U8
+                                      : XR_TARGET_INSTRUCTION_VALUE_PRODUCT_SET_I64;
+            exact = rows[scalar_begin + ordinal].opcode == scalar_opcode &&
+                    rows[init + 1u + ordinal].opcode == set_opcode;
+        }
+        if (exact && xr_target_plan_fingerprint_is_intact(plan) &&
+            xr_target_instruction_program_verify(plan, NULL, 0))
+            return (uint64_t) XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6;
+    }
     for (uint32_t i = 0; i < count; i++) {
         uint16_t opcode = rows[i].opcode;
         if (opcode == XR_TARGET_INSTRUCTION_CONST_U8 ||

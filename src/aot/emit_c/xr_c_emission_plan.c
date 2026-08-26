@@ -4446,6 +4446,14 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
     if (!xr_target_plan_is_verified(target_plan))
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "C emission plan requires a verified TargetPlan");
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    if (provenance &&
+        provenance->program_family ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "leaf-value product forbids the legacy C emission plan");
     const uint64_t required_value_families =
         XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE |
         XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |

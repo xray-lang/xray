@@ -487,8 +487,11 @@ target authority. For the exact two-module scalar graph, the verified program
 C-emission binding mechanically supplies caller/callee/initializer value and
 ABI views, the canonical direct symbol and reachability edge, and the exact
 elided shared carrier; its generated-C/native cold, warm, edit, and revert
-oracle is admitted as `execution=cgen-ready`. This does not admit general graph
-execution, a public runtime manifest/loader route, or `PRODUCT_ACTIVE`.
+oracle is admitted as `execution=cgen-ready`. A separate public `XrProgram`
+facade admits only this exact two-partition/two-function/one-call/one-argument
+direct-`i64` graph through the same verified Program TargetPlan and live
+manifest. This does not admit other graph shapes, dynamic reload, concurrent
+unload, or `PRODUCT_ACTIVE`.
 These schemas retain no compiler pointer or target-specific bytes. They
 serialize and fingerprint the PSC schema/family/fingerprint,
 GenerationClosureId, exact type/type-field/function/dependency/call row bindings, preserved

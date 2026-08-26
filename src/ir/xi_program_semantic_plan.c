@@ -965,10 +965,11 @@ bool xi_program_semantic_plan_verify_detached_leaf_authority(
                                     "detached leaf PSC state is incomplete");
     if (!xr_program_semantic_closure_verify(closure, error, error_size))
         return false;
+    uint32_t family = xr_program_semantic_closure_family(closure);
     if (xr_program_semantic_closure_schema(closure) !=
             XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
-        xr_program_semantic_closure_family(closure) !=
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
+        (family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL &&
+         family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL))
         return semantic_scalar_fail(error, error_size,
                                     "detached leaf PSC schema or family is not exact");
     if (!semantic_detached_source_module_is_exact(module, closure))
@@ -979,6 +980,8 @@ bool xi_program_semantic_plan_verify_detached_leaf_authority(
                                     "detached leaf SemanticPlan is missing");
     if (!xr_semantic_plan_verify(plan, error, error_size))
         return false;
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+        return semantic_leaf_product_plan_verify(root, plan, error, error_size);
 
     size_t function_count = xr_program_semantic_closure_function_count(closure);
     if (function_count > UINT16_MAX || module->nfuncs != function_count ||

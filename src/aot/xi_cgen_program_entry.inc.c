@@ -987,6 +987,69 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     fprintf(out, "}\n");
 }
 
+XR_FUNC XiCgenLeafProductRoute xi_cgen_leaf_product_program_route(
+    const XiModule *module, const XrTargetPlan *plan) {
+    const XrProgramSemanticClosure *closure =
+        module ? module->program_semantic_closure : NULL;
+    bool module_product =
+        closure &&
+        xr_program_semantic_closure_family(closure) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    const XrSemanticPlan *plan_semantic = xr_target_plan_semantic_plan(plan);
+    const XrSemanticProgramProvenance *plan_provenance =
+        xr_semantic_plan_program_provenance(plan_semantic);
+    bool plan_product =
+        plan_provenance &&
+        plan_provenance->program_family ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    if (!module_product && !plan_product)
+        return XI_CGEN_LEAF_PRODUCT_ROUTE_ORDINARY;
+    return module_product == plan_product ? XI_CGEN_LEAF_PRODUCT_ROUTE_CLAIM
+                                          : XI_CGEN_LEAF_PRODUCT_ROUTE_REJECT;
+}
+
+static bool cg_try_emit_leaf_value_product_program(XiCgenCtx *ctx, FILE *out,
+                                                   XiModule *module) {
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XrTargetPlan *plan = xaot_bundle_program_target_plan(bundle);
+    XiCgenLeafProductRoute route =
+        xi_cgen_leaf_product_program_route(module, plan);
+    if (route == XI_CGEN_LEAF_PRODUCT_ROUTE_ORDINARY)
+        return false;
+    if (route == XI_CGEN_LEAF_PRODUCT_ROUTE_REJECT) {
+        ctx->error = true;
+        return true;
+    }
+    const XrTargetProfile *profile = xr_target_plan_profile(plan);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions =
+        xr_target_plan_functions(plan, &function_count);
+    if (!bundle || bundle->nmodules != 1u || !bundle->modules ||
+        bundle->modules[0] != module || !functions || function_count != 4u ||
+        !xaot_bundle_program_semantic_for_module(bundle, 0) ||
+        ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT ||
+        bundle->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT ||
+        bundle->artifact_kind != ctx->artifact_kind ||
+        ctx->freestanding_profile || !machine ||
+        machine->runtime_profile != XR_TARGET_RUNTIME_PROFILE_HOSTED) {
+        ctx->error = true;
+        return true;
+    }
+    char error[256] = {0};
+    char *source = NULL;
+    size_t source_size = 0;
+    if (!xr_c_leaf_value_product_program_emit(plan, module, &source, &source_size,
+                                              error, sizeof(error)) ||
+        !source || fwrite(source, 1, source_size, out) != source_size) {
+        xr_free(source);
+        ctx->error = true;
+        return true;
+    }
+    xr_free(source);
+    return true;
+}
+
 XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     XR_DCHECK(ctx != NULL, "xi_cgen_program: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_program: NULL output");
@@ -995,6 +1058,9 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
     XiFunc *main_func = module->init;
     const char *prefix = module->name ? module->name : "mod";
+
+    if (cg_try_emit_leaf_value_product_program(ctx, out, module))
+        return;
 
     if (!cg_require_backend_tree(ctx, main_func))
         return;

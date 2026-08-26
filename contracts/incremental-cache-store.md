@@ -122,7 +122,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
     every live module, function, import/export, resolver, call, attachment, and
     dependency join. Producer and entry XSM bytes are deterministic; entry
     decode requires the exact ordered producer plan. The driver then constructs
-    one independently verified schema-49 program TargetPlan from the full
+    one independently verified schema-50 program TargetPlan from the full
     canonical SemanticPlan module set. Its single graph row, two pointer-free
     module partitions, aggregate semantic fingerprint, global Target rows, and
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge must all verify before
@@ -164,7 +164,7 @@ anchor-sha256: src/aot/xaot_driver.c 225c535b8b9ac5751ad5d413712105c446910244593
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
-anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
+anchor-sha256: tests/unit/CMakeLists.txt 836bea1878e361715d3d64ad2be0478d86895a926d512db6018a7af1316ab244
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c c9819052135b26f8717a9746e3b496a6b4b799be54e8c5f9fd6fb83235ee549c
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 55297a8a70bcb0c463dd03512699ecd7bc7723fd505ac75b102c585ed4c4857f

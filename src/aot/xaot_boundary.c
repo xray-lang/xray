@@ -442,6 +442,12 @@ static XaotLeafAggregateTargetStatus leaf_function_authority(
 
     const XiModule *module = bundle_module_for_func(bundle, function);
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    if (closure &&
+        xr_program_semantic_closure_family(closure) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+        return leaf_aggregate_error(
+            errbuf, errbuf_len,
+            "leaf value-product execution cannot enter the legacy aggregate boundary");
     if (!module || !closure ||
         xr_program_semantic_closure_family(closure) !=
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)

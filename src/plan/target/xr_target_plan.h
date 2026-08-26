@@ -101,6 +101,11 @@ typedef enum XrTargetExecutionFamily {
      * direct call, caller-owned result storage, and return are all carried by
      * schema-47 TargetPlan rows. */
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
+    /* One pointer-free six-field value product whose exact x64 layout is
+     * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
+     * execute only after the complete schema-50 instruction groups prove the
+     * layout, ordinal accesses, caller-owned result storage, and return. */
+    XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX

@@ -98,8 +98,12 @@ projection defined below; they never imply TargetPlan admission on their own.
     operations. The independent Xi verifier rechecks all six ordinals, the `u8`
     member, both caller/callee joins, exact operation coverage, and an
     authority-free module initializer. Ordinary TypedProgram publication and
-    SemanticPlan, TargetPlan, VM, and AOT consumption remain unwired, so this Xi
-    proof cannot be interpreted as tuple6 execution admission.
+    SemanticPlan and schema-50 TargetPlan preserve the exact six-member layout,
+    two caller-storage calls, and ordinal-bound instructions. Typed VM and the
+    hosted-fragment C projection execute only after independent TargetPlan
+    verification grants the leaf-value-product family. Ordinary product
+    execution, legacy per-module C plans, product `EXECUTABLE` artifacts, and
+    freestanding product emission remain fail-closed.
 11. Only the scalar family builds `XrScalarCallDecision`. It requires the exact
     verified scalar PSC/GCI/TargetProfile and freezes native ABI,
     `DIRECT_LOCAL`, `STATIC_DIRECT`, `I64`, register-only argument/result, and
@@ -186,7 +190,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then builds one schema-49 program TargetPlan from the complete canonical
+    then builds one schema-50 program TargetPlan from the complete canonical
     SemanticPlan module set. The plan has one program-graph row, two module
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
@@ -201,8 +205,11 @@ projection defined below; they never imply TargetPlan admission on their own.
     For the exact two-module scalar graph, that single binding also freezes the
     complete C value and ABI rows for caller, callee, and module initializers,
     and product CGen mechanically consumes it through native execution. It does
-    not grant container, coroutine, installed-loader, public-manifest, another
-    graph-family, or general product-activation authority. No consumer may skip,
+    also grants the installed public `XrProgram` load/execute/unload facade backed
+    by the same plan, live manifest, decoded cache, program fingerprint,
+    module-set fingerprint, and GCI. It does not grant container, coroutine,
+    another graph family, dynamic reload, concurrent unload, or general
+    product-activation authority. No consumer may skip,
     stitch per-module plans, fall back, or reconstruct missing facts from names,
     function bodies, tags, local semantic indexes, or legacy readers.
 19. The first single-module TargetPlan consumer admits only the exact
@@ -260,7 +267,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     and their XSM round-trips close the same graph authority. Target construction
     consumes the full canonical plan set in `program_module_row` order while the
     entry fragment separately carries only its ordered direct dependency.
-    It emits one verified schema-49 TargetPlan with global functions, slots,
+    It emits one verified schema-50 TargetPlan with global functions, slots,
     values, instructions, calls, arguments, debug facts, layouts, extents, and
     capabilities; module partitions are bounded pointer-free views and are not
     independent plans. The cross-partition edge is exactly one
@@ -298,8 +305,10 @@ projection defined below; they never imply TargetPlan admission on their own.
     The source product publishes deterministic module summaries, emits real C,
     and executes native cold/warm/dependency-edit/dependency-revert results
     42/42/43/42. This native closure remains exclusive to the exact bounded
-    graph; installed loading, public runtime manifests, other graph shapes,
-    containers, coroutines, and general product activation remain unavailable.
+    graph. Its separate installed public facade admits only the same exact
+    two-partition/two-function/one-call/one-argument direct-`i64` graph; other
+    graph shapes, containers, coroutines, dynamic reload, and general product
+    activation remain unavailable.
 
 ## Digest anchors
 
@@ -353,7 +362,7 @@ anchor-sha256: src/ir/xi_program_semantic.c 0b5851bf3e9a8ced97b63be88caa9954e35f
 anchor-sha256: src/ir/xi_program_semantic_verify.c fd47f412edf01c83b24490e0752531c110a08e6e3391e33bdfd7be4b1fc0acbb
 anchor-sha256: src/ir/xi_own.c d36d0c84c81224d366afa7971390af9b2a58e65f06fc95e29a25a38c74979d7d
 anchor-sha256: src/ir/xi_program_semantic_plan.h c516db30bd0b7ec8fe0749bfd6fac4aecb8cfac217dad32f1954a7a66a7ee7ae
-anchor-sha256: src/ir/xi_program_semantic_plan.c 9ed71948f17cefaa72e992a4f68aa50447e074bc069102bcd3e9b678e474445e
+anchor-sha256: src/ir/xi_program_semantic_plan.c 9490649be2ac6648e79295eba24acf35f035c00893407f224118e33a7ac7880c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c e8ad9cbcaf1f69de191165ff8736253241b8bc1c5f1fed94a0d9abebecc5c262
@@ -362,9 +371,9 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c ff9ef7e0b8a4c640d211bf05150d
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f1abf760346c76d3d574d1dc0f13e061e568e264a5b3dd7aaec391e0e49b0d21
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c cb908edaf692e03a29b77ada7c3d30386612c4ff673eb6777f76dd4e6f152123
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3faed709ec5d779d5df0778bae33cd67fd8d86f094ef1007ae1d5ac450387398
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
-anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
+anchor-sha256: tests/unit/CMakeLists.txt 836bea1878e361715d3d64ad2be0478d86895a926d512db6018a7af1316ab244
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c a058e500a1dc183f7e167ffcf648189cfbcda66c5362529b3d848e0e902f8c8c
-anchor-sha256: src/aot/xaot_bundle.c 50dd04b10963b817adf9f4fe0fbea3a00ee1bfb420986584ef93953334f93640
+anchor-sha256: src/aot/xaot_boundary.c 58fddb930eac3cbed2d05e299ec10c4a8c61662b1651727edee880cb423a352b
+anchor-sha256: src/aot/xaot_bundle.c 2b56409182e3c61c130db314160dbc87c1eca8ef4d6831684b8e90b11539dcee

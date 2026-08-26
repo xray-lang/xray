@@ -412,7 +412,7 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-The schema-49 source program graph is a distinct program-wide AOT cutover; it
+The schema-50 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
@@ -454,10 +454,11 @@ only the caller is seeded as an ordinary product-body root; the callee survives
 solely through the verified direct edge. The kept caller C has
 one stable-symbol direct call and no module/name/shared runtime lookup, and the
 cold/warm/edit/revert native oracle produces 42/42/43/42. This grants a native
-ABI and binary claim only for the exact bounded two-module scalar graph. It
-does not authorize another graph family, the installed graph loader, a public
-runtime-manifest route, or general product activation; all such boundaries
-remain fail closed.
+ABI and binary claim only for the exact bounded two-module scalar graph. The
+installed public `XrProgram` facade admits only that same exact direct-`i64`
+graph through the verified Program TargetPlan and live manifest. It does not
+authorize another graph family, dynamic reload, concurrent unload, or general
+product activation; all such boundaries remain fail closed.
 
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
 function is identified through its owning module's frozen PSC v5 row:
@@ -751,7 +752,7 @@ anchor-sha256: src/aot/xaot_link.c 350f8b20fef687d5d989c1926d9d98e234c15116d3de0
 anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759eb00fd65b40b648f0fc7c661
 anchor-sha256: src/aot/xaot_prepare.c 9a1613fb8d49402b3bf7beca936fbff9a4c4f4b4245db8b8bd7bd4d3c5590118
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
-anchor-sha256: src/aot/xaot_bundle.c 50dd04b10963b817adf9f4fe0fbea3a00ee1bfb420986584ef93953334f93640
+anchor-sha256: src/aot/xaot_bundle.c 2b56409182e3c61c130db314160dbc87c1eca8ef4d6831684b8e90b11539dcee
 anchor-sha256: src/aot/xaot_verify.c be9e8104fb8943f8f65e921a9479c3e5de7774f6560ec124694ab8dd7c605a49
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c d6c3a3db1eb66f01cf8e136626822b42218a7487347cb41b86586194475a9250
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 20143c8af944dcddf795b0b43ca2dad7fe52d097b60edaefa81c678b834a9a2f
@@ -761,12 +762,12 @@ anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c b70546516d3c10a0141f51263
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 7116d17b3c38fb432d60f1646c4f815496798c133a6ffd2a90b136d4352272ac
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 0bb6b5995c89f5e7a8071cf20b7bc69a6adddbb3f626c2eeda539617e61363fd
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 17353e09b9c5891e92c7df2bac284ca66092b4554bd8c2109a0b447d73c5fed0
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e0afec5542188381add3de02f74fab76d983a70da33d69b17e206d847e49eff5
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c dbf75d9642a2e927ecf1396ae3e039060567576ef734dfb7405a1246151a3739
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 9a6cf43eba7f80398e5587caecc975669d37fa7ff75034dbf2e450259e73bf4f
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.c d1b876cf1600462e2fe42a9479e19da490300b672a1f14ce08c44468c3aca22b
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 91e0881d324bfd26bfb1d3e26877c9b07b5dbe5de3f7ef7fdee2882d030d9332
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 0db57c7d713d5ccc41bcc480ef9fd66e50967c929ffb7532217b68baf0fd11d9
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 68deb54bcbe60ac1ff46e854d562bafbe1f745aec3ebbe52c62d4eed17c9e4e8
 anchor-sha256: src/plan/semantic/xr_semantic_shared_read_shape.h c82c3ac533b4e4b0ef944e66b8a8b1ce1c1f2d96d3772438c7fc5ab9dc9ee0ce
 anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 0c35fd29c8d8cc53636354f04fac70e7ec29e565e2af8ec2ff5d0ec4cda78ab8
@@ -780,7 +781,7 @@ anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c d2ff150f8974ba28f6392b6db1df6f4
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c c053f25b71fb2a2df09b0519bd05e9d75a960d8b1354787b2e4fee9e612cf070
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c 5251fcc2dd987d15e3ed4ab9646cfe0d47ec600cf05637138614989284ac4c4e
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 40ee4f36cea8e202ffb21bc45c542b2815e56500e832ce04a3ab9b22c9a8f9b1
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c bdadf1c59082c63bb4ffc9db416a6cdb7c60af07b0a9af76e9edec0f49f0323a
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
 anchor-sha256: src/aot/xi_cgen.c 46ba3391cdf82750f2f0259f10dbf80a1cd0d4b03ddf8bc2a05a6376cf32ff69
 anchor-sha256: src/ir/xi_opt.c 44fdacef3233931ba3e9f5b165a70d978b0cb365510bde8db2e00a84c9625b8f
@@ -800,6 +801,6 @@ anchor-sha256: src/aot/xrt_provider_abi.h 4deebceb145b02ba5c5836c8688b9c4788a130
 anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1bfd9f84613580b3b6b5ece8bfd9eaa4
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c a058e500a1dc183f7e167ffcf648189cfbcda66c5362529b3d848e0e902f8c8c
+anchor-sha256: src/aot/xaot_boundary.c 58fddb930eac3cbed2d05e299ec10c4a8c61662b1651727edee880cb423a352b
 anchor-sha256: src/aot/xaot_driver.c 225c535b8b9ac5751ad5d413712105c446910244593be7c0a9f44a4c8f54fe32
 anchor-sha256: tests/unit/aot/test_xaot_driver.c 067bc64b28de1e058dc91b49bd78d80c290bfdab73cd97bfdb3e2fc98920339d

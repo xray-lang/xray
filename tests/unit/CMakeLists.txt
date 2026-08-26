@@ -341,6 +341,34 @@ set_tests_properties(test_program_semantic_call_locator PROPERTIES
 add_xray_unit_test(test_xi_program_semantic ir/test_xi_program_semantic.c)
 set_tests_properties(test_xi_program_semantic PROPERTIES
     LABELS "ir;semantic;target-machine;ownership;task-283")
+set(XR_LEAF_PRODUCT_NATIVE_SOURCE
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/leaf_product_native.c)
+add_custom_command(
+    OUTPUT ${XR_LEAF_PRODUCT_NATIVE_SOURCE}
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+            ${CMAKE_CURRENT_BINARY_DIR}/generated
+    COMMAND ${CMAKE_COMMAND} -E env
+            XR_LEAF_PRODUCT_NATIVE_C_OUTPUT=${XR_LEAF_PRODUCT_NATIVE_SOURCE}
+            $<TARGET_FILE:test_xi_program_semantic>
+    DEPENDS test_xi_program_semantic
+    COMMENT "Generating verified tuple6 TargetPlan native C fixture"
+    VERBATIM)
+set_source_files_properties(${XR_LEAF_PRODUCT_NATIVE_SOURCE}
+    PROPERTIES GENERATED TRUE)
+add_executable(test_leaf_product_native
+    ${XR_LEAF_PRODUCT_NATIVE_SOURCE})
+set_target_properties(test_leaf_product_native PROPERTIES
+    C_STANDARD 11
+    C_STANDARD_REQUIRED TRUE)
+if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
+    target_compile_options(test_leaf_product_native PRIVATE /W4 /WX)
+else()
+    target_compile_options(test_leaf_product_native PRIVATE -Wall -Wextra -Werror)
+endif()
+add_test(NAME test_leaf_product_native
+    COMMAND $<TARGET_FILE:test_leaf_product_native>)
+set_tests_properties(test_leaf_product_native PROPERTIES
+    LABELS "aot;cgen;native;target-machine;task-281")
 add_executable(test_semantic_type_admission plan/test_semantic_type_admission.c)
 target_include_directories(test_semantic_type_admission PRIVATE ${XRAY_COMMON_INCLUDES})
 add_test(NAME test_semantic_type_admission COMMAND $<TARGET_FILE:test_semantic_type_admission>)

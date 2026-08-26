@@ -269,40 +269,40 @@
   :effects (control) :error none :suspend no :immediate none :control return
   :semantic none :dispatch return-aggregate :dispatch-arg none)
 
-; These field-level product rows are TargetPlan authority only.  The typed VM
-; provider deliberately binds them to a rejecting handler until a later slice
-; installs a complete product execution ABI.
+; These field-level product rows execute only as part of the independently
+; verified tuple6 instruction groups.  Their dispatch kinds name the physical
+; row action and do not grant family coverage by themselves.
 (define-target-instruction const-u8
   :id 38 :name "const.u8" :arity 0 :terminator no
   :result-rep u8 :operand-reps ()
   :result-ownership trivial :operand-ownership ()
   :effects () :error none :suspend no :immediate i64 :control none
-  :semantic xi.const :dispatch target-only :dispatch-arg none)
+  :semantic xi.const :dispatch const-u8 :dispatch-arg none)
 
 (define-target-instruction value-product-init
   :id 39 :name "value.product.init" :arity 0 :terminator no
   :result-rep aggregate :operand-reps ()
   :result-ownership trivial :operand-ownership ()
   :effects () :error none :suspend no :immediate layout-record :control none
-  :semantic xi.value.product.construct :dispatch target-only :dispatch-arg none)
+  :semantic xi.value.product.construct :dispatch value-product-init :dispatch-arg none)
 
 (define-target-instruction value-product-set-i64
   :id 40 :name "value.product.set.i64" :arity 2 :terminator no
   :result-rep none :operand-reps (aggregate i64)
   :result-ownership none :operand-ownership (borrow borrow)
   :effects (memory-write) :error none :suspend no :immediate field-record :control none
-  :semantic xi.value.product.construct :dispatch target-only :dispatch-arg none)
+  :semantic xi.value.product.construct :dispatch value-product-set-i64 :dispatch-arg none)
 
 (define-target-instruction value-product-set-u8
   :id 41 :name "value.product.set.u8" :arity 2 :terminator no
   :result-rep none :operand-reps (aggregate u8)
   :result-ownership none :operand-ownership (borrow borrow)
   :effects (memory-write) :error none :suspend no :immediate field-record :control none
-  :semantic xi.value.product.construct :dispatch target-only :dispatch-arg none)
+  :semantic xi.value.product.construct :dispatch value-product-set-u8 :dispatch-arg none)
 
 (define-target-instruction value-product-get-u8
   :id 42 :name "value.product.get.u8" :arity 1 :terminator no
   :result-rep u8 :operand-reps (aggregate)
   :result-ownership trivial :operand-ownership (borrow)
   :effects () :error none :suspend no :immediate field-record :control none
-  :semantic xi.value.product.project :dispatch target-only :dispatch-arg none)
+  :semantic xi.value.product.project :dispatch value-product-get-u8 :dispatch-arg none)

@@ -3684,7 +3684,11 @@ TARGET_DISPATCH_ARGUMENTS = {
     'aggregate-make': {'none'},
     'call-aggregate': {'none'},
     'return-aggregate': {'none'},
-    'target-only': {'none'},
+    'const-u8': {'none'},
+    'value-product-init': {'none'},
+    'value-product-set-i64': {'none'},
+    'value-product-set-u8': {'none'},
+    'value-product-get-u8': {'none'},
 }
 
 
@@ -3951,7 +3955,11 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_AGGREGATE_MAKE,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_CALL_AGGREGATE,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN_AGGREGATE,',
-        '    XR_TARGET_INSTRUCTION_DISPATCH_TARGET_ONLY,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_CONST_U8,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_INIT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_SET_I64,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_SET_U8,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_GET_U8,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',

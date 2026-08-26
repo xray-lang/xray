@@ -32,6 +32,8 @@ typedef struct XrCAggregateProjection {
     char element_c_type[16];
 } XrCAggregateProjection;
 
+struct XiModule;
+
 XR_FUNC bool xr_c_aggregate_projection(
     const XrTargetPlan *target_plan,
     const XrTargetValueRepRecord *binding,
@@ -42,5 +44,13 @@ XR_FUNC bool xr_c_aggregate_projection(
 XR_FUNC bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan,
                                              uint32_t semantic_type,
                                              XrCAggregateProjection *out);
+
+/* Validates and freezes the one PSC/Xi-to-TargetPlan join internally, then
+ * emits solely from that opaque binding and schema-50 TargetPlan rows.  No
+ * mutable binding escapes this call.  The output contains no test oracle or
+ * process entry point and is released with xr_free(). */
+XR_FUNC bool xr_c_leaf_value_product_program_emit(
+    const XrTargetPlan *target_plan, const struct XiModule *module,
+    char **out_source, size_t *out_size, char *error, size_t error_size);
 
 #endif  // XR_TARGET_AGGREGATE_C_PROJECTION_H

@@ -29,6 +29,18 @@ typedef struct XrTypedLeafAggregateI64x2 {
     int64_t fields[2];
 } XrTypedLeafAggregateI64x2;
 
+/* Exact pointer-free tuple6 carrier.  Padding is part of the x64 ABI layout
+ * proved by schema-50 TargetPlan rows; callers never expose plan slots. */
+typedef struct XrTypedLeafValueProductTuple6 {
+    int64_t field0;
+    int64_t field1;
+    uint8_t field2;
+    uint8_t reserved2[7];
+    int64_t field3;
+    int64_t field4;
+    int64_t field5;
+} XrTypedLeafValueProductTuple6;
+
 typedef enum XrTypedDispatchProvider {
     XR_TYPED_DISPATCH_PROVIDER_INVALID = 0,
     XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
@@ -139,6 +151,14 @@ typedef struct XrTypedDispatchLeafAggregateI64x2Request {
     uint32_t argument_count;
 } XrTypedDispatchLeafAggregateI64x2Request;
 
+typedef struct XrTypedDispatchLeafValueProductTuple6Request {
+    const XrTargetPlan *verified_plan;
+    const XrFingerprint *required_plan_fingerprint;
+    XrTypedLeafValueProductTuple6 *result;
+    XrTypedDispatchProvider provider;
+    uint32_t function;
+} XrTypedDispatchLeafValueProductTuple6Request;
+
 /* A suspended typed coroutine is single-owner and owns one packed frame and
  * one immutable decoded program. Resuming reuses those exact objects; no
  * retained legacy value stack or bytecode frame is created. The initial slice
@@ -166,6 +186,8 @@ XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_values(
     const XrTypedDispatchValueRequest *request);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_aggregate_i64x2(
     const XrTypedDispatchLeafAggregateI64x2Request *request);
+XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_value_product_tuple6(
+    const XrTypedDispatchLeafValueProductTuple6Request *request);
 /* Creation requires an empty owning output slot. Failure preserves that slot;
  * success transfers the sole coroutine owner into it. Free is the only API
  * that releases the owned frame/cache/plan and clears the slot. */

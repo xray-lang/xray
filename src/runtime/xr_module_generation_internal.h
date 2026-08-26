@@ -73,7 +73,8 @@ struct XrLoadedModuleGeneration {
     bool active_manifest_published;
 };
 
-/* Internal-only inspection for the product-unreachable source-graph KAT. */
+/* Internal live-manifest inspection shared by focused verification and the
+ * bounded public-program executor; it exposes no second manifest owner. */
 XR_FUNC bool xr_runtime_generation_live_manifest_snapshot(
     const XrLoadedModuleGeneration *generation,
     XrRuntimeGenerationLiveManifest *manifest);

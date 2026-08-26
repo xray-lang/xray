@@ -30,6 +30,7 @@
 #include "../shared/xr_int_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../base/xmalloc.h"
+#include <stddef.h>
 #include <string.h>
 
 _Static_assert(XR_VM_DEBUG_MAX_STACK_DEPTH >=
@@ -39,6 +40,22 @@ _Static_assert(sizeof(XrTypedLeafAggregateI64x2) == 16u,
                "leaf aggregate request carrier must stay exactly 16 bytes");
 _Static_assert(_Alignof(XrTypedLeafAggregateI64x2) == _Alignof(int64_t),
                "leaf aggregate request carrier must keep i64 alignment");
+_Static_assert(sizeof(XrTypedLeafValueProductTuple6) == 48u,
+               "leaf value product carrier must stay exactly 48 bytes");
+_Static_assert(_Alignof(XrTypedLeafValueProductTuple6) == _Alignof(int64_t),
+               "leaf value product carrier must keep i64 alignment");
+_Static_assert(offsetof(XrTypedLeafValueProductTuple6, field0) == 0u &&
+                   offsetof(XrTypedLeafValueProductTuple6, field1) == 8u &&
+                   offsetof(XrTypedLeafValueProductTuple6, field2) == 16u &&
+                   offsetof(XrTypedLeafValueProductTuple6, field3) == 24u &&
+                   offsetof(XrTypedLeafValueProductTuple6, field4) == 32u &&
+                   offsetof(XrTypedLeafValueProductTuple6, field5) == 40u,
+               "leaf value product carrier offsets must match schema-50 x64 layout");
+
+typedef union XrTypedAggregateValue {
+    XrTypedLeafAggregateI64x2 pair;
+    XrTypedLeafValueProductTuple6 product;
+} XrTypedAggregateValue;
 
 /* Scalar dispatch owns no lifecycle executor.  Prove that boundary from the
  * verified plan before a frame exists, then repeat it from the allocated
@@ -204,6 +221,27 @@ static bool target_i64_rep_is_exact(const XrTargetPlan *plan, uint16_t rep_index
            rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE;
 }
 
+static bool target_u8_rep_is_exact(const XrTargetPlan *plan, uint16_t rep_index) {
+    const XrTargetMachineRepRecord *rep = xr_target_plan_machine_rep(plan, rep_index);
+    return rep && rep->kind == XR_MACHINE_REP_U8 && rep->register_bits == 8 &&
+           rep->memory_size == 1 && rep->memory_align == 1 &&
+           rep->root_kind == XR_TARGET_ROOT_NONE && rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+           rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE;
+}
+
+static XrTypedDispatchStatus describe_exact_u8(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                               uint32_t slot, XrTypedSlotAccess *access) {
+    const XrTargetSlotRecord *record = target_slot_record(plan, slot);
+    if (!record || !target_value_rep_binds_slot(plan, record) ||
+        record->register_rep != record->memory_rep ||
+        !target_u8_rep_is_exact(plan, record->register_rep) ||
+        xr_typed_frame_describe_slot(frame, slot, access) != XR_TYPED_FRAME_OK ||
+        access->size != 1u || access->alignment != 1u ||
+        access->register_rep != record->register_rep || access->memory_rep != record->memory_rep)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    return XR_TYPED_DISPATCH_OK;
+}
+
 static XrTypedDispatchStatus describe_exact_i64(const XrTargetPlan *plan, XrTypedFrame *frame,
                                                 uint32_t slot, XrTypedSlotAccess *access) {
     const XrTargetSlotRecord *record = target_slot_record(plan, slot);
@@ -309,6 +347,92 @@ static XrTypedDispatchStatus store_leaf_aggregate(const XrTargetPlan *plan, XrTy
     return XR_TYPED_DISPATCH_OK;
 }
 
+typedef struct XrTypedLeafProductSlot {
+    XrTypedSlotAccess access;
+    const XrTargetLayoutRecord *layout;
+    uint32_t layout_index;
+} XrTypedLeafProductSlot;
+
+static bool target_product_field_is_exact(const XrTargetPlan *plan,
+                                          const XrTargetFieldRecord *field,
+                                          uint32_t layout, uint32_t ordinal) {
+    bool u8 = ordinal == 2u;
+    return field && field->layout == layout && field->semantic_field == ordinal &&
+           field->semantic_name == XR_SEMANTIC_INDEX_NONE && field->offset == ordinal * 8u &&
+           field->size == (u8 ? 1u : 8u) && field->align == (u8 ? 1u : 8u) &&
+           (u8 ? target_u8_rep_is_exact(plan, field->memory_rep)
+               : target_i64_rep_is_exact(plan, field->memory_rep)) &&
+           field->root_kind == XR_TARGET_ROOT_NONE && field->flags == 0 && field->reserved == 0;
+}
+
+static XrTypedDispatchStatus describe_leaf_product(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                                    uint32_t slot, XrTypedLeafProductSlot *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    const XrTargetSlotRecord *record = target_slot_record(plan, slot);
+    XrTypedSlotAccess access = {0};
+    if (!plan || !frame || !out || !record || !target_value_rep_binds_slot(plan, record) ||
+        record->size != 48u || record->align != 8u || record->register_rep != record->memory_rep ||
+        record->root_kind != XR_TARGET_ROOT_NONE || record->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        xr_typed_frame_describe_slot(frame, slot, &access) != XR_TYPED_FRAME_OK ||
+        access.size != 48u || access.alignment != 8u ||
+        access.register_rep != record->register_rep || access.memory_rep != record->memory_rep)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    const XrTargetMachineRepRecord *rep = xr_target_plan_machine_rep(plan, record->memory_rep);
+    uint32_t layout_count = 0, field_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(plan, &layout_count);
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(plan, &field_count);
+    uint32_t layout_index = rep ? rep->detail : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetLayoutRecord *layout =
+        layouts && layout_index < layout_count && layouts[layout_index].id == layout_index
+            ? &layouts[layout_index]
+            : NULL;
+    if (!rep || rep->kind != XR_MACHINE_REP_AGGREGATE || rep->register_bits != 384u ||
+        rep->memory_size != 48u || rep->memory_align != 8u ||
+        rep->root_kind != XR_TARGET_ROOT_NONE || rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE || rep->lane_count != 0 || !layout ||
+        layout->kind != XR_TARGET_LAYOUT_AGGREGATE || layout->fixed_prefix_size != 48u ||
+        layout->align != 8u || layout->field_count != 6u || layout->root_field_count != 0 ||
+        !fields || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    for (uint32_t ordinal = 0; ordinal < 6u; ordinal++)
+        if (!target_product_field_is_exact(plan, &fields[layout->field_begin + ordinal],
+                                           layout_index, ordinal))
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    out->access = access;
+    out->layout = layout;
+    out->layout_index = layout_index;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus load_leaf_product(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                               uint32_t slot,
+                                               XrTypedLeafValueProductTuple6 *value,
+                                               XrTypedLeafProductSlot *described) {
+    XrTypedLeafProductSlot local = {0};
+    XrTypedDispatchStatus status = describe_leaf_product(plan, frame, slot, &local);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    if (xr_typed_frame_load(frame, &local.access, value, sizeof(*value)) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (described)
+        *described = local;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus store_leaf_product(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                                uint32_t slot,
+                                                const XrTypedLeafValueProductTuple6 *value) {
+    XrTypedLeafProductSlot local = {0};
+    XrTypedDispatchStatus status = describe_leaf_product(plan, frame, slot, &local);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    return xr_typed_frame_store(frame, &local.access, value, sizeof(*value)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
 static XrTypedDispatchStatus load_bool_byte(XrTypedFrame *frame, uint32_t slot,
                                             uint8_t *byte) {
     XrTypedSlotAccess access = {0};
@@ -394,7 +518,7 @@ typedef struct XrTypedDispatchRowContext {
     uint32_t *next;
     bool *returned;
     uint64_t *return_bits;
-    XrTypedLeafAggregateI64x2 *aggregate_return;
+    XrTypedAggregateValue *aggregate_return;
     struct XrTypedDispatchExecution *execution;
     const XrVmDecodedInstruction *decoded;
     bool parameters_prebound;
@@ -542,7 +666,7 @@ static XrTypedDispatchStatus execute_function(
                  uint32_t argument_count,
     bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
     uint64_t *return_bits,
-                 XrTypedLeafAggregateI64x2 *aggregate_return);
+                 XrTypedAggregateValue *aggregate_return);
 
 static XrVmTraceEvent make_trace_event(XrVmTraceEventKind kind,
                                        uint32_t function, uint32_t frame,
@@ -643,29 +767,44 @@ static XrTypedDispatchStatus execute_aggregate_get(XrTypedFrame *frame,
         contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
         row->operand_count != 1 || row->immediate_bits > UINT32_MAX)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    bool product = xr_target_plan_function_execution_family_mask(
+                       context->execution->plan, row->function) ==
+                   XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6;
     XrTypedLeafAggregateI64x2 aggregate = {{0, 0}};
     XrTypedLeafAggregateSlot source = {0};
-    XrTypedDispatchStatus status = load_leaf_aggregate(context->execution->plan, frame,
-                                                       row->operand_slots[0], &aggregate, &source);
+    XrTypedLeafValueProductTuple6 product_value = {0};
+    XrTypedLeafProductSlot product_source = {0};
+    XrTypedDispatchStatus status =
+        product ? load_leaf_product(context->execution->plan, frame, row->operand_slots[0],
+                                    &product_value, &product_source)
+                : load_leaf_aggregate(context->execution->plan, frame, row->operand_slots[0],
+                                      &aggregate, &source);
     if (status != XR_TYPED_DISPATCH_OK)
         return status;
     uint32_t field_count = 0;
     const XrTargetFieldRecord *fields =
         xr_target_plan_fields(context->execution->plan, &field_count);
     uint32_t field_index = (uint32_t) row->immediate_bits;
-    if (!fields || field_index >= field_count || field_index < source.layout->field_begin ||
-        field_index - source.layout->field_begin >= source.layout->field_count)
+    const XrTargetLayoutRecord *source_layout = product ? product_source.layout : source.layout;
+    uint32_t source_layout_index = product ? product_source.layout_index : source.layout_index;
+    if (!fields || field_index >= field_count || field_index < source_layout->field_begin ||
+        field_index - source_layout->field_begin >= source_layout->field_count)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     const XrTargetFieldRecord *field = &fields[field_index];
-    uint32_t ordinal = field_index - source.layout->field_begin;
-    if (!target_leaf_field_is_exact(context->execution->plan, field, source.layout_index, ordinal))
+    uint32_t ordinal = field_index - source_layout->field_begin;
+    if (product ? (ordinal == 2u || !target_product_field_is_exact(
+                                        context->execution->plan, field, source_layout_index, ordinal))
+                : !target_leaf_field_is_exact(context->execution->plan, field,
+                                              source_layout_index, ordinal))
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrTypedSlotAccess result = {0};
     if (describe_exact_i64(context->execution->plan, frame, row->result_slot, &result) !=
         XR_TYPED_DISPATCH_OK)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     uint64_t bits = 0;
-    memcpy(&bits, (const uint8_t *) &aggregate + field->offset, sizeof(bits));
+    memcpy(&bits, (product ? (const uint8_t *) &product_value : (const uint8_t *) &aggregate) +
+                      field->offset,
+           sizeof(bits));
     return xr_typed_frame_store(frame, &result, &bits, sizeof(bits)) == XR_TYPED_FRAME_OK
                ? XR_TYPED_DISPATCH_OK
                : XR_TYPED_DISPATCH_FRAME_ERROR;
@@ -906,8 +1045,16 @@ static XrTypedDispatchStatus execute_return_aggregate(XrTypedFrame *frame,
     if (!contract || !context || !context->execution || !context->aggregate_return ||
         contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_AGGREGATE || row->operand_count != 1)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
-    XrTypedDispatchStatus status = load_leaf_aggregate(
-        context->execution->plan, frame, row->operand_slots[0], context->aggregate_return, NULL);
+    uint64_t family = xr_target_plan_function_execution_family_mask(context->execution->plan,
+                                                                    row->function);
+    XrTypedDispatchStatus status =
+        family == XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6
+            ? load_leaf_product(context->execution->plan, frame, row->operand_slots[0],
+                                &context->aggregate_return->product, NULL)
+            : family == XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2
+                  ? load_leaf_aggregate(context->execution->plan, frame, row->operand_slots[0],
+                                        &context->aggregate_return->pair, NULL)
+                  : XR_TYPED_DISPATCH_PROGRAM_INVALID;
     if (status == XR_TYPED_DISPATCH_OK)
         *context->returned = true;
     return status;
@@ -927,15 +1074,122 @@ static XrTypedDispatchStatus execute_return_unit(
     return XR_TYPED_DISPATCH_OK;
 }
 
-static XrTypedDispatchStatus execute_target_only(
+static XrTypedDispatchStatus execute_const_u8(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
     XrTypedDispatchRowContext *context) {
-    (void) frame;
-    (void) row;
-    (void) contract;
-    (void) context;
-    return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    if (!context || !context->execution || !contract || row->immediate_bits > UINT8_MAX ||
+        contract->result_rep != XR_TARGET_INSTRUCTION_REP_U8 || row->operand_count != 0)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedSlotAccess result = {0};
+    if (describe_exact_u8(context->execution->plan, frame, row->result_slot, &result) !=
+        XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint8_t value = (uint8_t) row->immediate_bits;
+    return xr_typed_frame_store(frame, &result, &value, sizeof(value)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus execute_value_product_init(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract, XrTypedDispatchRowContext *context) {
+    if (!context || !context->execution || !contract || row->immediate_bits > UINT32_MAX ||
+        contract->result_rep != XR_TARGET_INSTRUCTION_REP_AGGREGATE || row->operand_count != 0)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafProductSlot destination = {0};
+    if (describe_leaf_product(context->execution->plan, frame, row->result_slot, &destination) !=
+            XR_TYPED_DISPATCH_OK ||
+        destination.layout_index != (uint32_t) row->immediate_bits)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafValueProductTuple6 value = {0};
+    return xr_typed_frame_store(frame, &destination.access, &value, sizeof(value)) ==
+                   XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus execute_value_product_set(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract, XrTypedDispatchRowContext *context, bool u8) {
+    if (!context || !context->execution || !contract || row->operand_count != 2 ||
+        row->immediate_bits > UINT32_MAX ||
+        contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
+        contract->operand_rep[1] !=
+            (u8 ? XR_TARGET_INSTRUCTION_REP_U8 : XR_TARGET_INSTRUCTION_REP_I64))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafProductSlot product = {0};
+    if (describe_leaf_product(context->execution->plan, frame, row->operand_slots[0], &product) !=
+        XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint32_t field_count = 0;
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(context->execution->plan, &field_count);
+    uint32_t field_index = (uint32_t) row->immediate_bits;
+    if (!fields || field_index >= field_count || field_index < product.layout->field_begin)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint32_t ordinal = field_index - product.layout->field_begin;
+    if (ordinal >= 6u || (ordinal == 2u) != u8 ||
+        !target_product_field_is_exact(context->execution->plan, &fields[field_index],
+                                       product.layout_index, ordinal))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedSlotAccess source = {0};
+    size_t width = u8 ? 1u : 8u;
+    if ((u8 ? describe_exact_u8(context->execution->plan, frame, row->operand_slots[1], &source)
+            : describe_exact_i64(context->execution->plan, frame, row->operand_slots[1], &source)) !=
+        XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint8_t bytes[8] = {0};
+    if (xr_typed_frame_load(frame, &source, bytes, width) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    XrTypedLeafValueProductTuple6 value = {0};
+    if (xr_typed_frame_load(frame, &product.access, &value, sizeof(value)) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    memcpy((uint8_t *) &value + fields[field_index].offset, bytes, width);
+    return xr_typed_frame_store(frame, &product.access, &value, sizeof(value)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus execute_value_product_set_i64(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract, XrTypedDispatchRowContext *context) {
+    return execute_value_product_set(frame, row, contract, context, false);
+}
+
+static XrTypedDispatchStatus execute_value_product_set_u8(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract, XrTypedDispatchRowContext *context) {
+    return execute_value_product_set(frame, row, contract, context, true);
+}
+
+static XrTypedDispatchStatus execute_value_product_get_u8(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract, XrTypedDispatchRowContext *context) {
+    if (!context || !context->execution || !contract || row->operand_count != 1 ||
+        row->immediate_bits > UINT32_MAX || contract->result_rep != XR_TARGET_INSTRUCTION_REP_U8 ||
+        contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_AGGREGATE)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafValueProductTuple6 value = {0};
+    XrTypedLeafProductSlot product = {0};
+    XrTypedDispatchStatus status = load_leaf_product(context->execution->plan, frame,
+                                                     row->operand_slots[0], &value, &product);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    uint32_t field_count = 0;
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(context->execution->plan, &field_count);
+    uint32_t field_index = (uint32_t) row->immediate_bits;
+    if (!fields || field_index >= field_count || field_index != product.layout->field_begin + 2u ||
+        !target_product_field_is_exact(context->execution->plan, &fields[field_index],
+                                       product.layout_index, 2u))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedSlotAccess result = {0};
+    if (describe_exact_u8(context->execution->plan, frame, row->result_slot, &result) !=
+        XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    return xr_typed_frame_store(frame, &result, &value.field2, sizeof(value.field2)) ==
+                   XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
 static XrTypedDispatchStatus execute_array_push(
@@ -1120,6 +1374,38 @@ static bool leaf_aggregate_call_is_exact(const XrTargetPlan *plan,
            argument->callee_memory_rep == argument->memory_rep;
 }
 
+static bool leaf_product_call_is_exact(const XrTargetPlan *plan,
+                                       const XrTargetInstructionRecord *row,
+                                       const XrTargetCallRecord *call,
+                                       uint32_t argument_count) {
+    if (!plan || !row || !call || row->immediate_bits > UINT32_MAX || argument_count != 0 ||
+        call->id != (uint32_t) row->immediate_bits || call->caller_function != row->function ||
+        call->callee_function == XR_SEMANTIC_INDEX_NONE || call->result_slot != row->result_slot ||
+        call->caller_storage_slot != row->result_slot ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !bytes_are_zero(call->source_export_identity.bytes, sizeof(call->source_export_identity.bytes)) ||
+        !bytes_are_zero(call->source_callee_identity.bytes, sizeof(call->source_callee_identity.bytes)) ||
+        call->result_register_rep != call->result_memory_rep ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE || call->argument_count != 0 ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->result_mode != XR_TARGET_CALL_CALLER_STORAGE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_hof_kind != XR_TARGET_ARRAY_HOF_NONE ||
+        call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->reserved8[0] != 0 || call->reserved8[1] != 0 || call->reserved8[2] != 0)
+        return false;
+    const XrTargetMachineRepRecord *result_rep =
+        xr_target_plan_machine_rep(plan, call->result_memory_rep);
+    return result_rep && result_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+           result_rep->register_bits == 384u && result_rep->memory_size == 48u &&
+           result_rep->memory_align == 8u;
+}
+
 static XrTypedDispatchStatus execute_call_common(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
@@ -1140,9 +1426,15 @@ static XrTypedDispatchStatus execute_call_common(
     if (!call || call->argument_begin > argument_count ||
         call->argument_count > argument_count - call->argument_begin)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    bool product_call = aggregate_call &&
+                        xr_target_plan_function_execution_family_mask(execution->plan,
+                                                                      row->function) ==
+                            XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6;
     if (aggregate_call &&
         (contract->result_rep != XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
-         !leaf_aggregate_call_is_exact(execution->plan, row, call, arguments, argument_count)))
+         (product_call ? !leaf_product_call_is_exact(execution->plan, row, call, argument_count)
+                       : !leaf_aggregate_call_is_exact(execution->plan, row, call, arguments,
+                                                       argument_count))))
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
 
     uint32_t child_frame_id = execution->next_frame_id++;
@@ -1185,7 +1477,7 @@ static XrTypedDispatchStatus execute_call_common(
     if (status != XR_TYPED_DISPATCH_OK)
         goto cleanup;
     uint64_t child_result = 0;
-    XrTypedLeafAggregateI64x2 child_aggregate = {{0, 0}};
+    XrTypedAggregateValue child_aggregate = {0};
     execution->call_depth++;
     status = execute_function(execution, child, call->callee_function, NULL, NULL,
                               call->argument_count, true, child_frame_id,
@@ -1193,8 +1485,11 @@ static XrTypedDispatchStatus execute_call_common(
     execution->call_depth--;
     if (status == XR_TYPED_DISPATCH_OK) {
         status = aggregate_call
-                     ? store_leaf_aggregate(execution->plan, frame, call->caller_storage_slot,
-                                            &child_aggregate, NULL)
+                     ? (product_call
+                            ? store_leaf_product(execution->plan, frame, call->caller_storage_slot,
+                                                 &child_aggregate.product)
+                            : store_leaf_aggregate(execution->plan, frame, call->caller_storage_slot,
+                                                   &child_aggregate.pair, NULL))
                      : store_i64_bits(frame, row->result_slot, child_result);
     }
 
@@ -1553,7 +1848,7 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          uint32_t row_count, uint32_t *next,
                                          bool *returned,
                                          uint64_t *return_bits,
-            XrTypedLeafAggregateI64x2 *aggregate_return, XrTypedDispatchExecution *execution,
+            XrTypedAggregateValue *aggregate_return, XrTypedDispatchExecution *execution,
                                          bool parameters_prebound,
                                          uint32_t frame_id) {
     const XrTargetInstructionContract *contract =
@@ -1600,7 +1895,7 @@ static XrTypedDispatchStatus execute_function_rows(
     bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
     uint32_t frame_depth, const XrTargetInstructionRecord *instructions,
     const XrVmDecodedFunctionView *decoded_function,
-    uint32_t instruction_count, uint64_t *return_bits, XrTypedLeafAggregateI64x2 *aggregate_return,
+    uint32_t instruction_count, uint64_t *return_bits, XrTypedAggregateValue *aggregate_return,
                       XrTypedDispatchFunctionRun *run) {
     XrVmDebugControl *debug_control = execution->debug_session
                                           ? execution->debug_session->control
@@ -1709,7 +2004,7 @@ static XrTypedDispatchStatus execute_function(
                  uint32_t argument_count,
     bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
     uint64_t *return_bits,
-                 XrTypedLeafAggregateI64x2 *aggregate_return) {
+                 XrTypedAggregateValue *aggregate_return) {
     XrVmDebugControl *debug_control = execution->debug_session
                                           ? execution->debug_session->control
                                           : NULL;
@@ -1997,14 +2292,65 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_aggregate_i64x2(
         .provider = request->provider,
     };
     uint64_t ignored_scalar_result = 0;
-    XrTypedLeafAggregateI64x2 aggregate_result = {{0, 0}};
+    XrTypedAggregateValue aggregate_result = {0};
     XrTypedDispatchStatus status = execute_function(
         &execution, frame, request->function, NULL, request->arguments, request->argument_count,
         false, 0, XR_VM_TRACE_ID_NONE, &ignored_scalar_result, &aggregate_result);
     if (free_scalar_frame(&frame) != XR_TYPED_DISPATCH_OK)
         status = XR_TYPED_DISPATCH_FRAME_ERROR;
     if (status == XR_TYPED_DISPATCH_OK)
-        *request->result = aggregate_result;
+        *request->result = aggregate_result.pair;
+    return status;
+}
+
+XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_value_product_tuple6(
+    const XrTypedDispatchLeafValueProductTuple6Request *request) {
+    if (request && request->result)
+        memset(request->result, 0, sizeof(*request->result));
+    if (!request || !request->verified_plan || !request->required_plan_fingerprint ||
+        !request->result ||
+        (request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH &&
+         request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE))
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    const XrTargetPlan *plan = request->verified_plan;
+    const XrFingerprint *fingerprint = request->required_plan_fingerprint;
+    if (!xr_target_plan_is_verified(plan))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (!xr_fingerprint_equal(xr_target_plan_fingerprint(plan), *fingerprint))
+        return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+    char error[512] = {0};
+    if (!xr_target_plan_fingerprint_is_intact(plan) ||
+        !xr_target_instruction_program_verify(plan, error, sizeof(error)))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (xr_target_plan_function_execution_family_mask(plan, request->function) !=
+            XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 ||
+        !function_has_zero_lifecycle(plan, request->function))
+        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    XrTypedFrame *frame = NULL;
+    if (xr_typed_frame_create(plan, fingerprint, request->function, &limits, &frame) !=
+        XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    XrTypedDispatchExecution execution = {
+        .plan = plan,
+        .fingerprint = fingerprint,
+        .limits = limits,
+        .remaining_steps = XR_TYPED_DISPATCH_MAX_STEPS,
+        .call_depth = 1,
+        .next_frame_id = 1,
+        .provider = request->provider,
+    };
+    uint64_t ignored_scalar_result = 0;
+    XrTypedAggregateValue product_result = {0};
+    XrTypedDispatchStatus status = execute_function(
+        &execution, frame, request->function, NULL, NULL, 0, false, 0,
+        XR_VM_TRACE_ID_NONE, &ignored_scalar_result, &product_result);
+    if (free_scalar_frame(&frame) != XR_TYPED_DISPATCH_OK)
+        status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (status == XR_TYPED_DISPATCH_OK)
+        *request->result = product_result.product;
     return status;
 }
 

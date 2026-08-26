@@ -34,6 +34,17 @@ typedef struct XaotTarget XaotTarget;
 typedef struct XrTargetPlan XrTargetPlan;
 typedef struct XrCEmissionPlan XrCEmissionPlan;
 
+/* Shared canonical family-authority classification for the program emitter.
+ * It never inspects target opcodes or source spelling. */
+typedef enum XiCgenLeafProductRoute {
+    XI_CGEN_LEAF_PRODUCT_ROUTE_ORDINARY = 0,
+    XI_CGEN_LEAF_PRODUCT_ROUTE_CLAIM = 1,
+    XI_CGEN_LEAF_PRODUCT_ROUTE_REJECT = 2,
+} XiCgenLeafProductRoute;
+
+XR_FUNC XiCgenLeafProductRoute xi_cgen_leaf_product_program_route(
+    const struct XiModule *module, const XrTargetPlan *plan);
+
 typedef struct XiCgenCoroFrameStats {
     uint32_t coroutine_count;
     size_t total_frame_bytes;

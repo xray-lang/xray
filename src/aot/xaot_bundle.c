@@ -410,17 +410,28 @@ XR_FUNC bool xaot_func_plan_carries_coroutine_ops(const XaotFuncPlan *plan) {
     return record && record->carries_coroutine_ops != 0u;
 }
 
-static bool xaot_module_uses_leaf_aggregate_psc(const XiModule *module) {
-    return module && module->program_semantic_closure &&
-           xr_program_semantic_closure_family(module->program_semantic_closure) ==
-               XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+static uint32_t xaot_module_program_semantic_family(const XiModule *module) {
+    if (!module || !module->program_semantic_closure)
+        return 0u;
+    return xr_program_semantic_closure_family(module->program_semantic_closure);
+}
+
+static bool xaot_module_uses_detached_leaf_psc(const XiModule *module) {
+    uint32_t family = xaot_module_program_semantic_family(module);
+    return family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+           family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+}
+
+static bool xaot_module_uses_legacy_leaf_aggregate_emission(const XiModule *module) {
+    return xaot_module_program_semantic_family(module) ==
+           XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
 }
 
 static bool xaot_module_semantic_authority_matches(const XiModule *module,
                                                    const XrSemanticPlan *semantic) {
     if (!module || !module->init || !semantic)
         return false;
-    if (xaot_module_uses_leaf_aggregate_psc(module))
+    if (xaot_module_uses_detached_leaf_psc(module))
         return xi_program_semantic_plan_verify_detached_leaf_authority(module->init, semantic, NULL,
                                                                         0);
     const XrSemanticPlan *live_semantic = module->init->semantic_plan;
@@ -584,10 +595,10 @@ xaot_bundle_program_semantic_for_func(const XaotBundle *bundle,
             xaot_bundle_program_partition_for_module(bundle, module_index, &partition)
                 ? xr_target_plan_semantic_module(bundle->program_target_plan, partition)
                 : NULL;
-        bool leaf_match = xaot_module_uses_leaf_aggregate_psc(module) &&
+        bool leaf_match = xaot_module_uses_detached_leaf_psc(module) &&
                           (func == module->init || func->psc_function_index != XI_PSC_ROW_NONE) &&
                           xaot_function_belongs_to_module(module, func) && semantic;
-        bool ordinary_match = !xaot_module_uses_leaf_aggregate_psc(module) && semantic &&
+        bool ordinary_match = !xaot_module_uses_detached_leaf_psc(module) && semantic &&
                               func->semantic_plan == semantic;
         if (!leaf_match && !ordinary_match)
             continue;
@@ -605,6 +616,10 @@ XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBu
                                                                     uint32_t module_index) {
     if (!bundle || !bundle->module_emission_plans || module_index >= bundle->nmodules)
         return NULL;
+    const XiModule *module = bundle->modules ? bundle->modules[module_index] : NULL;
+    if (xaot_module_program_semantic_family(module) ==
+        XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+        return NULL;
     return bundle->module_emission_plans[module_index];
 }
 
@@ -616,12 +631,15 @@ XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_func(const XaotBund
     const XrCEmissionPlan *match = NULL;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules ? bundle->modules[module_index] : NULL;
+        if (xaot_module_program_semantic_family(module) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
+            return NULL;
         const XrSemanticPlan *semantic =
             xaot_bundle_program_semantic_for_module(bundle, module_index);
-        bool leaf_match = xaot_module_uses_leaf_aggregate_psc(module) &&
+        bool leaf_match = xaot_module_uses_legacy_leaf_aggregate_emission(module) &&
                           (func == module->init || func->psc_function_index != XI_PSC_ROW_NONE) &&
                           xaot_function_belongs_to_module(module, func) && semantic;
-        bool legacy_match = !xaot_module_uses_leaf_aggregate_psc(module) && semantic &&
+        bool legacy_match = !xaot_module_uses_detached_leaf_psc(module) && semantic &&
                             func->semantic_plan == semantic;
         if (!leaf_match && !legacy_match)
             continue;
