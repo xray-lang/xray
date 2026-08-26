@@ -360,7 +360,9 @@ add_executable(test_leaf_product_native
 set_target_properties(test_leaf_product_native PROPERTIES
     C_STANDARD 11
     C_STANDARD_REQUIRED TRUE)
-if(MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
+if(CMAKE_C_COMPILER_ID STREQUAL "MSVC"
+        OR (CMAKE_C_COMPILER_ID STREQUAL "Clang"
+            AND CMAKE_C_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC"))
     target_compile_options(test_leaf_product_native PRIVATE /W4 /WX)
 else()
     target_compile_options(test_leaf_product_native PRIVATE -Wall -Wextra -Werror)
