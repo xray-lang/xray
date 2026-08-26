@@ -918,6 +918,98 @@ static bool scalar_graph_xtp_bytes_rejected(
     return rejected;
 }
 
+static bool scalar_graph_xtp_resigned_partition_semantic_rejected(
+    XrTargetPlan *target, const uint8_t *bytes, size_t size,
+    const XrSemanticPlan *const *semantic_modules, XrTargetProfile *profile) {
+    if (!target || !bytes || !size || !semantic_modules || !profile ||
+        target->program_graphs_count != 1u ||
+        target->module_partitions_count != 2u)
+        return false;
+    uint32_t partition_index = target->program_graphs[0].producer_partition;
+    if (partition_index >= target->module_partitions_count)
+        return false;
+
+    XrFingerprint saved_semantic =
+        target->module_partitions[partition_index].semantic_fingerprint;
+    target->module_partitions[partition_index].semantic_fingerprint.bytes[0] ^= 1u;
+    XrFingerprint forged_semantic =
+        target->module_partitions[partition_index].semantic_fingerprint;
+    XrFingerprint forged_plan;
+    xr_target_plan_compute_fingerprint(target, &forged_plan);
+    target->module_partitions[partition_index].semantic_fingerprint = saved_semantic;
+
+    XrFingerprint restored_plan;
+    xr_target_plan_compute_fingerprint(target, &restored_plan);
+    if (!xr_fingerprint_equal(restored_plan, target->fingerprint) ||
+        xr_fingerprint_equal(forged_plan, restored_plan))
+        return false;
+
+    uint8_t *forged = (uint8_t *) xr_malloc(size);
+    if (!forged)
+        return false;
+    memcpy(forged, bytes, size);
+    uint8_t *partition_entry = scalar_graph_xtp_directory_entry(
+        forged, XR_XTP_SECTION_MODULE_PARTITIONS);
+    size_t partition_offset =
+        (size_t) xr_xtp_take_u64(partition_entry + 8u);
+    size_t partition_length =
+        (size_t) xr_xtp_take_u64(partition_entry + 16u);
+    uint32_t partition_count =
+        (uint32_t) xr_xtp_take_u64(partition_entry + 24u);
+    uint32_t partition_row_size = xr_xtp_take_u32(partition_entry + 32u);
+    bool exact =
+        partition_count == target->module_partitions_count &&
+        partition_row_size ==
+            xr_xtp_wire_row_size(XR_XTP_SECTION_MODULE_PARTITIONS) &&
+        partition_index < partition_count &&
+        partition_length == (size_t) partition_count * partition_row_size &&
+        partition_offset <= size && partition_length <= size - partition_offset;
+    if (exact) {
+        uint8_t *partition_row =
+            forged + partition_offset +
+            (size_t) partition_index * partition_row_size;
+        memcpy(partition_row + XR_STABLE_ID_BYTES, forged_semantic.bytes,
+               sizeof(forged_semantic.bytes));
+        memcpy(forged + 168u, forged_plan.bytes, sizeof(forged_plan.bytes));
+        scalar_graph_xtp_resign_section(
+            forged, XR_XTP_SECTION_MODULE_PARTITIONS);
+        scalar_graph_xtp_resign_artifact(forged, size);
+    }
+
+    XrXtpCandidate *candidate = NULL;
+    char error[512] = {0};
+    exact = exact && xr_xtp_decode_candidate(forged, size, &candidate, error,
+                                             sizeof(error));
+    XrTargetModulePartitionRecord decoded_partitions[2] = {0};
+    const XrXtpSectionView *view =
+        exact ? xr_xtp_candidate_section(
+                    candidate, XR_XTP_SECTION_MODULE_PARTITIONS)
+              : NULL;
+    exact = exact && view && view->count == 2u &&
+            xr_xtp_decode_rows(XR_XTP_SECTION_MODULE_PARTITIONS,
+                               candidate->bytes + view->offset, view->count,
+                               decoded_partitions) &&
+            xr_fingerprint_equal(candidate->identity.plan_fingerprint,
+                                 forged_plan) &&
+            xr_fingerprint_equal(
+                decoded_partitions[partition_index].semantic_fingerprint,
+                forged_semantic);
+    XrTargetPlan *materialized = (XrTargetPlan *) (uintptr_t) 1;
+    bool accepted =
+        exact && xr_xtp_materialize_target_plan_program_graph(
+                     candidate, semantic_modules, 2u, profile, &materialized,
+                     error, sizeof(error));
+    if (accepted)
+        xr_target_plan_free(materialized);
+    bool rejected_by_canonical_semantics =
+        exact && !accepted && materialized == NULL &&
+        strstr(error, "program graph module partition identity is invalid") !=
+            NULL;
+    xr_xtp_candidate_release(candidate);
+    xr_free(forged);
+    return rejected_by_canonical_semantics;
+}
+
 static bool scalar_graph_runtime_load_rejected(
     const uint8_t *bytes, size_t size,
     const XrSemanticPlan *const *semantic_modules) {
@@ -945,7 +1037,7 @@ static bool scalar_graph_runtime_load_rejected(
 }
 
 static bool scalar_graph_xtp_roundtrip(
-    const XrTargetPlan *target, const XrSemanticPlan *const *semantic_modules,
+    XrTargetPlan *target, const XrSemanticPlan *const *semantic_modules,
     XrTargetProfile *profile) {
     uint8_t *bytes = NULL;
     size_t size = 0;
@@ -1002,6 +1094,9 @@ static bool scalar_graph_xtp_roundtrip(
     if (exact)
         exact = scalar_graph_runtime_load_rejected(bytes, size,
                                                    semantic_modules);
+    if (exact)
+        exact = scalar_graph_xtp_resigned_partition_semantic_rejected(
+            target, bytes, size, semantic_modules, profile);
     uint8_t *mutated = exact ? (uint8_t *) xr_malloc(size) : NULL;
     if (exact)
         exact = mutated != NULL;
