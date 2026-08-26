@@ -63,6 +63,10 @@ typedef struct XrTargetPlanDraft {
     uint32_t entry_expectations_count;
     const XrTargetDebugFactRecord *debug_facts;
     uint32_t debug_facts_count;
+    const XrTargetProgramGraphRecord *program_graphs;
+    uint32_t program_graphs_count;
+    const XrTargetModulePartitionRecord *module_partitions;
+    uint32_t module_partitions_count;
 } XrTargetPlanDraft;
 
 XR_FUNC bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out,
@@ -104,10 +108,15 @@ struct XrTargetPlan {
     XR_TARGET_TABLE_FIELD(coroutines, XrTargetCoroutineStateRecord);
     XR_TARGET_TABLE_FIELD(entry_expectations, XrTargetEntryExpectationRecord);
     XR_TARGET_TABLE_FIELD(debug_facts, XrTargetDebugFactRecord);
+    XR_TARGET_TABLE_FIELD(program_graphs, XrTargetProgramGraphRecord);
+    XR_TARGET_TABLE_FIELD(module_partitions, XrTargetModulePartitionRecord);
 #undef XR_TARGET_TABLE_FIELD
 };
 
 XR_FUNC void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out);
+XR_FUNC bool xr_target_semantic_module_set_fingerprint(
+    const XrSemanticPlan *entry, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, XrFingerprint *out);
 XR_FUNC void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout,
                                                   XrFingerprint *out);
 XR_FUNC void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call,

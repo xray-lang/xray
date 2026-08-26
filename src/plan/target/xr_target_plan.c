@@ -66,7 +66,8 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
           draft->root_maps_count <= 10000000u && draft->root_slots_count <= 40000000u &&
           draft->cleanups_count <= 40000000u && draft->adapters_count <= 1000000u &&
           draft->capabilities_count <= 65536u && draft->coroutines_count <= 10000000u &&
-          draft->entry_expectations_count <= 10000000u && draft->debug_facts_count <= 40000000u))
+          draft->entry_expectations_count <= 10000000u && draft->debug_facts_count <= 40000000u &&
+          draft->program_graphs_count <= 1u && draft->module_partitions_count <= 1024u))
         return false;
     size_t total = sizeof(XrTargetPlan);
     if (draft->semantic_dependency_count >
@@ -100,6 +101,8 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
     XR_ADD_DRAFT_BYTES(coroutines);
     XR_ADD_DRAFT_BYTES(entry_expectations);
     XR_ADD_DRAFT_BYTES(debug_facts);
+    XR_ADD_DRAFT_BYTES(program_graphs);
+    XR_ADD_DRAFT_BYTES(module_partitions);
 #undef XR_ADD_DRAFT_BYTES
     return total <= (size_t) UINT32_MAX;
 }
@@ -403,6 +406,140 @@ static void hash_debug_fact(XrSHA256Context *ctx, const XrTargetDebugFactRecord 
     hash_fingerprint(ctx, record->layout_fingerprint);
 }
 
+static void hash_program_graph(XrSHA256Context *ctx,
+                               const XrTargetProgramGraphRecord *record) {
+#define XR_HASH_GRAPH_U32(name) hash_u64(ctx, record->name)
+    XR_HASH_GRAPH_U32(schema);
+    XR_HASH_GRAPH_U32(family);
+    XR_HASH_GRAPH_U32(module_count);
+    XR_HASH_GRAPH_U32(function_count);
+    XR_HASH_GRAPH_U32(export_count);
+    XR_HASH_GRAPH_U32(entry_count);
+    XR_HASH_GRAPH_U32(call_count);
+    XR_HASH_GRAPH_U32(argument_count);
+    XR_HASH_GRAPH_U32(entry_partition);
+    XR_HASH_GRAPH_U32(producer_partition);
+    XR_HASH_GRAPH_U32(entry_target_function);
+    XR_HASH_GRAPH_U32(producer_target_function);
+    XR_HASH_GRAPH_U32(entry_semantic_function);
+    XR_HASH_GRAPH_U32(producer_semantic_function);
+    XR_HASH_GRAPH_U32(target_call);
+    XR_HASH_GRAPH_U32(target_argument);
+    XR_HASH_GRAPH_U32(entry_semantic_operation);
+    XR_HASH_GRAPH_U32(producer_semantic_export);
+    XR_HASH_GRAPH_U32(entry_semantic_dependency);
+    XR_HASH_GRAPH_U32(producer_semantic_parameter);
+    XR_HASH_GRAPH_U32(caller_slot);
+    XR_HASH_GRAPH_U32(callee_slot);
+    XR_HASH_GRAPH_U32(argument_ordinal);
+    XR_HASH_GRAPH_U32(flags);
+#undef XR_HASH_GRAPH_U32
+    hash_fingerprint(ctx, record->program_fingerprint);
+    hash_id(ctx, record->generation_identity);
+    hash_fingerprint(ctx, record->target_profile_fingerprint);
+    hash_id(ctx, record->entry_function_identity);
+    hash_id(ctx, record->producer_function_identity);
+    hash_u64(ctx, record->entry_function_flags);
+    hash_u64(ctx, record->producer_function_flags);
+    hash_u64(ctx, record->reserved16);
+    hash_id(ctx, record->export_identity);
+    hash_id(ctx, record->exported_function_identity);
+    hash_id(ctx, record->entry_identity);
+    hash_id(ctx, record->call_identity);
+    hash_id(ctx, record->callsite_identity);
+    hash_id(ctx, record->resolver_binding);
+    hash_id(ctx, record->argument_identity);
+    hash_id(ctx, record->parameter_identity);
+}
+
+static void hash_module_partition(XrSHA256Context *ctx,
+                                  const XrTargetModulePartitionRecord *record) {
+    hash_id(ctx, record->module_identity);
+    hash_fingerprint(ctx, record->semantic_fingerprint);
+    hash_u64(ctx, record->program_module_row);
+    hash_u64(ctx, record->semantic_dependency);
+#define XR_HASH_PARTITION_RANGE(name)                                                              \
+    do {                                                                                           \
+        hash_u64(ctx, record->name##_begin);                                                       \
+        hash_u64(ctx, record->name##_count);                                                       \
+    } while (0)
+    XR_HASH_PARTITION_RANGE(value_reps);
+    XR_HASH_PARTITION_RANGE(extents);
+    XR_HASH_PARTITION_RANGE(layouts);
+    XR_HASH_PARTITION_RANGE(fields);
+    XR_HASH_PARTITION_RANGE(storage);
+    XR_HASH_PARTITION_RANGE(allocations);
+    XR_HASH_PARTITION_RANGE(extent_operands);
+    XR_HASH_PARTITION_RANGE(functions);
+    XR_HASH_PARTITION_RANGE(slots);
+    XR_HASH_PARTITION_RANGE(instructions);
+    XR_HASH_PARTITION_RANGE(calls);
+    XR_HASH_PARTITION_RANGE(call_arguments);
+    XR_HASH_PARTITION_RANGE(root_maps);
+    XR_HASH_PARTITION_RANGE(root_slots);
+    XR_HASH_PARTITION_RANGE(cleanups);
+    XR_HASH_PARTITION_RANGE(adapters);
+    XR_HASH_PARTITION_RANGE(coroutines);
+    XR_HASH_PARTITION_RANGE(entry_expectations);
+    XR_HASH_PARTITION_RANGE(debug_facts);
+#undef XR_HASH_PARTITION_RANGE
+}
+
+bool xr_target_semantic_module_set_fingerprint(
+    const XrSemanticPlan *entry, const XrSemanticPlan *const *dependencies,
+    uint32_t dependency_count, XrFingerprint *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!entry || !out || dependency_count > 1024u ||
+        (dependency_count && !dependencies))
+        return false;
+    uint32_t module_count = dependency_count + 1u;
+    const XrSemanticPlan **by_program_row =
+        (const XrSemanticPlan **) xr_calloc(module_count, sizeof(*by_program_row));
+    if (!by_program_row)
+        return false;
+    const XrSemanticProgramProvenance *entry_program =
+        xr_semantic_plan_program_provenance(entry);
+    bool valid = entry_program && entry_program->module_count == module_count;
+    for (uint32_t source = 0; valid && source < module_count; source++) {
+        const XrSemanticPlan *semantic = source ? dependencies[source - 1u] : entry;
+        const XrSemanticProgramProvenance *program =
+            xr_semantic_plan_program_provenance(semantic);
+        valid = program && program->module_count == module_count &&
+                program->program_module_row < module_count &&
+                !by_program_row[program->program_module_row] &&
+                program->program_schema == entry_program->program_schema &&
+                program->program_family == entry_program->program_family &&
+                xr_fingerprint_equal(program->program_fingerprint,
+                                     entry_program->program_fingerprint) &&
+                xr_stable_id_equal(program->generation_identity,
+                                   entry_program->generation_identity);
+        if (valid)
+            by_program_row[program->program_module_row] = semantic;
+    }
+    if (valid) {
+        static const uint8_t domain[] = "xray-target-semantic-module-set-v1\0";
+        XrSHA256Context ctx;
+        xr_sha256_init(&ctx);
+        xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
+        hash_u64(&ctx, entry_program->program_schema);
+        hash_u64(&ctx, entry_program->program_family);
+        hash_u64(&ctx, module_count);
+        hash_fingerprint(&ctx, entry_program->program_fingerprint);
+        hash_id(&ctx, entry_program->generation_identity);
+        for (uint32_t row = 0; row < module_count; row++) {
+            const XrSemanticProgramProvenance *program =
+                xr_semantic_plan_program_provenance(by_program_row[row]);
+            hash_u64(&ctx, row);
+            hash_id(&ctx, program->program_module);
+            hash_fingerprint(&ctx, xr_semantic_plan_fingerprint(by_program_row[row]));
+        }
+        xr_sha256_final(&ctx, out->bytes);
+    }
+    xr_free(by_program_row);
+    return valid;
+}
+
 void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout_index,
                                           XrFingerprint *out) {
     static const uint8_t domain[] = "xray-target-layout-v5\0";
@@ -468,7 +605,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v22\0";
+    static const uint8_t domain[] = "xray-target-plan-v23\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -498,6 +635,8 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
     XR_HASH_TABLE_COUNT(coroutines);
     XR_HASH_TABLE_COUNT(entry_expectations);
     XR_HASH_TABLE_COUNT(debug_facts);
+    XR_HASH_TABLE_COUNT(program_graphs);
+    XR_HASH_TABLE_COUNT(module_partitions);
 #undef XR_HASH_TABLE_COUNT
     for (uint32_t i = 0; i < plan->machine_reps_count; i++)
         hash_machine_rep(&ctx, &plan->machine_reps[i]);
@@ -545,6 +684,10 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
         hash_entry_expectation(&ctx, &plan->entry_expectations[i]);
     for (uint32_t i = 0; i < plan->debug_facts_count; i++)
         hash_debug_fact(&ctx, &plan->debug_facts[i]);
+    for (uint32_t i = 0; i < plan->program_graphs_count; i++)
+        hash_program_graph(&ctx, &plan->program_graphs[i]);
+    for (uint32_t i = 0; i < plan->module_partitions_count; i++)
+        hash_module_partition(&ctx, &plan->module_partitions[i]);
     xr_sha256_final(&ctx, out->bytes);
 }
 
@@ -583,6 +726,14 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     plan->completed_family_mask = draft->completed_family_mask;
     plan->semantic_plan = xr_semantic_plan_retain((XrSemanticPlan *) draft->semantic_plan);
     plan->semantic_fingerprint = xr_semantic_plan_fingerprint(draft->semantic_plan);
+    if ((draft->program_graphs_count || draft->module_partitions_count) &&
+        !xr_target_semantic_module_set_fingerprint(
+            draft->semantic_plan, draft->semantic_dependencies,
+            draft->semantic_dependency_count, &plan->semantic_fingerprint)) {
+        set_error(error, error_size, "XR_TARGET_1002",
+                  "target module-set semantic identity is invalid");
+        goto fail;
+    }
     plan->semantic_dependency_count = draft->semantic_dependency_count;
     if (plan->semantic_dependency_count) {
         if (!draft->semantic_dependencies ||
@@ -621,6 +772,8 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     XR_COPY_DRAFT_TABLE(coroutines, XrTargetCoroutineStateRecord);
     XR_COPY_DRAFT_TABLE(entry_expectations, XrTargetEntryExpectationRecord);
     XR_COPY_DRAFT_TABLE(debug_facts, XrTargetDebugFactRecord);
+    XR_COPY_DRAFT_TABLE(program_graphs, XrTargetProgramGraphRecord);
+    XR_COPY_DRAFT_TABLE(module_partitions, XrTargetModulePartitionRecord);
     plan->frozen = true;
     for (uint32_t i = 0; i < plan->layouts_count; i++) {
         if (plan->layouts[i].extent >= plan->extents_count ||
@@ -812,6 +965,8 @@ void xr_target_plan_free(XrTargetPlan *plan) {
     XR_FREE_TARGET_TABLE(coroutines);
     XR_FREE_TARGET_TABLE(entry_expectations);
     XR_FREE_TARGET_TABLE(debug_facts);
+    XR_FREE_TARGET_TABLE(program_graphs);
+    XR_FREE_TARGET_TABLE(module_partitions);
 #undef XR_FREE_TARGET_TABLE
     xr_free(plan);
 }
@@ -866,7 +1021,7 @@ const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTargetPlan *p
 
 const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
                                                        uint32_t semantic_value) {
-    if (!plan)
+    if (!plan || plan->module_partitions_count > 1u)
         return NULL;
     uint32_t begin = 0;
     uint32_t end = plan->value_reps_count;
@@ -888,6 +1043,135 @@ const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *pla
     return plan && dependency < plan->semantic_dependency_count
                ? plan->semantic_dependencies[dependency]
                : NULL;
+}
+
+const XrSemanticPlan *xr_target_plan_semantic_module(const XrTargetPlan *plan,
+                                                     uint32_t partition) {
+    if (!plan || !plan->frozen)
+        return NULL;
+    if (!plan->module_partitions_count)
+        return partition == 0u ? plan->semantic_plan : NULL;
+    if (partition >= plan->module_partitions_count)
+        return NULL;
+    uint32_t dependency = plan->module_partitions[partition].semantic_dependency;
+    if (dependency == XR_TARGET_MODULE_PARTITION_ENTRY)
+        return plan->semantic_plan;
+    return dependency < plan->semantic_dependency_count
+               ? plan->semantic_dependencies[dependency]
+               : NULL;
+}
+
+const XrSemanticPlan *xr_target_plan_module_for_function(const XrTargetPlan *plan,
+                                                         uint32_t target_function,
+                                                         uint32_t *partition) {
+    if (partition)
+        *partition = UINT32_MAX;
+    if (!plan || !plan->frozen || target_function >= plan->functions_count)
+        return NULL;
+    if (!plan->module_partitions_count) {
+        if (partition)
+            *partition = 0u;
+        return plan->semantic_plan;
+    }
+    for (uint32_t i = 0; i < plan->module_partitions_count; i++) {
+        const XrTargetModulePartitionRecord *module = &plan->module_partitions[i];
+        if (target_function >= module->functions_begin &&
+            target_function - module->functions_begin < module->functions_count) {
+            if (partition)
+                *partition = i;
+            return xr_target_plan_semantic_module(plan, i);
+        }
+    }
+    return NULL;
+}
+
+const XrTargetValueRepRecord *
+xr_target_plan_value_rep_for_module(const XrTargetPlan *plan, uint32_t partition,
+                                    uint32_t semantic_value) {
+    if (!plan || !plan->frozen)
+        return NULL;
+    uint32_t begin = 0u;
+    uint32_t count = plan->value_reps_count;
+    if (plan->module_partitions_count) {
+        if (partition >= plan->module_partitions_count)
+            return NULL;
+        begin = plan->module_partitions[partition].value_reps_begin;
+        count = plan->module_partitions[partition].value_reps_count;
+    } else if (partition != 0u) {
+        return NULL;
+    }
+    if (begin > plan->value_reps_count || count > plan->value_reps_count - begin)
+        return NULL;
+    uint32_t end = begin + count;
+    while (begin < end) {
+        uint32_t middle = begin + (end - begin) / 2u;
+        const XrTargetValueRepRecord *record = &plan->value_reps[middle];
+        if (record->semantic_value == semantic_value)
+            return record;
+        if (record->semantic_value < semantic_value)
+            begin = middle + 1u;
+        else
+            end = middle;
+    }
+    return NULL;
+}
+
+bool xr_target_plan_function_semantic_binding(const XrTargetPlan *plan,
+                                              uint32_t target_function,
+                                              const XrSemanticPlan **semantic_plan,
+                                              uint32_t *semantic_function) {
+    if (semantic_plan)
+        *semantic_plan = NULL;
+    if (semantic_function)
+        *semantic_function = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticPlan *owner =
+        xr_target_plan_module_for_function(plan, target_function, NULL);
+    if (!owner)
+        return false;
+    uint32_t local = plan->functions[target_function].semantic_function;
+    if (local >= xr_semantic_plan_function_count(owner))
+        return false;
+    if (semantic_plan)
+        *semantic_plan = owner;
+    if (semantic_function)
+        *semantic_function = local;
+    return true;
+}
+
+bool xr_target_plan_find_function(const XrTargetPlan *plan,
+                                  const XrSemanticPlan *semantic_plan,
+                                  uint32_t semantic_function,
+                                  uint32_t *target_function) {
+    if (target_function)
+        *target_function = UINT32_MAX;
+    if (!plan || !plan->frozen || !semantic_plan || !target_function)
+        return false;
+    uint32_t begin = 0u;
+    uint32_t count = plan->functions_count;
+    if (plan->module_partitions_count) {
+        bool found_module = false;
+        for (uint32_t i = 0; i < plan->module_partitions_count; i++) {
+            if (xr_target_plan_semantic_module(plan, i) != semantic_plan)
+                continue;
+            begin = plan->module_partitions[i].functions_begin;
+            count = plan->module_partitions[i].functions_count;
+            found_module = true;
+            break;
+        }
+        if (!found_module)
+            return false;
+    } else if (semantic_plan != plan->semantic_plan) {
+        return false;
+    }
+    if (begin > plan->functions_count || count > plan->functions_count - begin)
+        return false;
+    for (uint32_t i = begin; i < begin + count; i++) {
+        if (plan->functions[i].semantic_function != semantic_function)
+            continue;
+        *target_function = i;
+        return true;
+    }
+    return false;
 }
 
 const XrTargetInstructionRecord *
@@ -971,4 +1255,6 @@ XR_TARGET_TABLE_ACCESSOR(capabilities, XrTargetCapabilityRecord)
 XR_TARGET_TABLE_ACCESSOR(coroutines, XrTargetCoroutineStateRecord)
 XR_TARGET_TABLE_ACCESSOR(entry_expectations, XrTargetEntryExpectationRecord)
 XR_TARGET_TABLE_ACCESSOR(debug_facts, XrTargetDebugFactRecord)
+XR_TARGET_TABLE_ACCESSOR(program_graphs, XrTargetProgramGraphRecord)
+XR_TARGET_TABLE_ACCESSOR(module_partitions, XrTargetModulePartitionRecord)
 #undef XR_TARGET_TABLE_ACCESSOR

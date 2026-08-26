@@ -283,6 +283,7 @@ typedef enum XrTargetCallOwnership {
 typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_INVALID = 0,
     XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
+    XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT,
     XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
     XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR,
@@ -359,6 +360,7 @@ typedef enum XrTargetCallConvention {
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
+    XR_TARGET_CALL_TARGET_PROGRAM_DIRECT,
     XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
     XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR,
@@ -834,6 +836,92 @@ typedef struct XrTargetDebugFactRecord {
     XrFingerprint layout_fingerprint;
 } XrTargetDebugFactRecord;
 
+#define XR_TARGET_PROGRAM_GRAPH_SCHEMA_VERSION UINT32_C(1)
+#define XR_TARGET_MODULE_PARTITION_ENTRY UINT32_MAX
+
+typedef enum XrTargetProgramGraphFlag {
+    XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN = 1u << 0,
+    XR_TARGET_PROGRAM_GRAPH_DIRECT_I64 = 1u << 1,
+} XrTargetProgramGraphFlag;
+
+/* A module partition is a view over one global TargetPlan. Semantic indexes
+ * remain local to their source SemanticPlan; these disjoint ranges say which
+ * module interprets every target row that carries or inherits such an index. */
+typedef struct XrTargetModulePartitionRecord {
+    XrStableId module_identity;
+    XrFingerprint semantic_fingerprint;
+    uint32_t program_module_row;
+    uint32_t semantic_dependency;
+#define XR_TARGET_PARTITION_RANGE(name) uint32_t name##_begin; uint32_t name##_count
+    XR_TARGET_PARTITION_RANGE(value_reps);
+    XR_TARGET_PARTITION_RANGE(extents);
+    XR_TARGET_PARTITION_RANGE(layouts);
+    XR_TARGET_PARTITION_RANGE(fields);
+    XR_TARGET_PARTITION_RANGE(storage);
+    XR_TARGET_PARTITION_RANGE(allocations);
+    XR_TARGET_PARTITION_RANGE(extent_operands);
+    XR_TARGET_PARTITION_RANGE(functions);
+    XR_TARGET_PARTITION_RANGE(slots);
+    XR_TARGET_PARTITION_RANGE(instructions);
+    XR_TARGET_PARTITION_RANGE(calls);
+    XR_TARGET_PARTITION_RANGE(call_arguments);
+    XR_TARGET_PARTITION_RANGE(root_maps);
+    XR_TARGET_PARTITION_RANGE(root_slots);
+    XR_TARGET_PARTITION_RANGE(cleanups);
+    XR_TARGET_PARTITION_RANGE(adapters);
+    XR_TARGET_PARTITION_RANGE(coroutines);
+    XR_TARGET_PARTITION_RANGE(entry_expectations);
+    XR_TARGET_PARTITION_RANGE(debug_facts);
+#undef XR_TARGET_PARTITION_RANGE
+} XrTargetModulePartitionRecord;
+
+/* One pointer-free authority row closes the first bounded source-module
+ * graph. The row names the two SemanticPlan partitions by fingerprint and
+ * joins their stable module, function, export, entry, call, and argument
+ * identities to one global TargetPlan row namespace. */
+typedef struct XrTargetProgramGraphRecord {
+    uint32_t schema;
+    uint32_t family;
+    uint32_t module_count;
+    uint32_t function_count;
+    uint32_t export_count;
+    uint32_t entry_count;
+    uint32_t call_count;
+    uint32_t argument_count;
+    uint32_t entry_partition;
+    uint32_t producer_partition;
+    uint32_t entry_target_function;
+    uint32_t producer_target_function;
+    uint32_t entry_semantic_function;
+    uint32_t producer_semantic_function;
+    uint32_t target_call;
+    uint32_t target_argument;
+    uint32_t entry_semantic_operation;
+    uint32_t producer_semantic_export;
+    uint32_t entry_semantic_dependency;
+    uint32_t producer_semantic_parameter;
+    uint32_t caller_slot;
+    uint32_t callee_slot;
+    uint32_t argument_ordinal;
+    uint32_t flags;
+    XrFingerprint program_fingerprint;
+    XrStableId generation_identity;
+    XrFingerprint target_profile_fingerprint;
+    XrStableId entry_function_identity;
+    XrStableId producer_function_identity;
+    uint8_t entry_function_flags;
+    uint8_t producer_function_flags;
+    uint16_t reserved16;
+    XrStableId export_identity;
+    XrStableId exported_function_identity;
+    XrStableId entry_identity;
+    XrStableId call_identity;
+    XrStableId callsite_identity;
+    XrStableId resolver_binding;
+    XrStableId argument_identity;
+    XrStableId parameter_identity;
+} XrTargetProgramGraphRecord;
+
 XR_STATIC_ASSERT(sizeof(XrTargetEntryExpectationRecord) == 144u,
                  "dynamic entry expectation wire facts must stay compact");
 
@@ -843,17 +931,38 @@ XR_FUNC bool xr_target_plan_is_frozen(const XrTargetPlan *plan);
 XR_FUNC bool xr_target_plan_is_verified(const XrTargetPlan *plan);
 XR_FUNC uint32_t xr_target_plan_schema_version(const XrTargetPlan *plan);
 XR_FUNC XrFingerprint xr_target_plan_fingerprint(const XrTargetPlan *plan);
+/* Root SemanticPlan fingerprint for one-module plans; canonical program-module
+ * set fingerprint for graph plans. */
 XR_FUNC XrFingerprint xr_target_plan_semantic_fingerprint(const XrTargetPlan *plan);
 XR_FUNC bool xr_target_plan_fingerprint_is_intact(const XrTargetPlan *plan);
 XR_FUNC uint64_t xr_target_plan_completed_family_mask(const XrTargetPlan *plan);
+/* The legacy root accessor is the entry module only. Graph consumers must use
+ * the partition-aware joins below before interpreting module-local indexes. */
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_plan(const XrTargetPlan *plan);
 XR_FUNC const XrTargetProfile *xr_target_plan_profile(const XrTargetPlan *plan);
 XR_FUNC const XrTargetMachineRepRecord *xr_target_plan_machine_rep(const XrTargetPlan *plan,
                                                                    uint16_t rep);
+/* This unqualified lookup is intentionally unavailable for multi-module plans. */
 XR_FUNC const XrTargetValueRepRecord *xr_target_plan_value_rep(const XrTargetPlan *plan,
                                                                uint32_t semantic_value);
+XR_FUNC const XrTargetValueRepRecord *
+xr_target_plan_value_rep_for_module(const XrTargetPlan *plan, uint32_t partition,
+                                    uint32_t semantic_value);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *plan,
                                                                  uint32_t dependency);
+XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_module(const XrTargetPlan *plan,
+                                                             uint32_t partition);
+XR_FUNC const XrSemanticPlan *xr_target_plan_module_for_function(const XrTargetPlan *plan,
+                                                                 uint32_t target_function,
+                                                                 uint32_t *partition);
+XR_FUNC bool xr_target_plan_function_semantic_binding(const XrTargetPlan *plan,
+                                                      uint32_t target_function,
+                                                      const XrSemanticPlan **semantic_plan,
+                                                      uint32_t *semantic_function);
+XR_FUNC bool xr_target_plan_find_function(const XrTargetPlan *plan,
+                                          const XrSemanticPlan *semantic_plan,
+                                          uint32_t semantic_function,
+                                          uint32_t *target_function);
 XR_FUNC uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
                                                                uint32_t function);
 XR_FUNC const XrTargetInstructionRecord *
@@ -882,6 +991,8 @@ XR_TARGET_TABLE_ACCESSOR(capabilities, XrTargetCapabilityRecord);
 XR_TARGET_TABLE_ACCESSOR(coroutines, XrTargetCoroutineStateRecord);
 XR_TARGET_TABLE_ACCESSOR(entry_expectations, XrTargetEntryExpectationRecord);
 XR_TARGET_TABLE_ACCESSOR(debug_facts, XrTargetDebugFactRecord);
+XR_TARGET_TABLE_ACCESSOR(program_graphs, XrTargetProgramGraphRecord);
+XR_TARGET_TABLE_ACCESSOR(module_partitions, XrTargetModulePartitionRecord);
 #undef XR_TARGET_TABLE_ACCESSOR
 
 #endif  // XR_TARGET_PLAN_H
