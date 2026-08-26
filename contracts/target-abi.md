@@ -420,6 +420,10 @@ verified TargetPlan provenance and fingerprint. A mutable `XiFunc.semantic_plan`
 pointer is not required authority; when present it is only an additional exact
 agreement check. Missing, duplicate, foreign same-shape, or mutated identity
 fails closed without a name, dense-index, function-body, or legacy resolver.
+Representation refinement must route every program-bound exact aggregate
+through its SemanticPlan binding, TargetPlan projection, and stamped Xi witness
+before any generic live-type comparison; generic source-type shape remains
+available only to non-program-bound types.
 
 For an admitted leaf `i64x2` function, `TARGET_PLAN` is the ABI owner, the
 legacy `XaotFuncAbi` is zero, and TargetPlan-bound values do not create persistent
@@ -702,7 +706,7 @@ anchor-sha256: src/aot/xaot_prepare.c d8cc4408a253218b585f9184a190918f8b29b3fd96
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c 4fb0d68766ccbbd70ec14a084c6055e25c245d3298774e79f45d8eb85799acda
 anchor-sha256: src/aot/xaot_verify.c 9bf9a829caae95fcc14cf9a4ab3e8e7a981dd88dca6c0173ae474ba8e5332e66
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 5596aa36c903498ab556e65a1d1403acd99b69d960dfc839f26d078292e6585a
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c d6c3a3db1eb66f01cf8e136626822b42218a7487347cb41b86586194475a9250
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c b721d86277c3ee934ea4eec6c65f3fb91bcd6da198a2fdc968eb5d044656d52d
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be

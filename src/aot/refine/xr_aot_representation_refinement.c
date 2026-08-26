@@ -3100,12 +3100,14 @@ static bool materialized_signature_type_matches(const VerifyAuthority *ctx,
                                                 const XiValue *witness) {
     const XrSemanticTypeRecord *type =
         ctx ? xr_semantic_plan_type(ctx->semantic, semantic_type) : NULL;
-    if (source_type_matches(live_type, type))
-        return true;
     const XrSemanticProgramProvenance *provenance =
         ctx ? xr_semantic_plan_program_provenance(ctx->semantic) : NULL;
     const XrSemanticProgramTypeBinding *binding =
         ctx ? xr_semantic_plan_program_type_for_semantic_type(ctx->semantic, semantic_type) : NULL;
+    bool program_bound_aggregate =
+        binding && type && (type->flags & XR_SEM_TYPE_AGGREGATE_EXACT) != 0;
+    if (!program_bound_aggregate)
+        return source_type_matches(live_type, type);
     XrCAggregateProjection projection = {0};
     bool projection_exact =
         ctx && xr_c_leaf_aggregate_projection(ctx->target_plan, semantic_type, &projection) &&
