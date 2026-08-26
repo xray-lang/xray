@@ -21,6 +21,7 @@
 #include "ir/xi_escape.h"
 #include "ir/xi_lower.h"
 #include "ir/xi_opt.h"
+#include "ir/xi_own.h"
 #include "ir/xi_program_semantic.h"
 #include "ir/xi_program_semantic_plan.h"
 #include "ir/xi_semantic_snapshot.h"
@@ -251,6 +252,22 @@ static XiValue *find_non_call_value(XiModule *module) {
         }
     }
     return NULL;
+}
+
+static void assert_foreign_declaration_type_is_rejected(XiModule *module, XrType **type_slot,
+                                                        char *error, size_t error_size) {
+    ASSERT_NOT_NULL(module);
+    ASSERT_NOT_NULL(type_slot);
+    ASSERT_NOT_NULL(*type_slot);
+    ASSERT_NOT_NULL((*type_slot)->instance.class_ref);
+    XrType *saved = *type_slot;
+    XrClassInfo foreign_same_shape_class = *saved->instance.class_ref;
+    XrType foreign_same_shape_type = *saved;
+    foreign_same_shape_type.instance.class_ref = &foreign_same_shape_class;
+    *type_slot = &foreign_same_shape_type;
+    ASSERT_FALSE(xi_program_semantic_verify(module, NULL, error, error_size));
+    *type_slot = saved;
+    ASSERT_TRUE(xi_program_semantic_verify(module, NULL, error, error_size));
 }
 
 static void dce_and_mark_tree_optimized(XiFunc *function) {
@@ -1296,15 +1313,13 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     ASSERT_MSG(xr_semantic_plan_build(root, &semantic, error, sizeof(error)), error);
     ASSERT_NOT_NULL(semantic);
     ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
-    const XrSemanticProgramProvenance *provenance =
-        xr_semantic_plan_program_provenance(semantic);
+    const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(semantic);
     ASSERT_NOT_NULL(provenance);
     ASSERT_EQ_UINT(provenance->program_family,
                    XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL);
     const XrSemanticFunctionRecord *caller = NULL;
     for (uint32_t i = 0; i < semantic->program_function_binding_count; i++) {
-        const XrSemanticProgramFunctionBinding *binding =
-            &semantic->program_function_bindings[i];
+        const XrSemanticProgramFunctionBinding *binding = &semantic->program_function_bindings[i];
         if ((binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0)
             caller = xr_semantic_plan_function(semantic, binding->semantic_function);
     }
@@ -1462,14 +1477,53 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     XiValue *aggregate_value = find_bound_type_value(root->module, aggregate_program, UINT16_MAX);
     ASSERT_NOT_NULL(aggregate_value);
     ASSERT_NOT_NULL(aggregate_value->type);
+    XiValue *class_create = find_bound_type_value(root->module, aggregate_program, XI_AGG_NEW);
+    ASSERT_NOT_NULL(class_create);
+    XiValue *bound_call = NULL;
+    for (uint16_t i = 0; i < root->module->nfuncs; i++) {
+        XiValue *candidate = find_bound_call(root->module->functions[i]);
+        if (!candidate)
+            continue;
+        ASSERT_NULL(bound_call);
+        bound_call = candidate;
+    }
+    ASSERT_NOT_NULL(bound_call);
+    ASSERT_NOT_NULL(bound_call->args);
+    ASSERT_EQ_UINT(bound_call->nargs, 2);
+    ASSERT_NOT_NULL(bound_call->args[1]);
+    ASSERT_EQ_UINT(bound_call->psc_type_index, aggregate_program);
+    ASSERT_EQ_UINT(bound_call->args[1]->psc_type_index, aggregate_program);
+
+    /* Each semantic role must rejoin the exact local declaration. A foreign
+     * class with
+     * identical fields is not the Pair declaration, regardless of
+     * which expression-local
+     * XrType happens to carry it. */
+    assert_foreign_declaration_type_is_rejected(root->module, &callee->return_type, error,
+                                                sizeof(error));
+    assert_foreign_declaration_type_is_rejected(root->module, &callee->params[0]->type, error,
+                                                sizeof(error));
+    assert_foreign_declaration_type_is_rejected(root->module, &class_create->type, error,
+                                                sizeof(error));
+    assert_foreign_declaration_type_is_rejected(root->module, &bound_call->type, error,
+                                                sizeof(error));
+    assert_foreign_declaration_type_is_rejected(root->module, &bound_call->args[1]->type, error,
+                                                sizeof(error));
+
+    ASSERT_TRUE(xi_own_value_is_psc_leaf_aggregate(callee->params[0]));
+    ASSERT_FALSE(xi_own_value_is_rc(callee->params[0]));
+    ASSERT_FALSE(xi_own_function_return_is_rc(callee));
 
     uint32_t saved_return = callee->psc_return_type_index;
     callee->psc_return_type_index = XI_PSC_ROW_NONE;
     ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    ASSERT_FALSE(xi_own_function_return_is_rc(callee));
     callee->psc_return_type_index = saved_return;
     uint32_t saved_parameter = callee->params[0]->psc_type_index;
     callee->params[0]->psc_type_index = XI_PSC_ROW_NONE;
     ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    ASSERT_TRUE(xi_own_value_is_psc_leaf_aggregate(callee->params[0]));
+    ASSERT_FALSE(xi_own_value_is_rc(callee->params[0]));
     callee->params[0]->psc_type_index = saved_parameter;
     uint32_t saved_value = aggregate_value->psc_type_index;
     aggregate_value->psc_type_index = XI_PSC_ROW_NONE;
@@ -1486,9 +1540,14 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     uint32_t saved_class_type = aggregate_class->psc_type_index;
     aggregate_class->psc_type_index = XI_PSC_ROW_NONE;
     ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    ASSERT_FALSE(xi_own_value_is_psc_leaf_aggregate(callee->params[0]));
+    ASSERT_TRUE(xi_own_value_is_rc(callee->params[0]));
+    ASSERT_TRUE(xi_own_function_return_is_rc(callee));
     aggregate_class->psc_type_index = scalar_program;
     ASSERT_FALSE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
+    ASSERT_FALSE(xi_own_value_is_psc_leaf_aggregate(callee->params[0]));
     aggregate_class->psc_type_index = saved_class_type;
+    ASSERT_TRUE(xi_own_value_is_psc_leaf_aggregate(callee->params[0]));
 
     XrClassInfo *saved_class_info = aggregate_class->class_info;
     ASSERT_NOT_NULL(saved_class_info);
@@ -1567,6 +1626,27 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     prepare_leaf_tree_for_semantic_plan(root);
     ASSERT_TRUE(
         xi_module_set_identity(root->module, "memory-module-v1:id=27:xi-program-semantic-leaf-v1"));
+    XrType *saved_callee_return_type = callee->return_type;
+    XrType hostile_scalar_carrier = *saved_callee_return_type;
+    hostile_scalar_carrier.scalar_rep = XR_NATIVE_I64;
+    callee->return_type = &hostile_scalar_carrier;
+    XrSemanticPlan *rejected_semantic = NULL;
+    memset(error, 0, sizeof(error));
+    ASSERT_FALSE(xr_semantic_plan_build(root, &rejected_semantic, error, sizeof(error)));
+    ASSERT_NULL(rejected_semantic);
+    ASSERT_NOT_NULL(strstr(error, "PSC annotation is not exact"));
+    callee->return_type = saved_callee_return_type;
+
+    XrType hostile_builtin_carrier = *saved_callee_return_type;
+    hostile_builtin_carrier.instance.class_ref = NULL;
+    hostile_builtin_carrier.instance.class_name = "StringBuilder";
+    callee->return_type = &hostile_builtin_carrier;
+    memset(error, 0, sizeof(error));
+    ASSERT_FALSE(xr_semantic_plan_build(root, &rejected_semantic, error, sizeof(error)));
+    ASSERT_NULL(rejected_semantic);
+    ASSERT_TRUE(error[0] != '\0');
+    callee->return_type = saved_callee_return_type;
+
     XrSemanticPlan *semantic = NULL;
     bool semantic_built = xr_semantic_plan_build(root, &semantic, error, sizeof(error));
     ASSERT_MSG(semantic_built, error);
@@ -1588,6 +1668,8 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     const XrSemanticTypeRecord *aggregate_semantic_type =
         &semantic->types[aggregate_binding->semantic_type];
     ASSERT_EQ_UINT(aggregate_semantic_type->kind, XR_KIND_INSTANCE);
+    ASSERT_EQ_UINT(aggregate_semantic_type->builtin_type, XR_TID_NULL);
+    ASSERT_EQ_UINT(aggregate_semantic_type->scalar_rep, XR_SCALAR_REP_NONE);
     ASSERT_TRUE((aggregate_semantic_type->flags & XR_SEM_TYPE_VALUE) != 0);
     ASSERT_TRUE(same_id(aggregate_semantic_type->source_class_identity,
                         aggregate_binding->source_class_identity));
@@ -1614,13 +1696,26 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         aggregate_function_count++;
         for (uint16_t p = 0; p < function->parameter_count; p++) {
             ASSERT_TRUE(function->parameter_begin + p < semantic->parameter_count);
-            ASSERT_EQ_UINT(semantic->parameters[function->parameter_begin + p].type,
-                           aggregate_binding->semantic_type);
+            const XrSemanticParameterRecord *parameter =
+                &semantic->parameters[function->parameter_begin + p];
+            ASSERT_EQ_UINT(parameter->type, aggregate_binding->semantic_type);
+            ASSERT_EQ_UINT(parameter->ownership, XI_OWN_NONE);
+            ASSERT_EQ_UINT(parameter->transfer_mode, XR_TRANSFER_SHARE);
             aggregate_parameter_count++;
         }
     }
     ASSERT_EQ_UINT(aggregate_function_count, 2);
     ASSERT_EQ_UINT(aggregate_parameter_count, 1);
+    uint32_t aggregate_parameter_operation_count = 0;
+    for (uint32_t i = 0; i < semantic->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &semantic->operations[i];
+        if (operation->opcode != XI_PARAM ||
+            operation->result_type != aggregate_binding->semantic_type)
+            continue;
+        ASSERT_EQ_UINT(operation->parameter_ownership, XI_OWN_NONE);
+        aggregate_parameter_operation_count++;
+    }
+    ASSERT_EQ_UINT(aggregate_parameter_operation_count, 1);
     ASSERT_NOT_NULL(xr_semantic_plan_program_function_for_semantic_function(
         semantic, semantic->program_function_bindings[0].semantic_function));
     const XrSemanticProgramCallBinding *aggregate_call_binding =
@@ -1631,6 +1726,8 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     const XrSemanticOperationRecord *aggregate_call =
         &semantic->operations[aggregate_call_binding->operation];
     ASSERT_EQ_UINT(aggregate_call->result_type, aggregate_binding->semantic_type);
+    ASSERT_EQ_UINT(aggregate_call->result_ownership, XI_GEN_RESULT_OWNERSHIP_CALL_RESULT);
+    ASSERT_EQ_UINT(aggregate_call->parameter_ownership, XI_OWN_NONE);
     ASSERT_EQ_UINT(aggregate_call->operand_count, 2);
     ASSERT_TRUE(aggregate_call->operand_begin + 1u < semantic->operand_count);
     ASSERT_EQ_UINT(semantic->operands[aggregate_call->operand_begin + 1u].type,

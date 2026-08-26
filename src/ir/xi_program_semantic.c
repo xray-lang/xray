@@ -124,15 +124,51 @@ static bool xr_type_matches_program_type(const XrProgramSemanticClosure *closure
     return true;
 }
 
-static bool program_type_for_xr_type(const XrProgramSemanticClosure *closure, const XrType *type,
+static bool class_declaration_for_type(const XiModule *module, const XrType *type,
+                                       const XiClassData **out) {
+    if (out)
+        *out = NULL;
+    if (!module || !type || !out || type->kind != XR_KIND_INSTANCE || !type->instance.class_ref)
+        return false;
+    const XiClassData *match = NULL;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        const XiClassData *candidate = module->classes ? module->classes[i] : NULL;
+        if (!candidate || candidate->class_info != type->instance.class_ref)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    *out = match;
+    return match != NULL;
+}
+
+static bool program_type_for_xr_type(const XiModule *module,
+                                     const XrProgramSemanticClosure *closure, const XrType *type,
                                      uint32_t *out) {
     if (out)
         *out = XI_PSC_ROW_NONE;
     if (!closure || !type || !out)
         return false;
+    const XiClassData *declaration = NULL;
+    if (type->kind == XR_KIND_INSTANCE && type->instance.class_ref) {
+        if (!class_declaration_for_type(module, type, &declaration))
+            return false;
+        const XrProgramSemanticTypeRecord *row =
+            xr_program_semantic_closure_type(closure, declaration->psc_type_index);
+        if (declaration->psc_type_index == XI_PSC_ROW_NONE || !row ||
+            row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
+            !locator_matches(declaration->source_locator, row->declaration_locator) ||
+            !xr_type_matches_program_type(closure, row, type))
+            return false;
+        *out = declaration->psc_type_index;
+        return true;
+    }
     uint32_t match = XI_PSC_ROW_NONE;
     for (uint32_t i = 0; i < xr_program_semantic_closure_type_count(closure); i++) {
         const XrProgramSemanticTypeRecord *row = xr_program_semantic_closure_type(closure, i);
+        if (!row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR)
+            continue;
         if (!xr_type_matches_program_type(closure, row, type))
             continue;
         if (match != XI_PSC_ROW_NONE)
@@ -143,42 +179,44 @@ static bool program_type_for_xr_type(const XrProgramSemanticClosure *closure, co
     return true;
 }
 
-static bool bind_value_type(XiValue *value, const XrProgramSemanticClosure *closure) {
+static bool bind_value_type(XiValue *value, const XiModule *module,
+                            const XrProgramSemanticClosure *closure) {
     if (!value)
         return false;
     uint32_t row = XI_PSC_ROW_NONE;
-    if (!program_type_for_xr_type(closure, value->type, &row) ||
+    if (!program_type_for_xr_type(module, closure, value->type, &row) ||
         (value->psc_type_index != XI_PSC_ROW_NONE && value->psc_type_index != row))
         return false;
     value->psc_type_index = row;
     return true;
 }
 
-static bool bind_function_types(XiFunc *function, const XrProgramSemanticClosure *closure) {
+static bool bind_function_types(XiFunc *function, const XiModule *module,
+                                const XrProgramSemanticClosure *closure) {
     if (!function)
         return false;
     uint32_t result = XI_PSC_ROW_NONE;
-    if (!program_type_for_xr_type(closure, function->return_type, &result) ||
+    if (!program_type_for_xr_type(module, closure, function->return_type, &result) ||
         (function->psc_return_type_index != XI_PSC_ROW_NONE &&
          function->psc_return_type_index != result))
         return false;
     function->psc_return_type_index = result;
     for (uint16_t p = 0; p < function->nparams; p++)
-        if (!bind_value_type(function->params[p], closure))
+        if (!bind_value_type(function->params[p], module, closure))
             return false;
     for (uint32_t b = 0; b < function->nblocks; b++) {
         XiBlock *block = function->blocks[b];
         if (!block)
             return false;
         for (XiPhi *phi = block->phis; phi; phi = phi->next)
-            if (!bind_value_type(&phi->value, closure))
+            if (!bind_value_type(&phi->value, module, closure))
                 return false;
         for (uint32_t i = 0; i < block->nvalues; i++)
-            if (!bind_value_type(block->values[i], closure))
+            if (!bind_value_type(block->values[i], module, closure))
                 return false;
     }
     for (uint16_t i = 0; i < function->nchildren; i++)
-        if (!bind_function_types(function->children[i], closure))
+        if (!bind_function_types(function->children[i], module, closure))
             return false;
     return true;
 }
@@ -358,7 +396,7 @@ bool xi_program_semantic_finalize(XiFunc *root, const XiProgramSemanticInput *in
     callee->inline_policy = XI_INLINE_PRESERVE_CALL;
     if (!bind_aggregate_class(root->module, input->closure, error, error_size))
         return false;
-    return bind_function_types(root, input->closure) ||
+    return bind_function_types(root, root->module, input->closure) ||
            scalar_fail(error, error_size, "Xi PSC type bindings are incomplete");
 }
 

@@ -125,21 +125,50 @@ static bool verify_type_matches_program(const XrProgramSemanticClosure *closure,
     return true;
 }
 
-static bool verify_bound_type(const XrProgramSemanticClosure *closure, const XiValue *value) {
-    const XrProgramSemanticTypeRecord *row =
-        value ? verify_program_type(closure, value->psc_type_index) : NULL;
-    return row && verify_type_matches_program(closure, row, value->type);
+static bool verify_class_declaration_for_type(const XiModule *module, const XrType *type,
+                                              const XiClassData **out) {
+    if (out)
+        *out = NULL;
+    if (!module || !type || !out || type->kind != XR_KIND_INSTANCE || !type->instance.class_ref)
+        return false;
+    const XiClassData *match = NULL;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        const XiClassData *candidate = module->classes ? module->classes[i] : NULL;
+        if (!candidate || candidate->class_info != type->instance.class_ref)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+    }
+    *out = match;
+    return match != NULL;
 }
 
-static bool expected_program_type_row(const XrProgramSemanticClosure *closure, const XrType *type,
+static bool expected_program_type_row(const XiModule *module,
+                                      const XrProgramSemanticClosure *closure, const XrType *type,
                                       uint32_t *out) {
     if (out)
         *out = XI_PSC_ROW_NONE;
     if (!closure || !type || !out)
         return false;
+    const XiClassData *declaration = NULL;
+    if (type->kind == XR_KIND_INSTANCE && type->instance.class_ref) {
+        if (!verify_class_declaration_for_type(module, type, &declaration))
+            return false;
+        const XrProgramSemanticTypeRecord *row =
+            verify_program_type(closure, declaration->psc_type_index);
+        if (!row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
+            !verify_locator_exact(declaration->source_locator, row->declaration_locator) ||
+            !verify_type_matches_program(closure, row, type))
+            return false;
+        *out = declaration->psc_type_index;
+        return true;
+    }
     uint32_t match = XI_PSC_ROW_NONE;
     for (uint32_t i = 0; closure && i < xr_program_semantic_closure_type_count(closure); i++) {
         const XrProgramSemanticTypeRecord *row = xr_program_semantic_closure_type(closure, i);
+        if (!row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR)
+            continue;
         if (!verify_type_matches_program(closure, row, type))
             continue;
         if (match != XI_PSC_ROW_NONE)
@@ -150,15 +179,24 @@ static bool expected_program_type_row(const XrProgramSemanticClosure *closure, c
     return true;
 }
 
-static bool verify_exact_type_metadata(const XrProgramSemanticClosure *closure,
+static bool verify_bound_type(const XiModule *module, const XrProgramSemanticClosure *closure,
+                              const XiValue *value) {
+    uint32_t expected = XI_PSC_ROW_NONE;
+    return value && expected_program_type_row(module, closure, value->type, &expected) &&
+           value->psc_type_index == expected;
+}
+
+static bool verify_exact_type_metadata(const XiModule *module,
+                                       const XrProgramSemanticClosure *closure,
                                        const XiFunc *function, char *error, size_t error_size) {
     uint32_t expected = XI_PSC_ROW_NONE;
-    if (!function || !expected_program_type_row(closure, function->return_type, &expected) ||
+    if (!function ||
+        !expected_program_type_row(module, closure, function->return_type, &expected) ||
         function->psc_return_type_index != expected)
         return verify_fail(error, error_size, "Xi return type PSC binding is not exact");
     for (uint16_t p = 0; p < function->nparams; p++)
         if (!function->params[p] ||
-            !expected_program_type_row(closure, function->params[p]->type, &expected) ||
+            !expected_program_type_row(module, closure, function->params[p]->type, &expected) ||
             function->params[p]->psc_type_index != expected)
             return verify_fail(error, error_size, "Xi parameter type PSC binding is not exact");
     for (uint32_t b = 0; b < function->nblocks; b++) {
@@ -166,12 +204,12 @@ static bool verify_exact_type_metadata(const XrProgramSemanticClosure *closure,
         if (!block)
             return verify_fail(error, error_size, "Xi type metadata block is NULL");
         for (const XiPhi *phi = block->phis; phi; phi = phi->next)
-            if (!expected_program_type_row(closure, phi->value.type, &expected) ||
+            if (!expected_program_type_row(module, closure, phi->value.type, &expected) ||
                 phi->value.psc_type_index != expected)
                 return verify_fail(error, error_size, "Xi phi type PSC binding is not exact");
         for (uint32_t v = 0; v < block->nvalues; v++)
             if (!block->values[v] ||
-                !expected_program_type_row(closure, block->values[v]->type, &expected) ||
+                !expected_program_type_row(module, closure, block->values[v]->type, &expected) ||
                 block->values[v]->psc_type_index != expected)
                 return verify_fail(error, error_size, "Xi value type PSC binding is not exact");
     }
@@ -314,7 +352,7 @@ static bool verify_leaf_aggregate_program(const XiModule *module, char *error, s
                 function->params[0]->type->instance.class_ref != aggregate_class->class_info ||
                 function->params[0]->param_mode != XR_PARAM_READ ||
                 function->params[0]->psc_type_index != aggregate_index ||
-                !verify_bound_type(closure, function->params[0]) ||
+                !verify_bound_type(module, closure, function->params[0]) ||
                 function->inline_policy != XI_INLINE_PRESERVE_CALL)
                 return verify_fail(error, error_size, "Xi aggregate callee contract is invalid");
             callee = function;
@@ -322,10 +360,10 @@ static bool verify_leaf_aggregate_program(const XiModule *module, char *error, s
             return verify_fail(error, error_size, "Xi aggregate function flags are invalid");
         }
     }
-    if (!verify_exact_type_metadata(closure, module->init, error, error_size))
+    if (!verify_exact_type_metadata(module, closure, module->init, error, error_size))
         return false;
     for (uint16_t i = 0; i < module->nfuncs; i++)
-        if (!verify_exact_type_metadata(closure, module->functions[i], error, error_size))
+        if (!verify_exact_type_metadata(module, closure, module->functions[i], error, error_size))
             return false;
     const XiValue *call = NULL;
     uint32_t call_count = 0;
@@ -358,8 +396,8 @@ static bool verify_leaf_aggregate_program(const XiModule *module, char *error, s
                     value->psc_type_index != aggregate_index || value->nargs != 2 || !value->args ||
                     !value->args[0] || !value->args[1] ||
                     value->args[1]->psc_type_index != aggregate_index ||
-                    !verify_bound_type(closure, value) ||
-                    !verify_bound_type(closure, value->args[1]) ||
+                    !verify_bound_type(module, closure, value) ||
+                    !verify_bound_type(module, closure, value->args[1]) ||
                     value->flags != xi_op_default_effects(XI_CALL) || value->aux_int != 0 ||
                     value->call_plan || value->xg_callsite_id != 0 || value->error_region ||
                     value->transfer_mode != 0 || value->param_mode != XR_PARAM_READ ||

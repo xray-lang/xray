@@ -89,14 +89,21 @@ projection defined below; they never imply TargetPlan admission on their own.
     typed family, return-type row indexes; parameters, phis, and values retain
     the exact applicable PSC type-row index or canonical `NONE`;
     the covered call retains its PSC call row and exact source locator. No PSC
-    row pointer or duplicated stable identity is cached in Xi.
+    row pointer or duplicated stable identity is cached in Xi. Exact scalars
+    retain the closed scalar-registry join. A leaf aggregate first resolves the
+    expression type's analyzer class to one local `XiClassData`, then reads that
+    declaration's already-bound `psc_type_index` and exact PSC locator; aggregate
+    field shape only verifies eligibility after this join and never selects a
+    row.
 14. The independent Xi verifier dispatches on family. Scalar rechecks the
     decision/profile and exact i64 contracts. Leaf aggregate requires exactly
     one aggregate type, two functions, one call, no target facts, exact
     return/parameter/call bindings, and exact PSC metadata on every function
     return, parameter, phi, and value. Bound/unbound mixtures, wrong rows,
     locator drift, extra execution contracts, or post-optimization mutations
-    fail closed.
+    fail closed. The verifier independently reconstructs the same unique local
+    declaration/PSC join instead of trusting the publisher's annotation or
+    scanning same-shaped PSC rows.
 15. SemanticPlan schema 41 and program-provenance schema 2 admit both bounded
     families only after PSC-to-Xi verification. The plan stores pointer-free
     PSC schema/family/fingerprint/GCI/counts and typed bindings; it retains no
@@ -118,6 +125,11 @@ projection defined below; they never imply TargetPlan admission on their own.
     source-class identity; that declaration row is the only identity owner for
     return, parameter, construction, and call-result sites. Xi type-row
     annotations are checked against this join but never supply a missing row.
+    Xi ownership and SemanticPlan parameter/result ownership read this verified
+    declaration/PSC row rather than deriving a semantic conclusion from those
+    annotations. The leaf type's builtin id and scalar carrier are fixed to
+    `NULL`/`NONE`; a live type claiming a builtin or scalar carrier is rejected
+    instead of minting another canonical key.
     A missing or ambiguous class, zero or different PSC row, foreign same-shape
     class, nullable/const/generic modifier, duplicate binding, reordered row, or
     mismatched join fails closed.
@@ -190,7 +202,7 @@ anchor-sha256: src/plan/semantic/xr_scalar_call_semantics.c e7951de7ce36a6facece
 anchor-sha256: src/plan/format/xr_xsm_decode.c 6ff4b7c3b998c73a8d7451989145d58d2d6745406c766acd40ea1bc02614bc61
 anchor-sha256: src/plan/format/xr_xsm_encode.c 9e8659c4a7c586112cdef2235937b999f8600887754fe6f259a296e70bd16172
 anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c befed0f719e6b74021d31a256891eab98eac4772411eb37b8057279c52f48b44
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c e11bd235b1f93bde31f59b489e6644779a5897e3c245f4076451daa475f59c86
 anchor-sha256: src/plan/semantic/xr_semantic_ids.h 5ccc28182a03acc01e6ab52fc150d97267b1c78da04913b3f69fd69c4a50d46c
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c 95ebd25bb49476d4b9e4f6a374b5e1adabe242a5668073bee90843271d0f80c7
 anchor-sha256: src/plan/semantic/xr_semantic_plan.h a1743ffdc68b1f47bca570c8835c27e8e187bff29d0fb4c9fb2f373c64fb3cc6
@@ -208,8 +220,9 @@ anchor-sha256: src/ir/xi_lower_expr.c 05f4a5e451614770dc9ed255d0f5689343d4bd5ac6
 anchor-sha256: src/ir/xi_lower_stmt.c 16c87830bf9473823d2718143eb94c42cd56f6d189e9bec879b1c724d398deee
 anchor-sha256: src/ir/xi_pipeline.c 662e98afc50d25f45c13d7671c558c90679e3ea2923809df56fcbcc9a1b2035c
 anchor-sha256: src/ir/xi_program_semantic.h 2d521c0bd34597e3bf3e386600e87983c11d25d217762c1bb767cf7994bcf9f4
-anchor-sha256: src/ir/xi_program_semantic.c 9f526e34f840119d7de84f7b31425c56765aed4e1cbbf81d402ca0160a841169
-anchor-sha256: src/ir/xi_program_semantic_verify.c 32a010a2fed46515b84f995bfa72ff75785aff845110360d18516a9e16336464
+anchor-sha256: src/ir/xi_program_semantic.c b56674c379ca65197f16f2bf79178ae81991e774003b6e381bbab1799163418a
+anchor-sha256: src/ir/xi_program_semantic_verify.c ddb8dc0c03b390ffcff1795e68613d09d9aeab8c2607a454e64d1fc238bd8671
+anchor-sha256: src/ir/xi_own.c c8dda6cd586f03723baf676601306338d0cd7b6675a514670c558d96091a681e
 anchor-sha256: src/ir/xi_program_semantic_plan.h c69c6864a8ba090a947f64c445adafcf756685a5581b00183ef2d758ffa81efd
 anchor-sha256: src/ir/xi_program_semantic_plan.c 7c10bf3d69c4e7bbd2a3245246aefd9cd7d874729695d07b39b91f0a9a0cc054
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c a70207fc78e278308c8471733157017864ffbc85054575f5893ec98312c3b141
@@ -218,7 +231,7 @@ anchor-sha256: tests/unit/plan/test_semantic_plan.c a02d1f10431993c9efd64538f1eb
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 706228d7e49b9283705f21f9ed94e3f72cff3d701e47804bc2c581dabcb00943
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c a553850263b1e8c90321c03b74cc84d280f8ce9e4d291180b2ff1fca787fbc6f
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e052a97632a0e2f33acba67b1ec07fdb4f193d00a46a1a8efe9fbe82984b10cf
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 1626ab33972df02d651bda9d2133b41128dd6633caffa0fc9df9ca58a316c721
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
 anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7

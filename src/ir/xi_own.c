@@ -77,41 +77,60 @@ static const XiModule *xi_own_function_module(const XiFunc *function) {
     return NULL;
 }
 
-static bool xi_own_psc_type_is_pointer_free_leaf(const XiFunc *function, uint32_t program_row) {
+static bool xi_own_locator_matches(XiSourceLocator xi, XrProgramSemanticSourceLocator program) {
+    return xi.kind != 0 && xi.kind == program.kind && xi.span.start_line != 0 &&
+           xi.span.start_line == program.start_line && xi.span.start_column != 0 &&
+           xi.span.start_column == program.start_column && xi.span.end_line != 0 &&
+           xi.span.end_line == program.end_line && xi.span.end_column != 0 &&
+           xi.span.end_column == program.end_column;
+}
+
+static bool xi_own_type_is_pointer_free_program_leaf(const XiFunc *function, const XrType *type) {
     const XiModule *module = xi_own_function_module(function);
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
-    if (!closure || program_row == XI_PSC_ROW_NONE ||
+    if (!closure || !type || type->kind != XR_KIND_INSTANCE || !type->instance.class_ref ||
+        type->is_nullable || type->is_const || type->is_literal ||
+        type->instance.type_arg_count != 0 || type->scalar_rep != XR_SCALAR_REP_NONE ||
         !xr_program_semantic_closure_is_frozen(closure) ||
         !xr_program_semantic_closure_is_verified(closure) ||
-        xr_program_semantic_closure_schema(closure) !=
-            XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
+        xr_program_semantic_closure_schema(closure) != XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
         xr_program_semantic_closure_family(closure) !=
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
         return false;
+    const XiClassData *declaration = NULL;
+    for (uint16_t i = 0; i < module->nclasses; i++) {
+        const XiClassData *candidate = module->classes ? module->classes[i] : NULL;
+        if (!candidate || candidate->class_info != type->instance.class_ref)
+            continue;
+        if (declaration)
+            return false;
+        declaration = candidate;
+    }
     const XrProgramSemanticTypeRecord *row =
-        xr_program_semantic_closure_type(closure, program_row);
+        declaration && declaration->psc_type_index != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_type(closure, declaration->psc_type_index)
+            : NULL;
     const uint8_t required = XR_PROGRAM_SEMANTIC_TYPE_NONNULLABLE |
-                             XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC |
-                             XR_PROGRAM_SEMANTIC_TYPE_VALUE |
+                             XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC | XR_PROGRAM_SEMANTIC_TYPE_VALUE |
                              XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE;
-    return row && row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE &&
-           row->exact_scalar == XR_EXACT_SCALAR_NONE &&
-           row->field_count > 0 && row->flags == required && row->reserved == 0;
+    return declaration && row &&
+           xi_own_locator_matches(declaration->source_locator, row->declaration_locator) &&
+           row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE &&
+           row->exact_scalar == XR_EXACT_SCALAR_NONE && row->field_count > 0 &&
+           row->flags == required && row->reserved == 0;
 }
 
 XR_FUNC bool xi_own_value_is_psc_leaf_aggregate(const XiValue *value) {
     const XiFunc *function = value && value->block ? value->block->func : NULL;
-    return value && xi_own_psc_type_is_pointer_free_leaf(function, value->psc_type_index);
+    return value && xi_own_type_is_pointer_free_program_leaf(function, value->type);
 }
 
 XR_FUNC bool xi_own_value_is_rc(const XiValue *value) {
-    return value && !xi_own_value_is_psc_leaf_aggregate(value) &&
-           xi_own_type_is_rc(value->type);
+    return value && !xi_own_value_is_psc_leaf_aggregate(value) && xi_own_type_is_rc(value->type);
 }
 
 XR_FUNC bool xi_own_function_return_is_rc(const XiFunc *function) {
-    return function &&
-           !xi_own_psc_type_is_pointer_free_leaf(function, function->psc_return_type_index) &&
+    return function && !xi_own_type_is_pointer_free_program_leaf(function, function->return_type) &&
            xi_own_type_is_rc(function->return_type);
 }
 

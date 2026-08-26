@@ -555,7 +555,8 @@ Evidence:
   layout/value/slot/call joins; it proves same-plan and same-fingerprint parity
   through both typed VM providers and the AOT boundary, plus fail-closed field,
   layout, call, slot, instruction, PSC identity, type-modifier, foreign-shape,
-  and foreign-source mutations. It invokes the independent instruction verifier
+  foreign-source, role-specific return/parameter/construction/call-result/call-argument,
+  and builtin/scalar-carrier mutations. It invokes the independent instruction verifier
   directly to reject zero groups and caller-only or callee-only coverage, and
   proves that valid leaf authority with a noncanonical SemanticPlan operation
   shape is rejected by the builder rather than published as an empty executable
@@ -691,5 +692,5 @@ anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c58bde5be23a2b2509a369632eb2e83
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 283d4f75e19ace0f068d040c12a4633726038dd6c4eafffc35df0bba9acdca15
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ebc90392a842b12a97794a7bf3e0ea862e8340c58dde8ff215d65f6e75c7ffd3
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c a553850263b1e8c90321c03b74cc84d280f8ce9e4d291180b2ff1fca787fbc6f
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e052a97632a0e2f33acba67b1ec07fdb4f193d00a46a1a8efe9fbe82984b10cf
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a6a9fe22bcb7e7c3df79d16f478f437c3ef1c8775169feaea9ff9323e2b148f8

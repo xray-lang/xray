@@ -669,6 +669,7 @@ CONTRACT_SPECS = (
             "src/ir/xi_program_semantic.h",
             "src/ir/xi_program_semantic.c",
             "src/ir/xi_program_semantic_verify.c",
+            "src/ir/xi_own.c",
             "src/ir/xi_program_semantic_plan.h",
             "src/ir/xi_program_semantic_plan.c",
             "src/aot/xaot_boundary.h",

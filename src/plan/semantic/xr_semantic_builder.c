@@ -452,8 +452,8 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
             return fail(ctx, "XR_SEM_0019",
                         "program aggregate has no unique source-class identity");
         return text_append_format(
-                   key, "type-v3:%u:0:%u:0:0:1:0:0:0:%u:0:;named:", (unsigned) type->kind,
-                   xr_semantic_frozen_builtin_type(type), (unsigned) type->scalar_rep) &&
+                   key, "type-v3:%u:0:%u:0:0:1:0:0:0:%u:0:;named:", (unsigned) XR_KIND_INSTANCE,
+                   (unsigned) XR_TID_NULL, (unsigned) XR_SCALAR_REP_NONE) &&
                text_append_component(key, source_name) && text_append(key, "[0];program-type:") &&
                text_append_stable_id(key, program_type->id) && text_append(key, ";source-class:") &&
                text_append_stable_id(key, source_class);
@@ -556,8 +556,10 @@ static uint32_t declared_program_type_row_for_source(const XrSemanticBuildContex
                                                      const XrType *type) {
     if (!ctx || !ctx->program_closure || !type || type->kind != XR_KIND_INSTANCE ||
         type->is_nullable || type->is_const || type->is_literal ||
-        type->instance.type_arg_count != 0 || !ctx->function_count || !ctx->functions[0].source ||
-        !ctx->functions[0].source->module)
+        type->instance.type_arg_count != 0 ||
+        xr_semantic_frozen_builtin_type(type) != XR_TID_NULL ||
+        type->scalar_rep != XR_SCALAR_REP_NONE || !ctx->function_count ||
+        !ctx->functions[0].source || !ctx->functions[0].source->module)
         return XI_PSC_ROW_NONE;
     const XiModule *module = ctx->functions[0].source->module;
     uint32_t source_class = source_class_for_type(ctx, type);
@@ -1024,8 +1026,15 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     if (!record->canonical_key ||
         !xr_stable_id_from_key(record->canonical_key, &record->id, &(XrFingerprint) {{0}}))
         return fail(ctx, "XR_EXEC_5003", "semantic type identity allocation failed");
-    record->kind = (uint32_t) type->kind;
-    record->builtin_type = xr_semantic_frozen_builtin_type(type);
+    uint32_t program_row = program_type_row_for_source(ctx, type);
+    const XrProgramSemanticTypeRecord *program_type =
+        ctx->program_closure && program_row != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_type(ctx->program_closure, program_row)
+            : NULL;
+    bool program_leaf_value =
+        program_type && program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
+    record->kind = program_leaf_value ? XR_KIND_INSTANCE : (uint32_t) type->kind;
+    record->builtin_type = program_leaf_value ? XR_TID_NULL : xr_semantic_frozen_builtin_type(type);
     record->source_class = source_class_for_type(ctx, type);
     (void) source_class_identity_for_type(ctx, type, &record->source_class_identity);
     if (type->kind == XR_KIND_ENUM) {
@@ -1042,9 +1051,10 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
             record->enum_member_count = (uint16_t) type->enum_type.layout->variant_count;
         }
     }
-    record->scalar_rep = type->scalar_rep;
+    record->scalar_rep = program_leaf_value ? XR_SCALAR_REP_NONE : type->scalar_rep;
     bool reference_capable =
-        xr_semantic_frozen_builtin_type(type) != XR_TID_NULL || xi_own_type_is_rc(type);
+        !program_leaf_value &&
+        (xr_semantic_frozen_builtin_type(type) != XR_TID_NULL || xi_own_type_is_rc(type));
     bool borrow_view = type->kind == XR_KIND_SLICE;
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
@@ -1723,14 +1733,7 @@ static bool append_parameter_records(XrSemanticBuildContext *ctx, uint32_t funct
         record->mode = source->params[p]->param_mode;
         record->ownership = xi_arc_parameter_ownership(source, source->params[p]);
         record->transfer_mode = source->params[p]->transfer_mode;
-        const XrProgramSemanticTypeRecord *program_parameter_type =
-            ctx->program_closure && source->params[p]->psc_type_index != XI_PSC_ROW_NONE
-                ? xr_program_semantic_closure_type(ctx->program_closure,
-                                                   source->params[p]->psc_type_index)
-                : NULL;
-        bool program_leaf_value =
-            program_parameter_type &&
-            program_parameter_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
+        bool program_leaf_value = source_is_program_leaf_aggregate(ctx, source->params[p]->type);
         if (program_leaf_value) {
             record->ownership = XI_OWN_NONE;
             record->transfer_mode = XR_TRANSFER_SHARE;
@@ -4565,13 +4568,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->parameter_mode = value->param_mode;
     if (value->op == XI_PARAM)
         record->parameter_ownership = xi_arc_parameter_ownership(function, value);
-    if (ctx->program_closure && value->op == XI_PARAM && value->psc_type_index != XI_PSC_ROW_NONE) {
-        const XrProgramSemanticTypeRecord *program_parameter_type =
-            xr_program_semantic_closure_type(ctx->program_closure, value->psc_type_index);
-        if (program_parameter_type &&
-            program_parameter_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE)
-            record->parameter_ownership = XI_OWN_NONE;
-    }
+    if (value->op == XI_PARAM && source_is_program_leaf_aggregate(ctx, value->type))
+        record->parameter_ownership = XI_OWN_NONE;
     record->flags = value->flags;
     XiReturnOwnership value_ownership = xi_arc_value_return_ownership(function, value);
     record->result_alias_operand = xi_arc_value_alias_operand(function, value);
@@ -4581,7 +4579,8 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     record->return_parameter = value_ownership.param_index;
     record->return_provenance = value_ownership.kind;
     record->return_complete = value_ownership.complete ? 1u : 0u;
-    if (ctx->program_closure && value->op == XI_CALL && value->psc_call_index != XI_PSC_ROW_NONE &&
+    if (ctx->program_closure && value->op == XI_CALL &&
+        source_is_program_leaf_aggregate(ctx, value->type) &&
         xr_program_semantic_closure_family(ctx->program_closure) ==
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
         record->result_ownership = XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
