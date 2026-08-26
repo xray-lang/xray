@@ -2584,6 +2584,13 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     }
     aot_bundle_initialized = true;
+    if (!source_program_closure && nmodules != 1) {
+        aot_bundle.error_msg =
+            "XR_TARGET_1000: product TargetPlan requires one canonical program authority";
+        fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
+                aot_bundle.error_msg);
+        goto fail_free_ir;
+    }
     if (source_program_closure) {
         char graph_semantic_error[512] = {0};
         if (!xi_program_semantic_verify_module_set(
