@@ -52,6 +52,10 @@ SUMMARY_RE = re.compile(
     r"xsm-artifacts=([0-9a-f]{64}) "
     r"xsm-publish-order=([0-9a-f]{64})"
 )
+PROGRAM_RE = re.compile(
+    r"\[program-closure\] modules=(\d+) dependencies=(\d+) "
+    r"psc=([0-9a-f]{64}) gci=([0-9a-f]{32})"
+)
 
 SOLO_V1 = "fn scale(x: i64) -> i64 {\n    return x * 3\n}\n\nprint(scale(14))\n"
 SOLO_V2 = "fn scale(x: i64) -> i64 {\n    return x * 5\n}\n\nprint(scale(14))\n"
@@ -60,6 +64,16 @@ LEAF_V2 = "export fn scale(x: i64) -> i64 {\n    return x * 5\n}\n"
 MIDDLE = ('import { scale } from "./leaf"\n\n'
           "export fn twice(x: i64) -> i64 {\n    return scale(x) + scale(x)\n}\n")
 APP = 'import { twice } from "./middle"\n\nprint(twice(7))\n'
+PRODUCT_PRODUCER_V1 = (
+    "export fn add1(value: i64) -> i64 { return value + 1 }\n"
+)
+PRODUCT_PRODUCER_V2 = (
+    "export fn add1(value: i64) -> i64 { return value + 2 }\n"
+)
+PRODUCT_ENTRY = (
+    'import { add1 } from "./producer"\n'
+    "fn root() -> i64 { return add1(41) }\n"
+)
 
 
 class Recorder:
@@ -93,6 +107,14 @@ class Summary:
 
 
 @dataclass
+class ProgramClosure:
+    modules: int
+    dependencies: int
+    fingerprint: str
+    generation_id: str
+
+
+@dataclass
 class Config:
     xray: Path
     opt_level: str
@@ -122,6 +144,16 @@ def parse_summary(rec: Recorder, result: proc.ProcResult, label: str,
                    int(match.group(4)), int(match.group(5)),
                    int(match.group(6)), int(match.group(7)),
                    int(match.group(8)), match.group(9), match.group(10))
+
+
+def parse_program_closure(rec: Recorder, result: proc.ProcResult,
+                          label: str) -> ProgramClosure | None:
+    match = PROGRAM_RE.search(result.combined_text())
+    if not match:
+        rec.bad(f"{label}: no [program-closure] report", result.combined_text())
+        return None
+    return ProgramClosure(int(match.group(1)), int(match.group(2)),
+                          match.group(3), match.group(4))
 
 
 def xsm_inventory(cache: Path) -> dict[str, str]:
@@ -302,9 +334,89 @@ def run_graph_identity(rec: Recorder, config: Config, ws: workspace.Workspace) -
            "chain-revert: canonical artifact bytes return", str(restored))
 
 
+def run_product_graph_identity(rec: Recorder, config: Config,
+                               ws: workspace.Workspace) -> None:
+    """The bounded source product graph must key every XSM by one PSC/GCI."""
+    print("--- a two-source-module scalar product graph carries PSC/GCI authority ---")
+    d = ws.subdir("product-graph")
+    cache = d / ".cache"
+    producer, entry = d / "producer.xr", d / "entry.xr"
+    producer.write_text(PRODUCT_PRODUCER_V1, encoding="utf-8")
+    entry.write_text(PRODUCT_ENTRY, encoding="utf-8")
+
+    cold_result = build(config, cache, entry, d / "product1")
+    cold = parse_summary(rec, cold_result, "product-cold", False)
+    cold_program = parse_program_closure(rec, cold_result, "product-cold")
+    if not cold or not cold_program:
+        return
+    expect(rec, cold.modules == 2 and cold_program.modules == 2 and
+           cold_program.dependencies == 1,
+           "product-cold: complete two-module/one-dependency authority is reported",
+           f"summary={cold}\nprogram={cold_program}")
+    expect(rec, cold_program.fingerprint != "0" * 64 and
+           cold_program.generation_id != "0" * 32,
+           "product-cold: PSC and GCI are nonzero", str(cold_program))
+    expect(rec, cold.hits == 0 and cold.published == 2 and cold.recomputed == 2,
+           "product-cold: both PSC-keyed XSM artifacts publish", str(cold))
+    cold_inventory = xsm_inventory(cache)
+    expect(rec, len(cold_inventory) == 2,
+           "product-cold: one immutable XSM object exists per module",
+           str(cold_inventory))
+
+    warm_result = build(config, cache, entry, d / "product2")
+    warm = parse_summary(rec, warm_result, "product-warm", False)
+    warm_program = parse_program_closure(rec, warm_result, "product-warm")
+    if not warm or not warm_program:
+        return
+    expect(rec, warm.graph == cold.graph and warm_program == cold_program,
+           "product-warm: graph, PSC, and GCI identities are deterministic",
+           f"cold={cold}, {cold_program}\nwarm={warm}, {warm_program}")
+    expect(rec, warm.hits == 2 and warm.published == 0 and warm.recomputed == 0 and
+           warm.artifacts == cold.artifacts and xsm_inventory(cache) == cold_inventory,
+           "product-warm: both exact PSC/GCI cache keys hit without rewriting",
+           str(warm))
+
+    producer.write_text(PRODUCT_PRODUCER_V2, encoding="utf-8")
+    edited_result = build(config, cache, entry, d / "product3")
+    edited = parse_summary(rec, edited_result, "product-edit", False)
+    edited_program = parse_program_closure(rec, edited_result, "product-edit")
+    if not edited or not edited_program:
+        return
+    expect(rec, edited.graph != cold.graph and
+           edited_program.fingerprint != cold_program.fingerprint and
+           edited_program.generation_id != cold_program.generation_id,
+           "product-edit: dependency source change rotates graph, PSC, and GCI",
+           f"cold={cold}, {cold_program}\nedit={edited}, {edited_program}")
+    expect(rec, edited.hits == 0 and edited.published == 2 and edited.recomputed == 2 and
+           edited.artifacts != cold.artifacts,
+           "product-edit: full program authority rotates both module cache keys",
+           str(edited))
+    edited_inventory = xsm_inventory(cache)
+    expect(rec, len(edited_inventory) == 4 and
+           all(edited_inventory.get(name) == digest
+               for name, digest in cold_inventory.items()),
+           "product-edit: old exact-key artifacts remain immutable beside new keys",
+           str(edited_inventory))
+
+    producer.write_text(PRODUCT_PRODUCER_V1, encoding="utf-8")
+    restored_result = build(config, cache, entry, d / "product4")
+    restored = parse_summary(rec, restored_result, "product-revert", False)
+    restored_program = parse_program_closure(rec, restored_result, "product-revert")
+    if not restored or not restored_program:
+        return
+    expect(rec, restored.graph == cold.graph and restored_program == cold_program,
+           "product-revert: original graph, PSC, and GCI return",
+           f"cold={cold}, {cold_program}\nrevert={restored}, {restored_program}")
+    expect(rec, restored.hits == 2 and restored.artifacts == cold.artifacts and
+           xsm_inventory(cache) == edited_inventory,
+           "product-revert: original exact-key artifacts serve both modules",
+           str(restored))
+
+
 SCENARIOS = {
     "determinism": run_determinism,
     "graph-identity": run_graph_identity,
+    "product-graph-identity": run_product_graph_identity,
 }
 
 

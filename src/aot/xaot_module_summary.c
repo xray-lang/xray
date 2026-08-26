@@ -18,6 +18,8 @@
 #include "../ir/xi_module.h"
 #include "../module/xmodule_graph.h"
 #include "../plan/format/xr_xsm_schema.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
+#include "../plan/semantic/xr_source_semantic_identity.h"
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../toolchain/xcompiler_session.h"
@@ -53,6 +55,7 @@ typedef struct XaotModuleSummaryBuild {
     int module_count;
     XrStableId *ids;
     XrCacheKey *keys;
+    const XrProgramSemanticClosure *program_closure;
     XrModuleSummaryFacts shared;
     bool rebuild;
     XaotModuleSummaryCacheStats *stats;
@@ -520,12 +523,54 @@ static const XrSemanticPlan *module_semantic_plan(const XiModule *module) {
     return module && module->init ? module->init->semantic_plan : NULL;
 }
 
+static const XrProgramSemanticModuleRecord *program_module_for_spec(
+    const XrProgramSemanticClosure *closure, const XrModuleSpec *spec) {
+    XrProgramSemanticModuleInput source;
+    if (!closure || !spec || !spec->canonical ||
+        !xr_source_semantic_module_authority(spec->canonical,
+                                             spec->source_content_fingerprint, &source, NULL))
+        return NULL;
+    const XrProgramSemanticModuleRecord *match = NULL;
+    for (uint32_t row = 0; row < xr_program_semantic_closure_module_count(closure); row++) {
+        const XrProgramSemanticModuleRecord *candidate =
+            xr_program_semantic_closure_module(closure, row);
+        if (!candidate || !xr_stable_id_equal(candidate->module_identity,
+                                              source.module_identity))
+            continue;
+        if (match || !xr_fingerprint_equal(candidate->module_authority_fingerprint,
+                                           source.module_authority_fingerprint) ||
+            !xr_fingerprint_equal(candidate->source_fingerprint,
+                                  source.source_fingerprint) ||
+            !xr_fingerprint_equal(candidate->export_fingerprint,
+                                  source.export_fingerprint))
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
 static bool add_module_node(XaotModuleSummaryBuild *build, int topo_index,
                             const XrModuleSpec *spec, const XrSemanticPlan *plan) {
     XrModuleSummaryFacts facts = build->shared;
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(plan);
-    if (program && program->schema != 0) {
+    if (build->program_closure) {
+        XrFingerprint product =
+            xr_program_semantic_closure_fingerprint(build->program_closure);
+        XrGenerationClosureId generation =
+            xr_program_semantic_closure_generation_id(build->program_closure);
+        if (!program_module_for_spec(build->program_closure, spec) ||
+            (program && program->schema != 0 &&
+             (!xr_fingerprint_equal(program->program_fingerprint, product) ||
+              memcmp(program->generation_identity.bytes, generation.bytes,
+                     sizeof(generation.bytes)) != 0))) {
+            fprintf(stderr, "Error: product program authority does not bind module '%s'\n",
+                    spec && spec->canonical ? spec->canonical : "<unknown>");
+            return false;
+        }
+        facts.program_semantics = product;
+        memcpy(facts.generation.bytes, generation.bytes, sizeof(generation.bytes));
+    } else if (program && program->schema != 0) {
         facts.program_semantics = program->program_fingerprint;
         facts.generation = program->generation_identity;
     }
@@ -603,7 +648,9 @@ static bool collect_module_nodes(XaotModuleSummaryBuild *build, const XrModuleGr
 
 static bool build_summary_graph(XaotModuleSummaryBuild *build, XrCompilerSession *session,
                                 const XrModuleGraph *graph, XiModule *const *modules,
-                                int module_count, const XaotBuildOptions *options) {
+                                int module_count,
+                                const XrProgramSemanticClosure *program_closure,
+                                const XaotBuildOptions *options) {
     const XrTargetProfile *profile = xr_compiler_session_target_profile(session);
     char error[256];
     if (!profile || !xr_target_profile_verify(profile, error, sizeof(error))) {
@@ -614,7 +661,16 @@ static bool build_summary_graph(XaotModuleSummaryBuild *build, XrCompilerSession
     build->store = xr_compiler_session_cache_store(session);
     build->modules = modules;
     build->module_count = module_count;
+    build->program_closure = program_closure;
     build->rebuild = options->incremental_cache_rebuild;
+    if (program_closure &&
+        (!xr_program_semantic_closure_is_frozen(program_closure) ||
+         !xr_program_semantic_closure_is_verified(program_closure) ||
+         !xr_program_semantic_closure_verify(program_closure, error, sizeof(error)) ||
+         xr_program_semantic_closure_module_count(program_closure) != (size_t) module_count)) {
+        fprintf(stderr, "Error: module summaries require one exact product program closure\n");
+        return false;
+    }
     build->shared.target = xr_target_profile_fingerprint(profile);
     toolchain_fingerprint(&build->shared.toolchain);
     configuration_fingerprint(options, &build->shared.configuration);
@@ -641,6 +697,7 @@ static bool build_summary_graph(XaotModuleSummaryBuild *build, XrCompilerSession
 
 bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGraph *graph,
                                    XiModule *const *modules, int module_count,
+                                   const XrProgramSemanticClosure *program_closure,
                                    const XaotBuildOptions *options, bool verbose,
                                    XaotModuleSummaryCacheStats *stats) {
     if (stats)
@@ -658,7 +715,18 @@ bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGra
     build.graph = &summary_graph;
     build.stats = stats;
 
-    bool ok = build_summary_graph(&build, session, graph, modules, module_count, options);
+    bool ok = build_summary_graph(&build, session, graph, modules, module_count,
+                                  program_closure, options);
+    if (ok && program_closure) {
+        stats->program_modules =
+            (uint32_t) xr_program_semantic_closure_module_count(program_closure);
+        stats->program_dependencies =
+            (uint32_t) xr_program_semantic_closure_dependency_count(program_closure);
+        stats->program_fingerprint =
+            xr_program_semantic_closure_fingerprint(program_closure);
+        stats->generation_identity =
+            xr_program_semantic_closure_generation_id(program_closure);
+    }
     XrFingerprint graph_fingerprint;
     memset(&graph_fingerprint, 0, sizeof(graph_fingerprint));
     if (ok && (!xr_dependency_graph_validate(&summary_graph) ||
@@ -718,6 +786,18 @@ bool xaot_publish_module_summaries(XrCompilerSession *session, const XrModuleGra
                module_count, graph_hex, stats->hits, stats->published,
                stats->misses, stats->workers, stats->tasks,
                stats->recomputed_modules, artifact_hex, publish_hex);
+        if (program_closure) {
+            char program_hex[XR_FINGERPRINT_BYTES * 2 + 1];
+            char generation_hex[XR_STABLE_ID_BYTES * 2 + 1];
+            XrStableId generation_id;
+            xr_fingerprint_hex(stats->program_fingerprint, program_hex);
+            memcpy(generation_id.bytes, stats->generation_identity.bytes,
+                   sizeof(generation_id.bytes));
+            xr_stable_id_hex(generation_id, generation_hex);
+            printf("[program-closure] modules=%u dependencies=%u psc=%s gci=%s\n",
+                   stats->program_modules, stats->program_dependencies, program_hex,
+                   generation_hex);
+        }
     }
     return ok;
 }

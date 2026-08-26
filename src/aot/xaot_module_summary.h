@@ -23,6 +23,7 @@
 struct XiModule;
 struct XrCompilerSession;
 struct XrModuleGraph;
+struct XrProgramSemanticClosure;
 
 /* Modules are indexed by topological position, matching graph->topo_order.
  * Diagnostics are written to stderr and the verbose report to stdout, so the
@@ -30,6 +31,7 @@ struct XrModuleGraph;
 XR_FUNC bool xaot_publish_module_summaries(struct XrCompilerSession *session,
                                            const struct XrModuleGraph *graph,
                                            struct XiModule *const *modules, int module_count,
+                                           const struct XrProgramSemanticClosure *program_closure,
                                            const XaotBuildOptions *options, bool verbose,
                                            XaotModuleSummaryCacheStats *stats);
 

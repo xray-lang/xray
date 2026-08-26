@@ -1,7 +1,7 @@
 # Program semantic closure identity contract
 
 This contract freezes the target-neutral, pre-Xi semantic authority used by
-the first two bounded closed-program families. PSC itself contains no layout,
+the bounded single-module families and the first bounded source product graph. PSC itself contains no layout,
 storage, ABI, TargetProfile, executor recipe, or standalone artifact codec.
 Its verified rows may enter Xi and then the pointer-free SemanticPlan/XSM
 projection defined below; they never imply TargetPlan admission on their own.
@@ -66,7 +66,7 @@ projection defined below; they never imply TargetPlan admission on their own.
    call transfers one struct argument. The canonical first KAT is
    `Pair{i64 left,i64 right} -> swap(Pair) -> Pair` plus a nullary `root` that
    makes the unique call.
-10. A source outside either bounded structural predicate is `UNSUPPORTED` and
+10. A source outside every bounded structural predicate is `UNSUPPORTED` and
     publishes no partial authority. Once a predicate has matched, incomplete
     module identity, source fingerprint, resolved call, source locator, type,
     effect, or ownership evidence is `INVALID`; allocation exhaustion is a
@@ -142,11 +142,13 @@ projection defined below; they never imply TargetPlan admission on their own.
     ordinal, stable type or source-class identity, family, flag, reserved,
     fingerprint, or join mutations fail closed even when outer framing is
     otherwise valid.
-18. This W1 boundary closes source -> PSC v4 -> Xi -> SemanticPlan 41 -> XSM
-    only. It adds no aggregate layout, slot, CallDecision, TargetPlan, VM, AOT,
-    C-emission, execution-output, container, coroutine, cross-module, or public
-    ABI authority. Those capabilities require later verified slices and may not
-    recover missing facts from names, function bodies, tags, or legacy readers.
+18. The single-module W1 boundary closes source -> PSC v4 -> Xi -> SemanticPlan
+    41 -> XSM. The product-graph boundary in this contract closes source graph
+    -> standalone PSC/GCI -> module-summary XSM key only; it does not claim a
+    per-function Xi/SemanticPlan/TargetPlan transfer. Neither boundary adds
+    container, coroutine, public ABI, or unverified execution authority. Later
+    consumers may not recover missing facts from names, function bodies, tags,
+    or legacy readers.
 19. The first TargetPlan consumer admits only the exact leaf-aggregate family
     from the public SemanticPlan program provenance and type, field, function,
     and call bindings. It projects those rows into the existing TargetPlan
@@ -172,6 +174,20 @@ projection defined below; they never imply TargetPlan admission on their own.
     resolver may reconstruct the join. PSC remains target-neutral: this rule
     governs only how a downstream executable consumer reaches TargetPlan
     authority and adds no W4 family.
+21. The bounded source product predicate is exactly two resolver-admitted
+    source modules and one dependency edge. The dependency module contains one
+    exported, nongeneric, nonsuspending, pure unary `i64 -> i64` function; the
+    entry contains one selective import and one nonexported pure nullary `i64`
+    function whose unique resolved call targets that exact export with one
+    exact `i64` argument. Publication joins the analyzer's imported symbol,
+    dependency export table, resolver result, module/source authority, effect,
+    signature, and callsite locator. It emits a frozen verified GENERAL-family
+    PSC with two module rows, one dependency row, two function rows, one
+    cross-module call row, and one GCI. Topological enumeration order cannot
+    change its canonical identity. Once the syntax claims this predicate,
+    missing, stale, ambiguous, or wrong dependency/export/call authority is
+    `INVALID` and aborts the native source build; it cannot become a zero PSC,
+    single-module PSC, name/path guess, allowlist, or compatibility path.
 
 ## Digest anchors
 
@@ -189,8 +205,8 @@ anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.h beff336ef2725
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_internal.h d26adf137848c56d923d52b7bd85439105bcae1a48de736f989fc64685bcea17
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority.c 57e0d760a7d12f1cc5763ba3768eba48ae6859356018c37b9353d3d1e329113a
 anchor-sha256: src/frontend/analyzer/xa_scalar_program_authority_verify.c 19d2eab8e1b2b36e6ef2bdc6452e246a63a056704d7785cec8c5d25274900f40
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 147b24ae25210d707b3e2962fd856e5b9497975606d97768bc199088f8a9f04a
-anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 80dfdf7a062651f38d874ad6431813e408df24d4ba06926028c1082d03601b65
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.h 15ce506179036ab9708aa8cd1fb983ba4067149b0aa0c5b33241bd9c2e3b7f3b
+anchor-sha256: src/frontend/analyzer/xa_program_semantic_closure.c 1cb18334ccd12479e6d06e4c7aade2ee5407e44be4bf605ecca748882b044124
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure.h 6b53eb59868c8608b36704f3a7448960b2e4d5bf3f88f109ec1d7a387ff8442d
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure_internal.h 006da5f6b47f362c7e0296f648638bb396db27d6bcd9df65f58ae9cde1d5b03e
 anchor-sha256: src/plan/semantic/xr_program_semantic_closure.c 7b545703eff42c71172124874b7316aa882db46a04dc09eda319137bacfe2e84
@@ -228,7 +244,7 @@ anchor-sha256: src/ir/xi_program_semantic_plan.c 7c10bf3d69c4e7bbd2a3245246aefd9
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c a70207fc78e278308c8471733157017864ffbc85054575f5893ec98312c3b141
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c a02d1f10431993c9efd64538f1eb8f0c0dc61999c9977ac5684e3aefda3b564d
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 706228d7e49b9283705f21f9ed94e3f72cff3d701e47804bc2c581dabcb00943
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 05ab0c7478067bf6fc8b510ca157ab8eda4297fb487488ad7143cc4d3c94d1d9
 anchor-sha256: tests/unit/frontend/test_parser.c 2f0f249085f1f8d685f5460701c47aa348e1db6dd6249648792aafb0bc850a69
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e052a97632a0e2f33acba67b1ec07fdb4f193d00a46a1a8efe9fbe82984b10cf

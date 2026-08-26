@@ -54,6 +54,7 @@
 #include "xaot_verify.h"
 #include "../analysis/xglobal_producer.h"
 #include "../frontend/canonical/xcanon.h"
+#include "../frontend/analyzer/xa_program_semantic_closure.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/analyzer/xanalyzer_mono.h"
 #include "../toolchain/xcompiler_session.h"
@@ -1988,6 +1989,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     char **paths = NULL;
     char **mod_names = NULL;
     AstNode **mono_roots = NULL;
+    XrProgramSemanticClosure *source_program_closure = NULL;
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(options != NULL, "xaot_build: NULL options");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
@@ -2310,6 +2312,19 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         spec->status = XR_MODSPEC_ANALYZED;
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
+    {
+        char closure_error[512] = {0};
+        XaProgramSemanticClosurePublishStatus closure_status =
+            xa_program_semantic_closure_publish_scalar_module_graph(
+                shared_analyzer, graph, &source_program_closure, closure_error,
+                sizeof(closure_error));
+        if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||
+            closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE) {
+            fprintf(stderr, "Error: product program closure publication failed: %s\n",
+                    closure_error[0] ? closure_error : "incomplete two-module scalar authority");
+            goto fail_free_analyzer;
+        }
+    }
     /* --- Compile all modules through Xi IR pipeline --- */
     XiPipelineConfig cfg = xi_pipeline_aot_config();
     /* AVX2/AVX-512 stay behind explicit function target boundaries for both
@@ -2464,9 +2479,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
 
-    if (!xaot_publish_module_summaries(session, graph, modules, nmodules, options,
+    if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
+                                       source_program_closure, options,
                                        evidence_cache_verbose, &result->module_summary_cache))
         goto fail_free_ir;
+    xr_program_semantic_closure_free(source_program_closure);
+    source_program_closure = NULL;
 
     /* Xi values and AOT plans retain pointers into the analyzer-owned type
      * pool. Keep that pool alive through import resolution, prepare, verify,
@@ -2874,6 +2892,8 @@ fail_free_ir:
         shared_analyzer = NULL;
     }
 fail_free_analyzer:
+    xr_program_semantic_closure_free(source_program_closure);
+    source_program_closure = NULL;
     if (cached_global_evidence_initialized) {
         xg_global_evidence_free(&cached_global_evidence);
         cached_global_evidence_initialized = false;
@@ -2888,6 +2908,8 @@ fail_free_analyzer:
         shared_analyzer = NULL;
     }
 fail_free_graph:
+    xr_program_semantic_closure_free(source_program_closure);
+    source_program_closure = NULL;
     xr_free(imported_summary_modules);
     xr_free(discovered_imported_summary_payload_view);
     xaot_free_discovered_package_payloads(discovered_imported_summary_payloads,

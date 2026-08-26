@@ -111,6 +111,17 @@ invalidation, compiler-session ownership, or any compatibility reader.
     is an immutable exact-key orphan with no failed-generation address; any
     later operation must derive the same key and independently verify the raw
     bytes again before it can count as a hit.
+12. For the bounded two-source-module scalar product graph, the native source
+    driver publishes one independently verified PSC/GCI before Xi lowering and
+    carries that immutable authority into module-summary construction. Each
+    graph spec must match exactly one PSC module row through canonical source
+    semantic module authority; duplicate, missing, stale, or foreign rows abort
+    publication. The complete product PSC fingerprint and GCI are copied into
+    every module's XSM key, so a dependency source change rotates both module
+    addresses even when the entry source is unchanged. An existing per-plan
+    provenance row may only confirm the identical PSC/GCI. The claimed product
+    predicate cannot fall back to the zero-authority key state, a path/name
+    reconstruction, an old key reader, or a second cache lookup path.
 
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup,
@@ -127,10 +138,10 @@ anchor-sha256: src/incremental/xr_target_plan_tasks.h b8898e83f64a5f3526199de7e2
 anchor-sha256: src/incremental/xr_target_plan_tasks.c 97cb9d24a31e852506ace288f2b3c72fd7828a7cc1a1adb161f7a6a3c85377cc
 anchor-sha256: src/incremental/xr_module_summary_build.h 1d387ea9e943fa0fcebeba7222105b8d0677bdecf05cda3677dc0d400868279b
 anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57c51780e1ddb99dfe8e9bfbb38001abfb28ed29cc2
-anchor-sha256: src/aot/xaot_module_summary.h 356f61d193ecfb05a15c0d4ad14a36df8c540b49f841d09bb4375562f9c5d88f
-anchor-sha256: src/aot/xaot_module_summary.c 5bfd96577bf690fdef7d7bf04ac2c04574d081245df9a67969f0f45ed6c7c1fc
-anchor-sha256: src/aot/xaot_driver.h a8f9bdd948287f0f28f2dad9548933bb41529ac05e901ca2a3deaeb2aa2fc156
-anchor-sha256: src/aot/xaot_driver.c e51ab59a4d37065f175170a13e1673a754a0fa11d26601515c53fa285d2d8287
+anchor-sha256: src/aot/xaot_module_summary.h ab160517cfb59565b24f75f1273afb08e0c5d6c2370f282a1c09c7f45846adcc
+anchor-sha256: src/aot/xaot_module_summary.c 6fbc2301aed4722a12d0daf8600dd708be13d8bf2ab5d4210d8967fd1e7509fd
+anchor-sha256: src/aot/xaot_driver.h 8f2f4d10c58b2d2e37f0a1806b5c0b29814c343c69b1a2ff4f51633ec7a9392d
+anchor-sha256: src/aot/xaot_driver.c 862e1ac8a866931d8a5c7a86262657c986480af28da0bc6842322dea2f5b4bf6
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
@@ -139,6 +150,6 @@ anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c c9819052135b2
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_target_plan_tasks.c 558d2917133a9dee2206b997d0a12139b63d561865431d960889c8d0d5b87d3c
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 117a7c617160868de286912287b70b97dc79d07f685b740deb08d1e79e3f704e
-anchor-sha256: tests/aot/run_module_summary_determinism.py 3ab7a9b295c2b4ccc14bd80b9bf66485215251107a974222808f0b1a2f265c63
+anchor-sha256: tests/aot/run_module_summary_determinism.py 07cb7ca7060d15d8d8a85fdce7abd555d3207eb977f820029f4691a0b3c6b239
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a6a9fe22bcb7e7c3df79d16f478f437c3ef1c8775169feaea9ff9323e2b148f8
 anchor-sha256: tests/unit/os/test_fs_atomic.c 3166bf0113590778cf46f874a7205476819e043699bb99d9881549579237ce12

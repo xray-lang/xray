@@ -26,6 +26,7 @@
 #include "../base/xchecks.h"
 #include "../analysis/xglobal_summary.h"
 #include "../module/xmodule_identity.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/target/xr_target_profile.h"
 #include "xi_cgen.h"
 #include "xaot_artifact.h"
@@ -133,6 +134,10 @@ typedef struct XaotModuleSummaryCacheStats {
     uint32_t merged_modules;
     XrFingerprint artifact_order_fingerprint;
     XrFingerprint publish_order_fingerprint;
+    uint32_t program_modules;
+    uint32_t program_dependencies;
+    XrFingerprint program_fingerprint;
+    XrGenerationClosureId generation_identity;
 } XaotModuleSummaryCacheStats;
 
 /* Result of xaot_build().  Caller must free owned strings via xr_free(). */
