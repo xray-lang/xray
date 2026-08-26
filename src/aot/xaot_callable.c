@@ -245,6 +245,13 @@ static uint32_t callable_func_value_count(const XiFunc *func) {
 
 static const XiFunc *callable_resolve_direct_target(const XaotBundle *bundle, const XiFunc *owner,
                                                     const XiValue *call) {
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_call_view(
+        bundle, owner, call, &leaf_aggregate, NULL, 0);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        return leaf_aggregate.callee;
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+        return NULL;
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
         bundle, owner, call, &direct_i64, NULL, 0);

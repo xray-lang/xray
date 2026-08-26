@@ -1368,6 +1368,72 @@ static void test_driver_direct_i64_call_consumes_target_plan(void) {
     passed++;
 }
 
+static bool leaf_aggregate_generated_span_has_no_legacy_owner(const char *begin, const char *end) {
+    if (!begin || !end || begin >= end)
+        return false;
+    static const char *const forbidden[] = {
+        "XrValue",   "XR_TAG_PLACE", "XR_TAG_AGG_REF", "xr_aggregate_ref(",
+        "xr_mkptr(", "xrt_call",     "xrt_entry_cell", "xrt_dynamic_entry",
+        "_boxed",    "_unbox",       "xrt_getprop",    "xr_struct_layout_field_index",
+    };
+    for (size_t i = 0; i < sizeof(forbidden) / sizeof(forbidden[0]); i++) {
+        if (span_contains(begin, end, forbidden[i]))
+            return false;
+    }
+    return true;
+}
+
+static void test_driver_leaf_aggregate_call_consumes_target_plan(void) {
+    char source_path[256];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+    snprintf(source_path, sizeof(source_path), "/tmp/xray-xaot-leaf-aggregate-%ld.xr",
+             (long) xr_test_getpid());
+    ASSERT_TRUE(write_file_text(
+        source_path,
+        "struct Pair { left: i64; right: i64 }\n"
+        "fn swap(value: Pair) -> Pair { return Pair{left: value.right, right: value.left} }\n"
+        "export fn root() -> Pair { return swap(Pair{left: 1, right: 41}) }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.artifact_kind = XAOT_ARTIFACT_SHARED_LIBRARY;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+    options.emit_plan_dump = true;
+
+    ASSERT_TRUE(xaot_build_script(source_path, &options, &result) == 0);
+    ASSERT_TRUE(result.n_sources == 1 && result.sources && result.sources[0].c_source);
+    ASSERT_TRUE(result.plan_dump != NULL);
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=swap", "abi_owner=target-plan"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "abi_owner=target-plan"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=swap", "legacy_values=0"));
+    ASSERT_TRUE(dump_line_contains(result.plan_dump, "name=root", "legacy_values=0"));
+    ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=swap", "value="));
+    ASSERT_TRUE(!dump_line_contains(result.plan_dump, "kind=value-rep func=root", "value="));
+
+    const char *source = result.sources[0].c_source;
+    const char *swap = find_function_definition(source, "_swap_");
+    const char *root = find_function_definition(source, "_root_");
+    const char *swap_end = swap ? strstr(swap, "\n}\n") : NULL;
+    const char *root_end = root ? strstr(root, "\n}\n") : NULL;
+    ASSERT_TRUE(swap != NULL && swap_end != NULL && root != NULL && root_end != NULL);
+    const char *call_site = root ? strstr(root, "_swap_") : NULL;
+    ASSERT_TRUE(call_site != NULL && call_site < root_end);
+    ASSERT_TRUE(leaf_aggregate_generated_span_has_no_legacy_owner(swap, swap_end));
+    ASSERT_TRUE(leaf_aggregate_generated_span_has_no_legacy_owner(root, root_end));
+    ASSERT_TRUE(strstr(source, "_boxed") == NULL);
+    ASSERT_TRUE(strstr(source, "xrt_closure_new") == NULL);
+    ASSERT_TRUE(strstr(source, "XR_TAG_CLOSURE") == NULL);
+    ASSERT_TRUE(strstr(source, "({") == NULL);
+
+    xaot_build_result_free(&result);
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(source_path);
+    passed++;
+}
+
 int main(void) {
     const char *filter = getenv("XRAY_TEST_FILTER");
     if (filter && strcmp(filter, "target_plan_cache") == 0) {
@@ -1390,6 +1456,11 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
+    if (filter && strcmp(filter, "leaf_aggregate_target_plan") == 0) {
+        test_driver_leaf_aggregate_call_consumes_target_plan();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
     test_driver_dumps_subject_bound_local_evidence();
@@ -1404,6 +1475,7 @@ int main(void) {
     test_driver_auto_discovers_package_dependency_summary_payload();
     test_driver_requires_exact_typed_entry_authority();
     test_driver_direct_i64_call_consumes_target_plan();
+    test_driver_leaf_aggregate_call_consumes_target_plan();
     printf("%d passed, %d failed\n", passed, failed);
     return failed ? 1 : 0;
 }

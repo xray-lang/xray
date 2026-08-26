@@ -410,7 +410,7 @@ static XrStableId leaf_callsite(const XrProgramSemanticModuleInput *module,
 
 static XaLeafAuthorityStatus
 leaf_function_candidate(const XaAnalyzer *analyzer, const AstNode *node,
-                        const XrClassInfo *aggregate, uint32_t parameter_count,
+                        const XrClassInfo *aggregate, uint32_t parameter_count, bool entry,
                         const XaSymbol **symbol_out, XrFingerprint *effect_out) {
     const FunctionDeclNode *function =
         node && node->type == AST_FUNCTION_DECL ? &node->as.function_decl : NULL;
@@ -421,13 +421,14 @@ leaf_function_candidate(const XaAnalyzer *analyzer, const AstNode *node,
     const XrType *type = symbol ? symbol->links.type : NULL;
     if (!function || function->type_param_count != 0 || function->is_generator ||
         function->is_extern || !function->body || function->param_count != (int) parameter_count ||
-        node->is_exported)
+        (node->is_exported && !entry))
         return XA_LEAF_AUTHORITY_OUTSIDE;
     if (!symbol || !symbol->links.type || symbol->links.summary_owner != analyzer ||
         symbol->links.function_decl_node != node)
         return XA_LEAF_AUTHORITY_INVALID;
     if (symbol->kind != XA_SYM_FUNCTION || symbol->is_builtin || symbol->is_imported ||
-        symbol->is_exported || symbol->parent || type->kind != XR_KIND_FUNCTION ||
+        symbol->is_exported != node->is_exported || symbol->parent ||
+        type->kind != XR_KIND_FUNCTION ||
         type->function.param_count != (int) parameter_count ||
         type->function.min_params != (int) parameter_count || type->function.is_variadic ||
         type->function.is_c_abi || type->function.throw_effect != XR_FN_EFFECT_NO_THROW ||
@@ -537,8 +538,9 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_a
     XrFingerprint effects[2] = {{{0}}, {{0}}};
     for (int i = 0; i < 2; i++) {
         uint32_t parameters = i == caller ? 0u : 1u;
-        XaLeafAuthorityStatus status = leaf_function_candidate(
-            analyzer, functions[i], aggregate, parameters, &function_symbols[i], &effects[i]);
+        XaLeafAuthorityStatus status =
+            leaf_function_candidate(analyzer, functions[i], aggregate, parameters, i == caller,
+                                    &function_symbols[i], &effects[i]);
         if (status != XA_LEAF_AUTHORITY_READY)
             return status == XA_LEAF_AUTHORITY_INVALID ? XA_PROGRAM_SEMANTIC_CLOSURE_INVALID
                                                        : XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED;
@@ -650,7 +652,10 @@ XaProgramSemanticClosurePublishStatus xa_program_semantic_closure_publish_leaf_a
             .return_type = aggregate_type,
             .parameters = parameter_count ? &parameter : NULL,
             .parameter_count = parameter_count,
-            .flags = i == caller ? XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY : 0,
+            .flags = (uint8_t) ((i == caller ? XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY : 0) |
+                                (functions[i]->is_exported
+                                     ? XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED
+                                     : 0)),
         };
         ok = xr_program_semantic_closure_add_function(closure, &input, &function_ids[i], error,
                                                       error_size);

@@ -745,6 +745,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
         const XrProgramSemanticFunctionRecord *row = &closure->functions[i];
         bool leaf = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
         bool scalar = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
+        bool leaf_entry = leaf && (row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
         if (row->parameter_begin > closure->function_parameter_count ||
             row->parameter_count > closure->function_parameter_count - row->parameter_begin ||
             (row->parameter_count && !closure->function_parameters) ||
@@ -791,9 +792,8 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
                       closure->types[find_type(closure, row->return_type)].kind !=
                           XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
                       row->capability_mask != 0 ||
-                      (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY
-                           ? row->parameter_count != 0
-                           : row->flags != 0 || row->parameter_count != 1))) ||
+                      (leaf_entry ? row->parameter_count != 0
+                                  : row->flags != 0 || row->parameter_count != 1))) ||
             (scalar && (row->parameter_count != 0 || !verifier_stable_id_zero(row->return_type) ||
                         (row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && row->flags != 0) ||
                         row->capability_mask != 0)) ||
@@ -840,7 +840,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
         if (row->flags != 0)
             roots++;
         if (leaf) {
-            leaf_entries += row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
+            leaf_entries += leaf_entry ? 1u : 0u;
             leaf_callees += row->flags == 0 ? 1u : 0u;
         }
         if (scalar) {
@@ -894,7 +894,7 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
             return reject(error, error_size, "XR_SEM_0019",
                           "resolved call locator is outside its caller declaration");
         if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL &&
-            (caller_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+            ((caller_row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) == 0 ||
              caller_row->parameter_count != 0 || callee_row->flags != 0 ||
              callee_row->parameter_count != 1))
             return reject(error, error_size, "XR_SEM_0019",

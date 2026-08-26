@@ -11,8 +11,10 @@
 #include "../../../src/ir/xi_coro_exception_verify.h"
 #include "../../../src/ir/xi_coro_lower.h"
 #include "../../../src/ir/xi_edit.h"
+#include "../../../src/ir/xi_module.h"
 #include "../../../src/ir/xi_semantic_snapshot.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/runtime/class/xclass_info.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xffi_sig.h"
 #include "../../../src/shared/xr_array_core.h"
@@ -217,6 +219,70 @@ TEST(assertion_plan_aux_is_owned_cloned_snapshotted_and_verified) {
     hostile->aux = NULL;
     ASSERT(verify_ok(clone));
     xi_func_free(clone);
+}
+
+TEST(semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity) {
+    XrAggregateLayout layout = {0};
+    XrClassInfo class_info = {0};
+    class_info.name = "AliasValue";
+    class_info.struct_layout = &layout;
+    XrType instance_type = {0};
+    instance_type.kind = XR_KIND_INSTANCE;
+    instance_type.instance.class_name = "AliasValue";
+    instance_type.instance.class_ref = &class_info;
+
+    XiFunc *root = xi_func_new("snapshot_alias_root", &instance_type);
+    ASSERT(root != NULL);
+    XiBlock *entry = xi_block_new(root);
+    ASSERT(entry != NULL);
+    entry->sealed = true;
+
+    XiModule *module = xi_module_new("snapshot_alias.xr", "snapshot_alias", root);
+    ASSERT(module != NULL);
+    root->module = module;
+
+    XiClassData class_data = {0};
+    class_data.class_info = &class_info;
+    class_data.class_name = "AliasValue";
+    class_data.struct_layout = &layout;
+    module->classes = (XiClassData **) xr_calloc(1, sizeof(*module->classes));
+    ASSERT(module->classes != NULL);
+    module->classes[0] = &class_data;
+    module->nclasses = 1;
+
+    XrType *payload_types[1] = {&instance_type};
+    XiEnumMemberData member = {
+        .name = "Wrapped",
+        .payload_count = 1,
+        .payload_types = payload_types,
+    };
+    XiEnumData enum_data = {
+        .name = "AliasEnum",
+        .member_count = 1,
+        .members = &member,
+    };
+    module->nslots = 2;
+    module->slot_classes =
+        (XiClassData **) xr_calloc(module->nslots, sizeof(*module->slot_classes));
+    module->slot_enums = (XiEnumData **) xr_calloc(module->nslots, sizeof(*module->slot_enums));
+    ASSERT(module->slot_classes != NULL && module->slot_enums != NULL);
+    module->slot_classes[0] = &class_data;
+    module->slot_enums[0] = &enum_data;
+    module->slot_enums[1] = &enum_data;
+
+    ASSERT(xi_semantic_snapshot_detach(root));
+    ASSERT(root->return_type != &instance_type);
+    ASSERT(root->return_type->instance.class_ref == class_data.class_info);
+    ASSERT(class_data.struct_layout == class_data.class_info->struct_layout);
+    ASSERT(payload_types[0] == root->return_type);
+    ASSERT(payload_types[0]->instance.class_ref == class_data.class_info);
+
+    XrType *detached_type = root->return_type;
+    XrClassInfo *detached_class = class_data.class_info;
+    ASSERT(xi_semantic_snapshot_detach(root));
+    ASSERT(root->return_type == detached_type);
+    ASSERT(class_data.class_info == detached_class);
+    xi_func_free(root);
 }
 
 static void mark_coro_lower_input(XiFunc *f) {
@@ -2616,6 +2682,7 @@ int main(void) {
     test_filter = getenv("XRAY_TEST_FILTER");
 
     run_assertion_plan_aux_is_owned_cloned_snapshotted_and_verified();
+    run_semantic_snapshot_preserves_aliased_class_and_enum_inventory_identity();
     run_coro_depth_bound_fails_closed();
 
     run_non_unit_return_requires_value();

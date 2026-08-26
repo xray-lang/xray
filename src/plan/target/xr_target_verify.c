@@ -251,7 +251,7 @@ static bool verify_leaf_program_functions(const XrSemanticPlan *semantic,
             function->return_parameter != -1 || function->return_provenance != XR_SEM_RETURN_NONE)
             return false;
         seen[binding->program_row] = true;
-        if (binding->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && !shape->caller &&
+        if ((binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0 && !shape->caller &&
             function->parameter_count == 0) {
             shape->caller_binding = binding;
             shape->caller = function;

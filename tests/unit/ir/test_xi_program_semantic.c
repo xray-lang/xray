@@ -10,15 +10,20 @@
 
 #include "../test_framework.h"
 
+#include "aot/xaot_boundary.h"
+#include "aot/xaot_bundle.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
 #include "frontend/analyzer/xa_program_semantic_closure.h"
 #include "frontend/analyzer/xa_typed_program.h"
 #include "frontend/analyzer/xanalyzer.h"
+#include "ir/xi_arc.h"
+#include "ir/xi_escape.h"
 #include "ir/xi_lower.h"
 #include "ir/xi_opt.h"
 #include "ir/xi_program_semantic.h"
 #include "ir/xi_program_semantic_plan.h"
+#include "ir/xi_semantic_snapshot.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
 #include "plan/format/xr_xtp_internal.h"
@@ -158,6 +163,42 @@ static XiFunc *find_function(XiModule *module, const XrProgramSemanticClosure *c
     return NULL;
 }
 
+static void find_semantic_function_recursive(XiFunc *function,
+                                             const XrProgramSemanticClosure *closure,
+                                             const XrSemanticProgramFunctionBinding *binding,
+                                             XiFunc **match, uint32_t *match_count) {
+    if (!function || !match || !match_count)
+        return;
+    const XrProgramSemanticFunctionRecord *program_function =
+        function->psc_function_index != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_function(closure, function->psc_function_index)
+            : NULL;
+    if (binding && function->psc_function_index == binding->program_row && program_function &&
+        same_id(program_function->id, binding->program_function)) {
+        *match = function;
+        (*match_count)++;
+    }
+    for (uint16_t i = 0; i < function->nchildren; i++)
+        find_semantic_function_recursive(function->children[i], closure, binding, match,
+                                         match_count);
+}
+
+static XiFunc *find_semantic_function(XiModule *module, const XrSemanticPlan *semantic,
+                                      uint32_t semantic_function) {
+    XiFunc *match = NULL;
+    uint32_t match_count = 0;
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    const XrSemanticProgramFunctionBinding *binding =
+        xr_semantic_plan_program_function_for_semantic_function(semantic, semantic_function);
+    const XrProgramSemanticFunctionRecord *program_function =
+        binding ? xr_program_semantic_closure_function(closure, binding->program_row) : NULL;
+    if (!program_function || !same_id(program_function->id, binding->program_function))
+        return NULL;
+    if (module->init)
+        find_semantic_function_recursive(module->init, closure, binding, &match, &match_count);
+    return match_count == 1 ? match : NULL;
+}
+
 static XiValue *find_bound_call(XiFunc *function) {
     for (uint32_t b = 0; function && b < function->nblocks; b++) {
         XiBlock *block = function->blocks[b];
@@ -213,6 +254,15 @@ static void dce_and_mark_tree_optimized(XiFunc *function) {
         dce_and_mark_tree_optimized(function->children[i]);
 }
 
+static void prepare_leaf_tree_for_semantic_plan(XiFunc *function) {
+    ASSERT_NOT_NULL(function);
+    xi_escape_analyze(function);
+    xi_stack_alloc_rewrite(function);
+    xi_arc_insert(function);
+    xi_arc_elim(function);
+    dce_and_mark_tree_optimized(function);
+}
+
 static bool build_authorities(ScalarFixture *fixture, XrTargetProfile *profile,
                               XrProgramSemanticClosure **closure, XrScalarCallDecision *decision,
                               char *error, size_t error_size) {
@@ -262,6 +312,113 @@ static void expect_leaf_target_build_rejection(XrSemanticPlan *semantic, XrTarge
     resign_leaf_semantic(semantic);
     ASSERT_FALSE(xr_target_plan_build(semantic, profile, &candidate, error, sizeof(error)));
     ASSERT_NULL(candidate);
+}
+
+static void assert_leaf_aggregate_vm_execution(XrTargetPlan *plan,
+                                               const LeafAggregateTargetEvidence *evidence) {
+    ASSERT_NOT_NULL(plan);
+    ASSERT_NOT_NULL(evidence);
+    ASSERT_NOT_NULL(evidence->call);
+    ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
+
+    XrFingerprint original_fingerprint = xr_target_plan_fingerprint(plan);
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    for (size_t i = 0; i < sizeof(providers) / sizeof(providers[0]); i++) {
+        XrTypedLeafAggregateI64x2 result = {.fields = {-1, -1}};
+        XrTypedDispatchLeafAggregateI64x2Request request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &original_fingerprint,
+            .result = &result,
+            .provider = providers[i],
+            .function = evidence->call->caller_function,
+        };
+        ASSERT_EQ_UINT(xr_typed_dispatch_execute_leaf_aggregate_i64x2(&request),
+                       XR_TYPED_DISPATCH_OK);
+        ASSERT_EQ_INT(result.fields[0], 41);
+        ASSERT_EQ_INT(result.fields[1], 1);
+
+        XrFingerprint wrong_fingerprint = original_fingerprint;
+        wrong_fingerprint.bytes[0] ^= UINT8_C(0x80);
+        request.required_plan_fingerprint = &wrong_fingerprint;
+        result.fields[0] = -1;
+        result.fields[1] = -1;
+        ASSERT_EQ_UINT(xr_typed_dispatch_execute_leaf_aggregate_i64x2(&request),
+                       XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH);
+        ASSERT_EQ_INT(result.fields[0], 0);
+        ASSERT_EQ_INT(result.fields[1], 0);
+    }
+
+    uint32_t saved_result_slot = evidence->call->result_slot;
+    evidence->call->result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    resign_leaf_target(plan);
+    ASSERT_FALSE(xr_target_plan_verify(plan, NULL, 0));
+    XrFingerprint resigned_invalid_fingerprint = xr_target_plan_fingerprint(plan);
+    XrTypedLeafAggregateI64x2 result = {.fields = {-1, -1}};
+    XrTypedDispatchLeafAggregateI64x2Request request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = &resigned_invalid_fingerprint,
+        .result = &result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        .function = evidence->call->caller_function,
+    };
+    ASSERT_EQ_UINT(xr_typed_dispatch_execute_leaf_aggregate_i64x2(&request),
+                   XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED);
+    ASSERT_EQ_INT(result.fields[0], 0);
+    ASSERT_EQ_INT(result.fields[1], 0);
+
+    evidence->call->result_slot = saved_result_slot;
+    resign_leaf_target(plan);
+    ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
+    ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_fingerprint(plan), original_fingerprint));
+}
+
+static void assert_leaf_aggregate_aot_boundary(XiModule *module, XrTargetPlan *plan,
+                                               const LeafAggregateTargetEvidence *evidence) {
+    ASSERT_NOT_NULL(module);
+    ASSERT_NOT_NULL(plan);
+    ASSERT_NOT_NULL(evidence);
+    ASSERT_NOT_NULL(evidence->call);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(plan);
+    XiFunc *caller = find_semantic_function(module, semantic, evidence->call->caller_function);
+    XiFunc *callee = find_semantic_function(module, semantic, evidence->call->callee_function);
+    XiValue *call = find_bound_call(caller);
+    ASSERT_NOT_NULL(caller);
+    ASSERT_NOT_NULL(callee);
+    ASSERT_NOT_NULL(call);
+
+    XiModule *modules[] = {module};
+    XaotBundle bundle = {0};
+    char authority_error[512] = {0};
+    ASSERT_MSG(xi_program_semantic_plan_verify_detached_leaf_authority(
+                   module->init, semantic, authority_error, sizeof(authority_error)),
+               authority_error);
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    ASSERT_TRUE(xaot_bundle_set_target_plan(&bundle, 0, plan));
+    XaotLeafAggregateTargetView view = {0};
+    char error[512] = {0};
+    ASSERT_EQ_UINT(
+        xaot_boundary_leaf_aggregate_call_view(&bundle, caller, call, &view, error, sizeof(error)),
+        XAOT_LEAF_AGGREGATE_TARGET_FOUND);
+    ASSERT_EQ_PTR(view.target_plan, plan);
+    ASSERT_EQ_PTR(view.call, evidence->call);
+    ASSERT_EQ_PTR(view.callee, callee);
+    ASSERT_EQ_PTR(view.argument_value, call->args[1]);
+    ASSERT_TRUE(xr_fingerprint_equal(view.target_fingerprint, xr_target_plan_fingerprint(plan)));
+    ASSERT_NULL(xaot_boundary_resolve_direct_call_target(&bundle, caller, call, NULL));
+
+    plan->fingerprint.bytes[0] ^= UINT8_C(1);
+    memset(&view, 0, sizeof(view));
+    ASSERT_EQ_UINT(
+        xaot_boundary_leaf_aggregate_call_view(&bundle, caller, call, &view, error, sizeof(error)),
+        XAOT_LEAF_AGGREGATE_TARGET_INVALID);
+    ASSERT_NULL(xaot_boundary_resolve_direct_call_target(&bundle, caller, call, NULL));
+    plan->fingerprint.bytes[0] ^= UINT8_C(1);
+    ASSERT_TRUE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xaot_bundle_free(&bundle);
 }
 
 static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTargetPlan *plan,
@@ -453,6 +610,137 @@ static void assert_leaf_aggregate_target_mutations(XrSemanticPlan *semantic, XrT
     evidence.call->caller_storage_slot = XR_SEMANTIC_INDEX_NONE;
     expect_leaf_target_verify_rejection(plan);
     evidence.call->caller_storage_slot = saved_u32;
+
+    uint8_t saved_u8 = evidence.call->result_mode;
+    evidence.call->result_mode = XR_TARGET_CALL_VALUE;
+    expect_leaf_target_verify_rejection(plan);
+    evidence.call->result_mode = saved_u8;
+
+    uint32_t caller_instruction_count = 0;
+    const XrTargetInstructionRecord *caller_instructions = xr_target_plan_function_instructions(
+        plan, evidence.call->caller_function, &caller_instruction_count);
+    ASSERT_NOT_NULL(caller_instructions);
+    ASSERT_EQ_UINT(caller_instruction_count, 5);
+    ASSERT_EQ_UINT(caller_instructions[3].opcode, XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE);
+    ASSERT_EQ_UINT(caller_instructions[3].immediate_bits, evidence.call->id);
+    ASSERT_EQ_UINT(caller_instructions[4].opcode, XR_TARGET_INSTRUCTION_RETURN_AGGREGATE);
+    ASSERT_EQ_UINT(caller_instructions[4].operand_slots[0], evidence.call->result_slot);
+    XrTargetInstructionRecord *constant_instruction =
+        &plan->instructions[(size_t) (&caller_instructions[0] - plan->instructions)];
+    uint64_t saved_u64 = constant_instruction->immediate_bits;
+    constant_instruction->immediate_bits ^= UINT64_C(1);
+    expect_leaf_target_verify_rejection(plan);
+    constant_instruction->immediate_bits = saved_u64;
+
+    XrTargetInstructionRecord *caller_make_instruction =
+        &plan->instructions[(size_t) (&caller_instructions[2] - plan->instructions)];
+    saved_u64 = caller_make_instruction->immediate_bits;
+    caller_make_instruction->immediate_bits = UINT32_MAX;
+    expect_leaf_target_verify_rejection(plan);
+    caller_make_instruction->immediate_bits = saved_u64;
+
+    XrTargetSlotRecord *caller_constant_slot = &plan->slots[constant_instruction->result_slot];
+    saved_u32 = caller_constant_slot->semantic_operation;
+    caller_constant_slot->semantic_operation = XR_SEMANTIC_INDEX_NONE;
+    expect_leaf_target_verify_rejection(plan);
+    caller_constant_slot->semantic_operation = saved_u32;
+
+    XrTargetInstructionRecord *call_instruction =
+        &plan->instructions[(size_t) (&caller_instructions[3] - plan->instructions)];
+    saved_u64 = call_instruction->immediate_bits;
+    call_instruction->immediate_bits = UINT32_MAX;
+    expect_leaf_target_verify_rejection(plan);
+    call_instruction->immediate_bits = saved_u64;
+
+    saved_u32 = evidence.call->semantic_operation;
+    evidence.call->semantic_operation = caller_constant_slot->semantic_operation;
+    expect_leaf_target_verify_rejection(plan);
+    evidence.call->semantic_operation = saved_u32;
+
+    saved_u32 = evidence.argument->semantic_operand;
+    evidence.argument->semantic_operand--;
+    expect_leaf_target_verify_rejection(plan);
+    evidence.argument->semantic_operand = saved_u32;
+
+    XrTargetInstructionRecord *return_instruction =
+        &plan->instructions[(size_t) (&caller_instructions[4] - plan->instructions)];
+    saved_u32 = return_instruction->operand_slots[0];
+    return_instruction->operand_slots[0] = XR_TARGET_INSTRUCTION_SLOT_NONE;
+    expect_leaf_target_verify_rejection(plan);
+    return_instruction->operand_slots[0] = saved_u32;
+
+    uint32_t callee_instruction_count = 0;
+    const XrTargetInstructionRecord *callee_instructions = xr_target_plan_function_instructions(
+        plan, evidence.call->callee_function, &callee_instruction_count);
+    ASSERT_NOT_NULL(callee_instructions);
+    ASSERT_EQ_UINT(callee_instruction_count, 5);
+    ASSERT_EQ_UINT(callee_instructions[1].opcode, XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64);
+    ASSERT_NE(callee_instructions[1].immediate_bits, evidence.layout->field_begin);
+
+    XrTargetInstructionRecord *saved_instructions = plan->instructions;
+    uint32_t saved_instruction_count = plan->instructions_count;
+    plan->instructions = NULL;
+    plan->instructions_count = 0;
+    expect_leaf_target_verify_rejection(plan);
+    plan->instructions = saved_instructions;
+    plan->instructions_count = saved_instruction_count;
+
+    XrTargetInstructionRecord only_caller[5];
+    memcpy(only_caller, caller_instructions, sizeof(only_caller));
+    for (uint32_t i = 0; i < 5; i++)
+        only_caller[i].id = i;
+    plan->instructions = only_caller;
+    plan->instructions_count = 5;
+    expect_leaf_target_verify_rejection(plan);
+    plan->instructions = saved_instructions;
+    plan->instructions_count = saved_instruction_count;
+
+    XrTargetInstructionRecord only_callee[5];
+    memcpy(only_callee, callee_instructions, sizeof(only_callee));
+    for (uint32_t i = 0; i < 5; i++)
+        only_callee[i].id = i;
+    plan->instructions = only_callee;
+    plan->instructions_count = 5;
+    expect_leaf_target_verify_rejection(plan);
+    plan->instructions = saved_instructions;
+    plan->instructions_count = saved_instruction_count;
+    resign_leaf_target(plan);
+    ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
+
+    XrTargetInstructionRecord *parameter_instruction =
+        &plan->instructions[(size_t) (&callee_instructions[0] - plan->instructions)];
+    saved_u64 = parameter_instruction->immediate_bits;
+    parameter_instruction->immediate_bits = 1;
+    expect_leaf_target_verify_rejection(plan);
+    parameter_instruction->immediate_bits = saved_u64;
+
+    XrTargetInstructionRecord *get_instruction =
+        &plan->instructions[(size_t) (&callee_instructions[1] - plan->instructions)];
+    saved_u64 = get_instruction->immediate_bits;
+    get_instruction->immediate_bits = evidence.layout->field_begin;
+    expect_leaf_target_verify_rejection(plan);
+    get_instruction->immediate_bits = saved_u64;
+
+    XrTargetInstructionRecord *callee_make_instruction =
+        &plan->instructions[(size_t) (&callee_instructions[3] - plan->instructions)];
+    saved_u64 = callee_make_instruction->immediate_bits;
+    callee_make_instruction->immediate_bits = UINT32_MAX;
+    expect_leaf_target_verify_rejection(plan);
+    callee_make_instruction->immediate_bits = saved_u64;
+
+    XrTargetSlotRecord *callee_get_slot = &plan->slots[get_instruction->result_slot];
+    saved_u32 = callee_get_slot->semantic_value;
+    callee_get_slot->semantic_value =
+        plan->slots[callee_instructions[2].result_slot].semantic_value;
+    expect_leaf_target_verify_rejection(plan);
+    callee_get_slot->semantic_value = saved_u32;
+
+    XrTargetInstructionRecord *callee_return_instruction =
+        &plan->instructions[(size_t) (&callee_instructions[4] - plan->instructions)];
+    saved_u32 = callee_return_instruction->operand_slots[0];
+    callee_return_instruction->operand_slots[0] = callee_instructions[1].result_slot;
+    expect_leaf_target_verify_rejection(plan);
+    callee_return_instruction->operand_slots[0] = saved_u32;
 
     saved_u32 = evidence.argument->callee_slot;
     evidence.argument->callee_slot = evidence.call->result_slot;
@@ -1151,7 +1439,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     phi_block->phis = previous_phis;
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
 
-    dce_and_mark_tree_optimized(root);
+    prepare_leaf_tree_for_semantic_plan(root);
     ASSERT_TRUE(
         xi_module_set_identity(root->module, "memory-module-v1:id=27:xi-program-semantic-leaf-v1"));
     XrSemanticPlan *semantic = NULL;
@@ -1225,11 +1513,10 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_NOT_NULL(leaf_target);
     LeafAggregateTargetEvidence target_evidence = {0};
     assert_leaf_aggregate_target_shape(semantic, leaf_target, &target_evidence);
+    assert_leaf_aggregate_vm_execution(leaf_target, &target_evidence);
     assert_leaf_aggregate_target_mutations(semantic, leaf_target, target_evidence);
-    xr_target_plan_free(leaf_target);
     assert_leaf_aggregate_target_input_rejections(
         semantic, leaf_profile, foreign_authority_aggregate_row, foreign_source_aggregate_row);
-    xr_target_profile_free(leaf_profile);
 
     uint8_t *encoded = NULL;
     size_t encoded_size = 0;
@@ -1249,6 +1536,11 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     xr_free(roundtrip);
     xr_semantic_plan_free(decoded);
     xr_free(encoded);
+
+    ASSERT_MSG(xi_semantic_snapshot_detach_ex(root, error, sizeof(error)), error);
+    assert_leaf_aggregate_aot_boundary(root->module, leaf_target, &target_evidence);
+    xr_target_plan_free(leaf_target);
+    xr_target_profile_free(leaf_profile);
 
     xr_semantic_plan_free(semantic);
     xi_func_free(root);

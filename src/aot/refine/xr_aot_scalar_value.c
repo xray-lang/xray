@@ -13,6 +13,7 @@
 #include "../../plan/semantic/xr_semantic_string_shape.h"
 #include "../../plan/semantic/xr_semantic_string_slice_shape.h"
 #include "../../ir/xi_own.h"
+#include "../../ir/xi_program_semantic_plan.h"
 #include "../../runtime/value/xtype.h"
 #include <stdio.h>
 
@@ -140,7 +141,18 @@ bool xr_aot_scalar_semantic_value_id(const XrTargetPlan *target_plan, const XiFu
     if (!xr_target_plan_is_verified(target_plan))
         return fail(error, error_size, "scalar semantic identity requires a verified TargetPlan");
     const XrSemanticPlan *semantic_plan = xr_target_plan_semantic_plan(target_plan);
-    if (!semantic_plan || function->semantic_plan != semantic_plan ||
+    bool semantic_authority = semantic_plan && function->semantic_plan == semantic_plan;
+    if (!semantic_authority && semantic_plan && function->semantic_snapshot_detached) {
+        const XiFunc *root = function;
+        uint32_t depth = 0;
+        uint32_t limit = (uint32_t) xr_semantic_plan_function_count(semantic_plan);
+        while (root->parent_func && depth++ < limit)
+            root = root->parent_func;
+        semantic_authority = !root->parent_func &&
+                             xi_program_semantic_plan_verify_detached_leaf_authority(
+                                 root, semantic_plan, error, error_size);
+    }
+    if (!semantic_plan || !semantic_authority ||
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
         return fail(error, error_size,
                     "Xi function does not carry the TargetPlan semantic authority");

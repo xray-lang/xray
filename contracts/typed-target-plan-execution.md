@@ -13,13 +13,32 @@ family, or the exact source-class tagged `Array.push` call family described
 below. Every other function emits zero rows; no partial group or fallback is
 allowed.
 
-The bounded leaf-value aggregate direct-call family currently stops at target
-representation authority. SemanticPlan 41 program bindings project one
-target-profile-derived aggregate layout, caller/callee value and slot rows, one
-`VALUE/READ` argument, and a caller-storage result with no adapter or ownership
-transfer. The independent verifier reconstructs those joins without a legacy
-shape helper, Xi inference, or source-name switch. No aggregate instruction group
-is emitted, so this TargetPlan slice does not authorize typed VM or AOT execution.
+The bounded leaf-value aggregate direct-call family is one exact executable
+family within schema 47, not a second aggregate-only plan. SemanticPlan 41
+program bindings project one target-profile-derived aggregate layout,
+caller/callee value and slot rows, one `VALUE/READ` argument, and a caller-storage
+result with no adapter or ownership transfer. The callee group is exactly
+`PARAM_AGGREGATE`, two `AGGREGATE_GET_I64` rows,
+`AGGREGATE_MAKE_I64X2`, and `RETURN_AGGREGATE`; the caller group is exactly two
+scalar constants, `AGGREGATE_MAKE_I64X2`, `CALL_DIRECT_AGGREGATE`, and
+`RETURN_AGGREGATE`. The independent verifier reconstructs the program type,
+field, function, call, layout, value, slot, and instruction joins without a
+legacy shape helper, Xi inference, source-name switch, or alternate execution
+path. A missing, duplicate, or mutated join makes the entire family execution
+unavailable.
+
+Typed VM and AOT consume the same independently verified TargetPlan object and
+fingerprint for this family. The VM transports complete positional `i64x2`
+values through the exact caller, callee, and caller-storage slots and executes
+both generated providers from the shared opcode registry. AOT reaches the same
+function and call authority through the frozen PSC function row and SemanticPlan
+program bindings, then mechanically projects the exact 16-byte, 8-byte-aligned
+native value and direct call. For covered functions and calls, legacy AOT ABI,
+value-representation, boundary-step, place/aggregate-reference, name/body
+resolver, and runtime-call owners are zero or unreachable; invalid authority
+cannot fall back to them. This boundary covers only the exact leaf
+`Pair<i64,i64>`-shaped direct-local family and grants no general struct,
+container, coroutine, cross-module, or W4 execution authority.
 
 The scalar representation boundary separately recognizes an exact unaliased
 SemanticPlan `Ptr` or `MutPtr` as TargetPlan `RAW_PTR`: its size and alignment
@@ -147,7 +166,7 @@ TargetPlan rows before verification; the decoded cache and dispatcher consume
 only those rows and never observe a wire token. Text dump and diff use the same
 sequential iterator rather than random row-size access. There is no v33
 reader, translated row, alternate stream, or compatibility path.
-The internal typed dispatcher has two disjoint request carriers. The scalar
+The internal typed dispatcher has three disjoint request carriers. The scalar
 entry accepts a verified plan, its exact fingerprint, a derived nonzero scalar
 execution family, a positional signed-`i64` argument vector, exact typed-frame
 slot identities, an optional runtime-only debug session, and an optional
@@ -175,6 +194,14 @@ authority to build or execute. Neither path inspects SemanticPlan or Xi. The ver
 argument count must equal the number of parameter rows, and a shorter,
 longer, or absent vector is rejected before the frame exists rather than
 truncated, padded, or zero filled.
+
+The leaf-aggregate entry accepts only
+`XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2`, the exact verified plan and
+fingerprint, a complete positional aggregate argument vector, one result
+carrier, and exactly one generated executor provider. It derives every slot and
+call edge from the plan, never from Xi or SemanticPlan, and rejects a missing or
+extra argument, wrong fingerprint, wrong result slot, unknown provider, or any
+noncanonical instruction group before publishing a result.
 
 The managed entry accepts only the exact tagged push execution family and a
 mutable two-element `XrValue` vector. The receiver remains borrowed. The
@@ -523,6 +550,17 @@ Evidence:
   Invalid receivers, slices, and typed storage mismatches prove fail-closed
   carrier restoration without array
   mutation.
+- `test_xi_program_semantic` proves the source-backed leaf aggregate instruction
+  groups and exact layout/value/slot/call joins, same-plan and same-fingerprint
+  parity through both typed VM providers and the AOT boundary, and fail-closed
+  field, layout, call, slot, instruction, PSC identity, and foreign-source
+  mutations.
+- `test_xaot_driver` proves that the source-backed leaf aggregate functions use
+  TargetPlan ABI ownership, publish no covered legacy value plans, emit the
+  direct native aggregate call and field operations, and contain no covered
+  `XrValue`, `XR_TAG_PLACE`, `XR_TAG_AGG_REF`, dynamic lookup, runtime-call, or
+  legacy entry-cell residue. The test builds the source through the shared-library
+  AOT route so the exported root is part of the proven reachable program.
 - `test_xarray` proves the shared status-returning push kernel accepts the exact
   tagged carrier and leaves receiver shape and caller ownership unchanged on
   invalid receiver, slice, and typed-storage failures.
@@ -576,12 +614,12 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
-anchor-sha256: src/plan/target/xr_target_plan.c 9e7140184ca04bab125144d1f4559ac87a42172eefcf22eb434f33ac8101edff
-anchor-sha256: src/plan/target/xr_target_builder.c b532a82dcd2596127b6b824d3d90c90f96e8264300565e2d59dea447482ce989
+anchor-sha256: src/plan/target/xr_target_plan.h e09c17d38ae7d70e18ac2d8996e33bcc13a13f9448a4a586267f074826a2636c
+anchor-sha256: src/plan/target/xr_target_plan.c 31067ae316702f34e546331fc79d93e790696deb8618ece28c2ca3ac96b17c78
+anchor-sha256: src/plan/target/xr_target_builder.c 567c8dfed6ee1b9ee91ccaad1f317652e68bb5bb9affc1ae2e6078b6a97d969a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
-anchor-sha256: src/plan/target/xr_target_instruction_verify.c 93d4b68bee1aade849af677e8ee0d5fd2160bc068646a1db184052435acd9a26
-anchor-sha256: src/plan/target/xr_target_verify.c 1bcf31ecc57296ff4057216035a831a67b076cd6e0a9968e13846dab30dd94a1
+anchor-sha256: src/plan/target/xr_target_instruction_verify.c 42c12fbe9477e795a903741c72dd4db17ec75f4256a4809f1ccd8d7e6282a6ea
+anchor-sha256: src/plan/target/xr_target_verify.c feb92f272a1465be2d0112a3e53f37c2f07c7851a423f6abf4bc994f015bc0d2
 anchor-sha256: src/plan/format/xr_xtp_schema.h a53c1f1c5481784af7636d49e554e92d11055ad701e6727ad5961a4dfdf2100b
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 84e5b18d06b0a44e25708b80e0f19ff70918d0babd988d0d9ea7260fcb842f29
@@ -593,12 +631,12 @@ anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863c
 anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e794988105d6bdc18aa19d82ac4162
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
-anchor-sha256: src/vm/xr_typed_dispatch.h 96c324021b0f4a8cd5375ab1a155eb7a69db84f6246f6872994a9ec0c4397f75
-anchor-sha256: src/vm/xr_typed_dispatch.c d7b818d5dc454879bf2e31098e9844ebde8c71a0402ae1606d34aa5cd0658f94
+anchor-sha256: src/vm/xr_typed_dispatch.h eb086aac4115bbc7b34555e8ec3dccda7c4cc05c86e94a74e24f2d8491886c71
+anchor-sha256: src/vm/xr_typed_dispatch.c 692a5a9ad5cdac4f0d8fcaea433b423615a68461bca9a3d7987da7da55cbbfa2
 anchor-sha256: src/vm/xr_vm_decoded_cache.h b8dd666865e181f77203aff6b65217f3d1b5d3b413419c831d896a2e31902e23
 anchor-sha256: src/vm/xr_vm_decoded_cache.c 216b764f20711e5612c653d11b25651aedd9afae20ec066e588cc69e60f05c21
-anchor-sha256: src/vm/xr_typed_frame.c f7cbfdc3dc805bcfdf9c8a75e2a8293c9770f9873ba036402959980959ae13c9
-anchor-sha256: tests/unit/vm/test_typed_dispatch.c edd1f5f7caacf8bc5b7babc31a21d10934d2cb96d3523eb38d8cc20102366ac6
+anchor-sha256: src/vm/xr_typed_frame.c a90c15e7554024ce8ed4170b2d6b3e9d1269409678587abca7088d3b1216cc5b
+anchor-sha256: tests/unit/vm/test_typed_dispatch.c 3556b4e30fe1464e82b1fd8c4a23a3ba04530a1ca918ef055454cf84a531884e
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 1f7e032e521c9cdf3cbe8e3b435a6e4c2e9113a8f838e5ac935209589213f183
 anchor-sha256: tests/unit/plan/test_xtp_format.c de758e4a6073060c81e26a37a05d8e34597068d6408b12b756a5ac5acbe6003a
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c cfe41d4e83103cadb5e8eabc7a48aef121b5dc5ebdee14939e5c0f80bf955fff
@@ -612,16 +650,16 @@ anchor-sha256: include/xray_runtime_generation.h ac482c4a6b3526a5060554b2f27ef13
 anchor-sha256: src/runtime/xr_module_generation.c eb3581c48d3a59230a9b4db38a87ada54785aeb366e8fb7151f4246f3da38974
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c 314197abf0562d4ec4954bae52c3504fc9215d6d6aeb9b69b93eb3124c719895
 anchor-sha256: CMakeLists.txt 5890e07bb0689c9dbdb1b72616bde8f4481a719b58b87f8ad553830cab622407
-anchor-sha256: xisa/target/vm_ops.def 36dc261bb48b5908d445998a432711b359552f9a6ada71e199fb100f7b7e9304
-anchor-sha256: tools/xisagen/xisagen.py 9bc7501baa050d17830576325831de9331d0f8644566254b2b953047d37f7821
+anchor-sha256: xisa/target/vm_ops.def 573b1beea387c7b5df58de4fdad39e61417ea51ff6d346417bda7f36e698bc15
+anchor-sha256: tools/xisagen/xisagen.py ca1bfeb87944eff4eebf4d478b514a8bd6ea9fc0adef95d1589d97d9116c923e
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
-anchor-sha256: src/plan/target/xr_target_instruction_gen.h 04c9ca0ca30fff53152c64744e4d884b3eec3c0156c299a8d52be39abd50bc08
+anchor-sha256: src/plan/target/xr_target_instruction_gen.h f26247e8b421e8ca8cfc44c49fcafdf92b4ae6cfa863fa65e7eea73d1d801aa5
 anchor-sha256: src/vm/xr_vm_dynamic_entry.h 50a175071a41a521e11fa672b7f17663b73dda321fd6ab9703196324e642dfda
 anchor-sha256: src/vm/xr_vm_entry_adapter.h 260bca5ab4abcef7cc679f5674e92c0b2c8e95fa04444b73cb1e3f8584b61544
 anchor-sha256: src/vm/xr_vm_entry_adapter.c a18c76b33fa1a35b0b2b756d6eab77de5b7876f58b65bf6c5605a7596e701547
 anchor-sha256: xisa/target/vm_entry_adapters.def db46c172fa847c54cb24d477404f00d74db9996b99be9fa357a3ce0864a9ddb9
-anchor-sha256: src/vm/xr_vm_ops.def 29f593ee6c27b514b3c31499095f973e2eda82ce7c6f7cc3485da210fec4efc5
+anchor-sha256: src/vm/xr_vm_ops.def b0d669c575245640be14cbf4fae7d5d494d566d8942fd943fb133f60a65f87f8
 anchor-sha256: src/shared/xr_array_push_status.h 2d092c8b4b91fd7f8c09bb90f72bd0408d4eabedf2d235b5643bd0b1c81dbe04
 anchor-sha256: src/runtime/object/xarray.h 65c5272371925c830c046d08247fee289464b4fed2453b9546815367a41d6ff5
 anchor-sha256: src/runtime/object/xarray.c 102a52b887e0e777a79da3c78be8e025e1b2826f0a01cd4b0aee5cbe431c6416
@@ -633,3 +671,20 @@ anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed9493
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 8915b084f4a1de025340c94a2132d6d257c8b2ff3273faf3fd200bd2d5f6580f
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c ad03d77d583441969756a1f2d1be2cde504624c0cd4ed26ddae96a50c8a79ed5
 anchor-sha256: tests/unit/CMakeLists.txt 405e5d564669aeb8e1ad1ac31e14613a8530fd89b63247940a6d38748bdd1ba8
+anchor-sha256: src/aot/xaot_boundary.h 465de1d73d5ec9cb3819fc9506405a5116567a54a048eeef38fca697f5cf8ca7
+anchor-sha256: src/aot/xaot_boundary.c 22b97cdfac8d0b22905dfe036190560ab29f4beb32abd660cb9a49dc2f4c6b09
+anchor-sha256: src/aot/xaot_bundle.c 4fb0d68766ccbbd70ec14a084c6055e25c245d3298774e79f45d8eb85799acda
+anchor-sha256: src/aot/xaot_callable.c 87d39dadfdb7805e20d2a96b30bdaf01453fad7d821493f3c9a610efd5cc9049
+anchor-sha256: src/aot/xaot_driver.c e51ab59a4d37065f175170a13e1673a754a0fa11d26601515c53fa285d2d8287
+anchor-sha256: src/aot/xaot_prepare.c d8cc4408a253218b585f9184a190918f8b29b3fd96dcba071fd9f2b2b0b7e558
+anchor-sha256: src/aot/xaot_verify.c 9bf9a829caae95fcc14cf9a4ab3e8e7a981dd88dca6c0173ae474ba8e5332e66
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c d1b876cf1600462e2fe42a9479e19da490300b672a1f14ce08c44468c3aca22b
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e0afec5542188381add3de02f74fab76d983a70da33d69b17e206d847e49eff5
+anchor-sha256: src/aot/xi_cgen.c e839d7d65f8d20d7812bd2748f6d9c5f9d9531201c1bedfcd6e1ba6b137fdfc5
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c58bde5be23a2b2509a369632eb2e830015e644495079f7fa5d7e283d2cfaab9
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 283d4f75e19ace0f068d040c12a4633726038dd6c4eafffc35df0bba9acdca15
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c ebc90392a842b12a97794a7bf3e0ea862e8340c58dde8ff215d65f6e75c7ffd3
+anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c e6a3e2478b6bd78284cf29bce09ed2f6f886ec09451e798f02d75928ea8310cc
+anchor-sha256: tests/unit/aot/test_xaot_driver.c a6a9fe22bcb7e7c3df79d16f478f437c3ef1c8775169feaea9ff9323e2b148f8

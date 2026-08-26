@@ -20,6 +20,7 @@
 #include "debug/xr_vm_trace_internal.h"
 #include "../plan/target/xr_target_instruction_verify.h"
 #include "../plan/target/xr_target_profile.h"
+#include "../runtime/value/xtransfer_mode.h"
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_compare_core.h"
 #include "../shared/xr_int_arith_core.h"
@@ -30,6 +31,10 @@
 _Static_assert(XR_VM_DEBUG_MAX_STACK_DEPTH >=
                    XR_TYPED_DISPATCH_MAX_CALL_DEPTH,
                "debug stack must cover the complete typed call stack");
+_Static_assert(sizeof(XrTypedLeafAggregateI64x2) == 16u,
+               "leaf aggregate request carrier must stay exactly 16 bytes");
+_Static_assert(_Alignof(XrTypedLeafAggregateI64x2) == _Alignof(int64_t),
+               "leaf aggregate request carrier must keep i64 alignment");
 
 /* Scalar dispatch owns no lifecycle executor.  Prove that boundary from the
  * verified plan before a frame exists, then repeat it from the allocated
@@ -142,6 +147,133 @@ static XrTypedDispatchStatus store_i64_bits(XrTypedFrame *frame, uint32_t slot,
                : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
+static const XrTargetSlotRecord *target_slot_record(const XrTargetPlan *plan, uint32_t slot) {
+    uint32_t count = 0;
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &count);
+    return slots && slot < count && slots[slot].id == slot ? &slots[slot] : NULL;
+}
+
+static bool target_value_rep_binds_slot(const XrTargetPlan *plan, const XrTargetSlotRecord *slot) {
+    const XrTargetValueRepRecord *value = slot && slot->semantic_value != XR_SEMANTIC_INDEX_NONE
+                                              ? xr_target_plan_value_rep(plan, slot->semantic_value)
+                                              : NULL;
+    return value && value->semantic_value == slot->semantic_value && value->slot == slot->id &&
+           value->register_rep == slot->register_rep && value->memory_rep == slot->memory_rep;
+}
+
+static bool target_i64_rep_is_exact(const XrTargetPlan *plan, uint16_t rep_index) {
+    const XrTargetMachineRepRecord *rep = xr_target_plan_machine_rep(plan, rep_index);
+    return rep && rep->kind == XR_MACHINE_REP_I64 && rep->register_bits == 64 &&
+           rep->memory_size == 8 && rep->memory_align == 8 &&
+           rep->root_kind == XR_TARGET_ROOT_NONE && rep->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
+           rep->null_encoding == XR_TARGET_NULL_NOT_NULLABLE;
+}
+
+static XrTypedDispatchStatus describe_exact_i64(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                                uint32_t slot, XrTypedSlotAccess *access) {
+    const XrTargetSlotRecord *record = target_slot_record(plan, slot);
+    if (!record || !target_value_rep_binds_slot(plan, record) ||
+        record->register_rep != record->memory_rep ||
+        !target_i64_rep_is_exact(plan, record->register_rep) ||
+        describe_i64(frame, slot, access) != XR_TYPED_DISPATCH_OK ||
+        access->register_rep != record->register_rep || access->memory_rep != record->memory_rep)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+typedef struct XrTypedLeafAggregateSlot {
+    XrTypedSlotAccess access;
+    const XrTargetSlotRecord *slot;
+    const XrTargetLayoutRecord *layout;
+    uint32_t layout_index;
+} XrTypedLeafAggregateSlot;
+
+static bool target_leaf_field_is_exact(const XrTargetPlan *plan, const XrTargetFieldRecord *field,
+                                       uint32_t layout, uint32_t ordinal) {
+    return field && field->layout == layout && field->semantic_field == ordinal &&
+           field->semantic_name == XR_SEMANTIC_INDEX_NONE &&
+           field->offset == ordinal * sizeof(int64_t) && field->size == sizeof(int64_t) &&
+           field->align == _Alignof(int64_t) && target_i64_rep_is_exact(plan, field->memory_rep) &&
+           field->root_kind == XR_TARGET_ROOT_NONE && field->flags == 0 && field->reserved == 0;
+}
+
+static XrTypedDispatchStatus describe_leaf_aggregate(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                                     uint32_t slot, XrTypedLeafAggregateSlot *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!plan || !frame || !out)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    const XrTargetSlotRecord *record = target_slot_record(plan, slot);
+    XrTypedSlotAccess access = {0};
+    if (!record || !target_value_rep_binds_slot(plan, record) ||
+        record->size != sizeof(XrTypedLeafAggregateI64x2) ||
+        record->align != _Alignof(XrTypedLeafAggregateI64x2) ||
+        record->register_rep != record->memory_rep || record->root_kind != XR_TARGET_ROOT_NONE ||
+        record->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        xr_typed_frame_describe_slot(frame, slot, &access) != XR_TYPED_FRAME_OK ||
+        access.size != sizeof(XrTypedLeafAggregateI64x2) ||
+        access.alignment != _Alignof(XrTypedLeafAggregateI64x2) ||
+        access.register_rep != record->register_rep || access.memory_rep != record->memory_rep)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    const XrTargetMachineRepRecord *rep = xr_target_plan_machine_rep(plan, record->memory_rep);
+    uint32_t layout_count = 0;
+    uint32_t field_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(plan, &layout_count);
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(plan, &field_count);
+    uint32_t layout_index = rep ? rep->detail : XR_SEMANTIC_INDEX_NONE;
+    const XrTargetLayoutRecord *layout =
+        layouts && layout_index < layout_count && layouts[layout_index].id == layout_index
+            ? &layouts[layout_index]
+            : NULL;
+    if (!rep || rep->kind != XR_MACHINE_REP_AGGREGATE || rep->register_bits != 128 ||
+        rep->memory_size != sizeof(XrTypedLeafAggregateI64x2) ||
+        rep->memory_align != _Alignof(XrTypedLeafAggregateI64x2) ||
+        rep->root_kind != XR_TARGET_ROOT_NONE || rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
+        rep->null_encoding != XR_TARGET_NULL_NOT_NULLABLE || rep->lane_count != 0 || !layout ||
+        layout->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        layout->fixed_prefix_size != sizeof(XrTypedLeafAggregateI64x2) ||
+        layout->align != _Alignof(XrTypedLeafAggregateI64x2) || layout->field_count != 2 ||
+        layout->root_field_count != 0 || !fields || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin ||
+        !target_leaf_field_is_exact(plan, &fields[layout->field_begin], layout_index, 0) ||
+        !target_leaf_field_is_exact(plan, &fields[layout->field_begin + 1u], layout_index, 1))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    out->access = access;
+    out->slot = record;
+    out->layout = layout;
+    out->layout_index = layout_index;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus load_leaf_aggregate(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                                 uint32_t slot, XrTypedLeafAggregateI64x2 *value,
+                                                 XrTypedLeafAggregateSlot *described) {
+    XrTypedLeafAggregateSlot local = {0};
+    XrTypedDispatchStatus status = describe_leaf_aggregate(plan, frame, slot, &local);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    if (xr_typed_frame_load(frame, &local.access, value, sizeof(*value)) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (described)
+        *described = local;
+    return XR_TYPED_DISPATCH_OK;
+}
+
+static XrTypedDispatchStatus store_leaf_aggregate(const XrTargetPlan *plan, XrTypedFrame *frame,
+                                                  uint32_t slot,
+                                                  const XrTypedLeafAggregateI64x2 *value,
+                                                  XrTypedLeafAggregateSlot *described) {
+    XrTypedLeafAggregateSlot local = {0};
+    XrTypedDispatchStatus status = describe_leaf_aggregate(plan, frame, slot, &local);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    if (xr_typed_frame_store(frame, &local.access, value, sizeof(*value)) != XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (described)
+        *described = local;
+    return XR_TYPED_DISPATCH_OK;
+}
+
 static XrTypedDispatchStatus load_bool_byte(XrTypedFrame *frame, uint32_t slot,
                                             uint8_t *byte) {
     XrTypedSlotAccess access = {0};
@@ -221,11 +353,13 @@ static XrTypedDispatchStatus restore_owned_value(XrTypedFrame *frame, uint32_t s
 
 typedef struct XrTypedDispatchRowContext {
     const int64_t *arguments;
+    const XrTypedLeafAggregateI64x2 *aggregate_arguments;
     uint32_t argument_count;
     uint32_t row_count;
     uint32_t *next;
     bool *returned;
     uint64_t *return_bits;
+    XrTypedLeafAggregateI64x2 *aggregate_return;
     struct XrTypedDispatchExecution *execution;
     const XrVmDecodedInstruction *decoded;
     bool parameters_prebound;
@@ -348,9 +482,11 @@ static bool generation_identity_matches_plan(
 
 static XrTypedDispatchStatus execute_function(
     XrTypedDispatchExecution *execution, XrTypedFrame *frame,
-    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    uint32_t function, const int64_t *arguments, const XrTypedLeafAggregateI64x2 *aggregate_arguments,
+                 uint32_t argument_count,
     bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
-    uint64_t *return_bits);
+    uint64_t *return_bits,
+                 XrTypedLeafAggregateI64x2 *aggregate_return);
 
 static XrVmTraceEvent make_trace_event(XrVmTraceEventKind kind,
                                        uint32_t function, uint32_t frame,
@@ -416,6 +552,13 @@ static XrTypedDispatchStatus execute_param(
     XrTypedDispatchRowContext *context) {
     if (context->parameters_prebound)
         return XR_TYPED_DISPATCH_OK;
+    if (contract->result_rep == XR_TARGET_INSTRUCTION_REP_AGGREGATE) {
+        if (!context->aggregate_arguments || row->immediate_bits >= context->argument_count ||
+            !context->execution)
+            return XR_TYPED_DISPATCH_ARGUMENT_MISMATCH;
+        return store_leaf_aggregate(context->execution->plan, frame, row->result_slot,
+                                    &context->aggregate_arguments[row->immediate_bits], NULL);
+    }
     if (contract->result_rep == XR_TARGET_INSTRUCTION_REP_DYN_VALUE) {
         XrTypedDispatchExecution *execution = context->execution;
         if (!execution || !execution->value_arguments ||
@@ -433,6 +576,86 @@ static XrTypedDispatchStatus execute_param(
     uint64_t bits = 0;
     memcpy(&bits, &context->arguments[row->immediate_bits], sizeof(bits));
     return store_i64_bits(frame, row->result_slot, bits);
+}
+
+static XrTypedDispatchStatus execute_aggregate_get(XrTypedFrame *frame,
+                                                   const XrTargetInstructionRecord *row,
+                                                   const XrTargetInstructionContract *contract,
+                                                   XrTypedDispatchRowContext *context) {
+    if (!contract || !context || !context->execution ||
+        contract->result_rep != XR_TARGET_INSTRUCTION_REP_I64 ||
+        contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
+        row->operand_count != 1 || row->immediate_bits > UINT32_MAX)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafAggregateI64x2 aggregate = {{0, 0}};
+    XrTypedLeafAggregateSlot source = {0};
+    XrTypedDispatchStatus status = load_leaf_aggregate(context->execution->plan, frame,
+                                                       row->operand_slots[0], &aggregate, &source);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    uint32_t field_count = 0;
+    const XrTargetFieldRecord *fields =
+        xr_target_plan_fields(context->execution->plan, &field_count);
+    uint32_t field_index = (uint32_t) row->immediate_bits;
+    if (!fields || field_index >= field_count || field_index < source.layout->field_begin ||
+        field_index - source.layout->field_begin >= source.layout->field_count)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    const XrTargetFieldRecord *field = &fields[field_index];
+    uint32_t ordinal = field_index - source.layout->field_begin;
+    if (!target_leaf_field_is_exact(context->execution->plan, field, source.layout_index, ordinal))
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedSlotAccess result = {0};
+    if (describe_exact_i64(context->execution->plan, frame, row->result_slot, &result) !=
+        XR_TYPED_DISPATCH_OK)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint64_t bits = 0;
+    memcpy(&bits, (const uint8_t *) &aggregate + field->offset, sizeof(bits));
+    return xr_typed_frame_store(frame, &result, &bits, sizeof(bits)) == XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
+}
+
+static XrTypedDispatchStatus execute_aggregate_make(XrTypedFrame *frame,
+                                                    const XrTargetInstructionRecord *row,
+                                                    const XrTargetInstructionContract *contract,
+                                                    XrTypedDispatchRowContext *context) {
+    if (!contract || !context || !context->execution ||
+        contract->result_rep != XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
+        contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_I64 ||
+        contract->operand_rep[1] != XR_TARGET_INSTRUCTION_REP_I64 || row->operand_count != 2 ||
+        row->immediate_bits > UINT32_MAX)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafAggregateSlot destination = {0};
+    XrTypedDispatchStatus status =
+        describe_leaf_aggregate(context->execution->plan, frame, row->result_slot, &destination);
+    if (status != XR_TYPED_DISPATCH_OK ||
+        destination.layout_index != (uint32_t) row->immediate_bits)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedLeafAggregateI64x2 aggregate = {{0, 0}};
+    uint32_t field_count = 0;
+    const XrTargetFieldRecord *fields =
+        xr_target_plan_fields(context->execution->plan, &field_count);
+    if (!fields || destination.layout->field_begin > field_count ||
+        destination.layout->field_count > field_count - destination.layout->field_begin)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    for (uint32_t ordinal = 0; ordinal < 2; ordinal++) {
+        XrTypedSlotAccess operand = {0};
+        if (describe_exact_i64(context->execution->plan, frame, row->operand_slots[ordinal],
+                               &operand) != XR_TYPED_DISPATCH_OK)
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+        uint64_t bits = 0;
+        if (xr_typed_frame_load(frame, &operand, &bits, sizeof(bits)) != XR_TYPED_FRAME_OK)
+            return XR_TYPED_DISPATCH_FRAME_ERROR;
+        const XrTargetFieldRecord *field = &fields[destination.layout->field_begin + ordinal];
+        if (!target_leaf_field_is_exact(context->execution->plan, field, destination.layout_index,
+                                        ordinal))
+            return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+        memcpy((uint8_t *) &aggregate + field->offset, &bits, sizeof(bits));
+    }
+    return xr_typed_frame_store(frame, &destination.access, &aggregate, sizeof(aggregate)) ==
+                   XR_TYPED_FRAME_OK
+               ? XR_TYPED_DISPATCH_OK
+               : XR_TYPED_DISPATCH_FRAME_ERROR;
 }
 
 static XrTypedDispatchStatus execute_copy(
@@ -620,6 +843,20 @@ static XrTypedDispatchStatus execute_return(
     return load_i64_bits(frame, row->operand_slots[0], context->return_bits);
 }
 
+static XrTypedDispatchStatus execute_return_aggregate(XrTypedFrame *frame,
+                                                      const XrTargetInstructionRecord *row,
+                                                      const XrTargetInstructionContract *contract,
+                                                      XrTypedDispatchRowContext *context) {
+    if (!contract || !context || !context->execution || !context->aggregate_return ||
+        contract->operand_rep[0] != XR_TARGET_INSTRUCTION_REP_AGGREGATE || row->operand_count != 1)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    XrTypedDispatchStatus status = load_leaf_aggregate(
+        context->execution->plan, frame, row->operand_slots[0], context->aggregate_return, NULL);
+    if (status == XR_TYPED_DISPATCH_OK)
+        *context->returned = true;
+    return status;
+}
+
 static XrTypedDispatchStatus execute_return_unit(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
@@ -733,10 +970,32 @@ static XrTypedDispatchStatus execute_branch(
     return XR_TYPED_DISPATCH_OK;
 }
 
-static XrTypedDispatchStatus copy_call_arguments(
-    XrTypedFrame *parent, XrTypedFrame *child,
-    const XrTargetCallArgumentRecord *arguments, uint16_t argument_count) {
+static XrTypedDispatchStatus copy_call_arguments(const XrTargetPlan *plan, XrTypedFrame *parent, XrTypedFrame *child,
+    const XrTargetCallArgumentRecord *arguments, uint16_t argument_count, bool aggregate_call) {
     for (uint16_t ordinal = 0; ordinal < argument_count; ordinal++) {
+        if (aggregate_call) {
+            const XrTargetCallArgumentRecord *argument = &arguments[ordinal];
+            XrTypedLeafAggregateI64x2 value = {{0, 0}};
+            XrTypedLeafAggregateSlot caller = {0};
+            XrTypedLeafAggregateSlot callee = {0};
+            XrTypedDispatchStatus status =
+                load_leaf_aggregate(plan, parent, argument->caller_slot, &value, &caller);
+            if (status != XR_TYPED_DISPATCH_OK)
+                return status;
+            status = describe_leaf_aggregate(plan, child, argument->callee_slot, &callee);
+            if (status != XR_TYPED_DISPATCH_OK || caller.layout_index != callee.layout_index ||
+                caller.slot->register_rep != argument->register_rep ||
+                caller.slot->memory_rep != argument->memory_rep ||
+                callee.slot->register_rep != argument->callee_register_rep ||
+                callee.slot->memory_rep != argument->callee_memory_rep ||
+                argument->register_rep != argument->callee_register_rep ||
+                argument->memory_rep != argument->callee_memory_rep)
+                return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+            if (xr_typed_frame_store(child, &callee.access, &value, sizeof(value)) !=
+                XR_TYPED_FRAME_OK)
+                return XR_TYPED_DISPATCH_FRAME_ERROR;
+            continue;
+        }
         uint64_t bits = 0;
         XrTypedDispatchStatus status =
             load_i64_bits(parent, arguments[ordinal].caller_slot, &bits);
@@ -749,11 +1008,56 @@ static XrTypedDispatchStatus copy_call_arguments(
     return XR_TYPED_DISPATCH_OK;
 }
 
-static XrTypedDispatchStatus execute_call(
+static bool leaf_aggregate_call_is_exact(const XrTargetPlan *plan,
+                                         const XrTargetInstructionRecord *row,
+                                         const XrTargetCallRecord *call,
+                                         const XrTargetCallArgumentRecord *arguments,
+                                         uint32_t argument_count) {
+    if (!plan || !row || !call || !arguments || row->immediate_bits > UINT32_MAX ||
+        call->id != (uint32_t) row->immediate_bits || call->caller_function != row->function ||
+        call->callee_function == XR_SEMANTIC_INDEX_NONE || call->result_slot != row->result_slot ||
+        call->caller_storage_slot != row->result_slot ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !bytes_are_zero(call->source_export_identity.bytes,
+                        sizeof(call->source_export_identity.bytes)) ||
+        !bytes_are_zero(call->source_callee_identity.bytes,
+                        sizeof(call->source_callee_identity.bytes)) ||
+        call->result_register_rep != call->result_memory_rep ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE || call->argument_count != 1 ||
+        call->adapter_count != 0 || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
+        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
+        call->result_mode != XR_TARGET_CALL_CALLER_STORAGE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_hof_kind != XR_TARGET_ARRAY_HOF_NONE ||
+        call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->reserved8[0] != 0 || call->reserved8[1] != 0 || call->reserved8[2] != 0 ||
+        call->argument_begin >= argument_count)
+        return false;
+    const XrTargetMachineRepRecord *result_rep =
+        xr_target_plan_machine_rep(plan, call->result_memory_rep);
+    const XrTargetCallArgumentRecord *argument = &arguments[call->argument_begin];
+    return result_rep && result_rep->kind == XR_MACHINE_REP_AGGREGATE &&
+           result_rep->register_bits == 128 && result_rep->memory_size == 16 &&
+           result_rep->memory_align == 8 && argument->call == call->id && argument->ordinal == 0 &&
+           argument->mode == XR_TARGET_CALL_VALUE && argument->ownership == XR_TARGET_CALL_READ &&
+           argument->transfer_mode == XR_TRANSFER_SHARE && argument->flags == 0 &&
+           argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+           argument->reserved8[0] == 0 && argument->reserved8[1] == 0 &&
+           argument->reserved8[2] == 0 && argument->register_rep == call->result_register_rep &&
+           argument->memory_rep == call->result_memory_rep &&
+           argument->callee_register_rep == argument->register_rep &&
+           argument->callee_memory_rep == argument->memory_rep;
+}
+
+static XrTypedDispatchStatus execute_call_common(
     XrTypedFrame *frame, const XrTargetInstructionRecord *row,
     const XrTargetInstructionContract *contract,
-    XrTypedDispatchRowContext *context) {
-    (void) contract;
+    XrTypedDispatchRowContext *context,
+                                                 bool aggregate_call) {
     XrTypedDispatchExecution *execution = context->execution;
     if (!execution || execution->call_depth >= XR_TYPED_DISPATCH_MAX_CALL_DEPTH)
         return XR_TYPED_DISPATCH_CALL_DEPTH_EXCEEDED;
@@ -768,6 +1072,10 @@ static XrTypedDispatchStatus execute_call(
         calls && call_index < call_count ? &calls[call_index] : NULL;
     if (!call || call->argument_begin > argument_count ||
         call->argument_count > argument_count - call->argument_begin)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    if (aggregate_call &&
+        (contract->result_rep != XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
+         !leaf_aggregate_call_is_exact(execution->plan, row, call, arguments, argument_count)))
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
 
     uint32_t child_frame_id = execution->next_frame_id++;
@@ -802,21 +1110,26 @@ static XrTypedDispatchStatus execute_call(
     }
     if (xr_typed_frame_link_child(frame, child) != XR_TYPED_FRAME_OK)
         goto cleanup;
-    status = copy_call_arguments(frame, child,
+    status = copy_call_arguments(execution->plan, frame, child,
                                  call->argument_count
                                      ? &arguments[call->argument_begin]
                                      : NULL,
-                                 call->argument_count);
+                                 call->argument_count, aggregate_call);
     if (status != XR_TYPED_DISPATCH_OK)
         goto cleanup;
     uint64_t child_result = 0;
+    XrTypedLeafAggregateI64x2 child_aggregate = {{0, 0}};
     execution->call_depth++;
-    status = execute_function(execution, child, call->callee_function, NULL,
+    status = execute_function(execution, child, call->callee_function, NULL, NULL,
                               call->argument_count, true, child_frame_id,
-                              context->frame_id, &child_result);
+                              context->frame_id, &child_result, aggregate_call ? &child_aggregate : NULL);
     execution->call_depth--;
-    if (status == XR_TYPED_DISPATCH_OK)
-        status = store_i64_bits(frame, row->result_slot, child_result);
+    if (status == XR_TYPED_DISPATCH_OK) {
+        status = aggregate_call
+                     ? store_leaf_aggregate(execution->plan, frame, call->caller_storage_slot,
+                                            &child_aggregate, NULL)
+                     : store_i64_bits(frame, row->result_slot, child_result);
+    }
 
 cleanup:
     /* Successful frame cleanup severs the parent link.  A lifecycle refusal
@@ -839,6 +1152,19 @@ cleanup:
             status = trace_status;
     }
     return status;
+}
+
+static XrTypedDispatchStatus execute_call(XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+                                          const XrTargetInstructionContract *contract,
+                                          XrTypedDispatchRowContext *context) {
+    return execute_call_common(frame, row, contract, context, false);
+}
+
+static XrTypedDispatchStatus execute_call_aggregate(XrTypedFrame *frame,
+                                                    const XrTargetInstructionRecord *row,
+                                                    const XrTargetInstructionContract *contract,
+                                                    XrTypedDispatchRowContext *context) {
+    return execute_call_common(frame, row, contract, context, true);
 }
 
 static XrTypedDispatchStatus execute_entry_call(
@@ -1005,8 +1331,9 @@ static XrTypedDispatchStatus execute_entry_call(
     execution->call_depth++;
     status = execute_function(
         execution, child, resolution.function,
-        call->argument_count ? child_arguments : NULL, call->argument_count,
-        false, child_frame_id, context->frame_id, &child_result);
+        call->argument_count ? child_arguments : NULL, NULL,
+        call->argument_count,
+        false, child_frame_id, context->frame_id, &child_result, NULL);
     execution->call_depth--;
     execution->plan = saved_plan;
     execution->fingerprint = saved_fingerprint;
@@ -1105,10 +1432,8 @@ XR_FUNC bool xr_typed_dispatch_provider_contract_is_exact(
         switch ((XrTargetInstructionOpcode) opcode) {
 #define XR_VM_OP(symbol, handler, kind, argument)                                  \
             case XR_TARGET_INSTRUCTION_##symbol:                                  \
-                return contract->dispatch_kind ==                                 \
-                           XR_TARGET_INSTRUCTION_DISPATCH_##kind &&                \
-                       contract->dispatch_argument ==                             \
-                           XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument;
+                return contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_##kind &&                \
+                       contract->dispatch_argument == XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_##argument;
 #include "xr_vm_ops.def"
 #undef XR_VM_OP
             default: return false;
@@ -1157,11 +1482,11 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
                                          const XrTargetInstructionRecord *row,
                                          const XrVmDecodedInstruction *decoded,
                                          const int64_t *arguments,
-                                         uint32_t argument_count,
+            const XrTypedLeafAggregateI64x2 *aggregate_arguments, uint32_t argument_count,
                                          uint32_t row_count, uint32_t *next,
                                          bool *returned,
                                          uint64_t *return_bits,
-                                         XrTypedDispatchExecution *execution,
+            XrTypedLeafAggregateI64x2 *aggregate_return, XrTypedDispatchExecution *execution,
                                          bool parameters_prebound,
                                          uint32_t frame_id) {
     const XrTargetInstructionContract *contract =
@@ -1170,8 +1495,18 @@ static XrTypedDispatchStatus execute_row(XrTypedFrame *frame,
     if (!contract)
         return XR_TYPED_DISPATCH_PROGRAM_INVALID;
     XrTypedDispatchRowContext context = {
-        arguments, argument_count, row_count, next, returned, return_bits,
-        execution, decoded, parameters_prebound, frame_id,
+        .arguments = arguments,
+        .aggregate_arguments = aggregate_arguments,
+        .argument_count = argument_count,
+        .row_count = row_count,
+        .next = next,
+        .returned = returned,
+        .return_bits = return_bits,
+        .aggregate_return = aggregate_return,
+        .execution = execution,
+        .decoded = decoded,
+        .parameters_prebound = parameters_prebound,
+        .frame_id = frame_id,
     };
     if (!xr_typed_dispatch_provider_contract_is_exact(
             execution->provider, row->opcode, contract))
@@ -1193,12 +1528,13 @@ typedef struct XrTypedDispatchFunctionRun {
 
 static XrTypedDispatchStatus execute_function_rows(
     XrTypedDispatchExecution *execution, XrTypedFrame *frame,
-    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    uint32_t function, const int64_t *arguments,
+                      const XrTypedLeafAggregateI64x2 *aggregate_arguments, uint32_t argument_count,
     bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
     uint32_t frame_depth, const XrTargetInstructionRecord *instructions,
     const XrVmDecodedFunctionView *decoded_function,
-    uint32_t instruction_count, uint64_t *return_bits,
-    XrTypedDispatchFunctionRun *run) {
+    uint32_t instruction_count, uint64_t *return_bits, XrTypedLeafAggregateI64x2 *aggregate_return,
+                      XrTypedDispatchFunctionRun *run) {
     XrVmDebugControl *debug_control = execution->debug_session
                                           ? execution->debug_session->control
                                           : NULL;
@@ -1280,8 +1616,9 @@ static XrTypedDispatchStatus execute_function_rows(
         execution->row_suspended = false;
         execution->row_suspend_state = XR_TYPED_FRAME_CONTEXT_INDEX_NONE;
         status = execute_row(
-            frame, row, decoded, arguments, argument_count,
-            instruction_count, &next, &returned, return_bits, execution,
+            frame, row, decoded, arguments, aggregate_arguments, argument_count,
+            instruction_count, &next, &returned, return_bits, aggregate_return,
+                             execution,
             parameters_prebound, frame_id);
         if (status != XR_TYPED_DISPATCH_OK)
             return status;
@@ -1301,9 +1638,11 @@ static XrTypedDispatchStatus execute_function_rows(
 
 static XrTypedDispatchStatus execute_function(
     XrTypedDispatchExecution *execution, XrTypedFrame *frame,
-    uint32_t function, const int64_t *arguments, uint32_t argument_count,
+    uint32_t function, const int64_t *arguments, const XrTypedLeafAggregateI64x2 *aggregate_arguments,
+                 uint32_t argument_count,
     bool parameters_prebound, uint32_t frame_id, uint32_t parent_frame_id,
-    uint64_t *return_bits) {
+    uint64_t *return_bits,
+                 XrTypedLeafAggregateI64x2 *aggregate_return) {
     XrVmDebugControl *debug_control = execution->debug_session
                                           ? execution->debug_session->control
                                           : NULL;
@@ -1368,9 +1707,10 @@ static XrTypedDispatchStatus execute_function(
         goto report_error;
     }
     status = execute_function_rows(
-        execution, frame, function, arguments, argument_count,
+        execution, frame, function, arguments, aggregate_arguments,
+                                   argument_count,
         parameters_prebound, frame_id, parent_frame_id, frame_depth,
-        instructions, &decoded_function, instruction_count, return_bits, &run);
+        instructions, &decoded_function, instruction_count, return_bits, aggregate_return, &run);
 
 report_error:
     if (status != XR_TYPED_DISPATCH_OK &&
@@ -1534,9 +1874,8 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         execution.generation_identity_present = true;
     }
     XrTypedDispatchStatus status = execute_function(
-        &execution, frame, request->function, request->arguments,
-        request->argument_count, false, 0, XR_VM_TRACE_ID_NONE,
-        &return_bits);
+        &execution, frame, request->function, request->arguments, NULL, request->argument_count, false, 0, XR_VM_TRACE_ID_NONE,
+        &return_bits, NULL);
     if (free_scalar_frame(&frame) != XR_TYPED_DISPATCH_OK)
         status = XR_TYPED_DISPATCH_FRAME_ERROR;
     xr_typed_debug_control_end_execution(debug_control);
@@ -1544,6 +1883,57 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         return status;
     memcpy(request->result, &return_bits, sizeof(*request->result));
     return XR_TYPED_DISPATCH_OK;
+}
+
+XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_aggregate_i64x2(
+    const XrTypedDispatchLeafAggregateI64x2Request *request) {
+    if (request && request->result)
+        memset(request->result, 0, sizeof(*request->result));
+    if (!request || !request->verified_plan || !request->required_plan_fingerprint ||
+        !request->result || (!request->arguments && request->argument_count) ||
+        (request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH &&
+         request->provider != XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE))
+        return XR_TYPED_DISPATCH_INVALID_ARGUMENT;
+    const XrTargetPlan *plan = request->verified_plan;
+    const XrFingerprint *fingerprint = request->required_plan_fingerprint;
+    if (!xr_target_plan_is_verified(plan))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (!xr_fingerprint_equal(xr_target_plan_fingerprint(plan), *fingerprint))
+        return XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+    char error[512] = {0};
+    if (!xr_target_plan_fingerprint_is_intact(plan) ||
+        !xr_target_instruction_program_verify(plan, error, sizeof(error)))
+        return XR_TYPED_DISPATCH_PLAN_NOT_VERIFIED;
+    if (xr_target_plan_function_execution_family_mask(plan, request->function) !=
+            XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 ||
+        !function_has_zero_lifecycle(plan, request->function))
+        return XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE;
+
+    XrTypedFrameLimits limits;
+    xr_typed_frame_limits_default(&limits);
+    XrTypedFrame *frame = NULL;
+    if (xr_typed_frame_create(plan, fingerprint, request->function, &limits, &frame) !=
+        XR_TYPED_FRAME_OK)
+        return XR_TYPED_DISPATCH_FRAME_ERROR;
+    XrTypedDispatchExecution execution = {
+        .plan = plan,
+        .fingerprint = fingerprint,
+        .limits = limits,
+        .remaining_steps = XR_TYPED_DISPATCH_MAX_STEPS,
+        .call_depth = 1,
+        .next_frame_id = 1,
+        .provider = request->provider,
+    };
+    uint64_t ignored_scalar_result = 0;
+    XrTypedLeafAggregateI64x2 aggregate_result = {{0, 0}};
+    XrTypedDispatchStatus status = execute_function(
+        &execution, frame, request->function, NULL, request->arguments, request->argument_count,
+        false, 0, XR_VM_TRACE_ID_NONE, &ignored_scalar_result, &aggregate_result);
+    if (free_scalar_frame(&frame) != XR_TYPED_DISPATCH_OK)
+        status = XR_TYPED_DISPATCH_FRAME_ERROR;
+    if (status == XR_TYPED_DISPATCH_OK)
+        *request->result = aggregate_result;
+    return status;
 }
 
 XrTypedDispatchStatus xr_typed_dispatch_execute_values(
@@ -1596,8 +1986,8 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_values(
     };
     uint64_t ignored_result = 0;
     XrTypedDispatchStatus status = execute_function(
-        &execution, frame, request->function, NULL, request->argument_count,
-        false, 0, XR_VM_TRACE_ID_NONE, &ignored_result);
+        &execution, frame, request->function, NULL, NULL, request->argument_count,
+        false, 0, XR_VM_TRACE_ID_NONE, &ignored_result, NULL);
 
     /* Once PARAM_DYN_OWNED clears argument 1, every failure must move that
      * exact owner back before the frame can be destroyed. */
@@ -1747,9 +2137,10 @@ XrTypedDispatchStatus xr_typed_coroutine_i64_resume(
         coroutine->next_instruction;
     XrTypedDispatchStatus status = execute_function_rows(
         &coroutine->execution, coroutine->frame, coroutine->function,
-        coroutine->arguments, coroutine->argument_count, coroutine->started,
+        coroutine->arguments, NULL,
+        coroutine->argument_count, coroutine->started,
         0, XR_VM_TRACE_ID_NONE, 0, NULL, &view, view.instruction_count,
-        &coroutine->return_bits, &run);
+        &coroutine->return_bits, NULL, &run);
     uint32_t state = coroutine->execution.row_suspend_state;
     coroutine->started = true;
     coroutine->suspended = false;

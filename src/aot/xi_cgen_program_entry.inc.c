@@ -1036,7 +1036,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
     emit_class_native_typedefs(ctx, types, module, prefix);
     emit_class_shared_native_storage_decls(ctx, types, prefix);
-    emit_struct_native_typedefs(types, main_func, prefix, !ctx->freestanding_profile);
+    emit_struct_native_typedefs(ctx, types, main_func, prefix, !ctx->freestanding_profile);
     emit_enum_native_typedefs(ctx, types, module);
 
     emit_forward_decls(ctx, forwards, main_func, prefix);
@@ -1379,7 +1379,7 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
             emit_class_shared_native_storage_decls(ctx, unit, prefix);
             emit_imported_class_shared_native_storage_decls(ctx, unit);
         }
-        emit_struct_native_typedefs(unit, module->init, prefix, !ctx->freestanding_profile);
+        emit_struct_native_typedefs(ctx, unit, module->init, prefix, !ctx->freestanding_profile);
         /* enum aggregate from_base converters (emitted next, in the TYPES phase
          * as file-scope static inline functions) may reference module shared-slot
          * arrays for class native type ids after the unified native class

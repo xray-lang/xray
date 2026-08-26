@@ -328,6 +328,11 @@ static bool semantic_type_is_value(const XrType *type) {
                                     type->instance.class_ref->struct_layout));
 }
 
+static uint32_t program_type_row_for_source(const XrSemanticBuildContext *ctx,
+                                            const XrType *type);
+static bool source_is_program_leaf_aggregate(const XrSemanticBuildContext *ctx,
+                                             const XrType *type);
+
 static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stack, uint32_t depth,
                      XrSemanticBuildContext *ctx);
 static uint32_t source_class_for_type(const XrSemanticBuildContext *ctx, const XrType *type);
@@ -437,7 +442,11 @@ static bool type_key(const XrType *type, XrTextBuilder *key, const XrType **stac
     if (!text_append_format(key, "type-v3:%u:%u:%u:%u:%u:%u:%u:%u:%u:%u:", (unsigned) type->kind,
                             type->semantic_type_id, xr_semantic_frozen_builtin_type(type),
                             type->is_nullable ? 1u : 0u, type->is_const ? 1u : 0u,
-                            semantic_type_is_value(type) ? 1u : 0u, type->is_literal ? 1u : 0u,
+                             (semantic_type_is_value(type) ||
+                              source_is_program_leaf_aggregate(ctx, type))
+                                 ? 1u
+                                 : 0u,
+                             type->is_literal ? 1u : 0u,
                             type->is_cycle_candidate ? 1u : 0u, type->ptr_is_mut ? 1u : 0u,
                             (unsigned) type->scalar_rep) ||
         !text_append_component(key, type->alias_name))
@@ -531,32 +540,85 @@ static bool merge_program_type_row(uint32_t candidate, uint32_t *match) {
     return true;
 }
 
+static bool program_source_type_is_same_declaration(const XrType *left, const XrType *right) {
+    if (left == right)
+        return true;
+    if (!left || !right || left->kind != XR_KIND_INSTANCE || right->kind != XR_KIND_INSTANCE ||
+        left->is_nullable != right->is_nullable || left->is_const != right->is_const ||
+        left->is_literal != right->is_literal ||
+        left->instance.type_arg_count != right->instance.type_arg_count ||
+        !left->instance.class_ref || !right->instance.class_ref)
+        return false;
+    if (left->instance.class_ref == right->instance.class_ref)
+        return true;
+    return left->instance.class_ref->xg_class_id != 0 &&
+           left->instance.class_ref->xg_class_id == right->instance.class_ref->xg_class_id;
+}
+
+/* XiClassData owns the declaration-level PSC type row. XrType instances are
+ * expression-local analyzer products: some carry class_ref and some only the
+ * uniquely resolved local declaration name, so scanning value annotations
+ * cannot be the owner of type identity. Join the type to the local source
+ * class first and read the row frozen by xi_program_semantic_finalize(). */
+static uint32_t declared_program_type_row_for_source(const XrSemanticBuildContext *ctx,
+                                                     const XrType *type) {
+    if (!ctx || !ctx->program_closure || !type || type->kind != XR_KIND_INSTANCE ||
+        type->is_nullable || type->is_const || type->is_literal ||
+        type->instance.type_arg_count != 0 || !ctx->function_count ||
+        !ctx->functions[0].source || !ctx->functions[0].source->module)
+        return XI_PSC_ROW_NONE;
+    const XiModule *module = ctx->functions[0].source->module;
+    uint32_t source_class = source_class_for_type(ctx, type);
+    const XiClassData *data =
+        source_class < module->nclasses && module->classes ? module->classes[source_class] : NULL;
+    const XrProgramSemanticTypeRecord *row =
+        data && data->psc_type_index != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_type(ctx->program_closure, data->psc_type_index)
+            : NULL;
+    if (!data || !row || row->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE)
+        return XI_PSC_ROW_NONE;
+    return data->psc_type_index;
+}
+
 static uint32_t program_type_row_for_source(const XrSemanticBuildContext *ctx, const XrType *type) {
-    uint32_t match = XI_PSC_ROW_NONE;
+    uint32_t match = declared_program_type_row_for_source(ctx, type);
     for (uint32_t f = 0; ctx && type && f < ctx->function_count; f++) {
         const XiFunc *function = ctx->functions[f].source;
         if (!function)
             return XI_PSC_ROW_NONE;
-        if (function->return_type == type &&
+        if (program_source_type_is_same_declaration(function->return_type, type) &&
             !merge_program_type_row(function->psc_return_type_index, &match))
             return XI_PSC_ROW_NONE;
         for (uint16_t p = 0; p < function->nparams; p++)
-            if (function->params[p] && function->params[p]->type == type &&
+            if (function->params[p] &&
+                program_source_type_is_same_declaration(function->params[p]->type, type) &&
                 !merge_program_type_row(function->params[p]->psc_type_index, &match))
                 return XI_PSC_ROW_NONE;
         for (uint32_t b = 0; b < function->nblocks; b++) {
             const XiBlock *block = function->blocks[b];
             for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next)
-                if (phi->value.type == type &&
+                if (program_source_type_is_same_declaration(phi->value.type, type) &&
                     !merge_program_type_row(phi->value.psc_type_index, &match))
                     return XI_PSC_ROW_NONE;
             for (uint32_t v = 0; block && v < block->nvalues; v++)
-                if (block->values[v] && block->values[v]->type == type &&
+                if (block->values[v] &&
+                    program_source_type_is_same_declaration(block->values[v]->type, type) &&
                     !merge_program_type_row(block->values[v]->psc_type_index, &match))
                     return XI_PSC_ROW_NONE;
         }
     }
     return match;
+}
+
+static bool source_is_program_leaf_aggregate(const XrSemanticBuildContext *ctx,
+                                             const XrType *type) {
+    uint32_t row = program_type_row_for_source(ctx, type);
+    const XrProgramSemanticTypeRecord *program_type =
+        ctx && ctx->program_closure && row != XI_PSC_ROW_NONE
+            ? xr_program_semantic_closure_type(ctx->program_closure, row)
+            : NULL;
+    return program_type &&
+           program_type->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE;
 }
 
 static uint32_t program_type_row_for_id(const XrProgramSemanticClosure *closure,
@@ -958,7 +1020,9 @@ static bool add_type(XrSemanticBuildContext *ctx, const XrType *type, uint32_t *
     record->flags =
         (uint8_t) ((type->is_nullable ? XR_SEM_TYPE_NULLABLE : 0u) |
                    (type->is_const ? XR_SEM_TYPE_CONST : 0u) |
-                   (semantic_type_is_value(type) ? XR_SEM_TYPE_VALUE : 0u) |
+                   ((semantic_type_is_value(type) || source_is_program_leaf_aggregate(ctx, type))
+                        ? XR_SEM_TYPE_VALUE
+                        : 0u) |
                    (type->is_literal ? XR_SEM_TYPE_LITERAL : 0u) |
                    (reference_capable ? XR_SEM_TYPE_REFERENCE_CAPABLE : 0u) |
                    (borrow_view ? XR_SEM_TYPE_BORROW_VIEW : 0u) |

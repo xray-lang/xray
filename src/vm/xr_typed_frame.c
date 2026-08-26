@@ -387,11 +387,11 @@ static bool slot_rep_contract_is_exact(
            slot->ownership == memory_rep->ownership;
 }
 
-/* A source-export call carries namespace-resolution values in the immutable
- * plan even though the generated CALL_ENTRY instruction consumes only its
- * scalar argument/result slots. Those resolution-only slots are never
- * materialized by the typed executor. Keeping them uninitialized is narrower
- * than pretending the frame owns their roots or cleanup contract. */
+/* A frozen function may retain planning-only values that its verified typed
+ * instruction closure does not execute. Only instruction operands/results and
+ * call arguments are frame transport authority. Keeping every other slot
+ * inaccessible is narrower than pretending the executor owns its roots,
+ * cleanup, or representation contract. */
 static bool slot_is_executed(const XrTargetPlan *plan, uint32_t function,
                              uint32_t slot) {
     uint32_t row_count = 0;
@@ -419,7 +419,8 @@ static bool slot_is_executed(const XrTargetPlan *plan, uint32_t function,
                 return true;
         }
         uint32_t call_index = XR_SEMANTIC_INDEX_NONE;
-        if (row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 &&
+        if ((row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+             row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE) &&
             row->immediate_bits <= UINT32_MAX)
             call_index = (uint32_t) row->immediate_bits;
         else if (row->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64 &&
@@ -480,9 +481,9 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
     if (!functions || function_index >= function_count)
         return XR_TYPED_FRAME_FUNCTION_INVALID;
     const XrTargetFunctionRecord *function = &functions[function_index];
-    bool dynamic_entry_function =
-        xr_target_plan_function_execution_family_mask(plan, function_index) ==
-        XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC;
+    bool has_verified_instruction_closure =
+        xr_target_plan_function_execution_family_mask(plan, function_index) !=
+        0;
     if (function->id != function_index || function->semantic_function != function_index ||
         function->slot_begin > total_slots ||
         function->slot_count > total_slots - function->slot_begin ||
@@ -535,7 +536,7 @@ static XrTypedFrameStatus validate_shape(const XrTargetPlan *plan,
             slot->align > function->frame_align || slot->offset % slot->align != 0 ||
             slot->offset > function->frame_size ||
             slot->size > function->frame_size - slot->offset ||
-            ((!dynamic_entry_function ||
+            ((!has_verified_instruction_closure ||
               slot_is_executed(plan, function_index, global_slot)) &&
              !slot_rep_contract_is_exact(plan, slot)))
             return XR_TYPED_FRAME_SLOT_INVALID;

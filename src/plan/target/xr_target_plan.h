@@ -96,6 +96,10 @@ typedef enum XrTargetExecutionFamily {
      * borrowed, the tagged element is consumed, and the unit result occupies
      * no slot. */
     XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED = UINT64_C(1) << 3,
+    /* One pointer-free two-field aggregate whose layout, field accesses,
+     * direct call, caller-owned result storage, and return are all carried by
+     * schema-47 TargetPlan rows. */
+    XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX

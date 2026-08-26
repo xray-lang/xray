@@ -390,6 +390,28 @@ static XrRep cg_type_aot_storage_rep(const XrType *type) {
 static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
                                         XrCFunctionAbiEmissionView *out);
 
+static bool cg_function_semantic_index(XiCgenCtx *ctx, const XiFunc *f, uint32_t *out) {
+    if (out)
+        *out = XR_SEMANTIC_INDEX_NONE;
+    if (!ctx || !f || !out)
+        return false;
+    const XrTargetFunctionRecord *leaf_function = NULL;
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_function_status(
+        ctx->aot_bundle, f, NULL, &leaf_function, NULL, 0);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        ctx->error = true;
+        return false;
+    }
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+        *out = leaf_function->semantic_function;
+        return true;
+    }
+    if (!f->semantic_plan || f->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+        return false;
+    *out = f->semantic_plan_function_index;
+    return true;
+}
+
 /* Whether this function's boundary reaches C natively.
  *
  * Read from the signature rows, which carry the answer for the whole
@@ -412,8 +434,9 @@ static bool cg_func_param_abi_emission(XiCgenCtx *ctx, const XiFunc *f, uint16_t
                                        XrCFunctionAbiEmissionView *out) {
     char error[256] = {0};
     const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
-    return out && f && emission &&
-           xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index,
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    return out && f && emission && cg_function_semantic_index(ctx, f, &semantic_function) &&
+           xr_c_emission_plan_function_abi_view(emission, semantic_function,
                                                 (uint16_t) (param_idx + 1u), out, error,
                                                 sizeof(error));
 }
@@ -475,8 +498,9 @@ static bool cg_func_return_abi_emission(XiCgenCtx *ctx, const XiFunc *f,
                                         XrCFunctionAbiEmissionView *out) {
     char error[256] = {0};
     const XrCEmissionPlan *emission = cg_function_c_emission_plan(ctx, f);
-    return out && f && emission &&
-           xr_c_emission_plan_function_abi_view(emission, f->semantic_plan_function_index, 0u, out,
+    uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
+    return out && f && emission && cg_function_semantic_index(ctx, f, &semantic_function) &&
+           xr_c_emission_plan_function_abi_view(emission, semantic_function, 0u, out,
                                                 error, sizeof(error));
 }
 
@@ -1248,6 +1272,29 @@ static const XaotBoundaryStep *cg_value_boundary_step(XiCgenCtx *ctx, const XiFu
 static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FILE *out,
                                                              const XiFunc *f, const XiValue *call,
                                                              const XiFunc *target) {
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status =
+        cg_leaf_aggregate_call_view(ctx, f, call, &leaf_aggregate);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+        return NULL;
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+        XrCFunctionAbiEmissionView return_abi = {0};
+        XrCValueEmissionView result_emission = {0};
+        bool authoritative = false;
+        bool named_result = cg_value_emission_is_named_aggregate(
+            ctx, call, &result_emission, &authoritative);
+        if (leaf_aggregate.callee != target ||
+            !cg_func_return_abi_emission(ctx, target, &return_abi) ||
+            return_abi.rep != XR_C_VALUE_REP_AGGREGATE ||
+            return_abi.aggregate_class != XR_C_ABI_AGGREGATE_STRUCT || !named_result ||
+            !authoritative || !return_abi.c_type || !result_emission.c_type ||
+            strcmp(return_abi.c_type, result_emission.c_type) != 0) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: leaf-aggregate return disagrees with TargetPlan emission\n");
+            ctx->error = true;
+        }
+        return NULL;
+    }
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status =
         cg_direct_i64_call_view(ctx, f, call, &direct_i64);
@@ -1370,6 +1417,34 @@ static bool emit_cfn_value_rawptr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
 static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *call, const XiFunc *target,
                                           uint16_t arg_index, const XiValue *arg) {
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status =
+        cg_leaf_aggregate_call_view(ctx, f, call, &leaf_aggregate);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+        XrCFunctionAbiEmissionView parameter_abi = {0};
+        XrCValueEmissionView argument_emission = {0};
+        bool authoritative = false;
+        bool named_argument = cg_value_emission_is_named_aggregate(
+            ctx, arg, &argument_emission, &authoritative);
+        if (leaf_aggregate.callee != target || leaf_aggregate.argument_value != arg ||
+            arg_index != 0 || !cg_func_param_abi_emission(ctx, target, 0, &parameter_abi) ||
+            parameter_abi.rep != XR_C_VALUE_REP_AGGREGATE ||
+            parameter_abi.aggregate_class != XR_C_ABI_AGGREGATE_STRUCT || !named_argument ||
+            !authoritative || !parameter_abi.c_type || !argument_emission.c_type ||
+            strcmp(parameter_abi.c_type, argument_emission.c_type) != 0) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: leaf-aggregate argument disagrees with TargetPlan emission\n");
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        emit_vref(out, arg);
+        return;
+    }
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status =
         cg_direct_i64_call_view(ctx, f, call, &direct_i64);

@@ -66,8 +66,10 @@ roots, or general module activation.
    representation, and records the return in caller storage with no adapter or
    ownership transfer. Builder and independent verifier reconstruct the joins
    separately; a missing binding, shape-helper fallback, Xi guess, or source-name
-   special case is not load authority. This projection grants no aggregate VM or
-   AOT execution family. The
+   special case is not load authority. The projection alone grants no execution:
+   the bounded leaf VM/AOT family additionally requires the exact independently
+   verified instruction group frozen by the typed execution contract. A loaded
+   plan with layout rows but without that group remains execution unavailable. The
    closure-storage family covers
    only an exact no-capture heap closure's outer `XrValue` slot as
    dynamic/owned/tagged storage. It does not authorize the closure object body,
@@ -402,10 +404,10 @@ anchor-sha256: src/runtime/abi/xr_runtime_target_profile.h 8653f30d2ed073fd75d3a
 anchor-sha256: src/runtime/abi/xr_runtime_target_profile.c 31918070b7e530780073a8ca0010d2b62f78afbfcdf4d610c41bf27e4da4a5d1
 anchor-sha256: src/plan/target/xr_target_profile.h 2e37c59739b459a24a1ec455fbbb84e520579f0f69c67fbbdd995d47d8e3f946
 anchor-sha256: src/plan/target/xr_target_profile.c aa5b7db6be962e0deaedd2de4ae105f87f777d392fbf30e72b4da8704efa248f
-anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
-anchor-sha256: src/plan/target/xr_target_plan.c 9e7140184ca04bab125144d1f4559ac87a42172eefcf22eb434f33ac8101edff
-anchor-sha256: src/plan/target/xr_target_builder.c b532a82dcd2596127b6b824d3d90c90f96e8264300565e2d59dea447482ce989
-anchor-sha256: src/plan/target/xr_target_verify.c 1bcf31ecc57296ff4057216035a831a67b076cd6e0a9968e13846dab30dd94a1
+anchor-sha256: src/plan/target/xr_target_plan.h e09c17d38ae7d70e18ac2d8996e33bcc13a13f9448a4a586267f074826a2636c
+anchor-sha256: src/plan/target/xr_target_plan.c 31067ae316702f34e546331fc79d93e790696deb8618ece28c2ca3ac96b17c78
+anchor-sha256: src/plan/target/xr_target_builder.c 567c8dfed6ee1b9ee91ccaad1f317652e68bb5bb9affc1ae2e6078b6a97d969a
+anchor-sha256: src/plan/target/xr_target_verify.c feb92f272a1465be2d0112a3e53f37c2f07c7851a423f6abf4bc994f015bc0d2
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 638e5cb5fb73d8979a0c8f35f240800ac00d588ac4bad26889d0284391914eb4
 anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
 anchor-sha256: src/runtime/xr_runtime_artifact_authority.c f0978e9727c181e5686bd0aea15e214d5dba687ce090d13b19d1830e005bcd2c

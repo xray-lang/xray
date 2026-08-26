@@ -29,11 +29,13 @@
 #include "xi_analysis.h"
 #include "xi_escape.h"
 #include "xi_ops_gen.h"
+#include "xi_module.h"
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xanalyzer_builtins.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../frontend/analyzer/xbuiltin_receiver_registry.h"
 #include "../runtime/value/xtype.h"
+#include "../shared/xr_exact_scalar_registry.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 
@@ -66,6 +68,51 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
         type->enum_type.layout->is_zero_payload)
         return false;
     return xr_kind_is_reference_counted(type->kind);
+}
+
+static const XiModule *xi_own_function_module(const XiFunc *function) {
+    for (const XiFunc *owner = function; owner; owner = owner->parent_func)
+        if (owner->module)
+            return owner->module;
+    return NULL;
+}
+
+static bool xi_own_psc_type_is_pointer_free_leaf(const XiFunc *function, uint32_t program_row) {
+    const XiModule *module = xi_own_function_module(function);
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    if (!closure || program_row == XI_PSC_ROW_NONE ||
+        !xr_program_semantic_closure_is_frozen(closure) ||
+        !xr_program_semantic_closure_is_verified(closure) ||
+        xr_program_semantic_closure_schema(closure) !=
+            XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
+        xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
+        return false;
+    const XrProgramSemanticTypeRecord *row =
+        xr_program_semantic_closure_type(closure, program_row);
+    const uint8_t required = XR_PROGRAM_SEMANTIC_TYPE_NONNULLABLE |
+                             XR_PROGRAM_SEMANTIC_TYPE_NONGENERIC |
+                             XR_PROGRAM_SEMANTIC_TYPE_VALUE |
+                             XR_PROGRAM_SEMANTIC_TYPE_POINTER_FREE;
+    return row && row->kind == XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE &&
+           row->exact_scalar == XR_EXACT_SCALAR_NONE &&
+           row->field_count > 0 && row->flags == required && row->reserved == 0;
+}
+
+XR_FUNC bool xi_own_value_is_psc_leaf_aggregate(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    return value && xi_own_psc_type_is_pointer_free_leaf(function, value->psc_type_index);
+}
+
+XR_FUNC bool xi_own_value_is_rc(const XiValue *value) {
+    return value && !xi_own_value_is_psc_leaf_aggregate(value) &&
+           xi_own_type_is_rc(value->type);
+}
+
+XR_FUNC bool xi_own_function_return_is_rc(const XiFunc *function) {
+    return function &&
+           !xi_own_psc_type_is_pointer_free_leaf(function, function->psc_return_type_index) &&
+           xi_own_type_is_rc(function->return_type);
 }
 
 XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture) {
@@ -574,7 +621,7 @@ XR_FUNC bool xi_own_analyze(XiFunc *f, XiOwnResult *out) {
             if (!v || v->id >= max_id)
                 continue;
             XiOwnInfo *info = &out->values[v->id];
-            info->rc_managed = xi_own_type_is_rc(v->type);
+            info->rc_managed = xi_own_value_is_rc(v);
             info->last_use_blk = UINT32_MAX;
             info->last_use_val = UINT32_MAX;
             if (!info->rc_managed) {
@@ -596,7 +643,7 @@ XR_FUNC bool xi_own_analyze(XiFunc *f, XiOwnResult *out) {
         if (!pv || pv->id >= max_id)
             continue;
         XiOwnInfo *info = &out->values[pv->id];
-        info->rc_managed = xi_own_type_is_rc(pv->type);
+        info->rc_managed = xi_own_value_is_rc(pv);
         if (info->rc_managed) {
             info->ownership = XI_OWN_OWNED;
             compute_last_use(f, &du, live, pv, info);

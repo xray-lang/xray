@@ -251,7 +251,7 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
                 continue;
             if (v->escape != XI_ESC_NONE)
                 continue;
-            if (!xi_own_type_is_rc(v->type))
+            if (!xi_own_value_is_rc(v))
                 continue; /* scalars: no alloc */
             if (!xi_op_is_heap_alloc(v->op))
                 continue;
@@ -343,7 +343,7 @@ static void arc_copy_to_move(XiFunc *f) {
                     continue;
                 /* Only RC objects carry ownership; a scalar copy is irrelevant
                  * to ARC and must stay a plain copy. */
-                if (!xi_own_type_is_rc(v->type) || !xi_own_type_is_rc(v->args[0]->type))
+                if (!xi_own_value_is_rc(v) || !xi_own_value_is_rc(v->args[0]))
                     continue;
                 /* Value-type structs copy-on-assign: XI_COPY makes an
                  * INDEPENDENT struct, not a pointer alias. Turning it into a
@@ -500,8 +500,8 @@ static bool arc_value_is_borrow_alias(const XiValue *value, uint8_t depth) {
              * a borrowed owner.  Semantic conversions such as int -> string
              * allocate a fresh value even when their scalar source came from
              * a borrowed PLACE_LOAD. */
-            return value->nargs == 1 && xi_own_type_is_rc(value->type) &&
-                   xi_own_type_is_rc(value->args[0] ? value->args[0]->type : NULL) &&
+            return value->nargs == 1 && xi_own_value_is_rc(value) &&
+                   xi_own_value_is_rc(value->args[0]) &&
                    arc_value_is_borrow_alias(value->args[0], (uint8_t) (depth + 1));
         default:
             return false;
@@ -814,7 +814,7 @@ static bool tracks_rc(const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_STACK_ALLOC)
-        return v->aux_int == XI_CLOSURE_NEW && xi_own_type_is_rc(v->type);
+        return v->aux_int == XI_CLOSURE_NEW && xi_own_value_is_rc(v);
     if (v->op != XI_PARAM && !op_has_trackable_result(v->op))
         return false; /* side-effect op: no owning result */
     /* Call results: precise per-callee summaries classify fresh (+1) results
@@ -827,7 +827,7 @@ static bool tracks_rc(const XiValue *v) {
      * aliased borrow would be a use-after-free. Adding dups is always sound;
      * the only cost is that an unresolved discarded fresh return may leak. */
     if (op_is_call(v->op))
-        return xi_own_type_is_rc(v->type);
+        return xi_own_value_is_rc(v);
     /* A heap allocation is tracked on the strength of what it IS, never of what
      * a later pass might turn it into. The XI_STACK_ALLOC case above is the
      * only "this one has frame lifetime" answer.
@@ -839,7 +839,7 @@ static bool tracks_rc(const XiValue *v) {
      * those values back in scope for tracking. On the VM neither half runs, so
      * a NO_ESCAPE allocation stayed on the heap with nothing to release it:
      * every non-escaping closure leaked (2M closures => 143 MB max RSS). */
-    return xi_own_type_is_rc(v->type);
+    return xi_own_value_is_rc(v);
 }
 
 /* ========== Cross-function borrow signatures ==========
@@ -1082,7 +1082,7 @@ XR_FUNC int16_t xi_arc_value_alias_operand(const XiFunc *function, const XiValue
 }
 
 static XiReturnOwnership arc_infer_return_ownership(XiFunc *f) {
-    if (!f || !xi_own_type_is_rc(f->return_type))
+    if (!f || !xi_own_function_return_is_rc(f))
         return arc_return_unknown();
     XiReturnOwnership result = arc_return_unknown();
     bool seen = false;
@@ -1178,6 +1178,12 @@ XR_FUNC bool xi_arc_operand_consumes(const XiFunc *function, const XiValue *oper
         return argument && argument->op != XI_STACK_ALLOC;
     if (!xi_own_value_arg_is_consuming(operation, operand))
         return false;
+    /* PSC4 proves that this exact leaf value aggregate has value semantics and
+     * no managed leaves.  A direct-call use copies the value; it cannot move an
+     * RC ownership token that does not exist.  Keep this refinement row-bound:
+     * the global aggregate type shape remains conservatively RC-managed. */
+    if (xi_own_value_is_psc_leaf_aggregate(argument))
+        return false;
     if (operation->op == XI_STACK_ALLOC &&
         stack_alloc_closure_uses_are_scoped_par_for_callbacks((XiFunc *) function, operation))
         return false;
@@ -1189,13 +1195,13 @@ XR_FUNC uint8_t xi_arc_parameter_ownership(const XiFunc *function, const XiValue
         return XI_OWN_NONE;
     uint32_t index = (uint32_t) parameter->aux_int;
     if ((function->receiver_borrowed && index == 0) || function->operator_borrowed)
-        return xi_own_type_is_rc(parameter->type) ? XI_OWN_BORROWED : XI_OWN_NONE;
+        return xi_own_value_is_rc(parameter) ? XI_OWN_BORROWED : XI_OWN_NONE;
     if (function->arc_borrow_sig && function->arc_borrow_sig->valid &&
         index < function->arc_borrow_sig->nparams)
         return function->arc_borrow_sig->param_own[index];
     if (function->is_vararg && index == function->nparams)
-        return xi_own_type_is_rc(parameter->type) ? XI_OWN_OWNED : XI_OWN_NONE;
-    return xi_own_type_is_rc(parameter->type) ? XI_OWN_OWNED : XI_OWN_NONE;
+        return xi_own_value_is_rc(parameter) ? XI_OWN_OWNED : XI_OWN_NONE;
+    return xi_own_value_is_rc(parameter) ? XI_OWN_OWNED : XI_OWN_NONE;
 }
 
 /* Collect consuming uses of `target` across the function, in program order.
@@ -1532,7 +1538,7 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                      * test below never sees. */
                     is_member_borrow = u->args[0] == member;
                 } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
-                           xi_own_type_is_rc(u->type) && !call_returns_fresh(f, u)) {
+                           xi_own_value_is_rc(u) && !call_returns_fresh(f, u)) {
                     /* A method whose RC result may alias its receiver — a getter
                      * like Map.get hands back a stored reference,
                      * not a fresh +1 — keeps the receiver (arg 0) live until the
@@ -2438,7 +2444,7 @@ static void arc_init_sigs_collect(XiFunc *f, XiFuncVec *vec) {
     sig->valid = true;
     for (uint16_t p = 0; p < n; p++) {
         XiValue *pv = f->params[p];
-        sig->param_own[p] = (pv && xi_own_type_is_rc(pv->type)) ? XI_OWN_BORROWED : XI_OWN_NONE;
+        sig->param_own[p] = (pv && xi_own_value_is_rc(pv)) ? XI_OWN_BORROWED : XI_OWN_NONE;
     }
     f->arc_borrow_sig = sig;
     if (!xi_func_vec_push(vec, f))
@@ -2461,7 +2467,7 @@ static void arc_mark_closure_return_abis(XiFunc *function) {
             if (!closure || closure->op != XI_CLOSURE_NEW || !closure->aux)
                 continue;
             XiFunc *body = (XiFunc *) closure->aux;
-            if (body->return_type && xi_own_type_is_rc(body->return_type))
+            if (body->return_type && xi_own_function_return_is_rc(body))
                 body->requires_owned_indirect_return = true;
         }
     }
@@ -2533,7 +2539,7 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
         XiFunc *fn = vec.items[i];
         if (fixed_return[i])
             continue;
-        fn->arc_return_ownership = xi_own_type_is_rc(fn->return_type)
+        fn->arc_return_ownership = xi_own_function_return_is_rc(fn)
                                        ? arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true)
                                        : arc_return_unknown();
     }
@@ -2569,7 +2575,8 @@ XR_FUNC void xi_arc_analyze_contracts(XiFunc *f) {
      * name and leak. */
     for (uint32_t i = 0; i < vec.count; i++) {
         XiFunc *fn = vec.items[i];
-        if (!fn || fixed_return[i] || fn->is_extern || !xi_own_type_is_rc(fn->return_type) ||
+        if (!fn || fixed_return[i] || fn->is_extern ||
+            !xi_own_function_return_is_rc(fn) ||
             fn->arc_return_ownership.complete)
             continue;
         fn->arc_return_ownership = arc_return_ownership(XI_RETURN_OWNERSHIP_OWNED, -1, true);

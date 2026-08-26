@@ -81,6 +81,37 @@ typedef enum XaotDirectI64TargetStatus {
     XAOT_DIRECT_I64_TARGET_INVALID,
 } XaotDirectI64TargetStatus;
 
+typedef struct XaotLeafAggregateTargetView {
+    const XrTargetPlan *target_plan;
+    const XrTargetFunctionRecord *caller_function;
+    const XrTargetFunctionRecord *callee_function;
+    const XrTargetCallRecord *call;
+    const XrTargetCallArgumentRecord *argument;
+    const XrTargetInstructionRecord *call_instruction;
+    const XiFunc *callee;
+    const XiValue *argument_value;
+    XrFingerprint target_fingerprint;
+} XaotLeafAggregateTargetView;
+
+typedef enum XaotLeafAggregateTargetStatus {
+    XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED = 0,
+    XAOT_LEAF_AGGREGATE_TARGET_FOUND,
+    XAOT_LEAF_AGGREGATE_TARGET_INVALID,
+} XaotLeafAggregateTargetStatus;
+
+XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_function_status(
+    const struct XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,
+    const XrTargetFunctionRecord **function_out, char *errbuf, size_t errbuf_len);
+XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_semantic_value(
+    const struct XaotBundle *bundle, const XiFunc *function, const XiValue *value,
+    const XrTargetPlan **target_out, uint32_t *semantic_function_out,
+    uint32_t *semantic_value_out, char *errbuf, size_t errbuf_len);
+XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_abi_status(
+    const struct XaotBundle *bundle, const XiFunc *function, char *errbuf, size_t errbuf_len);
+XR_FUNC XaotLeafAggregateTargetStatus xaot_boundary_leaf_aggregate_call_view(
+    const struct XaotBundle *bundle, const XiFunc *caller, const XiValue *call,
+    XaotLeafAggregateTargetView *out, char *errbuf, size_t errbuf_len);
+
 /* Classifies a function from its verified TargetPlan execution row only. */
 XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
     const struct XaotBundle *bundle, const XiFunc *function, const XrTargetPlan **target_out,

@@ -23,4 +23,12 @@ XR_FUNC bool xi_program_semantic_plan_verify(const XiFunc *root, const XrSemanti
                                              const struct XrTargetProfile *target_profile,
                                              char *error, size_t error_size);
 
+/* Snapshot-safe leaf authority join for post-pipeline consumers.  The semantic
+ * snapshot intentionally removes analyzer lookup tables, so this verifier uses
+ * only the frozen PSC, pointer-free source-module authority, SemanticPlan
+ * provenance, and the retained Xi root/module inventory.  Live function/value
+ * row joins remain the responsibility of the backend boundary verifier. */
+XR_FUNC bool xi_program_semantic_plan_verify_detached_leaf_authority(
+    const XiFunc *root, const XrSemanticPlan *plan, char *error, size_t error_size);
+
 #endif  // XI_PROGRAM_SEMANTIC_PLAN_H

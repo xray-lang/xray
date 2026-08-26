@@ -261,7 +261,7 @@ static void register_def(ArcVerify *av, XiValue *v) {
     if (!v || v->id >= av->n)
         return;
     av->def[v->id] = v;
-    av->is_rc[v->id] = xi_own_type_is_rc(v->type);
+    av->is_rc[v->id] = xi_own_value_is_rc(v);
 }
 
 static void build_defs(ArcVerify *av) {
@@ -454,7 +454,7 @@ static bool check_stale_uses(ArcVerify *av) {
 /* C5 (metadata consistency): a RETAIN / RELEASE must operate on an RC-managed
  * value. Emitting a refcount primitive on a non-RC value is the incident-5
  * class of defect (an op treated as owning something it does not own). Correct
- * ARC gates every retain/release on xi_own_type_is_rc, so this is
+ * ARC gates every retain/release on the value-aware RC classifier, so this is
  * zero-false-positive. */
 static bool check_rc_op_metadata(ArcVerify *av) {
     XiFunc *f = av->f;

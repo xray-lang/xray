@@ -94,6 +94,35 @@ static XrTypedDispatchStatus execute_request_i64(
     return switch_status;
 }
 
+static XrTypedDispatchStatus execute_request_leaf_aggregate_i64x2(
+    const XrTargetPlan *plan, const XrFingerprint *fingerprint,
+    uint32_t function, const XrTypedLeafAggregateI64x2 *arguments,
+    uint32_t argument_count, XrTypedLeafAggregateI64x2 *result) {
+    REQUIRE(result != NULL);
+    XrTypedLeafAggregateI64x2 switch_result = *result;
+    XrTypedLeafAggregateI64x2 table_result = *result;
+    XrTypedDispatchLeafAggregateI64x2Request switch_request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = fingerprint,
+        .arguments = arguments,
+        .result = &switch_result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        .function = function,
+        .argument_count = argument_count,
+    };
+    XrTypedDispatchLeafAggregateI64x2Request table_request = switch_request;
+    table_request.result = &table_result;
+    table_request.provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE;
+    XrTypedDispatchStatus switch_status =
+        xr_typed_dispatch_execute_leaf_aggregate_i64x2(&switch_request);
+    XrTypedDispatchStatus table_status =
+        xr_typed_dispatch_execute_leaf_aggregate_i64x2(&table_request);
+    REQUIRE(table_status == switch_status);
+    REQUIRE(memcmp(&table_result, &switch_result, sizeof(table_result)) == 0);
+    *result = switch_result;
+    return switch_status;
+}
+
 static XrTypedDispatchStatus execute_debug_request_i64(
     const XrTargetPlan *plan, const XrFingerprint *fingerprint,
     uint32_t function, const int64_t *arguments, uint32_t argument_count,
@@ -153,7 +182,12 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED == 30);
     REQUIRE(XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED == 31);
     REQUIRE(XR_TARGET_INSTRUCTION_RETURN_UNIT == 32);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 32u);
+    REQUIRE(XR_TARGET_INSTRUCTION_PARAM_AGGREGATE == 33);
+    REQUIRE(XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64 == 34);
+    REQUIRE(XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2 == 35);
+    REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE == 36);
+    REQUIRE(XR_TARGET_INSTRUCTION_RETURN_AGGREGATE == 37);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 37u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     static const XrTypedDispatchProvider providers[] = {
@@ -200,7 +234,7 @@ static void test_generated_instruction_contract(void) {
             REQUIRE(strcmp(contract->name,
                            xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 26u);
+    REQUIRE(semantic_bindings == 28u);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==
@@ -846,6 +880,12 @@ static void test_closed_program_and_unavailable_boundary(void) {
     REQUIRE(execute_request_i64(fixture.program_plan, &fingerprint,
                                 0, NULL, 0, &result) == XR_TYPED_DISPATCH_OK);
     REQUIRE(result == INT64_MIN);
+
+    XrTypedLeafAggregateI64x2 aggregate_result = {{7, 9}};
+    REQUIRE(execute_request_leaf_aggregate_i64x2(
+                fixture.program_plan, &fingerprint, 0, NULL, 0,
+                &aggregate_result) == XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE);
+    REQUIRE(aggregate_result.fields[0] == 0 && aggregate_result.fields[1] == 0);
 
     REQUIRE(fixture.program_plan->root_maps_count == 0 &&
             fixture.program_plan->root_slots_count == 0);

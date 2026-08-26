@@ -37,4 +37,10 @@ XR_FUNC bool xr_c_aggregate_projection(
     const XrTargetValueRepRecord *binding,
     XrCAggregateProjection *out);
 
+/* Projects the pointer-free leaf-program aggregate from its typed program and
+ * TargetPlan rows.  No source spelling or Xi layout participates. */
+XR_FUNC bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan,
+                                             uint32_t semantic_type,
+                                             XrCAggregateProjection *out);
+
 #endif  // XR_TARGET_AGGREGATE_C_PROJECTION_H

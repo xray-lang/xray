@@ -3709,9 +3709,20 @@ static bool verify_managed_aggregate_field_graph(const XrSemanticPlan *plan, uin
 static bool verify_direct_local_managed_aggregate_boundaries(
     const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
     const XrSemanticFunctionRecord *callee, char *error, size_t error_size) {
+    uint32_t parameter_count = callee ? callee->parameter_count : 0;
+    const XrSemanticParameterRecord *last_parameter =
+        plan && callee && parameter_count > 0 &&
+                callee->parameter_begin <= plan->parameter_count &&
+                parameter_count <= plan->parameter_count - callee->parameter_begin
+            ? &plan->parameters[callee->parameter_begin + parameter_count - 1u]
+            : NULL;
+    bool variadic = last_parameter &&
+                    (last_parameter->flags & XR_SEM_PARAMETER_VARIADIC) != 0;
+    uint32_t minimum_operands = variadic ? parameter_count : parameter_count + 1u;
     if (!plan || !operation || !callee ||
         (operation->opcode != XI_CALL && operation->opcode != XI_TAIL_CALL) ||
-        operation->operand_count != (uint16_t) (callee->parameter_count + 1u))
+        (!variadic && operation->operand_count != minimum_operands) ||
+        (variadic && operation->operand_count < minimum_operands))
         return report(error, error_size, "XR_SEM_0019",
                       "direct-local managed aggregate call shape is incomplete");
     for (uint32_t ordinal = 0; ordinal < callee->parameter_count; ordinal++) {
@@ -3721,7 +3732,8 @@ static bool verify_direct_local_managed_aggregate_boundaries(
             xr_semantic_plan_parameter(plan, parameter_index);
         const XrSemanticOperandRecord *operand =
             operand_index < plan->operand_count ? &plan->operands[operand_index] : NULL;
-        if (!parameter || parameter->mode != XR_PARAM_READ ||
+        if (!parameter || (parameter->flags & XR_SEM_PARAMETER_VARIADIC) != 0 ||
+            parameter->mode != XR_PARAM_READ ||
             parameter->ownership != XI_OWN_BORROWED ||
             parameter->transfer_mode != XR_TRANSFER_SHARE)
             continue;
@@ -4410,7 +4422,8 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
         uint32_t callee_count = 0;
         for (uint32_t i = 0; i < provenance->function_count; i++) {
             const XrSemanticProgramFunctionBinding *binding = &plan->program_function_bindings[i];
-            entry_count += binding->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
+            entry_count +=
+                (binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0 ? 1u : 0u;
             callee_count += binding->flags == 0 ? 1u : 0u;
         }
         valid = entry_count == 1u && callee_count == 1u;
@@ -4434,7 +4447,8 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
                 xr_stable_id_equal(callee->program_function, binding->callee_program_function) &&
                 (provenance->program_family !=
                      XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
-                 (caller->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY && callee->flags == 0)) &&
+                 ((caller->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0 &&
+                  callee->flags == 0)) &&
                 (i == 0 || plan->program_call_bindings[i - 1].operation < binding->operation);
         if (valid)
             seen_call_rows[binding->program_row] = 1;

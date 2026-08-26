@@ -231,3 +231,40 @@
   :result-ownership none :operand-ownership ()
   :effects (control) :error none :suspend no :immediate none :control return
   :semantic none :dispatch return-unit :dispatch-arg none)
+
+; Schema-47 leaf aggregate execution is intentionally structural.  The rows
+; bind frozen TargetPlan field/layout/call identities and never source names.
+(define-target-instruction param-aggregate
+  :id 33 :name "param.aggregate" :arity 0 :terminator no
+  :result-rep aggregate :operand-reps ()
+  :result-ownership trivial :operand-ownership ()
+  :effects () :error none :suspend no :immediate parameter-ordinal :control none
+  :semantic xi.param :dispatch param :dispatch-arg none)
+
+(define-target-instruction aggregate-get-i64
+  :id 34 :name "aggregate.get.i64" :arity 1 :terminator no
+  :result-rep i64 :operand-reps (aggregate)
+  :result-ownership trivial :operand-ownership (borrow)
+  :effects () :error none :suspend no :immediate field-record :control none
+  :semantic none :dispatch aggregate-get :dispatch-arg none)
+
+(define-target-instruction aggregate-make-i64x2
+  :id 35 :name "aggregate.make.i64x2" :arity 2 :terminator no
+  :result-rep aggregate :operand-reps (i64 i64)
+  :result-ownership trivial :operand-ownership (borrow borrow)
+  :effects () :error none :suspend no :immediate layout-record :control none
+  :semantic none :dispatch aggregate-make :dispatch-arg none)
+
+(define-target-instruction call-direct-aggregate
+  :id 36 :name "call.direct.aggregate" :arity 0 :terminator no
+  :result-rep aggregate :operand-reps ()
+  :result-ownership trivial :operand-ownership ()
+  :effects () :error none :suspend no :immediate call-record :control none
+  :semantic xi.call :dispatch call-aggregate :dispatch-arg none)
+
+(define-target-instruction return-aggregate
+  :id 37 :name "return.aggregate" :arity 1 :terminator yes
+  :result-rep none :operand-reps (aggregate)
+  :result-ownership none :operand-ownership (borrow)
+  :effects (control) :error none :suspend no :immediate none :control return
+  :semantic none :dispatch return-aggregate :dispatch-arg none)

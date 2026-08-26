@@ -304,7 +304,7 @@ static bool verify_leaf_aggregate_program(const XiModule *module, char *error, s
                                "Xi aggregate function return binding is not exact");
         if (!verify_locator_exact(function->psc_declaration_locator, row->declaration_locator))
             return verify_fail(error, error_size, "Xi aggregate declaration locator is not exact");
-        if (row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) {
+        if ((row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0) {
             if (caller || function->nparams != 0)
                 return verify_fail(error, error_size, "Xi aggregate entry contract is invalid");
             caller = function;

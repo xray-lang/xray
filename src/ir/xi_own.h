@@ -104,6 +104,12 @@ XR_FUNC void xi_own_free(XiOwnResult *out);
 /* Whether a type is reference-counted (needs dup/drop).
  * Scalars (int/float/bool/null/unit/never) are not. */
 XR_FUNC bool xi_own_type_is_rc(const struct XrType *type);
+/* Value/function-aware refinement for a verified PSC4 leaf value aggregate.
+ * The global type classifier intentionally remains conservative: only an
+ * exact Xi PSC row can prove that this concrete aggregate is pointer-free. */
+XR_FUNC bool xi_own_value_is_psc_leaf_aggregate(const XiValue *value);
+XR_FUNC bool xi_own_value_is_rc(const XiValue *value);
+XR_FUNC bool xi_own_function_return_is_rc(const XiFunc *function);
 XR_FUNC XrTransferAction xi_capture_cross_execution_action(const XiCapture *capture);
 
 /* Whether a projection (field/element read) of this type could yield a heap

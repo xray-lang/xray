@@ -111,6 +111,13 @@ runtime call (R1). This is a boundary claim only: a function or module-init that
 still has an uncovered inbound edge retains its legacy ABI owner and any
 separately required closure materialization until that family is migrated.
 
+For the covered leaf `i64x2` Task 281 W3 boundary, generated C consumes the exact
+TargetPlan native aggregate layout, field rows, slots, and direct-local call. The
+covered function and call contain no runtime dispatch (R1), no box/unbox traffic
+(R5), and no Xi aggregate-to-runtime-carrier round trip (R6). This claim is
+limited to the admitted leaf family; an uncovered function or call retains its
+existing owner or fails closed rather than borrowing this allowance.
+
 Static cleanup registration and execution add no residue category and consume
 no allowance. A non-suspending `defer { ... }` is lowered as ordinary
 control-flow regions and may leave only the residue of operations written in
@@ -129,6 +136,6 @@ failure is a null result with no error allocation or pending-error traffic.
 ## Digest anchors
 
 anchor-sha256: src/aot/xi_cgen.h f91b93971b6123b498f964986df49ff2991a0863c22eb5c6e7a6e7d51494008b
-anchor-sha256: src/aot/xi_cgen.c df530c5e7026282624e7989cf2ac2823d79d8fe353ccd09419212b38b3bb7a83
+anchor-sha256: src/aot/xi_cgen.c e839d7d65f8d20d7812bd2748f6d9c5f9d9531201c1bedfcd6e1ba6b137fdfc5
 anchor-sha256: src/aot/xi_cgen_ctx_impl.inc.c ddf3b8d501ef8beb8999c06970d6ac2b178e11f6ff38ac28cb4c8570a7d4182c
 anchor-sha256: src/app/cli/xcmd_verify.c 25c38ae1b1081368f5acb29436f9aa49f906b24620c0951cc314e2a07d9416de

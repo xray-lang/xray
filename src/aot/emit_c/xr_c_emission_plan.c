@@ -413,6 +413,43 @@ static bool machine_kind_to_c_rep(const XrTargetPlan *target_plan, uint32_t sema
     }
 }
 
+static bool leaf_aggregate_abi_projection(const XrTargetPlan *target_plan,
+                                          uint32_t semantic_type, uint16_t register_kind,
+                                          uint16_t memory_kind, XrCValueRep *out,
+                                          const char **c_type,
+                                          const XrTargetMachineRepRecord **machine_out) {
+    if (!out || !c_type || register_kind != XR_MACHINE_REP_AGGREGATE ||
+        memory_kind != XR_MACHINE_REP_AGGREGATE)
+        return false;
+    XrCAggregateProjection projection = {0};
+    if (!xr_c_leaf_aggregate_projection(target_plan, semantic_type, &projection))
+        return false;
+    uint32_t machine_count = 0;
+    const XrTargetMachineRepRecord *machines =
+        xr_target_plan_machine_reps(target_plan, &machine_count);
+    const XrTargetMachineRepRecord *aggregate = NULL;
+    for (uint32_t i = 0; machines && i < machine_count; i++) {
+        if (machines[i].kind != XR_MACHINE_REP_AGGREGATE ||
+            machines[i].detail != projection.layout || machines[i].register_bits != 128 ||
+            machines[i].memory_size != 16 || machines[i].memory_align != 8 ||
+            machines[i].ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+            continue;
+        if (aggregate)
+            return false;
+        aggregate = &machines[i];
+    }
+    if (!aggregate)
+        return false;
+    char *owned_type = xr_strdup(projection.c_type);
+    if (!owned_type)
+        return false;
+    *out = XR_C_VALUE_REP_AGGREGATE;
+    *c_type = owned_type;
+    if (machine_out)
+        *machine_out = aggregate;
+    return true;
+}
+
 static bool emission_stable_id_is_zero(XrStableId id) {
     for (uint32_t i = 0; i < XR_STABLE_ID_BYTES; i++) {
         if (id.bytes[i] != 0)
@@ -5354,18 +5391,40 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                             agreed ? xr_target_plan_machine_rep(target_plan,
                                                                 agreed->result_register_rep)
                                    : NULL;
-                        if (!agreed && function_states_own_boundary(function) &&
+                        const XrTargetMachineRepRecord *return_memory_rep =
+                            agreed ? xr_target_plan_machine_rep(target_plan,
+                                                                agreed->result_memory_rep)
+                                   : NULL;
+                        const XrSemanticProgramFunctionBinding *program_function =
+                            xr_semantic_plan_program_function_for_semantic_function(semantic, f);
+                        if (!agreed && program_function &&
+                            leaf_aggregate_abi_projection(
+                                target_plan, function->return_type, XR_MACHINE_REP_AGGREGATE,
+                                XR_MACHINE_REP_AGGREGATE, &rep, &c_type, &register_rep)) {
+                            memory_rep = register_rep;
+                        } else if (!agreed && function_states_own_boundary(function) &&
                             declared_scalar_c_rep(
                                 xr_semantic_plan_type(semantic, function->return_type), &rep,
                                 &c_type)) {
                             /* Stated by the function, not inferred from callers
                              * it does not have. */
-                        } else if (!return_rep ||
-                                   !machine_kind_to_c_rep(target_plan, agreed->result_value,
-                                                          return_rep->kind, &rep, &c_type) ||
+                        } else if (!return_rep || !return_memory_rep ||
+                                   (return_rep->kind == XR_MACHINE_REP_AGGREGATE
+                                        ? (!leaf_aggregate_abi_projection(
+                                               target_plan, function->return_type,
+                                               return_rep->kind, return_memory_rep->kind, &rep,
+                                               &c_type, NULL) ||
+                                           agreed->result_register_rep != agreed->result_memory_rep)
+                                        : !machine_kind_to_c_rep(target_plan,
+                                                                 agreed->result_value,
+                                                                 return_rep->kind, &rep,
+                                                                 &c_type)) ||
                                    !c_type) {
                             complete = false;
                             break;
+                        } else {
+                            register_rep = return_rep;
+                            memory_rep = return_memory_rep;
                         }
                     }
                 } else {
@@ -5408,9 +5467,23 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                         /* Same reason as the return row. A borrowed place is
                          * excluded: how a place crosses is a property of the
                          * call, never of the declared type. */
-                    } else if (!boundary ||
-                               !machine_kind_to_c_rep(target_plan, subject, boundary->kind, &rep,
-                                                      &c_type) ||
+                    } else if (!boundary || !agreed ||
+                               (boundary->kind == XR_MACHINE_REP_AGGREGATE
+                                    ? (!leaf_aggregate_abi_projection(
+                                           target_plan, declared_type, boundary->kind,
+                                           xr_target_plan_machine_rep(
+                                               target_plan, agreed->callee_memory_rep)
+                                               ? xr_target_plan_machine_rep(
+                                                     target_plan, agreed->callee_memory_rep)
+                                                     ->kind
+                                               : XR_MACHINE_REP_COUNT,
+                                           &rep, &c_type, NULL) ||
+                                       agreed->callee_register_rep !=
+                                           agreed->callee_memory_rep ||
+                                       agreed->register_rep != agreed->callee_register_rep ||
+                                       agreed->memory_rep != agreed->callee_memory_rep)
+                                    : !machine_kind_to_c_rep(target_plan, subject,
+                                                             boundary->kind, &rep, &c_type)) ||
                                !c_type) {
                         complete = false;
                         break;
@@ -5475,6 +5548,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                 };
             }
             if (!complete) {
+                for (uint32_t row = written; row < abi_index; row++) {
+                    if (plan->function_abis[row].rep == XR_C_VALUE_REP_AGGREGATE)
+                        xr_free((void *) plan->function_abis[row].c_type);
+                }
                 abi_index = written;
             } else {
                 uint8_t boundary_kind =
@@ -5526,6 +5603,9 @@ void xr_c_emission_plan_free(XrCEmissionPlan *plan) {
     }
     for (uint32_t i = 0; i < plan->cleanup_count; i++)
         xr_free((void *) plan->cleanups[i].recipe_symbol);
+    for (uint32_t i = 0; i < plan->function_abi_count; i++)
+        if (plan->function_abis[i].rep == XR_C_VALUE_REP_AGGREGATE)
+            xr_free((void *) plan->function_abis[i].c_type);
     xr_free(plan->cleanups);
     xr_free(plan->function_abis);
     xr_free(plan->recipe_arguments);

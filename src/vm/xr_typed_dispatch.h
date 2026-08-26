@@ -21,6 +21,14 @@ typedef struct XrVmDecodedCache XrVmDecodedCache;
 typedef struct XrTypedCoroutineI64 XrTypedCoroutineI64;
 typedef XrArrayPushStatus (*XrTypedArrayPushKernel)(XrValue receiver, XrValue value);
 
+/* The first executable leaf-value aggregate family is exactly two target i64
+ * fields in declaration order.  This carrier is only the request boundary;
+ * the verified TargetPlan remains the authority for its 16-byte layout,
+ * representation, slots, field offsets, and direct-call storage. */
+typedef struct XrTypedLeafAggregateI64x2 {
+    int64_t fields[2];
+} XrTypedLeafAggregateI64x2;
+
 typedef enum XrTypedDispatchProvider {
     XR_TYPED_DISPATCH_PROVIDER_INVALID = 0,
     XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
@@ -115,6 +123,20 @@ typedef struct XrTypedDispatchValueRequest {
     uint32_t argument_count;
 } XrTypedDispatchValueRequest;
 
+/* Pointer-free entry for the exact leaf aggregate i64x2 execution family.
+ * Arguments are positional complete values.  A zero-parameter root therefore
+ * passes NULL with argument_count zero; a unary function passes one complete
+ * value.  Neither side may supply or observe a TargetPlan slot directly. */
+typedef struct XrTypedDispatchLeafAggregateI64x2Request {
+    const XrTargetPlan *verified_plan;
+    const XrFingerprint *required_plan_fingerprint;
+    const XrTypedLeafAggregateI64x2 *arguments;
+    XrTypedLeafAggregateI64x2 *result;
+    XrTypedDispatchProvider provider;
+    uint32_t function;
+    uint32_t argument_count;
+} XrTypedDispatchLeafAggregateI64x2Request;
+
 /* A suspended typed coroutine is single-owner and owns one packed frame and
  * one immutable decoded program. Resuming reuses those exact objects; no
  * retained legacy value stack or bytecode frame is created. The initial slice
@@ -140,6 +162,8 @@ XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
     const XrTypedDispatchI64Request *request);
 XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_values(
     const XrTypedDispatchValueRequest *request);
+XR_FUNC XrTypedDispatchStatus xr_typed_dispatch_execute_leaf_aggregate_i64x2(
+    const XrTypedDispatchLeafAggregateI64x2Request *request);
 /* Creation requires an empty owning output slot. Failure preserves that slot;
  * success transfers the sole coroutine owner into it. Free is the only API
  * that releases the owned frame/cache/plan and clears the slot. */

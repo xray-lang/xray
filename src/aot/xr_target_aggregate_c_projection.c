@@ -9,6 +9,7 @@
  */
 
 #include "xr_target_aggregate_c_projection.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../shared/xr_native_type_core.h"
 #include <inttypes.h>
@@ -32,6 +33,16 @@ static uint64_t hash_string(uint64_t hash, const char *value) {
     }
     hash ^= UINT64_C(0xff);
     return hash * UINT64_C(1099511628211);
+}
+
+static uint64_t hash_bytes(uint64_t hash, const uint8_t *bytes, size_t size) {
+    if (!bytes)
+        return hash;
+    for (size_t i = 0; i < size; i++) {
+        hash ^= bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
 }
 
 static bool scalar_native_type(uint16_t machine_kind, uint8_t *out) {
@@ -72,6 +83,105 @@ static const char *scalar_c_type(uint16_t machine_kind) {
         case XR_MACHINE_REP_F64: return "double";
         default: return NULL;
     }
+}
+
+static bool leaf_program_binding(const XrSemanticPlan *semantic, uint32_t semantic_type,
+                                 const XrSemanticProgramTypeBinding **out) {
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    const XrSemanticProgramTypeBinding *binding =
+        xr_semantic_plan_program_type_for_semantic_type(semantic, semantic_type);
+    if (!provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        !binding || binding->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE ||
+        binding->field_count != 2 || binding->field_begin >
+                                         xr_semantic_plan_program_type_field_binding_count(semantic) ||
+        binding->field_count > xr_semantic_plan_program_type_field_binding_count(semantic) -
+                                   binding->field_begin)
+        return false;
+    if (out)
+        *out = binding;
+    return true;
+}
+
+bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan, uint32_t semantic_type,
+                                    XrCAggregateProjection *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    const XrSemanticProgramTypeBinding *binding = NULL;
+    const XrTargetProfile *profile = xr_target_plan_profile(target_plan);
+    const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
+    uint32_t layout_count = 0, field_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(target_plan, &layout_count);
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(target_plan, &field_count);
+    if (!target_plan || !out || !xr_target_plan_is_verified(target_plan) || !semantic || !machine ||
+        !layouts || !fields || !leaf_program_binding(semantic, semantic_type, &binding))
+        return false;
+
+    const XrTargetLayoutRecord *layout = NULL;
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < layout_count; i++) {
+        if (layouts[i].semantic_type != semantic_type)
+            continue;
+        if (layout)
+            return false;
+        layout = &layouts[i];
+        layout_index = i;
+    }
+    if (!layout || layout->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        layout->fixed_prefix_size != 16 || layout->align != 8 || layout->root_field_count != 0 ||
+        layout->field_count != binding->field_count || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin)
+        return false;
+
+    uint64_t hash = UINT64_C(1469598103934665603);
+    hash = hash_word(hash, machine->data_layout.stable_hash);
+    hash = hash_word(hash, UINT64_C(3)); /* typed leaf-program value aggregate */
+    hash = hash_bytes(hash, binding->program_type.bytes, sizeof(binding->program_type.bytes));
+    hash = hash_bytes(hash, binding->source_class_identity.bytes,
+                      sizeof(binding->source_class_identity.bytes));
+    hash = hash_word(hash, layout->fixed_prefix_size);
+    hash = hash_word(hash, layout->align);
+    hash = hash_word(hash, layout->field_count);
+    for (uint32_t ordinal = 0; ordinal < layout->field_count; ordinal++) {
+        const XrTargetFieldRecord *field = &fields[layout->field_begin + ordinal];
+        const XrSemanticProgramTypeFieldBinding *program_field =
+            xr_semantic_plan_program_type_field_binding(semantic, binding->field_begin + ordinal);
+        const XrTargetMachineRepRecord *field_rep =
+            xr_target_plan_machine_rep(target_plan, field->memory_rep);
+        uint8_t native_type = 0;
+        if (!program_field || !field_rep ||
+            program_field->owner_program_row != binding->program_row ||
+            program_field->declaration_ordinal != ordinal ||
+            field->layout != layout_index || field->semantic_field != ordinal ||
+            field->semantic_name != XR_SEMANTIC_INDEX_NONE ||
+            !scalar_native_type(field_rep->kind, &native_type) ||
+            field_rep->kind != XR_MACHINE_REP_I64 ||
+            field_rep->memory_size != 8 || field_rep->memory_align != 8 ||
+            field_rep->ownership != XR_TARGET_OWNERSHIP_TRIVIAL || field->offset != ordinal * 8u ||
+            field->size != 8 || field->align != 8 ||
+            field->root_kind != XR_TARGET_ROOT_NONE || field->flags != 0 || field->reserved != 0)
+            return false;
+        hash = hash_bytes(hash, program_field->program_field_type.bytes,
+                          sizeof(program_field->program_field_type.bytes));
+        hash = hash_word(hash, field->offset);
+        hash = hash_word(hash, field->size);
+        hash = hash_word(hash, field->align);
+        hash = hash_word(hash, field_rep->kind);
+    }
+    if (!hash)
+        hash = UINT64_C(1);
+    int written = snprintf(out->c_type, sizeof(out->c_type),
+                           "xrt_struct_abi_%016" PRIx64, hash);
+    if (written <= 0 || (size_t) written >= sizeof(out->c_type)) {
+        memset(out, 0, sizeof(*out));
+        return false;
+    }
+    out->layout = layout_index;
+    out->abi_key = hash;
+    out->kind = XR_C_AGGREGATE_PROJECTION_NAMED_STRUCT;
+    return true;
 }
 
 static bool fixed_array_projection(const XrTargetPlan *target_plan,
@@ -265,6 +375,8 @@ bool xr_c_aggregate_projection(const XrTargetPlan *target_plan,
         layout->field_begin > field_count ||
         layout->field_count > field_count - layout->field_begin)
         return false;
+    if (leaf_program_binding(semantic, layout->semantic_type, NULL))
+        return xr_c_leaf_aggregate_projection(target_plan, layout->semantic_type, out);
     if (type->kind == XR_KIND_FIXED_ARRAY)
         return fixed_array_projection(target_plan, binding, register_rep, layout,
                                       fields, field_count, type, machine, out);

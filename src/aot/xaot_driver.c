@@ -2262,6 +2262,25 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         }
     }
 
+    /* Canonicalization mutates the AST consumed by Xi lowering.  Run it before
+     * the final analysis so the checked type graph and the lowered values name
+     * the same declarations; publishing analyzer authority and then rewriting
+     * the AST would make PSC type joins stale. */
+    for (int ti = 0; ti < nmodules; ti++) {
+        int idx = graph->topo_order[ti];
+        XrModuleSpec *spec = &graph->specs[idx];
+        XrCompilerSessionScope canon_scope;
+        bool has_canon_scope;
+        if (!spec->ast || !spec->source_path)
+            continue;
+        has_canon_scope = spec->ast->type == AST_PROGRAM && spec->ast->as.program.arena &&
+                          xr_compiler_session_push_arena(session, spec->ast->as.program.arena,
+                                                         spec->source_path, &canon_scope);
+        xr_canon_program((AstNode *) spec->ast, shared_analyzer, session);
+        if (has_canon_scope)
+            xr_compiler_session_pop_arena(&canon_scope);
+    }
+
     for (int ti = 0; ti < nmodules; ti++) {
         int idx = graph->topo_order[ti];
         XrModuleSpec *spec = &graph->specs[idx];
@@ -2285,6 +2304,10 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
             goto fail_free_analyzer;
         }
         spec->export_symbols = exports;
+        /* The canonical, post-monomorphization AST and its checked export
+         * table become durable authority together.  PSC publication refuses
+         * a module that has not reached this exact lifecycle state. */
+        spec->status = XR_MODSPEC_ANALYZED;
         xa_analyzer_clear_diagnostics(shared_analyzer);
     }
     /* --- Compile all modules through Xi IR pipeline --- */
@@ -2326,23 +2349,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xa_analyzer_set_graph(shared_analyzer, NULL);
         xa_analyzer_free(shared_analyzer);
         goto fail_free_graph;
-    }
-
-    /* Canonicalize before building final global evidence so lowering-time ids
-     * are derived from the same AST shape that Xi lowering consumes. */
-    for (int ti = 0; ti < nmodules; ti++) {
-        int idx = graph->topo_order[ti];
-        XrModuleSpec *spec = &graph->specs[idx];
-        XrCompilerSessionScope canon_scope;
-        bool has_canon_scope;
-        if (!spec->ast || !spec->source_path)
-            continue;
-        has_canon_scope = spec->ast->type == AST_PROGRAM && spec->ast->as.program.arena &&
-                          xr_compiler_session_push_arena(session, spec->ast->as.program.arena,
-                                                         spec->source_path, &canon_scope);
-        xr_canon_program((AstNode *) spec->ast, shared_analyzer, session);
-        if (has_canon_scope)
-            xr_compiler_session_pop_arena(&canon_scope);
     }
 
     if (cached_global_evidence_initialized) {
@@ -2455,7 +2461,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         modules[ti] = ir_funcs[ti]->module;
         modules[ti]->path = paths[ti];
         modules[ti]->name = mod_names[ti];
-        ir_funcs[ti]->module = NULL;
     }
     xa_analyzer_set_graph(shared_analyzer, NULL);
 
@@ -2769,6 +2774,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
 
     /* Free IR and module metadata (no longer needed after C generation) */
     for (int m = 0; m < nmodules; m++) {
+        if (modules[m] && modules[m]->init) {
+            XR_DCHECK(modules[m]->init->module == modules[m],
+                      "xaot_build: Xi root/module authority diverged before cleanup");
+            if (modules[m]->init->module == modules[m])
+                modules[m]->init->module = NULL;
+        }
         xi_module_free(modules[m]);
         xi_pipeline_result_free(&pres_arr[m]);
     }
@@ -2844,6 +2855,12 @@ fail_free_ir:
     if (global_evidence_initialized)
         xg_global_evidence_free(&global_evidence);
     for (int m = 0; m < nmodules; m++) {
+        if (modules && modules[m] && modules[m]->init) {
+            XR_DCHECK(modules[m]->init->module == modules[m],
+                      "xaot_build: Xi root/module authority diverged during cleanup");
+            if (modules[m]->init->module == modules[m])
+                modules[m]->init->module = NULL;
+        }
         if (modules)
             xi_module_free(modules[m]);
         xi_pipeline_result_free(&pres_arr[m]);

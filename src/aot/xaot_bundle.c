@@ -17,6 +17,7 @@
 #include "../base/xmemstream.h"
 #include "../frontend/parser/xtype_ref.h"
 #include "../ir/xi_op_name.h"
+#include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xvalue.h"
 #include <inttypes.h>
@@ -409,6 +410,31 @@ XR_FUNC bool xaot_func_plan_carries_coroutine_ops(const XaotFuncPlan *plan) {
     return record && record->carries_coroutine_ops != 0u;
 }
 
+static bool xaot_module_uses_leaf_aggregate_psc(const XiModule *module) {
+    return module && module->program_semantic_closure &&
+           xr_program_semantic_closure_family(module->program_semantic_closure) ==
+               XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+}
+
+static bool xaot_module_semantic_authority_matches(const XiModule *module,
+                                                   const XrSemanticPlan *semantic) {
+    if (!module || !module->init || !semantic)
+        return false;
+    if (xaot_module_uses_leaf_aggregate_psc(module))
+        return xi_program_semantic_plan_verify_detached_leaf_authority(module->init, semantic, NULL,
+                                                                        0);
+    return module->init->semantic_plan == semantic;
+}
+
+static bool xaot_function_belongs_to_module(const XiModule *module, const XiFunc *function) {
+    if (!module || !function)
+        return false;
+    for (const XiFunc *owner = function; owner; owner = owner->parent_func)
+        if (owner == module->init || owner->module == module)
+            return true;
+    return false;
+}
+
 XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBundle *bundle,
                                                                     uint32_t module_index) {
     if (!bundle || !bundle->module_emission_plans || module_index >= bundle->nmodules)
@@ -418,13 +444,21 @@ XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_module(const XaotBu
 
 XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_func(const XaotBundle *bundle,
                                                                   const XiFunc *func) {
-    if (!bundle || !func || !func->semantic_plan || !bundle->module_emission_plans ||
-        !bundle->target_plans)
+    if (!bundle || !func || !bundle->module_emission_plans || !bundle->target_plans)
         return NULL;
     const XrCEmissionPlan *match = NULL;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XiModule *module = bundle->modules ? bundle->modules[module_index] : NULL;
         const XrTargetPlan *target_plan = bundle->target_plans[module_index];
-        if (!target_plan || xr_target_plan_semantic_plan(target_plan) != func->semantic_plan)
+        bool leaf_match = xaot_module_uses_leaf_aggregate_psc(module) &&
+                          (func == module->init || func->psc_function_index != XI_PSC_ROW_NONE) &&
+                          xaot_function_belongs_to_module(module, func) && target_plan &&
+                          xaot_module_semantic_authority_matches(
+                              module, xr_target_plan_semantic_plan(target_plan));
+        bool legacy_match = !xaot_module_uses_leaf_aggregate_psc(module) && target_plan &&
+                            func->semantic_plan &&
+                            xr_target_plan_semantic_plan(target_plan) == func->semantic_plan;
+        if (!leaf_match && !legacy_match)
             continue;
         if (match || !bundle->module_emission_plans[module_index])
             return NULL;
@@ -485,8 +519,9 @@ XR_FUNC bool xaot_bundle_set_target_plan(XaotBundle *bundle, uint32_t module_ind
     if (!bundle || !bundle->target_plans || module_index >= bundle->nmodules || !target_plan)
         return false;
     module = bundle->modules ? bundle->modules[module_index] : NULL;
-    if (!module || !module->init || !module->init->semantic_plan ||
-        xr_target_plan_semantic_plan(target_plan) != module->init->semantic_plan ||
+    if (!module || !module->init ||
+        !xaot_module_semantic_authority_matches(module,
+                                                xr_target_plan_semantic_plan(target_plan)) ||
         xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES ||
         !xr_target_plan_is_verified(target_plan) ||
         !xr_target_plan_verify(target_plan, error, sizeof(error))) {
@@ -518,14 +553,27 @@ XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_module(const XaotBundle 
 
 XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *bundle,
                                                              const XiFunc *func) {
-    if (!bundle || !func || !func->semantic_plan || !bundle->target_plans)
+    if (!bundle || !func || !bundle->target_plans)
         return NULL;
+    const XrTargetPlan *match = NULL;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
+        const XiModule *module = bundle->modules ? bundle->modules[module_index] : NULL;
         const XrTargetPlan *target_plan = bundle->target_plans[module_index];
-        if (target_plan && xr_target_plan_semantic_plan(target_plan) == func->semantic_plan)
-            return target_plan;
+        bool leaf_match = xaot_module_uses_leaf_aggregate_psc(module) &&
+                          (func == module->init || func->psc_function_index != XI_PSC_ROW_NONE) &&
+                          xaot_function_belongs_to_module(module, func) && target_plan &&
+                          xaot_module_semantic_authority_matches(
+                              module, xr_target_plan_semantic_plan(target_plan));
+        bool legacy_match = !xaot_module_uses_leaf_aggregate_psc(module) && target_plan &&
+                            func->semantic_plan &&
+                            xr_target_plan_semantic_plan(target_plan) == func->semantic_plan;
+        if (!leaf_match && !legacy_match)
+            continue;
+        if (match)
+            return NULL;
+        match = target_plan;
     }
-    return NULL;
+    return match;
 }
 
 XR_FUNC bool xaot_bundle_install_representation_refinement(XaotBundle *bundle,

@@ -30,6 +30,7 @@
 #include "xaot_abi_gen.h"
 #include "xaot_layout_gen.h"
 #include "xaot_struct_name.h"
+#include "xr_target_aggregate_c_projection.h"
 #include "xi_backend_plan_contract.h"
 #include "xi_to_c_dispatch_gen.h"
 #include "xi_to_c_stmt_dispatch_gen.h"
@@ -57,6 +58,7 @@
 #include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"
 #include "../plan/semantic/xr_semantic_plan.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../plan/target/xr_target_capability.h"
 #include "../ir/xi_own.h"
@@ -2163,6 +2165,9 @@ static bool cg_static_function_value_use_is_direct_parallel_callback(const XiVal
 static bool cg_shared_static_function_slot_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                            int slot, const XiFunc *target);
 static bool cg_shared_slot_has_reachable_get(XiCgenCtx *ctx, const XiModule *owner_mod, int slot);
+static XaotLeafAggregateTargetStatus cg_leaf_aggregate_direct_callee_get_status(
+    XiCgenCtx *ctx, const XiFunc *current, const XiValue *value, char *error,
+    size_t error_size);
 
 static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
                                                             const XiValue *value,
@@ -2187,9 +2192,23 @@ static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, cons
                             return false;
                         CgStaticFunctionCall call =
                             cg_resolve_static_function_call(ctx, owner, user->args[0]);
-                        if (call.func != target || call.is_class_constructor)
-                            return false;
-                        break;
+                        if (call.func == target && !call.is_class_constructor)
+                            break;
+                        char error[256] = {0};
+                        XaotLeafAggregateTargetStatus leaf_status =
+                            cg_leaf_aggregate_direct_callee_get_status(
+                                ctx, owner, value, error, sizeof(error));
+                        if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+                            break;
+                        if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+                            if (!ctx->error)
+                                fprintf(stderr, "[xi_cgen] ERROR: XR_TARGET_1001: %s\n",
+                                        error[0]
+                                            ? error
+                                            : "leaf-aggregate direct callee authority is invalid");
+                            ctx->error = true;
+                        }
+                        return false;
                     }
                     case XI_BOX:
                     case XI_UNBOX:
@@ -2436,7 +2455,7 @@ static bool cg_shared_static_function_set_is_elided(XiCgenCtx *ctx, const XiFunc
 }
 
 static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
-                                                        const XiValue *v) {
+                                                         const XiValue *v) {
     if (!ctx || !current || !v ||
         (v->op != XI_CLOSURE_NEW && !(v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) ||
         !v->aux)
@@ -2471,10 +2490,63 @@ static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const Xi
     return saw_store;
 }
 
+static XaotLeafAggregateTargetStatus cg_leaf_aggregate_direct_callee_get_status(
+    XiCgenCtx *ctx, const XiFunc *current, const XiValue *value, char *error,
+    size_t error_size) {
+    if (!ctx || !current || !value || value->op != XI_GET_SHARED)
+        return XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
+    const XiValue *call = NULL;
+    uint32_t direct_uses = 0;
+    for (uint32_t b = 0; b < current->nblocks; b++) {
+        const XiBlock *block = current->blocks ? current->blocks[b] : NULL;
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            const XiValue *candidate = block->values ? block->values[i] : NULL;
+            for (uint16_t a = 0; candidate && a < candidate->nargs; a++) {
+                if (candidate->args[a] != value)
+                    continue;
+                direct_uses++;
+                if (candidate->op == XI_CALL && a == 0 && !call)
+                    call = candidate;
+                else
+                    return XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
+            }
+        }
+    }
+    if (!call || direct_uses != 1)
+        return XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
+    XaotLeafAggregateTargetView view = {0};
+    XaotLeafAggregateTargetStatus status = xaot_boundary_leaf_aggregate_call_view(
+        cg_ctx_aot_bundle(ctx), current, call, &view, error, error_size);
+    if (status != XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        return status;
+    const XiFunc *slot_target =
+        cg_shared_function_slot_target(ctx, current, (int) value->aux_int);
+    if (!view.target_plan || !view.call_instruction || !view.callee ||
+        view.callee != slot_target || view.argument_value != call->args[1]) {
+        if (error && error_size)
+            snprintf(error, error_size,
+                     "leaf-aggregate direct callee shared-load authority is inexact");
+        return XAOT_LEAF_AGGREGATE_TARGET_INVALID;
+    }
+    return XAOT_LEAF_AGGREGATE_TARGET_FOUND;
+}
+
 static bool cg_shared_static_function_get_is_elided(XiCgenCtx *ctx, const XiFunc *current,
-                                                    const XiValue *v) {
+                                                     const XiValue *v) {
     if (!ctx || !v || v->op != XI_GET_SHARED)
         return false;
+    char error[256] = {0};
+    XaotLeafAggregateTargetStatus leaf_status = cg_leaf_aggregate_direct_callee_get_status(
+        ctx, current, v, error, sizeof(error));
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        return true;
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        if (!ctx->error)
+            fprintf(stderr, "[xi_cgen] ERROR: XR_TARGET_1001: %s\n",
+                    error[0] ? error : "leaf-aggregate direct callee authority is invalid");
+        ctx->error = true;
+        return false;
+    }
     int slot = (int) v->aux_int;
     const XiFunc *target = cg_shared_function_slot_target(ctx, current, slot);
     return cg_shared_static_function_slot_can_elide(ctx, current, slot, target);
@@ -2558,12 +2630,43 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
 
     if (!function && value->block)
         function = value->block->func;
-    if (!function || !function->semantic_plan ||
-        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
+    if (!function)
         return CG_VALUE_EMISSION_BACKEND_ONLY;
 
-    const CgValueEmissionRegistryEntry *entry = ctx->value_emission_registry_last;
-    if (!entry || entry->semantic_plan != function->semantic_plan) {
+    const XrTargetPlan *leaf_target = NULL;
+    uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    char error[256] = {0};
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_semantic_value(
+        ctx->aot_bundle, function, value, &leaf_target, &semantic_function_id, &semantic_value,
+        error, sizeof(error));
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+        return cg_value_emission_fail(
+            ctx, error[0] ? error : "leaf-aggregate C value identity lookup failed");
+    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+        (!function->semantic_plan ||
+         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE))
+        return CG_VALUE_EMISSION_BACKEND_ONLY;
+
+    const CgValueEmissionRegistryEntry *entry = NULL;
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+        for (uint32_t module_index = 0; module_index < ctx->value_emission_registry_count;
+             module_index++) {
+            if (ctx->value_emission_registry[module_index].target_plan != leaf_target)
+                continue;
+            if (entry)
+                return cg_value_emission_fail(
+                    ctx, "leaf-aggregate C value authority is ambiguous");
+            entry = &ctx->value_emission_registry[module_index];
+        }
+    } else {
+        entry = ctx->value_emission_registry_last;
+    }
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND && !entry)
+        return cg_value_emission_fail(
+            ctx, "leaf-aggregate C value authority is missing from the module registry");
+    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+        (!entry || entry->semantic_plan != function->semantic_plan)) {
         entry = NULL;
         for (uint32_t module_index = 0; module_index < ctx->value_emission_registry_count;
              module_index++) {
@@ -2582,12 +2685,19 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     const XrCEmissionPlan *emission_plan = entry->emission_plan;
 
     const XrSemanticPlan *semantic_plan = xr_target_plan_semantic_plan(target_plan);
-    if (!semantic_plan || semantic_plan != function->semantic_plan)
+    if (!semantic_plan ||
+        (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
+             ? target_plan != leaf_target
+             : semantic_plan != function->semantic_plan))
         return cg_value_emission_fail(ctx,
                                       "Xi function does not carry the module TargetPlan authority");
 
     const XrSemanticFunctionRecord *semantic_function =
-        xr_semantic_plan_function(semantic_plan, function->semantic_plan_function_index);
+        xr_semantic_plan_function(
+            semantic_plan,
+            leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
+                ? semantic_function_id
+                : function->semantic_plan_function_index);
     if (!semantic_function)
         return cg_value_emission_fail(ctx, "C value semantic function record is missing");
     if (value->id >= semantic_function->value_count) {
@@ -2597,13 +2707,12 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
         return cg_value_emission_fail(ctx, "post-freeze Xi value has no semantic authority");
     }
 
-    uint32_t semantic_function_id = XR_SEMANTIC_INDEX_NONE;
-    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
-    char error[256] = {0};
-    if (!xr_aot_scalar_semantic_value_id(target_plan, function, value, &semantic_function_id,
+    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+        !xr_aot_scalar_semantic_value_id(target_plan, function, value, &semantic_function_id,
                                          &semantic_value, error, sizeof(error)))
         return cg_value_emission_fail(ctx, error[0] ? error : "C value identity lookup failed");
-    if (semantic_function_id != function->semantic_plan_function_index)
+    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+        semantic_function_id != function->semantic_plan_function_index)
         return cg_value_emission_fail(ctx, "C value semantic function identity changed");
 
     if (!xr_target_plan_value_rep(target_plan, semantic_value))
@@ -2933,18 +3042,9 @@ static bool cg_scalar_addressable_alias_recipe_source(XiCgenCtx *ctx, const XiFu
 }
 
 static const XrCEmissionPlan *cg_function_c_emission_plan(XiCgenCtx *ctx, const XiFunc *function) {
-    if (!ctx || !function || !function->semantic_plan)
-        return NULL;
-    const XrCEmissionPlan *match = NULL;
-    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
-        const CgValueEmissionRegistryEntry *entry = &ctx->value_emission_registry[i];
-        if (entry->semantic_plan != function->semantic_plan)
-            continue;
-        if (match)
-            return NULL;
-        match = entry->emission_plan;
-    }
-    return match;
+    return ctx && function
+               ? xaot_bundle_emission_plan_for_func(ctx->aot_bundle, function)
+               : NULL;
 }
 
 static bool cg_direct_local_tagged_ref_argument_emission(
@@ -3900,6 +4000,7 @@ static void emit_block_condition_expr(XiCgenCtx *ctx, FILE *out, const XiBlock *
 
 static bool cg_value_is_elided_static_fixed_struct_array_index_ref(XiCgenCtx *ctx, const XiFunc *f,
                                                                    const XiValue *v);
+static const XrTargetPlan *cg_function_target_plan(XiCgenCtx *ctx, const XiFunc *function);
 
 #include "xi_cgen_struct_helpers.inc.c"
 static bool cg_class_native_field_is_ref(const XrAggregateFieldLayout *field);
@@ -5334,20 +5435,12 @@ static CgAssertionAdapterId cg_assertion_adapter_id(XiCgenCtx *ctx) {
 
 static const XrTargetPlan *cg_function_target_plan(XiCgenCtx *ctx,
                                                    const XiFunc *function) {
-    if (!ctx || !function || !function->semantic_plan)
-        return NULL;
-    const XrTargetPlan *match = NULL;
-    for (uint32_t i = 0; i < ctx->value_emission_registry_count; i++) {
-        const CgValueEmissionRegistryEntry *entry =
-            &ctx->value_emission_registry[i];
-        if (entry->semantic_plan != function->semantic_plan)
-            continue;
-        if (match || !entry->target_plan ||
-            !xr_target_plan_is_verified(entry->target_plan))
-            return NULL;
-        match = entry->target_plan;
-    }
-    return match;
+    const XrTargetPlan *target =
+        ctx && function ? xaot_bundle_target_plan_for_func(ctx->aot_bundle, function) : NULL;
+    return target && xr_target_plan_is_verified(target) &&
+                   xr_target_plan_fingerprint_is_intact(target)
+               ? target
+               : NULL;
 }
 
 static bool cg_freestanding_assertion_authorized(
@@ -14432,20 +14525,30 @@ static bool cg_func_reach_mark_value_edges(XiCgenCtx *ctx, const XiFunc *owner, 
         changed |= cg_func_reach_mark_edge(ctx, data ? data->combine_func : NULL);
     }
 
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status = XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED;
+    if (bundle && v->op == XI_CALL) {
+        leaf_status = cg_leaf_aggregate_call_view(ctx, owner, v, &leaf_aggregate);
+        if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+            changed |= cg_func_reach_mark_edge(ctx, leaf_aggregate.callee);
+    }
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status = XAOT_DIRECT_I64_TARGET_UNCOVERED;
     if (bundle && (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT)) {
-        direct_i64_status =
-            cg_direct_i64_call_view(ctx, owner, v, &direct_i64);
+        direct_i64_status = leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
+                                ? cg_direct_i64_call_view(ctx, owner, v, &direct_i64)
+                                : XAOT_DIRECT_I64_TARGET_INVALID;
         if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND)
             changed |= cg_func_reach_mark_edge(ctx, direct_i64.callee);
-        else if (direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED)
+        else if (direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED &&
+                 leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
             changed |= cg_func_reach_mark_edge(
                 ctx, xaot_boundary_resolve_direct_call_target(bundle, owner, v, NULL));
     }
 
     if ((v->op == XI_CALL || v->op == XI_TAIL_CALL) && v->nargs >= 1 &&
-        direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED) {
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_UNCOVERED &&
+        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED) {
         CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, owner, v->args[0]);
         changed |= cg_func_reach_mark_edge(ctx, call.func);
         const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;

@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 46 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 47 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
@@ -11,6 +11,15 @@ any required family fact are rejected
 rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
+
+The bounded `XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2` family transports one
+complete trivial aggregate as two positional signed-`i64` fields. Its exact
+native layout is 16-byte size and 8-byte alignment, with fields at offsets 0 and
+8. Argument transfer, callee parameters, aggregate construction, field reads,
+return, and caller storage all use the exact slots and representations in the
+verified plan. The frame creates no tag, root, cleanup, place, or aggregate
+reference for that value and does not infer layout from a C type, Xi node, or
+source name. Every other aggregate execution family remains unavailable.
 
 The frame allocator validates only the selected function's packed slots; an
 unrelated representation in another function cannot make an otherwise exact
@@ -333,10 +342,10 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 824f17196a96d034c3bb1a4cce36d9c11333d178ac8aa6bea95bbb7d29492cb0
+anchor-sha256: src/plan/target/xr_target_plan.h e09c17d38ae7d70e18ac2d8996e33bcc13a13f9448a4a586267f074826a2636c
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
-anchor-sha256: src/vm/xr_typed_frame.c f7cbfdc3dc805bcfdf9c8a75e2a8293c9770f9873ba036402959980959ae13c9
-anchor-sha256: src/vm/xr_typed_dispatch.c d7b818d5dc454879bf2e31098e9844ebde8c71a0402ae1606d34aa5cd0658f94
+anchor-sha256: src/vm/xr_typed_frame.c a90c15e7554024ce8ed4170b2d6b3e9d1269409678587abca7088d3b1216cc5b
+anchor-sha256: src/vm/xr_typed_dispatch.c 692a5a9ad5cdac4f0d8fcaea433b423615a68461bca9a3d7987da7da55cbbfa2
 anchor-sha256: scripts/check_typed_call_staging.py 2d98ea1490d028149e705a25519a94ded9ed19153afe66929cadc0c47d45acba
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/benchmark.c 3fd550a0cfcdee2b28a631ef1ef6ae56c5a776c4d380a508d78e6d307bbf1b20
 anchor-sha256: tests/benchmarks/target-machine/typed_target_vm/run.py 1e63120e1b93825e3103489317a2202d78b383135505c2215f39b22b94972041

@@ -3653,14 +3653,15 @@ def generate_aot_layout_header(entries: list[AotLayoutDef]) -> str:
 # Typed TargetPlan instruction contract
 # ============================================================
 
-TARGET_REP_FAMILIES = {'none', 'i64', 'bool', 'dyn-value'}
+TARGET_REP_FAMILIES = {'none', 'i64', 'bool', 'dyn-value', 'aggregate'}
 TARGET_RESULT_OWNERSHIPS = {'none', 'trivial', 'borrow', 'owned'}
 TARGET_OPERAND_OWNERSHIPS = {'borrow', 'consume'}
 TARGET_EFFECTS = {'control', 'may-error', 'may-suspend', 'memory-write'}
 TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero', 'entry-call', 'array-push'}
 TARGET_IMMEDIATE_KINDS = {
     'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
-    'call-record', 'entry-expectation', 'coroutine-state',
+    'call-record', 'entry-expectation', 'coroutine-state', 'field-record',
+    'layout-record',
 }
 TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch', 'suspend'}
 TARGET_DISPATCH_ARGUMENTS = {
@@ -3679,6 +3680,10 @@ TARGET_DISPATCH_ARGUMENTS = {
     'suspend': {'none'},
     'array-push': {'none'},
     'return-unit': {'none'},
+    'aggregate-get': {'none'},
+    'aggregate-make': {'none'},
+    'call-aggregate': {'none'},
+    'return-aggregate': {'none'},
 }
 
 
@@ -3871,6 +3876,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_REP_I64,',
         '    XR_TARGET_INSTRUCTION_REP_BOOL,',
         '    XR_TARGET_INSTRUCTION_REP_DYN_VALUE,',
+        '    XR_TARGET_INSTRUCTION_REP_AGGREGATE,',
         '} XrTargetInstructionRepFamily;',
         '',
         'typedef enum XrTargetInstructionResultOwnership {',
@@ -3911,6 +3917,8 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_CALL_RECORD,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_ENTRY_EXPECTATION,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_COROUTINE_STATE,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_FIELD_RECORD,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_LAYOUT_RECORD,',
         '} XrTargetInstructionImmediateKind;',
         '',
         'typedef enum XrTargetInstructionControlKind {',
@@ -3937,6 +3945,10 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_SUSPEND,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_ARRAY_PUSH,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN_UNIT,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_AGGREGATE_GET,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_AGGREGATE_MAKE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_CALL_AGGREGATE,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_RETURN_AGGREGATE,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',

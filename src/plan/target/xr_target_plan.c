@@ -921,6 +921,17 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
         rows[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
         rows[3].opcode == XR_TARGET_INSTRUCTION_RETURN_UNIT)
         return (uint64_t) XR_TARGET_EXECUTION_MANAGED_ARRAY_PUSH_TAGGED;
+    bool leaf_aggregate = false;
+    for (uint32_t i = 0; i < count; i++) {
+        uint16_t opcode = rows[i].opcode;
+        leaf_aggregate |= opcode == XR_TARGET_INSTRUCTION_PARAM_AGGREGATE ||
+                          opcode == XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64 ||
+                          opcode == XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2 ||
+                          opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE ||
+                          opcode == XR_TARGET_INSTRUCTION_RETURN_AGGREGATE;
+    }
+    if (leaf_aggregate)
+        return (uint64_t) XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2;
     bool suspends = false;
     for (uint32_t i = 0; i < count; i++)
         suspends |= rows[i].opcode == XR_TARGET_INSTRUCTION_SUSPEND;

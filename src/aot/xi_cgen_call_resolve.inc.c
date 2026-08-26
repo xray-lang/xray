@@ -23,6 +23,21 @@ static XaotDirectI64TargetStatus cg_direct_i64_call_view(XiCgenCtx *ctx, const X
     return status;
 }
 
+static XaotLeafAggregateTargetStatus cg_leaf_aggregate_call_view(
+    XiCgenCtx *ctx, const XiFunc *current, const XiValue *call,
+    XaotLeafAggregateTargetView *out) {
+    char error[256] = {0};
+    XaotLeafAggregateTargetStatus status = xaot_boundary_leaf_aggregate_call_view(
+        cg_ctx_aot_bundle(ctx), current, call, out, error, sizeof(error));
+    if (status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        fprintf(stderr, "[xi_cgen] ERROR: %s\n",
+                error[0] ? error : "invalid leaf-aggregate TargetPlan call authority");
+        if (ctx)
+            ctx->error = true;
+    }
+    return status;
+}
+
 static bool cg_import_entry_matches_ref(const XiCgenCtx *ctx, const CgImportEntry *imp,
                                         const XiImportRef *ref, const char *member_name) {
     if (!ctx || !imp || !ref || !member_name || !imp->member_name)
@@ -224,6 +239,11 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
     /* A covered caller may resolve a call only with the complete call row.
      * A bare callee value is insufficient authority, so the legacy shape
      * resolver is deliberately unreachable for this execution family. */
+    XaotLeafAggregateTargetStatus leaf_aggregate =
+        xaot_boundary_leaf_aggregate_function_status(cg_ctx_aot_bundle(ctx), current, NULL, NULL,
+                                                     NULL, 0);
+    if (leaf_aggregate != XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED)
+        return cg_no_static_function_call();
     XaotDirectI64TargetStatus direct_i64 = xaot_boundary_direct_i64_function_status(
         cg_ctx_aot_bundle(ctx), current, NULL, NULL, NULL, 0);
     if (direct_i64 != XAOT_DIRECT_I64_TARGET_UNCOVERED)

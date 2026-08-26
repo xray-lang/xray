@@ -31,6 +31,7 @@
 #include "../ir/xi_own.h"
 #include "../ir/xi_range.h"
 #include "../ir/xi_value_query.h"
+#include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../shared/xr_array_core.h"
 #include <stdlib.h>
@@ -52,8 +53,18 @@ static bool prepare_require_target_plans(XaotBundle *bundle) {
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
         const XrTargetPlan *target_plan = bundle->target_plans[module_index];
-        if (!module || !module->init || !module->init->semantic_plan || !target_plan ||
-            xr_target_plan_semantic_plan(target_plan) != module->init->semantic_plan ||
+        const XrSemanticPlan *semantic =
+            target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+        bool leaf_aggregate =
+            module && module->program_semantic_closure &&
+            xr_program_semantic_closure_family(module->program_semantic_closure) ==
+                XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+        bool semantic_match =
+            leaf_aggregate
+                ? xi_program_semantic_plan_verify_detached_leaf_authority(module->init, semantic,
+                                                                         error, sizeof(error))
+                : (module && module->init && module->init->semantic_plan == semantic);
+        if (!module || !module->init || !target_plan || !semantic_match ||
             xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES ||
             !xr_target_plan_is_verified(target_plan) ||
             !xr_target_plan_verify(target_plan, error, sizeof(error))) {
@@ -93,7 +104,18 @@ static bool prepare_target_value_binding(XaotBundle *bundle, const XiFunc *func,
             bundle->error_msg = "AOT value lacks exact TargetPlan semantic identity";
         return false;
     }
-    if (!xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
+    const XrTargetPlan *leaf_target = NULL;
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_semantic_value(
+        bundle, func, value, &leaf_target, &semantic_function, &semantic_value, error,
+        sizeof(error));
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        bundle->error_msg = "AOT leaf-aggregate value lacks exact PSC identity";
+        return false;
+    }
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        target_plan = leaf_target;
+    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
                                          &semantic_value, error, sizeof(error))) {
         if (xr_aot_rep_adapter_value_is_exact(target_plan, func, value, error, sizeof(error)))
             return true;
@@ -5355,6 +5377,16 @@ static bool prepare_seed_direct_call_place_reps(XaotBundle *bundle, XiFunc *func
             if (!call || (call->op != XI_CALL && call->op != XI_CALL_METHOD &&
                           call->op != XI_CALL_METHOD_DIRECT))
                 continue;
+            XaotLeafAggregateTargetView leaf_aggregate = {0};
+            XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_call_view(
+                bundle, func, call, &leaf_aggregate, NULL, 0);
+            if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+                bundle->error_msg =
+                    "AOT leaf-aggregate place seed has invalid TargetPlan authority";
+                return false;
+            }
+            if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+                continue;
             bool source_export = false;
             if (!prepare_seed_source_export_call_place_reps(bundle, func, call, &source_export))
                 return false;
@@ -5463,6 +5495,15 @@ static bool prepare_direct_call_boundaries(XaotBundle *bundle, const XaotFuncPla
     if (!bundle || !caller_plan || !caller_plan->func || !call)
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
+        return true;
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_call_view(
+        bundle, caller_plan->func, call, &leaf_aggregate, NULL, 0);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        bundle->error_msg = "AOT leaf-aggregate call has invalid TargetPlan authority";
+        return false;
+    }
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
         return true;
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
@@ -5724,13 +5765,22 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
     }
     if (!prepare_func_type_plans(bundle, func))
         return false;
+    XaotLeafAggregateTargetStatus leaf_status =
+        xaot_boundary_leaf_aggregate_abi_status(bundle, func, NULL, 0);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        bundle->error_msg = "AOT function has invalid leaf-aggregate TargetPlan authority";
+        return false;
+    }
     XaotDirectI64TargetStatus direct_i64_status =
-        xaot_boundary_direct_i64_abi_status(bundle, func, NULL, 0);
+        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED
+            ? xaot_boundary_direct_i64_abi_status(bundle, func, NULL, 0)
+            : XAOT_DIRECT_I64_TARGET_UNCOVERED;
     if (direct_i64_status == XAOT_DIRECT_I64_TARGET_INVALID) {
         bundle->error_msg = "AOT function has invalid direct-i64 TargetPlan authority";
         return false;
     }
-    if (direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND) {
         plan->abi_authority = XAOT_FUNC_ABI_AUTHORITY_TARGET_PLAN;
     } else {
         plan->abi_authority = XAOT_FUNC_ABI_AUTHORITY_LEGACY;

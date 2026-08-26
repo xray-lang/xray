@@ -5457,7 +5457,15 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
     XiValue *callee = v->args[0];
-    if (xicgen_emit_stdlib_import_call(ctx, out, f, v))
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status =
+        cg_leaf_aggregate_call_view(ctx, f, v, &leaf_aggregate);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_UNCOVERED &&
+        xicgen_emit_stdlib_import_call(ctx, out, f, v))
         return;
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status =
@@ -5467,7 +5475,10 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         return;
     }
     CgStaticFunctionCall static_call =
-        direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
+        leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND
+            ? cg_static_function_call(leaf_aggregate.callee,
+                                      cg_module_prefix_for_func(ctx, leaf_aggregate.callee))
+        : direct_i64_status == XAOT_DIRECT_I64_TARGET_FOUND
             ? cg_static_function_call(direct_i64.callee,
                                       cg_module_prefix_for_func(ctx, direct_i64.callee))
             : cg_resolve_static_function_call(ctx, f, callee);
@@ -12454,9 +12465,365 @@ static bool xicgen_emit_struct_place_field_lvalue(XiCgenCtx *ctx, FILE *out, con
     return true;
 }
 
+static const XrSemanticOperationRecord *xicgen_leaf_semantic_value_producer(
+    const XrSemanticPlan *semantic, uint32_t function, uint32_t value) {
+    const XrSemanticOperationRecord *producer = NULL;
+    if (!semantic || value == XR_SEMANTIC_INDEX_NONE)
+        return NULL;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        if (!candidate || candidate->function != function || candidate->result_value != value)
+            continue;
+        if (producer)
+            return NULL;
+        producer = candidate;
+    }
+    return producer;
+}
+
+static bool xicgen_leaf_semantic_operand_value(const XrSemanticOperandRecord *operands,
+                                               uint32_t operand_count,
+                                               const XrSemanticOperationRecord *operation,
+                                               uint32_t ordinal, uint32_t *out_value) {
+    if (!operands || !operation || ordinal >= operation->operand_count ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    if (out_value)
+        *out_value = operands[operation->operand_begin + ordinal].value;
+    return true;
+}
+
+static bool xicgen_leaf_value_belongs_to_function(const XiFunc *function,
+                                                  const XiValue *value) {
+    if (!function || !value || !value->block || value->block->func != function)
+        return false;
+    uint32_t block_matches = 0, value_matches = 0;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        const XiBlock *block = function->blocks ? function->blocks[b] : NULL;
+        if (block == value->block)
+            block_matches++;
+        for (uint32_t i = 0; block && i < block->nvalues; i++)
+            if (block->values && block->values[i] == value)
+                value_matches++;
+        for (const XiPhi *phi = block ? block->phis : NULL; phi; phi = phi->next)
+            if (&phi->value == value)
+                value_matches++;
+    }
+    return block_matches == 1 && value_matches == 1;
+}
+
+static bool xicgen_leaf_aggregate_place_load_source(XiCgenCtx *ctx, const XiFunc *function,
+                                                    const XiValue *load,
+                                                    const XiValue **source_out) {
+    if (source_out)
+        *source_out = NULL;
+    if (!ctx || !function || !load || load->op != XI_PLACE_LOAD || load->nargs != 1 ||
+        !load->args[0] || !source_out)
+        return false;
+    const XrTargetPlan *target = cg_function_target_plan(ctx, function);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    if (!target || !semantic || !provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
+        return false;
+    char error[256] = {0};
+    const XrTargetFunctionRecord *function_row = NULL;
+    const XrTargetPlan *value_target = NULL;
+    if (xaot_boundary_leaf_aggregate_function_status(ctx->aot_bundle, function, &value_target,
+                                                     &function_row, error, sizeof(error)) !=
+            XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        value_target != target || !function_row) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate place-load function authority is inexact");
+        return false;
+    }
+    uint32_t semantic_function = function_row->semantic_function;
+    uint32_t load_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t load_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t source_value = XR_SEMANTIC_INDEX_NONE;
+    if (xaot_boundary_leaf_aggregate_semantic_value(
+            ctx->aot_bundle, function, load, &value_target, &load_function, &load_value, error,
+            sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        value_target != target || load_function != semantic_function ||
+        xaot_boundary_leaf_aggregate_semantic_value(
+            ctx->aot_bundle, function, load->args[0], &value_target, &source_function,
+            &source_value, error, sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        value_target != target || source_function != semantic_function) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate place-load value authority is inexact");
+        return false;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    const XrSemanticOperationRecord *operation =
+        xicgen_leaf_semantic_value_producer(semantic, semantic_function, load_value);
+    uint32_t operation_source = XR_SEMANTIC_INDEX_NONE;
+    if (!operation || operation->opcode != XI_PLACE_LOAD || operation->operand_count != 1 ||
+        !xicgen_leaf_semantic_operand_value(operands, operand_count, operation, 0,
+                                            &operation_source) ||
+        operation_source != source_value) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate place-load semantic projection is inexact");
+        return false;
+    }
+    uint32_t parameter_matches = 0;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_parameter_count(semantic); i++) {
+        const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(semantic, i);
+        if (parameter && parameter->function == semantic_function &&
+            parameter->value == source_value && parameter->ordinal == 0)
+            parameter_matches++;
+    }
+    const XrTargetValueRepRecord *source_rep = xr_target_plan_value_rep(target, source_value);
+    uint32_t instruction_count = 0, param_matches = 0, get_matches = 0;
+    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
+        target, semantic_function, &instruction_count);
+    for (uint32_t i = 0; instructions && i < instruction_count; i++) {
+        if (source_rep && instructions[i].opcode == XR_TARGET_INSTRUCTION_PARAM_AGGREGATE &&
+            instructions[i].result_slot == source_rep->slot && instructions[i].operand_count == 0)
+            param_matches++;
+        if (source_rep && instructions[i].opcode == XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64 &&
+            instructions[i].operand_count == 1 &&
+            instructions[i].operand_slots[0] == source_rep->slot)
+            get_matches++;
+    }
+    if (parameter_matches != 1 || instruction_count != 5 || param_matches != 1 ||
+        get_matches != 2) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate place-load target projection is inexact");
+        return false;
+    }
+    *source_out = load->args[0];
+    return true;
+}
+
+static bool xicgen_leaf_aggregate_field(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
+                                        uint32_t *ordinal_out) {
+    if (!ctx || !f || !v || !ordinal_out ||
+        (v->op != XI_AGG_GET && v->op != XI_AGG_SET) || v->nargs < 1 || !v->args[0])
+        return false;
+    const XrTargetPlan *target = cg_function_target_plan(ctx, f);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    if (!target || !semantic || !provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
+        return false;
+    const XrTargetFunctionRecord *function_row = NULL;
+    char error[256] = {0};
+    const XrTargetPlan *value_target = NULL;
+    if (xaot_boundary_leaf_aggregate_function_status(ctx->aot_bundle, f, &value_target,
+                                                     &function_row, error, sizeof(error)) !=
+            XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        value_target != target || !function_row) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate field function authority is inexact");
+        return false;
+    }
+    uint32_t function_index = function_row->semantic_function;
+    uint32_t receiver_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t receiver_value = XR_SEMANTIC_INDEX_NONE;
+    if (xaot_boundary_leaf_aggregate_semantic_value(
+            ctx->aot_bundle, f, v->args[0], &value_target, &receiver_function, &receiver_value,
+            error, sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+        value_target != target || receiver_function != function_index) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate field receiver identity is inexact");
+        return false;
+    }
+    uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    if (v->op == XI_AGG_GET) {
+        uint32_t result_function = XR_SEMANTIC_INDEX_NONE;
+        if (xaot_boundary_leaf_aggregate_semantic_value(
+                ctx->aot_bundle, f, v, &value_target, &result_function, &semantic_value, error,
+                sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+            value_target != target || result_function != function_index) {
+            (void) cg_value_emission_fail(ctx,
+                                          "leaf-aggregate field result identity is inexact");
+            return false;
+        }
+    } else {
+        const XrSemanticFunctionRecord *semantic_function =
+            xr_semantic_plan_function(semantic, function_index);
+        if (!semantic_function || !xicgen_leaf_value_belongs_to_function(f, v) ||
+            v->id >= semantic_function->value_count ||
+            semantic_function->value_begin > UINT32_MAX - v->id) {
+            (void) cg_value_emission_fail(ctx,
+                                          "leaf-aggregate set result identity is inexact");
+            return false;
+        }
+        semantic_value = semantic_function->value_begin + v->id;
+    }
+    uint32_t stored_value = XR_SEMANTIC_INDEX_NONE;
+    if (v->op == XI_AGG_SET) {
+        uint32_t stored_function = XR_SEMANTIC_INDEX_NONE;
+        if (v->nargs != 2 || !v->args[1] ||
+            xaot_boundary_leaf_aggregate_semantic_value(
+                ctx->aot_bundle, f, v->args[1], &value_target, &stored_function, &stored_value,
+                error, sizeof(error)) != XAOT_LEAF_AGGREGATE_TARGET_FOUND ||
+            value_target != target || stored_function != function_index) {
+            (void) cg_value_emission_fail(ctx,
+                                          "leaf-aggregate field stored value identity is inexact");
+            return false;
+        }
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    const XrSemanticOperationRecord *operation = NULL;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+        uint32_t expected_operands = v->op == XI_AGG_GET ? 1u : 2u;
+        if (!candidate || candidate->function != function_index || candidate->opcode != v->op ||
+            candidate->operand_count != expected_operands || !operands ||
+            candidate->operand_begin > operand_count ||
+            candidate->operand_count > operand_count - candidate->operand_begin ||
+            operands[candidate->operand_begin].value != receiver_value ||
+            candidate->result_value != semantic_value ||
+            (v->op == XI_AGG_SET &&
+             operands[candidate->operand_begin + 1u].value != stored_value))
+            continue;
+        if (operation) {
+            (void) cg_value_emission_fail(ctx,
+                                          "leaf-aggregate field operation identity is ambiguous");
+            return false;
+        }
+        operation = candidate;
+    }
+    if (!operation || operation->semantic_immediate < 0 || operation->semantic_immediate > 1 ||
+        v->aux_int != operation->semantic_immediate) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate field operation identity is inexact");
+        return false;
+    }
+    const XrTargetValueRepRecord *receiver_rep =
+        xr_target_plan_value_rep(target, receiver_value);
+    const XrTargetMachineRepRecord *receiver_machine =
+        receiver_rep ? xr_target_plan_machine_rep(target, receiver_rep->register_rep) : NULL;
+    uint32_t layout_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(target, &layout_count);
+    const XrTargetLayoutRecord *layout =
+        receiver_machine && receiver_machine->kind == XR_MACHINE_REP_AGGREGATE && layouts &&
+                receiver_machine->detail < layout_count
+            ? &layouts[receiver_machine->detail]
+            : NULL;
+    XrCAggregateProjection projection = {0};
+    uint32_t ordinal = (uint32_t) operation->semantic_immediate;
+    uint32_t field_count = 0;
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(target, &field_count);
+    if (!layout || !fields || layout->field_count != 2 || ordinal >= layout->field_count ||
+        layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin ||
+        !xr_c_leaf_aggregate_projection(target, layout->semantic_type, &projection) ||
+        projection.layout != receiver_machine->detail) {
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate field layout authority is inexact");
+        return false;
+    }
+    const XrTargetFieldRecord *field = &fields[layout->field_begin + ordinal];
+    if (field->layout != projection.layout || field->semantic_field != ordinal ||
+        field->semantic_name != XR_SEMANTIC_INDEX_NONE || field->offset != ordinal * 8u) {
+        (void) cg_value_emission_fail(ctx, "leaf-aggregate field row authority is inexact");
+        return false;
+    }
+    uint32_t instruction_count = 0, matches = 0;
+    const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
+        target, function_index, &instruction_count);
+    if (v->op == XI_AGG_GET) {
+        const XrSemanticOperationRecord *receiver_producer =
+            xicgen_leaf_semantic_value_producer(semantic, function_index, receiver_value);
+        uint32_t receiver_source = XR_SEMANTIC_INDEX_NONE;
+        const XrTargetValueRepRecord *result_rep =
+            xr_target_plan_value_rep(target, semantic_value);
+        const XrTargetValueRepRecord *receiver_source_rep = NULL;
+        if (!receiver_producer || receiver_producer->opcode != XI_PLACE_LOAD ||
+            receiver_producer->operand_count != 1 ||
+            !xicgen_leaf_semantic_operand_value(operands, operand_count, receiver_producer, 0,
+                                                &receiver_source)) {
+            (void) cg_value_emission_fail(
+                ctx, "leaf-aggregate get receiver projection is inexact");
+            return false;
+        }
+        receiver_source_rep = xr_target_plan_value_rep(target, receiver_source);
+        for (uint32_t i = 0; instructions && i < instruction_count; i++)
+            if (result_rep && receiver_source_rep &&
+                instructions[i].opcode == XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64 &&
+                instructions[i].result_slot == result_rep->slot &&
+                instructions[i].operand_count == 1 &&
+                instructions[i].operand_slots[0] == receiver_source_rep->slot &&
+                instructions[i].immediate_bits == layout->field_begin + ordinal)
+                matches++;
+    } else {
+        uint32_t stored_by_ordinal[2] = {XR_SEMANTIC_INDEX_NONE, XR_SEMANTIC_INDEX_NONE};
+        uint32_t set_matches = 0;
+        for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+            const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
+            uint32_t candidate_receiver = XR_SEMANTIC_INDEX_NONE;
+            uint32_t candidate_stored = XR_SEMANTIC_INDEX_NONE;
+            if (!candidate || candidate->function != function_index ||
+                candidate->opcode != XI_AGG_SET || candidate->operand_count != 2 ||
+                candidate->semantic_immediate < 0 || candidate->semantic_immediate > 1 ||
+                !xicgen_leaf_semantic_operand_value(operands, operand_count, candidate, 0,
+                                                    &candidate_receiver) ||
+                !xicgen_leaf_semantic_operand_value(operands, operand_count, candidate, 1,
+                                                    &candidate_stored) ||
+                candidate_receiver != receiver_value)
+                continue;
+            uint32_t candidate_ordinal = (uint32_t) candidate->semantic_immediate;
+            if (stored_by_ordinal[candidate_ordinal] != XR_SEMANTIC_INDEX_NONE) {
+                (void) cg_value_emission_fail(
+                    ctx, "leaf-aggregate set projection is ambiguous");
+                return false;
+            }
+            stored_by_ordinal[candidate_ordinal] = candidate_stored;
+            set_matches++;
+        }
+        const XrTargetValueRepRecord *stored_rep0 =
+            xr_target_plan_value_rep(target, stored_by_ordinal[0]);
+        const XrTargetValueRepRecord *stored_rep1 =
+            xr_target_plan_value_rep(target, stored_by_ordinal[1]);
+        if (set_matches != 2 || !stored_rep0 || !stored_rep1) {
+            (void) cg_value_emission_fail(ctx, "leaf-aggregate set projection is incomplete");
+            return false;
+        }
+        for (uint32_t i = 0; instructions && i < instruction_count; i++)
+            if (instructions[i].opcode == XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2 &&
+                instructions[i].result_slot == receiver_rep->slot &&
+                instructions[i].operand_count == 2 &&
+                instructions[i].operand_slots[0] == stored_rep0->slot &&
+                instructions[i].operand_slots[1] == stored_rep1->slot &&
+                instructions[i].immediate_bits == projection.layout)
+                matches++;
+    }
+    if (matches != 1) {
+        (void) cg_value_emission_fail(ctx,
+                                      "leaf-aggregate field instruction authority is inexact");
+        return false;
+    }
+    *ordinal_out = ordinal;
+    return true;
+}
+
 static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_struct_get: need struct arg");
+    uint32_t leaf_ordinal = 0;
+    if (xicgen_leaf_aggregate_field(ctx, f, v, &leaf_ordinal)) {
+        const XiValue *load = v->args[0];
+        if (!load || load->op != XI_PLACE_LOAD || load->nargs != 1 || !load->args[0]) {
+            (void) cg_value_emission_fail(
+                ctx, "leaf-aggregate get live receiver projection is inexact");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        emit_vref(out, load->args[0]);
+        fprintf(out, ".f%u", (unsigned) leaf_ordinal);
+        return;
+    }
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_static_fixed_struct_array_field_get_expr(ctx, out, v))
         return;
     if (emit_static_struct_field_get_expr(ctx, out, v))
@@ -12489,6 +12856,19 @@ static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
+    uint32_t leaf_ordinal = 0;
+    if (xicgen_leaf_aggregate_field(ctx, f, v, &leaf_ordinal)) {
+        fprintf(out, "(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ".f%u = ", (unsigned) leaf_ordinal);
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ")");
+        return;
+    }
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_static_fixed_struct_array_field_set_expr(ctx, out, v))
         return;
     XrAggregateLayout *sl = (XrAggregateLayout *) v->aux;
@@ -15722,9 +16102,18 @@ static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 }
 
 static void xicgen_place_load(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
+                               const char *prefix) {
     (void) prefix;
     if (!v || v->nargs != 1 || !v->args[0]) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    const XiValue *leaf_source = NULL;
+    if (xicgen_leaf_aggregate_place_load_source(ctx, f, v, &leaf_source)) {
+        emit_vref(out, leaf_source);
+        return;
+    }
+    if (ctx->error) {
         emit_codegen_abort_expr(out);
         return;
     }

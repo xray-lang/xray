@@ -38,6 +38,8 @@ typedef struct XiSemanticSnapshot {
     XiSnapshotPtrMap enum_layouts;
     XiSnapshotPtrMap aggregate_layouts;
     XiSnapshotPtrMap class_infos;
+    XiSnapshotPtrMap enum_datas;
+    XiSnapshotPtrMap class_datas;
     const char *failure;
     int failure_type_kind;
     int failure_value_op;
@@ -554,6 +556,12 @@ static bool snapshot_literal_types(XiSemanticSnapshot *snapshot, XiConstLiteral 
 static bool snapshot_enum_data(XiSemanticSnapshot *snapshot, XiEnumData *data) {
     if (!data)
         return true;
+    if (snapshot_map_get(&snapshot->enum_datas, data))
+        return true;
+    if (!snapshot_map_put(&snapshot->enum_datas, data, data)) {
+        snapshot->failed = true;
+        return false;
+    }
     if (data->member_count > 0 && !data->members)
         return false;
     for (uint32_t i = 0; i < data->member_count; i++) {
@@ -573,6 +581,12 @@ static bool snapshot_enum_data(XiSemanticSnapshot *snapshot, XiEnumData *data) {
 static bool snapshot_class_data(XiSemanticSnapshot *snapshot, XiClassData *data) {
     if (!data)
         return true;
+    if (snapshot_map_get(&snapshot->class_datas, data))
+        return true;
+    if (!snapshot_map_put(&snapshot->class_datas, data, data)) {
+        snapshot->failed = true;
+        return false;
+    }
     data->class_info = snapshot_class_info(snapshot, data->class_info);
     data->struct_layout = snapshot_aggregate_layout(snapshot, data->struct_layout);
     data->instance_layout = snapshot_aggregate_layout(snapshot, data->instance_layout);
@@ -768,6 +782,8 @@ bool xi_semantic_snapshot_detach_ex(XiFunc *root, char *error, size_t error_size
     snapshot_map_dispose(&snapshot.enum_layouts);
     snapshot_map_dispose(&snapshot.aggregate_layouts);
     snapshot_map_dispose(&snapshot.class_infos);
+    snapshot_map_dispose(&snapshot.enum_datas);
+    snapshot_map_dispose(&snapshot.class_datas);
     if (!ok && error && error_size > 0) {
         snprintf(error, error_size, "%s (type_kind=%d, value_op=%d)",
                  snapshot.failure ? snapshot.failure : "unknown semantic snapshot failure",

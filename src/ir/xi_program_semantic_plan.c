@@ -471,7 +471,7 @@ static bool verify_scalar_semantic_plan(const XiFunc *root, const XrSemanticPlan
 }
 
 static bool semantic_leaf_aggregate_plan_verify(const XiFunc *root, const XrSemanticPlan *plan,
-                                                char *error, size_t error_size) {
+                                                 char *error, size_t error_size) {
     const XiModule *module = root ? root->module : NULL;
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
     if (!root || !module || module->init != root || !closure || !plan || module->nfuncs != 2 ||
@@ -614,6 +614,101 @@ static bool semantic_leaf_aggregate_plan_verify(const XiFunc *root, const XrSema
                                 module->identity, error, error_size))
         return false;
     return semantic_program_call_inventory_is_exact(plan, call_binding, error, error_size);
+}
+
+static bool semantic_detached_source_module_is_exact(
+    const XiModule *module, const XrProgramSemanticClosure *closure) {
+    const XrProgramSemanticModuleRecord *program_module =
+        closure && xr_program_semantic_closure_module_count(closure) == 1
+            ? xr_program_semantic_closure_module(closure, 0)
+            : NULL;
+    const XrProgramSemanticModuleInput *source =
+        module && module->source_semantic_module_present ? &module->source_semantic_module : NULL;
+    return program_module && source &&
+           xr_stable_id_equal(program_module->module_identity, source->module_identity) &&
+           xr_fingerprint_equal(program_module->module_authority_fingerprint,
+                                source->module_authority_fingerprint) &&
+           xr_fingerprint_equal(program_module->source_fingerprint, source->source_fingerprint) &&
+           xr_fingerprint_equal(program_module->export_fingerprint, source->export_fingerprint);
+}
+
+bool xi_program_semantic_plan_verify_detached_leaf_authority(
+    const XiFunc *root, const XrSemanticPlan *plan, char *error, size_t error_size) {
+    const XiModule *module = root ? root->module : NULL;
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    if (error && error_size)
+        error[0] = '\0';
+    if (!root || !root->semantic_snapshot_detached || !module || module->init != root)
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf Xi root authority is incomplete");
+    if (!closure || !xr_program_semantic_closure_is_frozen(closure) ||
+        !xr_program_semantic_closure_is_verified(closure))
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf PSC state is incomplete");
+    if (!xr_program_semantic_closure_verify(closure, error, error_size))
+        return false;
+    if (xr_program_semantic_closure_schema(closure) !=
+            XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION ||
+        xr_program_semantic_closure_family(closure) !=
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf PSC schema or family is not exact");
+    if (!semantic_detached_source_module_is_exact(module, closure))
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf source-module authority disagrees with PSC");
+    if (!plan)
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf SemanticPlan is missing");
+    if (!xr_semantic_plan_verify(plan, error, error_size))
+        return false;
+
+    size_t function_count = xr_program_semantic_closure_function_count(closure);
+    if (function_count > UINT16_MAX || module->nfuncs != function_count ||
+        root->nchildren != function_count || root->psc_function_index != XI_PSC_ROW_NONE ||
+        root->psc_return_type_index != XI_PSC_ROW_NONE ||
+        xr_semantic_plan_function_count(plan) != function_count + 1)
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf Xi module inventory is not exact");
+    for (uint16_t i = 0; i < module->nfuncs; i++) {
+        const XiFunc *function = module->functions ? module->functions[i] : NULL;
+        uint16_t child_matches = 0;
+        for (uint16_t child = 0; child < root->nchildren; child++)
+            if (root->children && root->children[child] == function)
+                child_matches++;
+        if (!function || function->parent_func != root || function->semantic_snapshot_detached == 0 ||
+            child_matches != 1 ||
+            !xr_program_semantic_closure_function(closure, function->psc_function_index))
+            return semantic_scalar_fail(error, error_size,
+                                        "detached leaf Xi function inventory is not exact");
+        for (uint16_t previous = 0; previous < i; previous++)
+            if (module->functions[previous] &&
+                module->functions[previous]->psc_function_index == function->psc_function_index)
+                return semantic_scalar_fail(error, error_size,
+                                            "detached leaf Xi function rows are duplicated");
+    }
+
+    const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);
+    XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(closure);
+    if (!provenance ||
+        provenance->schema != XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION ||
+        provenance->program_schema != xr_program_semantic_closure_schema(closure) ||
+        provenance->program_family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
+        provenance->type_count != xr_program_semantic_closure_type_count(closure) ||
+        provenance->type_field_count != xr_program_semantic_closure_type_field_count(closure) ||
+        provenance->function_count != function_count ||
+        provenance->call_count != xr_program_semantic_closure_call_count(closure) ||
+        xr_semantic_plan_program_type_binding_count(plan) != provenance->type_count ||
+        xr_semantic_plan_program_type_field_binding_count(plan) != provenance->type_field_count ||
+        xr_semantic_plan_program_function_binding_count(plan) != provenance->function_count ||
+        xr_semantic_plan_program_call_binding_count(plan) != provenance->call_count ||
+        !xr_fingerprint_equal(provenance->program_fingerprint,
+                              xr_program_semantic_closure_fingerprint(closure)) ||
+        memcmp(provenance->generation_identity.bytes, generation.bytes, sizeof(generation.bytes)) !=
+            0)
+        return semantic_scalar_fail(error, error_size,
+                                    "detached leaf SemanticPlan provenance disagrees with PSC");
+    return true;
 }
 
 bool xi_program_semantic_plan_verify(const XiFunc *root, const XrSemanticPlan *plan,

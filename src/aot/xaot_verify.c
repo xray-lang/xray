@@ -23,6 +23,7 @@
 #include "../ir/xi_coro_analyze.h"
 #include "../ir/xi_effect.h"
 #include "../ir/xi_escape.h"
+#include "../ir/xi_program_semantic_plan.h"
 #include "../plan/target/xr_target_verify.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../shared/xr_derive_flags.h"
@@ -45,11 +46,21 @@ static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf, 
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
         const XrTargetPlan *target_plan = bundle->target_plans[module_index];
-        if (!module || !module->init || !module->init->semantic_plan || !target_plan)
+        const XrSemanticPlan *semantic =
+            target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
+        const XrSemanticProgramProvenance *provenance =
+            semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+        bool leaf_aggregate =
+            provenance &&
+            provenance->program_family ==
+                XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+        bool semantic_match =
+            leaf_aggregate
+                ? xi_program_semantic_plan_verify_detached_leaf_authority(
+                      module ? module->init : NULL, semantic, target_error, sizeof(target_error))
+                : (module && module->init && module->init->semantic_plan == semantic);
+        if (!module || !module->init || !target_plan || !semantic_match)
             return set_error(errbuf, errbuf_len, "AOT module has no bound TargetPlan");
-        if (xr_target_plan_semantic_plan(target_plan) != module->init->semantic_plan)
-            return set_error(errbuf, errbuf_len,
-                             "AOT module TargetPlan has different semantic authority");
         if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES)
             return set_error(errbuf, errbuf_len,
                              "AOT module TargetPlan family coverage is incomplete");
@@ -76,7 +87,17 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
     target_plan = xaot_bundle_target_plan_for_func(bundle, func);
     if (!func || !value || !out_binding || !out_rep_adapter || !target_plan)
         return set_error(errbuf, errbuf_len, "AOT value lacks exact TargetPlan semantic identity");
-    if (!xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
+    const XrTargetPlan *leaf_target = NULL;
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_semantic_value(
+        bundle, func, value, &leaf_target, &semantic_function, &semantic_value, target_error,
+        sizeof(target_error));
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+        return set_error(errbuf, errbuf_len,
+                         "AOT leaf-aggregate value lacks exact PSC identity");
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND)
+        target_plan = leaf_target;
+    if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+        !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
                                          &semantic_value, target_error, sizeof(target_error))) {
         if (!xr_aot_rep_adapter_value_is_exact(target_plan, func, value, target_error,
                                                sizeof(target_error)))
@@ -7244,11 +7265,16 @@ static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, 
         XaotFuncAbi empty = {0};
         if (memcmp(&plan->abi, &empty, sizeof(empty)) != 0)
             return set_error(errbuf, errbuf_len,
-                             "TargetPlan-owned i64 function retains legacy AOT ABI state");
-        if (xaot_boundary_direct_i64_abi_status(bundle, plan->func, errbuf, errbuf_len) !=
-            XAOT_DIRECT_I64_TARGET_FOUND)
+                             "TargetPlan-owned function retains legacy AOT ABI state");
+        XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_abi_status(
+            bundle, plan->func, errbuf, errbuf_len);
+        if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+            return false;
+        if (leaf_status != XAOT_LEAF_AGGREGATE_TARGET_FOUND &&
+            xaot_boundary_direct_i64_abi_status(bundle, plan->func, errbuf, errbuf_len) !=
+                XAOT_DIRECT_I64_TARGET_FOUND)
             return set_error(errbuf, errbuf_len,
-                             "TargetPlan-owned i64 function authority is invalid");
+                             "TargetPlan-owned function authority is invalid");
         return true;
     }
     if (plan->abi_authority != XAOT_FUNC_ABI_AUTHORITY_LEGACY)
@@ -7473,6 +7499,22 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
         return true;
     if (call->op != XI_CALL && call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT)
         return true;
+    XaotLeafAggregateTargetView leaf_aggregate = {0};
+    XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_call_view(
+        bundle, func, call, &leaf_aggregate, errbuf, errbuf_len);
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_INVALID)
+        return false;
+    if (leaf_status == XAOT_LEAF_AGGREGATE_TARGET_FOUND) {
+        if (xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG, func,
+                                              call, leaf_aggregate.argument_value,
+                                              leaf_aggregate.callee, 0) ||
+            xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, func,
+                                              call, NULL, leaf_aggregate.callee, UINT16_MAX))
+            return set_error(
+                errbuf, errbuf_len,
+                "TargetPlan-owned leaf-aggregate call retains legacy boundary steps");
+        return true;
+    }
     XaotDirectI64TargetView direct_i64 = {0};
     XaotDirectI64TargetStatus direct_i64_status = xaot_boundary_direct_i64_call_view(
         bundle, func, call, &direct_i64, errbuf, errbuf_len);

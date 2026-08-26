@@ -2638,7 +2638,8 @@ semantic_leaf_program_direct_call_is_exact(const XrSemanticPlan *plan, uint32_t 
         stable_id_is_zero(call->program_call) || stable_id_is_zero(call->callsite) ||
         !xr_stable_id_equal(call->caller_program_function, caller_binding->program_function) ||
         !xr_stable_id_equal(call->callee_program_function, callee_binding->program_function) ||
-        caller_binding->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY || callee_binding->flags != 0 ||
+        (caller_binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) == 0 ||
+        callee_binding->flags != 0 ||
         operation->opcode != XI_CALL || operation->function == call->target_function ||
         operation->result_value == XR_SEMANTIC_INDEX_NONE ||
         operation->result_type != bound_callee->return_type ||
@@ -12738,6 +12739,424 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
     return true;
 }
 
+typedef struct XrLeafAggregateInstructionShape {
+    const XrSemanticProgramTypeBinding *aggregate;
+    const XrSemanticProgramFunctionBinding *caller_binding;
+    const XrSemanticProgramFunctionBinding *callee_binding;
+    const XrSemanticFunctionRecord *caller;
+    const XrSemanticFunctionRecord *callee;
+    const XrSemanticParameterRecord *parameter;
+    const XrSemanticOperationRecord *caller_ops[9];
+    const XrSemanticOperationRecord *callee_ops[10];
+    const XrTargetCallRecord *call;
+    uint32_t call_index;
+    uint32_t caller_operation_begin;
+    uint32_t callee_operation_begin;
+    uint32_t layout;
+    uint32_t field[2];
+    uint16_t aggregate_rep;
+} XrLeafAggregateInstructionShape;
+
+static bool leaf_operation_operands_are(const XrSemanticPlan *semantic,
+                                        const XrSemanticOperationRecord *operation,
+                                        uint16_t count, uint32_t first, uint32_t second) {
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    if (!operation || operation->operand_count != count || !operands ||
+        operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return false;
+    if (count > 0 && operands[operation->operand_begin].value != first)
+        return false;
+    return count < 2 || operands[operation->operand_begin + 1u].value == second;
+}
+
+static bool leaf_materialized_slot_is_exact(const XrTargetMaterializedPlan *materialized,
+                                            uint32_t semantic_value, uint32_t function,
+                                            uint32_t semantic_operation, uint8_t role,
+                                            uint16_t rep, uint32_t size,
+                                            uint32_t *out_slot) {
+    const XrTargetValueRepRecord *value =
+        find_materialized_value(materialized, semantic_value);
+    const XrTargetSlotRecord *slot =
+        value && value->slot < materialized->slot_count
+            ? &materialized->slots[value->slot]
+            : NULL;
+    const XrTargetMachineRepRecord *machine =
+        rep < materialized->machine_rep_count ? &materialized->machine_reps[rep] : NULL;
+    if (!value || !slot || !machine || value->register_rep != rep || value->memory_rep != rep ||
+        slot->id != value->slot || slot->function != function ||
+        slot->semantic_value != semantic_value || slot->semantic_operation != semantic_operation ||
+        slot->role != role || slot->register_rep != rep || slot->memory_rep != rep ||
+        slot->size != size || slot->align != 8 || slot->root_kind != XR_TARGET_ROOT_NONE ||
+        slot->ownership != XR_TARGET_OWNERSHIP_TRIVIAL || slot->reserved != 0 ||
+        machine->memory_size != size || machine->memory_align != 8 ||
+        machine->root_kind != XR_TARGET_ROOT_NONE ||
+        machine->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
+        return false;
+    if (out_slot)
+        *out_slot = value->slot;
+    return true;
+}
+
+/* Rebuild the bounded PSC4 leaf program from pointer-free SemanticPlan rows.
+ * The source class and field spellings are intentionally absent: the program
+ * bindings select the aggregate, declaration ordinals select its two fields,
+ * and the frozen SSA rows prove the constructor/get/set/call ordering. */
+static bool leaf_aggregate_instruction_shape_is_exact(
+    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    XrLeafAggregateInstructionShape *shape) {
+    if (shape)
+        memset(shape, 0, sizeof(*shape));
+    const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *provenance =
+        semantic ? semantic_leaf_program_provenance(semantic) : NULL;
+    if (!semantic || !materialized || !shape || !provenance)
+        return false;
+
+    for (uint32_t i = 0; i < provenance->function_count; i++) {
+        const XrSemanticProgramFunctionBinding *binding =
+            xr_semantic_plan_program_function_binding(semantic, i);
+        if (!binding || binding->program_row >= provenance->function_count ||
+            memcmp(binding->reserved, (uint8_t[3]) {0}, 3) != 0 ||
+            binding->semantic_function >= materialized->function_count)
+            return false;
+        if ((binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0) {
+            if (shape->caller_binding)
+                return false;
+            shape->caller_binding = binding;
+        } else if (binding->flags == 0) {
+            if (shape->callee_binding)
+                return false;
+            shape->callee_binding = binding;
+        } else
+            return false;
+    }
+    if (!shape->caller_binding || !shape->callee_binding)
+        return false;
+    shape->caller = xr_semantic_plan_function(
+        semantic, shape->caller_binding->semantic_function);
+    shape->callee = xr_semantic_plan_function(
+        semantic, shape->callee_binding->semantic_function);
+    const XrSemanticProgramCallBinding *call_binding =
+        xr_semantic_plan_program_call_binding(semantic, 0);
+    const XrSemanticOperationRecord *call_operation =
+        call_binding ? xr_semantic_plan_operation(semantic, call_binding->operation) : NULL;
+    if (!shape->caller || !shape->callee || !call_binding || !call_operation ||
+        !semantic_leaf_program_direct_call_is_exact(
+            semantic, call_binding->operation, call_operation, shape->callee, &shape->aggregate) ||
+        call_operation->function != shape->caller_binding->semantic_function ||
+        call_binding->target_function != shape->callee_binding->semantic_function ||
+        shape->caller->block_count != 1 || shape->callee->block_count != 1 ||
+        shape->caller->parameter_count != 0 || shape->callee->parameter_count != 1 ||
+        shape->caller->capture_count != 0 || shape->callee->capture_count != 0)
+        return false;
+
+    const XrSemanticBlockRecord *caller_block =
+        xr_semantic_plan_block(semantic, shape->caller->block_begin);
+    const XrSemanticBlockRecord *callee_block =
+        xr_semantic_plan_block(semantic, shape->callee->block_begin);
+    if (!caller_block || !callee_block || caller_block->function !=
+            shape->caller_binding->semantic_function || callee_block->function !=
+            shape->callee_binding->semantic_function || caller_block->kind != XI_BLOCK_RETURN ||
+        callee_block->kind != XI_BLOCK_RETURN || caller_block->operation_count != 9 ||
+        callee_block->operation_count != 10 ||
+        caller_block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+        caller_block->successors[1] != XR_SEMANTIC_INDEX_NONE ||
+        callee_block->successors[0] != XR_SEMANTIC_INDEX_NONE ||
+        callee_block->successors[1] != XR_SEMANTIC_INDEX_NONE)
+        return false;
+    shape->caller_operation_begin = caller_block->operation_begin;
+    shape->callee_operation_begin = callee_block->operation_begin;
+    for (uint32_t i = 0; i < 9; i++) {
+        shape->caller_ops[i] =
+            xr_semantic_plan_operation(semantic, caller_block->operation_begin + i);
+        if (!shape->caller_ops[i] || shape->caller_ops[i]->function != caller_block->function ||
+            shape->caller_ops[i]->block != shape->caller->block_begin)
+            return false;
+    }
+    for (uint32_t i = 0; i < 10; i++) {
+        shape->callee_ops[i] =
+            xr_semantic_plan_operation(semantic, callee_block->operation_begin + i);
+        if (!shape->callee_ops[i] || shape->callee_ops[i]->function != callee_block->function ||
+            shape->callee_ops[i]->block != shape->callee->block_begin)
+            return false;
+    }
+    shape->parameter = xr_semantic_plan_parameter(semantic, shape->callee->parameter_begin);
+    const XrSemanticOperationRecord *const0 = shape->caller_ops[1];
+    const XrSemanticOperationRecord *const1 = shape->caller_ops[2];
+    const XrSemanticConstantRecord *constant0 =
+        xr_semantic_plan_constant(semantic, const0->constant);
+    const XrSemanticConstantRecord *constant1 =
+        xr_semantic_plan_constant(semantic, const1->constant);
+    if (!shape->parameter || shape->parameter->function !=
+            shape->callee_binding->semantic_function || shape->parameter->ordinal != 0 ||
+        shape->parameter->type != shape->aggregate->semantic_type ||
+        shape->callee_ops[0]->opcode != XI_PARAM ||
+        shape->callee_ops[0]->result_value != shape->parameter->value ||
+        shape->callee_ops[0]->result_type != shape->aggregate->semantic_type ||
+        shape->callee_ops[0]->semantic_immediate != 0 ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[0], 0, 0, 0) ||
+        shape->callee_ops[1]->opcode != XI_PLACE_LOAD ||
+        shape->callee_ops[1]->result_type != shape->aggregate->semantic_type ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[1], 1,
+                                     shape->parameter->value, 0) ||
+        shape->callee_ops[2]->opcode != XI_AGG_GET ||
+        shape->callee_ops[2]->semantic_immediate != 1 ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[2], 1,
+                                     shape->callee_ops[1]->result_value, 0) ||
+        shape->callee_ops[3]->opcode != XI_PLACE_LOAD ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[3], 1,
+                                     shape->parameter->value, 0) ||
+        shape->callee_ops[4]->opcode != XI_AGG_GET ||
+        shape->callee_ops[4]->semantic_immediate != 0 ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[4], 1,
+                                     shape->callee_ops[3]->result_value, 0) ||
+        shape->callee_ops[5]->opcode != XI_GET_SHARED ||
+        shape->callee_ops[6]->opcode != XI_RETAIN ||
+        shape->callee_ops[6]->result_type != shape->callee_ops[5]->result_type ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[6], 1,
+                                     shape->callee_ops[5]->result_value, 0) ||
+        shape->callee_ops[7]->opcode != XI_AGG_NEW ||
+        shape->callee_ops[7]->result_type != shape->aggregate->semantic_type ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[7], 1,
+                                     shape->callee_ops[5]->result_value, 0) ||
+        shape->callee_ops[8]->opcode != XI_AGG_SET ||
+        shape->callee_ops[8]->semantic_immediate != 0 ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[8], 2,
+                                     shape->callee_ops[7]->result_value,
+                                     shape->callee_ops[2]->result_value) ||
+        shape->callee_ops[9]->opcode != XI_AGG_SET ||
+        shape->callee_ops[9]->semantic_immediate != 1 ||
+        !leaf_operation_operands_are(semantic, shape->callee_ops[9], 2,
+                                     shape->callee_ops[7]->result_value,
+                                     shape->callee_ops[4]->result_value) ||
+        callee_block->control_value != shape->callee_ops[7]->result_value ||
+        shape->caller_ops[0]->opcode != XI_GET_SHARED || const0->opcode != XI_CONST ||
+        const1->opcode != XI_CONST || !constant0 || !constant1 ||
+        constant0->kind != XR_SEM_CONST_INT || constant1->kind != XR_SEM_CONST_INT ||
+        constant0->type != const0->result_type || constant1->type != const1->result_type ||
+        semantic_leaf_program_type_kind(semantic, const0->result_type, NULL) !=
+            XR_TARGET_LEAF_PROGRAM_TYPE_SCALAR ||
+        const1->result_type != const0->result_type ||
+        shape->caller_ops[3]->opcode != XI_GET_SHARED ||
+        shape->caller_ops[4]->opcode != XI_RETAIN ||
+        shape->caller_ops[4]->result_type != shape->caller_ops[3]->result_type ||
+        !leaf_operation_operands_are(semantic, shape->caller_ops[4], 1,
+                                     shape->caller_ops[3]->result_value, 0) ||
+        shape->caller_ops[5]->opcode != XI_AGG_NEW ||
+        shape->caller_ops[5]->result_type != shape->aggregate->semantic_type ||
+        !leaf_operation_operands_are(semantic, shape->caller_ops[5], 1,
+                                     shape->caller_ops[3]->result_value, 0) ||
+        shape->caller_ops[6]->opcode != XI_AGG_SET ||
+        shape->caller_ops[6]->semantic_immediate != 0 ||
+        !leaf_operation_operands_are(semantic, shape->caller_ops[6], 2,
+                                     shape->caller_ops[5]->result_value,
+                                     const0->result_value) ||
+        shape->caller_ops[7]->opcode != XI_AGG_SET ||
+        shape->caller_ops[7]->semantic_immediate != 1 ||
+        !leaf_operation_operands_are(semantic, shape->caller_ops[7], 2,
+                                     shape->caller_ops[5]->result_value,
+                                     const1->result_value) ||
+        shape->caller_ops[8] != call_operation ||
+        caller_block->control_value != call_operation->result_value)
+        return false;
+
+    uint32_t layout_matches = 0;
+    for (uint32_t i = 0; i < materialized->layout_count; i++) {
+        const XrTargetLayoutRecord *layout = &materialized->layouts[i];
+        if (layout->semantic_type != shape->aggregate->semantic_type)
+            continue;
+        shape->layout = i;
+        layout_matches++;
+    }
+    const XrTargetLayoutRecord *layout =
+        layout_matches == 1 ? &materialized->layouts[shape->layout] : NULL;
+    if (!layout || layout->id != shape->layout || layout->kind != XR_TARGET_LAYOUT_AGGREGATE ||
+        layout->fixed_prefix_size != 16 || layout->align != 8 || layout->field_count != 2 ||
+        layout->field_begin > materialized->field_count ||
+        layout->field_count > materialized->field_count - layout->field_begin)
+        return false;
+    for (uint32_t ordinal = 0; ordinal < 2; ordinal++) {
+        shape->field[ordinal] = layout->field_begin + ordinal;
+        const XrTargetFieldRecord *field = &materialized->fields[shape->field[ordinal]];
+        if (field->layout != shape->layout || field->semantic_field != ordinal ||
+            field->semantic_name != XR_SEMANTIC_INDEX_NONE || field->offset != ordinal * 8u ||
+            field->size != 8 || field->align != 8 || field->root_kind != XR_TARGET_ROOT_NONE ||
+            field->flags != 0 || field->reserved != 0 ||
+            field->memory_rep >= materialized->machine_rep_count ||
+            materialized->machine_reps[field->memory_rep].kind != XR_MACHINE_REP_I64)
+            return false;
+    }
+    uint32_t rep_matches = 0;
+    for (uint32_t i = 0; i < materialized->machine_rep_count; i++) {
+        const XrTargetMachineRepRecord *rep = &materialized->machine_reps[i];
+        if (rep->kind == XR_MACHINE_REP_AGGREGATE && rep->detail == shape->layout) {
+            shape->aggregate_rep = (uint16_t) i;
+            rep_matches++;
+        }
+    }
+    if (rep_matches != 1)
+        return false;
+    for (uint32_t i = 0; i < materialized->call_count; i++) {
+        if (materialized->calls[i].semantic_operation != call_binding->operation)
+            continue;
+        if (shape->call)
+            return false;
+        shape->call = &materialized->calls[i];
+        shape->call_index = i;
+    }
+    if (!shape->call || shape->call->id != shape->call_index ||
+        shape->call->caller_function != shape->caller_binding->semantic_function ||
+        shape->call->callee_function != shape->callee_binding->semantic_function ||
+        shape->call->result_mode != XR_TARGET_CALL_CALLER_STORAGE ||
+        shape->call->result_slot != shape->call->caller_storage_slot ||
+        shape->call->argument_count != 1 || shape->call->adapter_count != 0 ||
+        shape->call->result_register_rep != shape->aggregate_rep ||
+        shape->call->result_memory_rep != shape->aggregate_rep)
+        return false;
+    return true;
+}
+
+static bool materialize_leaf_aggregate_instruction_function(
+    const XrTargetPlanBuilder *builder, const XrTargetMaterializedPlan *materialized,
+    uint32_t function_index, XrTargetInstructionRecord *rows, uint32_t row_begin,
+    uint32_t *out_row_count) {
+    if (out_row_count)
+        *out_row_count = 0;
+    XrLeafAggregateInstructionShape shape = {0};
+    if (!leaf_aggregate_instruction_shape_is_exact(builder, materialized, &shape))
+        return false;
+    bool callee = function_index == shape.callee_binding->semantic_function;
+    bool caller = function_index == shape.caller_binding->semantic_function;
+    if (!callee && !caller)
+        return false;
+
+    uint32_t slot[5] = {0};
+    XrTargetInstructionRecord group[5] = {0};
+    if (callee) {
+        if (!leaf_materialized_slot_is_exact(
+                materialized, shape.parameter->value, function_index,
+                XR_SEMANTIC_INDEX_NONE, XR_TARGET_SLOT_PARAMETER,
+                shape.aggregate_rep, 16, &slot[0]) ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.callee_ops[2]->result_value, function_index,
+                shape.callee_operation_begin + 2u, XR_TARGET_SLOT_TEMPORARY,
+                materialized->fields[shape.field[1]].memory_rep, 8, &slot[1]) ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.callee_ops[4]->result_value, function_index,
+                shape.callee_operation_begin + 4u, XR_TARGET_SLOT_TEMPORARY,
+                materialized->fields[shape.field[0]].memory_rep, 8, &slot[2]) ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.callee_ops[7]->result_value, function_index,
+                shape.callee_operation_begin + 7u, XR_TARGET_SLOT_TEMPORARY,
+                shape.aggregate_rep, 16, &slot[3]))
+            return false;
+        group[0] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[0],
+            .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                              XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_PARAM_AGGREGATE, .immediate_bits = 0,
+        };
+        group[1] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[1],
+            .operand_slots = {slot[0], XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64, .operand_count = 1,
+            .immediate_bits = shape.field[1],
+        };
+        group[2] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[2],
+            .operand_slots = {slot[0], XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_AGGREGATE_GET_I64, .operand_count = 1,
+            .immediate_bits = shape.field[0],
+        };
+        group[3] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[3],
+            .operand_slots = {slot[1], slot[2]},
+            .opcode = XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2, .operand_count = 2,
+            .immediate_bits = shape.layout,
+        };
+        group[4] = (XrTargetInstructionRecord) {
+            .function = function_index,
+            .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+            .operand_slots = {slot[3], XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_RETURN_AGGREGATE, .operand_count = 1,
+        };
+    } else {
+        const XrSemanticConstantRecord *constant0 = xr_semantic_plan_constant(
+            builder->semantic_plan, shape.caller_ops[1]->constant);
+        const XrSemanticConstantRecord *constant1 = xr_semantic_plan_constant(
+            builder->semantic_plan, shape.caller_ops[2]->constant);
+        if (!constant0 || !constant1 ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.caller_ops[1]->result_value, function_index,
+                shape.caller_operation_begin + 1u, XR_TARGET_SLOT_TEMPORARY,
+                materialized->fields[shape.field[0]].memory_rep, 8, &slot[0]) ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.caller_ops[2]->result_value, function_index,
+                shape.caller_operation_begin + 2u, XR_TARGET_SLOT_TEMPORARY,
+                materialized->fields[shape.field[1]].memory_rep, 8, &slot[1]) ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.caller_ops[5]->result_value, function_index,
+                shape.caller_operation_begin + 5u, XR_TARGET_SLOT_TEMPORARY,
+                shape.aggregate_rep, 16, &slot[2]) ||
+            !leaf_materialized_slot_is_exact(
+                materialized, shape.caller_ops[8]->result_value, function_index,
+                shape.caller_operation_begin + 8u, XR_TARGET_SLOT_TEMPORARY,
+                shape.aggregate_rep, 16, &slot[3]))
+            return false;
+        group[0] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[0],
+            .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                              XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_CONST_I64,
+            .immediate_bits = (uint64_t) constant0->integer,
+        };
+        group[1] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[1],
+            .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                              XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_CONST_I64,
+            .immediate_bits = (uint64_t) constant1->integer,
+        };
+        group[2] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[2],
+            .operand_slots = {slot[0], slot[1]},
+            .opcode = XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2, .operand_count = 2,
+            .immediate_bits = shape.layout,
+        };
+        group[3] = (XrTargetInstructionRecord) {
+            .function = function_index, .result_slot = slot[3],
+            .operand_slots = {XR_TARGET_INSTRUCTION_SLOT_NONE,
+                              XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE,
+            .immediate_bits = shape.call_index,
+        };
+        group[4] = (XrTargetInstructionRecord) {
+            .function = function_index,
+            .result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE,
+            .operand_slots = {slot[3], XR_TARGET_INSTRUCTION_SLOT_NONE},
+            .opcode = XR_TARGET_INSTRUCTION_RETURN_AGGREGATE, .operand_count = 1,
+        };
+    }
+    if (!xr_target_instruction_rows_control_flow_is_exact(
+            group, 5, materialized->functions[function_index].slot_begin,
+            materialized->functions[function_index].slot_count, materialized->calls,
+            materialized->call_count, materialized->call_arguments,
+            materialized->call_argument_count, materialized->entry_expectations,
+            materialized->entry_expectation_count, materialized->coroutines,
+            materialized->coroutine_count))
+        return false;
+    if (rows)
+        for (uint32_t i = 0; i < 5; i++) {
+            group[i].id = row_begin + i;
+            rows[row_begin + i] = group[i];
+        }
+    if (out_row_count)
+        *out_row_count = 5;
+    return true;
+}
+
 /* The managed tagged Array.push family is deliberately separate from the
  * scalar family.  Its two parameter slots carry XrValue, the element slot is
  * consumed by the side-effect row, and the unit return has no result slot at
@@ -12930,8 +13349,21 @@ static bool materialize_tagged_array_push_instruction_function(
 }
 
 static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
-                                           XrTargetMaterializedPlan *materialized, char *error,
-                                           size_t error_size) {
+                                            XrTargetMaterializedPlan *materialized, char *error,
+                                            size_t error_size) {
+    const XrSemanticProgramProvenance *published =
+        builder && builder->semantic_plan
+            ? xr_semantic_plan_program_provenance(builder->semantic_plan)
+            : NULL;
+    bool requires_leaf_aggregate =
+        published && published->program_family ==
+                         XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
+    XrLeafAggregateInstructionShape required_leaf_shape = {0};
+    if (requires_leaf_aggregate &&
+        !leaf_aggregate_instruction_shape_is_exact(builder, materialized,
+                                                   &required_leaf_shape))
+        return fail(error, error_size, "XR_TARGET_1005",
+                    "leaf aggregate program requires one exact caller and callee instruction group");
     XrScalarInstructionAnalysis analysis = {0};
     if (!scalar_instruction_analysis_init(builder, materialized, &analysis))
         return fail(error, error_size, "XR_EXEC_5003", "scalar instruction analysis failed");
@@ -12941,18 +13373,40 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
         (uint8_t *) allocate_records(materialized->function_count, sizeof(*executable));
     uint8_t *managed_push =
         (uint8_t *) allocate_records(materialized->function_count, sizeof(*managed_push));
-    if (materialized->function_count && (!function_rows || !executable || !managed_push)) {
+    uint8_t *leaf_aggregate =
+        (uint8_t *) allocate_records(materialized->function_count, sizeof(*leaf_aggregate));
+    if (materialized->function_count &&
+        (!function_rows || !executable || !managed_push || !leaf_aggregate)) {
         xr_free(function_rows);
         xr_free(executable);
         xr_free(managed_push);
+        xr_free(leaf_aggregate);
         scalar_instruction_analysis_dispose(&analysis);
         return fail(error, error_size, "XR_EXEC_5003",
                     "typed instruction eligibility allocation failed");
     }
     uint32_t instruction_count = 0;
     for (uint32_t function = 0; function < materialized->function_count; function++) {
-        if (!materialize_scalar_instruction_function(builder, materialized, function, &analysis,
-                                                     NULL, NULL, 0, &function_rows[function])) {
+        bool required_leaf_function =
+            requires_leaf_aggregate &&
+            (function == required_leaf_shape.caller_binding->semantic_function ||
+             function == required_leaf_shape.callee_binding->semantic_function);
+        bool emitted_leaf = materialize_leaf_aggregate_instruction_function(
+            builder, materialized, function, NULL, 0, &function_rows[function]);
+        if (required_leaf_function && (!emitted_leaf || function_rows[function] != 5)) {
+            xr_free(function_rows);
+            xr_free(executable);
+            xr_free(managed_push);
+            xr_free(leaf_aggregate);
+            scalar_instruction_analysis_dispose(&analysis);
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "leaf aggregate program instruction coverage is incomplete");
+        }
+        if (emitted_leaf) {
+            leaf_aggregate[function] = 1;
+        } else if (!materialize_scalar_instruction_function(
+                       builder, materialized, function, &analysis, NULL, NULL, 0,
+                       &function_rows[function])) {
             if (!materialize_tagged_array_push_instruction_function(
                     builder, materialized, function, NULL, 0, &function_rows[function]))
                 continue;
@@ -12982,6 +13436,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             xr_free(function_rows);
             xr_free(executable);
             xr_free(managed_push);
+            xr_free(leaf_aggregate);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_EXEC_5003", "typed instruction budget exhausted");
         }
@@ -13004,7 +13459,11 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
         if (!executable[function])
             continue;
         uint32_t emitted_rows = 0;
-        bool emitted = managed_push[function]
+        bool emitted = leaf_aggregate[function]
+                           ? materialize_leaf_aggregate_instruction_function(
+                                 builder, materialized, function, materialized->instructions,
+                                 next_instruction, &emitted_rows)
+                       : managed_push[function]
                            ? materialize_tagged_array_push_instruction_function(
                                  builder, materialized, function, materialized->instructions,
                                  next_instruction, &emitted_rows)
@@ -13015,6 +13474,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             xr_free(function_rows);
             xr_free(executable);
             xr_free(managed_push);
+            xr_free(leaf_aggregate);
             scalar_instruction_analysis_dispose(&analysis);
             return fail(error, error_size, "XR_TARGET_1005",
                         "typed instruction eligibility changed during materialization");
@@ -13024,6 +13484,7 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
     xr_free(function_rows);
     xr_free(executable);
     xr_free(managed_push);
+    xr_free(leaf_aggregate);
     scalar_instruction_analysis_dispose(&analysis);
     if (next_instruction != materialized->instruction_count)
         return fail(error, error_size, "XR_TARGET_1005",
@@ -13034,6 +13495,7 @@ allocation_failed:
     xr_free(function_rows);
     xr_free(executable);
     xr_free(managed_push);
+    xr_free(leaf_aggregate);
     scalar_instruction_analysis_dispose(&analysis);
     return fail(error, error_size, "XR_EXEC_5003", "typed instruction materialization failed");
 }

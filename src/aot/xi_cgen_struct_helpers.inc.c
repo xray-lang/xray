@@ -500,8 +500,64 @@ static void cg_collect_struct_layouts_from_func(const XiFunc *f, const XrAggrega
         cg_collect_struct_layouts_from_func(f->children[ci], layouts, hashes, count);
 }
 
-static void emit_struct_native_typedefs(FILE *out, const XiFunc *f, const char *prefix,
-                                        bool emit_runtime_clone) {
+static bool emit_leaf_aggregate_native_typedef(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    const XrTargetPlan *target = cg_function_target_plan(ctx, f);
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    if (!target || !semantic || !provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL)
+        return false;
+    const XrSemanticProgramTypeBinding *aggregate = NULL;
+    for (uint32_t i = 0;
+         i < (uint32_t) xr_semantic_plan_program_type_binding_count(semantic); i++) {
+        const XrSemanticProgramTypeBinding *candidate =
+            xr_semantic_plan_program_type_binding(semantic, i);
+        if (!candidate || candidate->kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE)
+            continue;
+        if (aggregate) {
+            cg_ctx_set_error(ctx);
+            return true;
+        }
+        aggregate = candidate;
+    }
+    XrCAggregateProjection projection = {0};
+    uint32_t layout_count = 0, field_count = 0;
+    const XrTargetLayoutRecord *layouts = xr_target_plan_layouts(target, &layout_count);
+    const XrTargetFieldRecord *fields = xr_target_plan_fields(target, &field_count);
+    if (!aggregate ||
+        !xr_c_leaf_aggregate_projection(target, aggregate->semantic_type, &projection) ||
+        projection.layout >= layout_count || !layouts || !fields) {
+        cg_ctx_set_error(ctx);
+        return true;
+    }
+    const XrTargetLayoutRecord *layout = &layouts[projection.layout];
+    if (layout->field_count != 2 || layout->field_begin > field_count ||
+        layout->field_count > field_count - layout->field_begin) {
+        cg_ctx_set_error(ctx);
+        return true;
+    }
+    fprintf(out, "#ifndef XRT_TYPEDEF_%016" PRIx64 "\n", projection.abi_key);
+    fprintf(out, "#define XRT_TYPEDEF_%016" PRIx64 " 1\n", projection.abi_key);
+    fprintf(out, "typedef struct %s { int64_t f0; int64_t f1; } %s;\n", projection.c_type,
+            projection.c_type);
+    fprintf(out, "_Static_assert(sizeof(%s) == %u, \"aggregate size\");\n", projection.c_type,
+            (unsigned) layout->fixed_prefix_size);
+    fprintf(out, "_Static_assert(_Alignof(%s) == %u, \"aggregate align\");\n",
+            projection.c_type, (unsigned) layout->align);
+    for (uint32_t ordinal = 0; ordinal < 2; ordinal++) {
+        const XrTargetFieldRecord *field = &fields[layout->field_begin + ordinal];
+        fprintf(out, "_Static_assert(offsetof(%s, f%u) == %u, \"aggregate field\");\n",
+                projection.c_type, (unsigned) ordinal, (unsigned) field->offset);
+    }
+    fprintf(out, "#endif\n\n");
+    return true;
+}
+
+static void emit_struct_native_typedefs(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const char *prefix, bool emit_runtime_clone) {
+    if (emit_leaf_aggregate_native_typedef(ctx, out, f))
+        return;
     const XrAggregateLayout *layouts[CG_STRUCT_TYPEDEF_MAX];
     uint64_t hashes[CG_STRUCT_TYPEDEF_MAX];
     int count = 0;
