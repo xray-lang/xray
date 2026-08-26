@@ -36,7 +36,9 @@
 #include "plan/semantic/xr_semantic_plan_internal.h"
 #include "plan/semantic/xr_semantic_verify.h"
 #include "plan/target/xr_target_builder.h"
+#include "plan/target/xr_target_plan_internal.h"
 #include "plan/target/xr_target_profile.h"
+#include "plan/target/xr_target_verify.h"
 #include "runtime/abi/xr_runtime_target_profile.h"
 #include "shared/xr_exact_scalar_registry.h"
 #include "toolchain/xcompiler_session.h"
@@ -851,7 +853,16 @@ static bool scalar_graph_module_and_plan_mutations(ScalarGraphPlanFixture *fixtu
     return ok && scalar_graph_plan_set_valid(fixture);
 }
 
-static bool scalar_graph_target_rejects_execution(ScalarGraphPlanFixture *fixture) {
+static bool scalar_graph_target_mutation_rejected(XrTargetPlan *target, void *field) {
+    uint8_t *byte = (uint8_t *) field;
+    char error[512] = {0};
+    *byte ^= 1u;
+    bool rejected = !xr_target_plan_verify(target, error, sizeof(error));
+    *byte ^= 1u;
+    return rejected;
+}
+
+static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
     XrTargetProfile *profile = NULL;
     XrTargetPlan *target = NULL;
     char error[512] = {0};
@@ -859,18 +870,110 @@ static bool scalar_graph_target_rejects_execution(ScalarGraphPlanFixture *fixtur
         return false;
     XrSemanticPlan *entry = scalar_graph_plan(fixture, fixture->entry_index);
     XrSemanticPlan *producer = scalar_graph_plan(fixture, fixture->producer_index);
-    const XrSemanticPlan *dependencies[1] = {producer};
-    bool rejected = !xr_target_plan_build_module_set(entry, dependencies, 1, profile, &target,
-                                                      error, sizeof(error)) &&
-                    !target && strstr(error, "XR_TARGET_1001") &&
-                    strstr(error, "outside TargetPlan coverage");
-    memset(error, 0, sizeof(error));
-    rejected = rejected && !xr_target_plan_build(producer, profile, &target, error,
-                                                 sizeof(error)) &&
-               !target && strstr(error, "XR_TARGET_1001");
+    const XrSemanticProgramProvenance *entry_program =
+        xr_semantic_plan_program_provenance(entry);
+    const XrSemanticProgramProvenance *producer_program =
+        xr_semantic_plan_program_provenance(producer);
+    const XrSemanticPlan *modules[2] = {NULL, NULL};
+    if (entry_program && producer_program && entry_program->program_module_row < 2u &&
+        producer_program->program_module_row < 2u) {
+        modules[entry_program->program_module_row] = entry;
+        modules[producer_program->program_module_row] = producer;
+    }
+    bool exact = xr_target_plan_build_program_graph(modules, 2u, profile, &target,
+                                                    error, sizeof(error)) &&
+                 target && xr_target_plan_is_verified(target) &&
+                 xr_target_plan_schema_version(target) == XR_TARGET_PLAN_SCHEMA_VERSION;
+    uint32_t graph_count = 0, partition_count = 0, call_count = 0, argument_count = 0;
+    uint32_t instruction_count = 0, expectation_count = 0;
+    const XrTargetProgramGraphRecord *graphs = xr_target_plan_program_graphs(target, &graph_count);
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(target, &partition_count);
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target, &argument_count);
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_instructions(target, &instruction_count);
+    xr_target_plan_entry_expectations(target, &expectation_count);
+    exact = exact && graphs && graph_count == 1u && partitions && partition_count == 2u &&
+            calls && call_count == 1u && arguments && argument_count == 1u &&
+            instructions && instruction_count != 0u && expectation_count == 0u;
+    if (exact) {
+        const XrTargetProgramGraphRecord *graph = &graphs[0];
+        const XrTargetCallRecord *call = &calls[graph->target_call];
+        const XrTargetCallArgumentRecord *argument = &arguments[graph->target_argument];
+        const XrSemanticPlan *entry_owner =
+            xr_target_plan_semantic_module(target, graph->entry_partition);
+        const XrSemanticPlan *producer_owner =
+            xr_target_plan_semantic_module(target, graph->producer_partition);
+        const XrSemanticPlan *bound_semantic = NULL;
+        uint32_t bound_function = XR_SEMANTIC_INDEX_NONE;
+        uint32_t found_function = XR_SEMANTIC_INDEX_NONE;
+        exact = entry_owner == entry && producer_owner == producer &&
+                call->calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT &&
+                call->target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
+                call->callee_function == graph->producer_target_function &&
+                argument->caller_slot == graph->caller_slot &&
+                argument->callee_slot == graph->callee_slot &&
+                xr_target_plan_function_semantic_binding(
+                    target, graph->producer_target_function, &bound_semantic, &bound_function) &&
+                bound_semantic == producer &&
+                bound_function == graph->producer_semantic_function &&
+                xr_target_plan_find_function(target, producer, bound_function, &found_function) &&
+                found_function == graph->producer_target_function &&
+                xr_target_plan_value_rep(target, 0u) == NULL;
+        uint32_t direct = 0, dynamic = 0;
+        for (uint32_t i = 0; i < instruction_count; i++) {
+            direct += instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64;
+            dynamic += instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64;
+        }
+        exact = exact && direct == 1u && dynamic == 0u;
+    }
+    if (exact) {
+        XrTargetProgramGraphRecord *graph = &target->program_graphs[0];
+        XrTargetModulePartitionRecord *entry_partition =
+            &target->module_partitions[graph->entry_partition];
+        XrTargetCallRecord *call = &target->calls[graph->target_call];
+        XrTargetCallArgumentRecord *argument = &target->call_arguments[graph->target_argument];
+        XrTargetInstructionRecord *direct = NULL;
+        for (uint32_t i = 0; i < target->instructions_count; i++)
+            if (target->instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64)
+                direct = &target->instructions[i];
+        exact = direct &&
+                scalar_graph_target_mutation_rejected(target, &target->semantic_fingerprint) &&
+                scalar_graph_target_mutation_rejected(target,
+                                                      &entry_partition->semantic_fingerprint) &&
+                scalar_graph_target_mutation_rejected(target,
+                                                      &entry_partition->module_identity) &&
+                scalar_graph_target_mutation_rejected(target,
+                                                      &entry_partition->semantic_module) &&
+                scalar_graph_target_mutation_rejected(target,
+                                                      &entry_partition->functions_begin) &&
+                scalar_graph_target_mutation_rejected(target, &graph->program_fingerprint) &&
+                scalar_graph_target_mutation_rejected(target, &graph->generation_identity) &&
+                scalar_graph_target_mutation_rejected(
+                    target, &graph->target_profile_fingerprint) &&
+                scalar_graph_target_mutation_rejected(target,
+                                                      &graph->entry_function_identity) &&
+                scalar_graph_target_mutation_rejected(target,
+                                                      &graph->producer_function_identity) &&
+                scalar_graph_target_mutation_rejected(target, &graph->export_identity) &&
+                scalar_graph_target_mutation_rejected(target, &graph->entry_identity) &&
+                scalar_graph_target_mutation_rejected(target, &graph->call_identity) &&
+                scalar_graph_target_mutation_rejected(target, &graph->callsite_identity) &&
+                scalar_graph_target_mutation_rejected(target, &graph->resolver_binding) &&
+                scalar_graph_target_mutation_rejected(target, &graph->argument_identity) &&
+                scalar_graph_target_mutation_rejected(target, &graph->parameter_identity) &&
+                scalar_graph_target_mutation_rejected(target, &call->calling_convention) &&
+                scalar_graph_target_mutation_rejected(target, &call->callee_function) &&
+                scalar_graph_target_mutation_rejected(target, &argument->callee_slot) &&
+                scalar_graph_target_mutation_rejected(target, &direct->opcode) &&
+                xr_target_plan_verify(target, error, sizeof(error)) &&
+                xr_target_plan_fingerprint_is_intact(target);
+    }
     xr_target_plan_free(target);
     xr_target_profile_free(profile);
-    return rejected;
+    return exact;
 }
 
 static void expect_strict_call_locator_rejection(bool match_caller_end, const char *namespace_id) {
@@ -1213,7 +1316,7 @@ TEST(two_source_module_scalar_graph_publishes_complete_authority) {
     ASSERT_TRUE(scalar_graph_program_row_mutations(&plan_fixture));
     ASSERT_TRUE(scalar_graph_external_join_mutations(&plan_fixture));
     ASSERT_TRUE(scalar_graph_module_and_plan_mutations(&plan_fixture));
-    ASSERT_TRUE(scalar_graph_target_rejects_execution(&plan_fixture));
+    ASSERT_TRUE(scalar_graph_target_plan_is_exact(&plan_fixture));
     scalar_graph_plan_fixture_cleanup(&plan_fixture);
 
     int first = fixture.graph->topo_order[0];

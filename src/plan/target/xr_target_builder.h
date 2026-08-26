@@ -31,5 +31,12 @@ XR_FUNC bool xr_target_plan_build_module_set(
     XrTargetPlan **out,
     char *error,
     size_t error_size);
+XR_FUNC bool xr_target_plan_build_program_graph(
+    const XrSemanticPlan *const *semantic_modules,
+    uint32_t semantic_module_count,
+    XrTargetProfile *profile,
+    XrTargetPlan **out,
+    char *error,
+    size_t error_size);
 
 #endif  // XR_TARGET_BUILDER_H

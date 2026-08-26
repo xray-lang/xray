@@ -19,6 +19,8 @@ typedef struct XrTargetPlanDraft {
     const XrSemanticPlan *semantic_plan;
     const XrSemanticPlan *const *semantic_dependencies;
     uint32_t semantic_dependency_count;
+    const XrSemanticPlan *const *semantic_modules;
+    uint32_t semantic_module_count;
     XrTargetProfile *profile;
     uint64_t completed_family_mask;
     const XrTargetMachineRepRecord *machine_reps;
@@ -83,6 +85,8 @@ struct XrTargetPlan {
     XrSemanticPlan *semantic_plan;
     XrSemanticPlan **semantic_dependencies;
     uint32_t semantic_dependency_count;
+    XrSemanticPlan **semantic_modules;
+    uint32_t semantic_module_count;
     XrTargetProfile *profile;
 #define XR_TARGET_TABLE_FIELD(name, type)                                                          \
     type *name;                                                                                    \
@@ -114,9 +118,18 @@ struct XrTargetPlan {
 };
 
 XR_FUNC void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out);
+XR_FUNC bool xr_target_semantic_program_module_set_verify(
+    const XrSemanticPlan *const *modules, uint32_t module_count,
+    char *error, size_t error_size);
+XR_FUNC bool xr_target_semantic_program_module_verify_fragment(
+    const XrSemanticPlan *const *modules, uint32_t module_count,
+    uint32_t program_module_row, char *error, size_t error_size);
+XR_FUNC bool xr_target_semantic_program_module_direct_dependencies(
+    const XrSemanticPlan *const *modules, uint32_t module_count,
+    uint32_t program_module_row, const XrSemanticPlan ***dependencies,
+    uint32_t *dependency_count, char *error, size_t error_size);
 XR_FUNC bool xr_target_semantic_module_set_fingerprint(
-    const XrSemanticPlan *entry, const XrSemanticPlan *const *dependencies,
-    uint32_t dependency_count, XrFingerprint *out);
+    const XrSemanticPlan *const *modules, uint32_t module_count, XrFingerprint *out);
 XR_FUNC void xr_target_layout_compute_fingerprint(const XrTargetPlan *plan, uint32_t layout,
                                                   XrFingerprint *out);
 XR_FUNC void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call,

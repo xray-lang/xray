@@ -18,6 +18,7 @@
 #include "../../base/xchecks.h"
 #include "xr_target_instruction_gen.h"
 #include "xr_target_profile.h"
+#include "../semantic/xr_program_semantic_closure.h"
 #include "../semantic/xr_semantic_plan.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -283,7 +284,6 @@ typedef enum XrTargetCallOwnership {
 typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_INVALID = 0,
     XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL,
-    XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT,
     XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE,
     XR_TARGET_CALL_CONVENTION_SOURCE_EXPORT,
     XR_TARGET_CALL_CONVENTION_STRINGBUILDER_CONSTRUCTOR,
@@ -315,6 +315,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_MAP_ENTRIES_ITERATOR,
     XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_HAS_NEXT,
     XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_NEXT,
+    XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -360,7 +361,6 @@ typedef enum XrTargetCallConvention {
 typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_INVALID = 0,
     XR_TARGET_CALL_TARGET_DIRECT_LOCAL = XR_SEM_CALL_TARGET_DIRECT_LOCAL,
-    XR_TARGET_CALL_TARGET_PROGRAM_DIRECT,
     XR_TARGET_CALL_TARGET_CHANNEL_CLOSE,
     XR_TARGET_CALL_TARGET_SOURCE_EXPORT,
     XR_TARGET_CALL_TARGET_STRINGBUILDER_CONSTRUCTOR,
@@ -392,6 +392,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_MAP_ENTRIES_ITERATOR,
     XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_HAS_NEXT,
     XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT,
+    XR_TARGET_CALL_TARGET_PROGRAM_DIRECT,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayHofKind {
@@ -837,7 +838,8 @@ typedef struct XrTargetDebugFactRecord {
 } XrTargetDebugFactRecord;
 
 #define XR_TARGET_PROGRAM_GRAPH_SCHEMA_VERSION UINT32_C(1)
-#define XR_TARGET_MODULE_PARTITION_ENTRY UINT32_MAX
+#define XR_TARGET_MAX_PROGRAM_MODULES XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES
+#define XR_TARGET_MAX_SEMANTIC_DEPENDENCIES XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES
 
 typedef enum XrTargetProgramGraphFlag {
     XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN = 1u << 0,
@@ -851,7 +853,7 @@ typedef struct XrTargetModulePartitionRecord {
     XrStableId module_identity;
     XrFingerprint semantic_fingerprint;
     uint32_t program_module_row;
-    uint32_t semantic_dependency;
+    uint32_t semantic_module;
 #define XR_TARGET_PARTITION_RANGE(name) uint32_t name##_begin; uint32_t name##_count
     XR_TARGET_PARTITION_RANGE(value_reps);
     XR_TARGET_PARTITION_RANGE(extents);
@@ -950,6 +952,9 @@ xr_target_plan_value_rep_for_module(const XrTargetPlan *plan, uint32_t partition
                                     uint32_t semantic_value);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *plan,
                                                                  uint32_t dependency);
+XR_FUNC uint32_t xr_target_plan_program_module_count(const XrTargetPlan *plan);
+XR_FUNC const XrSemanticPlan *xr_target_plan_program_module(const XrTargetPlan *plan,
+                                                            uint32_t program_module);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_module(const XrTargetPlan *plan,
                                                              uint32_t partition);
 XR_FUNC const XrSemanticPlan *xr_target_plan_module_for_function(const XrTargetPlan *plan,

@@ -14382,18 +14382,19 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
 
 static bool builder_new(const XrSemanticPlan *semantic_plan, XrTargetProfile *profile,
                         const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
-                        XrTargetPlanBuilder **out, char *error, size_t error_size) {
+                        bool allow_program_graph, XrTargetPlanBuilder **out, char *error,
+                        size_t error_size) {
     if (out)
         *out = NULL;
     if (!semantic_plan || !profile || !out)
         return fail(error, error_size, "XR_TARGET_1000", "target builder input is missing");
     const XrSemanticProgramProvenance *program =
         xr_semantic_plan_program_provenance(semantic_plan);
-    if (program && program->program_family ==
+    if (!allow_program_graph && program && program->program_family ==
                        XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
         return fail(error, error_size, "XR_TARGET_1001",
                     "graph SemanticPlan execution is outside TargetPlan coverage");
-    if (dependency_count > 1024u ||
+    if (dependency_count > XR_TARGET_MAX_SEMANTIC_DEPENDENCIES ||
         dependency_count != xr_semantic_plan_dependency_count(semantic_plan))
         return fail(error, error_size, "XR_TARGET_1000", "semantic plan is not verified");
     char nested_error[512] = {0};
@@ -14582,21 +14583,8 @@ static const XrTargetFamily k_target_families[] = {
     {"dynamic_entry_expectations", builder_add_dynamic_entry_expectations},
 };
 
-bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *profile,
-                          XrTargetPlan **out, char *error, size_t error_size) {
-    return xr_target_plan_build_module_set(semantic_plan, NULL, 0, profile, out, error, error_size);
-}
-
-bool xr_target_plan_build_module_set(const XrSemanticPlan *semantic_plan,
-                                     const XrSemanticPlan *const *dependencies,
-                                     uint32_t dependency_count, XrTargetProfile *profile,
-                                     XrTargetPlan **out, char *error, size_t error_size) {
-    XrTargetPlanBuilder *builder = NULL;
-    if (out)
-        *out = NULL;
-    if (!builder_new(semantic_plan, profile, dependencies, dependency_count, &builder, error,
-                     error_size))
-        return false;
+static bool builder_collect_families(XrTargetPlanBuilder *builder, char *error,
+                                     size_t error_size) {
     bool survey = false;
     uint32_t refused_families = 0;
     for (size_t i = 0; i < sizeof(k_target_families) / sizeof(k_target_families[0]); i++) {
@@ -14610,14 +14598,790 @@ bool xr_target_plan_build_module_set(const XrSemanticPlan *semantic_plan,
                 snprintf(error, error_size, "%s", family_error);
         }
         refused_families++;
-        if (!survey) {
-            builder_free(builder);
+        if (!survey)
             return false;
-        }
         target_survey_row(k_target_families[i].name, family_error);
     }
-    if (refused_families) {
-        fprintf(stderr, "[refusal-survey] target-plan families refused: %u\n", refused_families);
+    if (!refused_families)
+        return true;
+    fprintf(stderr, "[refusal-survey] target-plan families refused: %u\n", refused_families);
+    return false;
+}
+
+typedef struct XrProgramGraphModuleDraft {
+    const XrSemanticPlan *semantic;
+    XrTargetMaterializedPlan target;
+    uint32_t semantic_module;
+} XrProgramGraphModuleDraft;
+
+static bool build_program_graph_module(const XrSemanticPlan *semantic,
+                                       const XrSemanticPlan *const *dependencies,
+                                       uint32_t dependency_count, XrTargetProfile *profile,
+                                       XrTargetMaterializedPlan *out, char *error,
+                                       size_t error_size) {
+    XrTargetPlanBuilder *builder = NULL;
+    memset(out, 0, sizeof(*out));
+    if (!builder_new(semantic, profile, dependencies, dependency_count, true, &builder, error,
+                     error_size))
+        return false;
+    bool built = builder_collect_families(builder, error, error_size) &&
+                 builder_materialize(builder, out, error, error_size);
+    builder_free(builder);
+    if (!built)
+        materialized_dispose(out);
+    return built;
+}
+
+static bool graph_add_count(uint32_t *total, uint32_t count) {
+    if (*total > UINT32_MAX - count)
+        return false;
+    *total += count;
+    return true;
+}
+
+static void graph_add_row(uint32_t *row, uint32_t offset) {
+    if (*row != XR_SEMANTIC_INDEX_NONE)
+        *row += offset;
+}
+
+static bool graph_allocate_materialized(XrTargetMaterializedPlan *target, char *error,
+                                        size_t error_size) {
+#define XR_GRAPH_ALLOCATE(name, count_name)                                                        \
+    do {                                                                                           \
+        target->name = allocate_records(target->count_name, sizeof(*target->name));                \
+        if (target->count_name && !target->name)                                                   \
+            return fail(error, error_size, "XR_EXEC_5003",                                       \
+                        "program graph target table allocation failed");                          \
+    } while (0)
+    XR_GRAPH_ALLOCATE(machine_reps, machine_rep_count);
+    XR_GRAPH_ALLOCATE(value_reps, value_rep_count);
+    XR_GRAPH_ALLOCATE(extents, extent_count);
+    XR_GRAPH_ALLOCATE(layouts, layout_count);
+    XR_GRAPH_ALLOCATE(fields, field_count);
+    XR_GRAPH_ALLOCATE(functions, function_count);
+    XR_GRAPH_ALLOCATE(slots, slot_count);
+    XR_GRAPH_ALLOCATE(instructions, instruction_count);
+    XR_GRAPH_ALLOCATE(calls, call_count);
+    XR_GRAPH_ALLOCATE(call_arguments, call_argument_count);
+    XR_GRAPH_ALLOCATE(root_maps, root_map_count);
+    XR_GRAPH_ALLOCATE(root_slots, root_slot_count);
+    XR_GRAPH_ALLOCATE(cleanups, cleanup_count);
+    XR_GRAPH_ALLOCATE(adapters, adapter_count);
+    XR_GRAPH_ALLOCATE(capabilities, capability_count);
+    XR_GRAPH_ALLOCATE(coroutines, coroutine_count);
+    XR_GRAPH_ALLOCATE(debug_facts, debug_fact_count);
+#undef XR_GRAPH_ALLOCATE
+    return true;
+}
+
+static bool graph_accumulate_counts(XrTargetMaterializedPlan *target,
+                                    const XrTargetMaterializedPlan *source) {
+#define XR_GRAPH_ADD_COUNT(name)                                                                  \
+    if (!graph_add_count(&target->name, source->name))                                             \
+        return false
+    XR_GRAPH_ADD_COUNT(value_rep_count);
+    XR_GRAPH_ADD_COUNT(extent_count);
+    XR_GRAPH_ADD_COUNT(layout_count);
+    XR_GRAPH_ADD_COUNT(field_count);
+    XR_GRAPH_ADD_COUNT(function_count);
+    XR_GRAPH_ADD_COUNT(slot_count);
+    XR_GRAPH_ADD_COUNT(instruction_count);
+    XR_GRAPH_ADD_COUNT(call_count);
+    XR_GRAPH_ADD_COUNT(call_argument_count);
+    XR_GRAPH_ADD_COUNT(root_map_count);
+    XR_GRAPH_ADD_COUNT(root_slot_count);
+    XR_GRAPH_ADD_COUNT(cleanup_count);
+    XR_GRAPH_ADD_COUNT(adapter_count);
+    XR_GRAPH_ADD_COUNT(coroutine_count);
+    XR_GRAPH_ADD_COUNT(debug_fact_count);
+#undef XR_GRAPH_ADD_COUNT
+    return true;
+}
+
+static bool graph_merge_machine_reps(const XrTargetMaterializedPlan *left,
+                                     const XrTargetMaterializedPlan *right,
+                                     XrTargetMaterializedPlan *target,
+                                     uint16_t rep_maps[2][256]) {
+    uint32_t indexes[2] = {0, 0};
+    uint32_t count = 0;
+    while (indexes[0] < left->machine_rep_count || indexes[1] < right->machine_rep_count) {
+        bool have_left = indexes[0] < left->machine_rep_count;
+        bool have_right = indexes[1] < right->machine_rep_count;
+        int order = !have_left ? 1
+                    : !have_right
+                        ? -1
+                        : compare_rep_record(&left->machine_reps[indexes[0]],
+                                             &right->machine_reps[indexes[1]]);
+        if (count >= target->machine_rep_count || count >= 256u)
+            return false;
+        const XrTargetMachineRepRecord *chosen =
+            order <= 0 ? &left->machine_reps[indexes[0]]
+                       : &right->machine_reps[indexes[1]];
+        target->machine_reps[count] = *chosen;
+        target->machine_reps[count].id = count;
+        if (order <= 0)
+            rep_maps[0][indexes[0]++] = (uint16_t) count;
+        if (order >= 0)
+            rep_maps[1][indexes[1]++] = (uint16_t) count;
+        count++;
+    }
+    target->machine_rep_count = count;
+    return true;
+}
+
+static bool graph_merge_capabilities(const XrTargetMaterializedPlan *left,
+                                     const XrTargetMaterializedPlan *right,
+                                     XrTargetMaterializedPlan *target) {
+    uint32_t count = 0;
+    for (uint32_t source_index = 0; source_index < 2u; source_index++) {
+        const XrTargetMaterializedPlan *source = source_index ? right : left;
+        for (uint32_t i = 0; i < source->capability_count; i++) {
+            const XrTargetCapabilityRecord *candidate = &source->capabilities[i];
+            XrTargetCapabilityRecord *match = NULL;
+            for (uint32_t j = 0; j < count; j++) {
+                if (target->capabilities[j].capability == candidate->capability) {
+                    match = &target->capabilities[j];
+                    break;
+                }
+            }
+            if (match) {
+                if (match->provider != candidate->provider || match->flags != candidate->flags)
+                    return false;
+                continue;
+            }
+            if (count >= target->capability_count)
+                return false;
+            target->capabilities[count] = *candidate;
+            target->capabilities[count].id = count;
+            count++;
+        }
+    }
+    target->capability_count = count;
+    return true;
+}
+
+static bool graph_merge_module(XrTargetMaterializedPlan *target,
+                               const XrTargetMaterializedPlan *source,
+                               XrTargetModulePartitionRecord *partition,
+                               const uint16_t rep_map[256]) {
+#define XR_GRAPH_COPY(name, count_name, begin_name)                                                \
+    do {                                                                                           \
+        if (source->count_name)                                                                    \
+            memcpy(target->name + partition->begin_name, source->name,                            \
+                   (size_t) source->count_name * sizeof(*source->name));                           \
+    } while (0)
+    XR_GRAPH_COPY(value_reps, value_rep_count, value_reps_begin);
+    XR_GRAPH_COPY(extents, extent_count, extents_begin);
+    XR_GRAPH_COPY(layouts, layout_count, layouts_begin);
+    XR_GRAPH_COPY(fields, field_count, fields_begin);
+    XR_GRAPH_COPY(functions, function_count, functions_begin);
+    XR_GRAPH_COPY(slots, slot_count, slots_begin);
+    XR_GRAPH_COPY(instructions, instruction_count, instructions_begin);
+    XR_GRAPH_COPY(calls, call_count, calls_begin);
+    XR_GRAPH_COPY(call_arguments, call_argument_count, call_arguments_begin);
+    XR_GRAPH_COPY(root_maps, root_map_count, root_maps_begin);
+    XR_GRAPH_COPY(root_slots, root_slot_count, root_slots_begin);
+    XR_GRAPH_COPY(cleanups, cleanup_count, cleanups_begin);
+    XR_GRAPH_COPY(adapters, adapter_count, adapters_begin);
+    XR_GRAPH_COPY(coroutines, coroutine_count, coroutines_begin);
+    XR_GRAPH_COPY(debug_facts, debug_fact_count, debug_facts_begin);
+#undef XR_GRAPH_COPY
+
+    for (uint32_t i = 0; i < partition->value_reps_count; i++) {
+        XrTargetValueRepRecord *row =
+            &target->value_reps[partition->value_reps_begin + i];
+        graph_add_row(&row->slot, partition->slots_begin);
+        row->register_rep = rep_map[row->register_rep];
+        row->memory_rep = rep_map[row->memory_rep];
+    }
+    for (uint32_t i = 0; i < partition->extents_count; i++) {
+        XrTargetExtentRecord *row = &target->extents[partition->extents_begin + i];
+        row->id += partition->extents_begin;
+        graph_add_row(&row->element_layout, partition->layouts_begin);
+    }
+    for (uint32_t i = 0; i < partition->layouts_count; i++) {
+        XrTargetLayoutRecord *row = &target->layouts[partition->layouts_begin + i];
+        row->id += partition->layouts_begin;
+        graph_add_row(&row->extent, partition->extents_begin);
+        row->field_begin += partition->fields_begin;
+    }
+    for (uint32_t i = 0; i < partition->fields_count; i++) {
+        XrTargetFieldRecord *row = &target->fields[partition->fields_begin + i];
+        row->layout += partition->layouts_begin;
+        row->memory_rep = rep_map[row->memory_rep];
+    }
+    for (uint32_t i = 0; i < partition->functions_count; i++) {
+        XrTargetFunctionRecord *row = &target->functions[partition->functions_begin + i];
+        row->id += partition->functions_begin;
+        row->slot_begin += partition->slots_begin;
+        row->root_begin += partition->root_maps_begin;
+        row->cleanup_begin += partition->cleanups_begin;
+        row->coroutine_begin += partition->coroutines_begin;
+    }
+    for (uint32_t i = 0; i < partition->slots_count; i++) {
+        XrTargetSlotRecord *row = &target->slots[partition->slots_begin + i];
+        row->id += partition->slots_begin;
+        row->function += partition->functions_begin;
+        row->register_rep = rep_map[row->register_rep];
+        row->memory_rep = rep_map[row->memory_rep];
+    }
+    for (uint32_t i = 0; i < partition->instructions_count; i++) {
+        XrTargetInstructionRecord *row =
+            &target->instructions[partition->instructions_begin + i];
+        row->id += partition->instructions_begin;
+        row->function += partition->functions_begin;
+        graph_add_row(&row->result_slot, partition->slots_begin);
+        graph_add_row(&row->operand_slots[0], partition->slots_begin);
+        graph_add_row(&row->operand_slots[1], partition->slots_begin);
+        if (row->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64)
+            row->immediate_bits += partition->calls_begin;
+    }
+    for (uint32_t i = 0; i < partition->calls_count; i++) {
+        XrTargetCallRecord *row = &target->calls[partition->calls_begin + i];
+        row->id += partition->calls_begin;
+        row->caller_function += partition->functions_begin;
+        graph_add_row(&row->callee_function, partition->functions_begin);
+        graph_add_row(&row->result_slot, partition->slots_begin);
+        graph_add_row(&row->caller_storage_slot, partition->slots_begin);
+        graph_add_row(&row->error_slot, partition->slots_begin);
+        row->argument_begin += partition->call_arguments_begin;
+        row->adapter_begin += partition->adapters_begin;
+        row->result_register_rep = rep_map[row->result_register_rep];
+        row->result_memory_rep = rep_map[row->result_memory_rep];
+        row->error_register_rep = rep_map[row->error_register_rep];
+        row->error_memory_rep = rep_map[row->error_memory_rep];
+    }
+    for (uint32_t i = 0; i < partition->call_arguments_count; i++) {
+        XrTargetCallArgumentRecord *row =
+            &target->call_arguments[partition->call_arguments_begin + i];
+        row->call += partition->calls_begin;
+        graph_add_row(&row->caller_slot, partition->slots_begin);
+        graph_add_row(&row->callee_slot, partition->slots_begin);
+        row->register_rep = rep_map[row->register_rep];
+        row->memory_rep = rep_map[row->memory_rep];
+        row->callee_register_rep = rep_map[row->callee_register_rep];
+        row->callee_memory_rep = rep_map[row->callee_memory_rep];
+    }
+    for (uint32_t i = 0; i < partition->root_maps_count; i++) {
+        XrTargetRootMapRecord *row = &target->root_maps[partition->root_maps_begin + i];
+        row->id += partition->root_maps_begin;
+        row->function += partition->functions_begin;
+        row->slot_begin += partition->root_slots_begin;
+    }
+    for (uint32_t i = 0; i < partition->root_slots_count; i++)
+        target->root_slots[partition->root_slots_begin + i] += partition->slots_begin;
+    for (uint32_t i = 0; i < partition->cleanups_count; i++) {
+        XrTargetCleanupRecord *row = &target->cleanups[partition->cleanups_begin + i];
+        row->id += partition->cleanups_begin;
+        row->function += partition->functions_begin;
+        row->slot += partition->slots_begin;
+    }
+    for (uint32_t i = 0; i < partition->adapters_count; i++) {
+        XrTargetAdapterRecord *row = &target->adapters[partition->adapters_begin + i];
+        row->id += partition->adapters_begin;
+        row->call += partition->calls_begin;
+        row->input_rep = rep_map[row->input_rep];
+        row->output_rep = rep_map[row->output_rep];
+        graph_add_row(&row->layout, partition->layouts_begin);
+    }
+    for (uint32_t i = 0; i < partition->coroutines_count; i++) {
+        XrTargetCoroutineStateRecord *row = &target->coroutines[partition->coroutines_begin + i];
+        row->id += partition->coroutines_begin;
+        row->function += partition->functions_begin;
+        graph_add_row(&row->direct_call, partition->calls_begin);
+        graph_add_row(&row->result_slot, partition->slots_begin);
+    }
+    for (uint32_t i = 0; i < partition->debug_facts_count; i++) {
+        XrTargetDebugFactRecord *row = &target->debug_facts[partition->debug_facts_begin + i];
+        row->id += partition->debug_facts_begin;
+        row->instruction += partition->instructions_begin;
+        row->function += partition->functions_begin;
+        graph_add_row(&row->coroutine_state, partition->coroutines_begin);
+    }
+    return true;
+}
+
+static const XrSemanticProgramFunctionBinding *
+graph_function_binding(const XrSemanticPlan *semantic, uint8_t exact_flags) {
+    const XrSemanticProgramFunctionBinding *found = NULL;
+    for (uint32_t i = 0; i < xr_semantic_plan_program_function_binding_count(semantic); i++) {
+        const XrSemanticProgramFunctionBinding *row =
+            xr_semantic_plan_program_function_binding(semantic, i);
+        if (!row || row->flags != exact_flags)
+            continue;
+        if (found)
+            return NULL;
+        found = row;
+    }
+    return found;
+}
+
+static bool graph_target_function_for_semantic(const XrTargetMaterializedPlan *target,
+                                               const XrTargetModulePartitionRecord *partition,
+                                               uint32_t semantic_function,
+                                               uint32_t *target_function) {
+    for (uint32_t i = 0; i < partition->functions_count; i++) {
+        uint32_t row = partition->functions_begin + i;
+        if (target->functions[row].semantic_function != semantic_function)
+            continue;
+        *target_function = row;
+        return true;
+    }
+    return false;
+}
+
+static bool graph_target_value_slot(const XrTargetMaterializedPlan *target,
+                                    const XrTargetModulePartitionRecord *partition,
+                                    uint32_t semantic_value, uint32_t *slot,
+                                    uint16_t *register_rep, uint16_t *memory_rep) {
+    for (uint32_t i = 0; i < partition->value_reps_count; i++) {
+        const XrTargetValueRepRecord *row =
+            &target->value_reps[partition->value_reps_begin + i];
+        if (row->semantic_value != semantic_value)
+            continue;
+        if (row->slot == XR_SEMANTIC_INDEX_NONE)
+            return false;
+        *slot = row->slot;
+        *register_rep = row->register_rep;
+        *memory_rep = row->memory_rep;
+        return true;
+    }
+    return false;
+}
+
+static bool graph_bind_direct_call(
+    const XrSemanticPlan *entry, const XrSemanticPlan *producer,
+    const XrTargetModulePartitionRecord *entry_partition,
+    const XrTargetModulePartitionRecord *producer_partition, XrTargetProfile *profile,
+    XrTargetMaterializedPlan *target, XrTargetProgramGraphRecord *graph, char *error,
+    size_t error_size) {
+    const XrSemanticProgramProvenance *program = xr_semantic_plan_program_provenance(entry);
+    const XrSemanticProgramFunctionBinding *entry_function =
+        graph_function_binding(entry, XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY);
+    const XrSemanticProgramFunctionBinding *producer_function =
+        graph_function_binding(producer, XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED);
+    const XrSemanticProgramCallBinding *call_binding =
+        xr_semantic_plan_program_call_binding_count(entry) == 1u
+            ? xr_semantic_plan_program_call_binding(entry, 0)
+            : NULL;
+    const XrSemanticOperationRecord *operation =
+        call_binding ? xr_semantic_plan_operation(entry, call_binding->operation) : NULL;
+    const XrSemanticCallTargetRecord *semantic_target = NULL;
+    uint32_t semantic_target_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; operation && i < xr_semantic_plan_call_target_count(entry); i++) {
+        const XrSemanticCallTargetRecord *candidate = xr_semantic_plan_call_target(entry, i);
+        if (!candidate || candidate->operation != call_binding->operation)
+            continue;
+        if (semantic_target)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "program graph call target is ambiguous");
+        semantic_target = candidate;
+        semantic_target_index = i;
+    }
+    const XrSemanticSourceExportRecord *source_export =
+        semantic_target && semantic_target->source_export <
+                               xr_semantic_plan_source_export_count(producer)
+            ? xr_semantic_plan_source_export(producer, semantic_target->source_export)
+            : NULL;
+    const XrSemanticFunctionRecord *producer_semantic_function =
+        producer_function
+            ? xr_semantic_plan_function(producer, producer_function->semantic_function)
+            : NULL;
+    const XrSemanticParameterRecord *parameter =
+        producer_semantic_function && producer_semantic_function->parameter_count == 1u
+            ? xr_semantic_plan_parameter(producer,
+                                         producer_semantic_function->parameter_begin)
+            : NULL;
+    uint32_t entry_target_function = UINT32_MAX, producer_target_function = UINT32_MAX;
+    if (!program || !entry_function || !producer_function || !call_binding || !operation ||
+        !semantic_target || !source_export || !producer_semantic_function || !parameter ||
+        semantic_target->kind != XR_SEM_CALL_TARGET_SOURCE_EXPORT ||
+        semantic_target->dependency != 0u || source_export->kind != XR_SEM_SOURCE_EXPORT_FUNCTION ||
+        source_export->function != producer_function->semantic_function ||
+        !graph_target_function_for_semantic(target, entry_partition,
+                                            entry_function->semantic_function,
+                                            &entry_target_function) ||
+        !graph_target_function_for_semantic(target, producer_partition,
+                                            producer_function->semantic_function,
+                                            &producer_target_function))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "program graph semantic function/export joins are not exact");
+
+    XrTargetCallRecord *call = NULL;
+    uint32_t target_call = UINT32_MAX;
+    for (uint32_t i = 0; i < entry_partition->calls_count; i++) {
+        uint32_t row = entry_partition->calls_begin + i;
+        XrTargetCallRecord *candidate = &target->calls[row];
+        if (candidate->semantic_operation != call_binding->operation ||
+            candidate->semantic_call_target != semantic_target_index)
+            continue;
+        if (call)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "program graph target call is ambiguous");
+        call = candidate;
+        target_call = row;
+    }
+    if (!call || call->argument_count != 1u ||
+        call->argument_begin >= target->call_argument_count)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "program graph target call/argument is missing");
+    XrTargetCallArgumentRecord *argument = &target->call_arguments[call->argument_begin];
+    uint32_t callee_slot = UINT32_MAX;
+    uint16_t callee_register_rep = 0, callee_memory_rep = 0;
+    if (argument->call != target_call || argument->ordinal != 0u ||
+        argument->callee_parameter != producer_semantic_function->parameter_begin ||
+        !graph_target_value_slot(target, producer_partition, parameter->value, &callee_slot,
+                                 &callee_register_rep, &callee_memory_rep))
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "program graph argument slot join is not exact");
+
+    uint32_t direct_instruction = UINT32_MAX;
+    for (uint32_t i = 0; i < entry_partition->instructions_count; i++) {
+        uint32_t row = entry_partition->instructions_begin + i;
+        XrTargetInstructionRecord *instruction = &target->instructions[row];
+        if (instruction->opcode != XR_TARGET_INSTRUCTION_CALL_ENTRY_I64 ||
+            instruction->function != entry_target_function ||
+            instruction->result_slot != call->result_slot)
+            continue;
+        if (direct_instruction != UINT32_MAX)
+            return fail(error, error_size, "XR_TARGET_1001",
+                        "program graph call instruction is ambiguous");
+        direct_instruction = row;
+    }
+    if (direct_instruction == UINT32_MAX)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "program graph call instruction is missing");
+
+    call->callee_function = producer_target_function;
+    call->calling_convention = XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT;
+    call->target_kind = XR_TARGET_CALL_TARGET_PROGRAM_DIRECT;
+    argument->callee_slot = callee_slot;
+    argument->callee_register_rep = callee_register_rep;
+    argument->callee_memory_rep = callee_memory_rep;
+    target->instructions[direct_instruction].opcode = XR_TARGET_INSTRUCTION_CALL_DIRECT_I64;
+    target->instructions[direct_instruction].immediate_bits = target_call;
+
+    const XrSemanticFunctionRecord *entry_semantic_function =
+        xr_semantic_plan_function(entry, entry_function->semantic_function);
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(entry, &operand_count);
+    uint32_t argument_operand = operation->operand_begin + 1u;
+    if (!entry_semantic_function || !operands || operation->operand_count != 2u ||
+        argument_operand >= operand_count || argument->semantic_operand != argument_operand)
+        return fail(error, error_size, "XR_TARGET_1001",
+                    "program graph semantic argument identity is missing");
+
+    *graph = (XrTargetProgramGraphRecord) {
+        .schema = XR_TARGET_PROGRAM_GRAPH_SCHEMA_VERSION,
+        .family = program->program_family,
+        .module_count = 2u,
+        .function_count = program->function_count,
+        .export_count = 1u,
+        .entry_count = 1u,
+        .call_count = 1u,
+        .argument_count = 1u,
+        .entry_partition = entry_partition->program_module_row,
+        .producer_partition = producer_partition->program_module_row,
+        .entry_target_function = entry_target_function,
+        .producer_target_function = producer_target_function,
+        .entry_semantic_function = entry_function->semantic_function,
+        .producer_semantic_function = producer_function->semantic_function,
+        .target_call = target_call,
+        .target_argument = call->argument_begin,
+        .entry_semantic_operation = call_binding->operation,
+        .producer_semantic_export = semantic_target->source_export,
+        .entry_semantic_dependency = semantic_target->dependency,
+        .producer_semantic_parameter = producer_semantic_function->parameter_begin,
+        .caller_slot = argument->caller_slot,
+        .callee_slot = argument->callee_slot,
+        .argument_ordinal = argument->ordinal,
+        .flags = XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN | XR_TARGET_PROGRAM_GRAPH_DIRECT_I64,
+        .program_fingerprint = program->program_fingerprint,
+        .generation_identity = program->generation_identity,
+        .target_profile_fingerprint = xr_target_profile_fingerprint(profile),
+        .entry_function_identity = entry_function->program_function,
+        .producer_function_identity = producer_function->program_function,
+        .entry_function_flags = entry_function->flags,
+        .producer_function_flags = producer_function->flags,
+        .export_identity = source_export->id,
+        .exported_function_identity = source_export->exported_entity,
+        .entry_identity = entry_semantic_function->id,
+        .call_identity = call_binding->program_call,
+        .callsite_identity = call_binding->callsite,
+        .resolver_binding = call_binding->resolver_binding,
+        .argument_identity = argument->identity,
+        .parameter_identity = parameter->id,
+    };
+    return true;
+}
+
+bool xr_target_plan_build_program_graph(const XrSemanticPlan *const *semantic_modules,
+                                        uint32_t semantic_module_count,
+                                        XrTargetProfile *profile,
+                                        XrTargetPlan **out, char *error, size_t error_size) {
+    if (out)
+        *out = NULL;
+    if (!semantic_modules || semantic_module_count != 2u || !profile || !out)
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "program graph builder requires the exact bounded semantic module set");
+    if (!xr_target_semantic_program_module_set_verify(
+            semantic_modules, semantic_module_count, error, error_size))
+        return false;
+    const XrSemanticPlan *entry = NULL;
+    const XrSemanticPlan *producer = NULL;
+    for (uint32_t row = 0; row < semantic_module_count; row++) {
+        const XrSemanticPlan *semantic = semantic_modules[row];
+        if (graph_function_binding(semantic, XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY)) {
+            if (entry)
+                return fail(error, error_size, "XR_TARGET_1000",
+                            "program graph entry module is ambiguous");
+            entry = semantic;
+        }
+        if (graph_function_binding(semantic, XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)) {
+            if (producer)
+                return fail(error, error_size, "XR_TARGET_1000",
+                            "program graph producer module is ambiguous");
+            producer = semantic;
+        }
+    }
+    const XrSemanticProgramProvenance *entry_program =
+        xr_semantic_plan_program_provenance(entry);
+    const XrSemanticProgramProvenance *producer_program =
+        xr_semantic_plan_program_provenance(producer);
+    if (!entry || !producer || !entry_program || !producer_program ||
+        entry_program->program_family !=
+            XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+        producer_program->program_family != entry_program->program_family ||
+        entry_program->module_count != 2u || producer_program->module_count != 2u ||
+        entry_program->program_module_row >= 2u || producer_program->program_module_row >= 2u ||
+        entry_program->program_module_row == producer_program->program_module_row ||
+        !xr_fingerprint_equal(entry_program->program_fingerprint,
+                              producer_program->program_fingerprint) ||
+        !xr_stable_id_equal(entry_program->generation_identity,
+                            producer_program->generation_identity))
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "program graph builder requires the exact bounded semantic module set");
+
+    XrProgramGraphModuleDraft modules[2] = {0};
+    modules[entry_program->program_module_row].semantic = entry;
+    modules[entry_program->program_module_row].semantic_module =
+        entry_program->program_module_row;
+    modules[producer_program->program_module_row].semantic = producer;
+    modules[producer_program->program_module_row].semantic_module =
+        producer_program->program_module_row;
+    const XrSemanticPlan **entry_dependencies = NULL;
+    const XrSemanticPlan **producer_dependencies = NULL;
+    uint32_t entry_dependency_count = 0, producer_dependency_count = 0;
+    if (!xr_target_semantic_program_module_direct_dependencies(
+            semantic_modules, semantic_module_count, entry_program->program_module_row,
+            &entry_dependencies, &entry_dependency_count, error, error_size) ||
+        !xr_target_semantic_program_module_direct_dependencies(
+            semantic_modules, semantic_module_count, producer_program->program_module_row,
+            &producer_dependencies, &producer_dependency_count, error, error_size) ||
+        entry_dependency_count != 1u || producer_dependency_count != 0u) {
+        xr_free(entry_dependencies);
+        xr_free(producer_dependencies);
+        return fail(error, error_size, "XR_TARGET_1000",
+                    "program graph local dependency vectors are not exact");
+    }
+    bool built = build_program_graph_module(entry, entry_dependencies, entry_dependency_count,
+                                            profile,
+                                            &modules[entry_program->program_module_row].target,
+                                            error, error_size) &&
+                 build_program_graph_module(producer, producer_dependencies,
+                                            producer_dependency_count, profile,
+                                            &modules[producer_program->program_module_row].target,
+                                            error, error_size);
+    if (!built)
+        goto done;
+    XrTargetMaterializedPlan merged = {0};
+    if (modules[0].target.machine_rep_count >
+        UINT32_MAX - modules[1].target.machine_rep_count) {
+        fail(error, error_size, "XR_EXEC_5003",
+             "program graph machine representation count overflowed");
+        built = false;
+        goto done;
+    }
+    merged.machine_rep_count =
+        modules[0].target.machine_rep_count + modules[1].target.machine_rep_count;
+    if (modules[0].target.capability_count >
+        UINT32_MAX - modules[1].target.capability_count) {
+        fail(error, error_size, "XR_EXEC_5003", "program graph capability count overflowed");
+        built = false;
+        goto done;
+    }
+    merged.capability_count =
+        modules[0].target.capability_count + modules[1].target.capability_count;
+    for (uint32_t i = 0; built && i < 2u; i++)
+        built = graph_accumulate_counts(&merged, &modules[i].target);
+    if (!built || !graph_allocate_materialized(&merged, error, error_size)) {
+        if (built)
+            built = false;
+        else
+            fail(error, error_size, "XR_EXEC_5003",
+                 "program graph target row count overflowed");
+        materialized_dispose(&merged);
+        goto done;
+    }
+    uint16_t rep_maps[2][256] = {{0}};
+    if (!graph_merge_machine_reps(&modules[0].target, &modules[1].target, &merged, rep_maps)) {
+        fail(error, error_size, "XR_TARGET_1004",
+             "program graph machine representation union is not exact");
+        built = false;
+        materialized_dispose(&merged);
+        goto done;
+    }
+    if (!graph_merge_capabilities(&modules[0].target, &modules[1].target, &merged)) {
+        fail(error, error_size, "XR_TARGET_1004",
+             "program graph capability authorities are inconsistent");
+        built = false;
+        materialized_dispose(&merged);
+        goto done;
+    }
+
+    XrTargetModulePartitionRecord partitions[2] = {0};
+    uint32_t value_reps = 0, extents = 0, layouts = 0, fields = 0, functions = 0;
+    uint32_t slots = 0, instructions = 0, calls = 0, call_arguments = 0;
+    uint32_t root_maps = 0, root_slots = 0, cleanups = 0, adapters = 0;
+    uint32_t coroutines = 0, debug_facts = 0;
+    for (uint32_t i = 0; i < 2u; i++) {
+        const XrSemanticProgramProvenance *program =
+            xr_semantic_plan_program_provenance(modules[i].semantic);
+        partitions[i] = (XrTargetModulePartitionRecord) {
+            .module_identity = program->program_module,
+            .semantic_fingerprint = xr_semantic_plan_fingerprint(modules[i].semantic),
+            .program_module_row = i,
+            .semantic_module = modules[i].semantic_module,
+            .value_reps_begin = value_reps,
+            .value_reps_count = modules[i].target.value_rep_count,
+            .extents_begin = extents,
+            .extents_count = modules[i].target.extent_count,
+            .layouts_begin = layouts,
+            .layouts_count = modules[i].target.layout_count,
+            .fields_begin = fields,
+            .fields_count = modules[i].target.field_count,
+            .functions_begin = functions,
+            .functions_count = modules[i].target.function_count,
+            .slots_begin = slots,
+            .slots_count = modules[i].target.slot_count,
+            .instructions_begin = instructions,
+            .instructions_count = modules[i].target.instruction_count,
+            .calls_begin = calls,
+            .calls_count = modules[i].target.call_count,
+            .call_arguments_begin = call_arguments,
+            .call_arguments_count = modules[i].target.call_argument_count,
+            .root_maps_begin = root_maps,
+            .root_maps_count = modules[i].target.root_map_count,
+            .root_slots_begin = root_slots,
+            .root_slots_count = modules[i].target.root_slot_count,
+            .cleanups_begin = cleanups,
+            .cleanups_count = modules[i].target.cleanup_count,
+            .adapters_begin = adapters,
+            .adapters_count = modules[i].target.adapter_count,
+            .coroutines_begin = coroutines,
+            .coroutines_count = modules[i].target.coroutine_count,
+            .debug_facts_begin = debug_facts,
+            .debug_facts_count = modules[i].target.debug_fact_count,
+        };
+        value_reps += modules[i].target.value_rep_count;
+        extents += modules[i].target.extent_count;
+        layouts += modules[i].target.layout_count;
+        fields += modules[i].target.field_count;
+        functions += modules[i].target.function_count;
+        slots += modules[i].target.slot_count;
+        instructions += modules[i].target.instruction_count;
+        calls += modules[i].target.call_count;
+        call_arguments += modules[i].target.call_argument_count;
+        root_maps += modules[i].target.root_map_count;
+        root_slots += modules[i].target.root_slot_count;
+        cleanups += modules[i].target.cleanup_count;
+        adapters += modules[i].target.adapter_count;
+        coroutines += modules[i].target.coroutine_count;
+        debug_facts += modules[i].target.debug_fact_count;
+        graph_merge_module(&merged, &modules[i].target, &partitions[i], rep_maps[i]);
+    }
+
+    XrTargetProgramGraphRecord graph = {0};
+    built = graph_bind_direct_call(
+        entry, producer, &partitions[entry_program->program_module_row],
+        &partitions[producer_program->program_module_row], profile, &merged, &graph, error,
+        error_size);
+    if (built) {
+        XrTargetPlanDraft draft = {
+            .semantic_plan = entry,
+            .semantic_dependencies = entry_dependencies,
+            .semantic_dependency_count = entry_dependency_count,
+            .semantic_modules = semantic_modules,
+            .semantic_module_count = semantic_module_count,
+            .profile = profile,
+            .completed_family_mask = XR_TARGET_REQUIRED_FAMILIES,
+            .machine_reps = merged.machine_reps,
+            .machine_reps_count = merged.machine_rep_count,
+            .value_reps = merged.value_reps,
+            .value_reps_count = merged.value_rep_count,
+            .extents = merged.extents,
+            .extents_count = merged.extent_count,
+            .layouts = merged.layouts,
+            .layouts_count = merged.layout_count,
+            .fields = merged.fields,
+            .fields_count = merged.field_count,
+            .functions = merged.functions,
+            .functions_count = merged.function_count,
+            .slots = merged.slots,
+            .slots_count = merged.slot_count,
+            .instructions = merged.instructions,
+            .instructions_count = merged.instruction_count,
+            .calls = merged.calls,
+            .calls_count = merged.call_count,
+            .call_arguments = merged.call_arguments,
+            .call_arguments_count = merged.call_argument_count,
+            .root_maps = merged.root_maps,
+            .root_maps_count = merged.root_map_count,
+            .root_slots = merged.root_slots,
+            .root_slots_count = merged.root_slot_count,
+            .cleanups = merged.cleanups,
+            .cleanups_count = merged.cleanup_count,
+            .adapters = merged.adapters,
+            .adapters_count = merged.adapter_count,
+            .capabilities = merged.capabilities,
+            .capabilities_count = merged.capability_count,
+            .coroutines = merged.coroutines,
+            .coroutines_count = merged.coroutine_count,
+            .debug_facts = merged.debug_facts,
+            .debug_facts_count = merged.debug_fact_count,
+            .program_graphs = &graph,
+            .program_graphs_count = 1u,
+            .module_partitions = partitions,
+            .module_partitions_count = 2u,
+        };
+        built = xr_target_plan_freeze(&draft, out, error, error_size);
+    }
+    materialized_dispose(&merged);
+
+done:
+    xr_free(entry_dependencies);
+    xr_free(producer_dependencies);
+    materialized_dispose(&modules[0].target);
+    materialized_dispose(&modules[1].target);
+    return built;
+}
+
+bool xr_target_plan_build(const XrSemanticPlan *semantic_plan, XrTargetProfile *profile,
+                          XrTargetPlan **out, char *error, size_t error_size) {
+    return xr_target_plan_build_module_set(semantic_plan, NULL, 0, profile, out, error, error_size);
+}
+
+bool xr_target_plan_build_module_set(const XrSemanticPlan *semantic_plan,
+                                     const XrSemanticPlan *const *dependencies,
+                                     uint32_t dependency_count, XrTargetProfile *profile,
+                                     XrTargetPlan **out, char *error, size_t error_size) {
+    XrTargetPlanBuilder *builder = NULL;
+    if (out)
+        *out = NULL;
+    if (!builder_new(semantic_plan, profile, dependencies, dependency_count, false, &builder,
+                     error, error_size))
+        return false;
+    if (!builder_collect_families(builder, error, error_size)) {
         builder_free(builder);
         return false;
     }
