@@ -62,8 +62,10 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
         function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE)
         return XAOT_DIRECT_I64_TARGET_UNCOVERED;
 
-    const XrTargetPlan *target = xaot_bundle_target_plan_for_func(bundle, function);
-    if (!target || xr_target_plan_semantic_plan(target) != function->semantic_plan ||
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, function, NULL);
+    const XrTargetPlan *target = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
+    if (!target || semantic != function->semantic_plan ||
         xr_target_plan_completed_family_mask(target) != XR_TARGET_REQUIRED_FAMILIES ||
         !xr_target_plan_is_verified(target) || !xr_target_plan_fingerprint_is_intact(target))
         return direct_i64_error(errbuf, errbuf_len,
@@ -71,9 +73,13 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_function_status(
 
     uint32_t function_count = 0;
     const XrTargetFunctionRecord *functions = xr_target_plan_functions(target, &function_count);
-    uint32_t index = function->semantic_plan_function_index;
+    uint32_t index = XR_SEMANTIC_INDEX_NONE;
+    if (!xr_target_plan_find_function(target, semantic,
+                                      function->semantic_plan_function_index, &index))
+        return direct_i64_error(errbuf, errbuf_len,
+                                "direct-i64 function has no canonical program function row");
     if (!functions || index >= function_count || functions[index].id != index ||
-        functions[index].semantic_function != index)
+        functions[index].semantic_function != function->semantic_plan_function_index)
         return direct_i64_error(errbuf, errbuf_len,
                                 "direct-i64 function has no exact TargetPlan function row");
     if (xr_target_plan_function_execution_family_mask(target, index) !=
@@ -103,7 +109,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_abi_status(
     uint32_t call_count = 0;
     const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
     for (uint32_t i = 0; calls && i < call_count; i++) {
-        if (calls[i].callee_function != function_row->semantic_function)
+        if (calls[i].callee_function != function_row->id)
             continue;
         if (calls[i].target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
             calls[i].calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
@@ -158,7 +164,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
         return direct_i64_error(errbuf, errbuf_len,
                                 "covered direct-i64 call lacks exact semantic value identity");
 
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, caller, NULL);
     const XrSemanticOperationRecord *operation = NULL;
     uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
@@ -188,7 +195,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
                                     "covered direct-i64 TargetPlan call is ambiguous");
         target_call = &calls[i];
     }
-    if (!target_call || target_call->caller_function != semantic_function ||
+    if (!target_call || target_call->caller_function != caller_row->id ||
         target_call->result_value != semantic_value || target_call->argument_count != 1 ||
         target_call->adapter_count != 0 ||
         target_call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
@@ -205,17 +212,20 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
 
     const XrSemanticCallTargetRecord *semantic_target =
         xr_semantic_plan_call_target(semantic, target_call->semantic_call_target);
-    if (!semantic_target || semantic_target->operation != operation_index ||
-        semantic_target->function != target_call->callee_function ||
+    uint32_t function_count = 0;
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(target, &function_count);
+    const XrTargetFunctionRecord *callee_row =
+        functions && target_call->callee_function < function_count
+            ? &functions[target_call->callee_function]
+            : NULL;
+    if (!semantic_target || !callee_row || semantic_target->operation != operation_index ||
+        semantic_target->function != callee_row->semantic_function ||
         semantic_target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL)
         return direct_i64_error(errbuf, errbuf_len,
                                 "covered direct-i64 callee identity is inexact");
 
-    uint32_t function_count = 0;
-    const XrTargetFunctionRecord *functions = xr_target_plan_functions(target, &function_count);
-    if (!functions || target_call->callee_function >= function_count ||
-        functions[target_call->callee_function].id != target_call->callee_function ||
-        functions[target_call->callee_function].semantic_function != target_call->callee_function ||
+    if (callee_row->id != target_call->callee_function ||
+        xr_target_plan_module_for_function(target, callee_row->id, NULL) != semantic ||
         xr_target_plan_function_execution_family_mask(target, target_call->callee_function) !=
             XR_TARGET_EXECUTION_SCALAR_I64_CLOSED)
         return direct_i64_error(errbuf, errbuf_len,
@@ -246,8 +256,8 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     for (uint32_t i = 0; i < bundle->nmodules; i++) {
         const XiModule *module = bundle->modules ? bundle->modules[i] : NULL;
         if (module && module->init && module->init->semantic_plan == semantic)
-            direct_i64_find_function(module->init, semantic, target_call->callee_function, &callee,
-                                     &callee_count);
+            direct_i64_find_function(module->init, semantic, callee_row->semantic_function,
+                                     &callee, &callee_count);
     }
     if (!callee || callee_count != 1)
         return direct_i64_error(errbuf, errbuf_len,
@@ -256,7 +266,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
     const XrTargetInstructionRecord *call_instruction = NULL;
     uint32_t instruction_count = 0;
     const XrTargetInstructionRecord *instructions = xr_target_plan_function_instructions(
-        target, semantic_function, &instruction_count);
+        target, caller_row->id, &instruction_count);
     for (uint32_t i = 0; instructions && i < instruction_count; i++) {
         if (instructions[i].opcode != XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
             instructions[i].immediate_bits != target_call->id)
@@ -266,7 +276,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
                                     "covered direct-i64 instruction row is ambiguous");
         call_instruction = &instructions[i];
     }
-    if (!call_instruction || call_instruction->function != semantic_function ||
+    if (!call_instruction || call_instruction->function != caller_row->id ||
         call_instruction->result_slot != target_call->result_slot ||
         call_instruction->operand_count != 0 ||
         call_instruction->operand_slots[0] != XR_TARGET_INSTRUCTION_SLOT_NONE ||
@@ -276,7 +286,7 @@ XR_FUNC XaotDirectI64TargetStatus xaot_boundary_direct_i64_call_view(
 
     out->target_plan = target;
     out->caller_function = caller_row;
-    out->callee_function = &functions[target_call->callee_function];
+    out->callee_function = callee_row;
     out->call = target_call;
     out->argument = argument;
     out->call_instruction = call_instruction;
@@ -365,9 +375,11 @@ static XaotLeafAggregateTargetStatus leaf_function_authority(
                                         "leaf-aggregate Xi module authority is ambiguous");
         module_index = i;
     }
-    const XrTargetPlan *target =
-        module_index != UINT32_MAX ? xaot_bundle_target_plan_for_module(bundle, module_index) : NULL;
-    const XrSemanticPlan *semantic = target ? xr_target_plan_semantic_plan(target) : NULL;
+    const XrSemanticPlan *semantic =
+        module_index != UINT32_MAX
+            ? xaot_bundle_program_semantic_for_module(bundle, module_index)
+            : NULL;
+    const XrTargetPlan *target = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
     const XrSemanticProgramProvenance *provenance =
         semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
     XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(closure);

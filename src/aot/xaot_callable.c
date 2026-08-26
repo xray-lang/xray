@@ -896,10 +896,10 @@ static const XiFunc *callable_array_hof_target_is_exact(
     const CallableAnalysis *analysis, const XiFunc *owner,
     const XiValue *value) {
     const XaotBundle *bundle = analysis ? analysis->bundle : NULL;
-    const XrTargetPlan *target = bundle && owner
-        ? xaot_bundle_target_plan_for_func(bundle, owner) : NULL;
-    const XrSemanticPlan *semantic = target
-        ? xr_target_plan_semantic_plan(target) : NULL;
+    const XrSemanticPlan *semantic = bundle && owner
+        ? xaot_bundle_program_semantic_for_func(bundle, owner, NULL) : NULL;
+    const XrTargetPlan *target = semantic
+        ? xaot_bundle_program_target_plan(bundle) : NULL;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     char error[192] = {0};

@@ -1068,24 +1068,18 @@ static void test_driver_auto_discovers_package_summary_payloads(void) {
     passed++;
 }
 
-static void run_driver_auto_discovers_multiple_package_summary_payloads(
-    bool parallel_probe) {
+static void test_driver_rejects_missing_canonical_program_target_plan_authority(void) {
     char root[XR_TEST_PATH_MAX];
     char home_dir[XR_TEST_PATH_MAX];
     char entry_source[XR_TEST_PATH_MAX];
     char cache_dir[XR_TEST_PATH_MAX];
-    char cache_dir_dual[XR_TEST_PATH_MAX];
-    char cache_dir_wide[XR_TEST_PATH_MAX];
-    char edited_source[XR_TEST_PATH_MAX];
     XaotTarget target = {0};
     XaotBuildOptions options = {0};
     XaotBuildResult result;
     char *payload_a = NULL;
     char *payload_b = NULL;
     const char *coordinates[2] = {"codex/pkga", "codex/pkgb"};
-    const char *payloads[2];
     XrLockfile *lockfile = NULL;
-    uint64_t imported_hash = 0;
     char *old_home;
 
     memset(&result, 0, sizeof(result));
@@ -1093,10 +1087,6 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     snprintf(home_dir, sizeof(home_dir), "%s/home", root);
     snprintf(entry_source, sizeof(entry_source), "%s/entry.xr", root);
     snprintf(cache_dir, sizeof(cache_dir), "%s/cache/aot/native", root);
-    snprintf(cache_dir_dual, sizeof(cache_dir_dual),
-             "%s/cache-dual/aot/native", root);
-    snprintf(cache_dir_wide, sizeof(cache_dir_wide),
-             "%s/cache-wide/aot/native", root);
     payload_a = install_package_payload(home_dir, cache_dir, "codex/pkga",
                                         "fn package_a() -> i64 {\n"
                                         "    return 11\n"
@@ -1107,18 +1097,11 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
                                         "}\n");
     ASSERT_TRUE(payload_a != NULL);
     ASSERT_TRUE(payload_b != NULL);
-    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_dual, payload_a));
-    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_dual, payload_b));
-    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_wide, payload_a));
-    ASSERT_TRUE(write_global_payload_to_cache(cache_dir_wide, payload_b));
     ASSERT_TRUE(write_file_text(entry_source, "import \"codex/pkga\" as a\n"
                                               "import \"codex/pkgb\" as b\n"
                                               "fn value() -> i64 {\n"
                                               "    return 17\n"
                                               "}\n"));
-    payloads[0] = payload_a;
-    payloads[1] = payload_b;
-    ASSERT_TRUE(xg_imported_summary_hash_from_package_payloads(0, payloads, 2, &imported_hash));
     lockfile = make_package_lockfile(home_dir, coordinates, 2);
     ASSERT_TRUE(lockfile != NULL);
     old_home = dup_env_value("HOME");
@@ -1128,118 +1111,20 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     options.target = &target;
     options.profile = XAOT_BUILD_PROFILE_HOSTED;
     ASSERT_TRUE(install_native_target_profile(&options, &target));
-    options.emit_global_evidence_dump = true;
     options.incremental_cache_dir = cache_dir;
     options.lockfile = lockfile;
-    if (!parallel_probe) {
-        ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
-        ASSERT_TRUE(dump_contains_import_hash(result.global_evidence_dump,
-                                              imported_hash));
-    } else {
-        XaotModuleSummaryCacheStats cold[3];
-        XaotModuleSummaryCacheStats warm[3];
-        XaotModuleSummaryCacheStats edited[3];
-        const char *cache_roots[3] = {
-            cache_dir, cache_dir_dual, cache_dir_wide,
-        };
-        const uint32_t worker_limits[3] = {1u, 2u, 8u};
-        const uint32_t expected_workers[3] = {1u, 2u, 2u};
+    options.target_plan_workers = 8u;
 
-        for (uint32_t run = 0; run < 3u; run++) {
-            options.incremental_cache_dir = cache_roots[run];
-            options.target_plan_workers = worker_limits[run];
-            ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
-            cold[run] = result.module_summary_cache;
-            ASSERT_TRUE(cold[run].workers == expected_workers[run]);
-            ASSERT_TRUE(cold[run].tasks == 3);
-            ASSERT_TRUE(cold[run].hits == 0);
-            ASSERT_TRUE(cold[run].misses == 3);
-            ASSERT_TRUE(cold[run].recomputed_modules == 3);
-            ASSERT_TRUE(cold[run].published == 3);
-            ASSERT_TRUE(cold[run].merged_modules == 3);
-            if (run > 0) {
-                ASSERT_TRUE(xr_fingerprint_equal(
-                    cold[run].artifact_order_fingerprint,
-                    cold[0].artifact_order_fingerprint));
-                ASSERT_TRUE(xr_fingerprint_equal(
-                    cold[run].publish_order_fingerprint,
-                    cold[0].publish_order_fingerprint));
-            }
-            ASSERT_TRUE(result.target_plan_cache.workers ==
-                        (run == 0 ? 1u : (run == 1 ? 2u : 3u)));
-            xaot_build_result_free(&result);
-        }
-
-        for (uint32_t run = 0; run < 3u; run++) {
-            options.incremental_cache_dir = cache_roots[run];
-            options.target_plan_workers = worker_limits[run];
-            ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
-            warm[run] = result.module_summary_cache;
-            ASSERT_TRUE(warm[run].workers == expected_workers[run]);
-            ASSERT_TRUE(warm[run].tasks == 3);
-            ASSERT_TRUE(warm[run].hits == 3);
-            ASSERT_TRUE(warm[run].misses == 0);
-            ASSERT_TRUE(warm[run].recomputed_modules == 0);
-            ASSERT_TRUE(warm[run].published == 0);
-            ASSERT_TRUE(warm[run].merged_modules == 3);
-            ASSERT_TRUE(xr_fingerprint_equal(
-                warm[run].artifact_order_fingerprint,
-                cold[0].artifact_order_fingerprint));
-            if (run > 0)
-                ASSERT_TRUE(xr_fingerprint_equal(
-                    warm[run].publish_order_fingerprint,
-                    warm[0].publish_order_fingerprint));
-            xaot_build_result_free(&result);
-        }
-
-        ASSERT_TRUE(write_package_source(
-            home_dir, "codex/pkga",
-            "fn package_a() -> i64 {\n"
-            "    return 31\n"
-            "}\n",
-            edited_source, sizeof(edited_source)));
-        for (uint32_t run = 0; run < 3u; run++) {
-            options.incremental_cache_dir = cache_roots[run];
-            options.target_plan_workers = worker_limits[run];
-            ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
-            edited[run] = result.module_summary_cache;
-            ASSERT_TRUE(edited[run].workers == expected_workers[run]);
-            ASSERT_TRUE(edited[run].tasks == 3);
-            ASSERT_TRUE(edited[run].hits < 3);
-            ASSERT_TRUE(edited[run].recomputed_modules > 0);
-            ASSERT_TRUE(edited[run].recomputed_modules < 3);
-            ASSERT_TRUE(edited[run].published ==
-                        edited[run].recomputed_modules);
-            ASSERT_TRUE(edited[run].merged_modules == 3);
-            ASSERT_TRUE(!xr_fingerprint_equal(
-                edited[run].artifact_order_fingerprint,
-                cold[0].artifact_order_fingerprint));
-            if (run > 0) {
-                ASSERT_TRUE(edited[run].hits == edited[0].hits);
-                ASSERT_TRUE(edited[run].recomputed_modules ==
-                            edited[0].recomputed_modules);
-                ASSERT_TRUE(xr_fingerprint_equal(
-                    edited[run].artifact_order_fingerprint,
-                    edited[0].artifact_order_fingerprint));
-                ASSERT_TRUE(xr_fingerprint_equal(
-                    edited[run].publish_order_fingerprint,
-                    edited[0].publish_order_fingerprint));
-            }
-            xaot_build_result_free(&result);
-        }
-
-        options.incremental_cache_dir = cache_dir;
-        options.target_plan_workers = 1;
-        XrTargetPlanCancellationToken cancellation;
-        xr_target_plan_cancellation_token_init(&cancellation);
-        xr_target_plan_cancellation_token_request(&cancellation);
-        options.target_plan_cancellation = &cancellation;
-        options.incremental_cache_rebuild = false;
-        ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
-        ASSERT_TRUE(result.target_plan_cache.cancelled == 3);
-        ASSERT_TRUE(result.n_sources == 0);
-        options.target_plan_cancellation = NULL;
-    }
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    ASSERT_TRUE(result.target_plan_cache.workers == 0u);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 0u);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 0u);
+    ASSERT_TRUE(result.target_plan_cache.published == 0u);
+    ASSERT_TRUE(result.target_plan_cache.cancelled == 0u);
+    ASSERT_TRUE(result.n_sources == 0);
+    ASSERT_TRUE(result.sources == NULL);
+    ASSERT_TRUE(result.total_compiled == 0);
 
     xaot_build_result_free(&result);
     options.lockfile = NULL;
@@ -1251,14 +1136,6 @@ static void run_driver_auto_discovers_multiple_package_summary_payloads(
     xr_free(payload_b);
     xr_test_unlink(entry_source);
     passed++;
-}
-
-static void test_driver_auto_discovers_multiple_package_summary_payloads(void) {
-    run_driver_auto_discovers_multiple_package_summary_payloads(false);
-}
-
-static void test_driver_parallel_target_plans_are_canonical(void) {
-    run_driver_auto_discovers_multiple_package_summary_payloads(true);
 }
 
 static void test_driver_auto_discovers_package_dependency_summary_payload(void) {
@@ -1561,8 +1438,8 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
-    if (filter && strcmp(filter, "parallel_target_plans") == 0) {
-        test_driver_parallel_target_plans_are_canonical();
+    if (filter && strcmp(filter, "missing_program_target_plan_authority") == 0) {
+        test_driver_rejects_missing_canonical_program_target_plan_authority();
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
@@ -1591,7 +1468,7 @@ int main(void) {
     test_driver_hosted_fragment_borrows_runtime_ownership();
     test_driver_validates_freestanding_runtime_provider();
     test_driver_auto_discovers_package_summary_payloads();
-    test_driver_auto_discovers_multiple_package_summary_payloads();
+    test_driver_rejects_missing_canonical_program_target_plan_authority();
     test_driver_auto_discovers_package_dependency_summary_payload();
     test_driver_requires_exact_typed_entry_authority();
     test_driver_direct_i64_call_consumes_target_plan();

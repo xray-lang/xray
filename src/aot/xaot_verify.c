@@ -41,32 +41,23 @@ static bool set_error(char *errbuf, size_t errbuf_len, const char *msg) {
 static bool verify_target_plan_bindings(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
     char target_error[256] = {0};
 
-    if (!bundle || !bundle->modules || !bundle->target_plans)
-        return set_error(errbuf, errbuf_len, "AOT bundle has no module TargetPlans");
+    if (!bundle || !bundle->modules || !bundle->program_target_plan)
+        return set_error(errbuf, errbuf_len, "AOT bundle has no program TargetPlan");
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
-        const XrSemanticPlan *semantic =
-            target_plan ? xr_target_plan_semantic_plan(target_plan) : NULL;
-        const XrSemanticProgramProvenance *provenance =
-            semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
-        bool leaf_aggregate =
-            provenance &&
-            provenance->program_family ==
-                XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
-        bool semantic_match =
-            leaf_aggregate
-                ? xi_program_semantic_plan_verify_detached_leaf_authority(
-                      module ? module->init : NULL, semantic, target_error, sizeof(target_error))
-                : (module && module->init && module->init->semantic_plan == semantic);
-        if (!module || !module->init || !target_plan || !semantic_match)
-            return set_error(errbuf, errbuf_len, "AOT module has no bound TargetPlan");
+        const XrTargetPlan *target_plan =
+            xaot_bundle_program_semantic_for_module(bundle, module_index)
+                ? xaot_bundle_program_target_plan(bundle)
+                : NULL;
+        if (!module || !module->init || !target_plan)
+            return set_error(errbuf, errbuf_len,
+                             "AOT module is absent from the program TargetPlan");
         if (xr_target_plan_completed_family_mask(target_plan) != XR_TARGET_REQUIRED_FAMILIES)
             return set_error(errbuf, errbuf_len,
-                             "AOT module TargetPlan family coverage is incomplete");
+                             "AOT program TargetPlan family coverage is incomplete");
         if (!xr_target_plan_is_verified(target_plan) ||
             !xr_target_plan_verify(target_plan, target_error, sizeof(target_error)))
-            return set_error(errbuf, errbuf_len, "AOT module TargetPlan is corrupt");
+            return set_error(errbuf, errbuf_len, "AOT program TargetPlan is corrupt");
     }
     return true;
 }
@@ -78,14 +69,17 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
     const XrTargetPlan *target_plan;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
+    uint32_t partition = UINT32_MAX;
     char target_error[256] = {0};
 
     if (out_binding)
         *out_binding = NULL;
     if (out_rep_adapter)
         *out_rep_adapter = false;
-    target_plan = xaot_bundle_target_plan_for_func(bundle, func);
-    if (!func || !value || !out_binding || !out_rep_adapter || !target_plan)
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, func, &partition);
+    target_plan = semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
+    if (!func || !value || !out_binding || !out_rep_adapter || !target_plan || !semantic)
         return set_error(errbuf, errbuf_len, "AOT value lacks exact TargetPlan semantic identity");
     const XrTargetPlan *leaf_target = NULL;
     XaotLeafAggregateTargetStatus leaf_status = xaot_boundary_leaf_aggregate_semantic_value(
@@ -107,7 +101,8 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
         return true;
     }
     (void) semantic_function;
-    *out_binding = xr_target_plan_value_rep(target_plan, semantic_value);
+    *out_binding =
+        xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value);
     return true;
 }
 
@@ -215,8 +210,11 @@ static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *f
                                      errbuf_len))
         return false;
     if (binding) {
-        if (!verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
-                                             binding, value, out))
+        const XrTargetPlan *target_plan =
+            xaot_bundle_program_semantic_for_func(bundle, func, NULL)
+                ? xaot_bundle_program_target_plan(bundle)
+                : NULL;
+        if (!verify_target_machine_value_rep(target_plan, binding, value, out))
             return set_error(errbuf, errbuf_len, "AOT TargetPlan binding has invalid C value rep");
         return true;
     }
@@ -1165,8 +1163,11 @@ static bool verify_transfer_value_authority(const XaotBundle *bundle, const XiFu
             return set_error(errbuf, errbuf_len,
                              "AOT transfer Target-bound value also has legacy authority");
         if (rep_adapter ||
-            !verify_target_machine_value_rep(xaot_bundle_target_plan_for_func(bundle, func),
-                                             binding, value, &ignored_rep))
+            !verify_target_machine_value_rep(
+                xaot_bundle_program_semantic_for_func(bundle, func, NULL)
+                    ? xaot_bundle_program_target_plan(bundle)
+                    : NULL,
+                binding, value, &ignored_rep))
             return set_error(errbuf, errbuf_len,
                              "AOT transfer Target-bound value has invalid machine rep");
         return true;

@@ -3174,8 +3174,8 @@ static void test_bundle_owns_empty_policy_bound_authority(void) {
     XiModule *modules[1] = {&module};
     XaotBundle bundle;
     REQUIRE(xaot_bundle_init(&bundle, modules, 1, 0));
-    REQUIRE(xaot_bundle_set_target_plan(&bundle, 0,
-                                        fixture.target_plan));
+    REQUIRE(xaot_bundle_set_program_target_plan(&bundle,
+                                                fixture.target_plan));
     REQUIRE(xaot_bundle_require_representation_refinements(&bundle));
     REQUIRE(xaot_bundle_install_representation_refinement(
         &bundle, 0, plan, &policy));

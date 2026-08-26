@@ -1303,12 +1303,18 @@ const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *pla
 }
 
 uint32_t xr_target_plan_program_module_count(const XrTargetPlan *plan) {
-    return xr_target_plan_is_verified(plan) ? plan->semantic_module_count : 0u;
+    if (!xr_target_plan_is_verified(plan))
+        return 0u;
+    return plan->semantic_module_count ? plan->semantic_module_count : 1u;
 }
 
 const XrSemanticPlan *xr_target_plan_program_module(const XrTargetPlan *plan,
                                                     uint32_t program_module) {
-    return xr_target_plan_is_verified(plan) && program_module < plan->semantic_module_count
+    if (!xr_target_plan_is_verified(plan))
+        return NULL;
+    if (!plan->semantic_module_count)
+        return program_module == 0u ? plan->semantic_plan : NULL;
+    return program_module < plan->semantic_module_count
                ? plan->semantic_modules[program_module]
                : NULL;
 }

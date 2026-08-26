@@ -73,7 +73,11 @@ static XaotAbiSlot tagged_slot(const XrType *type) {
 
 static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle, const XiFunc *func,
                                                   const XiValue *value) {
-    const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_func(bundle, func);
+    uint32_t partition = UINT32_MAX;
+    const XrSemanticPlan *semantic =
+        xaot_bundle_program_semantic_for_func(bundle, func, &partition);
+    const XrTargetPlan *target_plan =
+        semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
     uint32_t semantic_function = XR_SEMANTIC_INDEX_NONE;
     uint32_t semantic_value = XR_SEMANTIC_INDEX_NONE;
     char error[256] = {0};
@@ -82,10 +86,10 @@ static bool target_adt_enum_value_uses_tagged_abi(const XaotBundle *bundle, cons
         !xr_aot_scalar_semantic_value_id(target_plan, func, value, &semantic_function,
                                          &semantic_value, error, sizeof(error)))
         return false;
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
     const XrSemanticOperationRecord *definition =
         xr_semantic_enum_value_definition(semantic, semantic_value);
-    const XrTargetValueRepRecord *binding = xr_target_plan_value_rep(target_plan, semantic_value);
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep_for_module(target_plan, partition, semantic_value);
     if (!definition || definition->function != semantic_function || !binding)
         return false;
     const XrSemanticTypeRecord *type = xr_semantic_plan_type(semantic, definition->result_type);

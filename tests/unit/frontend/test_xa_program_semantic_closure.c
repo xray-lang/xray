@@ -23,6 +23,7 @@
 #include "frontend/parser/xparse.h"
 #include "base/xmalloc.h"
 #include "base/xsha256.h"
+#include "aot/xaot_bundle.h"
 #include "aot/refine/xr_aot_refinement.h"
 #include "ir/xi_import_resolve.h"
 #include "ir/xi_pipeline.h"
@@ -1336,6 +1337,55 @@ static bool scalar_graph_typed_vm_rejects_resigned_authority(
                            xr_target_plan_fingerprint(target), saved_fingerprint);
 }
 
+static bool scalar_graph_bundle_owner_is_exact(
+    const ScalarGraphPlanFixture *fixture, XrTargetPlan *target) {
+    if (!fixture || !target || fixture->entry_index >= 2u)
+        return false;
+    XaotBundle bundle = {0};
+    bool exact = xaot_bundle_init(&bundle, (XiModule **) fixture->modules, 2u,
+                                  fixture->entry_index) &&
+                 xaot_bundle_set_program_target_plan(&bundle, target) &&
+                 xaot_bundle_program_target_plan(&bundle) == target &&
+                 xaot_bundle_program_semantic_for_module(&bundle, 0u) ==
+                     scalar_graph_plan(fixture, 0u) &&
+                 xaot_bundle_program_semantic_for_module(&bundle, 1u) ==
+                     scalar_graph_plan(fixture, 1u);
+    if (exact) {
+        uint32_t partitions[2] = {UINT32_MAX, UINT32_MAX};
+        for (uint32_t module = 0; exact && module < 2u; module++) {
+            const XrSemanticPlan *semantic = scalar_graph_plan(fixture, module);
+            uint32_t matches = 0;
+            for (uint32_t partition = 0; partition < 2u; partition++) {
+                if (xr_target_plan_semantic_module(target, partition) != semantic)
+                    continue;
+                partitions[module] = partition;
+                matches++;
+            }
+            exact = matches == 1u;
+        }
+        /* Both modules use local SemanticValue row zero.  The unqualified
+         * accessor must stay ambiguous while each canonical partition joins
+         * that colliding local index to its own target row. */
+        exact = exact && partitions[0] != partitions[1] &&
+                xr_target_plan_value_rep(target, 0u) == NULL &&
+                xr_target_plan_value_rep_for_module(target, partitions[0], 0u) != NULL &&
+                xr_target_plan_value_rep_for_module(target, partitions[1], 0u) != NULL;
+    }
+    xaot_bundle_free(&bundle);
+
+    XiModule *colliding_modules[2] = {
+        fixture->modules[fixture->entry_index],
+        fixture->modules[fixture->entry_index],
+    };
+    XaotBundle collision = {0};
+    bool collision_rejected =
+        xaot_bundle_init(&collision, colliding_modules, 2u, 0u) &&
+        !xaot_bundle_set_program_target_plan(&collision, target) &&
+        xaot_bundle_program_target_plan(&collision) == NULL;
+    xaot_bundle_free(&collision);
+    return exact && collision_rejected;
+}
+
 static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
     XrTargetProfile *profile = NULL;
     XrTargetPlan *target = NULL;
@@ -1403,7 +1453,8 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
         }
         exact = exact && direct == 1u && dynamic == 0u;
     }
-    exact = exact && scalar_graph_typed_vm_is_exact(target) &&
+    exact = exact && scalar_graph_bundle_owner_is_exact(fixture, target) &&
+            scalar_graph_typed_vm_is_exact(target) &&
             scalar_graph_xtp_roundtrip(target, modules, profile) &&
             scalar_graph_typed_vm_rejects_resigned_authority(target);
     if (exact) {

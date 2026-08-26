@@ -111,4 +111,4 @@ anchor-sha256: src/module/xproto_codec.h 109ec696fedec4c86fafe43632f8551441f8f1e
 anchor-sha256: src/runtime/object/xjson_serde.c 5fa5d9147857c3e210414ee14b8e591463a6c8df8cbc7849cfc8a500ccb91157
 anchor-sha256: stdlib/types/json.xr 9b4904f85a13bea98b04c616185183f921ed09761bde1cb48d751784fef48161
 anchor-sha256: src/module/xproto_codec.c fd0259678a73d79bd9703d4c736f2fb3ef9f9b67c3b8a172416f0e6bbce85688
-anchor-sha256: src/aot/xaot_verify.c 9bf9a829caae95fcc14cf9a4ab3e8e7a981dd88dca6c0173ae474ba8e5332e66
+anchor-sha256: src/aot/xaot_verify.c fa8bbbeb5af03dded414f768b7ff71f5cbc4d0585cf3be1fb51036caf89ed402

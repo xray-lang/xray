@@ -952,6 +952,8 @@ xr_target_plan_value_rep_for_module(const XrTargetPlan *plan, uint32_t partition
                                     uint32_t semantic_value);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_dependency(const XrTargetPlan *plan,
                                                                  uint32_t dependency);
+/* Every verified plan is a program plan. Ordinary plans expose their root as
+ * the sole program module; graph plans expose the canonical frozen module set. */
 XR_FUNC uint32_t xr_target_plan_program_module_count(const XrTargetPlan *plan);
 XR_FUNC const XrSemanticPlan *xr_target_plan_program_module(const XrTargetPlan *plan,
                                                             uint32_t program_module);

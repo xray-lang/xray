@@ -130,7 +130,7 @@ XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
     uint32_t count) {
     const XaotBundle *bundle = ctx ? ctx->aot_bundle : NULL;
     if (!ctx || ctx->error || ctx->value_emission_registry || !bundle || !bundle->modules ||
-        !bundle->target_plans || !emission_plans || count == 0 ||
+        !bundle->program_target_plan || !emission_plans || count == 0 ||
         count != bundle->nmodules) {
         fprintf(stderr,
                 "[xi_cgen] ERROR: XR_TARGET_1001: complete C value emission registry is missing\n");
@@ -141,17 +141,18 @@ XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
     const XrTargetProfile *profile = NULL;
     for (uint32_t module_index = 0; module_index < count; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan = bundle->target_plans[module_index];
+        const XrSemanticPlan *module_semantic =
+            xaot_bundle_program_semantic_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan =
+            module_semantic ? xaot_bundle_program_target_plan(bundle) : NULL;
         const XrCEmissionPlan *emission_plan = emission_plans[module_index];
         const XrTargetProfile *module_profile =
             target_plan ? xr_target_plan_profile(target_plan) : NULL;
         XrFingerprint module_profile_fingerprint =
             xr_target_profile_fingerprint(module_profile);
         char verification_error[256] = {0};
-        if (!module || !module->init || !module->init->semantic_plan ||
+        if (!module || !module->init || !module_semantic ||
             !target_plan || !emission_plan ||
-            xr_target_plan_semantic_plan(target_plan) !=
-                module->init->semantic_plan ||
             !xr_target_plan_is_verified(target_plan) ||
             !xr_c_emission_plan_is_verified(emission_plan) ||
             !xr_c_emission_plan_verify(
@@ -176,8 +177,8 @@ XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
         }
         profile = module_profile;
         for (uint32_t prior = 0; prior < module_index; prior++) {
-            if (xr_target_plan_semantic_plan(bundle->target_plans[prior]) ==
-                module->init->semantic_plan) {
+            if (bundle->modules[prior] && bundle->modules[prior]->init &&
+                xaot_bundle_program_semantic_for_module(bundle, prior) == module_semantic) {
                 fprintf(stderr,
                         "[xi_cgen] ERROR: XR_TARGET_1001: duplicate C value SemanticPlan authority\n");
                 ctx->error = true;
@@ -195,8 +196,8 @@ XR_FUNC bool xi_cgen_ctx_set_value_emission_plans(
     }
     for (uint32_t module_index = 0; module_index < count; module_index++) {
         registry[module_index].semantic_plan =
-            bundle->modules[module_index]->init->semantic_plan;
-        registry[module_index].target_plan = bundle->target_plans[module_index];
+            xaot_bundle_program_semantic_for_module(bundle, module_index);
+        registry[module_index].target_plan = bundle->program_target_plan;
         registry[module_index].emission_plan = emission_plans[module_index];
     }
     ctx->value_emission_registry = registry;

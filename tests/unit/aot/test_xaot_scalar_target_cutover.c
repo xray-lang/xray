@@ -229,7 +229,7 @@ static void cutover_bundle_create(CutoverBundle *fixture) {
                                      &fixture->modules[module_index].target_plan, error,
                                      sizeof(error)));
     }
-    REQUIRE(xaot_bundle_init(&fixture->bundle, fixture->module_ptrs, 2, 1));
+    REQUIRE(xaot_bundle_init(&fixture->bundle, fixture->module_ptrs, 1, 0));
     fixture->bundle_initialized = true;
 
     XgBuildKey key = {
@@ -239,7 +239,7 @@ static void cutover_bundle_create(CutoverBundle *fixture) {
     };
     xg_global_evidence_init(&fixture->evidence, key);
     fixture->evidence_initialized = true;
-    for (uint32_t module_index = 0; module_index < 2; module_index++) {
+    for (uint32_t module_index = 0; module_index < 1; module_index++) {
         XgBodySummary body = {
             .func_id = module_index + 1,
             .module_id = module_index + 1,
@@ -255,9 +255,8 @@ static void cutover_bundle_create(CutoverBundle *fixture) {
 }
 
 static void cutover_bundle_bind_all(CutoverBundle *fixture) {
-    for (uint32_t module_index = 0; module_index < 2; module_index++)
-        REQUIRE(xaot_bundle_set_target_plan(&fixture->bundle, module_index,
-                                            fixture->modules[module_index].target_plan));
+    REQUIRE(xaot_bundle_set_program_target_plan(
+        &fixture->bundle, fixture->modules[0].target_plan));
 }
 
 static void cutover_bundle_free(CutoverBundle *fixture) {
@@ -333,8 +332,8 @@ static void transfer_authority_fixture_create(TransferAuthorityFixture *fixture)
     fixture->send->args[1] = fixture->adapter;
 
     REQUIRE(xaot_bundle_init(&fixture->bundle, &fixture->module_ptr, 1, 0));
-    REQUIRE(xaot_bundle_set_target_plan(&fixture->bundle, 0,
-                                        fixture->target_plan));
+    REQUIRE(xaot_bundle_set_program_target_plan(&fixture->bundle,
+                                                fixture->target_plan));
     XgBuildKey key = {
         .compiler_semver_hash = UINT64_C(0x279),
         .module_id = 1,
@@ -460,31 +459,32 @@ static void test_missing_and_partial_module_plans_fail_before_prepare(void) {
     REQUIRE(!xaot_verify_bundle(&fixture.bundle, error, sizeof(error)));
     REQUIRE(strstr(error, "TargetPlan") != NULL);
 
-    REQUIRE(xaot_bundle_set_target_plan(&fixture.bundle, 0,
-                                        fixture.modules[0].target_plan));
+    REQUIRE(!xaot_bundle_set_program_target_plan(
+        &fixture.bundle, fixture.modules[1].target_plan));
     REQUIRE(!xaot_prepare_bundle(&fixture.bundle, NULL));
     REQUIRE(fixture.bundle.nfunc_plans == 0);
     REQUIRE(fixture.bundle.nvalue_plans == 0);
     cutover_bundle_free(&fixture);
 }
 
-static void test_multi_module_prepare_has_no_scalar_legacy_rows(void) {
+static void test_single_program_prepare_has_no_scalar_legacy_rows(void) {
     CutoverBundle fixture;
     char error[512] = {0};
     cutover_bundle_create(&fixture);
     cutover_bundle_bind_all(&fixture);
 
     REQUIRE(xaot_prepare_bundle(&fixture.bundle, NULL));
-    REQUIRE(fixture.bundle.nvalue_plans == 2);
-    REQUIRE(fixture.bundle.stats.values_total == 8);
-    REQUIRE(fixture.bundle.stats.values_scalar == 2);
-    REQUIRE(fixture.bundle.stats.values_void == 2);
-    REQUIRE(fixture.bundle.stats.values_tagged == 2);
-    REQUIRE(fixture.bundle.stats.values_enum_ordinal == 2);
-    for (uint32_t module_index = 0; module_index < 2; module_index++) {
+    REQUIRE(fixture.bundle.nvalue_plans == 1);
+    REQUIRE(fixture.bundle.stats.values_total == 4);
+    REQUIRE(fixture.bundle.stats.values_scalar == 1);
+    REQUIRE(fixture.bundle.stats.values_void == 1);
+    REQUIRE(fixture.bundle.stats.values_tagged == 1);
+    REQUIRE(fixture.bundle.stats.values_enum_ordinal == 1);
+    for (uint32_t module_index = 0; module_index < 1; module_index++) {
         const CutoverModule *module = &fixture.modules[module_index];
-        REQUIRE(xaot_bundle_target_plan_for_func(&fixture.bundle, module->function) ==
-                module->target_plan);
+        REQUIRE(xaot_bundle_program_semantic_for_func(
+                    &fixture.bundle, module->function, NULL) ==
+                module->function->semantic_plan);
         REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, module->integer) == NULL);
         REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, module->release) == NULL);
         REQUIRE(xaot_bundle_find_value_plan(&fixture.bundle, module->text) == NULL);
@@ -533,29 +533,23 @@ static void test_plan_dump_records_exact_value_authority(void) {
     REQUIRE(first != NULL);
     REQUIRE(second != NULL);
     REQUIRE(strcmp(first, second) == 0);
-    REQUIRE(fixture.bundle.nfunc_plans == 2);
-    XaotFuncPlan saved_first = fixture.bundle.func_plans[0];
-    fixture.bundle.func_plans[0] = fixture.bundle.func_plans[1];
-    fixture.bundle.func_plans[1] = saved_first;
     char *permuted = xaot_bundle_dump_plan(&fixture.bundle);
     REQUIRE(permuted != NULL);
     REQUIRE(strcmp(first, permuted) == 0);
-    saved_first = fixture.bundle.func_plans[0];
-    fixture.bundle.func_plans[0] = fixture.bundle.func_plans[1];
-    fixture.bundle.func_plans[1] = saved_first;
+    REQUIRE(fixture.bundle.nfunc_plans == 1);
     REQUIRE(substring_count(first,
                             "target_values=3 legacy_values=1 "
-                            "backend_adapters=0\n") == 2);
-    REQUIRE(substring_count(first, " authority=target ") == 6);
-    REQUIRE(substring_count(first, " authority=legacy\n") == 2);
-    for (uint32_t module_index = 0; module_index < 2; module_index++) {
+                            "backend_adapters=0\n") == 1);
+    REQUIRE(substring_count(first, " authority=target ") == 3);
+    REQUIRE(substring_count(first, " authority=legacy\n") == 1);
+    for (uint32_t module_index = 0; module_index < 1; module_index++) {
         const CutoverModule *module = &fixture.modules[module_index];
         require_target_plan_summary(first, module_index, module->target_plan);
         require_target_value_row(first, module, module->integer);
         require_target_value_row(first, module, module->release);
         require_target_value_row(first, module, module->text);
     }
-    REQUIRE(substring_count(first, "family=legacy-enum-ordinal") == 2);
+    REQUIRE(substring_count(first, "family=legacy-enum-ordinal") == 1);
 
     xr_free(permuted);
     xr_free(second);
@@ -568,7 +562,7 @@ static void test_plan_dump_rejects_missing_duplicate_and_residue_authority(void)
     cutover_bundle_create(&missing);
     cutover_bundle_bind_all(&missing);
     REQUIRE(xaot_prepare_bundle(&missing.bundle, NULL));
-    REQUIRE(missing.bundle.nvalue_plans == 2);
+    REQUIRE(missing.bundle.nvalue_plans == 1);
     missing.bundle.nvalue_plans--;
     REQUIRE(xaot_bundle_dump_plan(&missing.bundle) == NULL);
     missing.bundle.nvalue_plans++;
@@ -608,10 +602,10 @@ static void test_plan_dump_rejects_missing_duplicate_and_residue_authority(void)
     cutover_bundle_create(&absent_target);
     cutover_bundle_bind_all(&absent_target);
     REQUIRE(xaot_prepare_bundle(&absent_target.bundle, NULL));
-    XrTargetPlan *saved = absent_target.bundle.target_plans[0];
-    absent_target.bundle.target_plans[0] = NULL;
+    XrTargetPlan *saved = absent_target.bundle.program_target_plan;
+    absent_target.bundle.program_target_plan = NULL;
     REQUIRE(xaot_bundle_dump_plan(&absent_target.bundle) == NULL);
-    absent_target.bundle.target_plans[0] = saved;
+    absent_target.bundle.program_target_plan = saved;
     cutover_bundle_free(&absent_target);
 }
 
@@ -624,7 +618,7 @@ static void test_plan_dump_accepts_eliminated_target_values_only(void) {
     detach_block_value(target_block, target_eliminated.modules[0].text);
     char *dump = xaot_bundle_dump_plan(&target_eliminated.bundle);
     REQUIRE(dump != NULL);
-    REQUIRE(substring_count(dump, " authority=target ") == 6);
+    REQUIRE(substring_count(dump, " authority=target ") == 3);
     xr_free(dump);
     cutover_bundle_free(&target_eliminated);
 
@@ -681,7 +675,7 @@ static void test_plan_dump_preserves_exact_enum_ordinal_authority(void) {
 
     XaotBundle bundle;
     REQUIRE(xaot_bundle_init(&bundle, modules, 1, 0));
-    REQUIRE(xaot_bundle_set_target_plan(&bundle, 0, target_plan));
+    REQUIRE(xaot_bundle_set_program_target_plan(&bundle, target_plan));
     REQUIRE(xaot_bundle_add_func_plan(&bundle, function, 0, 0) != NULL);
     XaotValuePlan *legacy = xaot_bundle_add_value_plan(&bundle, function, ordinal);
     REQUIRE(legacy != NULL);
@@ -811,7 +805,7 @@ static void test_direct_i64_target_view_is_bound_and_fail_closed(void) {
     XiModule *modules[] = {&module};
     XaotBundle bundle = {0};
     REQUIRE(xaot_bundle_init(&bundle, modules, 1, 0));
-    REQUIRE(xaot_bundle_set_target_plan(&bundle, 0, target));
+    REQUIRE(xaot_bundle_set_program_target_plan(&bundle, target));
     XaotDirectI64TargetView view = {0};
     REQUIRE(xaot_boundary_direct_i64_call_view(&bundle, root, call, &view, error,
                                                sizeof(error)) ==
@@ -1084,7 +1078,7 @@ static void test_transfer_value_authority_is_exact_and_independent(void) {
 
 int main(void) {
     test_missing_and_partial_module_plans_fail_before_prepare();
-    test_multi_module_prepare_has_no_scalar_legacy_rows();
+    test_single_program_prepare_has_no_scalar_legacy_rows();
     test_plan_dump_records_exact_value_authority();
     test_plan_dump_rejects_missing_duplicate_and_residue_authority();
     test_plan_dump_accepts_eliminated_target_values_only();

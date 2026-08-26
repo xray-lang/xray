@@ -1710,58 +1710,47 @@ static bool xaot_resolve_semantic_dependencies(const XaotBundle *bundle,
     return true;
 }
 
-static bool xaot_build_module_target_plans(XaotBundle *bundle, XrTargetProfile *profile,
+static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *profile,
                                            XrCacheStore *cache_store, bool rebuild, bool verbose,
                                            uint32_t worker_limit,
                                            XrTargetPlanCancellationToken *cancellation,
                                            XaotTargetPlanCacheStats *stats) {
-    if (!bundle || !profile || !bundle->modules || bundle->nmodules == 0 || !stats ||
-        bundle->nmodules > SIZE_MAX / sizeof(XrTargetPlanTaskInput) ||
-        bundle->nmodules > SIZE_MAX / sizeof(XrTargetPlanTaskResult) ||
-        !xr_target_profile_verify(profile, NULL, 0))
-        return false;
-    XrTargetPlanTaskInput *inputs =
-        (XrTargetPlanTaskInput *) xr_calloc(bundle->nmodules, sizeof(*inputs));
-    XrTargetPlanTaskResult *results =
-        (XrTargetPlanTaskResult *) xr_calloc(bundle->nmodules, sizeof(*results));
-    const XrSemanticPlan ***dependencies =
-        (const XrSemanticPlan ***) xr_calloc(bundle->nmodules, sizeof(*dependencies));
-    if (!inputs || !results || !dependencies) {
-        xr_free(dependencies);
-        xr_free(results);
-        xr_free(inputs);
+    if (!bundle || !profile || !bundle->modules || bundle->nmodules != 1u || !stats ||
+        !xr_target_profile_verify(profile, NULL, 0)) {
+        if (bundle)
+            bundle->error_msg =
+                "XR_TARGET_1000: product TargetPlan requires one canonical program authority";
         return false;
     }
-    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
-        XiModule *module = bundle->modules[module_index];
-        inputs[module_index].semantic_plan =
-            module && module->init ? module->init->semantic_plan : NULL;
-        if (!inputs[module_index].semantic_plan ||
-            !xaot_resolve_semantic_dependencies(bundle, inputs[module_index].semantic_plan,
-                                                &dependencies[module_index],
-                                                &inputs[module_index].semantic_dependency_count)) {
-            for (uint32_t i = 0; i <= module_index; i++)
-                xr_free(dependencies[i]);
-            xr_free(dependencies);
-            xr_free(results);
-            xr_free(inputs);
-            return false;
-        }
-        inputs[module_index].semantic_dependencies = dependencies[module_index];
-    }
+    XiModule *module = bundle->modules[0];
+    const XrSemanticPlan *semantic = module && module->init
+                                         ? module->init->semantic_plan
+                                         : NULL;
+    const XrSemanticPlan **dependencies = NULL;
+    uint32_t dependency_count = 0;
+    if (!semantic ||
+        !xaot_resolve_semantic_dependencies(bundle, semantic, &dependencies,
+                                            &dependency_count))
+        return false;
 
+    XrTargetPlanTaskInput input = {
+        .semantic_plan = semantic,
+        .semantic_dependencies = dependencies,
+        .semantic_dependency_count = dependency_count,
+    };
+    XrTargetPlanTaskResult task = {0};
     XrTargetPlanTaskStats task_stats = {0};
     char error[512] = {0};
     XrTargetPlanTaskBatch batch = {
-        .inputs = inputs,
-        .input_count = bundle->nmodules,
+        .inputs = &input,
+        .input_count = 1u,
         .profile = profile,
         .cache_store = cache_store,
         .optimization_budget = xaot_target_plan_optimization_budget(),
         .rebuild = rebuild,
         .worker_limit = worker_limit,
         .cancellation = cancellation,
-        .results = results,
+        .results = &task,
     };
     bool planned = xr_target_plan_tasks_run(&batch, &task_stats, error, sizeof(error));
     stats->workers = task_stats.worker_count;
@@ -1771,60 +1760,42 @@ static bool xaot_build_module_target_plans(XaotBundle *bundle, XrTargetProfile *
     stats->published = task_stats.published;
     stats->cancelled = task_stats.cancelled;
     if (!planned) {
-        uint32_t failed = task_stats.first_failed_index;
-        const char *name =
-            failed < bundle->nmodules && bundle->modules[failed] && bundle->modules[failed]->name
-                ? bundle->modules[failed]->name
-                : "?";
-        fprintf(stderr, "Error: module TargetPlan task failed for '%s': %s\n", name,
+        const char *name = module && module->name ? module->name : "?";
+        fprintf(stderr, "Error: program TargetPlan task failed for '%s': %s\n", name,
                 error[0] ? error : "unknown error");
-        xr_target_plan_task_results_release(results, bundle->nmodules);
-        for (uint32_t i = 0; i < bundle->nmodules; i++)
-            xr_free(dependencies[i]);
+        xr_target_plan_task_results_release(&task, 1u);
         xr_free(dependencies);
-        xr_free(results);
-        xr_free(inputs);
         return false;
     }
 
     bool installed = true;
-    for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
-        XiModule *module = bundle->modules[module_index];
-        XrTargetPlanTaskResult *task = &results[module_index];
-        const char *name = module && module->name ? module->name : "?";
-        if (verbose && task->cache_enabled) {
-            if (task->cache_hit)
-                fprintf(stderr, "[target-plan-cache] hit %s\n", name);
-            else if (task->rebuild_requested)
-                fprintf(stderr, "[target-plan-cache] rebuild %s\n", name);
-            else
-                fprintf(stderr, "[target-plan-cache] miss %s status=%d\n", name,
-                        (int) task->load_status);
-            if (task->cache_publish_attempted && task->publish_status == XR_CACHE_PUBLISH_IO_ERROR)
-                fprintf(stderr, "[target-plan-cache] publish unavailable %s\n", name);
-        }
-        if (!task->plan || !xaot_bundle_set_target_plan(bundle, module_index, task->plan)) {
-            fprintf(stderr, "Error: module TargetPlan install failed for '%s': %s\n", name,
-                    bundle->error_msg ? bundle->error_msg : "unknown error");
-            installed = false;
-            break;
-        }
-        const XrTargetPlan *bound = xaot_bundle_target_plan_for_module(bundle, module_index);
-        if (!bound || !xr_target_profile_require_exact(profile, xr_target_plan_profile(bound),
-                                                       error, sizeof(error))) {
-            fprintf(stderr, "Error: module TargetPlan profile mismatch for '%s': %s\n",
-                    module->name ? module->name : "?",
-                    error[0] ? error : "missing exact profile authority");
-            installed = false;
-            break;
-        }
+    const char *name = module && module->name ? module->name : "?";
+    if (verbose && task.cache_enabled) {
+        if (task.cache_hit)
+            fprintf(stderr, "[target-plan-cache] hit %s\n", name);
+        else if (task.rebuild_requested)
+            fprintf(stderr, "[target-plan-cache] rebuild %s\n", name);
+        else
+            fprintf(stderr, "[target-plan-cache] miss %s status=%d\n", name,
+                    (int) task.load_status);
+        if (task.cache_publish_attempted && task.publish_status == XR_CACHE_PUBLISH_IO_ERROR)
+            fprintf(stderr, "[target-plan-cache] publish unavailable %s\n", name);
     }
-    xr_target_plan_task_results_release(results, bundle->nmodules);
-    for (uint32_t i = 0; i < bundle->nmodules; i++)
-        xr_free(dependencies[i]);
+    if (!task.plan || !xaot_bundle_set_program_target_plan(bundle, task.plan)) {
+        fprintf(stderr, "Error: program TargetPlan install failed for '%s': %s\n", name,
+                bundle->error_msg ? bundle->error_msg : "unknown error");
+        installed = false;
+    }
+    const XrTargetPlan *bound = xaot_bundle_program_target_plan(bundle);
+    if (installed &&
+        (!bound || !xr_target_profile_require_exact(profile, xr_target_plan_profile(bound),
+                                                    error, sizeof(error)))) {
+        fprintf(stderr, "Error: program TargetPlan profile mismatch for '%s': %s\n",
+                name, error[0] ? error : "missing exact profile authority");
+        installed = false;
+    }
+    xr_target_plan_task_results_release(&task, 1u);
     xr_free(dependencies);
-    xr_free(results);
-    xr_free(inputs);
     return installed;
 }
 
@@ -1878,7 +1849,10 @@ static bool xaot_validate_module_direct_calls(XaotBundle *bundle) {
         return false;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan =
+            xaot_bundle_program_semantic_for_module(bundle, module_index)
+                ? xaot_bundle_program_target_plan(bundle)
+                : NULL;
         XrAotRefinementPlan *refinement = NULL;
         XrAotRefinementDiagnostic diag = {0};
         if (!module || !target_plan ||
@@ -1930,7 +1904,10 @@ static bool xaot_install_module_representation_refinements(XaotBundle *bundle,
         return false;
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan =
+            xaot_bundle_program_semantic_for_module(bundle, module_index)
+                ? xaot_bundle_program_target_plan(bundle)
+                : NULL;
         XrAotRefinementPlan *refinement = NULL;
         XrAotRefinementDiagnostic diag = {0};
         if (!module || !module->init || !target_plan ||
@@ -1984,7 +1961,10 @@ static bool xaot_build_module_emission_plans(const XaotBundle *bundle,
     profile_fingerprint = xr_target_profile_fingerprint(profile);
     for (uint32_t module_index = 0; module_index < bundle->nmodules; module_index++) {
         const XiModule *module = bundle->modules[module_index];
-        const XrTargetPlan *target_plan = xaot_bundle_target_plan_for_module(bundle, module_index);
+        const XrTargetPlan *target_plan =
+            xaot_bundle_program_semantic_for_module(bundle, module_index)
+                ? xaot_bundle_program_target_plan(bundle)
+                : NULL;
         char error[512] = {0};
         if (!target_plan ||
             !xr_c_emission_plan_build(target_plan, profile_fingerprint,
@@ -2598,6 +2578,12 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     for (int ti = 0; ti < nmodules; ti++) {
         xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
     }
+    if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules,
+                          (uint32_t) entry_index)) {
+        fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
+        goto fail_free_ir;
+    }
+    aot_bundle_initialized = true;
     if (source_program_closure) {
         char graph_semantic_error[512] = {0};
         if (!xi_program_semantic_verify_module_set(
@@ -2635,6 +2621,15 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                         : "unverified source program AOT binding authority");
             goto fail_free_ir;
         }
+        if (!xaot_bundle_set_program_target_plan(&aot_bundle,
+                                                 source_program_target_plan)) {
+            fprintf(stderr, "Error: program TargetPlan install failed: %s\n",
+                    aot_bundle.error_msg ? aot_bundle.error_msg
+                                         : "program plan does not own the exact Xi module set");
+            goto fail_free_ir;
+        }
+        xr_target_plan_free(source_program_target_plan);
+        source_program_target_plan = NULL;
         if (evidence_cache_verbose)
             printf("[program-semantic-plan] modules=%d entry=%d xi=verified "
                    "semantic=verified target=verified aot-binding=verified "
@@ -2647,21 +2642,14 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         goto fail_free_ir;
     xr_program_semantic_closure_free(source_program_closure);
     source_program_closure = NULL;
-    if (source_program_target_plan) {
+    if (xaot_bundle_program_target_plan(&aot_bundle)) {
         fprintf(stderr,
                 "Error: XR_TARGET_1001: verified program TargetPlan execution is "
                 "outside same-plan VM/AOT coverage\n");
-        xr_target_plan_free(source_program_target_plan);
-        source_program_target_plan = NULL;
         goto fail_free_ir;
     }
 
     /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
-    if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
-        fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
-        goto fail_free_ir;
-    }
-    aot_bundle_initialized = true;
     if (!xaot_bundle_require_representation_refinements(&aot_bundle)) {
         fprintf(stderr, "Error: failed to require immutable representation authorities\n");
         goto fail_free_ir;
@@ -2688,11 +2676,14 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                 aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
     }
-    if (!xaot_build_module_target_plans(
+    if (!xaot_build_program_target_plan(
             &aot_bundle, options->target_profile, xr_compiler_session_cache_store(session),
             evidence_cache_rebuild, evidence_cache_verbose, options->target_plan_workers,
-            options->target_plan_cancellation, &result->target_plan_cache))
+            options->target_plan_cancellation, &result->target_plan_cache)) {
+        fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
+                aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
         goto fail_free_ir;
+    }
     if (!xaot_validate_module_direct_calls(&aot_bundle))
         goto fail_free_ir;
     if (!xaot_install_module_representation_refinements(&aot_bundle, &cfg.rep_policy))

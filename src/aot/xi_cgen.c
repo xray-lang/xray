@@ -5435,8 +5435,12 @@ static CgAssertionAdapterId cg_assertion_adapter_id(XiCgenCtx *ctx) {
 
 static const XrTargetPlan *cg_function_target_plan(XiCgenCtx *ctx,
                                                    const XiFunc *function) {
+    const XrSemanticPlan *semantic =
+        ctx && function
+            ? xaot_bundle_program_semantic_for_func(ctx->aot_bundle, function, NULL)
+            : NULL;
     const XrTargetPlan *target =
-        ctx && function ? xaot_bundle_target_plan_for_func(ctx->aot_bundle, function) : NULL;
+        semantic ? xaot_bundle_program_target_plan(ctx->aot_bundle) : NULL;
     return target && xr_target_plan_is_verified(target) &&
                    xr_target_plan_fingerprint_is_intact(target)
                ? target

@@ -429,7 +429,7 @@ static void assert_leaf_aggregate_aot_boundary(XiModule *module, XrTargetPlan *p
                    module->init, semantic, authority_error, sizeof(authority_error)),
                authority_error);
     ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
-    ASSERT_TRUE(xaot_bundle_set_target_plan(&bundle, 0, plan));
+    ASSERT_TRUE(xaot_bundle_set_program_target_plan(&bundle, plan));
     XaotLeafAggregateTargetView view = {0};
     char error[512] = {0};
     ASSERT_EQ_UINT(

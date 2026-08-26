@@ -358,7 +358,7 @@ Evidence:
   resolution even when immediate retirement is deferred, so a fallible frame
   cleanup cannot make the generation pin stack-local or unreachable.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 3a46929e884bd66c4ba2a5466b4e9a95ab381821c3f756a74b2ca7efa5237ff2
+anchor-sha256: src/plan/target/xr_target_plan.h e78f4e0216169aa2d1acbf9db0df80b338e6ecdb20c3a0b0dd7ef3dae8bf774b
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: src/vm/xr_typed_dispatch.c 1fa2d59ce6df94d4d983c2b0fb7e3af48ad30a2dcceb7526bd147f57f52c714f

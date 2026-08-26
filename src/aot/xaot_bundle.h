@@ -1563,10 +1563,9 @@ typedef struct XaotBundle {
     XiModule **modules;
     uint32_t nmodules;
     uint32_t entry_module;
-    /* One retained, independently verified target authority per Xi module.
-     * Migrated families must resolve through these plans and must not retain
-     * parallel Xaot-private rows. */
-    XrTargetPlan **target_plans;
+    /* One retained, independently verified target authority for the complete
+     * program. A one-module build is the single-module case of this owner. */
+    XrTargetPlan *program_target_plan;
     /* One owned immutable representation-refinement authority per module,
      * fingerprint-bound to its exact retained TargetPlan and target policy. */
     XrAotRefinementPlan **representation_refinements;
@@ -1769,12 +1768,19 @@ XR_FUNC const XrCEmissionPlan *xaot_bundle_emission_plan_for_func(const XaotBund
 XR_FUNC bool xaot_bundle_init(XaotBundle *bundle, XiModule **modules, uint32_t nmodules,
                               uint32_t entry_module);
 XR_FUNC void xaot_bundle_free(XaotBundle *bundle);
-XR_FUNC bool xaot_bundle_set_target_plan(XaotBundle *bundle, uint32_t module_index,
-                                         XrTargetPlan *target_plan);
-XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_module(const XaotBundle *bundle,
-                                                               uint32_t module_index);
-XR_FUNC const XrTargetPlan *xaot_bundle_target_plan_for_func(const XaotBundle *bundle,
-                                                             const XiFunc *func);
+XR_FUNC bool xaot_bundle_set_program_target_plan(XaotBundle *bundle,
+                                                  XrTargetPlan *target_plan);
+XR_FUNC const XrTargetPlan *xaot_bundle_program_target_plan(const XaotBundle *bundle);
+XR_FUNC bool xaot_bundle_program_partition_for_module(const XaotBundle *bundle,
+                                                       uint32_t module_index,
+                                                       uint32_t *partition_out);
+XR_FUNC const XrSemanticPlan *
+xaot_bundle_program_semantic_for_module(const XaotBundle *bundle,
+                                        uint32_t module_index);
+XR_FUNC const XrSemanticPlan *
+xaot_bundle_program_semantic_for_func(const XaotBundle *bundle,
+                                      const XiFunc *func,
+                                      uint32_t *partition_out);
 /* Ownership transfers to the bundle only when installation succeeds. */
 XR_FUNC bool xaot_bundle_install_representation_refinement(XaotBundle *bundle,
                                                            uint32_t module_index,
