@@ -1775,6 +1775,8 @@ XR_FUNC const XrTargetPlan *xaot_bundle_program_target_plan(const XaotBundle *bu
 XR_FUNC bool xaot_bundle_program_partition_for_module(const XaotBundle *bundle,
                                                        uint32_t module_index,
                                                        uint32_t *partition_out);
+XR_FUNC bool xaot_bundle_program_partition_for_xi_module(
+    const XaotBundle *bundle, const XiModule *module, uint32_t *partition_out);
 XR_FUNC const XrSemanticPlan *
 xaot_bundle_program_semantic_for_module(const XaotBundle *bundle,
                                         uint32_t module_index);

@@ -82,10 +82,22 @@ XRAY_API bool xr_runtime_target_plan_load(
     nested[0] = '\0';
     bool materialized =
         have_identity && xr_runtime_artifact_authority_bind_candidate(
-                             authority, &identity, nested, sizeof(nested)) &&
-        xr_xtp_materialize_target_plan(
-            candidate, authority->semantic_plan, authority->target_profile,
-            &plan, nested, sizeof(nested));
+                             authority, candidate, &identity, nested,
+                             sizeof(nested));
+    if (materialized) {
+        materialized = authority->semantic_modules
+                           ? xr_xtp_materialize_target_plan_program_graph(
+                                 candidate,
+                                 (const XrSemanticPlan *const *)
+                                     authority->semantic_modules,
+                                 authority->semantic_module_count,
+                                 authority->target_profile, &plan, nested,
+                                 sizeof(nested))
+                           : xr_xtp_materialize_target_plan(
+                                 candidate, authority->semantic_plan,
+                                 authority->target_profile, &plan, nested,
+                                 sizeof(nested));
+    }
     xr_xtp_candidate_release(candidate);
     if (!materialized) {
         char stage[96];

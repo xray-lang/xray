@@ -2,12 +2,12 @@
 
 This contract freezes the runtime-owned authority for loaded TargetPlan
 generations, the closed and exact SOURCE_EXPORT signed-`i64` typed executor,
-and the canonical runtime-only entry registry/cell/cache authority. It does not
+the bounded direct-`i64` program-graph executor, and the canonical runtime-only
+entry registry/cell/cache authority. It does not
 claim that INDIRECT_CALLABLE calls, escaping closures, a root scanner,
 hosted/FFI adapters, owned/object values, or suspension are installed. The
-sole-function scalar route remains a narrow public convenience, while verified
-dynamic functions execute only through the same typed request and pinned entry
-authority.
+sole-function scalar route and exact two-module program graph are narrow public
+capabilities; they do not authorize general product graphs or dynamic reload.
 
 1. A generation authority requires explicit, nonzero hard limits for loaded
    generations, total pins, per-generation pins, and every pin kind. The same
@@ -70,14 +70,18 @@ authority.
    cache allocation, exact graph/GCI binding, or any hard
    function/row/block/byte budget fails; a failed attempt leaves the generation
    VERIFIED and publishes nothing.
-6. A healthy ACTIVE eligible generation alone may execute its sole function.
+6. A healthy ACTIVE eligible generation alone may execute its ordinary sole
+   function or the unique entry of the admitted bounded program graph.
    Execution first acquires an `INFLIGHT_CALL` pin, binds the retained plan's
    exact generation identity fingerprint, requires the generation's exact
    decoded-cache plan/schema/fingerprint binding, and then uses only its
    verified instruction facts and typed frame through an explicitly selected
    generated function-table provider; there is no implicit default or fallback
    provider. Every success and failure path
-   releases the pin. DRAINING rejects new execution while permitting an
+   releases the pin. Program execution additionally obtains its entry only from
+   the verified graph record and rechecks the live manifest's complete
+   plan/program/module-set/GCI identity before dispatch; it has no public
+   function-index or name resolver. DRAINING rejects new execution while permitting an
    already-started call to release its pin, and retirement still requires all
    pins to reach zero. This route passes no arguments, so a sole function whose
    verified rows declare parameters fails closed with `XR_EXEC_5004` rather
@@ -115,13 +119,17 @@ authority.
    live publication, then rechecks the exact decoded cache while holding the
    authority gate; a wrong GCI or edited/foreign plan remains READY and is never
    published.
-8. The standalone public header and lifecycle/scalar-execution symbols, plus the
+8. The standalone public headers and lifecycle/scalar/program execution symbols, plus the
    internal production entry-cell implementation, are shipped by the Core
-   component and link from `xray_vm` without compiler builders, encoders,
-   analyzer objects, or Xi implementation symbols. Installed runtime code can
-   derive authority from exact XSM and materialize a matching XTP, so its archive
-   gate owns the XSM/XTP-to-sole-scalar success route. This remains a runtime
-   boundary only: it makes no source/CLI or product end-to-end claim.
+   component and link from `xray_vm` without compiler builders, encoders, mutable
+   analyzer graphs, or Xi implementation symbols. The archive includes the
+   immutable core-intrinsic registry that SemanticPlan verification owns.
+   Installed runtime code can derive ordinary or canonical program-module-set
+   authority from exact XSM images and materialize a matching XTP. Its archive
+   gate owns both the XSM/XTP-to-sole-scalar route and the exact two-XSM bounded
+   graph route, including reverse input order and joined concurrent execution.
+   This remains an installed artifact-runtime boundary: it makes no general
+   source/CLI, dynamic-reload, or `PRODUCT_ACTIVE` claim.
 9. The artifact runtime facade adds no independent execution, verification, or
    naming authority. A runtime owns exactly one generation authority and one
    explicit, versioned activation configuration. Zero budgets are rejected at
@@ -137,7 +145,12 @@ authority.
    denotes a generation that cannot run or an incomplete publication. `XrExport`
    contains a loan to one entry handle/cell and a loan to the owning
    activation; there is no parallel module/function handle or second execution
-   path.
+   path. The opaque `XrProgram` facade similarly accepts the complete XSM image
+   vector plus one XTP, canonicalizes only by verified program-module row, and
+   reuses that same generation, decoded cache, and live manifest. Its execute
+   call selects only `entry_target_function`. Multiple execute calls may run in
+   parallel, but this bounded lifecycle does not add a concurrent unload
+   protocol: callers must stop and join them before unload.
 10. Export names are a semantic-artifact fact. The TargetPlan carries dense
     numeric tables and no spelling, so lookup reads the verified source export
     table the plan retains and matches an exact name in it. It never resolves an
@@ -253,9 +266,9 @@ authority.
     deterministic ownership on every failure.
 
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
-anchor-sha256: src/runtime/xr_module_generation_internal.h f6695aeb3c557d542bc78bd0858c5f39b6ffb7f037b383a2d550c1ec6b5678e2
-anchor-sha256: src/runtime/xr_module_generation.c 5f8d48759b9d366e2686137489b0384fb2fa0495ec87254daba22f77404fff5f
-anchor-sha256: src/runtime/xr_module_generation_verify.c 0cf15a45c4af1498d8d1f26f8bd078042fd499c4d3258e0ef4fbe64b97556156
+anchor-sha256: src/runtime/xr_module_generation_internal.h 5b5c83be0e91b2c656d2ba76026a66b603c1182049f07edcbdaea46a56ed37fa
+anchor-sha256: src/runtime/xr_module_generation.c 9d70db67ddea2319c30099b5c2cfad2259677e3e3471f337cf8a0256595f2e30
+anchor-sha256: src/runtime/xr_module_generation_verify.c beb12bdddb26d6bc002cf43d23146e4f5e7976976901e8bf11aac98abd8011aa
 anchor-sha256: src/vm/xr_typed_dispatch.h acd1095b3a2d9e5607d007992b68b714d2e22fe394bfa8543611ea061ab40f43
 anchor-sha256: src/vm/xr_typed_dispatch.c 9b1a5cdcc51cc1445471cf38cb4ccbce33896929534d71bf2d233b3bf9b9ae22
 anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
@@ -267,10 +280,10 @@ anchor-sha256: contracts/target-machine/diagnostic-codes.toml f4cea43f422ccd0a5e
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c f4422072f94b01c4411b4677cb62ba72304553753c9225074d981b6b20f43fa3
 anchor-sha256: tests/unit/runtime/test_runtime_generation_archive.c 6824d75bad49bbd7dce591994ab2368ec58537cd1f82ebfa654445bda828b41b
 anchor-sha256: scripts/target_machine_retired_runtime_symbols.py 3db52d4670d4d76a640d91709f5a6fdd091511ac421ca6326c34ed3b8739d4f7
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 70d40dfa429c78f663381887bf4676c2b68c97334c55344554a6da587e886be8
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 536faa4afd6b0374ccc17e9446320a43eeea92f5c696fbd5f6dac644e95c7d53
 anchor-sha256: tests/install/run_install_public_surface_tests.py 1bbef0d66f5d0d78dbe41848497b678c02c88fc9663f296d9863571fe20eb38e
-anchor-sha256: include/xray_runtime_api.h ffbc546e7378e0f862b27ff87cc87dde54a32e6d661da35af39bb5bf1b6d5ff5
-anchor-sha256: src/runtime/xr_runtime_api.c 030513a825c56b493e9407767ef67bb34afdc0da5e405e2a648afc4ee4d4d3ac
+anchor-sha256: include/xray_runtime_api.h 07d75f03ee3baea4301bf30ac67c15b77d74feaec28322fb818c247970a1ce44
+anchor-sha256: src/runtime/xr_runtime_api.c 2297cb107d76409c13d0bb8019084722cb573bb79d5bce5b85613a32b45cf14a
 anchor-sha256: tests/unit/runtime/test_runtime_api_archive.c b7ef1d75a66f12b0b408dcd73a672e3e7df8af4a140ce612612996b60a778b9a
 anchor-sha256: src/runtime/xr_entry_cell.h 9e5012d17116a09ba81fccce7c74c380f4f74726026001f88010406589a19b7d
 anchor-sha256: src/runtime/xr_entry_cell.c c2bc18e2eb0c40767bff70b0137387a81d55bbe0b767673befcdc5acce4386a0

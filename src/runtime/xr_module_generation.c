@@ -48,6 +48,46 @@ static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
     return combined == 0;
 }
 
+static bool generation_identity_exact(
+    const XrModuleGenerationIdentity *left,
+    const XrModuleGenerationIdentity *right) {
+    return left && right &&
+           left->schema_version == right->schema_version &&
+           left->target_plan_schema_version ==
+               right->target_plan_schema_version &&
+           left->generation_number == right->generation_number &&
+           left->completed_family_mask == right->completed_family_mask &&
+           left->required_capability_mask == right->required_capability_mask &&
+           memcmp(left->semantic_fingerprint, right->semantic_fingerprint,
+                  sizeof(left->semantic_fingerprint)) == 0 &&
+           memcmp(left->program_fingerprint, right->program_fingerprint,
+                  sizeof(left->program_fingerprint)) == 0 &&
+           memcmp(left->program_module_set_fingerprint,
+                  right->program_module_set_fingerprint,
+                  sizeof(left->program_module_set_fingerprint)) == 0 &&
+           memcmp(left->generation_closure_id,
+                  right->generation_closure_id,
+                  sizeof(left->generation_closure_id)) == 0 &&
+           memcmp(left->target_profile_fingerprint,
+                  right->target_profile_fingerprint,
+                  sizeof(left->target_profile_fingerprint)) == 0 &&
+           memcmp(left->target_plan_fingerprint,
+                  right->target_plan_fingerprint,
+                  sizeof(left->target_plan_fingerprint)) == 0 &&
+           memcmp(left->runtime_abi_fingerprint,
+                  right->runtime_abi_fingerprint,
+                  sizeof(left->runtime_abi_fingerprint)) == 0 &&
+           memcmp(left->provider_set_fingerprint,
+                  right->provider_set_fingerprint,
+                  sizeof(left->provider_set_fingerprint)) == 0 &&
+           memcmp(left->object_header_fingerprint,
+                  right->object_header_fingerprint,
+                  sizeof(left->object_header_fingerprint)) == 0 &&
+           memcmp(left->generation_fingerprint,
+                  right->generation_fingerprint,
+                  sizeof(left->generation_fingerprint)) == 0;
+}
+
 static bool active_manifest_list_valid_locked(
     const XrRuntimeGenerationAuthority *authority) {
     uint32_t count = 0;
@@ -60,8 +100,8 @@ static bool active_manifest_list_valid_locked(
             current->state != XR_MODULE_GENERATION_ACTIVE ||
             !current->active_manifest_published ||
             current->active_program_target_plan != current->plan ||
-            memcmp(&current->active_identity, &current->identity,
-                   sizeof(current->identity)) != 0)
+            !generation_identity_exact(&current->active_identity,
+                                       &current->identity))
             return false;
     }
     return authority && count == authority->active_generation_count &&
@@ -104,8 +144,8 @@ static bool active_manifest_remove_locked(
     if (!active_manifest_list_valid_locked(authority) ||
         !generation->active_manifest_published ||
         generation->active_program_target_plan != generation->plan ||
-        memcmp(&generation->active_identity, &generation->identity,
-               sizeof(generation->identity)) != 0)
+        !generation_identity_exact(&generation->active_identity,
+                                   &generation->identity))
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
                     "live generation manifest is not exact");
     XrLoadedModuleGeneration **link = &authority->active_generations;
@@ -236,10 +276,17 @@ static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_numb
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "TargetPlan does not bind the canonical native runtime identity");
     uint64_t expected_capability_mask = 0;
-    if (!xr_target_semantic_capability_mask(
-            xr_target_plan_semantic_plan(plan),
-            facts->machine.runtime_profile,
-            &expected_capability_mask) ||
+    const XrSemanticPlan *ordinary_module[1] = {
+        xr_target_plan_semantic_plan(plan)};
+    const XrSemanticPlan *const *semantic_modules =
+        plan->semantic_module_count
+            ? (const XrSemanticPlan *const *) plan->semantic_modules
+            : ordinary_module;
+    uint32_t semantic_module_count =
+        plan->semantic_module_count ? plan->semantic_module_count : 1u;
+    if (!xr_target_semantic_capability_requirements(
+            semantic_modules, semantic_module_count, profile,
+            &expected_capability_mask, nested, sizeof(nested)) ||
         capability_mask != expected_capability_mask ||
         !xr_target_capability_mask_is_backed(capability_mask,
                                              provider_mask) ||
@@ -273,7 +320,7 @@ static bool populate_identity(const XrTargetPlan *plan, uint64_t generation_numb
             graphs[0].module_count != partition_count ||
             !xr_target_plan_program_module_set_fingerprint(plan, &module_set_fingerprint))
             return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
-                        "program generation identity is not a canonical two-module set");
+                        "program generation identity is not the exact admitted two-module capability");
         memcpy(identity->program_fingerprint, graphs[0].program_fingerprint.bytes,
                XR_RUNTIME_GENERATION_FINGERPRINT_SIZE);
         memcpy(identity->program_module_set_fingerprint, module_set_fingerprint.bytes,
@@ -843,6 +890,97 @@ XRAY_API bool xr_module_generation_execute_sole_scalar_i64(
             generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
             diagnostic, diagnostic_size))
         return false;
+    if (cache_status != XR_VM_DECODED_CACHE_OK)
+        return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return fail_typed_dispatch(status, diagnostic, diagnostic_size);
+    *result = executed_result;
+    return true;
+}
+
+XR_FUNCDEF bool xr_module_generation_execute_program_direct_i64(
+    XrLoadedModuleGeneration *generation, int64_t *result,
+    char *diagnostic, size_t diagnostic_size) {
+    if (result)
+        *result = 0;
+    if (!generation || !result)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "program execution requires a generation and result");
+    if (!xr_module_generation_pin_acquire(
+            generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
+            diagnostic, diagnostic_size))
+        return false;
+
+    XrRuntimeGenerationLiveManifest manifest = {0};
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(generation->plan, &graph_count);
+    (void) xr_target_plan_module_partitions(generation->plan,
+                                            &partition_count);
+    XrFingerprint module_set = {{0}};
+    bool exact =
+        xr_runtime_generation_live_manifest_snapshot(generation, &manifest) &&
+        manifest.program_target_plan == generation->plan &&
+        manifest.active_generation_count != 0u &&
+        generation_identity_exact(&manifest.identity,
+                                  &generation->identity) &&
+        xr_module_generation_verify(generation, diagnostic,
+                                    diagnostic_size) &&
+        graphs && graph_count == 1u && partition_count == 2u &&
+        graphs[0].module_count == partition_count &&
+        graphs[0].function_count == 2u && graphs[0].call_count == 1u &&
+        graphs[0].argument_count == 1u &&
+        graphs[0].flags ==
+            (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN |
+             XR_TARGET_PROGRAM_GRAPH_DIRECT_I64) &&
+        xr_target_plan_program_module_set_fingerprint(generation->plan,
+                                                      &module_set) &&
+        memcmp(manifest.identity.semantic_fingerprint, module_set.bytes,
+               sizeof(module_set.bytes)) == 0 &&
+        memcmp(manifest.identity.program_module_set_fingerprint,
+               module_set.bytes, sizeof(module_set.bytes)) == 0 &&
+        memcmp(manifest.identity.program_fingerprint,
+               graphs[0].program_fingerprint.bytes,
+               sizeof(manifest.identity.program_fingerprint)) == 0 &&
+        memcmp(manifest.identity.generation_closure_id,
+               graphs[0].generation_identity.bytes,
+               sizeof(manifest.identity.generation_closure_id)) == 0 &&
+        memcmp(manifest.identity.target_plan_fingerprint,
+               xr_target_plan_fingerprint(generation->plan).bytes,
+               sizeof(manifest.identity.target_plan_fingerprint)) == 0;
+    XrVmDecodedCacheStatus cache_status =
+        exact ? generation_cache_require_exact(generation)
+              : XR_VM_DECODED_CACHE_PLAN_IDENTITY_MISMATCH;
+    XrFingerprint required_fingerprint =
+        generation_plan_fingerprint(generation);
+    int64_t executed_result = 0;
+    XrTypedDispatchI64Request request = {
+        .verified_plan = manifest.program_target_plan,
+        .required_plan_fingerprint = &required_fingerprint,
+        .result = &executed_result,
+        .decoded_cache = generation->decoded_cache,
+        .dynamic_entries = NULL,
+        .generation_identity = &manifest.identity,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+        .function = exact ? graphs[0].entry_target_function : 0u,
+        .argument_count = 0u,
+        .use_dynamic_entry_cache = false,
+    };
+    XrTypedDispatchStatus status =
+        cache_status == XR_VM_DECODED_CACHE_OK
+            ? xr_typed_dispatch_execute_i64(&request)
+            : XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH;
+    char release_diagnostic[256] = {0};
+    bool released = xr_module_generation_pin_release(
+        generation, XR_MODULE_GENERATION_INFLIGHT_CALL,
+        release_diagnostic, sizeof(release_diagnostic));
+    if (!released)
+        return fail(diagnostic, diagnostic_size, "XR_OWN_3003",
+                    "program execution pin release failed");
+    if (!exact)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5008",
+                    "program live manifest no longer matches its verified authority");
     if (cache_status != XR_VM_DECODED_CACHE_OK)
         return fail_decoded_cache(cache_status, diagnostic, diagnostic_size);
     if (status != XR_TYPED_DISPATCH_OK)

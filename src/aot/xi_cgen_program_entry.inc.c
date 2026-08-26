@@ -918,10 +918,33 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     if (entry_has_descriptor)
         fprintf(out, "    if (!xr_aot_root_descriptor_begin(rt)) { xr_aot_runtime_delete(rt); "
                      "xrt_arc_shutdown(); return 1; }\n");
-    for (int m = 0; m < n; m++) {
-        if (!modules[m] || !modules[m]->init)
-            continue;
-        if (m == entry_index && entry_is_coro) {
+    if (ctx->program_direct_i64_required) {
+        if (!ctx->program_direct_i64_bound ||
+            ctx->program_direct_i64.initializer_count != (uint32_t) n ||
+            !ctx->program_direct_i64.initializers) {
+            ctx->error = true;
+            fprintf(out, "    return 1;\n");
+        } else {
+            for (uint32_t partition = 0;
+                 partition < ctx->program_direct_i64.initializer_count;
+                 partition++) {
+                const XrCProgramXiFunctionBinding *initializer =
+                    &ctx->program_direct_i64.initializers[partition];
+                if (!initializer->xi_function || !initializer->c_symbol[0]) {
+                    ctx->error = true;
+                    fprintf(out, "    return 1;\n");
+                    break;
+                }
+                fprintf(out, "    %s(NULL);\n", initializer->c_symbol);
+                cg_emit_main_pending_error_return(
+                    out, entry_needs_runtime, cg_can_report_uncaught_error(ctx));
+            }
+        }
+    } else {
+        for (int m = 0; m < n; m++) {
+            if (!modules[m] || !modules[m]->init)
+                continue;
+            if (m == entry_index && entry_is_coro) {
             fprintf(out, "    void *_entry_frame = ");
             emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_frame_new");
@@ -932,8 +955,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             fprintf(out, ", _entry_frame);\n");
             cg_emit_main_pending_error_return(out, entry_needs_runtime,
                                               cg_can_report_uncaught_error(ctx));
-        } else {
-            if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
+            } else {
+                if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
                 fprintf(stderr,
                         "[xi_cgen] ERROR: suspendable AOT dependency module init '%s' must "
                         "be the entry module\n",
@@ -941,12 +964,16 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
                 ctx->error = true;
                 fprintf(out, "    return 1;\n");
                 continue;
+                }
+                fprintf(out, "    ");
+                emit_fname(ctx, out,
+                           modules[m]->name ? modules[m]->name : "mod",
+                           modules[m]->init);
+                fprintf(out, "(NULL);\n");
+                cg_emit_main_pending_error_return(
+                    out, entry_needs_runtime,
+                    cg_can_report_uncaught_error(ctx));
             }
-            fprintf(out, "    ");
-            emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
-            fprintf(out, "(NULL);\n");
-            cg_emit_main_pending_error_return(out, entry_needs_runtime,
-                                              cg_can_report_uncaught_error(ctx));
         }
     }
     if (entry_has_descriptor)
@@ -1217,14 +1244,16 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
     if (!ctx || !out || !ctx->program_direct_i64_required)
         return true;
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XiModule *module =
+        ctx->all_modules && mod_index >= 0 && mod_index < ctx->all_nmodules
+            ? ctx->all_modules[mod_index]
+            : NULL;
     uint32_t partition = UINT32_MAX;
-    if (!ctx->program_direct_i64_bound || !bundle || mod_index < 0 ||
-        (uint32_t) mod_index >= bundle->nmodules ||
-        !xaot_bundle_program_partition_for_module(bundle, (uint32_t) mod_index,
-                                                   &partition) ||
+    if (!ctx->program_direct_i64_bound || !bundle || !module ||
+        !xaot_bundle_program_partition_for_xi_module(bundle, module,
+                                                      &partition) ||
         partition >= ctx->program_direct_i64.initializer_count ||
-        !ctx->program_direct_i64.initializers || !bundle->modules ||
-        !bundle->modules[mod_index] || !bundle->modules[mod_index]->init) {
+        !ctx->program_direct_i64.initializers || !module->init) {
         if (ctx)
             ctx->error = true;
         return false;
@@ -1235,7 +1264,7 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
     const XrCProgramXiFunctionBinding *caller = &ctx->program_direct_i64.caller;
     const XrCProgramXiFunctionBinding *callee = &ctx->program_direct_i64.callee;
     if (initializer->target_partition != partition ||
-        initializer->xi_function != bundle->modules[mod_index]->init) {
+        initializer->xi_function != module->init) {
         ctx->error = true;
         return false;
     }

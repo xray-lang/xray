@@ -731,6 +731,8 @@ XR_FUNC const XrSemanticConstantRecord *xr_semantic_plan_constant(const XrSemant
                                                                   uint32_t index);
 XR_FUNC const XrSemanticEntityRecord *xr_semantic_plan_entity(const XrSemanticPlan *plan,
                                                               uint32_t index);
+XR_FUNC const XrSemanticEntityRecord *
+xr_semantic_plan_unique_module_entity(const XrSemanticPlan *plan);
 XR_FUNC bool xr_semantic_plan_dump_entity(const XrSemanticPlan *plan, XrStableId id, FILE *out);
 XR_FUNC const uint32_t *xr_semantic_plan_type_children(const XrSemanticPlan *plan, uint32_t *count);
 XR_FUNC const uint32_t *xr_semantic_plan_predecessors(const XrSemanticPlan *plan, uint32_t *count);

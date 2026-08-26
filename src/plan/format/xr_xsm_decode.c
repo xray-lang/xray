@@ -64,8 +64,8 @@ static char *take_string(XrXsmReader *reader, uint32_t max_length) {
         reader->offset > reader->size || length > reader->size - reader->offset ||
         reader->string_bytes > XR_XSM_MAX_STRING_STORAGE ||
         allocation > XR_XSM_MAX_STRING_STORAGE - reader->string_bytes ||
-        reader->allocation_bytes > XR_XSM_MAX_DECODE_STORAGE ||
-        allocation > XR_XSM_MAX_DECODE_STORAGE - reader->allocation_bytes) {
+        reader->allocation_bytes > reader->allocation_limit ||
+        allocation > reader->allocation_limit - reader->allocation_bytes) {
         reader->failed = true;
         return NULL;
     }
@@ -94,8 +94,8 @@ static char *take_owned_string(XrXsmReader *reader, uint32_t max_length) {
         return NULL;
     size_t length = strlen(text) + 1u;
     size_t overhead = 2u * sizeof(void *);
-    if (length > SIZE_MAX - overhead || reader->allocation_bytes > XR_XSM_MAX_DECODE_STORAGE ||
-        length + overhead > XR_XSM_MAX_DECODE_STORAGE - reader->allocation_bytes) {
+    if (length > SIZE_MAX - overhead || reader->allocation_bytes > reader->allocation_limit ||
+        length + overhead > reader->allocation_limit - reader->allocation_bytes) {
         xr_free(text);
         reader->failed = true;
         return NULL;
@@ -142,8 +142,8 @@ static const char *take_plan_string(XrXsmReader *reader, XrSemanticPlan *plan, b
         return NULL;
     }
     peak_extra += persistent_string_storage + pool_growth_storage;
-    if (reader->allocation_bytes > XR_XSM_MAX_DECODE_STORAGE ||
-        peak_extra > XR_XSM_MAX_DECODE_STORAGE - reader->allocation_bytes) {
+    if (reader->allocation_bytes > reader->allocation_limit ||
+        peak_extra > reader->allocation_limit - reader->allocation_bytes) {
         xr_free(temporary);
         reader->failed = true;
         return NULL;
@@ -856,12 +856,18 @@ static void decode_ownership(XrXsmReader *reader, XrOwnershipCertificate *certif
     }
 }
 
-static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *const *dependencies,
-                       uint32_t dependency_count, bool module_set, XrSemanticPlan **out,
+static bool decode_xsm(const uint8_t *bytes, size_t size,
+                       const XrSemanticPlan *const *dependencies,
+                       uint32_t dependency_count, bool module_set,
+                       bool detached_program_module, size_t allocation_limit,
+                       size_t *retained_storage, XrSemanticPlan **out,
                        char *error, size_t error_size) {
     if (out)
         *out = NULL;
-    if (!bytes || !out || size < XR_XSM_HEADER_SIZE)
+    if (retained_storage)
+        *retained_storage = 0;
+    if (!bytes || !out || size < XR_XSM_HEADER_SIZE ||
+        allocation_limit == 0 || allocation_limit > XR_XSM_MAX_DECODE_STORAGE)
         return report(error, error_size, "XR_ARTIFACT_2001", "XSM header is truncated");
     if (size > XR_XSM_MAX_ARTIFACT_SIZE)
         return report(error, error_size, "XR_EXEC_5003", "XSM artifact exceeds its hard budget");
@@ -899,6 +905,22 @@ static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *
     if (memcmp(digest, actual_digest, sizeof(digest)) != 0)
         return report(error, error_size, "XR_ARTIFACT_2002", "XSM payload digest is invalid");
 
+    XrXsmReader reader = {
+        .data = bytes + XR_XSM_HEADER_SIZE,
+        .size = (size_t) payload_size,
+        .allocation_limit = allocation_limit,
+    };
+    XrXsmCounts count = {0};
+    size_t table_storage = 0;
+    if (!take_counts(&reader, &count) ||
+        !counts_fit_payload_minimum(count, reader.size - reader.offset) ||
+        !counts_fit_storage_budget(count, &table_storage))
+        return report(error, error_size, "XR_EXEC_5003", "XSM table budget is invalid");
+    if (sizeof(XrSemanticPlan) + sizeof(XrOwnershipCertificate) > allocation_limit ||
+        table_storage > allocation_limit - sizeof(XrSemanticPlan) -
+                            sizeof(XrOwnershipCertificate)) {
+        return report(error, error_size, "XR_EXEC_5003", "XSM decoder storage is invalid");
+    }
     XrSemanticPlan *plan = xr_semantic_plan_create();
     XrOwnershipCertificate *certificate =
         (XrOwnershipCertificate *) xr_calloc(1, sizeof(*certificate));
@@ -908,23 +930,12 @@ static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *
         return report(error, error_size, "XR_EXEC_5003", "XSM decoder allocation failed");
     }
     certificate->schema = schema;
-    XrXsmReader reader = {
-        .data = bytes + XR_XSM_HEADER_SIZE,
-        .size = (size_t) payload_size,
-    };
-    XrXsmCounts count;
-    size_t table_storage = 0;
-    if (!take_counts(&reader, &count) ||
-        !counts_fit_payload_minimum(count, reader.size - reader.offset) ||
-        !allocate_tables(plan, certificate, count, &table_storage)) {
+    size_t allocated_tables = 0;
+    if (!allocate_tables(plan, certificate, count, &allocated_tables) ||
+        allocated_tables != table_storage) {
         xr_semantic_plan_free(plan);
         xr_ownership_certificate_free(certificate);
-        return report(error, error_size, "XR_EXEC_5003", "XSM table budget is invalid");
-    }
-    if (table_storage > XR_XSM_MAX_DECODE_STORAGE - sizeof(*plan) - sizeof(*certificate)) {
-        xr_semantic_plan_free(plan);
-        xr_ownership_certificate_free(certificate);
-        return report(error, error_size, "XR_EXEC_5003", "XSM decoder storage is invalid");
+        return report(error, error_size, "XR_EXEC_5003", "XSM table allocation failed");
     }
     reader.allocation_bytes = table_storage + sizeof(*plan) + sizeof(*certificate);
     decode_program_provenance(&reader, plan);
@@ -954,6 +965,14 @@ static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *
         xr_semantic_plan_free(plan);
         return false;
     }
+    if (detached_program_module) {
+        plan->verified = true;
+        plan->module_set_verified = false;
+        if (retained_storage)
+            *retained_storage = reader.allocation_bytes;
+        *out = plan;
+        return true;
+    }
     if (plan->dependency_count != 0 && !module_set) {
         if (!module_set)
             report(error, error_size, "XR_ARTIFACT_2004",
@@ -973,17 +992,192 @@ static bool decode_xsm(const uint8_t *bytes, size_t size, const XrSemanticPlan *
     }
     plan->verified = true;
     plan->module_set_verified = plan->dependency_count != 0;
+    if (retained_storage)
+        *retained_storage = reader.allocation_bytes;
     *out = plan;
     return true;
 }
 
 bool xr_xsm_decode(const uint8_t *bytes, size_t size, XrSemanticPlan **out, char *error,
                    size_t error_size) {
-    return decode_xsm(bytes, size, NULL, 0, false, out, error, error_size);
+    return decode_xsm(bytes, size, NULL, 0, false, false,
+                      XR_XSM_MAX_DECODE_STORAGE, NULL, out, error,
+                      error_size);
 }
 
 bool xr_xsm_decode_module_set(const uint8_t *bytes, size_t size,
                               const XrSemanticPlan *const *dependencies, uint32_t dependency_count,
                               XrSemanticPlan **out, char *error, size_t error_size) {
-    return decode_xsm(bytes, size, dependencies, dependency_count, true, out, error, error_size);
+    return decode_xsm(bytes, size, dependencies, dependency_count, true,
+                      false, XR_XSM_MAX_DECODE_STORAGE, NULL, out, error,
+                      error_size);
+}
+
+void xr_xsm_decoded_program_module_set_free(XrSemanticPlan **semantic_modules,
+                                            uint32_t semantic_module_count) {
+    if (!semantic_modules)
+        return;
+    for (uint32_t i = 0; i < semantic_module_count; i++)
+        xr_semantic_plan_free(semantic_modules[i]);
+    xr_free(semantic_modules);
+}
+
+static const XrSemanticPlan *program_dependency_for_record(
+    XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count,
+    const XrSemanticDependencyRecord *dependency) {
+    const XrSemanticPlan *match = NULL;
+    for (uint32_t i = 0; dependency && i < semantic_module_count; i++) {
+        const XrSemanticPlan *candidate = semantic_modules[i];
+        const XrSemanticEntityRecord *module =
+            xr_semantic_plan_unique_module_entity(candidate);
+        if (!module || !xr_stable_id_equal(module->id, dependency->module) ||
+            !xr_fingerprint_equal(xr_semantic_plan_fingerprint(candidate),
+                                  dependency->semantic_fingerprint))
+            continue;
+        if (match)
+            return NULL;
+        match = candidate;
+    }
+    return match;
+}
+
+bool xr_xsm_decode_program_module_set(
+    const uint8_t *const *artifact_bytes, const size_t *artifact_sizes,
+    uint32_t artifact_count, XrSemanticPlan ***semantic_modules,
+    char *error, size_t error_size) {
+    /* The on-disk XSM provenance is count-generic.  This loader capability is
+     * deliberately narrower: the first admitted PRODUCT_DIRECT_I64 graph has
+     * exactly one entry fragment and one producer fragment. */
+    enum { XR_XSM_BOUNDED_PROGRAM_MODULE_COUNT = 2u };
+    if (semantic_modules)
+        *semantic_modules = NULL;
+    if (!semantic_modules || !artifact_bytes || !artifact_sizes ||
+        artifact_count != XR_XSM_BOUNDED_PROGRAM_MODULE_COUNT)
+        return report(error, error_size, "XR_ARTIFACT_2004",
+                      "program XSM module-set input is outside the bounded two-module capability");
+
+    size_t encoded_storage = 0;
+    for (uint32_t i = 0; i < artifact_count; i++) {
+        if (!artifact_bytes[i] || !artifact_sizes[i] ||
+            artifact_sizes[i] > XR_XSM_MAX_ARTIFACT_SIZE ||
+            encoded_storage >
+                XR_XSM_MAX_PROGRAM_MODULE_SET_ENCODED_STORAGE ||
+            artifact_sizes[i] >
+                XR_XSM_MAX_PROGRAM_MODULE_SET_ENCODED_STORAGE -
+                    encoded_storage)
+            return report(error, error_size, "XR_EXEC_5003",
+                          "program XSM module-set encoded storage exceeds its hard budget");
+        encoded_storage += artifact_sizes[i];
+    }
+    size_t vector_storage = (size_t) artifact_count *
+                            2u * sizeof(XrSemanticPlan *);
+    if (vector_storage > XR_XSM_MAX_PROGRAM_MODULE_SET_RETAINED_STORAGE)
+        return report(error, error_size, "XR_EXEC_5003",
+                      "program XSM module-set retained storage exceeds its hard budget");
+    size_t retained_storage_total = vector_storage;
+
+    XrSemanticPlan **decoded =
+        (XrSemanticPlan **) xr_calloc(artifact_count, sizeof(*decoded));
+    XrSemanticPlan **canonical =
+        (XrSemanticPlan **) xr_calloc(artifact_count, sizeof(*canonical));
+    if (!decoded || !canonical) {
+        xr_free(decoded);
+        xr_free(canonical);
+        return report(error, error_size, "XR_EXEC_5003",
+                      "program XSM module-set allocation failed");
+    }
+
+    bool valid = true;
+    XrFingerprint program_fingerprint = {{0}};
+    XrStableId generation_identity = {{0}};
+    uint32_t program_family = 0;
+    for (uint32_t i = 0; valid && i < artifact_count; i++) {
+        size_t retained_storage = 0;
+        size_t remaining_storage =
+            XR_XSM_MAX_PROGRAM_MODULE_SET_RETAINED_STORAGE -
+            retained_storage_total;
+        valid = artifact_bytes[i] && artifact_sizes[i] &&
+                decode_xsm(artifact_bytes[i], artifact_sizes[i], NULL, 0,
+                           false, true, remaining_storage,
+                           &retained_storage, &decoded[i], error, error_size);
+        if (valid)
+            retained_storage_total += retained_storage;
+        const XrSemanticProgramProvenance *provenance =
+            valid ? xr_semantic_plan_program_provenance(decoded[i]) : NULL;
+        if (!provenance || provenance->module_count != artifact_count ||
+            provenance->program_module_row >= artifact_count ||
+            canonical[provenance->program_module_row]) {
+            valid = false;
+            break;
+        }
+        if (i == 0) {
+            program_fingerprint = provenance->program_fingerprint;
+            generation_identity = provenance->generation_identity;
+            program_family = provenance->program_family;
+        } else if (provenance->program_family != program_family ||
+                   !xr_fingerprint_equal(provenance->program_fingerprint,
+                                         program_fingerprint) ||
+                   !xr_stable_id_equal(provenance->generation_identity,
+                                       generation_identity)) {
+            valid = false;
+            break;
+        }
+        canonical[provenance->program_module_row] = decoded[i];
+    }
+
+    for (uint32_t row = 0; valid && row < artifact_count; row++) {
+        XrSemanticPlan *plan = canonical[row];
+        if (!plan) {
+            valid = false;
+            break;
+        }
+        uint32_t dependency_count = plan->dependency_count;
+        if (dependency_count != 0 &&
+            sizeof(XrSemanticPlan *) > SIZE_MAX / dependency_count) {
+            valid = false;
+            break;
+        }
+        size_t dependency_storage =
+            (size_t) dependency_count * sizeof(XrSemanticPlan *);
+        if (dependency_storage >
+            XR_XSM_MAX_PROGRAM_MODULE_SET_RETAINED_STORAGE -
+                retained_storage_total) {
+            valid = false;
+            break;
+        }
+        const XrSemanticPlan **dependencies =
+            dependency_count
+                ? (const XrSemanticPlan **) xr_calloc(
+                      dependency_count, sizeof(*dependencies))
+                : NULL;
+        if (dependency_count && !dependencies) {
+            valid = false;
+            break;
+        }
+        for (uint32_t i = 0; valid && i < dependency_count; i++) {
+            dependencies[i] = program_dependency_for_record(
+                canonical, artifact_count, &plan->dependencies[i]);
+            valid = dependencies[i] != NULL && dependencies[i] != plan;
+        }
+        if (valid)
+            valid = xr_semantic_plan_verify_module_set(
+                plan, dependencies, dependency_count, error, error_size);
+        if (valid)
+            plan->module_set_verified = dependency_count != 0;
+        xr_free(dependencies);
+    }
+
+    if (!valid) {
+        if (!error || !error_size || !error[0])
+            report(error, error_size, "XR_ARTIFACT_2004",
+                   "program XSM module set is not canonical and exact");
+        for (uint32_t i = 0; i < artifact_count; i++)
+            xr_semantic_plan_free(decoded[i]);
+        xr_free(decoded);
+        xr_free(canonical);
+        return false;
+    }
+    xr_free(decoded);
+    *semantic_modules = canonical;
+    return true;
 }

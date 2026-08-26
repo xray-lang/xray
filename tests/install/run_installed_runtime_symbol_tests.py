@@ -31,6 +31,7 @@ REQUIRED = {
     "xr_artifact_probe",
     "xr_runtime_artifact_authority_load_available",
     "xr_runtime_artifact_authority_load_xsm",
+    "xr_runtime_artifact_authority_load_xsm_module_set",
     "xr_runtime_artifact_authority_free",
     "xr_runtime_artifact_authority_identity",
     "xr_runtime_artifact_authority_verify",
@@ -55,6 +56,9 @@ REQUIRED = {
     "xr_runtime_create",
     "xr_runtime_destroy",
     "xr_module_load_target_plan",
+    "xr_program_load_target_plan",
+    "xr_program_execute_direct_i64",
+    "xr_program_unload",
     "xr_module_find_export",
     "xr_export_call",
     "xr_module_unload",
@@ -110,6 +114,7 @@ APPROVED_RUNTIME_SOURCE_DIRECTORIES = (
     "src/runtime/abi",
 )
 APPROVED_RUNTIME_SOURCES = frozenset({
+    "src/shared/xr_core_intrinsic_registry.c",
     "src/shared/xr_http_url.c",
     "src/shared/xr_unicode_grapheme.c",
     "src/shared/xr_unicode_grapheme_data.c",
@@ -152,6 +157,7 @@ APPROVED_RUNTIME_SOURCES = frozenset({
     "src/vm/debug/xr_vm_trace.c",
 })
 REQUIRED_RUNTIME_SOURCE_BASENAMES = frozenset({
+    "xr_core_intrinsic_registry.c",
     "xr_dynamic_entry_runtime.c",
     "xr_module_generation.c",
     "xr_runtime_api.c",
@@ -391,6 +397,8 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
         "static int64_t scalar_result;\n"
         "static XrRuntime *runtime;\n"
         "static XrModule *module;\n"
+        "static XrProgram *program;\n"
+        "static XrRuntimeArtifactImage program_images[2];\n"
         "static const XrExport *module_export;\n"
         "static XrExportValue call_result;\n"
         "int main(void) { return !xr_runtime_artifact_authority_load_available() || "
@@ -398,9 +406,12 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
         "!xr_runtime_generation_activation_available() || "
         "authority != 0 || plan != 0 || generation_authority != 0 || generation != 0 || "
         "scalar_result != 0 || identity.schema_version != 0 || "
-        "runtime != 0 || module != 0 || module_export != 0 || call_result.kind != 0 || "
+        "runtime != 0 || module != 0 || program != 0 || module_export != 0 || call_result.kind != 0 || "
         "xr_runtime_create(0, &runtime, 0, 0) || "
         "xr_module_load_target_plan(runtime, 0, 0, 0, 0, &module, 0, 0) || "
+        "xr_program_load_target_plan(runtime, program_images, 2, 0, 0, &program, 0, 0) || "
+        "xr_program_execute_direct_i64(program, &scalar_result, 0, 0) || "
+        "xr_program_unload(&program, 0, 0) || "
         "xr_module_find_export(module, \"absent\", &module_export, 0, 0) || "
         "xr_export_call(module_export, 0, 0, &call_result, 0, 0) || "
         "xr_module_unload(&module, 0, 0) || xr_runtime_destroy(&runtime, 0, 0) || "
@@ -424,6 +435,239 @@ def compile_header(cc: Path, prefix: Path, work: Path) -> None:
         raise AssertionError(f"installed header is not standalone:\n{result.stdout}")
 
 
+def compile_and_run_program_route(
+    cc: Path, prefix: Path, archive: Path, fixture_writer: Path, work: Path
+) -> None:
+    work.mkdir(parents=True, exist_ok=True)
+    first_xsm = work / "program-0.xsm"
+    second_xsm = work / "program-1.xsm"
+    xtp = work / "program.xtp"
+    produced = run([
+        str(fixture_writer), "--write-program-runtime-artifacts",
+        str(first_xsm), str(second_xsm), str(xtp),
+    ])
+    if produced.returncode != 0 or not all(
+        path.is_file() for path in (first_xsm, second_xsm, xtp)
+    ):
+        raise AssertionError(
+            f"program artifact fixture generation failed:\n{produced.stdout}"
+        )
+
+    source = work / "installed_program_route.c"
+    source.write_text(
+        r'''#include <xray_runtime_api.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
+
+typedef struct Bytes { uint8_t *data; size_t size; } Bytes;
+typedef struct Execution {
+    const XrProgram *program;
+    int64_t result;
+    bool ok;
+    char diagnostic[256];
+} Execution;
+
+static bool read_bytes(const char *path, Bytes *bytes) {
+    FILE *file = fopen(path, "rb");
+    if (!file) return false;
+    if (fseek(file, 0, SEEK_END) != 0) { fclose(file); return false; }
+    long length = ftell(file);
+    if (length <= 0 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file); return false;
+    }
+    bytes->data = (uint8_t *) malloc((size_t) length);
+    bytes->size = bytes->data ? (size_t) length : 0u;
+    bool read_ok = bytes->data &&
+                   fread(bytes->data, 1, bytes->size, file) == bytes->size;
+    bool close_ok = fclose(file) == 0;
+    bool ok = read_ok && close_ok;
+    if (!ok) { free(bytes->data); bytes->data = NULL; bytes->size = 0u; }
+    return ok;
+}
+
+static void *provider_allocate(void *context, size_t size, size_t alignment) {
+    (void) context; (void) alignment; return malloc(size);
+}
+static void provider_deallocate(void *context, void *allocation, size_t size,
+                                size_t alignment) {
+    (void) context; (void) size; (void) alignment; free(allocation);
+}
+static void provider_panic(void *context, const char *message, size_t size) {
+    (void) context; (void) message; (void) size; abort();
+}
+
+static void execute(Execution *execution) {
+    execution->ok = xr_program_execute_direct_i64(
+        execution->program, &execution->result, execution->diagnostic,
+        sizeof(execution->diagnostic));
+}
+#ifdef _WIN32
+static DWORD WINAPI execute_worker(LPVOID opaque) {
+    execute((Execution *) opaque); return 0;
+}
+#else
+static void *execute_worker(void *opaque) {
+    execute((Execution *) opaque); return NULL;
+}
+#endif
+
+static bool run_program(XrRuntime *runtime,
+                        const XrRuntimeArtifactImage images[2],
+                        const Bytes *target, bool parallel) {
+    char diagnostic[512] = {0};
+    XrProgram *program = NULL;
+    if (!xr_program_load_target_plan(runtime, images, 2u, target->data,
+                                     target->size, &program, diagnostic,
+                                     sizeof(diagnostic))) {
+        fprintf(stderr, "installed program load failed: %s\n", diagnostic);
+        return false;
+    }
+    Execution executions[2] = {{.program = program}, {.program = program}};
+    bool ok = true;
+    if (!parallel) {
+        execute(&executions[0]);
+        ok = executions[0].ok && executions[0].result == INT64_C(42);
+    } else {
+#ifdef _WIN32
+        HANDLE threads[2] = {
+            CreateThread(NULL, 0, execute_worker, &executions[0], 0, NULL),
+            CreateThread(NULL, 0, execute_worker, &executions[1], 0, NULL),
+        };
+        bool waited[2] = {false, false};
+        for (unsigned i = 0; i < 2u; i++) {
+            if (!threads[i]) continue;
+            waited[i] = WaitForSingleObject(threads[i], INFINITE) ==
+                        WAIT_OBJECT_0;
+            if (!waited[i]) {
+                fprintf(stderr, "installed program worker did not quiesce\n");
+                abort();
+            }
+        }
+        ok = threads[0] && threads[1] && waited[0] && waited[1];
+        if (threads[0]) CloseHandle(threads[0]);
+        if (threads[1]) CloseHandle(threads[1]);
+#else
+        pthread_t threads[2];
+        bool started[2] = {
+            pthread_create(&threads[0], NULL, execute_worker,
+                           &executions[0]) == 0,
+            pthread_create(&threads[1], NULL, execute_worker,
+                           &executions[1]) == 0,
+        };
+        bool joined[2] = {false, false};
+        for (unsigned i = 0; i < 2u; i++) {
+            if (!started[i]) continue;
+            joined[i] = pthread_join(threads[i], NULL) == 0;
+            if (!joined[i]) {
+                fprintf(stderr, "installed program worker did not quiesce\n");
+                abort();
+            }
+        }
+        ok = started[0] && started[1] && joined[0] && joined[1];
+#endif
+        ok = ok && executions[0].ok && executions[1].ok &&
+             executions[0].result == INT64_C(42) &&
+             executions[1].result == INT64_C(42);
+    }
+    if (!ok)
+        fprintf(stderr, "installed program execute failed: %s %s\n",
+                executions[0].diagnostic, executions[1].diagnostic);
+    if (!xr_program_unload(&program, diagnostic, sizeof(diagnostic))) {
+        fprintf(stderr, "installed program unload failed: %s\n", diagnostic);
+        ok = false;
+    }
+    return ok;
+}
+
+int main(int argc, char **argv) {
+    if (argc != 4) return 2;
+    Bytes modules[2] = {0};
+    Bytes target = {0};
+    bool ok = read_bytes(argv[1], &modules[0]) &&
+              read_bytes(argv[2], &modules[1]) && read_bytes(argv[3], &target);
+    XrRuntimeConfig config = {
+        .schema_version = XR_RUNTIME_CONFIG_SCHEMA_VERSION,
+        .generation = {
+            .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+            .max_loaded_generations = 2u,
+            .max_total_pins = 8u,
+            .max_pins_per_generation = 4u,
+            .max_pins_by_kind = {4u, 2u, 2u, 2u, 2u},
+        },
+        .activation = {
+            .max_active_entries = 8u,
+            .max_active_provider_registrations = 8u,
+            .max_active_finalizer_registrations = 4u,
+        },
+        .providers = {
+            .allocate = provider_allocate,
+            .deallocate = provider_deallocate,
+            .panic = provider_panic,
+        },
+    };
+    char diagnostic[512] = {0};
+    XrRuntime *runtime = NULL;
+    ok = ok && xr_runtime_create(&config, &runtime, diagnostic,
+                                 sizeof(diagnostic));
+    XrRuntimeArtifactImage canonical[2] = {
+        {.bytes = modules[0].data, .size = modules[0].size},
+        {.bytes = modules[1].data, .size = modules[1].size},
+    };
+    XrRuntimeArtifactImage reversed[2] = {canonical[1], canonical[0]};
+    ok = ok && run_program(runtime, canonical, &target, false) &&
+         run_program(runtime, reversed, &target, true);
+    if (runtime && !xr_runtime_destroy(&runtime, diagnostic,
+                                       sizeof(diagnostic))) {
+        fprintf(stderr, "installed runtime destroy failed: %s\n", diagnostic);
+        ok = false;
+    }
+    free(target.data); free(modules[1].data); free(modules[0].data);
+    if (!ok) return 1;
+    puts("installed bounded program route: PASS");
+    return 0;
+}
+''',
+        encoding="utf-8",
+    )
+    executable = work / (
+        "installed_program_route.exe" if os.name == "nt"
+        else "installed_program_route"
+    )
+    if os.name == "nt":
+        command = [
+            str(cc), "/nologo", "/std:c11", "/W4", "/WX",
+            f"/I{prefix / 'include/xray'}", str(source), str(archive),
+            "synchronization.lib", f"/Fe:{executable}",
+        ]
+    else:
+        command = [
+            str(cc), "-std=c11", "-Wall", "-Wextra", "-Werror",
+            "-I", str(prefix / "include/xray"), str(source), str(archive),
+            "-pthread", "-lm", "-o", str(executable),
+        ]
+    compiled = run(command, cwd=work)
+    if compiled.returncode != 0 or not executable.is_file():
+        raise AssertionError(
+            f"installed program route compile/link failed:\n{compiled.stdout}"
+        )
+    executed = run(
+        [str(executable), str(first_xsm), str(second_xsm), str(xtp)],
+        cwd=work,
+    )
+    if (executed.returncode != 0 or
+            "installed bounded program route: PASS" not in executed.stdout):
+        raise AssertionError(
+            f"installed program route execution failed:\n{executed.stdout}"
+        )
+
+
 def main() -> int:
     verify_member_resolution_invariants()
     parser = argparse.ArgumentParser()
@@ -431,11 +675,13 @@ def main() -> int:
     parser.add_argument("--build-dir", type=Path, required=True)
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--cc", type=Path, required=True)
+    parser.add_argument("--program-fixture-writer", type=Path, required=True)
     args = parser.parse_args()
     root = args.project_root.resolve(strict=True)
     build = args.build_dir.resolve(strict=True)
     binary = args.binary.resolve(strict=True)
     cc = args.cc.resolve(strict=True)
+    fixture_writer = args.program_fixture_writer.resolve(strict=True)
     dumpbin = cc.parent / "dumpbin.exe"
     if os.name == "nt":
         if not dumpbin.is_file():
@@ -469,6 +715,10 @@ def main() -> int:
             symbol_sets.append(symbols)
             member_sets.append(members)
             compile_header(cc, prefix, work / directory)
+            compile_and_run_program_route(
+                cc, prefix, archive, fixture_writer,
+                work / f"{directory}-program",
+            )
         if symbol_sets[0] != symbol_sets[1]:
             raise AssertionError("Core and full installs expose different runtime symbols")
         if member_sets[0] != member_sets[1]:

@@ -873,10 +873,38 @@ static const XiModule *cg_import_ref_target_module(const XiCgenCtx *ctx, const X
                                                    int64_t *out_slot) {
     if (out_slot)
         *out_slot = -1;
-    if (!ctx || !ref || ref->resolved_mod_index < 0 || ref->resolved_shared_slot < 0 ||
-        ref->resolved_mod_index >= ctx->all_nmodules || !ctx->all_modules)
+    if (!ctx || !ref || ref->resolved_shared_slot < 0 || !ctx->all_modules)
         return NULL;
-    const XiModule *module = ctx->all_modules[ref->resolved_mod_index];
+    const XiModule *module = NULL;
+    if (ctx->program_direct_i64_required) {
+        const XaotBundle *bundle = ctx->aot_bundle;
+        uint32_t target_partition = UINT32_MAX;
+        if (!ctx->program_direct_i64_bound || !bundle ||
+            !ref->resolution_attempted || !ref->resolved_module ||
+            !xaot_bundle_program_partition_for_xi_module(
+                bundle, ref->resolved_module, &target_partition))
+            return NULL;
+        uint32_t matches = 0;
+        for (int module_index = 0; module_index < ctx->all_nmodules;
+             module_index++) {
+            uint32_t candidate_partition = UINT32_MAX;
+            const XiModule *candidate = ctx->all_modules[module_index];
+            if (!candidate ||
+                !xaot_bundle_program_partition_for_xi_module(
+                    bundle, candidate, &candidate_partition) ||
+                candidate_partition != target_partition)
+                continue;
+            module = candidate;
+            matches++;
+        }
+        if (matches != 1u)
+            return NULL;
+    } else {
+        if (ref->resolved_mod_index < 0 ||
+            ref->resolved_mod_index >= ctx->all_nmodules)
+            return NULL;
+        module = ctx->all_modules[ref->resolved_mod_index];
+    }
     if (!module || ref->resolved_shared_slot >= module->nslots)
         return NULL;
     if (out_slot)

@@ -22,9 +22,14 @@
 #include "frontend/parser/xast_walk.h"
 #include "frontend/parser/xparse.h"
 #include "base/xmalloc.h"
+#include "base/xmemstream.h"
 #include "base/xsha256.h"
+#include "analysis/xglobal_producer.h"
+#include "aot/xi_cgen.h"
 #include "aot/xaot_bundle.h"
 #include "aot/xaot_boundary.h"
+#include "aot/xaot_prepare.h"
+#include "aot/xaot_verify.h"
 #include "aot/emit_c/xr_c_program_emission.h"
 #include "aot/refine/xr_aot_refinement.h"
 #include "ir/xi_import_resolve.h"
@@ -35,6 +40,7 @@
 #include "module/xmodule.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
+#include "os/os_thread.h"
 #include "plan/format/xr_xtp_internal.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/semantic/xr_program_semantic_closure.h"
@@ -54,7 +60,9 @@
 #include "vm/xr_typed_dispatch.h"
 #include "vm/xr_vm_decoded_cache.h"
 #include "xray.h"
+#include "xray_runtime_api.h"
 #include "xray_vm.h"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -735,6 +743,13 @@ static bool scalar_graph_program_row_mutations(ScalarGraphPlanFixture *fixture) 
     producer->program_function_bindings[0].flags = saved_role;
     scalar_graph_refresh_plan(producer);
 
+    uint8_t saved_entry_role = entry->program_function_bindings[0].flags;
+    entry->program_function_bindings[0].flags = 0u;
+    scalar_graph_refresh_plan(entry);
+    ok = ok && !scalar_graph_plan_set_valid(fixture);
+    entry->program_function_bindings[0].flags = saved_entry_role;
+    scalar_graph_refresh_plan(entry);
+
     uint32_t saved_module_row = entry->program_provenance.program_module_row;
     entry->program_provenance.program_module_row = fixture->modules[fixture->producer_index]
                                                        ->psc_module_index;
@@ -1036,6 +1051,8 @@ static bool scalar_graph_xtp_resigned_partition_semantic_rejected(
 static bool scalar_graph_runtime_load_rejected(
     const uint8_t *bytes, size_t size,
     const XrSemanticPlan *const *semantic_modules) {
+    (void) bytes;
+    (void) size;
     const XrSemanticPlan *standalone = NULL;
     char error[512] = {0};
     for (uint32_t row = 0; row < 2u; row++)
@@ -1044,19 +1061,16 @@ static bool scalar_graph_runtime_load_rejected(
             xr_semantic_plan_verify(semantic_modules[row], error,
                                     sizeof(error)))
             standalone = semantic_modules[row];
-    XrRuntimeArtifactAuthority *authority = NULL;
-    bool ready = standalone && xr_runtime_artifact_authority_create_internal(
-                                   standalone, &authority, error,
-                                   sizeof(error));
-    XrTargetPlan *loaded = (XrTargetPlan *) (uintptr_t) 1;
-    bool accepted = ready && xr_runtime_target_plan_load(
-                                 bytes, size, authority, &loaded, error,
-                                 sizeof(error));
-    if (accepted)
-        xr_target_plan_free(loaded);
+    XrRuntimeArtifactAuthority *authority =
+        (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    bool rejected = standalone &&
+                    !xr_runtime_artifact_authority_create_internal(
+                        standalone, &authority, error, sizeof(error)) &&
+                    authority == NULL &&
+                    strstr(error, "exact ordinary or program SemanticPlan owner") !=
+                        NULL;
     xr_runtime_artifact_authority_free(authority);
-    return ready && !accepted && loaded == NULL &&
-           strncmp(error, "XR_", 3u) == 0;
+    return rejected;
 }
 
 static bool scalar_graph_typed_vm_is_exact(XrTargetPlan *target);
@@ -1431,6 +1445,25 @@ static bool scalar_graph_bundle_owner_is_exact(
                 xr_target_plan_value_rep(target, 0u) == NULL &&
                 xr_target_plan_value_rep_for_module(target, partitions[0], 0u) != NULL &&
                 xr_target_plan_value_rep_for_module(target, partitions[1], 0u) != NULL;
+
+        /* Partition resolution is a stable PSC/Semantic authority join, not
+         * membership or pointer identity in bundle->modules[]. */
+        XiModule detached_module = *fixture->modules[0];
+        XiFunc detached_initializer = *fixture->modules[0]->init;
+        detached_module.init = &detached_initializer;
+        detached_initializer.module = &detached_module;
+        uint32_t detached_partition = UINT32_MAX;
+        exact = exact &&
+                xaot_bundle_program_partition_for_xi_module(
+                    &bundle, &detached_module, &detached_partition) &&
+                detached_partition == partitions[0];
+        detached_module.source_semantic_module.module_identity.bytes[0] ^=
+            UINT8_C(0x80);
+        detached_partition = UINT32_MAX;
+        exact = exact &&
+                !xaot_bundle_program_partition_for_xi_module(
+                    &bundle, &detached_module, &detached_partition) &&
+                detached_partition == UINT32_MAX;
     }
     xaot_bundle_free(&bundle);
 
@@ -1450,6 +1483,563 @@ static bool scalar_graph_bundle_owner_is_exact(
         rejected_boundary == XR_C_ABI_BOUNDARY_INVALID;
     xaot_bundle_free(&collision);
     return exact && collision_rejected;
+}
+
+typedef struct ScalarGraphCgenOutput {
+    char *modules[2];
+    size_t sizes[2];
+} ScalarGraphCgenOutput;
+
+static void scalar_graph_cgen_output_free(ScalarGraphCgenOutput *output) {
+    if (!output)
+        return;
+    for (uint32_t i = 0; i < 2u; i++)
+        xr_free(output->modules[i]);
+    memset(output, 0, sizeof(*output));
+}
+
+static bool scalar_graph_cgen_render(
+    ScalarGraphPlanFixture *fixture, XrTargetPlan *target,
+    XiModule *ordered_modules[2], uint32_t ordered_entry,
+    bool mutate_legacy_generic_after_binding,
+    ScalarGraphCgenOutput *output) {
+    if (!fixture || !target || !ordered_modules || !output ||
+        ordered_entry >= 2u)
+        return false;
+    memset(output, 0, sizeof(*output));
+    XaotBundle bundle = {0};
+    XgGlobalEvidence evidence = {0};
+    char error[512] = {0};
+    bool init_ok = xaot_bundle_init(&bundle, fixture->modules, 2u,
+                                    fixture->entry_index);
+    bool set_ok = init_ok && xaot_bundle_set_program_target_plan(&bundle, target);
+    bool evidence_ok = set_ok && fixture->source && fixture->source->graph &&
+                       fixture->source->analyzer &&
+                       xg_global_evidence_build_from_module_graph_with_imported_modules_and_analyzer(
+                           &evidence, fixture->source->graph,
+                           XG_BUILD_NATIVE_RELEASE, 0u, NULL, 0u,
+                           fixture->source->analyzer) &&
+                       xaot_bundle_set_global_evidence(
+                           &bundle, &evidence, XG_BUILD_NATIVE_RELEASE);
+    bool prepare_ok = evidence_ok && xaot_prepare_bundle(&bundle, NULL);
+    bool verify_ok = prepare_ok && xaot_verify_bundle(&bundle, error,
+                                                       sizeof(error));
+    bool exact = verify_ok;
+    XiCgenCtx *ctx = exact ? xi_cgen_ctx_new() : NULL;
+    bool install_ok = exact && ctx && xi_cgen_ctx_set_aot_bundle(ctx, &bundle);
+    exact = install_ok;
+    if (exact) {
+        xi_cgen_resolve_module_imports(ctx, ordered_modules, 2);
+        exact = !xi_cgen_has_error(ctx);
+    }
+
+    XiFunc *mutated[4] = {0};
+    bool saved_generic[4] = {0};
+    uint32_t saved_xg_body[4] = {0};
+    uint32_t mutated_count = 0;
+    if (exact && mutate_legacy_generic_after_binding) {
+        for (uint32_t module = 0; module < 2u; module++) {
+            XiModule *current = fixture->modules[module];
+            XiFunc *candidates[2] = {
+                current ? current->init : NULL,
+                current && current->nfuncs == 1u
+                    ? current->functions[0]
+                    : NULL,
+            };
+            for (uint32_t i = 0; i < 2u; i++) {
+                XiFunc *function = candidates[i];
+                if (!function || mutated_count >= 4u) {
+                    exact = false;
+                    break;
+                }
+                mutated[mutated_count] = function;
+                saved_generic[mutated_count] = function->is_generic_template;
+                saved_xg_body[mutated_count] = function->xg_body_func_id;
+                function->is_generic_template = true;
+                function->xg_body_func_id = UINT32_C(7001) + mutated_count;
+                mutated_count++;
+            }
+        }
+    }
+
+    for (uint32_t ordered = 0; exact && ordered < 2u; ordered++) {
+        uint32_t original =
+            ordered_modules[ordered] == fixture->modules[0] ? 0u :
+            ordered_modules[ordered] == fixture->modules[1] ? 1u : UINT32_MAX;
+        if (original == UINT32_MAX) {
+            exact = false;
+            break;
+        }
+        FILE *stream = xr_open_memstream(&output->modules[original],
+                                         &output->sizes[original]);
+        if (!stream) {
+            exact = false;
+            break;
+        }
+        xi_cgen_module_tu(ctx, stream, ordered_modules, 2, ordered,
+                          ordered_entry);
+        exact = xr_close_memstream(stream, &output->modules[original],
+                                   &output->sizes[original]) == 0 &&
+                output->modules[original] && !xi_cgen_has_error(ctx);
+    }
+    for (uint32_t i = 0; i < mutated_count; i++) {
+        mutated[i]->is_generic_template = saved_generic[i];
+        mutated[i]->xg_body_func_id = saved_xg_body[i];
+    }
+    xi_cgen_ctx_free(ctx);
+    xaot_bundle_free(&bundle);
+    xg_global_evidence_free(&evidence);
+    if (!exact)
+        scalar_graph_cgen_output_free(output);
+    return exact;
+}
+
+static bool scalar_graph_cgen_order_and_post_bind_metadata_are_exact(
+    ScalarGraphPlanFixture *fixture, XrTargetPlan *target) {
+    XiModule *canonical[2] = {fixture->modules[0], fixture->modules[1]};
+    XiModule *reordered[2] = {fixture->modules[1], fixture->modules[0]};
+    ScalarGraphCgenOutput clean = {0};
+    ScalarGraphCgenOutput hostile = {0};
+    ScalarGraphCgenOutput reversed = {0};
+    bool clean_ok = scalar_graph_cgen_render(
+        fixture, target, canonical, fixture->entry_index, false, &clean);
+    bool hostile_ok = clean_ok && scalar_graph_cgen_render(
+        fixture, target, canonical, fixture->entry_index, true, &hostile);
+    bool reversed_ok = hostile_ok && scalar_graph_cgen_render(
+        fixture, target, reordered,
+        fixture->entry_index == 0u ? 1u : 0u, false, &reversed);
+    bool exact = reversed_ok;
+    for (uint32_t module = 0; exact && module < 2u; module++)
+        exact = clean.sizes[module] == hostile.sizes[module] &&
+                clean.sizes[module] == reversed.sizes[module] &&
+                memcmp(clean.modules[module], hostile.modules[module],
+                       clean.sizes[module]) == 0 &&
+                memcmp(clean.modules[module], reversed.modules[module],
+                       clean.sizes[module]) == 0;
+    scalar_graph_cgen_output_free(&reversed);
+    scalar_graph_cgen_output_free(&hostile);
+    scalar_graph_cgen_output_free(&clean);
+    return exact;
+}
+
+static void *scalar_graph_runtime_allocate(void *context, size_t size,
+                                           size_t alignment) {
+    (void) context;
+    return size && alignment <= _Alignof(void *) ? xr_malloc(size) : NULL;
+}
+
+static void scalar_graph_runtime_deallocate(void *context, void *allocation,
+                                            size_t size, size_t alignment) {
+    (void) context;
+    (void) size;
+    (void) alignment;
+    xr_free(allocation);
+}
+
+static void scalar_graph_runtime_panic(void *context, const char *message,
+                                       size_t message_size) {
+    (void) context;
+    (void) message;
+    (void) message_size;
+    abort();
+}
+
+typedef struct ScalarGraphProgramExecution {
+    const XrProgram *program;
+    int64_t result;
+    bool executed;
+    char diagnostic[256];
+} ScalarGraphProgramExecution;
+
+static void *scalar_graph_execute_program(void *opaque) {
+    ScalarGraphProgramExecution *execution =
+        (ScalarGraphProgramExecution *) opaque;
+    execution->executed = execution->program &&
+                          xr_program_execute_direct_i64(
+                              execution->program, &execution->result,
+                              execution->diagnostic,
+                              sizeof(execution->diagnostic));
+    return NULL;
+}
+
+static bool scalar_graph_resign_xtp_section(uint8_t *bytes, size_t size,
+                                             XrXtpSectionKind kind) {
+    size_t directory_offset = XR_XTP_HEADER_SIZE +
+                              ((size_t) kind - 1u) *
+                                  XR_XTP_DIRECTORY_ENTRY_SIZE;
+    if (!bytes || directory_offset + XR_XTP_DIRECTORY_ENTRY_SIZE > size)
+        return false;
+    uint8_t *entry = bytes + directory_offset;
+    size_t section_offset = (size_t) xr_xtp_take_u64(entry + 8u);
+    size_t section_length = (size_t) xr_xtp_take_u64(entry + 16u);
+    if (section_offset > size || section_length > size - section_offset)
+        return false;
+    xr_sha256(bytes + section_offset, section_length, entry + 40u);
+    return true;
+}
+
+static bool scalar_graph_resign_xtp(uint8_t *bytes, size_t size) {
+    static const uint8_t zero[XR_FINGERPRINT_BYTES] = {0};
+    if (!bytes || size < XR_XTP_FULL_DIGEST_OFFSET + sizeof(zero))
+        return false;
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    xr_sha256_update(&context, bytes, XR_XTP_FULL_DIGEST_OFFSET);
+    xr_sha256_update(&context, zero, sizeof(zero));
+    xr_sha256_update(&context,
+                     bytes + XR_XTP_FULL_DIGEST_OFFSET + sizeof(zero),
+                     size - XR_XTP_FULL_DIGEST_OFFSET - sizeof(zero));
+    xr_sha256_final(&context, bytes + XR_XTP_FULL_DIGEST_OFFSET);
+    return true;
+}
+
+static bool scalar_graph_mutate_program_graph_byte(uint8_t *bytes, size_t size,
+                                                    size_t row_offset) {
+    size_t directory_offset = XR_XTP_HEADER_SIZE +
+                              ((size_t) XR_XTP_SECTION_PROGRAM_GRAPHS - 1u) *
+                                  XR_XTP_DIRECTORY_ENTRY_SIZE;
+    if (!bytes || directory_offset + XR_XTP_DIRECTORY_ENTRY_SIZE > size)
+        return false;
+    uint8_t *entry = bytes + directory_offset;
+    size_t section_offset = (size_t) xr_xtp_take_u64(entry + 8u);
+    size_t section_length = (size_t) xr_xtp_take_u64(entry + 16u);
+    uint32_t section_count = xr_xtp_take_u32(entry + 24u);
+    if (section_count != 1u || section_length <= row_offset ||
+        section_offset > size || section_length > size - section_offset)
+        return false;
+    bytes[section_offset + row_offset] ^= UINT8_C(0x80);
+    return scalar_graph_resign_xtp_section(
+               bytes, size, XR_XTP_SECTION_PROGRAM_GRAPHS) &&
+           scalar_graph_resign_xtp(bytes, size);
+}
+
+static bool scalar_graph_program_candidate_mutation_rejected(
+    XrRuntime *runtime, const XrRuntimeArtifactImage images[2],
+    const uint8_t *xtp, size_t xtp_size, size_t row_offset) {
+    uint8_t *mutated = (uint8_t *) xr_malloc(xtp_size);
+    if (!mutated)
+        return false;
+    memcpy(mutated, xtp, xtp_size);
+    char diagnostic[512] = {0};
+    XrProgram *program = (XrProgram *) (uintptr_t) 1;
+    bool rejected =
+        scalar_graph_mutate_program_graph_byte(mutated, xtp_size,
+                                               row_offset) &&
+        !xr_program_load_target_plan(runtime, images, 2u, mutated, xtp_size,
+                                     &program, diagnostic,
+                                     sizeof(diagnostic)) &&
+        program == NULL &&
+        strstr(diagnostic,
+               "program candidate does not bind the exact authority identity") !=
+            NULL;
+    xr_free(mutated);
+    return rejected;
+}
+
+static bool bytes_all_zero(const uint8_t *bytes, size_t size) {
+    uint8_t combined = 0;
+    for (size_t i = 0; bytes && i < size; i++)
+        combined |= bytes[i];
+    return bytes && combined == 0;
+}
+
+static bool scalar_graph_program_authority_identity_mutations_rejected(
+    XrRuntimeArtifactAuthority *authority) {
+    if (!authority)
+        return false;
+    XrRuntimeArtifactAuthorityIdentity original = authority->identity;
+    char diagnostic[512] = {0};
+    bool rejected = true;
+    for (uint32_t mutation = 0; rejected && mutation < 6u; mutation++) {
+        authority->identity = original;
+        switch (mutation) {
+            case 0:
+                authority->identity.authority_kind =
+                    XR_RUNTIME_ARTIFACT_AUTHORITY_ORDINARY_MODULE;
+                break;
+            case 1:
+                authority->identity.semantic_module_count++;
+                break;
+            case 2:
+                authority->identity.semantic_fingerprint[0] ^= UINT8_C(0x80);
+                break;
+            case 3:
+                authority->identity.program_fingerprint[0] ^= UINT8_C(0x40);
+                break;
+            case 4:
+                authority->identity.program_module_set_fingerprint[0] ^=
+                    UINT8_C(0x20);
+                break;
+            case 5:
+                authority->identity.generation_closure_id[0] ^= UINT8_C(0x10);
+                break;
+        }
+        xr_runtime_artifact_authority_compute_fingerprint(
+            &authority->identity,
+            authority->identity.authority_fingerprint);
+        rejected = !xr_runtime_artifact_authority_verify(
+            authority, diagnostic, sizeof(diagnostic));
+    }
+    authority->identity = original;
+    return rejected && xr_runtime_artifact_authority_verify(
+                           authority, diagnostic, sizeof(diagnostic));
+}
+
+static bool scalar_graph_public_program_route_is_exact(
+    ScalarGraphPlanFixture *fixture, XrTargetPlan *target,
+    const XrSemanticPlan *const canonical_modules[2]) {
+    uint8_t *xsm[2] = {0};
+    size_t xsm_size[2] = {0};
+    uint8_t *xtp = NULL;
+    size_t xtp_size = 0;
+    char error[512] = {0};
+    bool exact = canonical_modules[0] && canonical_modules[1] &&
+                 xr_xsm_encode(canonical_modules[0], &xsm[0], &xsm_size[0],
+                               error, sizeof(error)) &&
+                 xr_xsm_encode(canonical_modules[1], &xsm[1], &xsm_size[1],
+                               error, sizeof(error)) &&
+                 xr_xtp_encode_plan(target, &xtp, &xtp_size, error,
+                                    sizeof(error));
+    XrRuntimeArtifactImage canonical[2] = {
+        {.bytes = xsm[0], .size = xsm_size[0]},
+        {.bytes = xsm[1], .size = xsm_size[1]},
+    };
+    XrRuntimeArtifactImage reversed[2] = {canonical[1], canonical[0]};
+    XrRuntimeArtifactImage duplicate[2] = {canonical[0], canonical[0]};
+    XrRuntimeArtifactImage three[3] = {canonical[0], canonical[1],
+                                       canonical[0]};
+    XrRuntimeArtifactAuthority *first = NULL;
+    XrRuntimeArtifactAuthority *second = NULL;
+    XrRuntimeArtifactAuthorityIdentity first_identity = {0};
+    XrRuntimeArtifactAuthorityIdentity second_identity = {0};
+    bool first_ok = exact && xr_runtime_artifact_authority_load_xsm_module_set(
+                                 canonical, 2u, &first, error, sizeof(error));
+    bool second_ok = first_ok && xr_runtime_artifact_authority_load_xsm_module_set(
+                                   reversed, 2u, &second, error,
+                                   sizeof(error));
+    bool identity_ok = second_ok &&
+            xr_runtime_artifact_authority_identity(first, &first_identity) &&
+            xr_runtime_artifact_authority_identity(second, &second_identity) &&
+            first_identity.schema_version ==
+                XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION &&
+            first_identity.authority_kind ==
+                XR_RUNTIME_ARTIFACT_AUTHORITY_PROGRAM_MODULE_SET &&
+            first_identity.semantic_module_count == 2u &&
+            first_identity.reserved == 0u &&
+            !bytes_all_zero(first_identity.semantic_fingerprint,
+                            sizeof(first_identity.semantic_fingerprint)) &&
+            !bytes_all_zero(first_identity.program_fingerprint,
+                            sizeof(first_identity.program_fingerprint)) &&
+            !bytes_all_zero(
+                first_identity.program_module_set_fingerprint,
+                sizeof(first_identity.program_module_set_fingerprint)) &&
+            !bytes_all_zero(first_identity.generation_closure_id,
+                            sizeof(first_identity.generation_closure_id)) &&
+            memcmp(first_identity.authority_fingerprint,
+                   second_identity.authority_fingerprint,
+                   sizeof(first_identity.authority_fingerprint)) == 0;
+    exact = identity_ok &&
+            scalar_graph_program_authority_identity_mutations_rejected(first);
+    XrRuntimeArtifactAuthority *rejected_authority =
+        (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    bool duplicate_ok = exact && !xr_runtime_artifact_authority_load_xsm_module_set(
+                         duplicate, 2u, &rejected_authority, error,
+                         sizeof(error)) &&
+            rejected_authority == NULL;
+    rejected_authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    bool count_ok = duplicate_ok &&
+                    !xr_runtime_artifact_authority_load_xsm_module_set(
+                        three, 3u, &rejected_authority, error,
+                        sizeof(error)) &&
+                    rejected_authority == NULL;
+    uint8_t budget_probe = 0u;
+    XrRuntimeArtifactImage oversized[2] = {
+        {.bytes = &budget_probe,
+         .size = XR_XSM_MAX_PROGRAM_MODULE_SET_ENCODED_STORAGE / 2u + 1u},
+        {.bytes = &budget_probe,
+         .size = XR_XSM_MAX_PROGRAM_MODULE_SET_ENCODED_STORAGE / 2u + 1u},
+    };
+    rejected_authority = (XrRuntimeArtifactAuthority *) (uintptr_t) 1;
+    bool budget_ok = count_ok &&
+                     !xr_runtime_artifact_authority_load_xsm_module_set(
+                         oversized, 2u, &rejected_authority, error,
+                         sizeof(error)) &&
+                     rejected_authority == NULL &&
+                     strstr(error, "hard budget") != NULL;
+    exact = budget_ok;
+    xr_runtime_artifact_authority_free(second);
+    xr_runtime_artifact_authority_free(first);
+
+    XrRuntimeConfig config = {
+        .schema_version = XR_RUNTIME_CONFIG_SCHEMA_VERSION,
+        .generation = {
+            .schema_version = XR_RUNTIME_GENERATION_SCHEMA_VERSION,
+            .max_loaded_generations = 2u,
+            .max_total_pins = 8u,
+            .max_pins_per_generation = 4u,
+            .max_pins_by_kind = {4u, 2u, 2u, 2u, 2u},
+        },
+        .activation = {
+            .max_active_entries = 8u,
+            .max_active_provider_registrations = 8u,
+            .max_active_finalizer_registrations = 4u,
+        },
+        .providers = {
+            .allocate = scalar_graph_runtime_allocate,
+            .deallocate = scalar_graph_runtime_deallocate,
+            .panic = scalar_graph_runtime_panic,
+        },
+    };
+    XrRuntime *runtime = NULL;
+    XrProgram *program = NULL;
+    bool create_ok = exact && xr_runtime_create(&config, &runtime, error,
+                                                sizeof(error));
+    XrProgram *extra = (XrProgram *) (uintptr_t) 1;
+    bool count_three_rejected =
+        create_ok && !xr_program_load_target_plan(
+                         runtime, three, 3u, xtp, xtp_size, &extra, error,
+                         sizeof(error)) &&
+        extra == NULL;
+    bool resigned_rejected =
+        count_three_rejected &&
+        scalar_graph_program_candidate_mutation_rejected(
+            runtime, reversed, xtp, xtp_size,
+            2u * sizeof(uint32_t)) &&
+        scalar_graph_program_candidate_mutation_rejected(
+            runtime, reversed, xtp, xtp_size,
+            24u * sizeof(uint32_t)) &&
+        scalar_graph_program_candidate_mutation_rejected(
+            runtime, reversed, xtp, xtp_size,
+            24u * sizeof(uint32_t) + XR_FINGERPRINT_BYTES);
+    bool load_ok = resigned_rejected && xr_program_load_target_plan(
+                                    runtime, reversed, 2u, xtp, xtp_size,
+                                    &program, error, sizeof(error));
+    ScalarGraphProgramExecution executions[2] = {
+        {.program = program},
+        {.program = program},
+    };
+    xr_thread_t threads[2] = {0};
+    bool started = load_ok;
+    for (uint32_t i = 0; started && i < 2u; i++)
+        started = xr_thread_create(&threads[i], scalar_graph_execute_program,
+                                   &executions[i]);
+    bool joined = started;
+    for (uint32_t i = 0; i < 2u; i++) {
+        if (!xr_thread_is_valid(threads[i]))
+            continue;
+        if (xr_thread_join(threads[i], NULL) != 0) {
+            /* The test cannot prove the external-sync unload precondition.
+             * Terminate without touching the possibly live program/runtime. */
+            abort();
+        }
+    }
+    bool execute_ok = joined;
+    for (uint32_t i = 0; execute_ok && i < 2u; i++)
+        execute_ok = executions[i].executed &&
+                     executions[i].result == INT64_C(42);
+    exact = execute_ok;
+    const XrSemanticPlan *producer =
+        scalar_graph_plan(fixture, fixture->producer_index);
+    const XrSemanticProgramProvenance *producer_provenance =
+        xr_semantic_plan_program_provenance(producer);
+    uint32_t producer_row = producer_provenance
+                                ? producer_provenance->program_module_row
+                                : UINT32_MAX;
+    XrModule *ordinary = (XrModule *) (uintptr_t) 1;
+    exact = exact && producer && producer->dependency_count == 0u &&
+            producer_row < 2u &&
+            !xr_module_load_target_plan(
+                         runtime, canonical[producer_row].bytes,
+                         canonical[producer_row].size, xtp,
+                         xtp_size,
+                         &ordinary, error, sizeof(error)) &&
+            ordinary == NULL &&
+            strstr(error,
+                   "exact ordinary or program SemanticPlan owner") !=
+                NULL;
+    XrProgram *missing = (XrProgram *) (uintptr_t) 1;
+    exact = exact && !xr_program_load_target_plan(
+                         runtime, canonical, 1u, xtp, xtp_size, &missing,
+                         error, sizeof(error)) &&
+            missing == NULL;
+    if (program)
+        exact = xr_program_unload(&program, error, sizeof(error)) && exact;
+    if (runtime)
+        exact = xr_runtime_destroy(&runtime, error, sizeof(error)) && exact;
+    xr_xtp_encoded_free(xtp);
+    xr_free(xsm[1]);
+    xr_free(xsm[0]);
+    return exact;
+}
+
+static bool scalar_graph_write_file(const char *path, const uint8_t *bytes,
+                                    size_t size) {
+    FILE *file = path ? fopen(path, "wb") : NULL;
+    bool written = file && fwrite(bytes, 1, size, file) == size;
+    bool closed = file && fclose(file) == 0;
+    return written && closed;
+}
+
+static int scalar_graph_write_program_runtime_artifacts(
+    const char *first_xsm_path, const char *second_xsm_path,
+    const char *xtp_path) {
+    ScalarGraphFixture source = {0};
+    ScalarGraphPlanFixture fixture = {0};
+    XrProgramSemanticClosure *closure = NULL;
+    XrTargetProfile *profile = NULL;
+    XrTargetPlan *target = NULL;
+    uint8_t *xsm[2] = {0};
+    size_t xsm_size[2] = {0};
+    uint8_t *xtp = NULL;
+    size_t xtp_size = 0;
+    char diagnostic[512] = {0};
+    bool exact = scalar_graph_fixture_build(&source, "41") &&
+                 xa_program_semantic_closure_publish_scalar_module_graph(
+                     source.analyzer, source.graph, &closure, diagnostic,
+                     sizeof(diagnostic)) ==
+                     XA_PROGRAM_SEMANTIC_CLOSURE_READY &&
+                 closure && scalar_graph_plan_fixture_build(
+                                &fixture, &source, closure, diagnostic,
+                                sizeof(diagnostic)) &&
+                 xr_runtime_target_profile_build_native_hosted(
+                     &profile, diagnostic, sizeof(diagnostic));
+    const XrSemanticPlan *modules[2] = {NULL, NULL};
+    for (uint32_t i = 0; exact && i < 2u; i++) {
+        XrSemanticPlan *semantic = scalar_graph_plan(&fixture, i);
+        const XrSemanticProgramProvenance *provenance =
+            xr_semantic_plan_program_provenance(semantic);
+        if (!semantic || !provenance || provenance->program_module_row >= 2u ||
+            modules[provenance->program_module_row]) {
+            exact = false;
+            break;
+        }
+        modules[provenance->program_module_row] = semantic;
+    }
+    exact = exact && modules[0] && modules[1] &&
+            xr_target_plan_build_program_graph(modules, 2u, profile, &target,
+                                               diagnostic,
+                                               sizeof(diagnostic)) &&
+            xr_xsm_encode(modules[0], &xsm[0], &xsm_size[0], diagnostic,
+                          sizeof(diagnostic)) &&
+            xr_xsm_encode(modules[1], &xsm[1], &xsm_size[1], diagnostic,
+                          sizeof(diagnostic)) &&
+            xr_xtp_encode_plan(target, &xtp, &xtp_size, diagnostic,
+                               sizeof(diagnostic)) &&
+            scalar_graph_write_file(first_xsm_path, xsm[0], xsm_size[0]) &&
+            scalar_graph_write_file(second_xsm_path, xsm[1], xsm_size[1]) &&
+            scalar_graph_write_file(xtp_path, xtp, xtp_size);
+    if (!exact && diagnostic[0])
+        fprintf(stderr, "program runtime artifact writer failed: %s\n",
+                diagnostic);
+    xr_xtp_encoded_free(xtp);
+    xr_free(xsm[1]);
+    xr_free(xsm[0]);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    scalar_graph_plan_fixture_cleanup(&fixture);
+    xr_program_semantic_closure_free(closure);
+    scalar_graph_fixture_cleanup(&source);
+    return exact ? 0 : 1;
 }
 
 static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
@@ -1521,6 +2111,10 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
     }
     exact = exact && scalar_graph_bundle_owner_is_exact(fixture, target) &&
             scalar_graph_c_emission_binding_is_exact(fixture, target) &&
+            scalar_graph_cgen_order_and_post_bind_metadata_are_exact(
+                fixture, target) &&
+            scalar_graph_public_program_route_is_exact(fixture, target,
+                                                       modules) &&
             scalar_graph_typed_vm_is_exact(target) &&
             scalar_graph_xtp_roundtrip(target, modules, profile) &&
             scalar_graph_typed_vm_rejects_resigned_authority(target);
@@ -2956,6 +3550,13 @@ TEST(resolved_target_mismatch_does_not_publish_scalar_authority) {
 
 TEST_MAIN_BEGIN()
 setup();
+if (argc == 5 && strcmp(argv[1], "--write-program-runtime-artifacts") == 0) {
+    int result = scalar_graph_write_program_runtime_artifacts(
+        argv[2], argv[3], argv[4]);
+    teardown();
+    XR_TEST_PROCESS_SHUTDOWN();
+    return result;
+}
 RUN_TEST_SUITE("source-backed program semantic closure");
 RUN_TEST(source_backed_scalar_snapshot_builds_verified_closure);
 RUN_TEST(source_backed_leaf_aggregate_publishes_typed_psc);

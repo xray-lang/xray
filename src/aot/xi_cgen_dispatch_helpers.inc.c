@@ -4023,11 +4023,19 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         }
     }
     bool found = false;
-    if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
-        ref->resolved_mod_index < ctx->all_nmodules && ctx->all_modules[ref->resolved_mod_index]) {
-        const char *tname = ctx->all_modules[ref->resolved_mod_index]->name;
-        fprintf(out, "xrt_shared_%s[%d]", tname ? tname : "mod", ref->resolved_shared_slot);
+    int64_t resolved_slot = -1;
+    const XiModule *resolved_module =
+        cg_import_ref_target_module(ctx, ref, &resolved_slot);
+    if (resolved_module) {
+        const char *tname = resolved_module->name;
+        fprintf(out, "xrt_shared_%s[%lld]", tname ? tname : "mod",
+                (long long) resolved_slot);
         found = true;
+    }
+    if (!found && ctx && ctx->program_direct_i64_required) {
+        ctx->error = true;
+        fputs("XR_NULL_VAL", out);
+        return;
     }
     if (!found && ref) {
         for (int ii = 0; ii < ctx->nimports; ii++) {

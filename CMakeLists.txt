@@ -1274,6 +1274,12 @@ set(CORE_ALL_SOURCES
 # So compile that one file per stage, and everything else exactly once. Building
 # the full source list twice (identical preprocessor input, byte-identical flags
 # apart from that one -I) meant ~618 redundant translation units per clean build.
+# The immutable core-intrinsic registry is shared compiler/runtime metadata.
+# Keep it in the common object closure after moving it out of the mutable
+# frontend analyzer directory; the backend/install source lists below also
+# name the same source in their intentionally separate static archives.
+list(APPEND CORE_ALL_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/shared/xr_core_intrinsic_registry.c")
 set(CORE_COMMON_SOURCES ${CORE_ALL_SOURCES})
 list(REMOVE_ITEM CORE_COMMON_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/module/stdlib_embedded.c")
 list(LENGTH CORE_ALL_SOURCES _core_all_count)
@@ -1317,7 +1323,7 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     # Assertion SemanticPlan verification consumes the stable core-intrinsic
     # registry.  This registry is immutable shared compiler metadata, not a
     # mutable analyzer-owned frontend graph.
-    src/frontend/analyzer/xa_core_intrinsic_registry.c
+    src/shared/xr_core_intrinsic_registry.c
     ${PLAN_SEMANTIC_SRC}
     ${PLAN_OWNERSHIP_SRC}
     src/plan/format/xr_artifact_kind.c
@@ -1411,7 +1417,7 @@ set(XRAY_VM_TARGET_PLAN_LOAD_SOURCES
     # Semantic assertion verification consumes the same machine-readable core
     # intrinsic registry as analyzer lowering.  The runtime archive links this
     # owner directly; it does not reconstruct assertion names or plan rules.
-    src/frontend/analyzer/xa_core_intrinsic_registry.c
+    src/shared/xr_core_intrinsic_registry.c
     src/plan/format/xr_artifact_kind.c
     src/plan/format/xr_xsm_decode.c
     src/plan/format/xr_xtp_artifact.c
@@ -3419,6 +3425,8 @@ if(BUILD_TESTS)
                 --build-dir ${CMAKE_BINARY_DIR}
                 --binary $<TARGET_FILE:xray>
                 --cc ${CMAKE_C_COMPILER}
+                --program-fixture-writer
+                $<TARGET_FILE:test_xa_program_semantic_closure>
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
     set_tests_properties(installed_runtime_symbol_inventory PROPERTIES

@@ -16,6 +16,8 @@
 
 struct XrRuntimeArtifactAuthority {
     XrSemanticPlan *semantic_plan;
+    XrSemanticPlan **semantic_modules;
+    uint32_t semantic_module_count;
     XrTargetProfile *target_profile;
     XrRuntimeArtifactAuthorityIdentity identity;
 };
@@ -28,7 +30,8 @@ XR_FUNC void xr_runtime_artifact_authority_compute_fingerprint(
     const XrRuntimeArtifactAuthorityIdentity *identity,
     uint8_t out[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE]);
 XR_FUNC bool xr_runtime_artifact_authority_bind_candidate(
-    const XrRuntimeArtifactAuthority *authority, const XrXtpIdentity *identity,
+    const XrRuntimeArtifactAuthority *authority,
+    const XrXtpCandidate *candidate, const XrXtpIdentity *identity,
     char *diagnostic, size_t diagnostic_size);
 XR_FUNC bool xr_runtime_artifact_authority_bind_plan(
     const XrRuntimeArtifactAuthority *authority, const XrTargetPlan *plan,

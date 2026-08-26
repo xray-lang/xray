@@ -49,10 +49,20 @@ struct XrModule {
     bool unloading;
 };
 
+/* Program is a distinct public facade over the same artifact/generation
+ * owners. It deliberately has no export registry or module-local entry cell. */
+struct XrProgram {
+    XrRuntime *runtime;
+    XrRuntimeArtifactAuthority *artifact_authority;
+    XrTargetPlan *plan;
+    XrLoadedModuleGeneration *generation;
+    bool unloading;
+};
+
 struct XrRuntime {
     xr_mutex_t gate;
     XrRuntimeGenerationAuthority *authority;
-    uint32_t loaded_modules;
+    uint32_t loaded_artifacts;
 };
 
 static bool fail(char *diagnostic, size_t diagnostic_size, const char *code,
@@ -106,11 +116,11 @@ XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic,
                     "runtime is missing");
     XrRuntime *owned = *runtime;
     xr_mutex_lock(&owned->gate);
-    bool empty = owned->loaded_modules == 0;
+    bool empty = owned->loaded_artifacts == 0;
     xr_mutex_unlock(&owned->gate);
     if (!empty)
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5006",
-                    "runtime still owns loaded modules");
+                    "runtime still owns loaded artifacts");
     if (!xr_runtime_generation_authority_destroy(&owned->authority, diagnostic,
                                                  diagnostic_size))
         return false;
@@ -121,13 +131,13 @@ XRAY_API bool xr_runtime_destroy(XrRuntime **runtime, char *diagnostic,
     return true;
 }
 
-/* Unwinds a partially loaded module through the lifecycle's own failure
+/* Unwinds a partially loaded artifact through the lifecycle's own failure
  * branch. A generation that never activated rolls back to RETIRED with zero
  * pins, which is the only state unload accepts, so no artifact is abandoned in
  * a live state and no diagnostic from the original failure is overwritten. */
-static void discard_partial_module(XrLoadedModuleGeneration *generation,
-                                   XrTargetPlan *plan,
-                                   XrRuntimeArtifactAuthority *authority) {
+static void discard_partial_artifact(XrLoadedModuleGeneration *generation,
+                                     XrTargetPlan *plan,
+                                     XrRuntimeArtifactAuthority *authority) {
     char nested[512] = {0};
     if (generation) {
         xr_module_generation_rollback(generation, nested, sizeof(nested));
@@ -263,7 +273,7 @@ XRAY_API bool xr_module_load_target_plan(
     if (!xr_module_generation_load_verified_target_plan(
             runtime->authority, plan, &generation, diagnostic,
             diagnostic_size)) {
-        discard_partial_module(NULL, plan, artifact_authority);
+        discard_partial_artifact(NULL, plan, artifact_authority);
         return false;
     }
 
@@ -280,7 +290,7 @@ XRAY_API bool xr_module_load_target_plan(
                             diagnostic_size)) {
         xr_free(exports);
         xr_free(created);
-        discard_partial_module(generation, plan, artifact_authority);
+        discard_partial_artifact(generation, plan, artifact_authority);
         return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
                     "module allocation failed or the plan declares no function");
     }
@@ -298,7 +308,7 @@ XRAY_API bool xr_module_load_target_plan(
         dispose_exports(exports, function_count, ignored, sizeof(ignored));
         xr_free(exports);
         xr_free(created);
-        discard_partial_module(generation, plan, artifact_authority);
+        discard_partial_artifact(generation, plan, artifact_authority);
         return false;
     }
     created->runtime = runtime;
@@ -309,9 +319,150 @@ XRAY_API bool xr_module_load_target_plan(
     created->function_count = function_count;
 
     xr_mutex_lock(&runtime->gate);
-    runtime->loaded_modules++;
+    runtime->loaded_artifacts++;
     xr_mutex_unlock(&runtime->gate);
     *module = created;
+    return true;
+}
+
+static bool bounded_program_plan_is_exact(
+    const XrTargetPlan *plan, uint32_t semantic_module_count) {
+    uint32_t graph_count = 0;
+    uint32_t partition_count = 0;
+    uint32_t function_count = 0;
+    const XrTargetProgramGraphRecord *graphs =
+        xr_target_plan_program_graphs(plan, &graph_count);
+    (void) xr_target_plan_module_partitions(plan, &partition_count);
+    (void) xr_target_plan_functions(plan, &function_count);
+    return graphs && graph_count == 1u && partition_count == 2u &&
+           partition_count == semantic_module_count &&
+           graphs[0].module_count == partition_count &&
+           graphs[0].function_count == 2u && graphs[0].call_count == 1u &&
+           graphs[0].argument_count == 1u &&
+           graphs[0].flags ==
+               (XR_TARGET_PROGRAM_GRAPH_SINGLE_PLAN |
+                XR_TARGET_PROGRAM_GRAPH_DIRECT_I64) &&
+           graphs[0].entry_target_function < function_count &&
+           graphs[0].producer_target_function < function_count &&
+           graphs[0].entry_target_function !=
+               graphs[0].producer_target_function &&
+           xr_target_plan_function_execution_family_mask(
+               plan, graphs[0].entry_target_function) ==
+               XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
+           xr_target_plan_function_execution_family_mask(
+               plan, graphs[0].producer_target_function) ==
+               XR_TARGET_EXECUTION_SCALAR_I64_CLOSED;
+}
+
+XRAY_API bool xr_program_load_target_plan(
+    XrRuntime *runtime, const XrRuntimeArtifactImage *semantic_artifacts,
+    uint32_t semantic_artifact_count,
+    const uint8_t *target_artifact_bytes, size_t target_artifact_size,
+    XrProgram **program, char *diagnostic, size_t diagnostic_size) {
+    if (program)
+        *program = NULL;
+    if (!runtime || !program || !semantic_artifacts ||
+        semantic_artifact_count != 2u || !target_artifact_bytes ||
+        !target_artifact_size)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "program load requires a runtime, a bounded XSM module set, and one XTP");
+
+    XrRuntimeArtifactAuthority *artifact_authority = NULL;
+    if (!xr_runtime_artifact_authority_load_xsm_module_set(
+            semantic_artifacts, semantic_artifact_count,
+            &artifact_authority, diagnostic, diagnostic_size) ||
+        !xr_runtime_artifact_authority_verify(
+            artifact_authority, diagnostic, diagnostic_size)) {
+        xr_runtime_artifact_authority_free(artifact_authority);
+        return false;
+    }
+    XrTargetPlan *plan = NULL;
+    if (!xr_runtime_target_plan_load(
+            target_artifact_bytes, target_artifact_size, artifact_authority,
+            &plan, diagnostic, diagnostic_size)) {
+        xr_runtime_artifact_authority_free(artifact_authority);
+        return false;
+    }
+    if (!bounded_program_plan_is_exact(plan, semantic_artifact_count)) {
+        xr_target_plan_free(plan);
+        xr_runtime_artifact_authority_free(artifact_authority);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5004",
+                    "program plan is outside the bounded direct-i64 capability");
+    }
+    XrProgram *created = (XrProgram *) xr_calloc(1, sizeof(*created));
+    XrLoadedModuleGeneration *generation = NULL;
+    if (!created) {
+        xr_target_plan_free(plan);
+        xr_runtime_artifact_authority_free(artifact_authority);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "program allocation failed");
+    }
+    if (
+        !xr_module_generation_load_verified_target_plan(
+            runtime->authority, plan, &generation, diagnostic,
+            diagnostic_size) ||
+        !xr_module_generation_prepare(generation, diagnostic,
+                                      diagnostic_size) ||
+        !xr_module_generation_activate(generation, diagnostic,
+                                       diagnostic_size)) {
+        xr_free(created);
+        discard_partial_artifact(generation, plan, artifact_authority);
+        return false;
+    }
+    created->runtime = runtime;
+    created->artifact_authority = artifact_authority;
+    created->plan = plan;
+    created->generation = generation;
+    xr_mutex_lock(&runtime->gate);
+    runtime->loaded_artifacts++;
+    xr_mutex_unlock(&runtime->gate);
+    *program = created;
+    return true;
+}
+
+XRAY_API bool xr_program_execute_direct_i64(
+    const XrProgram *program, int64_t *result, char *diagnostic,
+    size_t diagnostic_size) {
+    if (result)
+        *result = 0;
+    if (!program || !program->runtime || !program->generation ||
+        program->unloading || !result)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "program execution requires a loaded program and result");
+    return xr_module_generation_execute_program_direct_i64(
+        program->generation, result, diagnostic, diagnostic_size);
+}
+
+XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic,
+                                size_t diagnostic_size) {
+    if (!program || !*program || !(*program)->runtime)
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "program is missing");
+    XrProgram *owned = *program;
+    owned->unloading = true;
+    XrModuleGenerationSnapshot snapshot;
+    if (!xr_module_generation_snapshot(owned->generation, &snapshot))
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5005",
+                    "program generation state is unreadable");
+    if (snapshot.state == XR_MODULE_GENERATION_ACTIVE &&
+        !xr_module_generation_begin_drain(owned->generation, diagnostic,
+                                          diagnostic_size))
+        return false;
+    if (!xr_module_generation_retire(owned->generation, diagnostic,
+                                     diagnostic_size) ||
+        !xr_module_generation_unload(&owned->generation, diagnostic,
+                                     diagnostic_size))
+        return false;
+    xr_target_plan_free(owned->plan);
+    xr_runtime_artifact_authority_free(owned->artifact_authority);
+    XrRuntime *runtime = owned->runtime;
+    xr_mutex_lock(&runtime->gate);
+    if (runtime->loaded_artifacts)
+        runtime->loaded_artifacts--;
+    xr_mutex_unlock(&runtime->gate);
+    *program = NULL;
+    memset(owned, 0, sizeof(*owned));
+    xr_free(owned);
     return true;
 }
 
@@ -588,8 +739,8 @@ XRAY_API bool xr_module_unload(XrModule **module, char *diagnostic,
 
     XrRuntime *runtime = owned->runtime;
     xr_mutex_lock(&runtime->gate);
-    if (runtime->loaded_modules)
-        runtime->loaded_modules--;
+    if (runtime->loaded_artifacts)
+        runtime->loaded_artifacts--;
     xr_mutex_unlock(&runtime->gate);
 
     xr_free(owned->exports);

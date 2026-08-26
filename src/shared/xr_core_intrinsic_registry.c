@@ -5,11 +5,11 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xa_core_intrinsic_registry.c - Core intrinsic registry lookup and validation
+ * xr_core_intrinsic_registry.c - Core intrinsic registry lookup and validation
  */
 
-#include "../../shared/xr_core_intrinsic.h"
-#include "../../shared/xr_assertion_plan.h"
+#include "xr_core_intrinsic.h"
+#include "xr_assertion_plan.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -33,7 +33,7 @@ static const XrCoreIntrinsicDesc g_core_intrinsics[] = {
      XR_CORE_INTRINSIC_SEMANTIC_OP_##semantic_op,                                                  \
      XR_CORE_INTRINSIC_TARGET_##target_applicability,                                              \
      diagnostic_name},
-#include "../../shared/xr_core_intrinsic.def"
+#include "xr_core_intrinsic.def"
 #undef XR_CORE_INTRINSIC
 };
 

@@ -16,9 +16,9 @@
  *
  * CAPABILITY BOUNDARY:
  *   Export names live in the semantic artifact, never in the TargetPlan, so
- *   both artifacts are required to resolve one. The only installed executor is
- *   the closed scalar i64 route, so a resolved export is callable only when its
- *   verified rows are scalar i64 and its generation reached ACTIVE. Every other
+ *   both artifacts are required to resolve one. A module export is callable
+ *   only when the closed scalar-i64 executor owns its verified rows and its
+ *   generation reached ACTIVE. Every other
  *   export fails closed with a stable diagnostic instead of executing.
  *
  *   Exact scalar i64 source exports and their exact plan-required provider and
@@ -28,6 +28,9 @@
  *   duplicate key, missing binding, or exhausted budget rolls the whole
  *   generation back. Other export representations remain unsupported and fail
  *   activation rather than reaching lookup or execution through a fallback.
+ *   The distinct opaque program facade admits only the exact bounded
+ *   direct-i64 graph described below; it is neither an export-name fallback
+ *   nor a general graph executor.
  */
 
 #ifndef XRAY_RUNTIME_API_H
@@ -35,12 +38,14 @@
 
 #include "xray_export.h"
 #include "xray_runtime_generation.h"
+#include "xray_target_plan_load.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 typedef struct XrRuntime XrRuntime;
 typedef struct XrModule XrModule;
+typedef struct XrProgram XrProgram;
 typedef struct XrExport XrExport;
 
 #define XR_RUNTIME_CONFIG_SCHEMA_VERSION UINT32_C(2)
@@ -104,7 +109,7 @@ typedef struct XrExportValue {
  * not published module authority: a verified plan must require their exact
  * provider contracts before one activation transaction can register them.
  * There is no implicit native fallback. Destroying a runtime requires every
- * module it loaded to be unloaded first.
+ * artifact it loaded to be unloaded first.
  */
 XRAY_API bool xr_runtime_create(const XrRuntimeConfig *config,
                                 XrRuntime **runtime, char *diagnostic,
@@ -127,6 +132,33 @@ XRAY_API bool xr_module_load_target_plan(
     size_t semantic_artifact_size, const uint8_t *target_artifact_bytes,
     size_t target_artifact_size, XrModule **module, char *diagnostic,
     size_t diagnostic_size);
+
+/* Loads the bounded canonical program-graph capability from an arbitrarily
+ * ordered XSM image vector plus one exact XTP. The images are canonicalized
+ * only by their verified program-module rows. The returned opaque program is
+ * not a module-local export namespace: it owns no name/index recovery route
+ * and uses the runtime's existing generation, decoded-cache, and live-manifest
+ * owners. The current executor admits only the exact verified direct-i64 graph
+ * family; other program graphs fail during load. */
+XRAY_API bool xr_program_load_target_plan(
+    XrRuntime *runtime, const XrRuntimeArtifactImage *semantic_artifacts,
+    uint32_t semantic_artifact_count,
+    const uint8_t *target_artifact_bytes, size_t target_artifact_size,
+    XrProgram **program, char *diagnostic, size_t diagnostic_size);
+
+/* Executes only the unique entry_target_function in the live verified graph.
+ * Every call rechecks the published manifest identity, program/module-set
+ * fingerprints, GCI, TargetPlan, and decoded cache before dispatch. Multiple
+ * execute calls may run concurrently. Unload is a lifecycle boundary rather
+ * than dynamic reload: the caller must stop and join every execute call before
+ * calling xr_program_unload; concurrent execute/unload is unsupported. */
+XRAY_API bool xr_program_execute_direct_i64(
+    const XrProgram *program, int64_t *result, char *diagnostic,
+    size_t diagnostic_size);
+
+/* Releases a quiescent program after all execute calls have been joined. */
+XRAY_API bool xr_program_unload(XrProgram **program, char *diagnostic,
+                                size_t diagnostic_size);
 
 /*
  * Resolves a name against the module's verified source export table. The

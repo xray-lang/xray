@@ -1,10 +1,11 @@
 # Runtime TargetPlan artifact load contract
 
 This contract freezes exact XSM authority construction and the TargetPlan load
-boundary. Loading itself remains non-executing; the separately governed
-generation lifecycle may execute only the sole-function scalar route. This
-contract does not claim provider registration, an entry cell, exports, calls,
-roots, or general module activation.
+boundary. Low-level loading itself remains non-executing; the separately
+governed generation lifecycle executes the ordinary sole-function scalar route
+and one exact bounded two-module direct-`i64` program graph. This contract does
+not claim general program graphs, dynamic reload, name-based program exports,
+roots, or general product activation.
 
 1. Artifact identity comes from bytes. The probe reports match, need-more,
    unknown-reserved, or extension conflict. Only exact XSM and XTP identities
@@ -260,9 +261,9 @@ roots, or general module activation.
    authority. Builder and verifier derive that judgement independently from
    SemanticPlan, while String and other reference-capable children continue to
    fail closed at this element-indexing boundary.
-5. Runtime loading accepts only an XTP v48 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v49 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V48 is a breaking hard cutover from
+   independent TargetPlan verification. V49 is a breaking hard cutover from
    v48 and all earlier XTP schemas. It requires SemanticPlan schema 43 and
    TargetPlan schema 49, including exact PSC v6 provenance and typed program
    bindings; no compatibility alias is accepted. It
@@ -315,13 +316,14 @@ roots, or general module activation.
    authority; loading it is not an empty successful program. The loader
    returns only an immutable verified TargetPlan and performs no callback,
    provider lookup, registration, or execution.
-   Dependency-bearing SOURCE_EXPORT artifacts require the internal ordered
-   module-set materializer. It re-verifies exact dependency module and
-   semantic fingerprints plus public export/callee stable IDs before freezing
-   the TargetPlan. The standalone installed runtime load route does not accept
-   this vector and therefore remains fail closed for cross-module artifacts.
-   The bounded scalar module-graph family instead uses the dedicated program-
-   graph materializer. Schema 48 carries one program-graph row and canonical
+   Dependency-bearing SOURCE_EXPORT artifacts require exact program-module-set
+   authority. It re-verifies exact dependency module and semantic fingerprints
+   plus public export/callee stable IDs before freezing the TargetPlan. The
+   ordinary single-XSM authority constructor does not accept this vector and
+   therefore remains fail closed for cross-module artifacts. The bounded scalar
+   module-graph family instead uses the same public TargetPlan loader with
+   PROGRAM_MODULE_SET authority, which selects the unique program-graph
+   materializer. TargetPlan schema 49 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
    pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 208-byte rows and has
@@ -333,20 +335,25 @@ roots, or general module activation.
    plan, and reruns independent TargetPlan verification. Reordered, duplicate,
    missing, foreign, or re-signed module, graph, partition, call, argument, or
    fingerprint authority fails closed. Canonical graph encode/materialize/
-   re-encode is byte-identical. The ordinary materializer and the installed
-   `xr_runtime_target_plan_load` route intentionally do not accept this
-   multi-SemanticPlan authority. A plan produced by the dedicated graph
+   re-encode is byte-identical. The ordinary materializer rejects this
+   multi-SemanticPlan authority; `xr_runtime_target_plan_load` selects the graph
+   materializer only from the already verified program authority. A plan produced by the graph
    materializer is executable by the typed VM only through its verified graph
    entry and same-plan global rows. Its warm VM route uses the existing decoded
    cache only after that cache is bound to the exact runtime generation,
    canonical module-set fingerprint, program fingerprint, and GCI; the cache
-   does not copy a fixed two-partition schema or construct per-module plans. The
-   The installed loader and public runtime-manifest product route remain
-   unavailable. The compiler's separately governed bounded source-AOT lane may
+   does not copy a fixed two-partition schema or construct per-module plans.
+   The public `XrProgram` facade admits only the exact currently installed
+   two-partition/two-function/one-call/one-argument direct-`i64` capability. It
+   obtains the unique entry from the verified graph row, reuses the same
+   generation, live manifest, decoded cache, Program TargetPlan, program and
+   module-set fingerprints, and GCI, and rechecks that complete identity on
+   every execution. It has no function-index, module-name, export-name, or
+   ordinary-module recovery path. The compiler's bounded source-AOT lane may
    consume the same plan through its independently verified program C-emission
    binding for the exact two-module scalar graph only; it constructs no
-   per-module executable plans. No installed or public loader may infer that
-   compiler-internal authority or reconstruct a graph from module names.
+   per-module executable plans. Neither installed route may infer compiler-only
+   authority or reconstruct a graph from module names.
 6. Installed runtimes construct artifact authority only from exact XSM bytes.
    XSM decoding applies the current schema, operation-registry fingerprint,
    payload digest, ownership replay, semantic fingerprint, and independent
@@ -354,22 +361,38 @@ roots, or general module activation.
    TargetProfile. They do not guess SemanticPlan or TargetProfile authority
    from a host name, file name, sibling artifact, or caller-authored
    fingerprint. A dependency-bearing schema-43 XSM cannot be decoded as a
-   standalone artifact: its module-set route must present the canonical ordered
-   vector of every exact verified dependency SemanticPlan, and the decoder
+   standalone artifact: the currently admitted module-set route requires the
+   exact two fragments of this bounded capability and canonicalizes arbitrary
+   input order only from their verified program-module rows. The decoder
    rechecks dependency module IDs, semantic fingerprints, public export IDs,
-   callee function IDs, and frozen suspendability. The installed sole-scalar
-   route remains standalone-only and therefore rejects such cross-module
-   artifacts.
-7. The installed positive route is deliberately limited to exact XSM plus its
-   matching XTP and the sole-function scalar generation executor. A build-time
-   fixture generator freezes exact bytes for the current native profile; the
-   executed archive test links only the installed runtime archive, constructs
-   authority from XSM, materializes the verified XTP, prepares and activates
-   one generation, and executes function 0 to its exact scalar result. The CLI
-   exposes this same governed product route only as
-   `xray run module.xtp --semantic-plan module.xsm`. It identifies both inputs
+   callee function IDs, and frozen suspendability. The ordinary installed route
+   remains standalone-only and rejects such cross-module artifacts; the
+   `XrProgram` route instead requires the complete verified canonical set. The
+   module-set decoder enforces overflow-safe aggregate encoded and retained
+   decoded-storage budgets. Independent verification scratch remains governed
+   by the existing per-table and semantic-count limits and is not described as
+   part of that retained-storage budget.
+   Runtime artifact authority schema 3 distinguishes ordinary and program
+   authority. It freezes authority kind, canonical semantic-module count, exact
+   entry semantic fingerprint, program fingerprint, canonical program-module-set
+   fingerprint, and 16-byte GCI into the authority fingerprint. Ordinary
+   authority requires count one and zero program fields;
+   program authority requires the exact nonzero program fields. Candidate and
+   materialized-plan binding independently join them, and schema 2 is not read.
+7. The installed positive routes are deliberately limited to exact artifacts
+   and the two executors above. A build-time fixture generator freezes exact
+   bytes for the current native profile. The archive gate links only installed
+   headers plus the installed runtime archive. It first proves the ordinary XSM
+   plus matching XTP route, then performs two independent public program loads.
+   The first loads the two program XSM images in canonical input order, executes
+   the graph entry to 42, and unloads. The second loads the same images in reverse input order,
+   executes two concurrent calls to 42, joins them, and only then unloads and
+   destroys the runtime. Canonical order comes only from verified provenance
+   rows. The CLI exposes only the distinct ordinary single-module route as
+   `xray run module.xtp --semantic-plan module.xsm`. It identifies those inputs
    by bytes, runs the public runtime authority/load/generation APIs, prints the
-   scalar result, and completes drain, retire, unload, and authority teardown.
+   scalar result, and completes drain, retire, unload, and authority teardown;
+   it does not yet expose the program facade.
    Optional `--timings` reports artifact-read, semantic-verify, target-verify,
    activation, and entry/output monotonic durations for this exact route only;
    it cannot decorate source or legacy execution. No XSM or XTP encoder enters
@@ -406,12 +429,16 @@ roots, or general module activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt 3c6ab58162ec5d226a8f22d40eca5a0ace7041150617943d93784cc807869571
-anchor-sha256: include/xray_target_plan_load.h b5b85159f9c825b5239c26c0bb5e037a5e678d8386c2a771b5e27026b6268c72
+anchor-sha256: CMakeLists.txt 41a56b040c944ac96d7df0025fcf6a22ec525b5cebcf5b6f833d0f2ac5426c3a
+anchor-sha256: include/xray_runtime_api.h 07d75f03ee3baea4301bf30ac67c15b77d74feaec28322fb818c247970a1ce44
+anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
 anchor-sha256: src/plan/format/xr_artifact_kind.c a4569b3d3bcc67e28bc025f510ddb1dd95c4725e07ea7df59f93c56bb2f884b5
-anchor-sha256: src/plan/format/xr_xsm_schema.h 98fc9a9c8f4627de81075e25905a55189ce82f5b985b190a6bfaa6ce72810242
-anchor-sha256: src/plan/format/xr_xsm_decode.c 2dee1764076536b87cf00258cb58758cb799c0ffea1c8525d4ecd1a7fefcfcc7
+anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
+anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h bd864991027a87d48222a4eab6afc79ee6758be466e55caa8c6f3c06ffcef670
+anchor-sha256: src/plan/semantic/xr_semantic_plan.c aeaad12aee601f2bfb982fbaa72484a3845b8382874fe84a86c88c1594458eb1
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 8775d5d45526f3e7a7d91bf7c86f1b664f6383b0fb506dd5b9f25e109db1759c
 anchor-sha256: src/plan/format/xr_xtp_schema.h 41b794455308909d8cb8ccf6e1a276441c1ac2d5ad09b8d1c9963922d1b3d88a
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_artifact.c ed8328a99f27b5bbed4b0a0909f0e42c67ebfff066e80e1bdd4ea01439ebf9d1
@@ -436,23 +463,24 @@ anchor-sha256: src/plan/target/xr_target_plan.c 6ee4f3abe15fc72c07d4e3ab07eb48c9
 anchor-sha256: src/plan/target/xr_target_builder.c 87870c04824de87236a98491188357e1c2076d38d1fba4ae7970c9cd8f3c0dd1
 anchor-sha256: src/plan/target/xr_target_verify.c 1e9169019d391a5e3e057326debe1c75d60bac3581b88f0d38acd42713ca3b0a
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 6079934e95208abe3b7b7251b4c4b59275c61776f20de0d0873b70617899a62a
-anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 9bf3dbbd4ad323ee8a7745fce137c49b3a50992dc9a443c1851d95ec8a048e2b
-anchor-sha256: src/runtime/xr_runtime_artifact_authority.c f0978e9727c181e5686bd0aea15e214d5dba687ce090d13b19d1830e005bcd2c
-anchor-sha256: src/runtime/xr_runtime_artifact_verify.c 954452a1b4ff3923afb3a1b5171e185cf688dad96189ab2ac23e1b984befad19
-anchor-sha256: src/runtime/xr_target_plan_load.c 6b7f72151ed3359a8233e5b45e74b8175a42a120ade628ecb930aab1cb8a9fbb
+anchor-sha256: src/runtime/xr_runtime_artifact_authority_internal.h 5e81f18c79504cd7876910b0ad0d88b270fd19fbc6de7a44d5daa2bf47263692
+anchor-sha256: src/runtime/xr_runtime_artifact_authority.c 47203f0c178dc46872e6d6ec8c680a8e0cbd0f5e4670e7a4380f030b2d61a043
+anchor-sha256: src/runtime/xr_runtime_artifact_verify.c 6769b535c81ef682bfec16f7364b2fa5991e037ed7f2e67e70b21d12f331c4a0
+anchor-sha256: src/runtime/xr_target_plan_load.c 162babb92d90b8ead7842e68de5a6bccbb0a304e3e62299de4bb64c8ccf7a22d
+anchor-sha256: src/runtime/xr_runtime_api.c 2297cb107d76409c13d0bb8019084722cb573bb79d5bce5b85613a32b45cf14a
 anchor-sha256: src/app/cli/xcmd_run.c 4bbdfcfe6426abc90b411dd271bb849297a930e3c6364692225d8ba08e1c2f98
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: scripts/check_legacy_product_residue.py 0d8b95a014d23f7732e46b837f8c8d1cda3406da1464b314e6d2f401bd2a3705
 anchor-sha256: tests/unit/plan/test_target_plan.c 934176e9e784ccf2588fcb7bc205042e0a8530e394fc003355428976c56ebfd1
 anchor-sha256: tests/unit/plan/test_xtp_format.c c1e4045afcef05e4f74bcfd155558191c14ac9451ce840dd0cdd022e5d131d3c
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c be66579e2c72c13e5dadfc8bb00f3101c1b4366aa3d29cf9b811e7e4be06f17d
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f1abf760346c76d3d574d1dc0f13e061e568e264a5b3dd7aaec391e0e49b0d21
 anchor-sha256: tests/unit/CMakeLists.txt 82625a435d47134b938a40675265424b5f06d4d4eb59a4d1d1306eafaacc53c8
-anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 68cf5903360638cba7fe872f690810dfe7a9b531ee33d9939f347e1080b94d20
+anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
-anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 70d40dfa429c78f663381887bf4676c2b68c97334c55344554a6da587e886be8
+anchor-sha256: tests/install/run_installed_runtime_symbol_tests.py 536faa4afd6b0374ccc17e9446320a43eeea92f5c696fbd5f6dac644e95c7d53
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
 anchor-sha256: src/plan/target/xr_target_entry_abi.c cb5cd57a0b8f3bbfe2123a07f583da997d7d2989e5158fd241406b96ce433b12
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2

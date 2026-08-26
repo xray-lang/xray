@@ -3437,19 +3437,6 @@ static bool stable_id_zero(XrStableId id) {
     return xr_stable_id_equal(id, zero);
 }
 
-static const XrSemanticEntityRecord *verify_plan_module_entity(const XrSemanticPlan *plan) {
-    const XrSemanticEntityRecord *found = NULL;
-    for (uint32_t i = 0; plan && i < plan->entity_count; i++) {
-        const XrSemanticEntityRecord *entity = &plan->entities[i];
-        if (entity->kind != XR_SEM_ENTITY_MODULE)
-            continue;
-        if (found)
-            return NULL;
-        found = entity;
-    }
-    return found;
-}
-
 static bool verify_source_export_rows(const XrSemanticPlan *plan, const uint32_t *definitions,
                                       uint32_t value_count, char *error, size_t error_size) {
     const char *previous = NULL;
@@ -5648,7 +5635,8 @@ bool xr_semantic_plan_verify_module_set(const XrSemanticPlan *plan,
     for (uint32_t row = 0; valid && row < plan->dependency_count; row++) {
         const XrSemanticDependencyRecord *record = &plan->dependencies[row];
         const XrSemanticPlan *match = dependencies[row];
-        const XrSemanticEntityRecord *module = verify_plan_module_entity(match);
+        const XrSemanticEntityRecord *module =
+            xr_semantic_plan_unique_module_entity(match);
         if (!match || !xr_semantic_plan_is_verified(match) || !module ||
             !xr_stable_id_equal(module->id, record->module) ||
             !xr_fingerprint_equal(record->semantic_fingerprint,

@@ -15,6 +15,7 @@
 #include "../base/xsha256.h"
 #include "../plan/format/xr_xsm_schema.h"
 #include "../plan/semantic/xr_semantic_verify.h"
+#include "../plan/target/xr_target_plan_internal.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_capability.h"
 #include <stdio.h>
@@ -37,17 +38,25 @@ static void hash_u64(XrSHA256Context *context, uint64_t value) {
 XR_FUNCDEF void xr_runtime_artifact_authority_compute_fingerprint(
     const XrRuntimeArtifactAuthorityIdentity *identity,
     uint8_t out[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE]) {
-    static const uint8_t domain[] = "xray-runtime-artifact-authority-v2\0";
+    static const uint8_t domain[] = "xray-runtime-artifact-authority-v3\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
     hash_u64(&context, identity->schema_version);
+    hash_u64(&context, identity->authority_kind);
+    hash_u64(&context, identity->semantic_module_count);
     hash_u64(&context, identity->reserved);
     hash_u64(&context, identity->required_family_mask);
     hash_u64(&context, identity->required_capability_mask);
     hash_u64(&context, identity->provider_mask);
     xr_sha256_update(&context, identity->semantic_fingerprint,
                      XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
+    xr_sha256_update(&context, identity->program_fingerprint,
+                     XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
+    xr_sha256_update(&context, identity->program_module_set_fingerprint,
+                     XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
+    xr_sha256_update(&context, identity->generation_closure_id,
+                     sizeof(identity->generation_closure_id));
     xr_sha256_update(&context, identity->operation_registry_fingerprint,
                      XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE);
     xr_sha256_update(&context, identity->target_profile_fingerprint,
@@ -67,13 +76,23 @@ static void copy_fingerprint(uint8_t out[XR_RUNTIME_ARTIFACT_FINGERPRINT_SIZE],
 }
 
 static bool populate_identity(
-    const XrSemanticPlan *semantic_plan, const XrTargetProfile *target_profile,
+    const XrSemanticPlan *semantic_plan,
+    const XrSemanticPlan *const *semantic_modules,
+    uint32_t semantic_module_count, const XrTargetProfile *target_profile,
     XrRuntimeArtifactAuthorityIdentity *identity, char *diagnostic,
     size_t diagnostic_size) {
     char nested[512] = {0};
-    if (!xr_semantic_plan_verify(semantic_plan, nested, sizeof(nested)))
+    if (!semantic_plan ||
+        (semantic_module_count == 0 &&
+         (!xr_semantic_plan_verify(semantic_plan, nested, sizeof(nested)) ||
+          xr_semantic_plan_program_provenance(semantic_plan) != NULL)) ||
+        (semantic_module_count != 0 &&
+         (!semantic_modules ||
+          !xr_target_semantic_program_module_set_verify(
+              semantic_modules, semantic_module_count, nested,
+              sizeof(nested)))))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
-                    "artifact authority requires a verified SemanticPlan");
+                    "artifact authority requires an exact ordinary or program SemanticPlan owner");
     if (!xr_target_profile_verify(target_profile, nested, sizeof(nested)))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
                     "artifact authority requires a verified TargetProfile");
@@ -122,9 +141,17 @@ static bool populate_identity(
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
                     "native runtime authority lacks a foundation capability");
     uint64_t required_capability_mask = 0;
-    if (!xr_target_semantic_capability_mask(semantic_plan,
-                                            profile_facts->machine.runtime_profile,
-                                            &required_capability_mask) ||
+    bool capability_exact = true;
+    if (semantic_module_count == 0) {
+        capability_exact = xr_target_semantic_capability_mask(
+            semantic_plan, profile_facts->machine.runtime_profile,
+            &required_capability_mask);
+    } else {
+        capability_exact = xr_target_semantic_capability_requirements(
+            semantic_modules, semantic_module_count, target_profile,
+            &required_capability_mask, nested, sizeof(nested));
+    }
+    if (!capability_exact ||
         !xr_target_capability_mask_is_backed(required_capability_mask,
                                              provider_mask))
         return fail(diagnostic, diagnostic_size, "XR_TARGET_1004",
@@ -132,11 +159,35 @@ static bool populate_identity(
 
     memset(identity, 0, sizeof(*identity));
     identity->schema_version = XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION;
+    identity->authority_kind = semantic_module_count
+                                   ? XR_RUNTIME_ARTIFACT_AUTHORITY_PROGRAM_MODULE_SET
+                                   : XR_RUNTIME_ARTIFACT_AUTHORITY_ORDINARY_MODULE;
+    identity->semantic_module_count = semantic_module_count
+                                          ? semantic_module_count
+                                          : 1u;
     identity->required_family_mask = XR_TARGET_REQUIRED_FAMILIES;
     identity->required_capability_mask = required_capability_mask;
     identity->provider_mask = provider_mask;
     copy_fingerprint(identity->semantic_fingerprint,
                      xr_semantic_plan_fingerprint(semantic_plan));
+    if (semantic_module_count != 0) {
+        XrFingerprint module_set_fingerprint = {{0}};
+        const XrSemanticProgramProvenance *program =
+            xr_semantic_plan_program_provenance(semantic_modules[0]);
+        if (!program ||
+            !xr_target_semantic_module_set_fingerprint(
+                semantic_modules, semantic_module_count,
+                &module_set_fingerprint))
+            return fail(diagnostic, diagnostic_size, "XR_TARGET_1000",
+                        "program semantic module-set identity is unavailable");
+        copy_fingerprint(identity->program_fingerprint,
+                         program->program_fingerprint);
+        copy_fingerprint(identity->program_module_set_fingerprint,
+                         module_set_fingerprint);
+        memcpy(identity->generation_closure_id,
+               program->generation_identity.bytes,
+               sizeof(identity->generation_closure_id));
+    }
     copy_fingerprint(identity->operation_registry_fingerprint,
                      xr_semantic_plan_operation_registry_fingerprint(
                          semantic_plan));
@@ -174,6 +225,134 @@ XRAY_API bool xr_runtime_artifact_authority_load_xsm(
     return created;
 }
 
+XR_STATIC_ASSERT(
+    XR_RUNTIME_ARTIFACT_GENERATION_CLOSURE_ID_SIZE == XR_STABLE_ID_BYTES,
+    "artifact authority GCI must retain the complete stable identity");
+
+static XrSemanticPlan *program_entry_semantic(
+    XrSemanticPlan *const *semantic_modules, uint32_t semantic_module_count) {
+    XrSemanticPlan *entry = NULL;
+    for (uint32_t i = 0; i < semantic_module_count; i++) {
+        XrSemanticPlan *candidate = semantic_modules[i];
+        size_t function_count =
+            xr_semantic_plan_program_function_binding_count(candidate);
+        for (size_t function = 0; function < function_count; function++) {
+            const XrSemanticProgramFunctionBinding *binding =
+                xr_semantic_plan_program_function_binding(
+                    candidate, (uint32_t) function);
+            if (!binding ||
+                (binding->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) == 0)
+                continue;
+            if (entry)
+                return NULL;
+            entry = candidate;
+        }
+    }
+    return entry;
+}
+
+XRAY_API bool xr_runtime_artifact_authority_load_xsm_module_set(
+    const XrRuntimeArtifactImage *semantic_artifacts,
+    uint32_t semantic_artifact_count,
+    XrRuntimeArtifactAuthority **authority, char *diagnostic,
+    size_t diagnostic_size) {
+    if (authority)
+        *authority = NULL;
+    if (!authority || !semantic_artifacts || semantic_artifact_count != 2u)
+        return fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                    "program artifact authority requires the exact two-module capability");
+
+    const uint8_t **bytes = (const uint8_t **) xr_calloc(
+        semantic_artifact_count, sizeof(*bytes));
+    size_t *sizes =
+        (size_t *) xr_calloc(semantic_artifact_count, sizeof(*sizes));
+    if (!bytes || !sizes) {
+        xr_free(bytes);
+        xr_free(sizes);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "program artifact image vector allocation failed");
+    }
+    bool complete = true;
+    for (uint32_t i = 0; i < semantic_artifact_count; i++) {
+        bytes[i] = semantic_artifacts[i].bytes;
+        sizes[i] = semantic_artifacts[i].size;
+        complete = complete && bytes[i] && sizes[i] != 0;
+    }
+    XrSemanticPlan **semantic_modules = NULL;
+    bool decoded = complete && xr_xsm_decode_program_module_set(
+                                   bytes, sizes, semantic_artifact_count,
+                                   &semantic_modules, diagnostic,
+                                   diagnostic_size);
+    xr_free(bytes);
+    xr_free(sizes);
+    if (!decoded)
+        return complete
+                   ? false
+                   : fail(diagnostic, diagnostic_size,
+                          "XR_ARTIFACT_2004",
+                          "program artifact image vector contains an empty image");
+
+    XrSemanticPlan *entry = program_entry_semantic(
+        semantic_modules, semantic_artifact_count);
+    XrTargetProfile *native_profile = NULL;
+    XrRuntimeArtifactAuthorityIdentity identity;
+    bool exact = entry &&
+                 xr_runtime_target_profile_build_native_hosted(
+                     &native_profile, diagnostic, diagnostic_size) &&
+                 populate_identity(
+                     entry,
+                     (const XrSemanticPlan *const *) semantic_modules,
+                     semantic_artifact_count, native_profile, &identity,
+                     diagnostic, diagnostic_size);
+    if (!exact) {
+        xr_target_profile_free(native_profile);
+        xr_xsm_decoded_program_module_set_free(
+            semantic_modules, semantic_artifact_count);
+        if (!diagnostic || !diagnostic_size || !diagnostic[0])
+            fail(diagnostic, diagnostic_size, "XR_ARTIFACT_2004",
+                 "program artifact authority has no unique entry semantic module");
+        return false;
+    }
+
+    XrRuntimeArtifactAuthority *created =
+        (XrRuntimeArtifactAuthority *) xr_calloc(1, sizeof(*created));
+    XrSemanticPlan **owned_modules =
+        (XrSemanticPlan **) xr_calloc(semantic_artifact_count,
+                                      sizeof(*owned_modules));
+    if (!created || !owned_modules) {
+        xr_free(created);
+        xr_free(owned_modules);
+        xr_target_profile_free(native_profile);
+        xr_xsm_decoded_program_module_set_free(
+            semantic_modules, semantic_artifact_count);
+        return fail(diagnostic, diagnostic_size, "XR_EXEC_5003",
+                    "program artifact authority allocation failed");
+    }
+    for (uint32_t i = 0; i < semantic_artifact_count; i++)
+        owned_modules[i] = xr_semantic_plan_retain(semantic_modules[i]);
+    const XrSemanticProgramProvenance *entry_provenance =
+        xr_semantic_plan_program_provenance(entry);
+    created->semantic_plan =
+        entry_provenance &&
+                entry_provenance->program_module_row < semantic_artifact_count
+            ? owned_modules[entry_provenance->program_module_row]
+            : NULL;
+    created->semantic_modules = owned_modules;
+    created->semantic_module_count = semantic_artifact_count;
+    created->target_profile = native_profile;
+    created->identity = identity;
+    xr_xsm_decoded_program_module_set_free(
+        semantic_modules, semantic_artifact_count);
+    if (!created->semantic_plan ||
+        !xr_runtime_artifact_authority_verify(created, diagnostic,
+                                              diagnostic_size)) {
+        xr_runtime_artifact_authority_free(created);
+        return false;
+    }
+    *authority = created;
+    return true;
+}
+
 XR_FUNCDEF bool xr_runtime_artifact_authority_create_internal(
     const XrSemanticPlan *verified_semantic_plan,
     XrRuntimeArtifactAuthority **authority, char *diagnostic,
@@ -190,7 +369,7 @@ XR_FUNCDEF bool xr_runtime_artifact_authority_create_internal(
         return false;
 
     XrRuntimeArtifactAuthorityIdentity identity;
-    if (!populate_identity(verified_semantic_plan, native_profile, &identity,
+    if (!populate_identity(verified_semantic_plan, NULL, 0u, native_profile, &identity,
                            diagnostic, diagnostic_size)) {
         xr_target_profile_free(native_profile);
         return false;
@@ -232,7 +411,13 @@ XRAY_API void xr_runtime_artifact_authority_free(
     XrRuntimeArtifactAuthority *authority) {
     if (!authority)
         return;
-    xr_semantic_plan_free(authority->semantic_plan);
+    if (authority->semantic_modules) {
+        for (uint32_t i = 0; i < authority->semantic_module_count; i++)
+            xr_semantic_plan_free(authority->semantic_modules[i]);
+        xr_free(authority->semantic_modules);
+    } else {
+        xr_semantic_plan_free(authority->semantic_plan);
+    }
     xr_target_profile_free(authority->target_profile);
     memset(authority, 0, sizeof(*authority));
     xr_free(authority);

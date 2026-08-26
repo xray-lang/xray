@@ -78,6 +78,12 @@ XR_FUNC bool xr_runtime_generation_live_manifest_snapshot(
     const XrLoadedModuleGeneration *generation,
     XrRuntimeGenerationLiveManifest *manifest);
 
+/* Bounded public-program executor. It consumes the already-published live
+ * manifest and the generation's existing decoded cache; it owns neither. */
+XR_FUNC bool xr_module_generation_execute_program_direct_i64(
+    XrLoadedModuleGeneration *generation, int64_t *result,
+    char *diagnostic, size_t diagnostic_size);
+
 XR_FUNC bool xr_module_generation_verify_transition(
     const XrModuleGenerationSnapshot *before,
     const XrModuleGenerationSnapshot *after,

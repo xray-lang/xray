@@ -138,6 +138,44 @@ static void locked_snapshot(const XrLoadedModuleGeneration *generation,
            sizeof(snapshot->poison_fingerprint));
 }
 
+static bool verifier_identity_exact(
+    const XrModuleGenerationIdentity *left,
+    const XrModuleGenerationIdentity *right) {
+    return left && right &&
+           left->schema_version == right->schema_version &&
+           left->target_plan_schema_version == right->target_plan_schema_version &&
+           left->generation_number == right->generation_number &&
+           left->completed_family_mask == right->completed_family_mask &&
+           left->required_capability_mask == right->required_capability_mask &&
+           memcmp(left->semantic_fingerprint, right->semantic_fingerprint,
+                  sizeof(left->semantic_fingerprint)) == 0 &&
+           memcmp(left->program_fingerprint, right->program_fingerprint,
+                  sizeof(left->program_fingerprint)) == 0 &&
+           memcmp(left->program_module_set_fingerprint,
+                  right->program_module_set_fingerprint,
+                  sizeof(left->program_module_set_fingerprint)) == 0 &&
+           memcmp(left->generation_closure_id, right->generation_closure_id,
+                  sizeof(left->generation_closure_id)) == 0 &&
+           memcmp(left->target_profile_fingerprint,
+                  right->target_profile_fingerprint,
+                  sizeof(left->target_profile_fingerprint)) == 0 &&
+           memcmp(left->target_plan_fingerprint,
+                  right->target_plan_fingerprint,
+                  sizeof(left->target_plan_fingerprint)) == 0 &&
+           memcmp(left->runtime_abi_fingerprint,
+                  right->runtime_abi_fingerprint,
+                  sizeof(left->runtime_abi_fingerprint)) == 0 &&
+           memcmp(left->provider_set_fingerprint,
+                  right->provider_set_fingerprint,
+                  sizeof(left->provider_set_fingerprint)) == 0 &&
+           memcmp(left->object_header_fingerprint,
+                  right->object_header_fingerprint,
+                  sizeof(left->object_header_fingerprint)) == 0 &&
+           memcmp(left->generation_fingerprint,
+                  right->generation_fingerprint,
+                  sizeof(left->generation_fingerprint)) == 0;
+}
+
 static bool verifier_live_manifest_exact_locked(
     const XrLoadedModuleGeneration *generation) {
     const XrRuntimeGenerationAuthority *authority = generation->authority;
@@ -153,8 +191,8 @@ static bool verifier_live_manifest_exact_locked(
             current->state != XR_MODULE_GENERATION_ACTIVE ||
             !current->active_manifest_published ||
             current->active_program_target_plan != current->plan ||
-            memcmp(&current->active_identity, &current->identity,
-                   sizeof(current->identity)) != 0)
+            !verifier_identity_exact(&current->active_identity,
+                                     &current->identity))
             return false;
     }
     if (count != authority->active_generation_count ||
@@ -233,10 +271,18 @@ static bool verify_native_identity(const XrLoadedModuleGeneration *generation,
                    sizeof(identity->generation_closure_id)) == 0;
     }
     uint64_t expected_capability_mask = 0;
-    if (!xr_target_semantic_capability_mask(
-            xr_target_plan_semantic_plan(plan),
-            facts->machine.runtime_profile,
-            &expected_capability_mask))
+    const XrSemanticPlan *ordinary_module[1] = {
+        xr_target_plan_semantic_plan(plan)};
+    const XrSemanticPlan *const *semantic_modules =
+        plan->semantic_module_count
+            ? (const XrSemanticPlan *const *) plan->semantic_modules
+            : ordinary_module;
+    uint32_t semantic_module_count =
+        plan->semantic_module_count ? plan->semantic_module_count : 1u;
+    if (!xr_target_semantic_capability_requirements(
+            semantic_modules, semantic_module_count,
+            xr_target_plan_profile(plan), &expected_capability_mask,
+            nested, sizeof(nested)))
         return reject(diagnostic, diagnostic_size, "XR_TARGET_1004",
                       "generation semantic capability closure is invalid");
     if (!program_identity_exact ||

@@ -423,7 +423,73 @@ static bool xaot_module_semantic_authority_matches(const XiModule *module,
     if (xaot_module_uses_leaf_aggregate_psc(module))
         return xi_program_semantic_plan_verify_detached_leaf_authority(module->init, semantic, NULL,
                                                                         0);
-    return module->init->semantic_plan == semantic;
+    const XrSemanticPlan *live_semantic = module->init->semantic_plan;
+    const XrSemanticEntityRecord *live_entity =
+        xr_semantic_plan_unique_module_entity(live_semantic);
+    const XrSemanticEntityRecord *candidate_entity =
+        xr_semantic_plan_unique_module_entity(semantic);
+    if (!live_semantic || !xr_semantic_plan_is_frozen(live_semantic) ||
+        !xr_semantic_plan_is_verified(live_semantic) ||
+        !xr_semantic_plan_is_frozen(semantic) ||
+        !xr_semantic_plan_is_verified(semantic) || !live_entity ||
+        !candidate_entity ||
+        !xr_stable_id_equal(live_entity->id, candidate_entity->id) ||
+        !xr_fingerprint_equal(xr_semantic_plan_fingerprint(live_semantic),
+                              xr_semantic_plan_fingerprint(semantic)))
+        return false;
+
+    const XrSemanticProgramProvenance *candidate_program =
+        xr_semantic_plan_program_provenance(semantic);
+    const XrSemanticProgramProvenance *live_program =
+        xr_semantic_plan_program_provenance(live_semantic);
+    if (!candidate_program && !live_program)
+        return true;
+    if (!candidate_program || !live_program ||
+        candidate_program->program_module_row !=
+            live_program->program_module_row ||
+        !xr_stable_id_equal(candidate_program->program_module,
+                            live_program->program_module) ||
+        !xr_fingerprint_equal(candidate_program->program_fingerprint,
+                              live_program->program_fingerprint) ||
+        memcmp(candidate_program->generation_identity.bytes,
+               live_program->generation_identity.bytes,
+               sizeof(candidate_program->generation_identity.bytes)) != 0)
+        return false;
+
+    const XrProgramSemanticClosure *closure =
+        module->program_semantic_closure;
+    const XrProgramSemanticModuleInput *source =
+        module->source_semantic_module_present
+            ? &module->source_semantic_module
+            : NULL;
+    const XrProgramSemanticModuleRecord *psc_module =
+        closure ? xr_program_semantic_closure_module(
+                      closure, module->psc_module_index)
+                : NULL;
+    XrGenerationClosureId closure_generation =
+        xr_program_semantic_closure_generation_id(closure);
+    return closure && source && psc_module &&
+           xr_program_semantic_closure_is_frozen(closure) &&
+           xr_program_semantic_closure_is_verified(closure) &&
+           candidate_program->program_family ==
+               xr_program_semantic_closure_family(closure) &&
+           candidate_program->module_count ==
+               xr_program_semantic_closure_module_count(closure) &&
+           candidate_program->program_module_row == module->psc_module_index &&
+           xr_stable_id_equal(candidate_program->program_module,
+                              source->module_identity) &&
+           xr_stable_id_equal(candidate_program->program_module,
+                              psc_module->module_identity) &&
+           xr_fingerprint_equal(candidate_program->program_fingerprint,
+                                xr_program_semantic_closure_fingerprint(
+                                    closure)) &&
+           memcmp(candidate_program->generation_identity.bytes,
+                  closure_generation.bytes,
+                  sizeof(candidate_program->generation_identity.bytes)) == 0 &&
+           xr_fingerprint_equal(psc_module->module_authority_fingerprint,
+                                source->module_authority_fingerprint) &&
+           xr_fingerprint_equal(psc_module->source_fingerprint,
+                                source->source_fingerprint);
 }
 
 static bool xaot_function_belongs_to_module(const XiModule *module, const XiFunc *function) {
@@ -453,6 +519,33 @@ XR_FUNC bool xaot_bundle_program_partition_for_module(const XaotBundle *bundle,
     for (uint32_t partition = 0; partition < partition_count; partition++) {
         const XrSemanticPlan *semantic =
             xr_target_plan_semantic_module(bundle->program_target_plan, partition);
+        if (!xaot_module_semantic_authority_matches(module, semantic))
+            continue;
+        if (match != UINT32_MAX)
+            return false;
+        match = partition;
+    }
+    if (match == UINT32_MAX)
+        return false;
+    *partition_out = match;
+    return true;
+}
+
+XR_FUNC bool xaot_bundle_program_partition_for_xi_module(
+    const XaotBundle *bundle, const XiModule *module, uint32_t *partition_out) {
+    if (partition_out)
+        *partition_out = UINT32_MAX;
+    if (!bundle || !bundle->program_target_plan || !module || !partition_out)
+        return false;
+    uint32_t partition_count = 0;
+    (void) xr_target_plan_module_partitions(bundle->program_target_plan,
+                                            &partition_count);
+    if (!partition_count)
+        partition_count = 1u;
+    uint32_t match = UINT32_MAX;
+    for (uint32_t partition = 0; partition < partition_count; partition++) {
+        const XrSemanticPlan *semantic = xr_target_plan_semantic_module(
+            bundle->program_target_plan, partition);
         if (!xaot_module_semantic_authority_matches(module, semantic))
             continue;
         if (match != UINT32_MAX)

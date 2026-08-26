@@ -901,6 +901,20 @@ XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_edge, XrSemanticEdgeRecord, edges, edge
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_constant, XrSemanticConstantRecord, constants,
                         constant_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_entity, XrSemanticEntityRecord, entities, entity_count)
+
+const XrSemanticEntityRecord *
+xr_semantic_plan_unique_module_entity(const XrSemanticPlan *plan) {
+    const XrSemanticEntityRecord *found = NULL;
+    for (uint32_t i = 0; plan && i < plan->entity_count; i++) {
+        const XrSemanticEntityRecord *entity = &plan->entities[i];
+        if (entity->kind != XR_SEM_ENTITY_MODULE)
+            continue;
+        if (found)
+            return NULL;
+        found = entity;
+    }
+    return found;
+}
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_type_binding, XrSemanticProgramTypeBinding,
                         program_type_bindings, program_type_binding_count)
 XR_PLAN_RECORD_ACCESSOR(xr_semantic_plan_program_type_field_binding,

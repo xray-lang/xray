@@ -17,6 +17,13 @@ static void hex_bytes(const uint8_t *bytes, size_t size, char *hex) {
     hex[size * 2] = '\0';
 }
 
+static bool bytes_are_zero(const uint8_t *bytes, size_t size) {
+    for (size_t i = 0; bytes && i < size; i++)
+        if (bytes[i] != 0u)
+            return false;
+    return bytes != NULL;
+}
+
 static int write_evidence(const char *path,
                           const XrRuntimeArtifactAuthorityIdentity *authority,
                           const XrModuleGenerationIdentity *generation) {
@@ -80,6 +87,22 @@ int main(int argc, char **argv) {
     }
     if (!xr_runtime_artifact_authority_identity(authority, &identity)) {
         fprintf(stderr, "runtime artifact identity unavailable\n");
+        xr_target_plan_free(plan);
+        xr_runtime_artifact_authority_free(authority);
+        return 1;
+    }
+    if (identity.schema_version !=
+            XR_RUNTIME_ARTIFACT_AUTHORITY_SCHEMA_VERSION ||
+        identity.authority_kind !=
+            XR_RUNTIME_ARTIFACT_AUTHORITY_ORDINARY_MODULE ||
+        identity.semantic_module_count != 1u ||
+        !bytes_are_zero(identity.program_fingerprint,
+                        sizeof(identity.program_fingerprint)) ||
+        !bytes_are_zero(identity.program_module_set_fingerprint,
+                        sizeof(identity.program_module_set_fingerprint)) ||
+        !bytes_are_zero(identity.generation_closure_id,
+                        sizeof(identity.generation_closure_id))) {
+        fprintf(stderr, "ordinary runtime artifact identity is not exact v3\n");
         xr_target_plan_free(plan);
         xr_runtime_artifact_authority_free(authority);
         return 1;
