@@ -58,10 +58,11 @@ PROGRAM_RE = re.compile(
 )
 PROGRAM_PLAN_GATE = (
     "[program-semantic-plan] modules=2 entry=1 xi=verified "
-    "semantic=verified target=pending"
+    "semantic=verified target=verified execution=pending"
 )
 GRAPH_TARGET_REJECTION = (
-    "XR_TARGET_1001: graph SemanticPlan execution is outside TargetPlan coverage"
+    "XR_TARGET_1001: verified program TargetPlan execution is outside "
+    "same-plan VM/AOT coverage"
 )
 
 SOLO_V1 = "fn scale(x: i64) -> i64 {\n    return x * 3\n}\n\nprint(scale(14))\n"
@@ -198,7 +199,7 @@ def expect_product_target_boundary(rec: Recorder, result: proc.ProcResult,
            f"{label}: verified graph reaches the exact Target fail-closed boundary",
            result.combined_text())
     expect(rec, 0 <= gate_at < summary_at < closure_at,
-           f"{label}: Xi/SemanticPlan gate precedes cache publication and Target",
+           f"{label}: verified program target precedes cache publication and execution fence",
            stdout)
     expect(rec, not output.exists(),
            f"{label}: Target rejection publishes no native binary", str(output))
