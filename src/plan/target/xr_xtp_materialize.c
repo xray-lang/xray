@@ -16,6 +16,7 @@
 #include "xr_target_plan_internal.h"
 #include "xr_target_verify.h"
 #include "../format/xr_xtp_internal.h"
+#include "../semantic/xr_program_semantic_closure.h"
 #include "../semantic/xr_semantic_verify.h"
 #include "../../base/xmalloc.h"
 #include <string.h>
@@ -44,6 +45,8 @@ typedef struct XrXtpDecodedTables {
     XR_XTP_TABLE_FIELD(coroutines, XrTargetCoroutineStateRecord);
     XR_XTP_TABLE_FIELD(entry_expectations, XrTargetEntryExpectationRecord);
     XR_XTP_TABLE_FIELD(debug_facts, XrTargetDebugFactRecord);
+    XR_XTP_TABLE_FIELD(module_partitions, XrTargetModulePartitionRecord);
+    XR_XTP_TABLE_FIELD(program_graphs, XrTargetProgramGraphRecord);
 #undef XR_XTP_TABLE_FIELD
 } XrXtpDecodedTables;
 
@@ -70,6 +73,8 @@ static void dispose_tables(XrXtpDecodedTables *tables) {
     XR_XTP_FREE_TABLE(coroutines);
     XR_XTP_FREE_TABLE(entry_expectations);
     XR_XTP_FREE_TABLE(debug_facts);
+    XR_XTP_FREE_TABLE(module_partitions);
+    XR_XTP_FREE_TABLE(program_graphs);
 #undef XR_XTP_FREE_TABLE
     memset(tables, 0, sizeof(*tables));
 }
@@ -89,7 +94,7 @@ static bool validate_requirements(const XrXtpCandidate *candidate,
                          "materialization requirements are incomplete");
         return false;
     }
-    if (dependency_count > 1024u ||
+    if (dependency_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES ||
         dependency_count != xr_semantic_plan_dependency_count(semantic_plan)) {
         xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
                          "materialization requirements are not verified");
@@ -112,12 +117,27 @@ static bool validate_requirements(const XrXtpCandidate *candidate,
     }
     const XrTargetProfileDraft *facts = xr_target_profile_facts(expected_profile);
     const XrXtpIdentity *identity = &candidate->identity;
+    XrFingerprint semantic_fingerprint = xr_semantic_plan_fingerprint(semantic_plan);
+    const XrXtpSectionView *program_graphs =
+        xr_xtp_candidate_section(candidate, XR_XTP_SECTION_PROGRAM_GRAPHS);
+    const XrXtpSectionView *module_partitions =
+        xr_xtp_candidate_section(candidate, XR_XTP_SECTION_MODULE_PARTITIONS);
+    bool graph_module_set = program_graphs && module_partitions &&
+                            (program_graphs->count || module_partitions->count);
+    if ((!program_graphs || !module_partitions) ||
+        (graph_module_set &&
+         (dependency_count >= XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES ||
+          !xr_target_semantic_module_set_fingerprint(
+              semantic_plan, dependencies, dependency_count, &semantic_fingerprint)))) {
+        xr_xtp_set_error(error, error_size, "XR_TARGET_1000",
+                         "artifact module-set identity cannot be established");
+        return false;
+    }
     if (!facts || identity->semantic_schema != xr_semantic_plan_schema(semantic_plan) ||
         identity->profile_schema != facts->schema_version ||
         identity->plan_schema != XR_TARGET_PLAN_SCHEMA_VERSION ||
         identity->completed_family_mask != XR_TARGET_REQUIRED_FAMILIES ||
-        !fingerprint_matches(identity->semantic_fingerprint,
-                             xr_semantic_plan_fingerprint(semantic_plan)) ||
+        !fingerprint_matches(identity->semantic_fingerprint, semantic_fingerprint) ||
         !fingerprint_matches(identity->operation_registry_fingerprint,
                              xr_semantic_plan_operation_registry_fingerprint(semantic_plan)) ||
         !fingerprint_matches(identity->profile_fingerprint,
@@ -187,6 +207,8 @@ static bool decoded_storage_within_budget(const XrXtpCandidate *candidate,
     XR_XTP_ADD_DECODED_BYTES(COROUTINES, XrTargetCoroutineStateRecord);
     XR_XTP_ADD_DECODED_BYTES(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord);
     XR_XTP_ADD_DECODED_BYTES(DEBUG_FACTS, XrTargetDebugFactRecord);
+    XR_XTP_ADD_DECODED_BYTES(MODULE_PARTITIONS, XrTargetModulePartitionRecord);
+    XR_XTP_ADD_DECODED_BYTES(PROGRAM_GRAPHS, XrTargetProgramGraphRecord);
 #undef XR_XTP_ADD_DECODED_BYTES
     *decoded_bytes = total;
     return true;
@@ -261,6 +283,9 @@ static bool decode_tables(const XrXtpCandidate *candidate, XrXtpDecodedTables *t
     XR_XTP_DECODE_TABLE(entry_expectations, XrTargetEntryExpectationRecord,
                         ENTRY_EXPECTATIONS);
     XR_XTP_DECODE_TABLE(debug_facts, XrTargetDebugFactRecord, DEBUG_FACTS);
+    XR_XTP_DECODE_TABLE(module_partitions, XrTargetModulePartitionRecord,
+                        MODULE_PARTITIONS);
+    XR_XTP_DECODE_TABLE(program_graphs, XrTargetProgramGraphRecord, PROGRAM_GRAPHS);
 #undef XR_XTP_DECODE_TABLE
     return true;
 }
@@ -308,6 +333,8 @@ static XrTargetPlanDraft make_draft(const XrXtpDecodedTables *tables,
         XR_XTP_DRAFT_TABLE(coroutines),
         XR_XTP_DRAFT_TABLE(entry_expectations),
         XR_XTP_DRAFT_TABLE(debug_facts),
+        XR_XTP_DRAFT_TABLE(module_partitions),
+        XR_XTP_DRAFT_TABLE(program_graphs),
 #undef XR_XTP_DRAFT_TABLE
     };
     return draft;

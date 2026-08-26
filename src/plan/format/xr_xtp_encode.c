@@ -41,37 +41,40 @@ static bool fill_section_inputs(const XrTargetPlan *plan, XrXtpSectionInput sect
     const XrTargetProfileDraft *profile = xr_target_profile_facts(xr_target_plan_profile(plan));
     if (!profile)
         return false;
-    sections[0] =
+    sections[(uint32_t) XR_XTP_SECTION_TARGET_PROFILE - 1u] =
         (XrXtpSectionInput) {XR_XTP_SECTION_TARGET_PROFILE, 0, profile, 1, 0, 0};
-#define XR_XTP_FILL_SECTION(index, kind, accessor)                                                 \
+#define XR_XTP_FILL_SECTION(kind, accessor)                                                        \
     do {                                                                                           \
         const void *rows = xr_target_plan_##accessor(plan, &count);                               \
-        sections[index] =                                                                          \
+        sections[(uint32_t) XR_XTP_SECTION_##kind - 1u] =                                         \
             (XrXtpSectionInput) {XR_XTP_SECTION_##kind, 0, rows, count, 0, 0};                    \
     } while (0)
-    XR_XTP_FILL_SECTION(1, MACHINE_REPS, machine_reps);
-    XR_XTP_FILL_SECTION(2, VALUE_REPS, value_reps);
-    XR_XTP_FILL_SECTION(3, EXTENTS, extents);
-    XR_XTP_FILL_SECTION(4, LAYOUTS, layouts);
-    XR_XTP_FILL_SECTION(5, FIELDS, fields);
-    XR_XTP_FILL_SECTION(6, STORAGE, storage);
-    XR_XTP_FILL_SECTION(7, ALLOCATIONS, allocations);
-    XR_XTP_FILL_SECTION(8, EXTENT_OPERANDS, extent_operands);
-    XR_XTP_FILL_SECTION(9, FUNCTIONS, functions);
-    XR_XTP_FILL_SECTION(10, SLOTS, slots);
-    XR_XTP_FILL_SECTION(11, INSTRUCTIONS, instructions);
-    XR_XTP_FILL_SECTION(12, CALLS, calls);
-    XR_XTP_FILL_SECTION(13, CALL_ARGUMENTS, call_arguments);
-    XR_XTP_FILL_SECTION(14, ROOT_MAPS, root_maps);
-    XR_XTP_FILL_SECTION(15, ROOT_SLOTS, root_slots);
-    XR_XTP_FILL_SECTION(16, CLEANUPS, cleanups);
-    XR_XTP_FILL_SECTION(17, ADAPTERS, adapters);
-    XR_XTP_FILL_SECTION(18, CAPABILITIES, capabilities);
-    XR_XTP_FILL_SECTION(19, COROUTINES, coroutines);
-    XR_XTP_FILL_SECTION(20, ENTRY_EXPECTATIONS, entry_expectations);
-    XR_XTP_FILL_SECTION(21, DEBUG_FACTS, debug_facts);
+    XR_XTP_FILL_SECTION(MACHINE_REPS, machine_reps);
+    XR_XTP_FILL_SECTION(VALUE_REPS, value_reps);
+    XR_XTP_FILL_SECTION(EXTENTS, extents);
+    XR_XTP_FILL_SECTION(LAYOUTS, layouts);
+    XR_XTP_FILL_SECTION(FIELDS, fields);
+    XR_XTP_FILL_SECTION(STORAGE, storage);
+    XR_XTP_FILL_SECTION(ALLOCATIONS, allocations);
+    XR_XTP_FILL_SECTION(EXTENT_OPERANDS, extent_operands);
+    XR_XTP_FILL_SECTION(FUNCTIONS, functions);
+    XR_XTP_FILL_SECTION(SLOTS, slots);
+    XR_XTP_FILL_SECTION(INSTRUCTIONS, instructions);
+    XR_XTP_FILL_SECTION(CALLS, calls);
+    XR_XTP_FILL_SECTION(CALL_ARGUMENTS, call_arguments);
+    XR_XTP_FILL_SECTION(ROOT_MAPS, root_maps);
+    XR_XTP_FILL_SECTION(ROOT_SLOTS, root_slots);
+    XR_XTP_FILL_SECTION(CLEANUPS, cleanups);
+    XR_XTP_FILL_SECTION(ADAPTERS, adapters);
+    XR_XTP_FILL_SECTION(CAPABILITIES, capabilities);
+    XR_XTP_FILL_SECTION(COROUTINES, coroutines);
+    XR_XTP_FILL_SECTION(ENTRY_EXPECTATIONS, entry_expectations);
+    XR_XTP_FILL_SECTION(DEBUG_FACTS, debug_facts);
+    XR_XTP_FILL_SECTION(MODULE_PARTITIONS, module_partitions);
+    XR_XTP_FILL_SECTION(PROGRAM_GRAPHS, program_graphs);
 #undef XR_XTP_FILL_SECTION
-    sections[11].flags = XR_XTP_SECTION_FLAG_COMPACT;
+    sections[(uint32_t) XR_XTP_SECTION_INSTRUCTIONS - 1u].flags =
+        XR_XTP_SECTION_FLAG_COMPACT;
     return true;
 }
 

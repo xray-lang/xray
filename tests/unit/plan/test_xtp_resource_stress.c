@@ -426,7 +426,9 @@ static void test_nonempty_extent_and_debug_field_mutations(void) {
     xr_free(copy);
     REQUIRE(XR_XTP_SECTION_ENTRY_EXPECTATIONS == XR_XTP_SECTION_COROUTINES + 1u);
     REQUIRE(XR_XTP_SECTION_DEBUG_FACTS == XR_XTP_SECTION_ENTRY_EXPECTATIONS + 1u);
-    REQUIRE(XR_XTP_SECTION_COUNT == XR_XTP_SECTION_DEBUG_FACTS + 1u);
+    REQUIRE(XR_XTP_SECTION_MODULE_PARTITIONS == XR_XTP_SECTION_DEBUG_FACTS + 1u);
+    REQUIRE(XR_XTP_SECTION_PROGRAM_GRAPHS == XR_XTP_SECTION_MODULE_PARTITIONS + 1u);
+    REQUIRE(XR_XTP_SECTION_COUNT == XR_XTP_SECTION_PROGRAM_GRAPHS + 1u);
     puts("XTP mutation boundary: debug facts are source-backed and verified");
     dispose_fixture(&fixture);
 }

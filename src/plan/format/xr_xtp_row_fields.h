@@ -179,6 +179,36 @@
     F(U32, source_end_line) F(U32, source_end_column) F(ID, semantic_operation_identity)              \
     F(ID, source_span_identity) F(ID, owner_identity) F(ID, coroutine_state_identity)                 \
     F(FP, layout_fingerprint)
+#define XR_XTP_TEXT_MODULE_PARTITION_FIELDS(F)                                                    \
+    F(ID, module_identity) F(FP, semantic_fingerprint) F(U32, program_module_row)                \
+    F(U32, semantic_dependency) F(U32, value_reps_begin) F(U32, value_reps_count)                \
+    F(U32, extents_begin) F(U32, extents_count) F(U32, layouts_begin) F(U32, layouts_count)       \
+    F(U32, fields_begin) F(U32, fields_count) F(U32, storage_begin) F(U32, storage_count)         \
+    F(U32, allocations_begin) F(U32, allocations_count)                                          \
+    F(U32, extent_operands_begin) F(U32, extent_operands_count)                                  \
+    F(U32, functions_begin) F(U32, functions_count) F(U32, slots_begin) F(U32, slots_count)       \
+    F(U32, instructions_begin) F(U32, instructions_count) F(U32, calls_begin) F(U32, calls_count) \
+    F(U32, call_arguments_begin) F(U32, call_arguments_count)                                    \
+    F(U32, root_maps_begin) F(U32, root_maps_count) F(U32, root_slots_begin)                       \
+    F(U32, root_slots_count) F(U32, cleanups_begin) F(U32, cleanups_count)                        \
+    F(U32, adapters_begin) F(U32, adapters_count) F(U32, coroutines_begin)                        \
+    F(U32, coroutines_count) F(U32, entry_expectations_begin)                                    \
+    F(U32, entry_expectations_count) F(U32, debug_facts_begin) F(U32, debug_facts_count)
+#define XR_XTP_TEXT_PROGRAM_GRAPH_FIELDS(F)                                                       \
+    F(U32, schema) F(U32, family) F(U32, module_count) F(U32, function_count)                    \
+    F(U32, export_count) F(U32, entry_count) F(U32, call_count) F(U32, argument_count)           \
+    F(U32, entry_partition) F(U32, producer_partition) F(U32, entry_target_function)             \
+    F(U32, producer_target_function) F(U32, entry_semantic_function)                             \
+    F(U32, producer_semantic_function) F(U32, target_call) F(U32, target_argument)               \
+    F(U32, entry_semantic_operation) F(U32, producer_semantic_export)                            \
+    F(U32, entry_semantic_dependency) F(U32, producer_semantic_parameter)                        \
+    F(U32, caller_slot) F(U32, callee_slot) F(U32, argument_ordinal) F(U32, flags)               \
+    F(FP, program_fingerprint) F(ID, generation_identity) F(FP, target_profile_fingerprint)      \
+    F(ID, entry_function_identity) F(ID, producer_function_identity)                             \
+    F(U8, entry_function_flags) F(U8, producer_function_flags) F(U16, reserved16)                \
+    F(ID, export_identity) F(ID, exported_function_identity) F(ID, entry_identity)               \
+    F(ID, call_identity) F(ID, callsite_identity) F(ID, resolver_binding)                        \
+    F(ID, argument_identity) F(ID, parameter_identity)
 
 #define XR_XTP_TEXT_TYPED_ROWS(F)                                                                       \
     F(TARGET_PROFILE, XrTargetProfileDraft, XR_XTP_TEXT_PROFILE_FIELDS)                                \
@@ -201,6 +231,8 @@
     F(CAPABILITIES, XrTargetCapabilityRecord, XR_XTP_TEXT_CAPABILITY_FIELDS)                          \
     F(COROUTINES, XrTargetCoroutineStateRecord, XR_XTP_TEXT_COROUTINE_FIELDS)                         \
     F(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord, XR_XTP_TEXT_ENTRY_EXPECTATION_FIELDS)       \
-    F(DEBUG_FACTS, XrTargetDebugFactRecord, XR_XTP_TEXT_DEBUG_FACT_FIELDS)
+    F(DEBUG_FACTS, XrTargetDebugFactRecord, XR_XTP_TEXT_DEBUG_FACT_FIELDS)                            \
+    F(MODULE_PARTITIONS, XrTargetModulePartitionRecord, XR_XTP_TEXT_MODULE_PARTITION_FIELDS)          \
+    F(PROGRAM_GRAPHS, XrTargetProgramGraphRecord, XR_XTP_TEXT_PROGRAM_GRAPH_FIELDS)
 
 #endif  // XR_XTP_ROW_FIELDS_H

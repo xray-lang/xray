@@ -10,6 +10,7 @@
 #include "../../../src/plan/format/xr_artifact_kind.h"
 #include "../../../src/plan/format/xr_xsm_schema.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
+#include "../../../src/plan/semantic/xr_program_semantic_closure.h"
 #include "../../../src/plan/target/xr_target_builder.h"
 #include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
@@ -944,7 +945,8 @@ static void test_exact_roundtrip_and_owned_candidate(void) {
 
     const uint32_t rejected_schemas[] = {UINT32_C(12), UINT32_C(13), UINT32_C(14),
                                          UINT32_C(28), UINT32_C(41), UINT32_C(42),
-                                         UINT32_C(43), UINT32_C(44), UINT32_C(45)};
+                                         UINT32_C(43), UINT32_C(44), UINT32_C(45),
+                                         UINT32_C(46), UINT32_C(47)};
     for (size_t i = 0;
          i < sizeof(rejected_schemas) / sizeof(rejected_schemas[0]); i++) {
         uint8_t *old_schema = copy_artifact(&fixture);
@@ -1807,12 +1809,20 @@ static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 448, 58, 12, 24, 108, 28, 40, 24, 12,
         48, 58, 32, 160, 58, 20, 4, 20, 44, 12, 48, 144, 132,
+        208, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
     for (uint32_t kind = 1; kind < XR_XTP_SECTION_COUNT; kind++) {
         REQUIRE(xr_xtp_wire_row_size((XrXtpSectionKind) kind) == expected[kind]);
         REQUIRE(xr_xtp_table_count_limit((XrXtpSectionKind) kind) > 0);
     }
+    REQUIRE(xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS) ==
+            XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES);
+    REQUIRE(UINT64_C(256) <=
+            xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS));
+    REQUIRE(UINT64_C(257) >
+            xr_xtp_table_count_limit(XR_XTP_SECTION_MODULE_PARTITIONS));
+    REQUIRE(xr_xtp_table_count_limit(XR_XTP_SECTION_PROGRAM_GRAPHS) == 1u);
     REQUIRE(xr_xtp_runtime_peak_within_budget(
         XR_XTP_MAX_ARTIFACT_SIZE, XR_XTP_MAX_DECODED_TABLE_BYTES));
     REQUIRE(!xr_xtp_runtime_peak_within_budget(
@@ -1861,6 +1871,10 @@ static void test_every_typed_row_codec(void) {
     XR_XTP_ROW_ROUNDTRIP(ADAPTERS, XrTargetAdapterRecord);
     XR_XTP_ROW_ROUNDTRIP(CAPABILITIES, XrTargetCapabilityRecord);
     XR_XTP_ROW_ROUNDTRIP(COROUTINES, XrTargetCoroutineStateRecord);
+    XR_XTP_ROW_ROUNDTRIP(ENTRY_EXPECTATIONS, XrTargetEntryExpectationRecord);
+    XR_XTP_ROW_ROUNDTRIP(DEBUG_FACTS, XrTargetDebugFactRecord);
+    XR_XTP_ROW_ROUNDTRIP(MODULE_PARTITIONS, XrTargetModulePartitionRecord);
+    XR_XTP_ROW_ROUNDTRIP(PROGRAM_GRAPHS, XrTargetProgramGraphRecord);
 #undef XR_XTP_ROW_ROUNDTRIP
 }
 
@@ -2310,9 +2324,9 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-46-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-48-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 46 cutover tests passed");
+        puts("XTP schema 48 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();
