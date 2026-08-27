@@ -131,6 +131,25 @@ static XrTargetProfile *build_profile(void) {
     return profile;
 }
 
+/* The SemanticPlan builder requires a lowered graph to carry a typed durable
+ * module identity and synthesizes none, so each fixture names its own
+ * memory-namespace identity. xi_func_free owns the module it is attached to
+ * and releases it with the function. */
+static void attach_fixture_module(XiFunc *root, const char *name) {
+    char identity[256];
+    int written = snprintf(identity, sizeof(identity), "memory-module-v1:id=%zu:%s",
+                           strlen(name), name);
+    REQUIRE(written > 0 && (size_t) written < sizeof(identity));
+    if (!root->module) {
+        root->module = xi_module_new("test/opaque/fixture.xr", "opaque_fixture", root);
+        REQUIRE(root->module);
+    }
+    /* xi_module_new leaves the identity unset, so a fixture that built its own
+     * module still has to name one. */
+    if (!root->module->identity)
+        REQUIRE(xi_module_set_identity(root->module, identity));
+}
+
 static XrSemanticPlan *build_identity_semantic(const char *name,
                                                XrType *type) {
     XiFunc *function = xi_func_new(name, type);
@@ -148,6 +167,7 @@ static XrSemanticPlan *build_identity_semantic(const char *name,
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
+    attach_fixture_module(function, "opaque-identity-fixture");
     bool built = xr_semantic_plan_build(function, &semantic, diagnostic,
                                         sizeof(diagnostic));
     if (!built)
@@ -176,6 +196,7 @@ static XrSemanticPlan *build_channel_semantic(void) {
     function->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
+    attach_fixture_module(function, "opaque-channel-fixture");
     REQUIRE(xr_semantic_plan_build(function, &semantic, diagnostic,
                                    sizeof(diagnostic)));
     xi_func_free(function);
@@ -222,6 +243,7 @@ static XrSemanticPlan *build_raw_pointer_semantic(void) {
     root->stage = child->stage = XI_STAGE_OPTIMIZED;
     XrSemanticPlan *semantic = NULL;
     char diagnostic[512] = {0};
+    attach_fixture_module(root, "opaque-raw-pointer-fixture");
     bool built = xr_semantic_plan_build(root, &semantic, diagnostic,
                                         sizeof(diagnostic));
     if (!built)
@@ -525,6 +547,7 @@ static PlanFixture build_entry_plan(void) {
         .function = echo,
     };
     char diagnostic[512] = {0};
+    attach_fixture_module(dependency_root, "opaque-provider-fixture");
     REQUIRE(xr_semantic_plan_build_and_attach(
         dependency_root, diagnostic, sizeof(diagnostic)));
     XrSemanticPlan *dependency =
@@ -599,6 +622,7 @@ static PlanFixture build_entry_plan(void) {
     caller_root->module = caller_module;
     caller_module->nslots = 1;
     XiModule *dependencies[] = {dependency_module};
+    attach_fixture_module(caller_root, "opaque-consumer-fixture");
     REQUIRE(xr_semantic_plan_build_and_attach_module_set(
         caller_root, dependencies, 1, diagnostic, sizeof(diagnostic)));
     XrSemanticPlan *semantic =

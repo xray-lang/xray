@@ -105,6 +105,16 @@ static XiReppedProgram *advance_to_repped(XiFunc *f) {
     XiCoroLoweredProgram *lowered = advance_to_coro_lowered(f);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(lowered, error, sizeof(error));
     assert(optimized != NULL);
+    /* The SemanticPlan builder requires a lowered graph to carry a typed
+     * durable module identity and synthesizes none, so this fixture names its
+     * own memory-namespace identity. xi_func_free owns the module it is
+     * attached to and releases it with the function. */
+    if (!f->module) {
+        f->module = xi_module_new("xi_stage_fixture.xr", "xi_stage_fixture", f);
+        assert(f->module != NULL);
+        assert(xi_module_set_identity(f->module,
+                                      "memory-module-v1:id=19:xi-stage-fixture-v1"));
+    }
     bool planned = xr_semantic_plan_build_and_attach(f, error, sizeof(error));
     if (!planned)
         fprintf(stderr, "semantic plan attachment failed: %s\n", error);
