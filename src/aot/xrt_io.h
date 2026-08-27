@@ -500,24 +500,18 @@ static inline XrValue xrt_io_chmod_value(const char *path_data, int64_t path_len
     return XR_FROM_BOOL(ok);
 }
 
-static inline bool xrt_io_touch_update(void *ctx, const char *path) {
-    (void) ctx;
-    return xrt_io_platform_utime(path, NULL) == 0;
-}
-
-static inline bool xrt_io_touch_create(void *ctx, const char *path) {
-    (void) ctx;
-    FILE *f = fopen(path, "a");
-    if (!f)
-        return false;
-    return fclose(f) == 0;
-}
-
-static inline XrValue xrt_io_touch(const char *path_data, int64_t path_len) {
+static inline XrValue xrt_io_utime_now(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;
     char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    bool ok = xr_io_core_touch(path, xrt_io_touch_update, xrt_io_touch_create, NULL);
+    bool ok = false;
+    if (path) {
+#if defined(XR_OS_WINDOWS)
+        ok = _utime(path, NULL) == 0;
+#else
+        ok = utime(path, NULL) == 0;
+#endif
+    }
     XRT_FREE(owned);
     return XR_FROM_BOOL(ok);
 }

@@ -320,7 +320,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__tempDir", "(): string?", "Create temporary directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__tempFile", "(): string?", "Create temporary file (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__touch", "(path: Path): bool", "Create or update file timestamp", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
+    {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeFileBytes", "(path: Path, data: Array<u8>): bool", "Write byte array to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},

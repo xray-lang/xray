@@ -97,7 +97,7 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__symlink", io_symlink);
     XRS_EXPORT(module, isolate, "__tempDir", io_tempDir);
     XRS_EXPORT(module, isolate, "__tempFile", io_tempFile);
-    XRS_EXPORT(module, isolate, "__touch", io_touch);
+    XRS_EXPORT(module, isolate, "__utimeNow", io_utime_now);
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeFile", io_writeFile);
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeFileBytes", io_writeFileBytes);
     XRS_EXPORT(module, isolate, "__writeStderr", io_writeStderr);
