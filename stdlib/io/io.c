@@ -171,9 +171,9 @@ static XrValue io_readStdin(XrVMRuntime *X, XrValue *args, int argc) {
     if (!buf)
         return xr_null();
 
-    XrString *str = xr_string_intern(X, buf, len, 0);
+    XrValue value = xrs_string_value_n(X, buf, len);
     xr_free(buf);
-    return xr_string_value(str);
+    return value;
 }
 
 static XrValue io_stream_read_bytes(XrVMRuntime *X, FILE *stream, int64_t max_bytes) {
@@ -309,7 +309,7 @@ static XrCFuncResult file_io_finish(XrVMRuntime *X, FileIoState *st, bool ok, Xr
     } else if (st->kind == FILE_IO_WRITE) {
         r = xr_bool(st->off == st->len);
     } else if (st->kind == FILE_IO_READ_STRING) {
-        r = xr_string_value(xr_string_intern(X, st->rbuf, st->off, 0));
+        r = xrs_string_value_n(X, st->rbuf, st->off);
     } else {  // FILE_IO_READ_BYTES
         XrArray *arr = xr_byte_array_new(xr_current_coro(X), (int32_t) st->off);
         if (arr) {
@@ -444,7 +444,7 @@ static XrCFuncResult io_readFile(XrVMRuntime *X, XrValue *args, int argc, XrValu
     char *buf = io_read_file_buffer_sync(path, &read_size);
     if (!buf)
         return XR_CFUNC_DONE;
-    *result = xr_string_value(xr_string_intern(X, buf, read_size, 0));
+    *result = xrs_string_value_n(X, buf, read_size);
     xr_free(buf);
     return XR_CFUNC_DONE;
 }

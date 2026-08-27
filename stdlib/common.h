@@ -108,6 +108,11 @@ static inline XrValue xrs_string_value_n(XrVMRuntime *X, const char *s, size_t l
     if (!s)
         return xr_null();
     XrString *str = xr_string_intern(X, s, len, 0);
+    /* Interning rejects bytes that are not valid UTF-8 and answers NULL. The
+     * value constructor only asserts against that, so an optimized build would
+     * publish a string whose payload is NULL and fault on first use. */
+    if (!str)
+        return xr_null();
     return xr_string_value(str);
 }
 
@@ -156,8 +161,7 @@ static inline XrValue xrs_string_value_c(XrVMRuntime *X, const char *s) {
 
 #define XRS_EXPORT_YIELDABLE(mod, isolate, name_str, func_ptr)                                     \
     do {                                                                                           \
-        struct XrCFunction *_cf =                                                                  \
-            xr_yieldable_cfunction_new((isolate), (func_ptr), (name_str));                         \
+        struct XrCFunction *_cf = xr_yieldable_cfunction_new((isolate), (func_ptr), (name_str));   \
         xr_module_add_export((isolate), (mod), (name_str), xr_value_from_cfunction(_cf));          \
     } while (0)
 
