@@ -3,6 +3,7 @@
  */
 
 #include "../../src/ir/xi.h"
+#include "../../src/ir/xi_module.h"
 #include "../../src/plan/format/xr_xsm_schema.h"
 #include "../../src/plan/format/xr_xtp_internal.h"
 #include "../../src/plan/semantic/xr_semantic_builder.h"
@@ -190,6 +191,17 @@ static bool initialize_fixture(void) {
     }
     xi_block_set_return(entry, result);
     function->stage = XI_STAGE_OPTIMIZED;
+    /* The SemanticPlan builder requires a lowered graph to carry a typed
+     * durable module identity and synthesizes none, so this fixture names its
+     * own memory-namespace identity. xi_func_free owns the module it is
+     * attached to and releases it with the function. */
+    function->module = xi_module_new("fixtures/xtp_fuzz.xr", "xtp_fuzz", function);
+    if (!function->module ||
+        !xi_module_set_identity(function->module,
+                                "memory-module-v1:id=19:xtp-fuzz-fixture-v1")) {
+        xi_func_free(function);
+        return false;
+    }
     char error[512] = {0};
     if (!xr_semantic_plan_build(function, &fixture.semantic, error, sizeof(error))) {
         xi_func_free(function);

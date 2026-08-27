@@ -350,6 +350,16 @@ static bool package_module_spec_fixture_init(PackageModuleSpecFixture *fixture,
                  slash + 1);
     if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
         return false;
+    /* The source path this root is compared against has already been through
+     * realpath, and identity containment is a byte comparison, so the root has
+     * to be canonical too. On Darwin the temporary tree reaches us through the
+     * /var symlink, which would make the package escape its own root. */
+    char canonical_root[XR_TEST_PATH_MAX];
+    if (!xr_test_realpath_buf(fixture->physical_root, canonical_root, sizeof(canonical_root)))
+        return false;
+    n = snprintf(fixture->physical_root, sizeof(fixture->physical_root), "%s", canonical_root);
+    if (n < 0 || (size_t) n >= sizeof(fixture->physical_root))
+        return false;
     n = snprintf(fixture->namespace_id, sizeof(fixture->namespace_id), "%s@1.0.0", coordinate);
     if (n < 0 || (size_t) n >= sizeof(fixture->namespace_id))
         return false;

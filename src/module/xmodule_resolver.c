@@ -403,6 +403,19 @@ static int resolve_package(XrModuleResolver *r, const char *specifier, XrModuleI
     char package_root[XR_PATH_MAX];
     int root_length = snprintf(package_root, sizeof(package_root), "%s/.xray/packages/%s/%s/%s",
                                home, owner, name, version);
+    /* Every source path below is canonicalized before the identity authority
+     * sees it, and containment is a byte comparison, so a root reached through
+     * a symlinked home would make the package escape a root that is its own.
+     * A root that does not resolve is left alone: the entry probe below
+     * reports a missing package far better than a path error would. */
+    if (root_length > 0 && (size_t) root_length < sizeof(package_root)) {
+        char *canonical_root = xr_realpath(package_root);
+        if (canonical_root) {
+            int copied = snprintf(package_root, sizeof(package_root), "%s", canonical_root);
+            xr_free(canonical_root);
+            root_length = copied;
+        }
+    }
     char namespace_id[256];
     int namespace_length =
         snprintf(namespace_id, sizeof(namespace_id), "%s@%s", specifier, version);

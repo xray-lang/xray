@@ -883,4 +883,4 @@ anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 58fddb930eac3cbed2d05e299ec10c4a8c61662b1651727edee880cb423a352b
 anchor-sha256: src/aot/xaot_driver.c d92954960de17cc4bdab92fc6510e0512b1852c03c59a4f194598fcb7fd1c2bf
-anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687
+anchor-sha256: tests/unit/aot/test_xaot_driver.c 1e94625b4cbc941858c4a354f2d7ceaf0d09f87a33aa0cd1b76aade0f0700d29
