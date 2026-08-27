@@ -3803,6 +3803,9 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
         uint32_t source_instance_type = XR_SEMANTIC_INDEX_NONE;
         uint32_t source_instance_class = XR_SEMANTIC_INDEX_NONE;
         const XrSemanticOperationRecord *source_call = &plan->operations[operation];
+        bool program_overflow =
+            program_bound && plan->program_provenance.program_family ==
+                                 XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
         if (!program_bound && source_call->opcode == XI_CALL_METHOD &&
             (source_call->semantic_immediate & 1) == 0 && source_call->metadata_count == 1 &&
             source_call->operand_count > 0 && source_call->function < plan->function_count) {
@@ -3890,6 +3893,18 @@ static bool verify_call_targets(const XrSemanticPlan *plan, const uint32_t *defi
                                      source_call->opcode == XI_CALL &&
                                      xr_semantic_external_class_instance_type_is_exact(
                                          xr_semantic_plan_type(plan, source_call->result_type));
+        if (program_overflow) {
+            if (target || source_call->opcode != XI_CALL_METHOD ||
+                program_binding->target_function != XR_SEMANTIC_INDEX_NONE ||
+                program_binding->program_dependency != XR_SEMANTIC_INDEX_NONE ||
+                !stable_id_zero(program_binding->resolver_binding)) {
+                xr_free(stores.rows);
+                return report(error, error_size, "XR_SEM_0019",
+                              "overflow program call target is not exact");
+            }
+            program_cursor++;
+            continue;
+        }
         if (program_bound && !target) {
             xr_free(stores.rows);
             return report(error, error_size, "XR_SEM_0019",
@@ -4255,7 +4270,9 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
          provenance->program_family !=
              XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL &&
          provenance->program_family !=
-             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL) ||
+             XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL &&
+         provenance->program_family !=
+             XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) ||
         fingerprint_zero(provenance->program_fingerprint) ||
         stable_id_zero(provenance->generation_identity) ||
         stable_id_zero(provenance->program_module) ||
@@ -4309,7 +4326,16 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
           plan->program_function_binding_count != 1 ||
           plan->program_call_binding_count > 1 ||
           plan->program_dependency_binding_count != plan->program_call_binding_count ||
-          plan->program_dependency_binding_count != plan->dependency_count)))
+          plan->program_dependency_binding_count != plan->dependency_count)) ||
+        (provenance->program_family ==
+             XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
+         (provenance->type_count != 1 || provenance->type_field_count != 0 ||
+          provenance->function_count != 1 || provenance->call_count == 0 ||
+          provenance->module_count != 1 || provenance->dependency_count != 0 ||
+          provenance->program_module_row != 0 ||
+          plan->program_function_binding_count != 1 ||
+          plan->program_call_binding_count != provenance->call_count ||
+          plan->program_dependency_binding_count != 0)))
         return report(error, error_size, "XR_SEM_0019",
                       "program provenance family shape is invalid");
     uint8_t *seen_type_rows =
@@ -4485,6 +4511,12 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
                     ? local->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED
                     : local->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
     }
+    if (valid && provenance->program_family ==
+                     XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
+        const XrSemanticProgramFunctionBinding *entry =
+            &plan->program_function_bindings[0];
+        valid = entry->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY;
+    }
     if (valid &&
         provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
         uint32_t entry_count = 0;
@@ -4546,14 +4578,24 @@ static bool verify_program_provenance_layout(const XrSemanticPlan *plan, char *e
             }
             source_target = candidate;
         }
-        valid = operation && operation->opcode == XI_CALL &&
+        bool overflow = provenance->program_family ==
+                        XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+        valid = operation &&
+                (overflow ? operation->opcode == XI_CALL_METHOD
+                          : operation->opcode == XI_CALL) &&
                 binding->program_row < provenance->call_count &&
                 !seen_call_rows[binding->program_row] &&
                 binding->reserved == 0 &&
                 !stable_id_zero(binding->program_call) && !stable_id_zero(binding->callsite) &&
                 caller &&
                 xr_stable_id_equal(caller->program_function, binding->caller_program_function) &&
-                ((!external && callee && stable_id_zero(binding->resolver_binding) &&
+                ((overflow && !external && !callee &&
+                  stable_id_zero(binding->resolver_binding) &&
+                  binding->program_dependency == XR_SEMANTIC_INDEX_NONE &&
+                  binding->target_function == XR_SEMANTIC_INDEX_NONE &&
+                  !stable_id_zero(binding->callee_program_function)) ||
+                 (!overflow && !external && callee &&
+                  stable_id_zero(binding->resolver_binding) &&
                   binding->program_dependency == XR_SEMANTIC_INDEX_NONE &&
                   binding->target_function < plan->function_count &&
                   xr_stable_id_equal(callee->program_function,

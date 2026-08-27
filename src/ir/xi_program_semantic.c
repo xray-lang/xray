@@ -291,6 +291,8 @@ static bool bind_function_types(XiFunc *function, const XiModule *module,
 
 bool xi_program_semantic_input_prepare(const XrProgramSemanticClosure *closure,
                                        const XrScalarCallDecision *decision,
+                                       const XrI64OverflowDecisionTable *overflow_decisions,
+                                       const XrTargetProfile *target_profile,
                                        const XrProgramSemanticModuleInput *source_module,
                                        XiProgramSemanticInput *out, char *error,
                                        size_t error_size) {
@@ -323,6 +325,8 @@ bool xi_program_semantic_input_prepare(const XrProgramSemanticClosure *closure,
     *out = (XiProgramSemanticInput) {
         .closure = closure,
         .decision = decision,
+        .overflow_decisions = overflow_decisions,
+        .target_profile = target_profile,
         .module_index = match,
     };
     if (!xi_program_semantic_input_is_consistent(out, error, error_size)) {
@@ -339,6 +343,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
         !xr_program_semantic_closure_verify(input->closure, NULL, 0))
         return scalar_fail(error, error_size, "Xi input requires one verified frozen PSC");
     const XrScalarCallDecision *decision = input->decision;
+    const XrI64OverflowDecisionTable *overflow_decisions = input->overflow_decisions;
     XrGenerationClosureId generation = xr_program_semantic_closure_generation_id(input->closure);
     XrFingerprint fingerprint = xr_program_semantic_closure_fingerprint(input->closure);
     const XrProgramSemanticCallRecord *call = xr_program_semantic_closure_call(input->closure, 0);
@@ -347,6 +352,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
     bool scalar = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     bool product = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    bool overflow = family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     bool aggregate = false;
     if (family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL) {
         uint32_t aggregate_count = 0;
@@ -366,12 +372,15 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
     size_t module_count = xr_program_semantic_closure_module_count(input->closure);
     size_t function_count = xr_program_semantic_closure_function_count(input->closure);
     size_t call_count = xr_program_semantic_closure_call_count(input->closure);
-    if ((!scalar && !graph && !product && (!aggregate || decision)) ||
-        ((graph || product) && decision) ||
+    if ((!scalar && !graph && !product && !overflow && (!aggregate || decision)) ||
+        ((graph || product || aggregate) && (decision || overflow_decisions)) ||
+        (overflow && (decision || !overflow_decisions || !input->target_profile ||
+                      !xr_i64_overflow_decision_verify(overflow_decisions, input->closure,
+                                                       input->target_profile, NULL, 0))) ||
         (scalar && (!decision || decision->schema != XR_SCALAR_CALL_DECISION_SCHEMA_VERSION ||
-                    decision->sealed != 1)) ||
+                    decision->sealed != 1 || overflow_decisions)) ||
         input->module_index >= module_count ||
-        ((scalar || aggregate || product) &&
+        ((scalar || aggregate || product || overflow) &&
          (module_count != 1 || xr_program_semantic_closure_dependency_count(input->closure) != 0)) ||
         (graph &&
          (module_count != 2 || xr_program_semantic_closure_dependency_count(input->closure) != 1 ||
@@ -384,7 +393,15 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
         (product &&
          (type_count != 3 || xr_program_semantic_closure_type_field_count(input->closure) != 6 ||
           function_count != 3 || call_count != 2)) ||
-        (!product && (function_count != 2 || call_count != 1 || !call)) ||
+        (overflow &&
+         (type_count != 1 || function_count != 1 || call_count == 0 ||
+          !xr_program_semantic_closure_type(input->closure, 0) ||
+          xr_program_semantic_closure_type(input->closure, 0)->kind !=
+              XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+          xr_program_semantic_closure_type(input->closure, 0)->exact_scalar !=
+              XR_EXACT_SCALAR_I64 ||
+          overflow_decisions->row_count != call_count)) ||
+        (!product && !overflow && (function_count != 2 || call_count != 1 || !call)) ||
         (scalar &&
          (!same_bytes(decision->generation_id.bytes, generation.bytes, sizeof(generation.bytes)) ||
           !same_bytes(decision->closure_fingerprint.bytes, fingerprint.bytes,
@@ -393,7 +410,7 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
           !same_id(decision->callsite_identity, call->callsite_identity) ||
           !same_id(decision->caller_function, call->caller_function) ||
           !same_id(decision->callee_function, call->callee_function))) ||
-        (!product && (!find_function(input->closure, call->caller_function, NULL) ||
+        (!product && !overflow && (!find_function(input->closure, call->caller_function, NULL) ||
                       !find_function(input->closure, call->callee_function, NULL))))
         return scalar_fail(error, error_size, "Xi input does not bind its PSC partition");
     if (product) {
@@ -416,6 +433,21 @@ bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input
         }
         if (product_rows != 1)
             return scalar_fail(error, error_size, "Xi product type authority is not unique");
+    }
+    if (overflow) {
+        for (uint32_t i = 0; i < call_count; i++) {
+            const XrProgramSemanticCallRecord *overflow_call =
+                xr_program_semantic_closure_call(input->closure, i);
+            const XrI64OverflowDecisionRow *row =
+                xr_i64_overflow_decision_for_program_row(overflow_decisions, i);
+            if (!overflow_call || !row ||
+                !find_function(input->closure, overflow_call->caller_function, NULL) ||
+                !same_id(row->program_call, overflow_call->id) ||
+                !same_id(row->caller_function, overflow_call->caller_function) ||
+                !same_id(row->builtin_identity, overflow_call->callee_function))
+                return scalar_fail(error, error_size,
+                                   "Xi overflow decision rows are not exact");
+        }
     }
     return true;
 }
@@ -736,16 +768,24 @@ const XiValue *xi_program_semantic_call_for_row(const XiFunc *function,
 
 bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure **closure,
                                       const XrScalarCallDecision *decision,
+                                      const XrI64OverflowDecisionTable *overflow_decisions,
                                       const XrTargetProfile *target_profile, uint32_t module_index,
                                       char *error, size_t error_size) {
     if (!module || !closure || !*closure || module->program_semantic_closure ||
         module->psc_module_index != XI_PSC_ROW_NONE || module->scalar_call_decision ||
+        module->i64_overflow_decisions ||
         module->scalar_target_profile ||
         !module_identity_matches_source(module) ||
         !source_module_matches_psc(module, *closure, module_index)) {
         return scalar_fail(error, error_size, "Xi authority ownership transfer is invalid");
     }
-    XiProgramSemanticInput input = {*closure, decision, module_index};
+    XiProgramSemanticInput input = {
+        .closure = *closure,
+        .decision = decision,
+        .overflow_decisions = overflow_decisions,
+        .target_profile = target_profile,
+        .module_index = module_index,
+    };
     bool scalar = xr_program_semantic_closure_family(*closure) ==
                   XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
     bool aggregate = xr_program_semantic_closure_family(*closure) ==
@@ -754,16 +794,49 @@ bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure
                    XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     bool graph = xr_program_semantic_closure_family(*closure) ==
                  XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
+    bool overflow = xr_program_semantic_closure_family(*closure) ==
+                    XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     if (!xi_program_semantic_input_is_consistent(&input, error, error_size) ||
         (scalar &&
          (!target_profile || !xr_scalar_call_decision_verify(decision, *closure, target_profile,
                                                              error, error_size))) ||
-        (!aggregate && !product && !scalar && !graph) ||
-        ((aggregate || product || graph) && (decision || target_profile)))
+        (overflow &&
+         (!target_profile || !xr_i64_overflow_decision_verify(
+                                overflow_decisions, *closure, target_profile, error,
+                                error_size))) ||
+        (!aggregate && !product && !scalar && !graph && !overflow) ||
+        ((aggregate || product || graph) &&
+         (decision || overflow_decisions || target_profile)))
         return false;
-    if (!scalar) {
+    if (!scalar && !overflow) {
         module->program_semantic_closure = *closure;
         module->psc_module_index = module_index;
+        *closure = NULL;
+        return true;
+    }
+    if (overflow) {
+        XrI64OverflowDecisionTable *owned =
+            (XrI64OverflowDecisionTable *) xr_calloc(1, sizeof(*owned));
+        XrI64OverflowDecisionRow *rows =
+            (XrI64OverflowDecisionRow *) xr_calloc(overflow_decisions->row_count,
+                                                    sizeof(*rows));
+        XrTargetProfile *retained_profile =
+            xr_target_profile_retain((XrTargetProfile *) target_profile);
+        if (!owned || !rows || !retained_profile) {
+            xr_free(rows);
+            xr_free(owned);
+            xr_target_profile_free(retained_profile);
+            return scalar_fail(error, error_size,
+                               "Xi overflow decision ownership allocation failed");
+        }
+        *owned = *overflow_decisions;
+        memcpy(rows, overflow_decisions->rows,
+               overflow_decisions->row_count * sizeof(*rows));
+        owned->rows = rows;
+        module->program_semantic_closure = *closure;
+        module->psc_module_index = module_index;
+        module->i64_overflow_decisions = owned;
+        module->scalar_target_profile = retained_profile;
         *closure = NULL;
         return true;
     }

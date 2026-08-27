@@ -187,7 +187,7 @@ static void test_generated_instruction_contract(void) {
     REQUIRE(XR_TARGET_INSTRUCTION_AGGREGATE_MAKE_I64X2 == 35);
     REQUIRE(XR_TARGET_INSTRUCTION_CALL_DIRECT_AGGREGATE == 36);
     REQUIRE(XR_TARGET_INSTRUCTION_RETURN_AGGREGATE == 37);
-    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 37u);
+    REQUIRE(XR_TARGET_INSTRUCTION_CONTRACT_COUNT == 43u);
     REQUIRE(XR_TEST_VM_DISPATCH_COUNT ==
             XR_TARGET_INSTRUCTION_CONTRACT_COUNT);
     static const XrTypedDispatchProvider providers[] = {
@@ -206,9 +206,7 @@ static void test_generated_instruction_contract(void) {
                 contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE);
         if (!contract->terminator &&
             contract->result_rep == XR_TARGET_INSTRUCTION_REP_NONE)
-            REQUIRE(contract->dispatch_kind ==
-                        XR_TARGET_INSTRUCTION_DISPATCH_ARRAY_PUSH &&
-                    contract->arity == 2 &&
+            REQUIRE(contract->arity == 2 &&
                     (contract->effects &
                      XR_TARGET_INSTRUCTION_EFFECT_MEMORY_WRITE) != 0);
         REQUIRE((contract->error_kind != XR_TARGET_INSTRUCTION_ERROR_NONE) ==
@@ -234,7 +232,7 @@ static void test_generated_instruction_contract(void) {
             REQUIRE(strcmp(contract->name,
                            xr_target_instruction_opcode_name(other)) != 0);
     }
-    REQUIRE(semantic_bindings == 28u);
+    REQUIRE(semantic_bindings == 33u);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_INVALID) ==
             NULL);
     REQUIRE(xr_target_instruction_contract(XR_TARGET_INSTRUCTION_COUNT) ==

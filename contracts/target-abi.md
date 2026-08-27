@@ -138,7 +138,7 @@ member, ordered operands, direct-local TargetPlan call, exact callee, and
 applied direct-call authority record. Missing, duplicate, reordered, stale, or
 ordinary-`XI_CALL` substitutions fail closed; prepare has no normalization or
 compatibility path. This changes no public ABI or plan schema.
-The C emission projection schema 38 preserves the exact materialization recipe
+The C emission projection schema 39 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
@@ -423,7 +423,22 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-TargetPlan schema 52 freezes one exact borrowed direct-local
+TargetPlan schema 53 freezes the closed `i64.addOverflows`,
+`i64.subOverflows`, and `i64.mulOverflows` family as two exact signed-`i64`
+inputs and one `I1` result slot. The ABI answer is the function-qualified
+predicate row plus its typed instruction; a method name, Xi body shape, or
+runtime method table is not an ABI owner. The typed VM consumes the verified
+row mechanically. AOT C emission schema 39 projects every predicate row into
+one independently verified `uint8_t` recipe naming exactly one shared
+`xr_arith_core_{add,sub,mul}_overflows` helper. Representation refinement keeps
+both inputs in `I64`, the predicate result in `I1`, and records no adapter.
+CGen consumes the immutable recipe before generic method lowering and consumes
+the native predicate directly as a branch condition; it cannot read method
+text, dispatch through the runtime method table, box the predicate, or fall
+back to a legacy value plan. Missing, duplicate, stale, swapped, or
+wrong-helper rows fail closed before C emission.
+
+TargetPlan schema 53 freezes one exact borrowed direct-local
 `ref i64` boundary. The caller source and callee parameter retain scalar `I64`
 storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
 request to rewrite the parameter as a general raw-pointer value. The caller's
@@ -433,15 +448,15 @@ and transfer. C emission may project that verified boundary as `int64_t *`.
 This authority does not by itself grant representation-refinement, VM, CGen, or
 native execution coverage, and no generic ref or pointer inference is allowed.
 The AOT scalar-ref-v1 slice separately rejoins that exact SemanticPlan and
-schema-52 TargetPlan boundary. Refinement schema 6 records no adapter: it
+schema-53 TargetPlan boundary. Refinement schema 6 records no adapter: it
 materializes caller storage, callee storage, call machine rows, and load/store
 pointees as `I64`, while the caller `LOCAL_ADDR` and callee function ABI are
-`RAW_PTR` with an `I64` pointee. C-emission schema 38 is the sole C spelling
+`RAW_PTR` with an `I64` pointee. C-emission schema 39 is the sole C spelling
 owner for `int64_t *`; prepare and independent AOT verification consume its
 immutable row, and covered CGen cannot recover a pointer level from mutable Xi
 types or a legacy value plan.
 
-The schema-52 source program graph is a distinct program-wide AOT cutover; it
+The schema-53 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
@@ -622,6 +637,9 @@ emission rather than falling back to compiler-host layout.
   hosted fragment selected for direct MSVC compilation must contain no GNU
   statement expression and must pass a real MSVC compile probe; failure remains
   fail-closed and does not downgrade the already selected target ABI.
+  Hosted-fragment context storage belongs to the core AOT runtime independently
+  of optional stdlib VM fastpaths. The initializer declaration and definition
+  use one linkage decision in both single-unit and multi-unit emission.
   Covered fixed-array checked loads call the canonical checked-index helper as
   an ordinary ISO C11 expression. Covered slice display/view paths materialize
   one scoped `xrt_array_t` view and never use a statement expression, retired
@@ -807,7 +825,7 @@ anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94f
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78
 anchor-sha256: src/aot/xaot_verify.c 77792254ac2246618a0eff6644fae9d6107bf5a4afcc1b1333f1275f45b4eb0e
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c f554382fc5581bc22b2a7f938e00cdc2b4f4312ca17fe72add95be9fd5f373d3
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c ce1574674f96c91d3db7619e9ba6d3a89d5f9e4c5db5364a44b03885065b94b8
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 20143c8af944dcddf795b0b43ca2dad7fe52d097b60edaefa81c678b834a9a2f
@@ -815,9 +833,9 @@ anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
 anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c adeaec89f179ee972311ba9574b67c640fbc93af3ccfaf50abade4ea854f664d
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 7116d17b3c38fb432d60f1646c4f815496798c133a6ffd2a90b136d4352272ac
-anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h f3b7efab43d508b4a6926002d1ce2e1d9fde3fa2510181b5a61cb769a8d95e74
+anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 17353e09b9c5891e92c7df2bac284ca66092b4554bd8c2109a0b447d73c5fed0
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e281f8a9a8b1047182f5b52457fb91149daf1baad011088d92161b967a6a5e67
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 0d1d9c4d0292b7add3a333c5f24931a0c4ea04284bf483811b35064633b9f990
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c 25e81479447c0e37a37b7dff98ff27c41b0751daf539bb796aeb3c06902cdc37
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
@@ -840,11 +858,12 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c c053f25b71fb2a2df09b0519bd05e9d75a960d8b1354787b2e4fee9e612cf070
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c be43babe746e19562268cc058732876f49476c73df71e66e53db42fadd97909a
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 743a8a37bea8b103a494ab76ce15e3807208963819750bd9982ff044cec8be49
-anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ee09e8d9638b171daadfe2166003003206567d325390876b28a6f010bf397c19
+anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 582d445d24eccc952c1eaf88a1e65239bc3da341de87ba907c7ff43b6b21e3a4
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c 57bf5cd577126f6e9b2565e2e59873614ac7f4dc0b8b4418b684201c4b47ec9a
-anchor-sha256: src/ir/xi_opt.c 44fdacef3233931ba3e9f5b165a70d978b0cb365510bde8db2e00a84c9625b8f
+anchor-sha256: src/aot/xi_cgen.c ca969baedfca00f02f660ec9f76715d248b54de629af7f3408ce45a46bf5a19b
+anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
+anchor-sha256: src/ir/xi_opt.c c2ed1e63c3c84c2654516714e34dc061858f685ec447975e2b1777da992d0801
 anchor-sha256: src/aot/xrt_coll.h 37e45c48a5f5a68e523a853ddf3d557d3ee6976337d7ab620df4d88d39228879
 anchor-sha256: src/aot/xrt_core_freestanding.h 5d4e9b2da067c44aa23d0b46b0ae133abeaae6e1b49a8efee617b384cb45cfb6
 anchor-sha256: src/aot/xrt_method.h ec377657645eeb7468eb4fe33307beaa296543911293edd03e5aabf3dc92c8e7
@@ -855,6 +874,7 @@ anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3
 anchor-sha256: src/app/toolchain/xtc_probe.c 883a5ee95f39dbf335144289a5db2b693112a5a072d96dcf85ecf4abcfd42a09
 anchor-sha256: src/ir/xi.h 089354e3324b62754b0c53c65f9e7451e735ce3bcbdcebcd3afc33c6ba44336e
 anchor-sha256: stdlib/simd/simd.xr 35c745eb6a37f37a0c7a2d2daf4d4bb953582e930929970d330a2cd3469696d9
+anchor-sha256: src/stdlib/xstdlib_vm_fastpath_amalgam.c 1e76506a0f62d91bdc6c0237d7537c19dd16a4889b937d2754b0df031cd027c2
 anchor-sha256: src/aot/xaot_coro.h 51edaa56bb72326f5bacd0998b00d505e0c0533190f4ba0289c10ee954049995
 anchor-sha256: src/aot/xi_cgen_class_helpers.inc.c 0488c328fc9d2eda313728e80c1ebe380363e08e367a588194d1061ae1bdfcec
 anchor-sha256: src/aot/xrt_provider_abi.h 4deebceb145b02ba5c5836c8688b9c4788a130ab9fd0856d7ecc21dbcd5ce840

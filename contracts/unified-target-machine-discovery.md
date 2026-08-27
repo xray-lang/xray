@@ -53,8 +53,8 @@ the exact executed input instead of the caller's `core.autocrlf` preference.
 
 anchor-sha256: .gitattributes e978a1bddfdafc2f706780f7bd9a0cca60ba71fb72fcb17a1ef782dacdd3d549
 anchor-sha256: contracts/target-machine/semantic-owner-inventory.json 059e9f7dfcd8459e3cda1f8186a722f2d3daab287bd072082a9dd6de79195d6a
-anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json b5d286c3595e0023364481a4e61c4947ad6c1067c97aea2557fb47a1f3d66a77
-anchor-sha256: contracts/target-machine/legacy-vm-inventory.json f60612fa40973a652c15723ac1beb1e10506c8968cd770d506c9b8f4b63d44f9
+anchor-sha256: contracts/target-machine/aot-plan-destination-inventory.json 348cd70cfcb8df6281ad7af36b93bcf1336e7772f99eeb7591446d28890f4be0
+anchor-sha256: contracts/target-machine/legacy-vm-inventory.json af36ba00c6671d61d1e381cdbf6eb80a77676c8e7bb3fc71fc13d4368f087479
 anchor-sha256: contracts/target-machine/legacy-product-residue.json c335bd1360bdbd242d642a4ef5990072a2111345daf237e87cb4af103967f230
 anchor-sha256: contracts/target-machine/migration-source-classification.json e0adb045a60f4b5d4c5a5f243b6a43cb217236190a4d2163eab2368f8663cacc
 anchor-sha256: scripts/check_target_machine_migration_classification.py 415a579c63f3a8bdd2ba15be9583e4ef4ac914891710eda3d0ca3cd48433fe2c

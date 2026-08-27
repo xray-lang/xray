@@ -12,13 +12,19 @@
 
 #include "aot/xaot_boundary.h"
 #include "aot/xaot_bundle.h"
+#include "aot/xaot_prepare.h"
+#include "aot/xaot_verify.h"
 #include "aot/xi_cgen.h"
+#include "aot/emit_c/xr_c_emission_plan_internal.h"
+#include "aot/refine/xr_aot_representation_refinement.h"
 #include "aot/xr_target_aggregate_c_projection.h"
 #include "aot/xr_leaf_value_product_program_emission.h"
+#include "analysis/xglobal_summary.h"
 #include "base/xmalloc.h"
 #include "base/xmemstream.h"
 #include "base/xsha256.h"
 #include "frontend/analyzer/xa_program_semantic_closure.h"
+#include "frontend/analyzer/xa_i64_overflow_program.h"
 #include "frontend/analyzer/xa_typed_program.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "ir/xi_arc.h"
@@ -26,11 +32,14 @@
 #include "ir/xi_lower.h"
 #include "ir/xi_opt.h"
 #include "ir/xi_own.h"
+#include "ir/xi_pipeline.h"
+#include "ir/xi_i64_overflow_program.h"
 #include "ir/xi_program_semantic.h"
 #include "ir/xi_program_semantic_plan.h"
 #include "ir/xi_semantic_snapshot.h"
 #include "module/xmodule_graph.h"
 #include "module/xmodule_resolver.h"
+#include "module/xnative_package.h"
 #include "plan/format/xr_xtp_internal.h"
 #include "plan/format/xr_xtp_schema.h"
 #include "plan/ownership/xr_ownership_certificate_internal.h"
@@ -39,6 +48,7 @@
 #include "plan/semantic/xr_semantic_verify.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/target/xr_target_builder.h"
+#include "plan/target/xr_i64_overflow_target_instruction.h"
 #include "plan/target/xr_target_instruction_verify.h"
 #include "plan/target/xr_target_plan_internal.h"
 #include "plan/target/xr_target_profile.h"
@@ -48,6 +58,8 @@
 #include "runtime/abi/xr_runtime_target_profile.h"
 #include "toolchain/xcompiler_session.h"
 #include "vm/xr_typed_dispatch.h"
+#include "xray_vm.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,6 +97,14 @@ static const char kLeafProductXiSource[] =
     "fn validatePath() -> (i64, i64, u8, i64, i64, i64) {\n"
     "    var value = scan()\n"
     "    return (value.0, value.1, value.2, value.3, value.4, value.5)\n"
+    "}\n";
+
+static const char kI64OverflowPredicateSource[] =
+    "fn overflow(a: i64, b: i64) -> i64 {\n"
+    "    if (a.addOverflows(b)) { return 1 }\n"
+    "    if (a.subOverflows(b)) { return 2 }\n"
+    "    if (a.mulOverflows(b)) { return 3 }\n"
+    "    return 0\n"
     "}\n";
 
 typedef struct ScalarFixture {
@@ -696,6 +716,124 @@ static size_t substring_count(const char *text, const char *needle) {
     return count;
 }
 
+static bool install_i64_overflow_global_evidence(XaotBundle *bundle, XiModule *module,
+                                                  XgGlobalEvidence *evidence) {
+    if (!bundle || !module || !module->init || module->init->nchildren != 1 || !evidence)
+        return false;
+    XgBuildKey key = {
+        .compiler_semver_hash = UINT64_C(0x283),
+        .module_id = 1,
+        .profile = XG_BUILD_NATIVE_RELEASE,
+    };
+    xg_global_evidence_init(evidence, key);
+    XiFunc *entry = module->init->children[0];
+    XgBodySummary init_body = {
+        .func_id = 1,
+        .module_id = 1,
+        .name_id = xg_name_id("<module-init>"),
+        .kind = XG_BODY_MODULE_INIT,
+        .body_hash = UINT64_C(0x283000001),
+    };
+    XgDeclSummary entry_decl = {
+        .module_id = 1,
+        .source_node_id = 1,
+        .decl_id = 1,
+        .kind = XG_DECL_FUNC,
+        .name_id = xg_name_id(entry->name ? entry->name : "overflow"),
+        .signature_key = 1,
+        .source_span_id = 1,
+    };
+    XgBodySummary entry_body = {
+        .func_id = 2,
+        .module_id = 1,
+        .source_node_id = 1,
+        .owner_decl_id = 1,
+        .name_id = entry_decl.name_id,
+        .signature_key = 1,
+        .source_span_id = 1,
+        .kind = XG_BODY_FUNCTION,
+        .body_hash = UINT64_C(0x283000002),
+    };
+    module->init->xg_body_func_id = init_body.func_id;
+    entry->xg_body_func_id = entry_body.func_id;
+    if (!xg_global_evidence_add_body(evidence, &init_body)) {
+        bundle->error_msg = "overflow module-init evidence allocation failed";
+        return false;
+    }
+    if (!xg_global_evidence_add_decl(evidence, &entry_decl)) {
+        bundle->error_msg = "overflow entry declaration evidence allocation failed";
+        return false;
+    }
+    if (!xg_global_evidence_add_body(evidence, &entry_body)) {
+        bundle->error_msg = "overflow entry body evidence allocation failed";
+        return false;
+    }
+    for (uint32_t slot = 0; slot < module->nslots; slot++) {
+        const char *name = module->init->slot_owned_names
+                               ? module->init->slot_owned_names[slot]
+                               : NULL;
+        if (!name)
+            continue;
+        bool is_const = module->init->slot_owned_consts &&
+                        module->init->slot_owned_consts[slot] != 0;
+        uint32_t source_node_id = 2u + slot;
+        XgDeclSummary storage = {
+            .module_id = 1,
+            .source_node_id = source_node_id,
+            .decl_id = 2u + slot,
+            .kind = XG_DECL_GLOBAL,
+            .name_id = xg_name_id(name),
+            .signature_key = source_node_id,
+            .source_span_id = source_node_id,
+            .storage_domain = XR_STORAGE_MODULE_STATIC,
+            .storage_mutability =
+                is_const ? XR_STORAGE_READONLY : XR_STORAGE_MUTABLE,
+            .address_identity = XR_ADDRESS_MODULE_STABLE,
+            .materialization_kind = XR_MATERIALIZE_STATIC_DATA,
+        };
+        if (!xg_global_evidence_add_decl(evidence, &storage)) {
+            bundle->error_msg = "overflow storage evidence allocation failed";
+            return false;
+        }
+    }
+    return xaot_bundle_set_global_evidence(bundle, evidence, XG_BUILD_NATIVE_RELEASE);
+}
+
+static const char *find_i64_overflow_function_body(const char *source,
+                                                   const char **body_end,
+                                                   char symbol[128]) {
+    if (body_end)
+        *body_end = NULL;
+    if (symbol)
+        symbol[0] = '\0';
+    const char *helper = source ? strstr(source, "xr_arith_core_add_overflows(") : NULL;
+    const char *function = NULL;
+    for (const char *candidate = source; helper && candidate && candidate < helper;) {
+        const char *next = strstr(candidate, "static int64_t ");
+        if (!next || next >= helper)
+            break;
+        function = next;
+        candidate = next + 1;
+    }
+    const char *open = function ? strchr(function, '(') : NULL;
+    const char *close = helper ? strstr(helper, "\n}\n") : NULL;
+    if (!function || !open || open >= helper || !close)
+        return NULL;
+    const char *name_end = open;
+    const char *name_begin = name_end;
+    while (name_begin > function &&
+           (isalnum((unsigned char) name_begin[-1]) || name_begin[-1] == '_'))
+        name_begin--;
+    size_t name_length = (size_t) (name_end - name_begin);
+    if (!symbol || name_length == 0 || name_length >= 128u)
+        return NULL;
+    memcpy(symbol, name_begin, name_length);
+    symbol[name_length] = '\0';
+    if (body_end)
+        *body_end = close + 3;
+    return function;
+}
+
 static void test_leaf_product_symbol(XrStableId identity, char out[48]) {
     static const char hex[] = "0123456789abcdef";
     memcpy(out, "xr_lp_", 6u);
@@ -1064,7 +1202,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
     ASSERT_NOT_NULL(semantic);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(xr_target_plan_schema_version(plan), XR_TARGET_PLAN_SCHEMA_VERSION);
-    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 52);
+    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 53);
     ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(plan));
     ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(plan),
@@ -1470,12 +1608,13 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     XiProgramSemanticInput input = {
         .closure = closure,
         .decision = &decision,
+        .target_profile = profile,
     };
     XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, profile, 0,
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, NULL, profile, 0,
                                                  error, sizeof(error)));
     ASSERT_NULL(closure);
     bool verified = xi_program_semantic_verify(root->module, profile, error, sizeof(error));
@@ -1876,7 +2015,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_TRUE(
         build_authorities(&fixture, profile, &second, &second_decision, error, sizeof(error)));
     XrProgramSemanticClosure *second_owner = second;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, profile,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, NULL, profile,
                                                   0, error, sizeof(error)));
     ASSERT_TRUE(second == second_owner);
     xr_program_semantic_closure_free(second);
@@ -1918,7 +2057,7 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     char error[512] = {0};
     ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
                                          sizeof(error)));
     ASSERT_NULL(closure);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
@@ -2057,7 +2196,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         (XrProgramSemanticClosure *) foreign_authority_published);
     ASSERT_NOT_NULL(foreign_authority);
     XrProgramSemanticClosure *foreign_authority_owner = foreign_authority;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL, 0,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL, NULL, 0,
                                                   error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_authority, foreign_authority_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
@@ -2067,14 +2206,14 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         xr_program_semantic_closure_retain((XrProgramSemanticClosure *) foreign_source_published);
     ASSERT_NOT_NULL(foreign_source);
     XrProgramSemanticClosure *foreign_source_owner = foreign_source;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, 0,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, NULL, 0,
                                                   error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_source, foreign_source_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
     xr_program_semantic_closure_free(foreign_source);
 
     ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
                                          sizeof(error)));
     ASSERT_NULL(closure);
     bool xi_verified = xi_program_semantic_verify(root->module, NULL, error, sizeof(error));
@@ -2466,7 +2605,7 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
                                                  sizeof(error)));
     ASSERT_NULL(closure);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
@@ -2744,11 +2883,553 @@ TEST(retain_rejects_mutable_closure) {
     xr_program_semantic_closure_free(collecting);
 }
 
+TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    ASSERT_NOT_NULL(session);
+    ScalarFixture fixture;
+    ASSERT_TRUE(fixture_analyze(&fixture, session, "xi-i64-overflow", kI64OverflowPredicateSource));
+    char error[512] = {0};
+    XrProgramSemanticClosure *source_closure = NULL;
+    XaProgramSemanticClosurePublishStatus source_status = xa_i64_overflow_program_publish(
+        fixture.analyzer, fixture.spec->ast, fixture.spec, &source_closure, error, sizeof(error));
+    ASSERT_EQ_UINT(source_status, XA_PROGRAM_SEMANTIC_CLOSURE_READY);
+    ASSERT_NOT_NULL(source_closure);
+    xr_program_semantic_closure_free(source_closure);
+    ASSERT_TRUE(fixture_publish(&fixture));
+    const XrProgramSemanticClosure *published =
+        xa_typed_program_program_semantic_closure(fixture.typed);
+    ASSERT_NOT_NULL(published);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(published),
+                   XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE);
+    XrProgramSemanticClosure *closure =
+        xr_program_semantic_closure_retain((XrProgramSemanticClosure *) published);
+    ASSERT_NOT_NULL(closure);
+    memset(error, 0, sizeof(error));
+    XrTargetProfile *profile = NULL;
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
+    ASSERT_TRUE(xr_compiler_session_set_target_profile(session, profile));
+    XrI64OverflowDecisionTable decisions = {0};
+    ASSERT_TRUE(xr_i64_overflow_decision_build(
+        closure, xr_program_semantic_closure_generation_id(closure), profile, &decisions, error,
+        sizeof(error)));
+    XiProgramSemanticInput input = {
+        .closure = closure,
+        .overflow_decisions = &decisions,
+        .target_profile = profile,
+        .module_index = 0,
+    };
+    ASSERT_TRUE(xi_program_semantic_input_is_consistent(&input, error, sizeof(error)));
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
+    ASSERT_NOT_NULL(root);
+    ASSERT_NOT_NULL(root->module);
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, &decisions,
+                                                 profile, 0, error, sizeof(error)));
+    ASSERT_NULL(closure);
+    xr_i64_overflow_decision_dispose(&decisions);
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    ASSERT_EQ_UINT(root->module->nfuncs, 1);
+    XiFunc *function = root->module->functions[0];
+    ASSERT_NOT_NULL(function);
+    XiValue *calls[3] = {NULL, NULL, NULL};
+    uint32_t call_count = 0;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        XiBlock *block = function->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->psc_call_index != XI_PSC_ROW_NONE) {
+                ASSERT_TRUE(call_count < 3);
+                calls[call_count++] = value;
+                ASSERT_EQ_UINT(value->op, XI_CALL_METHOD);
+                ASSERT_NULL(value->aux);
+                ASSERT_EQ_UINT(value->nargs, 2);
+            }
+        }
+    }
+    ASSERT_EQ_UINT(call_count, 3);
+    int64_t saved_symbol = calls[0]->aux_int;
+    calls[0]->aux_int = calls[1]->aux_int;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    calls[0]->aux_int = saved_symbol;
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    uint32_t saved_row = calls[0]->psc_call_index;
+    calls[0]->psc_call_index = calls[1]->psc_call_index;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    calls[0]->psc_call_index = saved_row;
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+
+    dce_and_mark_tree_optimized(root);
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    XrSemanticPlan *semantic = NULL;
+    ASSERT_MSG(xr_semantic_plan_build(root, &semantic, error, sizeof(error)), error);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+    ASSERT_EQ_UINT(semantic->program_function_binding_count, 1);
+    ASSERT_EQ_UINT(semantic->program_call_binding_count, 3);
+    ASSERT_EQ_UINT(semantic->call_target_count, 0);
+    for (uint32_t i = 0; i < semantic->program_call_binding_count; i++) {
+        const XrSemanticProgramCallBinding *binding =
+            &semantic->program_call_bindings[i];
+        ASSERT_EQ_UINT(binding->target_function, XR_SEMANTIC_INDEX_NONE);
+        ASSERT_EQ_UINT(binding->program_dependency, XR_SEMANTIC_INDEX_NONE);
+        ASSERT_TRUE(binding->operation < semantic->operation_count);
+        ASSERT_EQ_UINT(semantic->operations[binding->operation].opcode, XI_CALL_METHOD);
+    }
+
+    XrFingerprint original = semantic->fingerprint;
+    uint32_t first_operation = semantic->program_call_bindings[0].operation;
+    int64_t saved_immediate = semantic->operations[first_operation].semantic_immediate;
+    semantic->operations[first_operation].semantic_immediate =
+        semantic->operations[semantic->program_call_bindings[1].operation].semantic_immediate;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                 sizeof(error)));
+    semantic->operations[first_operation].semantic_immediate = saved_immediate;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_TRUE(xr_fingerprint_equal(semantic->fingerprint, original));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+
+    XrStableId saved_builtin = semantic->program_call_bindings[0].callee_program_function;
+    semantic->program_call_bindings[0].callee_program_function =
+        semantic->program_call_bindings[1].callee_program_function;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                 sizeof(error)));
+    semantic->program_call_bindings[0].callee_program_function = saved_builtin;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_TRUE(xr_fingerprint_equal(semantic->fingerprint, original));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+
+    saved_symbol = calls[0]->aux_int;
+    calls[0]->aux_int = calls[1]->aux_int;
+    ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                 sizeof(error)));
+    calls[0]->aux_int = saved_symbol;
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+
+    uint8_t *encoded = NULL;
+    size_t encoded_size = 0;
+    ASSERT_TRUE(xr_xsm_encode(semantic, &encoded, &encoded_size, error, sizeof(error)));
+    ASSERT_TRUE(encoded_size >= XR_XSM_HEADER_SIZE);
+    XrSemanticPlan *decoded = NULL;
+    ASSERT_TRUE(xr_xsm_decode(encoded, encoded_size, &decoded, error, sizeof(error)));
+    ASSERT_NOT_NULL(decoded);
+    ASSERT_TRUE(xr_semantic_plan_verify(decoded, error, sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, decoded, profile, error,
+                                                sizeof(error)));
+    ASSERT_EQ_UINT(decoded->program_call_binding_count, 3);
+    ASSERT_EQ_UINT(decoded->call_target_count, 0);
+    xr_semantic_plan_free(decoded);
+    xr_free(encoded);
+
+    XrTargetPlan *target = NULL;
+    ASSERT_MSG(xr_target_plan_build(semantic, profile, &target, error, sizeof(error)), error);
+    ASSERT_NOT_NULL(target);
+    ASSERT_EQ_UINT(xr_target_plan_schema_version(target), 53);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(target));
+    uint32_t predicate_count = 0;
+    const XrTargetI64OverflowPredicateRecord *predicates =
+        xr_target_plan_i64_overflow_predicates(target, &predicate_count);
+    ASSERT_NOT_NULL(predicates);
+    ASSERT_EQ_UINT(predicate_count, 3);
+    uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticProgramFunctionBinding *program_function =
+        xr_semantic_plan_program_function_binding(semantic, 0);
+    ASSERT_NOT_NULL(program_function);
+    ASSERT_TRUE(xr_target_plan_find_function(target, semantic,
+                                             program_function->semantic_function,
+                                             &target_function));
+    ASSERT_EQ_UINT(xr_target_plan_function_execution_family_mask(target, target_function),
+                   XR_TARGET_EXECUTION_I64_OVERFLOW_PREDICATE);
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *target_instructions =
+        xr_target_plan_function_instructions(target, target_function, &instruction_count);
+    ASSERT_NOT_NULL(target_instructions);
+    uint32_t overflow_instruction_count = 0;
+    uint32_t predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_MUL + 1u] = {0};
+    for (uint32_t i = 0; i < instruction_count; i++) {
+        if (target_instructions[i].opcode != XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE)
+            continue;
+        ASSERT_TRUE(overflow_instruction_count < predicate_count);
+        ASSERT_TRUE(target_instructions[i].immediate_bits < predicate_count);
+        uint32_t predicate_index = (uint32_t) target_instructions[i].immediate_bits;
+        const XrTargetI64OverflowPredicateRecord *predicate =
+            &predicates[predicate_index];
+        ASSERT_EQ_UINT(target_instructions[i].function, target_function);
+        ASSERT_EQ_UINT(target_instructions[i].result_slot, predicate->result_slot);
+        ASSERT_EQ_UINT(target_instructions[i].operand_slots[0], predicate->receiver_slot);
+        ASSERT_EQ_UINT(target_instructions[i].operand_slots[1], predicate->argument_slot);
+        ASSERT_EQ_UINT(predicate->id, predicate_index);
+        ASSERT_EQ_UINT(predicate->program_row, predicate_index);
+        ASSERT_EQ_UINT(predicate->function, target_function);
+        ASSERT_TRUE(predicate->kind >= XR_TARGET_I64_OVERFLOW_PREDICATE_ADD &&
+                    predicate->kind <= XR_TARGET_I64_OVERFLOW_PREDICATE_MUL);
+        predicate_kind_counts[predicate->kind]++;
+        overflow_instruction_count++;
+    }
+    ASSERT_EQ_UINT(overflow_instruction_count, predicate_count);
+    ASSERT_EQ_UINT(predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_ADD], 1);
+    ASSERT_EQ_UINT(predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_SUB], 1);
+    ASSERT_EQ_UINT(predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_MUL], 1);
+
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    ASSERT_MSG(xr_c_emission_plan_build(target, profile_fingerprint, &emission,
+                                        error, sizeof(error)),
+               error);
+    ASSERT_NOT_NULL(emission);
+    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                          error, sizeof(error)));
+    XrAotRefinementPlan *refinement = NULL;
+    XrAotRefinementDiagnostic refinement_diag = {0};
+    ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(
+        target, NULL, &refinement, &refinement_diag));
+    ASSERT_NOT_NULL(refinement);
+    XrAotRefinementPlanView refinement_view = xr_aot_refinement_plan_view(refinement);
+    ASSERT_TRUE(refinement_view.verified);
+    ASSERT_EQ_UINT(refinement_view.record_count, 0);
+    ASSERT_TRUE(xr_aot_refinement_verify(&refinement_view, target, &refinement_diag));
+    for (uint32_t i = 0; i < predicate_count; i++) {
+        const XrTargetI64OverflowPredicateRecord *predicate = &predicates[i];
+        const XrTargetSlotRecord *result = &target->slots[predicate->result_slot];
+        const XrTargetSlotRecord *receiver = &target->slots[predicate->receiver_slot];
+        const XrTargetSlotRecord *argument = &target->slots[predicate->argument_slot];
+        XrCValueEmissionView view = {0};
+        ASSERT_TRUE(xr_c_emission_plan_value_view(
+            emission, result->semantic_value, &view, error, sizeof(error)));
+        ASSERT_EQ_UINT(view.materialization,
+                       XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE);
+        ASSERT_EQ_UINT(view.rep, XR_C_VALUE_REP_BOOL);
+        ASSERT_EQ_UINT(view.target_register_kind, XR_MACHINE_REP_I1);
+        ASSERT_EQ_UINT(view.recipe_operand_value, receiver->semantic_value);
+        ASSERT_EQ_UINT(view.recipe_argument_value, argument->semantic_value);
+        ASSERT_EQ_UINT(view.recipe_discriminant, predicate->kind);
+        ASSERT_NOT_NULL(view.recipe_symbol);
+        ASSERT_TRUE(strcmp(view.c_type, "uint8_t") == 0);
+    }
+    XrCValueEmissionView *mutable_recipe = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].materialization ==
+            XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE) {
+            mutable_recipe = &emission->values[i];
+            break;
+        }
+    ASSERT_NOT_NULL(mutable_recipe);
+    uint32_t saved_recipe_operand = mutable_recipe->recipe_operand_value;
+    mutable_recipe->recipe_operand_value = mutable_recipe->recipe_argument_value;
+    ASSERT_FALSE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                           error, sizeof(error)));
+    mutable_recipe->recipe_operand_value = saved_recipe_operand;
+    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                          error, sizeof(error)));
+    uint32_t saved_recipe_discriminant = mutable_recipe->recipe_discriminant;
+    mutable_recipe->recipe_discriminant = XR_TARGET_I64_OVERFLOW_PREDICATE_INVALID;
+    ASSERT_FALSE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                           error, sizeof(error)));
+    mutable_recipe->recipe_discriminant = saved_recipe_discriminant;
+    ASSERT_TRUE(xr_c_emission_plan_verify(emission, target, profile_fingerprint,
+                                          error, sizeof(error)));
+
+    uint32_t saved_function_flags = semantic->program_function_bindings[0].flags;
+    semantic->program_function_bindings[0].flags |= XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED;
+    ASSERT_FALSE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+    semantic->program_function_bindings[0].flags = saved_function_flags;
+    ASSERT_TRUE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+
+    uint32_t saved_program_row = target->i64_overflow_predicates[0].program_row;
+    target->i64_overflow_predicates[0].program_row = 1u;
+    ASSERT_FALSE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+    target->i64_overflow_predicates[0].program_row = saved_program_row;
+    ASSERT_TRUE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+
+    uint32_t saved_result_slot = target->i64_overflow_predicates[0].result_slot;
+    target->i64_overflow_predicates[0].result_slot =
+        target->i64_overflow_predicates[0].receiver_slot;
+    ASSERT_FALSE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+    target->i64_overflow_predicates[0].result_slot = saved_result_slot;
+    ASSERT_TRUE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    static const int64_t cases[][3] = {
+        {INT64_MAX, 1, 1},
+        {INT64_MIN, 1, 2},
+        {INT64_MAX / 2 + 1, 2, 3},
+        {1, 2, 0},
+    };
+    XrFingerprint target_fingerprint = xr_target_plan_fingerprint(target);
+    for (size_t provider = 0; provider < sizeof(providers) / sizeof(providers[0]); provider++) {
+        for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+            int64_t arguments[] = {cases[c][0], cases[c][1]};
+            int64_t result = -1;
+            XrTypedDispatchI64Request request = {
+                .verified_plan = target,
+                .required_plan_fingerprint = &target_fingerprint,
+                .arguments = arguments,
+                .result = &result,
+                .provider = providers[provider],
+                .function = target_function,
+                .argument_count = 2,
+            };
+            ASSERT_EQ_UINT(xr_typed_dispatch_execute_i64(&request), XR_TYPED_DISPATCH_OK);
+            ASSERT_EQ_INT(result, cases[c][2]);
+        }
+    }
+
+    XrTargetI64OverflowPredicateRecord *mutable_predicates =
+        target->i64_overflow_predicates;
+    uint8_t saved_kind = mutable_predicates[0].kind;
+    mutable_predicates[0].kind = XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
+    mutable_predicates[0].kind = saved_kind;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(target->fingerprint, target_fingerprint));
+
+    uint32_t saved_semantic_function = target->functions[target_function].semantic_function;
+    target->functions[target_function].semantic_function =
+        target_function == 0 ? 1u : 0u;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
+    target->functions[target_function].semantic_function = saved_semantic_function;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    XrTargetInstructionRecord *mutable_overflow_instruction = NULL;
+    for (uint32_t i = 0; i < target->instructions_count; i++)
+        if (target->instructions[i].opcode == XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE) {
+            mutable_overflow_instruction = &target->instructions[i];
+            break;
+        }
+    ASSERT_NOT_NULL(mutable_overflow_instruction);
+    uint64_t saved_predicate_index = mutable_overflow_instruction->immediate_bits;
+    mutable_overflow_instruction->immediate_bits = UINT32_MAX;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
+    mutable_overflow_instruction->immediate_bits = saved_predicate_index;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(target->fingerprint, target_fingerprint));
+
+    uint8_t *target_encoded = NULL;
+    size_t target_encoded_size = 0;
+    ASSERT_TRUE(xr_xtp_encode_plan(target, &target_encoded, &target_encoded_size,
+                                   error, sizeof(error)));
+    ASSERT_TRUE(target_encoded_size >= XR_XTP_HEADER_SIZE);
+    XrXtpCandidate *target_candidate = NULL;
+    ASSERT_TRUE(xr_xtp_decode_candidate(target_encoded, target_encoded_size, &target_candidate,
+                                        error, sizeof(error)));
+    XrTargetPlan *roundtrip_target = NULL;
+    ASSERT_TRUE(xr_xtp_materialize_target_plan(target_candidate, semantic, profile,
+                                               &roundtrip_target, error, sizeof(error)));
+    ASSERT_NOT_NULL(roundtrip_target);
+    ASSERT_TRUE(xr_target_plan_verify(roundtrip_target, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_fingerprint(roundtrip_target),
+                                     target_fingerprint));
+    xr_target_plan_free(roundtrip_target);
+    xr_xtp_candidate_release(target_candidate);
+    xr_xtp_encoded_free(target_encoded);
+
+    XrVMConfig vm_config = {0};
+    XrVMRuntime *vm = xray_vm_new_full(&vm_config);
+    ASSERT_NOT_NULL(vm);
+    XrCompilerSession *previous_session =
+        xr_compiler_session_attach_isolate(vm, session);
+    ASSERT_NOT_NULL(previous_session);
+    XiPipelineConfig aot_config = xi_pipeline_aot_config();
+    aot_config.run_canonicalize = false;
+    aot_config.source_file = "scalar-binding.xr";
+    aot_config.module_identity = fixture.spec->canonical;
+    aot_config.module_name = "xi_i64_overflow";
+    XiPipelineResult native_result = xi_pipeline_compile_program(
+        fixture.spec->ast, fixture.analyzer, vm, &aot_config);
+    ASSERT_MSG(native_result.status == XI_PIPE_OK,
+               native_result.error.detail[0] ? native_result.error.detail
+                                             : "overflow AOT pipeline failed");
+    ASSERT_NOT_NULL(native_result.ir);
+    XiModule *native_module = native_result.ir->module;
+    ASSERT_NOT_NULL(native_module);
+    ASSERT_EQ_UINT(native_result.ir->stage, XI_STAGE_BACKEND);
+    ASSERT_NOT_NULL(native_result.ir->semantic_plan);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(
+                       native_module->program_semantic_closure),
+                   XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE);
+    XiValue *native_call = find_bound_call(native_module->functions[0]);
+    ASSERT_NOT_NULL(native_call);
+    ASSERT_TRUE(xi_i64_overflow_call_is_exact(native_module, native_module->functions[0],
+                                               native_call, profile));
+    XiValue *saved_receiver = native_call->args[0];
+    native_call->args[0] = native_call->args[1];
+    ASSERT_FALSE(xi_i64_overflow_call_is_exact(native_module, native_module->functions[0],
+                                                native_call, profile));
+    ASSERT_FALSE(xi_program_semantic_verify(native_module, profile, error, sizeof(error)));
+    native_call->args[0] = saved_receiver;
+    ASSERT_TRUE(xi_i64_overflow_call_is_exact(native_module, native_module->functions[0],
+                                               native_call, profile));
+    ASSERT_TRUE(xi_program_semantic_verify(native_module, profile, error, sizeof(error)));
+
+    XrTargetPlan *native_target = NULL;
+    ASSERT_MSG(xr_target_plan_build(native_result.ir->semantic_plan, profile,
+                                    &native_target, error, sizeof(error)),
+               error);
+    ASSERT_NOT_NULL(native_target);
+    ASSERT_TRUE(xr_target_plan_verify(native_target, error, sizeof(error)));
+    XrCEmissionPlan *native_emission = NULL;
+    ASSERT_MSG(xr_c_emission_plan_build(native_target, profile_fingerprint,
+                                        &native_emission, error, sizeof(error)),
+               error);
+    ASSERT_NOT_NULL(native_emission);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementPlan *native_refinement = NULL;
+    XrAotRefinementDiagnostic native_refinement_diag = {0};
+    ASSERT_TRUE(xr_aot_representation_refinement_build_from_authority(
+        native_target, &policy, &native_refinement, &native_refinement_diag));
+    ASSERT_NOT_NULL(native_refinement);
+
+    XiModule *modules[] = {native_module};
+    XaotBundle bundle = {0};
+    XrCExportPlan native_test_export = {
+        .xray_name = "overflow",
+        .symbol = "xr_test_i64_overflow",
+        .visibility = "hidden",
+        .abi = "xray",
+    };
+    native_module->functions[0]->export_plan = &native_test_export;
+    ASSERT_TRUE(xaot_bundle_init(&bundle, modules, 1, 0));
+    bundle.artifact_kind = XAOT_ARTIFACT_HOSTED_FRAGMENT;
+    ASSERT_TRUE(xaot_bundle_set_program_target_plan(&bundle, native_target));
+    ASSERT_TRUE(xaot_bundle_require_representation_refinements(&bundle));
+    XgGlobalEvidence native_evidence = {0};
+    ASSERT_MSG(install_i64_overflow_global_evidence(&bundle, native_module,
+                                                     &native_evidence),
+               bundle.error_msg ? bundle.error_msg
+                                : "overflow global evidence installation failed");
+    XrAotRefinementPlanView native_refinement_view =
+        xr_aot_refinement_plan_view(native_refinement);
+    bool native_materialization_ok = xr_aot_representation_materialization_verify(
+        &native_refinement_view, native_module->init, native_target, &policy,
+        &native_refinement_diag);
+    if (!native_materialization_ok)
+        snprintf(error, sizeof(error), "%s value=%u operation=%u record=%u",
+                 xr_aot_refinement_issue_name(native_refinement_diag.issue),
+                 native_refinement_diag.semantic_value,
+                 native_refinement_diag.semantic_operation,
+                 native_refinement_diag.record_index);
+    ASSERT_MSG(native_materialization_ok, error);
+    ASSERT_TRUE(xaot_bundle_install_representation_refinement(&bundle, 0,
+                                                               native_refinement, &policy));
+    native_refinement = NULL;
+    bundle.module_emission_plans[0] = native_emission;
+    ASSERT_MSG(xaot_prepare_bundle(&bundle, NULL),
+               bundle.error_msg ? bundle.error_msg : "overflow AOT prepare failed");
+    ASSERT_TRUE(xaot_verify_bundle(&bundle, error, sizeof(error)));
+
+    XiCgenCtx *cgen = xi_cgen_ctx_new();
+    ASSERT_NOT_NULL(cgen);
+    ASSERT_TRUE(xi_cgen_ctx_set_aot_bundle(cgen, &bundle));
+    const XrCEmissionPlan *emission_registry[] = {native_emission};
+    ASSERT_TRUE(xi_cgen_ctx_set_value_emission_plans(cgen, emission_registry, 1));
+    xi_cgen_ctx_set_artifact_kind(cgen, XAOT_ARTIFACT_HOSTED_FRAGMENT);
+    char *c_source = NULL;
+    size_t c_source_size = 0;
+    FILE *c_stream = xr_open_memstream(&c_source, &c_source_size);
+    ASSERT_NOT_NULL(c_stream);
+    xi_cgen_program(cgen, c_stream, native_module);
+    ASSERT_EQ_INT(xr_close_memstream(c_stream, &c_source, &c_source_size), 0);
+    ASSERT_FALSE(xi_cgen_has_error(cgen));
+    ASSERT_NOT_NULL(c_source);
+    ASSERT_TRUE(c_source_size > 0);
+
+    const char *overflow_body_end = NULL;
+    char overflow_symbol[128] = {0};
+    const char *overflow_body = find_i64_overflow_function_body(
+        c_source, &overflow_body_end, overflow_symbol);
+    ASSERT_NOT_NULL(overflow_body);
+    ASSERT_NOT_NULL(overflow_body_end);
+    ASSERT_TRUE(overflow_body_end > overflow_body);
+    size_t overflow_body_size = (size_t) (overflow_body_end - overflow_body);
+    char *overflow_body_copy = (char *) xr_malloc(overflow_body_size + 1u);
+    ASSERT_NOT_NULL(overflow_body_copy);
+    memcpy(overflow_body_copy, overflow_body, overflow_body_size);
+    overflow_body_copy[overflow_body_size] = '\0';
+    ASSERT_EQ_UINT(substring_count(overflow_body_copy,
+                                   "xr_arith_core_add_overflows("), 1);
+    ASSERT_EQ_UINT(substring_count(overflow_body_copy,
+                                   "xr_arith_core_sub_overflows("), 1);
+    ASSERT_EQ_UINT(substring_count(overflow_body_copy,
+                                   "xr_arith_core_mul_overflows("), 1);
+    ASSERT_NULL(strstr(overflow_body_copy, "addOverflows"));
+    ASSERT_NULL(strstr(overflow_body_copy, "subOverflows"));
+    ASSERT_NULL(strstr(overflow_body_copy, "mulOverflows"));
+    ASSERT_NULL(strstr(overflow_body_copy, "strcmp"));
+    ASSERT_NULL(strstr(overflow_body_copy, "xrt_call_method"));
+    ASSERT_NULL(strstr(overflow_body_copy, "xrt_method"));
+    ASSERT_NULL(strstr(overflow_body_copy, "XR_FROM_BOOL"));
+    ASSERT_NULL(strstr(overflow_body_copy, "lookup"));
+    xr_free(overflow_body_copy);
+
+    const char *native_path = getenv("XR_I64_OVERFLOW_NATIVE_C_OUTPUT");
+    if (native_path && native_path[0]) {
+        FILE *native = fopen(native_path, "wb");
+        ASSERT_NOT_NULL(native);
+        ASSERT_EQ_UINT(fwrite(c_source, 1, c_source_size, native), c_source_size);
+        ASSERT_TRUE(fprintf(
+                        native,
+                        "\nint main(void) {\n"
+                        "    if (%s(INT64_MAX, INT64_C(1)) != INT64_C(1)) return 1;\n"
+                        "    if (%s(INT64_MIN, INT64_C(1)) != INT64_C(2)) return 2;\n"
+                        "    if (%s(INT64_MAX / INT64_C(2) + INT64_C(1), "
+                        "INT64_C(2)) != INT64_C(3)) return 3;\n"
+                        "    if (%s(INT64_C(1), INT64_C(2)) != INT64_C(0)) return 4;\n"
+                        "    if (%s(INT64_C(5), INT64_C(3)) != INT64_C(0)) return 5;\n"
+                        "    if (%s(INT64_C(0), INT64_MAX) != INT64_C(0)) return 6;\n"
+                        "    return 0;\n"
+                        "}\n",
+                        native_test_export.symbol, native_test_export.symbol,
+                        native_test_export.symbol, native_test_export.symbol,
+                        native_test_export.symbol, native_test_export.symbol) > 0);
+        ASSERT_EQ_INT(fclose(native), 0);
+    }
+
+    xr_free(c_source);
+    xi_cgen_ctx_free(cgen);
+    xaot_bundle_free(&bundle);
+    native_target = NULL; /* XaotBundle owns the installed TargetPlan. */
+    xg_global_evidence_free(&native_evidence);
+    xr_aot_refinement_plan_free(native_refinement);
+    xr_c_emission_plan_free(native_emission);
+    xr_target_plan_free(native_target);
+    ASSERT_EQ_PTR(xr_compiler_session_attach_isolate(vm, previous_session), session);
+    xi_pipeline_result_free(&native_result);
+    xr_aot_refinement_plan_free(refinement);
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_semantic_plan_free(semantic);
+    xi_func_free(root);
+    xr_target_profile_free(profile);
+    fixture_cleanup(&fixture);
+    xr_compiler_session_delete(session);
+    xray_vm_delete(vm);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("PSC-backed Xi/SemanticPlan binding");
 RUN_TEST(stable_rows_survive_mutation_and_ownership_gates);
 RUN_TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected);
 RUN_TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates);
 RUN_TEST(leaf_product_uses_canonical_construct_project_joins);
+RUN_TEST(i64_overflow_program_uses_only_sealed_decision_rows);
 RUN_TEST(retain_rejects_mutable_closure);
 TEST_MAIN_END()

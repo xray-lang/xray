@@ -3661,7 +3661,7 @@ TARGET_ERRORS = {'none', 'divide-by-zero', 'modulo-by-zero', 'entry-call', 'arra
 TARGET_IMMEDIATE_KINDS = {
     'none', 'i64', 'parameter-ordinal', 'jump-target', 'branch-targets',
     'call-record', 'entry-expectation', 'coroutine-state', 'field-record',
-    'layout-record',
+    'layout-record', 'overflow-predicate-record',
 }
 TARGET_CONTROL_KINDS = {'none', 'return', 'jump', 'branch', 'suspend'}
 TARGET_DISPATCH_ARGUMENTS = {
@@ -3689,6 +3689,7 @@ TARGET_DISPATCH_ARGUMENTS = {
     'value-product-set-i64': {'none'},
     'value-product-set-u8': {'none'},
     'value-product-get-u8': {'none'},
+    'overflow': {'none'},
 }
 
 
@@ -3925,6 +3926,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_COROUTINE_STATE,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_FIELD_RECORD,',
         '    XR_TARGET_INSTRUCTION_IMMEDIATE_LAYOUT_RECORD,',
+        '    XR_TARGET_INSTRUCTION_IMMEDIATE_OVERFLOW_PREDICATE_RECORD,',
         '} XrTargetInstructionImmediateKind;',
         '',
         'typedef enum XrTargetInstructionControlKind {',
@@ -3960,6 +3962,7 @@ def generate_target_instruction_header(entries: list[TargetInstructionDef]) -> s
         '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_SET_I64,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_SET_U8,',
         '    XR_TARGET_INSTRUCTION_DISPATCH_VALUE_PRODUCT_GET_U8,',
+        '    XR_TARGET_INSTRUCTION_DISPATCH_OVERFLOW,',
         '} XrTargetInstructionDispatchKind;',
         '',
         'typedef enum XrTargetInstructionDispatchArgument {',

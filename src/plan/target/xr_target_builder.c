@@ -14,9 +14,11 @@
  */
 
 #include "../semantic/xr_semantic_heap_literal_shape.h"
+#include "../semantic/xr_i64_overflow_predicate_semantics.h"
 #include "xr_target_builder.h"
 #include "xr_target_capability.h"
 #include "xr_target_instruction_verify.h"
+#include "xr_i64_overflow_target_instruction.h"
 #include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
 #include "../semantic/xr_semantic_enum_shape.h"
@@ -227,6 +229,8 @@ typedef struct XrTargetMaterializedPlan {
     uint32_t function_count;
     XrTargetSlotRecord *slots;
     uint32_t slot_count;
+    XrTargetI64OverflowPredicateRecord *i64_overflow_predicates;
+    uint32_t i64_overflow_predicate_count;
     XrTargetInstructionRecord *instructions;
     uint32_t instruction_count;
     XrTargetCallRecord *calls;
@@ -538,6 +542,7 @@ static void materialized_dispose(XrTargetMaterializedPlan *materialized) {
     xr_free(materialized->fields);
     xr_free(materialized->functions);
     xr_free(materialized->slots);
+    xr_free(materialized->i64_overflow_predicates);
     xr_free(materialized->instructions);
     xr_free(materialized->calls);
     xr_free(materialized->call_arguments);
@@ -11089,7 +11094,26 @@ static bool builder_add_calls_and_adapters(XrTargetPlanBuilder *builder, char *e
         } else if (xr_semantic_adt_enum_constructor_is_exact(plan, operation, NULL)) {
             valid =
                 collect_adt_enum_constructor_call_intent(builder, i, operation, error, error_size);
+        } else if (operation->opcode == XI_CALL_METHOD) {
+            const XrSemanticProgramProvenance *program =
+                xr_semantic_plan_program_provenance(plan);
+            const XrSemanticProgramCallBinding *binding =
+                xr_semantic_plan_program_call_for_operation(plan, i);
+            XrI64OverflowPredicateKind overflow_kind =
+                XR_I64_OVERFLOW_PREDICATE_INVALID;
+            if (program &&
+                program->program_family ==
+                    XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
+                binding && binding->operation == i &&
+                binding->target_function == XR_SEMANTIC_INDEX_NONE &&
+                binding->program_dependency == XR_SEMANTIC_INDEX_NONE &&
+                xr_i64_overflow_predicate_kind_from_builtin_identity(
+                    binding->callee_program_function, &overflow_kind))
+                valid = true;
+            else
+                goto uncovered_call;
         } else if (semantic_operation_is_call_shaped(plan, operation)) {
+uncovered_call:
             uint32_t metadata_count = 0;
             uint32_t operand_count = 0;
             const char *const *metadata = xr_semantic_plan_metadata(plan, &metadata_count);
@@ -12166,6 +12190,121 @@ static bool materialized_i64_slot(const XrTargetMaterializedPlan *materialized, 
                                     XR_TARGET_SCALAR_SLOT_I64, out_slot);
 }
 
+static bool materialized_target_function_for_semantic(
+    const XrTargetMaterializedPlan *materialized, uint32_t semantic_function,
+    uint32_t *out_function) {
+    uint32_t match = XR_SEMANTIC_INDEX_NONE;
+    if (!materialized || !out_function)
+        return false;
+    for (uint32_t i = 0; i < materialized->function_count; i++) {
+        if (materialized->functions[i].semantic_function != semantic_function)
+            continue;
+        if (match != XR_SEMANTIC_INDEX_NONE)
+            return false;
+        match = i;
+    }
+    if (match == XR_SEMANTIC_INDEX_NONE || materialized->functions[match].id != match)
+        return false;
+    *out_function = match;
+    return true;
+}
+
+static bool materialize_i64_overflow_predicates(
+    const XrTargetPlanBuilder *builder, XrTargetMaterializedPlan *materialized,
+    char *error, size_t error_size) {
+    const XrSemanticPlan *semantic = builder ? builder->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *program =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    bool required = program &&
+                    program->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+    if (!required)
+        return true;
+    uint32_t count = (uint32_t) xr_semantic_plan_program_call_binding_count(semantic);
+    if (program->module_count != 1 || program->function_count != 1 ||
+        count == 0 || count != program->call_count ||
+        count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS)
+        return fail(error, error_size, "XR_TARGET_1003",
+                    "overflow program binding count is invalid");
+    materialized->i64_overflow_predicates =
+        (XrTargetI64OverflowPredicateRecord *) allocate_records(
+            count, sizeof(*materialized->i64_overflow_predicates));
+    if (!materialized->i64_overflow_predicates)
+        return fail(error, error_size, "XR_EXEC_5003",
+                    "overflow predicate table allocation failed");
+    materialized->i64_overflow_predicate_count = count;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    for (uint32_t i = 0; i < count; i++) {
+        const XrSemanticProgramCallBinding *binding =
+            xr_semantic_plan_program_call_binding(semantic, i);
+        const XrSemanticOperationRecord *operation =
+            binding ? xr_semantic_plan_operation(semantic, binding->operation) : NULL;
+        uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
+        bool function_joined = materialized_target_function_for_semantic(
+            materialized, operation ? operation->function : XR_SEMANTIC_INDEX_NONE,
+            &target_function);
+        if (!binding || !operation || !operands || binding->program_row >= count ||
+            materialized->i64_overflow_predicates[binding->program_row].kind !=
+                XR_TARGET_I64_OVERFLOW_PREDICATE_INVALID ||
+            !function_joined ||
+            operation->operand_count != 2 || operation->operand_begin > operand_count ||
+            operation->operand_count > operand_count - operation->operand_begin) {
+            if (error && error_size)
+                snprintf(error, error_size,
+                         "XR_TARGET_1003: overflow predicate SemanticPlan join is invalid "
+                         "row=%u program-row=%u operation=%u function=%u target-function=%u "
+                         "function-joined=%u operands=%u begin=%u total=%u",
+                         i, binding ? binding->program_row : XR_SEMANTIC_INDEX_NONE,
+                         binding ? binding->operation : XR_SEMANTIC_INDEX_NONE,
+                         operation ? operation->function : XR_SEMANTIC_INDEX_NONE,
+                         target_function, function_joined ? 1u : 0u,
+                         operation ? operation->operand_count : 0u,
+                         operation ? operation->operand_begin : 0u, operand_count);
+            return false;
+        }
+        uint32_t result_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        uint32_t receiver_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        uint32_t argument_slot = XR_TARGET_INSTRUCTION_SLOT_NONE;
+        if (!materialized_scalar_slot(materialized, target_function,
+                                      operation->result_value, XR_TARGET_SCALAR_SLOT_BOOL,
+                                      &result_slot) ||
+            !materialized_i64_slot(materialized, target_function,
+                                   operands[operation->operand_begin].value, &receiver_slot) ||
+            !materialized_i64_slot(materialized, target_function,
+                                   operands[operation->operand_begin + 1u].value,
+                                   &argument_slot) ||
+            !xr_i64_overflow_target_predicate_project(
+                semantic, binding->operation, target_function, result_slot,
+                receiver_slot, argument_slot, binding->program_row,
+                &materialized->i64_overflow_predicates[binding->program_row]))
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "overflow predicate projection is incomplete");
+    }
+    for (uint32_t i = 0; i < count; i++)
+        if (materialized->i64_overflow_predicates[i].kind ==
+            XR_TARGET_I64_OVERFLOW_PREDICATE_INVALID)
+            return fail(error, error_size, "XR_TARGET_1003",
+                        "overflow predicate program-row coverage is incomplete");
+    return true;
+}
+
+static const XrTargetI64OverflowPredicateRecord *materialized_overflow_predicate_for_operation(
+    const XrSemanticPlan *semantic, const XrTargetMaterializedPlan *materialized,
+    uint32_t function, uint32_t operation) {
+    const XrSemanticProgramCallBinding *binding =
+        semantic ? xr_semantic_plan_program_call_for_operation(semantic, operation) : NULL;
+    if (!binding || binding->program_row >=
+                        (materialized ? materialized->i64_overflow_predicate_count : 0))
+        return NULL;
+    const XrTargetI64OverflowPredicateRecord *row =
+        &materialized->i64_overflow_predicates[binding->program_row];
+    return row->id == binding->program_row && row->program_row == binding->program_row &&
+                   row->function == function && row->semantic_operation == operation
+               ? row
+               : NULL;
+}
+
 static bool source_entry_call_is_exact(const XrTargetPlanBuilder *builder,
                                        const XrTargetMaterializedPlan *materialized,
                                        uint32_t call_index) {
@@ -12886,8 +13025,14 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
                 continue;
             const XrSemanticOperationRecord *operation =
                 xr_semantic_plan_operation(semantic, operation_index);
-            uint16_t opcode = operation ? scalar_instruction_opcode(operation->opcode)
-                                        : XR_TARGET_INSTRUCTION_INVALID;
+            const XrTargetI64OverflowPredicateRecord *overflow_predicate =
+                operation ? materialized_overflow_predicate_for_operation(
+                                semantic, materialized, function_index, operation_index)
+                          : NULL;
+            uint16_t opcode = overflow_predicate
+                                  ? XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE
+                                  : operation ? scalar_instruction_opcode(operation->opcode)
+                                              : XR_TARGET_INSTRUCTION_INVALID;
             uint32_t entry_index = operation_index < analysis->operation_count
                                        ? analysis->entry_by_operation[operation_index]
                                        : XR_SEMANTIC_INDEX_NONE;
@@ -12899,6 +13044,8 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
                 contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_CALL;
             bool entry_call_dispatch =
                 contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL;
+            bool overflow_dispatch =
+                contract && contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_OVERFLOW;
             bool call_dispatch = direct_call_dispatch || entry_call_dispatch;
             uint32_t call_index = operation_index < analysis->operation_count
                                       ? analysis->call_by_operation[operation_index]
@@ -12906,7 +13053,8 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
             const XrTargetCallRecord *call =
                 call_index < materialized->call_count ? &materialized->calls[call_index] : NULL;
             if (!operation || !contract || operation->function != function_index ||
-                operation->block != block_index || (!call_dispatch && operation->effects != 0) ||
+                operation->block != block_index ||
+                (!call_dispatch && !overflow_dispatch && operation->effects != 0) ||
                 (direct_call_dispatch &&
                  (!call || !scalar_direct_i64_call_is_exact(builder, materialized, call_index) ||
                   (executable_functions && !executable_functions[call->callee_function]))) ||
@@ -12915,6 +13063,9 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
                   materialized->entry_expectations[entry_index].call != call_index ||
                   !source_entry_call_is_exact(builder, materialized, call_index))) ||
                 (!call_dispatch && operation->operand_count != contract->arity) ||
+                (overflow_dispatch &&
+                 (!overflow_predicate || overflow_predicate->function != function_index ||
+                  overflow_predicate->semantic_operation != operation_index)) ||
                 operation->operand_begin > operand_total ||
                 operation->operand_count > operand_total - operation->operand_begin) {
                 admissible = false;
@@ -12937,7 +13088,8 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
             }
             if ((!call_dispatch && operation->opcode == XI_COPY &&
                  operation->semantic_immediate != XI_COPY_KIND_IDENTITY) ||
-                (!call_dispatch && operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
+                (!call_dispatch && !overflow_dispatch &&
+                 operation->opcode != XI_CONST && operation->opcode != XI_COPY &&
                  operation->opcode != XI_PARAM && operation->semantic_immediate != 0)) {
                 admissible = false;
                 break;
@@ -12951,6 +13103,12 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
                     break;
                 }
                 immediate_bits = entry_call_dispatch ? entry_index : call_index;
+            } else if (overflow_dispatch) {
+                if (operation->constant != XR_SEMANTIC_INDEX_NONE ||
+                    overflow_predicate->result_slot != result_slot)
+                    admissible = false;
+                else
+                    immediate_bits = overflow_predicate->id;
             } else if (operation->opcode == XI_CONST) {
                 const XrSemanticConstantRecord *constant =
                     xr_semantic_plan_constant(semantic, operation->constant);
@@ -12990,6 +13148,12 @@ static bool materialize_scalar_instruction_function(const XrTargetPlanBuilder *b
             }
             if (!admissible)
                 break;
+            if (overflow_dispatch &&
+                (operand_slots[0] != overflow_predicate->receiver_slot ||
+                 operand_slots[1] != overflow_predicate->argument_slot)) {
+                admissible = false;
+                break;
+            }
             group[next_row++] = (XrTargetInstructionRecord) {
                 .function = function_index,
                 .result_slot = result_slot,
@@ -14087,6 +14251,22 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
     bool requires_leaf_product =
         published && published->program_family ==
                          XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    bool requires_overflow =
+        published && published->program_family ==
+                         XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+    uint32_t overflow_function = XR_SEMANTIC_INDEX_NONE;
+    if (requires_overflow) {
+        const XrSemanticProgramFunctionBinding *binding =
+            xr_semantic_plan_program_function_binding(builder->semantic_plan, 0);
+        if (!binding ||
+            xr_semantic_plan_program_function_binding_count(builder->semantic_plan) != 1 ||
+            !materialized_target_function_for_semantic(
+                materialized, binding ? binding->semantic_function : XR_SEMANTIC_INDEX_NONE,
+                &overflow_function) ||
+            materialized->i64_overflow_predicate_count != published->call_count)
+            return fail(error, error_size, "XR_TARGET_1005",
+                        "overflow program instruction authority is incomplete");
+    }
     XrLeafAggregateInstructionShape required_leaf_shape = {0};
     if (requires_leaf_aggregate &&
         !leaf_aggregate_instruction_shape_is_exact(builder, materialized,
@@ -14174,6 +14354,16 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
         } else if (!materialize_scalar_instruction_function(
                        builder, materialized, function, &analysis, NULL, NULL, 0,
                        &function_rows[function])) {
+            if (requires_overflow && function == overflow_function) {
+                xr_free(function_rows);
+                xr_free(executable);
+                xr_free(managed_push);
+                xr_free(leaf_aggregate);
+                xr_free(leaf_product);
+                scalar_instruction_analysis_dispose(&analysis);
+                return fail(error, error_size, "XR_TARGET_1005",
+                            "overflow program instruction coverage is incomplete");
+            }
             if (!materialize_tagged_array_push_instruction_function(
                     builder, materialized, function, NULL, 0, &function_rows[function]))
                 continue;
@@ -14234,6 +14424,17 @@ static bool materialize_typed_instructions(const XrTargetPlanBuilder *builder,
             return fail(error, error_size, "XR_TARGET_1005",
                         "leaf product callers and callee must survive instruction closure");
         }
+    }
+    if (requires_overflow &&
+        (overflow_function >= materialized->function_count || !executable[overflow_function])) {
+        xr_free(function_rows);
+        xr_free(executable);
+        xr_free(managed_push);
+        xr_free(leaf_aggregate);
+        xr_free(leaf_product);
+        scalar_instruction_analysis_dispose(&analysis);
+        return fail(error, error_size, "XR_TARGET_1005",
+                    "overflow program executable function is missing");
     }
     for (uint32_t function = 0; function < materialized->function_count; function++) {
         if (function_rows[function] > 40000000u - instruction_count) {
@@ -15164,6 +15365,7 @@ static bool builder_materialize(XrTargetPlanBuilder *builder,
         !materialize_calls_and_adapters(builder, materialized, error, error_size) ||
         !materialize_entry_expectations(builder, materialized, error, error_size) ||
         !materialize_coroutine_state_calls(builder, materialized, error, error_size) ||
+        !materialize_i64_overflow_predicates(builder, materialized, error, error_size) ||
         !materialize_typed_instructions(builder, materialized, error, error_size) ||
         !materialize_debug_facts(builder, materialized, error, error_size) ||
         !materialize_capabilities(builder, materialized, error, error_size)) {
@@ -15263,6 +15465,8 @@ static bool builder_freeze(XrTargetPlanBuilder *builder, XrTargetPlan **out, cha
         .functions_count = materialized.function_count,
         .slots = materialized.slots,
         .slots_count = materialized.slot_count,
+        .i64_overflow_predicates = materialized.i64_overflow_predicates,
+        .i64_overflow_predicates_count = materialized.i64_overflow_predicate_count,
         .instructions = materialized.instructions,
         .instructions_count = materialized.instruction_count,
         .calls = materialized.calls,

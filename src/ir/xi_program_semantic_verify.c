@@ -12,6 +12,7 @@
 #include "xi_core_api.h"
 #include "xi_effect.h"
 #include "xi_value_query.h"
+#include "xi_i64_overflow_program.h"
 #include "../frontend/analyzer/xanalyzer_symbol.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../runtime/value/xtype.h"
@@ -784,6 +785,12 @@ static bool verify_single_module_partition(const XiModule *module,
             return verify_fail(error, error_size,
                                "value-product Xi authority cannot retain target facts");
         return verify_leaf_product_program(module, error, error_size);
+    }
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
+        if (module->scalar_call_decision)
+            return verify_fail(error, error_size,
+                               "overflow Xi authority retained a scalar-call decision");
+        return xi_i64_overflow_program_verify(module, target_profile, error, error_size);
     }
     if (family != XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL)
         return verify_fail(error, error_size, "Xi program semantic family is unsupported");

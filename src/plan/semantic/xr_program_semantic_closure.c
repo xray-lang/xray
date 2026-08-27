@@ -14,6 +14,7 @@
  */
 
 #include "xr_program_semantic_closure_internal.h"
+#include "xr_i64_overflow_predicate_semantics.h"
 #include "xr_source_semantic_identity.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
@@ -637,8 +638,12 @@ bool xr_program_semantic_closure_add_function(XrProgramSemanticClosure *closure,
         memcmp(input->reserved, (uint8_t[7]) {0}, sizeof(input->reserved)) != 0 ||
         ((closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
           closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
-          closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)
-             ? (stable_id_is_zero(input->return_type) || input->parameter_count > 1 ||
+          closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL ||
+          closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE)
+             ? (stable_id_is_zero(input->return_type) ||
+                input->parameter_count >
+                    (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ? 2u
+                                                                                         : 1u) ||
                 input->parameter_count > closure->limits.max_function_parameters ||
                 (input->parameter_count && !input->parameters))
              : (!stable_id_is_zero(input->return_type) || input->parameter_count != 0 ||
@@ -729,9 +734,22 @@ bool xr_program_semantic_closure_add_call(XrProgramSemanticClosure *closure,
         find_function_record(closure, input->caller_function);
     const XrProgramSemanticFunctionRecord *callee =
         find_function_record(closure, input->callee_function);
+    bool overflow_builtin = false;
+    if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
+        for (uint32_t kind = XR_I64_OVERFLOW_PREDICATE_ADD;
+             kind < XR_I64_OVERFLOW_PREDICATE_COUNT; kind++) {
+            XrStableId identity = {{0}};
+            if (xr_i64_overflow_predicate_builtin_identity(
+                    (XrI64OverflowPredicateKind) kind, &identity) &&
+                stable_id_equal(identity, input->callee_function)) {
+                overflow_builtin = true;
+                break;
+            }
+        }
+    }
     const XrProgramSemanticModuleRecord *module =
         caller ? find_module_record(closure, caller->module_identity) : NULL;
-    if (!caller || !callee || !module ||
+    if (!caller || (!callee && !overflow_builtin) || !module ||
         !stable_id_equal(input->callsite_identity,
                          derive_source_callsite_identity(module, caller, input->locator)))
         return fail(error, error_size, "XR_SEM_0019",
@@ -868,7 +886,7 @@ static void canonicalize_tables(XrProgramSemanticClosure *closure) {
 
 static void compute_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                         XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v6\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v7\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);

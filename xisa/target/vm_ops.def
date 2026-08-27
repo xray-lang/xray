@@ -306,3 +306,13 @@
   :result-ownership trivial :operand-ownership (borrow)
   :effects () :error none :suspend no :immediate field-record :control none
   :semantic xi.value.product.project :dispatch value-product-get-u8 :dispatch-arg none)
+
+; The overflow predicates are sealed source-program calls, not arithmetic
+; aliases.  The referenced TargetPlan predicate row carries the one operation
+; answer, so neither VM nor C emission consults the original method spelling.
+(define-target-instruction i64-overflow-predicate
+  :id 43 :name "i64.overflow.predicate" :arity 2 :terminator no
+  :result-rep bool :operand-reps (i64 i64)
+  :result-ownership trivial :operand-ownership (borrow borrow)
+  :effects () :error none :suspend no :immediate overflow-predicate-record :control none
+  :semantic none :dispatch overflow :dispatch-arg none)

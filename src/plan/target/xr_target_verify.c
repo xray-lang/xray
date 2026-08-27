@@ -17,6 +17,7 @@
 #include "xr_target_verify.h"
 #include "xr_target_capability.h"
 #include "xr_target_instruction_verify.h"
+#include "xr_i64_overflow_target_instruction.h"
 #include "xr_target_entry_abi.h"
 #include "xr_target_plan_internal.h"
 #include "xr_target_profile_internal.h"
@@ -713,6 +714,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
         plan->fields_count > 16000000u || plan->storage_count > 4000000u ||
         plan->allocations_count > 10000000u || plan->extent_operands_count > 40000000u ||
         plan->functions_count > 100000u || plan->slots_count > 16000000u ||
+        plan->i64_overflow_predicates_count > XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS ||
         plan->instructions_count > 40000000u || plan->calls_count > 10000000u ||
         plan->call_arguments_count > 40000000u || plan->root_maps_count > 10000000u ||
         plan->root_slots_count > 40000000u || plan->cleanups_count > 40000000u ||
@@ -745,6 +747,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_ADD_TARGET_BYTES(extent_operands);
     XR_ADD_TARGET_BYTES(functions);
     XR_ADD_TARGET_BYTES(slots);
+    XR_ADD_TARGET_BYTES(i64_overflow_predicates);
     XR_ADD_TARGET_BYTES(instructions);
     XR_ADD_TARGET_BYTES(calls);
     XR_ADD_TARGET_BYTES(call_arguments);
@@ -774,6 +777,7 @@ static bool verify_resource_budgets(const XrTargetPlan *plan, char *error, size_
     XR_REQUIRE_TARGET_TABLE(extent_operands);
     XR_REQUIRE_TARGET_TABLE(functions);
     XR_REQUIRE_TARGET_TABLE(slots);
+    XR_REQUIRE_TARGET_TABLE(i64_overflow_predicates);
     XR_REQUIRE_TARGET_TABLE(instructions);
     XR_REQUIRE_TARGET_TABLE(calls);
     XR_REQUIRE_TARGET_TABLE(call_arguments);
@@ -5808,6 +5812,23 @@ static bool operation_is_exact_stringbuilder_append_rune(const XrSemanticPlan *s
     return true;
 }
 
+static bool overflow_predicate_covers_call_operation(const XrTargetPlan *plan,
+                                                     uint32_t operation_index) {
+    const XrSemanticPlan *semantic = plan ? plan->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *program =
+        semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
+    const XrSemanticProgramCallBinding *binding =
+        semantic ? xr_semantic_plan_program_call_for_operation(semantic, operation_index) : NULL;
+    if (!program ||
+        program->program_family != XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ||
+        !binding || binding->program_row >= plan->i64_overflow_predicates_count)
+        return false;
+    const XrTargetI64OverflowPredicateRecord *row =
+        &plan->i64_overflow_predicates[binding->program_row];
+    return row->id == binding->program_row && row->program_row == binding->program_row &&
+           row->semantic_operation == operation_index;
+}
+
 static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_size) {
     const XrSemanticPlan *semantic = plan->semantic_plan;
     uint32_t semantic_operations = (uint32_t) xr_semantic_plan_operation_count(semantic);
@@ -7848,7 +7869,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
     }
     for (uint32_t i = 0; valid && i < semantic_operations; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
-        if (operation_is_call_shaped(semantic, operation) && !covered[i]) {
+        if (operation_is_call_shaped(semantic, operation) && !covered[i] &&
+            !overflow_predicate_covers_call_operation(plan, i)) {
             valid = false;
         }
     }
@@ -10473,6 +10495,7 @@ bool xr_target_plan_verify(const XrTargetPlan *plan, char *error, size_t error_s
                     verify_extent_references(plan, error, error_size) &&
                     verify_storage_and_allocations(plan, error, error_size) &&
                     verify_functions_and_slots(plan, error, error_size) &&
+                    xr_i64_overflow_target_program_verify(plan, error, error_size) &&
                     xr_target_instruction_program_verify(plan, error, error_size) &&
                     verify_calls(plan, error, error_size) &&
                     verify_leaf_program_target(plan, error, error_size) &&

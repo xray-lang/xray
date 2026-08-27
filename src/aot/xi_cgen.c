@@ -3574,6 +3574,56 @@ static bool cg_channel_receive_emission_view(XiCgenCtx *ctx, const XiFunc *funct
     return true;
 }
 
+static bool cg_i64_overflow_predicate_required(const XiFunc *function) {
+    const XrSemanticProgramProvenance *provenance =
+        function ? xr_semantic_plan_program_provenance(function->semantic_plan) : NULL;
+    return provenance &&
+           provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+}
+
+static bool cg_i64_overflow_predicate_emission_view(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *value,
+    XrCValueEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!ctx || !function || !value || !out ||
+        !cg_i64_overflow_predicate_required(function))
+        return false;
+    uint32_t receiver = XR_SEMANTIC_INDEX_NONE;
+    uint32_t argument = XR_SEMANTIC_INDEX_NONE;
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, function, value, out);
+    const char *expected_symbol = NULL;
+    switch (out->recipe_discriminant) {
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_ADD:
+            expected_symbol = "xr_arith_core_add_overflows";
+            break;
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_SUB:
+            expected_symbol = "xr_arith_core_sub_overflows";
+            break;
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_MUL:
+            expected_symbol = "xr_arith_core_mul_overflows";
+            break;
+        default:
+            break;
+    }
+    if (status != CG_VALUE_EMISSION_FOUND || value->op != XI_CALL_METHOD ||
+        value->nargs != 2 || !value->args || !value->args[0] || !value->args[1] ||
+        out->materialization != XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE ||
+        out->rep != XR_C_VALUE_REP_BOOL || out->target_register_kind != XR_MACHINE_REP_I1 ||
+        out->target_memory_kind != XR_MACHINE_REP_I1 || !out->c_type ||
+        strcmp(out->c_type, "uint8_t") != 0 || out->recipe_rule_id != XR_C_EMISSION_RULE_NONE ||
+        !expected_symbol || !out->recipe_symbol ||
+        strcmp(out->recipe_symbol, expected_symbol) != 0 ||
+        !cg_value_semantic_id(ctx, function, value->args[0], &receiver) ||
+        !cg_value_semantic_id(ctx, function, value->args[1], &argument) ||
+        receiver != out->recipe_operand_value || argument != out->recipe_argument_value) {
+        (void) cg_value_emission_fail(
+            ctx, "i64 overflow predicate has no exact immutable C recipe");
+        return false;
+    }
+    return true;
+}
+
 static bool cg_string_runes_emission_view(XiCgenCtx *ctx, const XiFunc *function,
                                           const XiValue *value, XrCValueEmissionView *out) {
     if (out)
@@ -6363,6 +6413,16 @@ static const char *cg_null_test_adapter_name(XiCgenCtx *ctx) {
 }
 
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    const XiFunc *function = v && v->block ? v->block->func : NULL;
+    if (cg_i64_overflow_predicate_required(function)) {
+        XrCValueEmissionView overflow = {0};
+        if (!cg_i64_overflow_predicate_emission_view(ctx, function, v, &overflow)) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        emit_value_as_rep_ctx(ctx, out, v, XR_REP_I64);
+        return;
+    }
     const char *adapter = cg_truthiness_adapter_name(ctx);
     if (!adapter) {
         emit_codegen_abort_expr(out);

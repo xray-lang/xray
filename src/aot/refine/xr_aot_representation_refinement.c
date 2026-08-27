@@ -479,6 +479,100 @@ static const XrTargetValueRepRecord *verify_target_value_rep(
                : NULL;
 }
 
+typedef enum AotI64OverflowPredicateMatch {
+    AOT_I64_OVERFLOW_PREDICATE_NOT_APPLICABLE = 0,
+    AOT_I64_OVERFLOW_PREDICATE_EXACT,
+    AOT_I64_OVERFLOW_PREDICATE_MALFORMED,
+} AotI64OverflowPredicateMatch;
+
+/* Reconstruct the storage obligation from the verified, function-qualified
+ * TargetPlan row.  The method spelling and the live Xi call are deliberately
+ * absent: once TargetPlan has frozen KIND, neither refinement nor its verifier
+ * owns that answer. */
+static AotI64OverflowPredicateMatch aot_i64_overflow_predicate_binding(
+    const VerifyAuthority *ctx, uint32_t operation_index,
+    const XrTargetI64OverflowPredicateRecord **out) {
+    if (out)
+        *out = NULL;
+    if (!ctx || !ctx->semantic || !ctx->target_plan || !out)
+        return AOT_I64_OVERFLOW_PREDICATE_MALFORMED;
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(ctx->semantic);
+    if (!provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE)
+        return AOT_I64_OVERFLOW_PREDICATE_NOT_APPLICABLE;
+    const XrSemanticOperationRecord *operation =
+        xr_semantic_plan_operation(ctx->semantic, operation_index);
+    if (!operation || operation->opcode != XI_CALL_METHOD)
+        return AOT_I64_OVERFLOW_PREDICATE_NOT_APPLICABLE;
+    const XrSemanticProgramCallBinding *call =
+        xr_semantic_plan_program_call_for_operation(ctx->semantic, operation_index);
+    uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t predicate_count = 0, slot_count = 0, operand_count = 0;
+    const XrTargetI64OverflowPredicateRecord *predicates =
+        xr_target_plan_i64_overflow_predicates(ctx->target_plan, &predicate_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(ctx->semantic, &operand_count);
+    if (!call || !predicates || !slots || !operands ||
+        !xr_target_plan_find_function(ctx->target_plan, ctx->semantic,
+                                      operation->function, &target_function) ||
+        operation->operand_count != 2 || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin)
+        return AOT_I64_OVERFLOW_PREDICATE_MALFORMED;
+    const XrTargetI64OverflowPredicateRecord *match = NULL;
+    for (uint32_t i = 0; i < predicate_count; i++) {
+        const XrTargetI64OverflowPredicateRecord *candidate = &predicates[i];
+        if (candidate->semantic_operation != operation_index)
+            continue;
+        if (match)
+            return AOT_I64_OVERFLOW_PREDICATE_MALFORMED;
+        match = candidate;
+    }
+    if (!match || match->id >= predicate_count || match->id != call->program_row ||
+        match->program_row != call->program_row || match->function != target_function ||
+        !xr_stable_id_equal(match->program_call, call->program_call) ||
+        !xr_stable_id_equal(match->callsite, call->callsite) ||
+        match->result_slot >= slot_count || match->receiver_slot >= slot_count ||
+        match->argument_slot >= slot_count ||
+        match->kind < XR_TARGET_I64_OVERFLOW_PREDICATE_ADD ||
+        match->kind > XR_TARGET_I64_OVERFLOW_PREDICATE_MUL)
+        return AOT_I64_OVERFLOW_PREDICATE_MALFORMED;
+    const XrTargetSlotRecord *result = &slots[match->result_slot];
+    const XrTargetSlotRecord *receiver = &slots[match->receiver_slot];
+    const XrTargetSlotRecord *argument = &slots[match->argument_slot];
+    const XrTargetMachineRepRecord *result_register =
+        xr_target_plan_machine_rep(ctx->target_plan, result->register_rep);
+    const XrTargetMachineRepRecord *result_memory =
+        xr_target_plan_machine_rep(ctx->target_plan, result->memory_rep);
+    const XrTargetMachineRepRecord *receiver_register =
+        xr_target_plan_machine_rep(ctx->target_plan, receiver->register_rep);
+    const XrTargetMachineRepRecord *receiver_memory =
+        xr_target_plan_machine_rep(ctx->target_plan, receiver->memory_rep);
+    const XrTargetMachineRepRecord *argument_register =
+        xr_target_plan_machine_rep(ctx->target_plan, argument->register_rep);
+    const XrTargetMachineRepRecord *argument_memory =
+        xr_target_plan_machine_rep(ctx->target_plan, argument->memory_rep);
+    if (result->id != match->result_slot || receiver->id != match->receiver_slot ||
+        argument->id != match->argument_slot || result->function != target_function ||
+        receiver->function != target_function || argument->function != target_function ||
+        result->semantic_operation != operation_index ||
+        result->semantic_value != operation->result_value ||
+        receiver->semantic_value != operands[operation->operand_begin].value ||
+        argument->semantic_value != operands[operation->operand_begin + 1u].value ||
+        !result_register || !result_memory || !receiver_register || !receiver_memory ||
+        !argument_register || !argument_memory ||
+        result_register->kind != XR_MACHINE_REP_I1 ||
+        result_memory->kind != XR_MACHINE_REP_I1 ||
+        receiver_register->kind != XR_MACHINE_REP_I64 ||
+        receiver_memory->kind != XR_MACHINE_REP_I64 ||
+        argument_register->kind != XR_MACHINE_REP_I64 ||
+        argument_memory->kind != XR_MACHINE_REP_I64)
+        return AOT_I64_OVERFLOW_PREDICATE_MALFORMED;
+    *out = match;
+    return AOT_I64_OVERFLOW_PREDICATE_EXACT;
+}
+
 /* Setting XRAY_AOT_REFINE_TRACE prints, on stderr, why this pass refused a
  * program. Unset, the variable is never read and nothing is printed: it is
  * consulted only on the path that is already failing the build, so a passing
@@ -8333,6 +8427,16 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
             : NULL;
     if (!operation)
         return false;
+    const XrTargetI64OverflowPredicateRecord *overflow = NULL;
+    AotI64OverflowPredicateMatch overflow_match =
+        aot_i64_overflow_predicate_binding(ctx, operation_index, &overflow);
+    if (overflow_match == AOT_I64_OVERFLOW_PREDICATE_MALFORMED)
+        return false;
+    if (overflow_match == AOT_I64_OVERFLOW_PREDICATE_EXACT && overflow) {
+        *out_storage = XR_REP_I64;
+        *out_machine_kind = XR_MACHINE_REP_I1;
+        return true;
+    }
     if (ctx->exact_channel_value && ctx->exact_channel_value[semantic_value])
         return oracle_dynamic_channel_storage(ctx, semantic_value, out_storage, out_machine_kind);
     if (ctx->exact_source_namespace_value && ctx->exact_source_namespace_value[semantic_value])
@@ -9246,6 +9350,22 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         xr_semantic_plan_operation(ctx->semantic, operation_index);
     if (!operation || operand_index >= operation->operand_count)
         return false;
+    const XrTargetI64OverflowPredicateRecord *overflow = NULL;
+    AotI64OverflowPredicateMatch overflow_match =
+        aot_i64_overflow_predicate_binding(ctx, operation_index, &overflow);
+    if (overflow_match == AOT_I64_OVERFLOW_PREDICATE_MALFORMED)
+        return false;
+    if (overflow_match == AOT_I64_OVERFLOW_PREDICATE_EXACT) {
+        uint32_t slot_count = 0;
+        const XrTargetSlotRecord *slots = xr_target_plan_slots(ctx->target_plan, &slot_count);
+        uint32_t expected_slot = operand_index == 0 ? overflow->receiver_slot
+                                                    : overflow->argument_slot;
+        if (!slots || operand_index >= 2 || expected_slot >= slot_count ||
+            slots[expected_slot].semantic_value != source_value)
+            return false;
+        *out_storage = XR_REP_I64;
+        return true;
+    }
     uint16_t ignored_kind = 0;
     /* A nullable scalar operand stays in the tagged carrier its definition
      * already named, so no use of it can request an adapter. */

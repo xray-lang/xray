@@ -3713,13 +3713,15 @@
     {
       "path": "src/vm/xvm_ffi.c",
       "pointer_names": [
-        "args"
+        "args",
+        "out_result"
       ]
     },
     {
       "path": "src/vm/xvm_ffi.h",
       "pointer_names": [
-        "args"
+        "args",
+        "out_result"
       ]
     },
     {

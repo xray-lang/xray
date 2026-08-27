@@ -116,6 +116,7 @@ typedef struct XrSemanticBuildContext {
     uint32_t root_shared_store_count;
     const XrProgramSemanticClosure *program_closure;
     const XrScalarCallDecision *construction_decision;
+    const XrI64OverflowDecisionTable *construction_overflow_decisions;
     const XrTargetProfile *construction_target_profile;
     uint32_t program_module_row;
     XrSemanticProgramTypeBinding *program_type_bindings;
@@ -190,15 +191,22 @@ static bool prepare_program_authority(XrSemanticBuildContext *ctx, const XiFunc 
     bool aggregate = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL;
     bool product = family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     bool graph = family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
-    if ((!scalar && !aggregate && !product && !graph) ||
+    bool overflow = family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+    bool overflow_decisions = module->i64_overflow_decisions != NULL;
+    if ((!scalar && !aggregate && !product && !graph && !overflow) ||
         (scalar && (!decision || !profile)) ||
+        (overflow && (decision || !overflow_decisions || !profile)) ||
         ((aggregate || product || graph) && (decision || profile)) ||
         !xi_program_semantic_verify_partition(
-            module, scalar ? module->scalar_target_profile : NULL, ctx->error, ctx->error_size))
+            module, scalar || overflow ? module->scalar_target_profile : NULL, ctx->error,
+            ctx->error_size))
         return fail(ctx, "XR_SEM_0019", "SemanticPlan construction family is inconsistent");
     ctx->program_closure = module->program_semantic_closure;
     ctx->construction_decision = scalar ? module->scalar_call_decision : NULL;
-    ctx->construction_target_profile = scalar ? module->scalar_target_profile : NULL;
+    ctx->construction_overflow_decisions =
+        overflow ? module->i64_overflow_decisions : NULL;
+    ctx->construction_target_profile =
+        scalar || overflow ? module->scalar_target_profile : NULL;
     ctx->program_module_row = module->psc_module_index;
     return true;
 }
@@ -2247,6 +2255,24 @@ static bool append_operand(XrSemanticBuildContext *ctx, const XiFunc *function,
         destroys_scoped_stack_closure || xi_arc_operand_consumes(function, value, index)
             ? XR_SEM_OPERAND_CONSUME
             : XR_SEM_OPERAND_BORROW;
+    if (ctx->program_closure &&
+        xr_program_semantic_closure_family(ctx->program_closure) ==
+            XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
+        value->psc_call_index != XI_PSC_ROW_NONE) {
+        const XrI64OverflowDecisionRow *decision =
+            xr_i64_overflow_decision_for_program_row(
+                ctx->construction_overflow_decisions, value->psc_call_index);
+        uint8_t expected_rep = index == 0 && decision
+                                   ? decision->receiver_rep
+                                   : index == 1 && decision ? decision->argument_rep
+                                                            : XR_MACHINE_REP_COUNT;
+        if (!decision || index >= 2 || expected_rep != XR_MACHINE_REP_I64)
+            return fail(ctx, "XR_SEM_0019",
+                        "overflow operand has no exact sealed scalar contract");
+        /* Exact i64 has no ownership state to consume.  The sealed decision
+         * replaces the generic body-use approximation for this family. */
+        record->ownership_action = XR_SEM_OPERAND_BORROW;
+    }
     return true;
 }
 
@@ -5132,7 +5158,31 @@ static bool build_program_binding_rows(XrSemanticBuildContext *ctx) {
                     XrStableId resolver = {{0}};
                     if (!row || ctx->program_call_binding_count >= call_count)
                         return fail(ctx, "XR_SEM_0019", "program call binding is incomplete");
-                    if (!graph) {
+                    bool overflow = xr_program_semantic_closure_family(ctx->program_closure) ==
+                                    XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+                    if (overflow) {
+                        const XrI64OverflowDecisionRow *decision =
+                            xr_i64_overflow_decision_for_program_row(
+                                ctx->construction_overflow_decisions, value->psc_call_index);
+                        const XiFunc *caller = ctx->functions[f].source;
+                        const XrProgramSemanticFunctionRecord *caller_row =
+                            caller && caller->psc_function_index != XI_PSC_ROW_NONE
+                                ? xr_program_semantic_closure_function(
+                                      ctx->program_closure, caller->psc_function_index)
+                                : NULL;
+                        if (!decision || !caller_row || value->op != XI_CALL_METHOD ||
+                            value->nargs != 2 || value->aux ||
+                            value->aux_int != ((int64_t) decision->method_symbol << 1) ||
+                            !xr_stable_id_equal(decision->program_call, row->id) ||
+                            !xr_stable_id_equal(decision->callsite, row->callsite_identity) ||
+                            !xr_stable_id_equal(decision->caller_function,
+                                                row->caller_function) ||
+                            !xr_stable_id_equal(decision->builtin_identity,
+                                                row->callee_function) ||
+                            !xr_stable_id_equal(caller_row->id, row->caller_function))
+                            return fail(ctx, "XR_SEM_0019",
+                                        "overflow program call binding is not exact");
+                    } else if (!graph) {
                         if (!program_direct_local_callee(ctx, f, value, &target))
                             return false;
                     } else {

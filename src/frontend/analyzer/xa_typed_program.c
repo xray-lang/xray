@@ -10,6 +10,7 @@
 #include "xa_node_table.h"
 #include "xa_scalar_program_authority.h"
 #include "xa_program_semantic_closure.h"
+#include "xa_i64_overflow_program.h"
 #include "xanalyzer.h"
 #include "xanalyzer_symbol.h"
 #include "../parser/xast_nodes.h"
@@ -189,8 +190,11 @@ XaTypedProgramPublishResult xa_typed_program_publish(struct XaAnalyzer *analyzer
     }
     if (!program->scalar_authority) {
         char closure_error[256] = {0};
-        XaProgramSemanticClosurePublishStatus closure_status =
-            xa_program_semantic_closure_publish_leaf_aggregate(
+        XaProgramSemanticClosurePublishStatus closure_status = xa_i64_overflow_program_publish(
+            analyzer, syntax, module_spec, &program->program_semantic_closure, closure_error,
+            sizeof(closure_error));
+        if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_UNSUPPORTED)
+            closure_status = xa_program_semantic_closure_publish_leaf_aggregate(
                 analyzer, syntax, module_spec, &program->program_semantic_closure, closure_error,
                 sizeof(closure_error));
         if (closure_status == XA_PROGRAM_SEMANTIC_CLOSURE_INVALID ||

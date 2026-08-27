@@ -6,13 +6,15 @@
       "id": "arithmetic",
       "owner": "shared-kernel",
       "production_callers": [
-        "src/aot/xi_cgen_dispatch_helpers.inc.c",
+        "src/aot/emit_c/xr_c_emission_plan.c",
+        "src/aot/xi_cgen.c",
         "src/aot/xrt_core_freestanding.h",
         "src/aot/xrt_mem.h",
         "src/aot/xrt_method.h",
         "src/runtime/symbol/xsymbol_table.c",
         "src/runtime/symbol/xsymbol_table.h",
         "src/runtime/value/xi64_methods.h",
+        "src/vm/xr_typed_dispatch.c",
         "stdlib/mem/mem.c"
       ],
       "profiles": [
@@ -28,7 +30,9 @@
         "xr_arith_core_sub_overflows"
       ],
       "status": "production",
-      "test_callers": []
+      "test_callers": [
+        "tests/unit/ir/test_xi_program_semantic.c"
+      ]
     },
     {
       "contains_tagged_value": true,
