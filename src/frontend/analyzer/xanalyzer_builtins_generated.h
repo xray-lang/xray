@@ -310,7 +310,6 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__readDirRecursive", "(path: Path): Array<string>", "List directory entries recursively (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__readLines", "(path: Path): Array<string>", "Read file as lines", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readStdin", "(): string?", "Read all data from standard input", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readStdinBytes", "(): Array<u8>?", "Read all standard input as binary bytes", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readlink", "(path: Path): string?", "Read symlink target (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
@@ -328,7 +327,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 36
+#define GEN_IO_FUNCTION_COUNT 35
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {

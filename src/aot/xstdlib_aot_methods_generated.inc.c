@@ -149,7 +149,6 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"io", "__readDirRecursive", 1, "xrt_io_read_dir_recursive", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readFile", 1, "xrt_io_read_file", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readFileBytes", 1, "xrt_io_read_file_bytes", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__readLines", 1, "xrt_io_read_lines", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readStdin", 0, "xrt_io_read_stdin", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readStdinBytes", 0, "xrt_io_read_stdin_bytes", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__readlink", 1, "xrt_io_readlink", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

@@ -415,32 +415,6 @@ static inline XrValue xrt_io_copy_file(const char *src_data, int64_t src_len, co
     return XR_FROM_BOOL(ok);
 }
 
-typedef struct XrtIoReadLinesCtx {
-    XrValue arr;
-} XrtIoReadLinesCtx;
-
-static inline bool xrt_io_read_lines_push(void *ctx, const char *data, size_t len) {
-    XrtIoReadLinesCtx *read_ctx = (XrtIoReadLinesCtx *) ctx;
-    xrt_array_push(read_ctx->arr, xrt_io_str_slice(data, len));
-    return true;
-}
-
-static inline XrValue xrt_io_read_lines(const char *path_data, int64_t path_len) {
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    size_t len = 0;
-    char *buf = xrt_io_read_file_buffer(path, &len);
-    XRT_FREE(owned);
-    if (!buf)
-        return XR_NULL_VAL;
-    XrValue arr = xrt_array_new(0);
-    XrtIoReadLinesCtx read_ctx = {arr};
-    xr_io_core_read_lines_each(buf, len, xrt_io_read_lines_push, &read_ctx);
-    XRT_FREE(buf);
-    return arr;
-}
-
 static inline XrValue xrt_io_is_symlink(const char *path_data, int64_t path_len) {
     char stack_path[512];
     char *owned = NULL;

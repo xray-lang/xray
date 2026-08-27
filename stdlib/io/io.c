@@ -882,49 +882,6 @@ static char *io_read_file_buffer_sync(const char *path, size_t *out_len) {
     return buf;
 }
 
-typedef struct IoReadLinesCtx {
-    XrVMRuntime *X;
-    XrArray *arr;
-} IoReadLinesCtx;
-
-static bool io_read_lines_push(void *ctx, const char *data, size_t len) {
-    IoReadLinesCtx *read_ctx = (IoReadLinesCtx *) ctx;
-    XrString *str = xr_string_intern(read_ctx->X, data, len, 0);
-    if (!str)
-        return false;
-    xr_array_push(read_ctx->arr, xr_string_value(str));
-    return true;
-}
-
-// readLines(path) - Read file by lines
-static XrValue io_readLines(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_null();
-
-    size_t len = 0;
-    char *buf = io_read_file_buffer_sync(path, &len);
-    if (!buf)
-        return xr_null();
-
-    XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr) {
-        xr_free(buf);
-        return xr_null();
-    }
-
-    IoReadLinesCtx read_ctx = {X, arr};
-    if (!xr_io_core_read_lines_each(buf, len, io_read_lines_push, &read_ctx)) {
-        xr_free(buf);
-        return xr_null();
-    }
-
-    xr_free(buf);
-    return xr_value_from_array(arr);
-}
-
 // isSymlink(path) - Check if path is a symlink
 static XrValue io_isSymlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
