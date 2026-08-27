@@ -96,36 +96,72 @@ many exports, classes and enums. Once the publisher returns `UNSUPPORTED`,
 
 ## Measured VM and AOT difference
 
+Two measurements are reported separately because they answer different
+questions and mixing them overstates what works.
+
+### Import without using the module
+
+An import alone shows the graph-size effect in isolation:
+
 | program | modules in graph | VM | AOT |
 |---|---:|---|---|
 | no import | 1 | passes | passes |
 | `import time` (no `.xr` source) | 1 | passes | passes |
-| `import math` (no `.xr` source) | 1 | passes | passes |
-| `import mem` (no `.xr` source) | 1 | passes | passes |
-| `import runtime` (no `.xr` source) | 1 | passes | passes |
-| `import regex` (no `.xr` source) | 1 | passes | passes |
-| `import crypto` (no `.xr` source) | 1 | passes | passes |
-| `import compress` (no `.xr` source) | 1 | passes | passes |
-| `import http2` (no `.xr` source) | 1 | passes | passes |
+| `import math`, `mem`, `runtime`, `regex`, `crypto`, `compress`, `http2` | 1 | passes | passes |
 | `import base64` (`.xr` source) | 2 | passes | XR_TARGET_1000 |
 | `import sys` (`.xr` source) | 2 | passes | XR_TARGET_1000 |
-| io contract probe (`.xr` sources) | 4 | not measured | XR_TARGET_1000 |
 
 A module with no `.xr` source never enters the module graph, so the program
-stays single-module and AOT accepts it. A module with an `.xr` source enters
-the graph and the program becomes multi-module.
+stays single-module. A module with an `.xr` source enters the graph and the
+program becomes multi-module.
+
+### Full contract probe for all 33 modules
+
+Running each module's own contract probe, which actually calls the module's
+symbols, gives the real number. Measured with
+`scripts/probe_stdlib_backends.py` against the binary recorded above; the
+no-import baseline control passed, so these outcomes are attributable to the
+modules and not to the toolchain.
+
+| AOT outcome | modules | count |
+|---|---|---:|
+| generated C | `time` | 1 |
+| `XR_TARGET_1000` program authority | cluster, codegen, csv, datetime, encoding, http, http2, io, log, os, parallel, path, simd, sys, text, toml, url, ws, yaml | 19 |
+| `XR_TARGET_1003` call target authority | compress, crypto, math, mem, prelude, regex, runtime | 7 |
+| semantic refusal before the target layer | _probe, base64, net, sync, test_yield, xml | 6 |
+
+VM passes for 26 of 33; the 7 VM failures are defects in the probe corpus and
+in `parallel`, reported separately, not consequences of this blocker.
+
+So one standard-library module out of 33 can reach generated C today.
+
+### The refusal is masking, not the whole gap
+
+The 19 modules refused at `XR_TARGET_1000` carry no information about which
+symbols the target layer actually lacks: the product-authority guard fires
+before any per-symbol target authority is consulted. The 7 single-module
+probes that get past it land on the next layer instead, with a specific
+`XR_TARGET_1003: call-shaped operation has no exact target authority` naming
+the selector it cannot bind (`abs`, `allocZeroed`, `slice`, `compile`,
+`liveBytes`, `md5`).
+
+Lifting the program-authority guard therefore does not deliver 19 working
+modules. It converts a masked refusal into a measurable one, which is what the
+standard library needs in order to report a real per-symbol gap. The size of
+the layer behind it is unmeasured, and this packet does not claim otherwise.
 
 ## Consequence for the migration
 
-Migrating a module from C to Xray currently removes that module's AOT
-capability rather than adding to it: a program that compiles to native today
-because `time` is a whole-module native primitive stops compiling the moment
-`time` gains an `.xr` semantic source. The completion criteria require every
-slice to produce same-plan VM and AOT observations plus real generated C, so
-this refusal gates the evidence half of all remaining standard-library work,
-including slices that are otherwise ready.
+Migrating a module from C to Xray currently removes what AOT capability it
+had rather than adding to it: `time` is the one module whose contract probe
+compiles to native today, and it is a whole-module native primitive with no
+`.xr` source at all. Giving it an Xray body makes every importing program
+multi-module and moves it into the refused set.
 
-The VM half is unaffected and stays measurable.
+The completion criteria require every slice to produce same-plan VM and AOT
+observations plus real generated C, so this refusal gates the evidence half of
+all remaining standard-library work, including slices that are otherwise
+ready. The VM half is unaffected and stays measurable.
 
 ## Requested generic capability
 
