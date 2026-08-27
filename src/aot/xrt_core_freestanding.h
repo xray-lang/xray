@@ -15,6 +15,16 @@
 #ifndef XRT_CORE_FREESTANDING_H
 #define XRT_CORE_FREESTANDING_H
 
+/* The Windows UCRT publishes snprintf/vsnprintf as external inline wrappers.
+ * Merely parsing a shared semantic header that reaches <stdio.h> can therefore
+ * materialize _stdio_common_vsprintf at -O0 even when generated target code
+ * never formats a value.  A freestanding translation unit must not acquire a
+ * hosted CRT dependency from header mechanics; a real stdio call remains an
+ * ordinary undefined symbol and is rejected by the provider ABI inventory. */
+#if defined(_WIN32) && !defined(_NO_CRT_STDIO_INLINE)
+#define _NO_CRT_STDIO_INLINE
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
