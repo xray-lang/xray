@@ -610,22 +610,17 @@ TEST(truncated_and_mutated_objects_are_refused_and_recomputed) {
     xr_test_program_plan_store_remove(root);
 }
 
-/* A plan built for another machine, planted under the key this machine would
- * look up. The key alone must not be treated as proof of what the bytes mean. */
-TEST(foreign_target_plan_under_the_right_key_is_refused) {
+/* Publish one plan under each profile in its own root, then plant the foreign
+ * bytes under the key the native profile looks up. Serving them would mean the
+ * key alone was treated as proof of what the bytes mean. */
+static void assert_foreign_plan_is_refused(const XrSemanticPlan *semantic, XrTargetProfile *native,
+                                           XrTargetProfile *foreign, const char *label) {
     char native_root[XR_PATH_MAX];
     char foreign_root[XR_PATH_MAX];
-    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-native", native_root, sizeof(native_root)),
-                  0);
-    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-foreign", foreign_root, sizeof(foreign_root)),
-                  0);
-    XrSemanticPlan *semantic = xr_test_program_plan_semantic(622u);
-    XrTargetProfile *native = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-    XrTargetProfile *foreign =
-        xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
-    ASSERT_NOT_NULL(semantic);
-    ASSERT_NOT_NULL(native);
-    ASSERT_NOT_NULL(foreign);
+    char foreign_label[64];
+    (void) snprintf(foreign_label, sizeof(foreign_label), "%s-foreign", label);
+    ASSERT_EQ_INT(xr_temp_dir_create(label, native_root, sizeof(native_root)), 0);
+    ASSERT_EQ_INT(xr_temp_dir_create(foreign_label, foreign_root, sizeof(foreign_root)), 0);
 
     PlanSerialRequest native_request = {
         .root = native_root,
@@ -644,6 +639,8 @@ TEST(foreign_target_plan_under_the_right_key_is_refused) {
     serial_build(&foreign_request, &other);
     ASSERT_TRUE(canonical.ok);
     ASSERT_TRUE(other.ok);
+    /* The facet has to reach the plan, or planting its bytes would prove
+     * nothing about whether the key separates the two profiles. */
     ASSERT_TRUE(canonical.size != other.size ||
                 memcmp(canonical.bytes, other.bytes, canonical.size) != 0);
 
@@ -651,6 +648,24 @@ TEST(foreign_target_plan_under_the_right_key_is_refused) {
     char *foreign_object = single_object_path(foreign_root, "xtp");
     ASSERT_NOT_NULL(native_object);
     ASSERT_NOT_NULL(foreign_object);
+
+    /* Two profiles that differ must not share an address. Building the foreign
+     * one against the native root has to miss and publish beside the native
+     * object rather than be served it. */
+    PlanSerialRequest shared_request = native_request;
+    shared_request.profile = foreign;
+    PlanSerialBuild shared;
+    serial_build(&shared_request, &shared);
+    ASSERT_TRUE(shared.ok);
+    ASSERT_TRUE(shared.result.cache_load_attempted);
+    ASSERT_FALSE(shared.result.cache_hit);
+    ASSERT_TRUE(shared.result.cache_published);
+    XrTestProgramPlanStoreInventory inventory;
+    xr_test_program_plan_store_inventory(native_root, &inventory);
+    ASSERT_EQ_UINT(inventory.objects, 2u);
+    ASSERT_EQ_UINT(inventory.temps, 0u);
+    serial_build_release(&shared);
+
     uint8_t *foreign_bytes = NULL;
     size_t foreign_size = 0;
     ASSERT_EQ_INT(
@@ -667,11 +682,84 @@ TEST(foreign_target_plan_under_the_right_key_is_refused) {
     xr_free(native_object);
     serial_build_release(&other);
     serial_build_release(&canonical);
+    xr_test_program_plan_store_remove(foreign_root);
+    xr_test_program_plan_store_remove(native_root);
+}
+
+static XrTargetProfile *build_from_fixture(XrTestTargetProfileFixture *fixture) {
+    XrTargetProfile *profile = NULL;
+    char error[512] = {0};
+    if (!xr_target_profile_build(&fixture->input, &profile, error, sizeof(error)))
+        return NULL;
+    return profile;
+}
+
+TEST(a_plan_for_another_machine_is_refused_under_this_machines_key) {
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(622u);
+    XrTargetProfile *native = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *foreign =
+        xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_NOT_NULL(native);
+    ASSERT_NOT_NULL(foreign);
+    assert_foreign_plan_is_refused(semantic, native, foreign, "xray-plan-cache-machine");
     xr_target_profile_free(foreign);
     xr_target_profile_free(native);
     xr_semantic_plan_free(semantic);
-    xr_test_program_plan_store_remove(foreign_root);
-    xr_test_program_plan_store_remove(native_root);
+}
+
+/* The whole-machine case above moves the machine facts, the provider set, and
+ * the runtime ABI at once, so it cannot say which of them the key actually
+ * reads. Move exactly one facet at a time. */
+TEST(each_target_facet_alone_separates_the_cache_identity) {
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(655u);
+    ASSERT_NOT_NULL(semantic);
+    XrTestTargetProfileFixture base;
+    ASSERT_TRUE(
+        xr_test_target_profile_fixture_init(&base, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    XrTargetProfile *native = build_from_fixture(&base);
+    ASSERT_NOT_NULL(native);
+
+    XrTestTargetProfileFixture machine;
+    ASSERT_TRUE(
+        xr_test_target_profile_fixture_init(&machine, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    machine.input.machine.atomic_width_mask |= XR_TARGET_ATOMIC_WIDTH_128;
+    XrTargetProfile *machine_profile = build_from_fixture(&machine);
+    ASSERT_NOT_NULL(machine_profile);
+    assert_foreign_plan_is_refused(semantic, native, machine_profile,
+                                   "xray-plan-cache-facet-machine");
+    xr_target_profile_free(machine_profile);
+
+    XrTestTargetProfileFixture provider;
+    ASSERT_TRUE(
+        xr_test_target_profile_fixture_init(&provider, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    provider.providers[0].allocator_max_alignment = 128u;
+    XrTargetProfile *provider_profile = build_from_fixture(&provider);
+    ASSERT_NOT_NULL(provider_profile);
+    assert_foreign_plan_is_refused(semantic, native, provider_profile,
+                                   "xray-plan-cache-facet-provider");
+    xr_target_profile_free(provider_profile);
+
+    XrTestTargetProfileFixture runtime;
+    ASSERT_TRUE(
+        xr_test_target_profile_fixture_init(&runtime, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    runtime.runtime_abi.dynamic_value.tags[1].required_flags = 2u;
+    XrTargetProfile *runtime_profile = build_from_fixture(&runtime);
+    ASSERT_NOT_NULL(runtime_profile);
+    assert_foreign_plan_is_refused(semantic, native, runtime_profile,
+                                   "xray-plan-cache-facet-runtime");
+    xr_target_profile_free(runtime_profile);
+
+    /* A mismatched object header never reaches a profile at all, so the cache
+     * has no second chance to be the layer that catches it. */
+    XrTestTargetProfileFixture header;
+    ASSERT_TRUE(
+        xr_test_target_profile_fixture_init(&header, false, XR_TARGET_RUNTIME_PROFILE_HOSTED));
+    header.object_header_materialization.target_endian = XR_RUNTIME_ENDIAN_BIG;
+    ASSERT_NULL(build_from_fixture(&header));
+
+    xr_target_profile_free(native);
+    xr_semantic_plan_free(semantic);
 }
 
 /* An object the store refuses to hold must refuse the build, not quietly
@@ -797,7 +885,8 @@ RUN_TEST(parallel_warm_builds_serve_one_canonical_plan);
 RUN_TEST(writer_and_readers_agree_on_one_canonical_plan);
 RUN_TEST(cancellation_across_build_boundaries_is_fail_closed);
 RUN_TEST(truncated_and_mutated_objects_are_refused_and_recomputed);
-RUN_TEST(foreign_target_plan_under_the_right_key_is_refused);
+RUN_TEST(a_plan_for_another_machine_is_refused_under_this_machines_key);
+RUN_TEST(each_target_facet_alone_separates_the_cache_identity);
 RUN_TEST(over_budget_publication_is_refused_without_residue);
 RUN_TEST(equal_content_authorities_share_one_cache_identity);
 TEST_MAIN_END()
