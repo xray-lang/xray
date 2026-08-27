@@ -15,6 +15,7 @@
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/xr_module_generation_internal.h"
 #include "../../../src/shared/xr_assertion_plan.h"
+#include "test_runtime_generation_audit.h"
 #include "test_runtime_generation_concurrency.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -615,6 +616,7 @@ int main(void) {
     test_assertion_generation_capability_identity(assertion);
     test_concurrent_generation_budget(plan);
     run_generation_lifecycle_races(plan);
+    run_generation_lifecycle_audit(plan);
     xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);

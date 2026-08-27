@@ -472,7 +472,8 @@ add_test(NAME test_runtime_target_plan_load_archive
     COMMAND $<TARGET_FILE:test_runtime_target_plan_load_archive>)
 add_xray_unit_test(test_runtime_generation
     runtime/test_runtime_generation.c
-    runtime/test_runtime_generation_concurrency.c)
+    runtime/test_runtime_generation_concurrency.c
+    runtime/test_runtime_generation_audit.c)
 add_xray_unit_test(test_dynamic_entry_runtime
     runtime/test_dynamic_entry_runtime.c)
 add_executable(test_runtime_generation_archive
