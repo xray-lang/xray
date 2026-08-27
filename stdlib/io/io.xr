@@ -201,7 +201,38 @@ export fn isDir(path: Path) -> bool { return __isDir(path) }
 export fn isFile(path: Path) -> bool { return __isFile(path) }
 export fn isSymlink(path: Path) -> bool { return __isSymlink(path) }
 export fn mkdir(path: Path) -> bool { return __mkdir(path) }
-export fn mkdirp(path: Path) -> bool { return __mkdirp(path) }
+// Separators follow the Path type's own contract, which is POSIX: '/' only.
+// A backslash is an ordinary filename byte, which is what it is on the systems
+// Path describes. Creating each missing level in turn, and treating a level
+// that already exists as a directory as success, is the whole of the policy.
+fn _ensureDir(dir: Path) -> bool {
+    if (__mkdir(dir)) { return true }
+    return __isDir(dir)
+}
+
+export fn mkdirp(path: Path) -> bool {
+    var raw = path.toString()
+    if (len(raw) == 0) { return false }
+
+    var rootLen = 0
+    if (raw.slice(0, 1) == "/") { rootLen = 1 }
+
+    var end = len(raw)
+    while (end > rootLen + 1 && raw.slice(end - 1, end) == "/") { end = end - 1 }
+    var p = raw.slice(0, end)
+    if (end <= rootLen) { return __isDir(Path(p)) }
+
+    var i = rootLen
+    while (i < len(p) && p.slice(i, i + 1) == "/") { i = i + 1 }
+    while (i < len(p)) {
+        if (p.slice(i, i + 1) == "/") {
+            if (i > rootLen && !_ensureDir(Path(p.slice(0, i)))) { return false }
+            while (i + 1 < len(p) && p.slice(i + 1, i + 2) == "/") { i = i + 1 }
+        }
+        i = i + 1
+    }
+    return _ensureDir(Path(p))
+}
 export fn readFile(path: Path) -> string? { return __readFile(path) }
 export fn readFileBytes(path: Path) -> Array<u8>? { return __readFileBytes(path) }
 export fn readStdin() -> string? { return __readStdin() }

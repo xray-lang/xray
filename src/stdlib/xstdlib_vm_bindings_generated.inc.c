@@ -82,7 +82,6 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__isFile", io_isFile);
     XRS_EXPORT(module, isolate, "__isSymlink", io_isSymlink);
     XRS_EXPORT(module, isolate, "__mkdir", io_mkdir);
-    XRS_EXPORT(module, isolate, "__mkdirp", io_mkdirp);
     XRS_EXPORT(module, isolate, "__readDir", io_readDir);
     XRS_EXPORT_YIELDABLE(module, isolate, "__readFile", io_readFile);
     XRS_EXPORT_YIELDABLE(module, isolate, "__readFileBytes", io_readFileBytes);

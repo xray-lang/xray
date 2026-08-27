@@ -323,32 +323,6 @@ static inline XrValue xrt_io_mkdir(const char *path_data, int64_t path_len) {
     return XR_FROM_BOOL(ok);
 }
 
-static inline int xrt_io_mkdirp_mkdir(void *ctx, const char *path) {
-    (void) ctx;
-    return xrt_io_platform_mkdir(path);
-}
-
-static inline bool xrt_io_mkdirp_is_dir(void *ctx, const char *path) {
-    (void) ctx;
-    struct stat st;
-    if (!path || stat(path, &st) != 0)
-        return false;
-#if defined(XR_OS_WINDOWS)
-    return (st.st_mode & _S_IFDIR) != 0;
-#else
-    return S_ISDIR(st.st_mode);
-#endif
-}
-
-static inline XrValue xrt_io_mkdirp(const char *path_data, int64_t path_len) {
-    char stack_path[XR_PATH_LIMIT_MAX_PATH];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    bool ok = path && xr_io_core_mkdirp(path, xrt_io_mkdirp_mkdir, xrt_io_mkdirp_is_dir, NULL);
-    XRT_FREE(owned);
-    return XR_FROM_BOOL(ok);
-}
-
 static inline XrValue xrt_io_cwd(void) {
     char buf[XR_PATH_LIMIT_MAX_PATH];
     if (!xrt_io_platform_getcwd(buf, sizeof(buf)))

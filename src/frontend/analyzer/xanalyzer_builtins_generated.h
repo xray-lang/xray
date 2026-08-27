@@ -305,7 +305,6 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__isFile", "(path: Path): bool", "Check if path is a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__isSymlink", "(path: Path): bool", "Check if path is a symlink", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__mkdir", "(path: Path): bool", "Create directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__mkdirp", "(path: Path): bool", "Create directory recursively", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readFile", "(path: Path): string?", "Read entire file as string", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
@@ -327,7 +326,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeStdout", "(data: string): bool", "Write text to standard output without adding a newline", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
 };
-#define GEN_IO_FUNCTION_COUNT 35
+#define GEN_IO_FUNCTION_COUNT 34
 
 // math module functions
 static const XaBuiltinMember g_gen_math_functions[] = {
