@@ -19,6 +19,19 @@
 #include "../../base/xjson.h"
 #include "xlsp_completion.h"
 
+typedef struct XrCompilerSession XrCompilerSession;
+
+/* Scoped compiler identity used by every LSP analyzer entry point.  The
+ * identity storage is borrowed by the compiler session until pop. */
+typedef struct XlspAnalysisIdentity {
+    XrCompilerSession *session;
+    char *identity;
+} XlspAnalysisIdentity;
+
+XR_FUNC bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
+                                         const char *uri);
+XR_FUNC void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope);
+
 // Generate diagnostics for a document
 XR_FUNC XrJsonValue *xlsp_analyze_diagnostics(XrLspDocument *doc);
 

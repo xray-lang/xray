@@ -37,6 +37,7 @@
 #include "../../runtime/value/xtype.h"
 #include "../../runtime/value/xtype_pool.h"
 #include "../../toolchain/xcompiler_session.h"
+#include "../../module/xmodule_identity.h"
 
 // AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
@@ -45,6 +46,70 @@
 static XrTypePool *lsp_compiler_analyzer_pool(XrVMRuntime *isolate) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(isolate);
     return xr_compiler_session_analyzer_pool(session);
+}
+
+/* The analyzer names an enum's nominal owner after the compilation unit
+ * identity of the session it runs in.  With no identity installed,
+ * xa_enum_info_new() fail-closes for every user-declared enum: the variant
+ * layout is never recorded, `E.variants` stops being iterable, and every
+ * `E.Member` types as <error>.  Batch compilation installs an identity per
+ * unit; the editor path has to do the same or it analyses a different
+ * language than the compiler does.
+ *
+ * The identity is derived from the document URI, which is stable for the
+ * life of the file.  Stability is required, not incidental: the owner is
+ * baked into the recorded enum layout, so a value that changed per keystroke
+ * would invalidate that layout on every edit. */
+/* Turn a document URI into a logical module path: relative, forward-slashed,
+ * and free of empty or dot segments.  Returns false when no such path exists,
+ * leaving the caller to analyse without an identity rather than inventing one. */
+static bool lsp_logical_path_from_uri(const char *uri, char *buf, size_t cap) {
+    const char *path = xlsp_uri_to_path(uri);
+    if (!path)
+        return false;
+    while (*path == '/' || *path == '\\')
+        path++;
+    size_t len = 0;
+    for (; path[len] && len + 1 < cap; len++)
+        buf[len] = path[len] == '\\' ? '/' : path[len];
+    if (len == 0 || path[len] != '\0')
+        return false;
+    buf[len] = '\0';
+    return true;
+}
+
+bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
+                                 const char *uri) {
+    scope->session = NULL;
+    scope->identity = NULL;
+    if (!session || !uri)
+        return false;
+
+    char logical[XLSP_MAX_PATH];
+    if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
+        return false;
+
+    const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
+    char *identity = NULL;
+    if (!xr_module_identity_from_logical(&authority, logical, &identity))
+        return false;
+
+    const XrCompileUnitIdentity unit = {.kind = XR_COMPILE_UNIT_USER, .module_identity = identity};
+    if (!xr_compiler_session_set_compile_unit_identity(session, &unit)) {
+        xr_free(identity);
+        return false;
+    }
+    scope->session = session;
+    scope->identity = identity;
+    return true;
+}
+
+void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope) {
+    if (scope->session)
+        xr_compiler_session_set_compile_unit_identity(scope->session, NULL);
+    xr_free(scope->identity);
+    scope->session = NULL;
+    scope->identity = NULL;
 }
 
 // Use analyzer's scope system for semantic rename (unified design)
@@ -258,8 +323,13 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
             if (open_doc->dirty && open_doc->ast) {
                 lsp_log("import: %s is open and dirty, re-analyzing", full_path);
+                XlspAnalysisIdentity import_identity;
+                xlsp_analysis_identity_push(
+                    &import_identity, xr_compiler_session_current_for_isolate(server->isolate),
+                    import_uri);
                 xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
                                          (XrAstNode *) open_doc->ast, open_doc->content_hash);
+                xlsp_analysis_identity_pop(&import_identity);
                 open_doc->dirty = false;
             } else {
                 lsp_log("import: %s already open (symbols up to date)", full_path);
@@ -308,7 +378,12 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
 
         // Analyze even with parse errors to get partial symbols for completion
         if (import_ast) {
+            XlspAnalysisIdentity import_identity;
+            xlsp_analysis_identity_push(&import_identity,
+                                        xr_compiler_session_current_for_isolate(server->isolate),
+                                        import_uri);
             xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
+            xlsp_analysis_identity_pop(&import_identity);
             lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
         } else {
             lsp_log("import: failed to parse %s", full_path);
@@ -409,8 +484,12 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         lsp_log("parse_document: incremental update%s",
                 doc->parse_error ? " (with parse errors)" : "");
         // Use incremental update with content hash for true change detection
+        XlspAnalysisIdentity doc_identity;
+        xlsp_analysis_identity_push(&doc_identity, xr_compiler_session_current_for_isolate(isolate),
+                                    doc->uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
                                  doc->content_hash);
+        xlsp_analysis_identity_pop(&doc_identity);
         lsp_log("parse_document: incremental update done");
 
         // Run coroutine sharing validation (emits E0363 diagnostics for
@@ -1227,8 +1306,7 @@ static const char *assertion_equal_params[] = {"actual", "expected", "message"};
 static const char *assertion_equal_param_docs[] = {"Actual value", "Expected value",
                                                    "Optional error message"};
 static const char *assert_action_params[] = {"action", "message"};
-static const char *assert_action_param_docs[] = {"Zero-argument action",
-                                                 "Optional error message"};
+static const char *assert_action_param_docs[] = {"Zero-argument action", "Optional error message"};
 
 static const FunctionSignature builtin_signatures[] = {
     {"print", "print(value, ...)", "Prints values to stdout", print_params, print_param_docs, 2},
