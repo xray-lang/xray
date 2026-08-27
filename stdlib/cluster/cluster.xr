@@ -10,6 +10,7 @@
 export fn self() -> string { return __self() }
 export fn nodes() -> Array<string> { return __nodes() }
 export fn discover() { __discover() }
+export fn info() -> ClusterInfo? { return __info() }
 // The monitor channel carries the node or coroutine name that ended, and the
 // termination reason for a remote coroutine; both are published as strings.
 export fn monitor(name: string, coroName: string? = null) -> Channel<string> {

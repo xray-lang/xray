@@ -3817,7 +3817,7 @@ module cluster {
     caps: "channel"
   }
 
-  fn info {
+  fn __info {
     signature: "(): ClusterInfo?"
     doc: "Get cluster status info"
     vm: "cluster_info_fn"

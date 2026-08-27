@@ -381,7 +381,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 0, 2, false},
     {"cluster", "__discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},
     {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", XR_CAP_CHANNEL, 0, true},
-    {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},
+    {"cluster", "__info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},
     {"cluster", "send", "(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", "cluster_send_primitive", "normal", "", "xrt_cluster_send", "sv", "enum_i64", "ClusterDelivery", "cluster.send", "", "runtime", "method", XR_CAP_CHANNEL, 2, true},
     {"cluster", "__listen", "(pattern: string, capacity: i64): Channel<Buffer>?", "Create a bounded receiver for opaque canonical service envelopes", "cluster_listen_fn", "normal", "", "xrt_cluster_listen", "sv", "value", "", "cluster.__listen", "", "runtime", "method", XR_CAP_CHANNEL, 2, true},
 };
