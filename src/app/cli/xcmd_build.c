@@ -1533,18 +1533,19 @@ static const char *default_hosted_fragment_output(const XrToolchainTarget *targe
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, bool debug_symbols,
                               const char *sysroot);
-static int cmd_build_native(
-    const char *input, const char *output, const char *cc, const char *opt_flag,
-    XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode, bool c_only,
-    bool strip, bool debug_symbols, XaotArtifactKind artifact_kind, XrCliBuildProfile profile,
-    XiCgenCDialect c_dialect, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
-    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
-    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
-    bool lto, bool rc_guard, const XrToolchainTarget *target,
-    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
-    const XrProject *project, const XrNativePackagePlan *native_package_plan,
-    const char *objcopy_output);
+static int
+cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
+                 XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
+                 bool c_only, bool strip, bool debug_symbols, XaotArtifactKind artifact_kind,
+                 XrCliBuildProfile profile, XiCgenCDialect c_dialect,
+                 XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+                 const char *linker_script, bool verbose, bool dump_xaot_plan,
+                 bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
+                 bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
+                 bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
+                 const XrToolchainTarget *target, const XrToolchainSelection *toolchain_plan,
+                 const XrTargetConfig *target_config, const XrProject *project,
+                 const XrNativePackagePlan *native_package_plan, const char *objcopy_output);
 
 /* ========== CLI Entry Point ========== */
 
@@ -1969,8 +1970,8 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
                               linker_script, verbose, dump_xaot_plan, dump_global_evidence,
                               dump_xi_evidence, dump_link_manifest, dump_residue, dump_link_command,
                               dry_run_link, c_header, keep_c, cache_dir_arg, rebuild, effective_lto,
-                              rc_guard, &target, &toolchain_plan, target_config,
-                              project, project ? project->native_plan : NULL, objcopy_output);
+                              rc_guard, &target, &toolchain_plan, target_config, project,
+                              project ? project->native_plan : NULL, objcopy_output);
         CMD_BUILD_RETURN(rc);
     }
     rc = cmd_build_bytecode(input_file, output_file, cc && cc[0] ? cc : "cc", opt_flag, c_only,
@@ -2074,14 +2075,14 @@ static void print_aot_codegen_stats(const XaotBuildResult *result) {
 static void print_aot_prepare_stats(const XaotBuildResult *result) {
     XR_DCHECK(result != NULL, "AOT result is NULL");
     const XaotPrepareStats *stats = &result->prepare_stats;
-    printf("[xi-native] AOT prepare: functions=%u target-plan=%u native=%u tagged=%u coro=%u values=%u "
+    printf("[xi-native] AOT prepare: functions=%u target-plan=%u native=%u tagged=%u coro=%u "
+           "values=%u "
            "boundaries=%u value_scalar=%u value_tagged=%u value_ptr=%u value_aggregate=%u "
            "value_vector=%u value_view=%u value_void=%u\n",
-           stats->functions_total, stats->functions_target_plan_abi,
-           stats->functions_native_abi, stats->functions_tagged_abi,
-           stats->functions_coro_abi, stats->values_total, stats->boundary_count,
-           stats->values_scalar, stats->values_tagged, stats->values_ptr, stats->values_aggregate,
-           stats->values_vector, stats->values_view, stats->values_void);
+           stats->functions_total, stats->functions_target_plan_abi, stats->functions_native_abi,
+           stats->functions_tagged_abi, stats->functions_coro_abi, stats->values_total,
+           stats->boundary_count, stats->values_scalar, stats->values_tagged, stats->values_ptr,
+           stats->values_aggregate, stats->values_vector, stats->values_view, stats->values_void);
 }
 
 /* ========== Per-module object cache (114: separate compilation) ==========
@@ -3242,13 +3243,10 @@ static uint32_t xaot_cli_provider_capability_by_name(const char *name) {
     return 0;
 }
 
-static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
-                                                 XrCliBuildProfile profile,
-                                                 const XrToolchainTarget *target,
-                                                 XaotTargetCapabilityProvider *out,
-                                                 bool *out_present,
-                                                 uint64_t *out_runtime_provider_mask,
-                                                 char *err, size_t err_size) {
+static bool xaot_cli_provider_from_target_config(
+    const XrTargetConfig *config, XrCliBuildProfile profile, const XrToolchainTarget *target,
+    XaotTargetCapabilityProvider *out, bool *out_present, uint64_t *out_runtime_provider_mask,
+    char *err, size_t err_size) {
     bool present = config && ((config->runtime_provider && config->runtime_provider[0]) ||
                               config->n_runtime_capabilities > 0 || config->n_runtime_hooks > 0);
     if (out_present)
@@ -3266,12 +3264,11 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
         snprintf(err, err_size, "runtime_provider is only valid for freestanding targets");
         return false;
     }
-    if (strcmp(config->runtime_provider,
-               XAOT_FREESTANDING_HOOK_PROVIDER_ID) != 0) {
+    if (strcmp(config->runtime_provider, XAOT_FREESTANDING_HOOK_PROVIDER_ID) != 0) {
         snprintf(err, err_size,
-                 "unsupported freestanding runtime_provider '%s'; expected exact built-in identity '%s' or a validated provider manifest",
-                 config->runtime_provider,
-                 XAOT_FREESTANDING_HOOK_PROVIDER_ID);
+                 "unsupported freestanding runtime_provider '%s'; expected exact built-in identity "
+                 "'%s' or a validated provider manifest",
+                 config->runtime_provider, XAOT_FREESTANDING_HOOK_PROVIDER_ID);
         return false;
     }
     memset(out, 0, sizeof(*out));
@@ -3322,8 +3319,9 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
         out->hook_bits |= hook;
     }
     if (assertion_report_capability != assertion_report_hook) {
-        snprintf(err, err_size,
-                 "freestanding assertion-report capability and exact hook must be declared together");
+        snprintf(
+            err, err_size,
+            "freestanding assertion-report capability and exact hook must be declared together");
         return false;
     }
     if (allocator_capability != (alloc_hook && free_hook) || alloc_hook != free_hook) {
@@ -3332,8 +3330,7 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
         return false;
     }
     if (panic_capability != panic_hook) {
-        snprintf(err, err_size,
-                 "freestanding panic capability requires the exact panic hook");
+        snprintf(err, err_size, "freestanding panic capability requires the exact panic hook");
         return false;
     }
     if (!allocator_capability || !panic_capability) {
@@ -3342,9 +3339,8 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
         return false;
     }
     if (out_runtime_provider_mask) {
-        *out_runtime_provider_mask |=
-            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
-            XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
+        *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |
+                                      XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_PANIC);
     }
     if (assertion_report_capability && out_runtime_provider_mask)
         *out_runtime_provider_mask |= XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_IO);
@@ -3360,21 +3356,23 @@ static bool xaot_cli_provider_from_target_config(const XrTargetConfig *config,
     return true;
 }
 
-static int cmd_build_native(
-    const char *input, const char *output, const char *cc, const char *opt_flag,
-    XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode, bool c_only,
-    bool strip, bool debug_symbols, XaotArtifactKind artifact_kind, XrCliBuildProfile profile,
-    XiCgenCDialect c_dialect, XiCgenTypeNameProfile type_name_profile, const char *sysroot,
-    const char *linker_script, bool verbose, bool dump_xaot_plan, bool dump_global_evidence,
-    bool dump_xi_evidence, bool dump_link_manifest, bool dump_residue, bool dump_link_command,
-    bool dry_run_link, const char *c_header, bool keep_c, const char *cache_dir_arg, bool rebuild,
-    bool lto, bool rc_guard, const XrToolchainTarget *target,
-    const XrToolchainSelection *toolchain_plan, const XrTargetConfig *target_config,
-    const XrProject *project, const XrNativePackagePlan *native_package_plan,
-    const char *objcopy_output) {
+static int
+cmd_build_native(const char *input, const char *output, const char *cc, const char *opt_flag,
+                 XaotOptimizationLevel optimization, const char *cpu, XaotSimdMode simd_mode,
+                 bool c_only, bool strip, bool debug_symbols, XaotArtifactKind artifact_kind,
+                 XrCliBuildProfile profile, XiCgenCDialect c_dialect,
+                 XiCgenTypeNameProfile type_name_profile, const char *sysroot,
+                 const char *linker_script, bool verbose, bool dump_xaot_plan,
+                 bool dump_global_evidence, bool dump_xi_evidence, bool dump_link_manifest,
+                 bool dump_residue, bool dump_link_command, bool dry_run_link, const char *c_header,
+                 bool keep_c, const char *cache_dir_arg, bool rebuild, bool lto, bool rc_guard,
+                 const XrToolchainTarget *target, const XrToolchainSelection *toolchain_plan,
+                 const XrTargetConfig *target_config, const XrProject *project,
+                 const XrNativePackagePlan *native_package_plan, const char *objcopy_output) {
     XaotBuildResult aot_result;
     XaotBuildOptions build_options;
     XrModuleIdentityAuthority entry_authority = {0};
+    char entry_authority_err[256] = {0};
     char *entry_authority_namespace = NULL;
     char *entry_authority_root = NULL;
     XrTargetProfile *target_profile = NULL;
@@ -3410,10 +3408,9 @@ static int cmd_build_native(
     memset(&build_options, 0, sizeof(build_options));
     {
         char provider_err[256];
-        if (!xaot_cli_provider_from_target_config(target_config, profile, target,
-                                                  &capability_provider, &has_capability_provider,
-                                                  &runtime_provider_mask,
-                                                  provider_err, sizeof(provider_err))) {
+        if (!xaot_cli_provider_from_target_config(
+                target_config, profile, target, &capability_provider, &has_capability_provider,
+                &runtime_provider_mask, provider_err, sizeof(provider_err))) {
             fprintf(stderr, "Error: %s\n", provider_err);
             xr_target_profile_free(target_profile);
             xaot_target_free(&build_target);
@@ -3423,14 +3420,14 @@ static int cmd_build_native(
     {
         XrTargetCodegenFacts codegen;
         char profile_err[256] = "invalid numeric target codegen facts";
-        bool profile_ok = xaot_target_profile_codegen_facts(&build_target, &codegen) &&
-                          (profile == XR_CLI_BUILD_PROFILE_HOSTED
-                               ? xtc_target_profile_build_native_hosted(
-                                     target, &codegen, &target_profile, profile_err,
-                                     sizeof(profile_err))
-                               : xtc_target_profile_build_native_freestanding(
-                                     target, &codegen, runtime_provider_mask, &target_profile,
-                                     profile_err, sizeof(profile_err)));
+        bool profile_ok =
+            xaot_target_profile_codegen_facts(&build_target, &codegen) &&
+            (profile == XR_CLI_BUILD_PROFILE_HOSTED
+                 ? xtc_target_profile_build_native_hosted(target, &codegen, &target_profile,
+                                                          profile_err, sizeof(profile_err))
+                 : xtc_target_profile_build_native_freestanding(
+                       target, &codegen, runtime_provider_mask, &target_profile, profile_err,
+                       sizeof(profile_err)));
         if (!profile_ok) {
             fprintf(stderr, "Error: %s\n", profile_err);
             xaot_target_free(&build_target);
@@ -3442,12 +3439,14 @@ static int cmd_build_native(
     build_options.native_package_plan = native_package_plan;
     bool have_entry_authority =
         project ? xr_project_module_identity_authority(
-                      project, &entry_authority, &entry_authority_namespace,
-                      &entry_authority_root)
-                : xr_module_identity_script_authority_from_source(
-                      input, &entry_authority, &entry_authority_root);
+                      project, &entry_authority, &entry_authority_namespace, &entry_authority_root,
+                      entry_authority_err, sizeof(entry_authority_err))
+                : xr_module_identity_script_authority_from_source(input, &entry_authority,
+                                                                  &entry_authority_root);
     if (!have_entry_authority) {
-        fprintf(stderr, "Error: failed to establish exact entry module identity authority\n");
+        fprintf(stderr, "Error: %s\n",
+                entry_authority_err[0] ? entry_authority_err
+                                       : "entry source has no exact module identity authority");
         xr_free(entry_authority_namespace);
         xr_free(entry_authority_root);
         xr_target_profile_free(target_profile);

@@ -67,11 +67,11 @@ XR_FUNC bool xr_cli_graph_authority_open(XrCliGraphAuthority *context, XrModuleR
             xr_cli_graph_authority_close(context);
             return false;
         }
-        if (!xr_project_module_identity_authority(context->project, &context->entry_authority,
-                                                  &context->authority_namespace,
-                                                  &context->authority_root)) {
-            graph_authority_error(error, error_size,
-                                  "cannot establish exact project/package module authority");
+        char authority_err[256];
+        if (!xr_project_module_identity_authority(
+                context->project, &context->entry_authority, &context->authority_namespace,
+                &context->authority_root, authority_err, sizeof(authority_err))) {
+            graph_authority_error(error, error_size, "%s", authority_err);
             xr_cli_graph_authority_close(context);
             return false;
         }
