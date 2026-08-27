@@ -780,7 +780,7 @@ TEST(repl_cross_input_call_rejects_missing_type_authority) {
     ASSERT_NOT_NULL(iso);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
 
-    XrProto *p1 = eval_repl(session, iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    XrProto *p1 = eval_repl(session, iso, "fn inc(n: i64) -> i64 { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     XrReplSymbolTable *table = xr_repl_symbols_of(iso);
     int index = find_symbol(table, "inc");
@@ -801,7 +801,7 @@ TEST(repl_cross_input_call_rejects_invalid_symbol_authority) {
     ASSERT_NOT_NULL(iso);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
 
-    XrProto *p1 = eval_repl(session, iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    XrProto *p1 = eval_repl(session, iso, "fn inc(n: i64) -> i64 { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     XrReplSymbolTable *table = xr_repl_symbols_of(iso);
     int index = find_symbol(table, "inc");
