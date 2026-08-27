@@ -25,12 +25,18 @@
 struct XrVMRuntime;
 struct XrProto;
 
+typedef enum {
+    XR_FFI_CALL_OK = 0,
+    XR_FFI_CALL_FAILED,
+    XR_FFI_CALL_PROVIDER_UNAVAILABLE,
+} XrFfiCallStatus;
+
 /* Invoke the extern function backing `proto` with `nargs` arguments (in
- * XrValue form) and return the result as an XrValue. On failure (missing
- * symbol, unsupported signature, libffi unavailable) a runtime error is
- * raised on the isolate and XR_NULL is returned. */
-XR_FUNC XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args,
-                                  int nargs);
+ * XrValue form). Success initializes `out_result`; failure leaves it untouched
+ * and has already emitted the source-owned diagnostic. XR_NULL is a valid void
+ * result and is never an error sentinel. */
+XR_FUNC XrFfiCallStatus xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto,
+                                          XrValue *args, int nargs, XrValue *out_result);
 
 /* FFI raw-pointer scalar load/store backing the VM's OP_PTR_LOAD / OP_PTR_STORE.
  * `ffi_type` is an XrFFIType code plus optional pointer-load flags. Plain typed

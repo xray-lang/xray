@@ -287,8 +287,12 @@ op_call_closure:
         // FFI: extern foreign function — marshal args and invoke the C symbol
         // through libffi instead of executing the synthesized stub body.
         if (XR_UNLIKELY(proto->is_extern)) {
-            XrValue result = xr_ffi_call_proto(isolate, proto, &R(a + 1), nargs);
+            XrValue result;
+            XrFfiCallStatus ffi_status =
+                xr_ffi_call_proto(isolate, proto, &R(a + 1), nargs, &result);
             VM_REBIND_AFTER_NATIVE_CALL();
+            if (XR_UNLIKELY(ffi_status != XR_FFI_CALL_OK))
+                return XR_VM_RUNTIME_ERROR;
             R(a) = result;
             vmbreak;
         }
@@ -590,8 +594,12 @@ vmcase(OP_TAILCALL) {
      * now; the bytecode return immediately following OP_TAILCALL propagates
      * R[A] through the current frame just like the C-function fast path. */
     if (XR_UNLIKELY(new_closure->proto->is_extern)) {
-        XrValue result = xr_ffi_call_proto(isolate, new_closure->proto, &R(a + 1), nargs);
+        XrValue result;
+        XrFfiCallStatus ffi_status =
+            xr_ffi_call_proto(isolate, new_closure->proto, &R(a + 1), nargs, &result);
         VM_REBIND_AFTER_NATIVE_CALL();
+        if (XR_UNLIKELY(ffi_status != XR_FFI_CALL_OK))
+            return XR_VM_RUNTIME_ERROR;
         R(a) = result;
         vmbreak;
     }

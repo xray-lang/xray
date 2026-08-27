@@ -18,6 +18,7 @@
 #include "runtime/core/xr_exec_context.h"
 #include "runtime/core/xr_runtime_core.h"
 #include "runtime/xisolate_internal.h"
+#include "vm/xvm.h"
 #include "xray_vm.h"
 
 #include <stdint.h>
@@ -71,6 +72,35 @@ static XrProto *make_bsearch_proto(void) {
     return proto;
 }
 
+static XrProto *make_extern_dispatch_root(OpCode call_opcode, uint8_t result_count) {
+    XrProto *root = xr_instruction_unit_new();
+    XrProto *foreign = xr_instruction_unit_new();
+    if (!root || !foreign) {
+        xr_instruction_unit_free(root);
+        xr_instruction_unit_free(foreign);
+        return NULL;
+    }
+    root->source_file = xr_strdup("<ffi-dispatch-root>");
+    root->maxstacksize = 2;
+    foreign->source_file = xr_strdup("<ffi-dispatch-foreign>");
+    foreign->maxstacksize = 1;
+    foreign->is_extern = true;
+    if (!root->source_file || !foreign->source_file) {
+        xr_instruction_unit_free(root);
+        xr_instruction_unit_free(foreign);
+        return NULL;
+    }
+    if (xr_instruction_unit_add_child(root, foreign) != 0) {
+        xr_instruction_unit_free(root);
+        xr_instruction_unit_free(foreign);
+        return NULL;
+    }
+    xr_instruction_unit_write(root, CREATE_ABx(OP_CLOSURE, 0, 0), 1);
+    xr_instruction_unit_write(root, CREATE_ABC(call_opcode, 0, 0, result_count), 1);
+    xr_instruction_unit_write(root, CREATE_ABC(OP_RETURN0, 0, 0, 0), 1);
+    return root;
+}
+
 TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
 #ifndef XRAY_HAVE_LIBFFI
     return;
@@ -94,7 +124,8 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
         xr_int((xr_Integer) sizeof(values[0])), xr_value_from_closure(callback),
     };
 
-    XrValue result = xr_ffi_call_proto(iso, bsearch_proto, args, 5);
+    XrValue result = xr_null();
+    ASSERT_EQ_INT(xr_ffi_call_proto(iso, bsearch_proto, args, 5, &result), XR_FFI_CALL_OK);
     ASSERT_TRUE(XR_IS_INT(result));
 
     uintptr_t found = (uintptr_t) XR_TO_INT(result);
@@ -110,7 +141,53 @@ TEST(vm_ffi_bsearch_invokes_xray_cfn_callback) {
 #endif
 }
 
+TEST(vm_ffi_failure_never_commits_result_storage) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrValue result = xr_int(73);
+    XrFfiCallStatus status = xr_ffi_call_proto(iso, NULL, NULL, 0, &result);
+#ifndef XRAY_HAVE_LIBFFI
+    ASSERT_EQ_INT(status, XR_FFI_CALL_PROVIDER_UNAVAILABLE);
+#else
+    ASSERT_EQ_INT(status, XR_FFI_CALL_FAILED);
+#endif
+    ASSERT_TRUE(XR_IS_INT(result));
+    ASSERT_EQ_INT(XR_TO_INT(result), 73);
+    ASSERT_EQ_INT(xr_ffi_call_proto(iso, NULL, NULL, 0, NULL), XR_FFI_CALL_FAILED);
+
+    xray_vm_delete(iso);
+}
+
+static void assert_extern_dispatch_fails_closed(OpCode call_opcode, uint8_t result_count) {
+    XrVMRuntime *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+    XrProto *root = make_extern_dispatch_root(call_opcode, result_count);
+    ASSERT_NOT_NULL(root);
+
+    ASSERT_EQ_INT(xr_vm_interpret_proto(iso, root), XR_VM_RUNTIME_ERROR);
+
+    xr_instruction_unit_free(root);
+    xray_vm_delete(iso);
+}
+
+TEST(vm_ffi_normal_call_failure_stops_dispatch) {
+    assert_extern_dispatch_fails_closed(OP_CALL, 1);
+}
+
+TEST(vm_ffi_tail_call_failure_stops_dispatch) {
+    assert_extern_dispatch_fails_closed(OP_TAILCALL, 1);
+}
+
+TEST(vm_ffi_unused_void_call_failure_stops_dispatch) {
+    assert_extern_dispatch_fails_closed(OP_CALL, 0);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("VM FFI callback bridge");
 RUN_TEST(vm_ffi_bsearch_invokes_xray_cfn_callback);
+RUN_TEST(vm_ffi_failure_never_commits_result_storage);
+RUN_TEST(vm_ffi_normal_call_failure_stops_dispatch);
+RUN_TEST(vm_ffi_tail_call_failure_stops_dispatch);
+RUN_TEST(vm_ffi_unused_void_call_failure_stops_dispatch);
 TEST_MAIN_END()

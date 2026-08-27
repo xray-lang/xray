@@ -419,11 +419,16 @@ static void *ffi_resolve_symbol(struct XrVMRuntime *X, const char *symbol, const
 #endif
 }
 
-XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args, int nargs) {
+XrFfiCallStatus xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args,
+                                  int nargs, XrValue *out_result) {
+    if (!out_result) {
+        xr_runtime_error(X, "FFI: foreign call result storage is missing");
+        return XR_FFI_CALL_FAILED;
+    }
     const XrFFISig *sig = proto ? proto->ffi_sig : NULL;
     if (!sig) {
-        xr_runtime_error(X, "FFI: missing extern metadata for foreign call\n");
-        return xr_null();
+        xr_runtime_error(X, "FFI: missing extern metadata for foreign call");
+        return XR_FFI_CALL_FAILED;
     }
 
     const char *symbol = sig->symbol;
@@ -431,22 +436,22 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
     if (np > XR_FFI_MAX_ARGS) {
         xr_runtime_error(X, "FFI: '%s' has too many parameters (%d > %d)\n", symbol ? symbol : "?",
                          np, XR_FFI_MAX_ARGS);
-        return xr_null();
+        return XR_FFI_CALL_FAILED;
     }
     if (nargs < np) {
         xr_runtime_error(X, "FFI: '%s' expects %d arguments, got %d\n", symbol ? symbol : "?", np,
                          nargs);
-        return xr_null();
+        return XR_FFI_CALL_FAILED;
     }
 
     bool library_error = false;
     void *fn = ffi_resolve_symbol(X, symbol, sig->dylib, &library_error);
     if (!fn) {
         if (library_error)
-            return xr_null();
+            return XR_FFI_CALL_FAILED;
         xr_runtime_error(X, "FFI: symbol '%s' not found%s%s\n", symbol ? symbol : "?",
                          sig->dylib ? " in library " : "", sig->dylib ? sig->dylib : "");
-        return xr_null();
+        return XR_FFI_CALL_FAILED;
     }
 
     ffi_type *atypes[XR_FFI_MAX_ARGS];
@@ -466,11 +471,11 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
             XrClosure *closure = xr_closure_from_callback_arg(X, a, "FFI CFn callback");
             if (!closure) {
                 ffi_callback_bridges_free(callbacks, np);
-                return xr_null();
+                return XR_FFI_CALL_FAILED;
             }
             if (!ffi_callback_bridge_prepare(X, cb_sig, closure, &callbacks[i])) {
                 ffi_callback_bridges_free(callbacks, np);
-                return xr_null();
+                return XR_FFI_CALL_FAILED;
             }
             slots[i].ptr = callbacks[i].code;
             avalues[i] = &slots[i].ptr;
@@ -486,7 +491,7 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
     if (ffi_prep_cif(&cif, FFI_DEFAULT_ABI, (unsigned) np, rtype, atypes) != FFI_OK) {
         xr_runtime_error(X, "FFI: failed to prepare call for '%s'\n", symbol ? symbol : "?");
         ffi_callback_bridges_free(callbacks, np);
-        return xr_null();
+        return XR_FFI_CALL_FAILED;
     }
 
     /* libffi widens small integer/float returns to at least ffi_arg width. */
@@ -532,18 +537,24 @@ XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue 
             break;
     }
     ffi_callback_bridges_free(callbacks, np);
-    return result;
+    *out_result = result;
+    return XR_FFI_CALL_OK;
 }
 
 #else /* !XRAY_HAVE_LIBFFI */
 
-XrValue xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args, int nargs) {
+XrFfiCallStatus xr_ffi_call_proto(struct XrVMRuntime *X, struct XrProto *proto, XrValue *args,
+                                  int nargs, XrValue *out_result) {
+    if (!out_result) {
+        xr_runtime_error(X, "FFI: foreign call result storage is missing");
+        return XR_FFI_CALL_FAILED;
+    }
     (void) proto;
     (void) args;
     (void) nargs;
-    xr_runtime_error(
-        X, "FFI: this build has no libffi; extern calls are unsupported in the VM (use AOT)\n");
-    return xr_null();
+    xr_runtime_error(X,
+                     "FFI: VM extern provider unavailable; this build has no qualified libffi");
+    return XR_FFI_CALL_PROVIDER_UNAVAILABLE;
 }
 
 #endif /* XRAY_HAVE_LIBFFI */

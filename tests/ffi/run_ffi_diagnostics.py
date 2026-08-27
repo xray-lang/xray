@@ -36,15 +36,16 @@ _ANSI = re.compile(r"\x1B\[[0-9;]*[a-zA-Z]")
 
 MISSING_LIB = "xray_missing_library_nope_zz"
 MISSING_SYMBOL = "xray_missing_symbol_nope_zz"
+MISSING_LIB_LINK = MISSING_LIB + ".lib" if platform.IS_WINDOWS else MISSING_LIB
 
-NO_LIBFFI = "this build has no libffi"
+NO_LIBFFI = "FFI: VM extern provider unavailable; this build has no qualified libffi"
 
 MISSING_LIB_SOURCE = '''extern "C" { fn nope(x: i32) -> i32 }
 print(unsafe { nope(1) })
 '''
 
 MISSING_LIB_MANIFEST = f'''[package]
-name = "ffi-missing-library"
+name = "tests/ffi-missing-library"
 version = "1.0.0"
 license = "MIT"
 main = "main.xr"
@@ -60,7 +61,7 @@ vm = "verified-dynamic"
 [[native.unit]]
 name = "missing"
 kind = "platform"
-system_links = ["{MISSING_LIB}"]
+system_links = ["{MISSING_LIB_LINK}"]
 optimization = "none"
 visibility = "default"
 warnings = "system"
@@ -79,7 +80,7 @@ print(unsafe {{ {MISSING_SYMBOL}(1) }})
 '''
 
 MISSING_SYMBOL_MANIFEST = f'''[package]
-name = "ffi-missing-symbol"
+name = "tests/ffi-missing-symbol"
 version = "1.0.0"
 license = "MIT"
 main = "main.xr"
@@ -146,12 +147,12 @@ class Recorder:
             self.ok(name)
 
 
-def run_vm_case(xray: Path, source: Path, timeout: float | None) -> str:
-    """stderr then stdout, as the shell concatenated them, ANSI stripped."""
+def run_vm_case(xray: Path, source: Path, timeout: float | None):
+    """Return the process result and its ANSI-stripped diagnostic text."""
     result = proc.run([xray, "run", source], timeout=timeout)
     combined = (result.stderr.decode("utf-8", "replace")
                 + result.stdout.decode("utf-8", "replace"))
-    return strip_ansi(combined)
+    return result, strip_ansi(combined)
 
 
 def main(argv: list[str]) -> int:
@@ -182,9 +183,21 @@ def main(argv: list[str]) -> int:
         sym_src.write_text(MISSING_SYMBOL_SOURCE, encoding="utf-8", newline="\n")
         (sym_dir / "xray.toml").write_text(MISSING_SYMBOL_MANIFEST, encoding="utf-8", newline="\n")
 
-        vm_lib_text = run_vm_case(xray, lib_src, timeout)
+        vm_lib, vm_lib_text = run_vm_case(xray, lib_src, timeout)
         if NO_LIBFFI in vm_lib_text:
-            rec.skip("vm missing library: libffi disabled")
+            if vm_lib.returncode != 0:
+                rec.ok("vm missing library: unavailable provider fails execution")
+            else:
+                rec.bad("vm missing library: unavailable provider fails execution", vm_lib_text)
+            if vm_lib.stdout == b"":
+                rec.ok("vm missing library: unavailable provider commits no result")
+            else:
+                rec.bad("vm missing library: unavailable provider commits no result",
+                        vm_lib.stdout.decode("utf-8", "replace"))
+            rec.expect_not_contains(vm_lib_text, "use AOT",
+                                    "vm missing library: no backend fallback advice")
+            rec.expect_not_contains(vm_lib_text, "FFI: symbol 'nope' not found",
+                                    "vm missing library: no misleading symbol error")
         else:
             rec.expect_contains(vm_lib_text,
                                 f"FFI: cannot load library '{MISSING_LIB}'",
@@ -192,9 +205,19 @@ def main(argv: list[str]) -> int:
             rec.expect_not_contains(vm_lib_text, "FFI: symbol 'nope' not found",
                                     "vm missing library: no misleading symbol error")
 
-        vm_sym_text = run_vm_case(xray, sym_src, timeout)
+        vm_sym, vm_sym_text = run_vm_case(xray, sym_src, timeout)
         if NO_LIBFFI in vm_sym_text:
-            rec.skip("vm missing symbol: libffi disabled")
+            if vm_sym.returncode != 0:
+                rec.ok("vm missing symbol: unavailable provider fails execution")
+            else:
+                rec.bad("vm missing symbol: unavailable provider fails execution", vm_sym_text)
+            if vm_sym.stdout == b"":
+                rec.ok("vm missing symbol: unavailable provider commits no result")
+            else:
+                rec.bad("vm missing symbol: unavailable provider commits no result",
+                        vm_sym.stdout.decode("utf-8", "replace"))
+            rec.expect_not_contains(vm_sym_text, f"FFI: symbol '{MISSING_SYMBOL}' not found",
+                                    "vm missing symbol: provider decision precedes lookup")
         else:
             rec.expect_contains(vm_sym_text,
                                 f"FFI: symbol '{MISSING_SYMBOL}' not found",
