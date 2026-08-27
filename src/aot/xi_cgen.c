@@ -2869,8 +2869,14 @@ static CgValueEmissionStatus cg_value_emission_view(XiCgenCtx *ctx, const XiFunc
     /* Registry installation independently proved exact supported-row coverage.
      * Absence here therefore identifies the verified unsupported partition; it
      * cannot hide a missing numeric, void, or tagged row. */
-    if (!xr_c_emission_plan_value_view(emission_plan, semantic_value, out, error, sizeof(error)))
+    if (!xr_c_emission_plan_value_view(emission_plan, semantic_value, out, error, sizeof(error))) {
+        const XrTargetMachineRepRecord *target_register =
+            xr_target_plan_machine_rep(target_plan, target_value->register_rep);
+        if (target_register && target_register->kind == XR_MACHINE_REP_RAW_PTR)
+            return cg_value_emission_fail(
+                ctx, "RAW_PTR C value projection is missing from immutable authority");
         return CG_VALUE_EMISSION_NOT_COVERED;
+    }
     return CG_VALUE_EMISSION_FOUND;
 }
 
@@ -3236,6 +3242,14 @@ static bool cg_direct_local_tagged_ref_argument_emission(
         !xr_c_emission_plan_call_argument_view(plan, semantic_call, ordinal, out, error,
                                                sizeof(error)))
         return false;
+    bool scalar_ref_v1 =
+        out->caller_register_kind == XR_MACHINE_REP_I64 &&
+        out->caller_memory_kind == XR_MACHINE_REP_I64 &&
+        out->callee_register_kind == XR_MACHINE_REP_I64 &&
+        out->callee_memory_kind == XR_MACHINE_REP_I64 && out->c_type &&
+        strcmp(out->c_type, "int64_t *") == 0;
+    if (scalar_ref_v1)
+        return false;
     if (out->semantic_call_value != semantic_call || out->semantic_value != semantic_argument ||
         out->ordinal != ordinal || out->caller_register_kind != XR_MACHINE_REP_DYN_VALUE ||
         out->caller_memory_kind != XR_MACHINE_REP_DYN_VALUE ||
@@ -3253,6 +3267,39 @@ static bool cg_direct_local_tagged_ref_argument_emission(
     return true;
 }
 
+static bool cg_direct_local_scalar_ref_v1_argument_emission(
+    XiCgenCtx *ctx, const XiFunc *function, const XiValue *call, uint16_t ordinal,
+    const XiValue *argument, XrCCallArgumentEmissionView *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    uint32_t semantic_call = XR_SEMANTIC_INDEX_NONE;
+    uint32_t semantic_argument = XR_SEMANTIC_INDEX_NONE;
+    const XrCEmissionPlan *plan = cg_function_c_emission_plan(ctx, function);
+    char error[256] = {0};
+    if (!out || !plan || !cg_value_semantic_id(ctx, function, call, &semantic_call) ||
+        !cg_value_semantic_id(ctx, function, argument, &semantic_argument) ||
+        !xr_c_emission_plan_call_argument_view(plan, semantic_call, ordinal, out, error,
+                                               sizeof(error)))
+        return false;
+    if (out->semantic_call_value != semantic_call ||
+        out->semantic_value != semantic_argument || out->ordinal != ordinal ||
+        out->caller_register_kind != XR_MACHINE_REP_I64 ||
+        out->caller_memory_kind != XR_MACHINE_REP_I64 ||
+        out->callee_register_kind != XR_MACHINE_REP_I64 ||
+        out->callee_memory_kind != XR_MACHINE_REP_I64 ||
+        out->mode != XR_TARGET_CALL_REFERENCE ||
+        out->ownership != XR_TARGET_CALL_BORROW ||
+        out->transfer_mode != XR_TRANSFER_SHARE ||
+        out->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
+        out->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        out->reserved[0] != 0 || out->reserved[1] != 0 || out->reserved[2] != 0 ||
+        !out->c_type || strcmp(out->c_type, "int64_t *") != 0) {
+        ctx->error = true;
+        return false;
+    }
+    return true;
+}
+
 static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
     if (!view || !view->c_type)
         return false;
@@ -3262,11 +3309,11 @@ static bool cg_raw_pointer_emission_is_exact(const XrCValueEmissionView *view) {
                view->recipe_discriminant < XR_TARGET_ARRAY_STORAGE_COUNT &&
                strcmp(view->c_type, "XrValue *") == 0;
     if (view->materialization == XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS)
-        /* The address of a local: untyped, because each access through it
-         * states its own width rather than reading one off the pointer. */
-        return view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+        return view->recipe_operand_value != UINT32_MAX &&
+               view->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
                view->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
-               view->recipe_operand_value != UINT32_MAX && strcmp(view->c_type, "void *") == 0;
+               (strcmp(view->c_type, "void *") == 0 ||
+                strcmp(view->c_type, "int64_t *") == 0);
     return view->materialization == XR_C_VALUE_MATERIALIZATION_NONE &&
            (strcmp(view->c_type, "const void *") == 0 || strcmp(view->c_type, "void *") == 0 ||
             strcmp(view->c_type, "const void * *") == 0 || strcmp(view->c_type, "void * *") == 0);

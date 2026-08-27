@@ -1559,6 +1559,29 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
         emit_codegen_abort_expr(out);
         return;
     }
+    XrCCallArgumentEmissionView scalar_ref_v1 = {0};
+    if (cg_direct_local_scalar_ref_v1_argument_emission(
+            ctx, f, call, arg_index, arg, &scalar_ref_v1)) {
+        const char *slot_c_type = cg_func_param_abi_c_type(ctx, target, arg_index);
+        if (xaot_value_storage_rep(slot_rep) != XR_REP_RAWPTR || !slot_c_type ||
+            strcmp(slot_c_type, scalar_ref_v1.c_type) != 0) {
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: direct-local scalar ref-v1 emission row "
+                    "disagrees with callee ABI at v%u arg %u\n",
+                    call ? call->id : 0, (unsigned) arg_index);
+            ctx->error = true;
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "(%s)(", scalar_ref_v1.c_type);
+        emit_vref(out, arg);
+        fprintf(out, ")");
+        return;
+    }
+    if (ctx->error) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     XrCValueEmissionView arg_emission = {0};
     CgValueEmissionStatus arg_emission_status = cg_value_emission_view(ctx, f, arg, &arg_emission);
     XaotValueRep frozen_arg_rep = {0};

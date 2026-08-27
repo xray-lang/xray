@@ -114,7 +114,31 @@ static bool verify_target_value_binding(const XaotBundle *bundle, const XiFunc *
     return true;
 }
 
-static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
+/* Verification consumes the same immutable C-emission row as prepare. A Xi
+ * type describes the LOCAL_ADDR subject, not the extra pointer level, so it is
+ * never C spelling authority for a Target RAW_PTR value. */
+static const char *verify_exact_raw_pointer_c_type(const XaotBundle *bundle,
+                                                   const XiFunc *func,
+                                                   const XrTargetValueRepRecord *binding) {
+    XrCValueEmissionView view = {0};
+    char error[256] = {0};
+    const XrCEmissionPlan *emission_plan =
+        xaot_bundle_emission_plan_for_func(bundle, func);
+    if (!binding || !emission_plan ||
+        !xr_c_emission_plan_value_view(emission_plan, binding->semantic_value, &view, error,
+                                       sizeof(error)) ||
+        view.semantic_value != binding->semantic_value ||
+        view.target_register_rep != binding->register_rep ||
+        view.target_memory_rep != binding->memory_rep ||
+        view.target_register_kind != XR_MACHINE_REP_RAW_PTR ||
+        view.target_memory_kind != XR_MACHINE_REP_RAW_PTR ||
+        view.rep != XR_C_VALUE_REP_RAW_PTR || !view.c_type)
+        return NULL;
+    return view.c_type;
+}
+
+static bool verify_target_machine_value_rep(const XaotBundle *bundle, const XiFunc *func,
+                                            const XrTargetPlan *target_plan,
                                             const XrTargetValueRepRecord *binding,
                                             const XiValue *value, XaotValueRep *out) {
     const XrTargetMachineRepRecord *machine;
@@ -198,8 +222,9 @@ static bool verify_target_machine_value_rep(const XrTargetPlan *target_plan,
                                          : XAOT_VALUE_SCALAR;
     out->rep = rep;
     out->type = value->type;
-    out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR ? xaot_raw_pointer_c_type(value->type)
-                                                          : info->c_type;
+    out->c_type = machine->kind == XR_MACHINE_REP_RAW_PTR
+                      ? verify_exact_raw_pointer_c_type(bundle, func, binding)
+                      : info->c_type;
     if (!out->c_type)
         return false;
     if (machine->kind == XR_MACHINE_REP_ENUM_ORDINAL)
@@ -222,7 +247,7 @@ static bool verify_effective_value_rep(const XaotBundle *bundle, const XiFunc *f
             xaot_bundle_program_semantic_for_func(bundle, func, NULL)
                 ? xaot_bundle_program_target_plan(bundle)
                 : NULL;
-        if (!verify_target_machine_value_rep(target_plan, binding, value, out))
+        if (!verify_target_machine_value_rep(bundle, func, target_plan, binding, value, out))
             return set_error(errbuf, errbuf_len, "AOT TargetPlan binding has invalid C value rep");
         return true;
     }
@@ -1172,6 +1197,7 @@ static bool verify_transfer_value_authority(const XaotBundle *bundle, const XiFu
                              "AOT transfer Target-bound value also has legacy authority");
         if (rep_adapter ||
             !verify_target_machine_value_rep(
+                bundle, func,
                 xaot_bundle_program_semantic_for_func(bundle, func, NULL)
                     ? xaot_bundle_program_target_plan(bundle)
                     : NULL,

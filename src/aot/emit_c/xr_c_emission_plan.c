@@ -10,6 +10,7 @@
 
 #include "xr_c_emission_plan_internal.h"
 #include "xr_c_emission_rule_runtime.h"
+#include "xr_c_scalar_ref_projection.h"
 #include "../xaot_layout_gen.h"
 #include "../xr_target_aggregate_c_projection.h"
 #include "../../plan/target/xr_target_plan.h"
@@ -39,7 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(37)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(38)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -2026,250 +2027,6 @@ classify_direct_local_tagged_ref_argument(const XrTargetPlan *target_plan,
                : XR_C_TAGGED_REF_ARGUMENT_MALFORMED;
 }
 
-typedef enum XrDirectLocalScalarRefArgumentMatch {
-    XR_C_SCALAR_REF_ARGUMENT_NOT_THIS_FAMILY = 0,
-    XR_C_SCALAR_REF_ARGUMENT_EXACT,
-    XR_C_SCALAR_REF_ARGUMENT_MALFORMED,
-} XrDirectLocalScalarRefArgumentMatch;
-
-static const char *scalar_ref_pointer_c_type(uint16_t kind) {
-    switch ((XrMachineRepKind) kind) {
-        case XR_MACHINE_REP_I1:
-            return "uint8_t *";
-        case XR_MACHINE_REP_I8:
-            return "int8_t *";
-        case XR_MACHINE_REP_U8:
-            return "uint8_t *";
-        case XR_MACHINE_REP_I16:
-            return "int16_t *";
-        case XR_MACHINE_REP_U16:
-            return "uint16_t *";
-        case XR_MACHINE_REP_I32:
-            return "int32_t *";
-        case XR_MACHINE_REP_U32:
-            return "uint32_t *";
-        case XR_MACHINE_REP_I64:
-            return "int64_t *";
-        case XR_MACHINE_REP_U64:
-            return "uint64_t *";
-        case XR_MACHINE_REP_ISIZE:
-            return "ptrdiff_t *";
-        case XR_MACHINE_REP_USIZE:
-            return "size_t *";
-        case XR_MACHINE_REP_F32:
-            return "float *";
-        case XR_MACHINE_REP_F64:
-            return "double *";
-        case XR_MACHINE_REP_RUNE:
-            return "uint32_t *";
-        case XR_MACHINE_REP_VOID:
-        case XR_MACHINE_REP_ENUM_ORDINAL:
-        case XR_MACHINE_REP_OBJECT_REF:
-        case XR_MACHINE_REP_RAW_PTR:
-        case XR_MACHINE_REP_CODE_REF:
-        case XR_MACHINE_REP_DYN_VALUE:
-        case XR_MACHINE_REP_AGGREGATE:
-        case XR_MACHINE_REP_VECTOR:
-        case XR_MACHINE_REP_VIEW:
-        case XR_MACHINE_REP_COUNT:
-            return NULL;
-    }
-    return NULL;
-}
-
-static bool build_direct_local_scalar_ref_argument_view(
-    const XrTargetPlan *target_plan, const XrTargetCallArgumentRecord *argument,
-    XrCCallArgumentEmissionView *out) {
-    uint32_t call_count = 0, slot_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
-    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
-    const XrTargetCallRecord *call =
-        argument && argument->call < call_count ? &calls[argument->call] : NULL;
-    const XrTargetSlotRecord *caller_slot =
-        argument && argument->caller_slot < slot_count ? &slots[argument->caller_slot] : NULL;
-    const XrTargetSlotRecord *callee_slot =
-        argument && argument->callee_slot < slot_count ? &slots[argument->callee_slot] : NULL;
-    const XrTargetMachineRepRecord *caller_register =
-        argument ? xr_target_plan_machine_rep(target_plan, argument->register_rep) : NULL;
-    const XrTargetMachineRepRecord *caller_memory =
-        argument ? xr_target_plan_machine_rep(target_plan, argument->memory_rep) : NULL;
-    const XrTargetMachineRepRecord *callee_register =
-        argument ? xr_target_plan_machine_rep(target_plan, argument->callee_register_rep) : NULL;
-    const XrTargetMachineRepRecord *callee_memory =
-        argument ? xr_target_plan_machine_rep(target_plan, argument->callee_memory_rep) : NULL;
-    const char *pointer_c_type =
-        caller_register ? scalar_ref_pointer_c_type(caller_register->kind) : NULL;
-    if (!target_plan || !argument || !out || !call || !caller_slot || !callee_slot ||
-        !caller_register || !caller_memory || !callee_register || !callee_memory ||
-        !pointer_c_type ||
-        call->calling_convention != XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL ||
-        call->target_kind != XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
-        argument->mode != XR_TARGET_CALL_REFERENCE ||
-        argument->ownership != XR_TARGET_CALL_BORROW ||
-        argument->transfer_mode != XR_TRANSFER_SHARE ||
-        argument->flags != XR_TARGET_CALL_ARGUMENT_ADDRESSABLE ||
-        argument->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
-        argument->reserved8[0] != 0 || argument->reserved8[1] != 0 ||
-        argument->reserved8[2] != 0 ||
-        caller_slot->semantic_value == argument->semantic_value ||
-        caller_slot->register_rep != argument->register_rep ||
-        caller_slot->memory_rep != argument->memory_rep ||
-        caller_slot->function != call->caller_function ||
-        callee_slot->semantic_value == argument->semantic_value ||
-        callee_slot->function != call->callee_function ||
-        callee_slot->role != XR_TARGET_SLOT_PARAMETER ||
-        argument->register_rep != argument->callee_register_rep ||
-        argument->memory_rep != argument->callee_memory_rep ||
-        caller_register->kind != caller_memory->kind ||
-        caller_register->kind != callee_register->kind ||
-        caller_register->kind != callee_memory->kind ||
-        caller_register->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        caller_memory->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        callee_register->ownership != XR_TARGET_OWNERSHIP_TRIVIAL ||
-        callee_memory->ownership != XR_TARGET_OWNERSHIP_TRIVIAL)
-        return false;
-    memset(out, 0, sizeof(*out));
-    out->semantic_call_value = call->result_value;
-    out->semantic_operand = argument->semantic_operand;
-    out->semantic_value = argument->semantic_value;
-    out->callee_parameter = argument->callee_parameter;
-    out->ordinal = argument->ordinal;
-    out->caller_register_kind = caller_register->kind;
-    out->caller_memory_kind = caller_memory->kind;
-    out->callee_register_kind = callee_register->kind;
-    out->callee_memory_kind = callee_memory->kind;
-    out->mode = argument->mode;
-    out->ownership = argument->ownership;
-    out->transfer_mode = argument->transfer_mode;
-    out->flags = argument->flags;
-    out->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
-    out->c_type = pointer_c_type;
-    return true;
-}
-
-static XrDirectLocalScalarRefArgumentMatch
-classify_direct_local_scalar_ref_argument(const XrTargetPlan *target_plan,
-                                          const XrTargetCallArgumentRecord *argument,
-                                          XrCCallArgumentEmissionView *out) {
-    if (!target_plan || !argument || !out)
-        return XR_C_SCALAR_REF_ARGUMENT_MALFORMED;
-    uint32_t call_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
-    const XrTargetCallRecord *call =
-        calls && argument->call < call_count ? &calls[argument->call] : NULL;
-    bool direct_local_claim =
-        call && (call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL ||
-                 call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL);
-    bool scalar_ref_claim =
-        direct_local_claim && argument->mode == XR_TARGET_CALL_REFERENCE &&
-        argument->ownership == XR_TARGET_CALL_BORROW &&
-        argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE;
-    if (!scalar_ref_claim)
-        return XR_C_SCALAR_REF_ARGUMENT_NOT_THIS_FAMILY;
-    return build_direct_local_scalar_ref_argument_view(target_plan, argument, out)
-               ? XR_C_SCALAR_REF_ARGUMENT_EXACT
-               : XR_C_SCALAR_REF_ARGUMENT_MALFORMED;
-}
-
-static const char *verify_scalar_ref_pointer_c_type(uint16_t kind) {
-    switch ((XrMachineRepKind) kind) {
-        case XR_MACHINE_REP_I1:
-            return "uint8_t *";
-        case XR_MACHINE_REP_I8:
-            return "int8_t *";
-        case XR_MACHINE_REP_U8:
-            return "uint8_t *";
-        case XR_MACHINE_REP_I16:
-            return "int16_t *";
-        case XR_MACHINE_REP_U16:
-            return "uint16_t *";
-        case XR_MACHINE_REP_I32:
-            return "int32_t *";
-        case XR_MACHINE_REP_U32:
-            return "uint32_t *";
-        case XR_MACHINE_REP_I64:
-            return "int64_t *";
-        case XR_MACHINE_REP_U64:
-            return "uint64_t *";
-        case XR_MACHINE_REP_ISIZE:
-            return "ptrdiff_t *";
-        case XR_MACHINE_REP_USIZE:
-            return "size_t *";
-        case XR_MACHINE_REP_F32:
-            return "float *";
-        case XR_MACHINE_REP_F64:
-            return "double *";
-        case XR_MACHINE_REP_RUNE:
-            return "uint32_t *";
-        default:
-            return NULL;
-    }
-}
-
-static bool verify_direct_local_scalar_ref_argument_projection(
-    const XrTargetPlan *target_plan, const XrTargetCallArgumentRecord *target,
-    const XrCCallArgumentEmissionView *actual) {
-    uint32_t call_count = 0, slot_count = 0;
-    const XrTargetCallRecord *calls = xr_target_plan_calls(target_plan, &call_count);
-    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
-    const XrTargetCallRecord *call =
-        target && target->call < call_count ? &calls[target->call] : NULL;
-    const XrTargetSlotRecord *caller_slot =
-        target && target->caller_slot < slot_count ? &slots[target->caller_slot] : NULL;
-    const XrTargetSlotRecord *callee_slot =
-        target && target->callee_slot < slot_count ? &slots[target->callee_slot] : NULL;
-    const XrTargetMachineRepRecord *caller_register =
-        target ? xr_target_plan_machine_rep(target_plan, target->register_rep) : NULL;
-    const XrTargetMachineRepRecord *caller_memory =
-        target ? xr_target_plan_machine_rep(target_plan, target->memory_rep) : NULL;
-    const XrTargetMachineRepRecord *callee_register =
-        target ? xr_target_plan_machine_rep(target_plan, target->callee_register_rep) : NULL;
-    const XrTargetMachineRepRecord *callee_memory =
-        target ? xr_target_plan_machine_rep(target_plan, target->callee_memory_rep) : NULL;
-    const char *c_type =
-        caller_register ? verify_scalar_ref_pointer_c_type(caller_register->kind) : NULL;
-    return target_plan && target && actual && call && caller_slot && callee_slot &&
-           caller_register && caller_memory && callee_register && callee_memory && c_type &&
-           call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
-           call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
-           target->mode == XR_TARGET_CALL_REFERENCE &&
-           target->ownership == XR_TARGET_CALL_BORROW &&
-           target->transfer_mode == XR_TRANSFER_SHARE &&
-           target->flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
-           target->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
-           target->reserved8[0] == 0 && target->reserved8[1] == 0 && target->reserved8[2] == 0 &&
-           caller_slot->semantic_value != target->semantic_value &&
-           caller_slot->function == call->caller_function &&
-           caller_slot->register_rep == target->register_rep &&
-           caller_slot->memory_rep == target->memory_rep &&
-           callee_slot->semantic_value != target->semantic_value &&
-           callee_slot->function == call->callee_function &&
-           callee_slot->role == XR_TARGET_SLOT_PARAMETER &&
-           target->register_rep == target->callee_register_rep &&
-           target->memory_rep == target->callee_memory_rep &&
-           caller_register->kind == caller_memory->kind &&
-           caller_register->kind == callee_register->kind &&
-           caller_register->kind == callee_memory->kind &&
-           caller_register->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
-           caller_memory->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
-           callee_register->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
-           callee_memory->ownership == XR_TARGET_OWNERSHIP_TRIVIAL &&
-           actual->semantic_call_value == call->result_value &&
-           actual->semantic_operand == target->semantic_operand &&
-           actual->semantic_value == target->semantic_value &&
-           actual->callee_parameter == target->callee_parameter &&
-           actual->ordinal == target->ordinal &&
-           actual->caller_register_kind == caller_register->kind &&
-           actual->caller_memory_kind == caller_memory->kind &&
-           actual->callee_register_kind == callee_register->kind &&
-           actual->callee_memory_kind == callee_memory->kind &&
-           actual->mode == target->mode && actual->ownership == target->ownership &&
-           actual->transfer_mode == target->transfer_mode && actual->flags == target->flags &&
-           actual->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
-           actual->reserved[0] == 0 && actual->reserved[1] == 0 && actual->reserved[2] == 0 &&
-           actual->c_type && strcmp(actual->c_type, c_type) == 0;
-}
-
 static int compare_c_call_argument_view(const void *left, const void *right) {
     const XrCCallArgumentEmissionView *a = (const XrCCallArgumentEmissionView *) left;
     const XrCCallArgumentEmissionView *b = (const XrCCallArgumentEmissionView *) right;
@@ -3642,7 +3399,9 @@ static bool verify_value(const XrCValueEmissionView *value) {
                 (strcmp(value->c_type, "const void *") != 0 &&
                  strcmp(value->c_type, "void *") != 0 &&
                  strcmp(value->c_type, "const void * *") != 0 &&
-                 strcmp(value->c_type, "void * *") != 0 && strcmp(value->c_type, "XrValue *") != 0))
+                 strcmp(value->c_type, "void * *") != 0 &&
+                 strcmp(value->c_type, "XrValue *") != 0 &&
+                 strcmp(value->c_type, "int64_t *") != 0))
                 return false;
             expected_c_type = value->c_type;
             break;
@@ -3810,9 +3569,11 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->recipe_argument_count == 0 && value->recipe_arguments == NULL &&
                        value->recipe_symbol == NULL;
     if (value->materialization == XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS)
-        recipe_valid = value->rep == XR_C_VALUE_REP_RAW_PTR &&
-                       value->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
-                       value->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+        recipe_valid = value->rep == XR_C_VALUE_REP_RAW_PTR && value->c_type &&
+                       ((value->target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+                         value->target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+                         (strcmp(value->c_type, "void *") == 0 ||
+                          strcmp(value->c_type, "int64_t *") == 0))) &&
                        value->literal_byte_length == 0 && value->literal_bytes == NULL &&
                        value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_operand_value != value->semantic_value &&
@@ -3982,7 +3743,7 @@ static bool verify_plan(const XrCEmissionPlan *plan) {
     for (uint32_t i = 0; i < plan->call_argument_count; i++) {
         const XrCCallArgumentEmissionView *argument = &plan->call_arguments[i];
         const char *scalar_ref_c_type =
-            verify_scalar_ref_pointer_c_type(argument->caller_register_kind);
+            argument->caller_register_kind == XR_MACHINE_REP_I64 ? "int64_t *" : NULL;
         bool exact_tagged_ref =
             argument->c_type && strcmp(argument->c_type, "XrValue *") == 0 &&
             argument->caller_register_kind == XR_MACHINE_REP_DYN_VALUE &&
@@ -4214,7 +3975,31 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         bool memory_supported =
             memory_rep &&
             verify_target_kind_projection(target_plan, binding->semantic_value, memory_rep->kind,
-                                          &expected_memory, &memory_c_type);
+                                           &expected_memory, &memory_c_type);
+        XrCScalarRefProjection scalar_ref_projection = {0};
+        XrCScalarRefProjectionStatus scalar_ref_status =
+            xr_c_scalar_ref_project_address(target_plan, binding,
+                                            &scalar_ref_projection);
+        if (scalar_ref_status == XR_C_SCALAR_REF_MALFORMED)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "scalar-ref C projection is malformed");
+        bool expected_scalar_ref_address =
+            scalar_ref_status == XR_C_SCALAR_REF_EXACT;
+        if (expected_scalar_ref_address &&
+            !xr_c_scalar_ref_projection_views_are_exact(
+                &scalar_ref_projection, plan->call_arguments,
+                plan->call_argument_count, plan->function_abis,
+                plan->function_abi_count))
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "scalar-ref C projection rows are incomplete");
+        uint32_t expected_scalar_ref_address_source =
+            expected_scalar_ref_address ? scalar_ref_projection.source_value
+                                        : UINT32_MAX;
+        if (expected_scalar_ref_address) {
+            expected_register = expected_memory = XR_C_VALUE_REP_RAW_PTR;
+            register_c_type = memory_c_type = "int64_t *";
+            register_supported = memory_supported = true;
+        }
         XrCAggregateProjection aggregate = {0};
         bool aggregate_supported = false;
         if (register_rep && memory_rep && register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
@@ -4376,6 +4161,10 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         uint32_t expected_local_address_source = UINT32_MAX;
         bool expected_local_address =
             exact_local_address_recipe(target_plan, binding, &expected_local_address_source);
+        if (expected_scalar_ref_address) {
+            expected_local_address = true;
+            expected_local_address_source = expected_scalar_ref_address_source;
+        }
         uint8_t expected_recipe =
             expected_typed_rule      ? row->materialization
             : expected_scalar_alias  ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
@@ -4618,31 +4407,23 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
     uint32_t projected_call_arguments = 0;
     for (uint32_t i = 0; i < target_argument_count; i++) {
         const XrTargetCallArgumentRecord *target_argument = &target_arguments[i];
-        uint32_t target_call_count = 0;
-        const XrTargetCallRecord *target_calls =
-            xr_target_plan_calls(target_plan, &target_call_count);
-        const XrTargetCallRecord *target_call =
-            target_calls && target_argument->call < target_call_count
-                ? &target_calls[target_argument->call]
-                : NULL;
         XrCCallArgumentEmissionView expected = {0};
         XrDirectLocalTaggedRefArgumentMatch match =
             classify_direct_local_tagged_ref_argument(target_plan, target_argument, &expected);
         bool exact_ref_argument = match == XR_C_TAGGED_REF_ARGUMENT_EXACT;
         bool scalar_ref_argument = false;
+        XrCScalarRefProjection scalar_ref_projection = {0};
         if (match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
-            scalar_ref_argument =
-                target_call &&
-                target_call->calling_convention == XR_TARGET_CALL_CONVENTION_DIRECT_LOCAL &&
-                target_call->target_kind == XR_TARGET_CALL_TARGET_DIRECT_LOCAL &&
-                target_argument->mode == XR_TARGET_CALL_REFERENCE &&
-                target_argument->ownership == XR_TARGET_CALL_BORROW &&
-                target_argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE;
-            if (!scalar_ref_argument)
+            XrCScalarRefProjectionStatus scalar_status =
+                xr_c_scalar_ref_project_argument(target_plan, target_argument,
+                                                 &scalar_ref_projection);
+            if (scalar_status == XR_C_SCALAR_REF_NOT_THIS_FAMILY)
                 continue;
-            expected.semantic_call_value = target_call->result_value;
-            expected.ordinal = target_argument->ordinal;
-            exact_ref_argument = true;
+            if (scalar_status == XR_C_SCALAR_REF_MALFORMED)
+                return emission_error(error, error_size, "XR_TARGET_1001",
+                                      "C emission scalar-ref projection is malformed");
+            scalar_ref_argument = exact_ref_argument = true;
+            expected = scalar_ref_projection.call_argument;
         }
         if (!exact_ref_argument ||
             projected_call_arguments >= plan->call_argument_count)
@@ -4659,11 +4440,12 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             }
         }
         if (scalar_ref_argument) {
-            if (!verify_direct_local_scalar_ref_argument_projection(target_plan, target_argument,
-                                                                    actual))
+            if (!xr_c_scalar_ref_projection_views_are_exact(
+                    &scalar_ref_projection, plan->call_arguments,
+                    plan->call_argument_count, plan->function_abis,
+                    plan->function_abi_count))
                 return emission_error(error, error_size, "XR_TARGET_1001",
-                                      "C emission scalar ref argument disagrees with Target "
-                                      "authority");
+                                      "C emission scalar ref ABI disagrees with Target authority");
         } else if (!actual || actual->semantic_operand != expected.semantic_operand ||
             actual->semantic_value != expected.semantic_value ||
             actual->callee_parameter != expected.callee_parameter ||
@@ -4806,6 +4588,21 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         bool memory_is_value =
             memory_rep && machine_kind_to_c_rep(target_plan, binding->semantic_value,
                                                 memory_rep->kind, &memory_c_rep, &memory_c_type);
+        XrCScalarRefProjection scalar_ref_projection = {0};
+        XrCScalarRefProjectionStatus scalar_ref_status =
+            xr_c_scalar_ref_project_address(target_plan, binding,
+                                            &scalar_ref_projection);
+        if (scalar_ref_status == XR_C_SCALAR_REF_MALFORMED)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "scalar-ref C projection is malformed");
+        bool scalar_ref_address = scalar_ref_status == XR_C_SCALAR_REF_EXACT;
+        const char *scalar_ref_address_c_type =
+            scalar_ref_address ? scalar_ref_projection.call_argument.c_type : NULL;
+        if (scalar_ref_address) {
+            register_c_rep = memory_c_rep = XR_C_VALUE_REP_RAW_PTR;
+            register_c_type = memory_c_type = scalar_ref_address_c_type;
+            register_is_value = memory_is_value = true;
+        }
         XrCAggregateProjection aggregate = {0};
         if (register_rep && memory_rep && register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
             memory_rep->kind == XR_MACHINE_REP_AGGREGATE &&
@@ -4823,7 +4620,7 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         }
         uint8_t direct_tagged_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         uint32_t local_address_source = UINT32_MAX;
-        if (register_rep->kind == XR_MACHINE_REP_RAW_PTR &&
+        if (register_rep->kind == XR_MACHINE_REP_RAW_PTR && !scalar_ref_address &&
             !exact_direct_local_tagged_ref_parameter_recipe(target_plan, binding,
                                                             &direct_tagged_ref_storage) &&
             !exact_local_address_recipe(target_plan, binding, &local_address_source) &&
@@ -4892,11 +4689,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             classify_direct_local_tagged_ref_argument(target_plan, argument, &projected);
         bool exact_ref_argument = match == XR_C_TAGGED_REF_ARGUMENT_EXACT;
         if (match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
-            XrDirectLocalScalarRefArgumentMatch scalar_match =
-                classify_direct_local_scalar_ref_argument(target_plan, argument, &projected);
-            if (scalar_match == XR_C_SCALAR_REF_ARGUMENT_NOT_THIS_FAMILY)
+            XrCScalarRefProjection scalar_ref = {0};
+            XrCScalarRefProjectionStatus scalar_status =
+                xr_c_scalar_ref_project_argument(target_plan, argument, &scalar_ref);
+            if (scalar_status == XR_C_SCALAR_REF_NOT_THIS_FAMILY)
                 continue;
-            exact_ref_argument = scalar_match == XR_C_SCALAR_REF_ARGUMENT_EXACT;
+            exact_ref_argument = scalar_status == XR_C_SCALAR_REF_EXACT;
         }
         if (!exact_ref_argument)
             return emission_error(error, error_size, "XR_TARGET_1001",
@@ -4974,6 +4772,20 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             xr_target_plan_machine_rep(target_plan, binding->memory_rep);
         XrCValueRep c_rep = XR_C_VALUE_REP_COUNT;
         const char *c_type = NULL;
+        XrCScalarRefProjection scalar_ref_projection = {0};
+        XrCScalarRefProjectionStatus scalar_ref_status =
+            xr_c_scalar_ref_project_address(target_plan, binding,
+                                            &scalar_ref_projection);
+        if (scalar_ref_status == XR_C_SCALAR_REF_MALFORMED) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "scalar-ref C projection is malformed");
+        }
+        bool scalar_ref_address = scalar_ref_status == XR_C_SCALAR_REF_EXACT;
+        uint32_t scalar_ref_address_source =
+            scalar_ref_address ? scalar_ref_projection.source_value : UINT32_MAX;
+        const char *scalar_ref_address_c_type =
+            scalar_ref_address ? scalar_ref_projection.call_argument.c_type : NULL;
         XrCAggregateProjection aggregate = {0};
         bool aggregate_supported = register_rep && memory_rep &&
                                    register_rep->kind == XR_MACHINE_REP_AGGREGATE &&
@@ -4984,9 +4796,14 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             c_type = aggregate.c_type;
         }
         if (!register_rep || !memory_rep || register_rep->kind != memory_rep->kind ||
-            (!aggregate_supported && !machine_kind_to_c_rep(target_plan, binding->semantic_value,
-                                                            register_rep->kind, &c_rep, &c_type)))
+            (!aggregate_supported && !scalar_ref_address &&
+             !machine_kind_to_c_rep(target_plan, binding->semantic_value, register_rep->kind,
+                                    &c_rep, &c_type)))
             continue;
+        if (scalar_ref_address) {
+            c_rep = XR_C_VALUE_REP_RAW_PTR;
+            c_type = scalar_ref_address_c_type;
+        }
         XrCValueEmissionView *value = &plan->values[value_index++];
         value->semantic_value = binding->semantic_value;
         value->target_register_rep = binding->register_rep;
@@ -5087,6 +4904,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
         uint32_t local_address_source = UINT32_MAX;
         bool local_address =
             exact_local_address_recipe(target_plan, binding, &local_address_source);
+        if (scalar_ref_address) {
+            local_address = true;
+            local_address_source = scalar_ref_address_source;
+        }
         if (typed_rule) {
             value->recipe_symbol = xr_strdup(typed_decision.symbol);
             if (!value->recipe_symbol) {
@@ -5538,12 +5359,15 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             target_plan, &target_call_arguments[i], &projected);
         bool exact_ref_argument = match == XR_C_TAGGED_REF_ARGUMENT_EXACT;
         if (match == XR_C_TAGGED_REF_ARGUMENT_NOT_THIS_FAMILY) {
-            XrDirectLocalScalarRefArgumentMatch scalar_match =
-                classify_direct_local_scalar_ref_argument(target_plan, &target_call_arguments[i],
-                                                          &projected);
-            if (scalar_match == XR_C_SCALAR_REF_ARGUMENT_NOT_THIS_FAMILY)
+            XrCScalarRefProjection scalar_ref = {0};
+            XrCScalarRefProjectionStatus scalar_status =
+                xr_c_scalar_ref_project_argument(
+                    target_plan, &target_call_arguments[i], &scalar_ref);
+            if (scalar_status == XR_C_SCALAR_REF_NOT_THIS_FAMILY)
                 continue;
-            exact_ref_argument = scalar_match == XR_C_SCALAR_REF_ARGUMENT_EXACT;
+            exact_ref_argument = scalar_status == XR_C_SCALAR_REF_EXACT;
+            if (exact_ref_argument)
+                projected = scalar_ref.call_argument;
         }
         if (!exact_ref_argument ||
             call_argument_index >= emission_call_argument_count) {
@@ -5812,6 +5636,21 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
                                 held_c_type) {
                                 pointee_rep = held_rep;
                                 pointee_c_type = held_c_type;
+                            }
+                            XrCScalarRefProjection scalar_ref = {0};
+                            XrCScalarRefProjectionStatus scalar_status =
+                                xr_c_scalar_ref_project_argument(
+                                    target_plan, agreed, &scalar_ref);
+                            if (scalar_status == XR_C_SCALAR_REF_MALFORMED) {
+                                complete = false;
+                                break;
+                            }
+                            if (scalar_status == XR_C_SCALAR_REF_EXACT) {
+                                rep = scalar_ref.function_abi.rep;
+                                c_type = scalar_ref.function_abi.c_type;
+                                pointee_rep = scalar_ref.function_abi.pointee_rep;
+                                pointee_c_type =
+                                    scalar_ref.function_abi.pointee_c_type;
                             }
                         }
                     }

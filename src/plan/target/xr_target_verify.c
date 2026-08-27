@@ -1394,6 +1394,62 @@ semantic_direct_local_ref_place_is_exact_verify(const XrSemanticPlan *semantic,
     return true;
 }
 
+/* Rebuild the ref-i64 address join without consulting the builder's family
+ * predicate. A plain LOCAL_ADDR that no exact call boundary consumes is not a
+ * RAW_PTR value merely because it has the same opcode. */
+static bool semantic_direct_local_scalar_ref_address_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticOperationRecord *address) {
+    if (!xr_semantic_ref_argument_local_addr_is_exact(
+            semantic, address, address ? address->result_type : XR_SEMANTIC_INDEX_NONE, NULL))
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(semantic);
+    for (uint32_t target_index = 0; operands && target_index < target_count; target_index++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(semantic, target_index);
+        const XrSemanticOperationRecord *call =
+            target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+        const XrSemanticFunctionRecord *callee =
+            target ? xr_semantic_plan_function(semantic, target->function) : NULL;
+        if (!target || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL || !call || !callee ||
+            call->function != address->function ||
+            !xr_semantic_call_target_names_local_function(
+                target, call, (uint32_t) xr_semantic_plan_function_count(semantic)) ||
+            call->operand_count != (uint32_t) callee->parameter_count + 1u ||
+            call->operand_begin > operand_count ||
+            call->operand_count > operand_count - call->operand_begin)
+            continue;
+        for (uint16_t ordinal = 0; ordinal < callee->parameter_count; ordinal++) {
+            const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+                semantic, callee->parameter_begin + ordinal);
+            const XrSemanticOperandRecord *operand =
+                &operands[call->operand_begin + ordinal + 1u];
+            uint16_t machine_kind = XR_MACHINE_REP_COUNT;
+            uint32_t storage_value = XR_SEMANTIC_INDEX_NONE;
+            if (!parameter || parameter->function != target->function ||
+                parameter->ordinal != ordinal || operand->role != XR_SEM_OPERAND_ARGUMENT ||
+                operand->parameter != (int16_t) ordinal || operand->value != address->result_value ||
+                operand->type != address->result_type || operand->parameter_mode != XR_PARAM_REF ||
+                operand->access != XR_CALL_ARG_REF || operand->origin == XI_PLACE_ORIGIN_NONE ||
+                operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+                operand->escape != XI_PLACE_ESCAPE_NONE ||
+                operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+                operand->transfer_mode != XR_TRANSFER_SHARE ||
+                operand->flags !=
+                    (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) ||
+                !semantic_direct_local_scalar_ref_parameter_is_exact_verify(
+                    semantic, parameter, &machine_kind) ||
+                machine_kind != XR_MACHINE_REP_I64 ||
+                !semantic_direct_local_ref_place_is_exact_verify(
+                    semantic, operand, call->function, &storage_value))
+                continue;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* The borrowed read of a String held in a shared cell, re-derived through the
  * shared judgement rather than read back from the builder. The builder binds
  * every such read, so a value it left unbound has to look like a missing
@@ -3990,7 +4046,8 @@ verify_value_binding(const XrTargetPlan *plan, uint32_t semantic_value, uint32_t
                              operation->result_type == semantic_type &&
                              operation->function == semantic_function;
     bool exact_local_address =
-        xr_semantic_local_addr_is_exact(plan->semantic_plan, operation, NULL);
+        xr_semantic_local_addr_is_exact(plan->semantic_plan, operation, NULL) ||
+        semantic_direct_local_scalar_ref_address_is_exact_verify(plan->semantic_plan, operation);
     bool exact_dynamic_value = xr_semantic_dynamic_value_is_exact(plan->semantic_plan, operation) &&
                                operation->result_value == semantic_value &&
                                operation->result_type == semantic_type &&

@@ -71,4 +71,47 @@ static inline bool xr_semantic_local_addr_is_exact(const XrSemanticPlan *plan,
     return true;
 }
 
+/* The ordinary address used by one source `ref` argument.  Unlike the cleanup
+ * recipe above, it carries no auxiliary bit.  The callee parameter supplies
+ * the pointee type; callers must still prove the call/parameter join rather
+ * than treating every plain LOCAL_ADDR as a ref argument. */
+static inline bool xr_semantic_ref_argument_local_addr_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *operation,
+    uint32_t pointee_type, const XrSemanticOperandRecord **out_source) {
+    if (out_source)
+        *out_source = NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    XrStableId zero = {{0}};
+    if (!plan || !operation || !operands || operation->opcode != XI_LOCAL_ADDR ||
+        operation->operand_count != 1 || operation->operand_begin >= operand_count ||
+        operation->result_value == XR_SEMANTIC_INDEX_NONE ||
+        operation->function >= xr_semantic_plan_function_count(plan) ||
+        operation->result_type != pointee_type ||
+        operation->effects != xi_generated_op_effects(XI_LOCAL_ADDR) ||
+        operation->flags != xi_generated_op_default_flags(XI_LOCAL_ADDR) ||
+        operation->ownership_use != xi_generated_op_own_use(XI_LOCAL_ADDR) ||
+        operation->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
+        operation->result_alias_operand != -1 || operation->return_parameter != -1 ||
+        operation->metadata_count != 0 || operation->semantic_immediate != 0 ||
+        operation->auxiliary_kind != XI_AUX_KIND_NONE ||
+        operation->constant != XR_SEMANTIC_INDEX_NONE ||
+        operation->callable_function != XR_SEMANTIC_INDEX_NONE ||
+        operation->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        operation->intrinsic_kind != XR_SEM_INTRINSIC_NONE || operation->allocation_key != NULL ||
+        !xr_stable_id_equal(operation->allocation_id, zero))
+        return false;
+    const XrSemanticOperandRecord *source = &operands[operation->operand_begin];
+    if (source->type != pointee_type || source->role != XR_SEM_OPERAND_VALUE ||
+        source->parameter != -1 || source->parameter_mode != XR_PARAM_READ ||
+        source->transfer_mode != XR_TRANSFER_SHARE || source->access != XR_CALL_ARG_PLAIN ||
+        source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
+        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0 ||
+        source->ownership_action != XR_SEM_OPERAND_BORROW)
+        return false;
+    if (out_source)
+        *out_source = source;
+    return true;
+}
+
 #endif /* XR_SEMANTIC_LOCAL_ADDR_SHAPE_H */

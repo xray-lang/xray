@@ -138,7 +138,7 @@ member, ordered operands, direct-local TargetPlan call, exact callee, and
 applied direct-call authority record. Missing, duplicate, reordered, stale, or
 ordinary-`XI_CALL` substitutions fail closed; prepare has no normalization or
 compatibility path. This changes no public ABI or plan schema.
-The C emission projection schema 30 preserves the exact materialization recipe
+The C emission projection schema 38 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
@@ -423,7 +423,7 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-TargetPlan schema 51 additionally freezes one exact borrowed direct-local
+TargetPlan schema 52 freezes one exact borrowed direct-local
 `ref i64` boundary. The caller source and callee parameter retain scalar `I64`
 storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
 request to rewrite the parameter as a general raw-pointer value. The caller's
@@ -432,8 +432,16 @@ binds its stable v1 identity, caller/callee slots, representations, ownership,
 and transfer. C emission may project that verified boundary as `int64_t *`.
 This authority does not by itself grant representation-refinement, VM, CGen, or
 native execution coverage, and no generic ref or pointer inference is allowed.
+The AOT scalar-ref-v1 slice separately rejoins that exact SemanticPlan and
+schema-52 TargetPlan boundary. Refinement schema 6 records no adapter: it
+materializes caller storage, callee storage, call machine rows, and load/store
+pointees as `I64`, while the caller `LOCAL_ADDR` and callee function ABI are
+`RAW_PTR` with an `I64` pointee. C-emission schema 38 is the sole C spelling
+owner for `int64_t *`; prepare and independent AOT verification consume its
+immutable row, and covered CGen cannot recover a pointer level from mutable Xi
+types or a legacy value plan.
 
-The schema-51 source program graph is a distinct program-wide AOT cutover; it
+The schema-52 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and

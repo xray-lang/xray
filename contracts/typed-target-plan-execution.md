@@ -1,6 +1,6 @@
 # Typed TargetPlan execution contract
 
-TargetPlan schema 51 may carry a canonical per-function instruction table and
+TargetPlan schema 52 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -14,7 +14,7 @@ below. Every other function emits zero rows; no partial group or fallback is
 allowed.
 
 The bounded leaf-value aggregate direct-call family is one exact executable
-family within schema 51, not a second aggregate-only plan. SemanticPlan 43
+family within schema 52, not a second aggregate-only plan. SemanticPlan 43
 program bindings project one target-profile-derived aggregate layout,
 caller/callee value and slot rows, one `VALUE/READ` argument, and a caller-storage
 result with no adapter or ownership transfer. The callee group is exactly
@@ -63,7 +63,7 @@ fail-closed because this family does not yet define one unique process entry.
 Managed tuple, tagged place/aggregate-reference, dynamic, boxed, name-derived,
 and legacy leaf-aggregate routes are forbidden for covered product functions.
 
-The bounded two-module scalar graph is one additional executable schema-51
+The bounded two-module scalar graph is one additional executable schema-52
 TargetPlan family. Its sole program-graph row and two
 canonical module partitions index global TargetPlan tables and bind the complete
 ordered SemanticPlan module set, aggregate semantic fingerprint, entry and
@@ -126,7 +126,7 @@ stable producer symbol directly and contains no module-name, shared-slot, or
 runtime import/export lookup.
 
 The graph XTP route preserves the same executable VM authority and AOT lower
-authority. Current schema 51 retains the exact graph and partition sections, mutually
+authority. Current schema 52 retains the exact graph and partition sections, mutually
 excludes ordinary and graph directory shapes, binds the header semantic
 fingerprint to the full canonical module set, and materializes only through that
 set plus the exact target profile.
@@ -278,7 +278,7 @@ executable family caps parameters at 64 so that density is proved without
 allocating.
 
 Instruction rows participate in the TargetPlan fingerprint as exact 32-byte
-canonical rows. XTP schema 51 preserves the bounded sequential compact stream
+canonical rows. XTP schema 52 preserves the bounded sequential compact stream
 introduced by v34; its directory entry carries the expanded row count, compact byte
 length, `COMPACT` flag, and zero row size. Canonical ULEB128 and signed ZigZag
 payloads plus the format-only superinstruction registry are the sole wire
@@ -413,16 +413,19 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 51 is a hard cutover from v50 and every earlier TargetPlan
+TargetPlan schema 52 is a hard cutover from v51 and every earlier TargetPlan
 schema. It requires SemanticPlan schema 43, program-provenance schema 4, and
-its exact generated Xi operation registry. Schema 51 preserves the PSC6 leaf
+its exact generated Xi operation registry. Schema 52 preserves the PSC6 leaf
 value-product family whose canonical Xi construct/project proof
 has the exact x64 48-byte/8-byte layout and ordinal-bound target rows; it does
 not widen the existing 16-byte/8-byte Pair family. It also assigns the exact
 direct-local borrowed `ref i64` call row its scalar-ref v1 meaning, including
-stable identity, caller/callee slots, scalar storage, ownership, transfer, and
-addressability. Because schema 50 did not distinguish that interpretation, v50
-and every earlier artifact are rejected rather than reinterpreted.
+stable identity, caller/callee scalar slots, scalar call storage, ownership,
+transfer, and addressability. It additionally makes the caller's exact
+`LOCAL_ADDR` value a `RAW_PTR` row instead of accepting the schema-51 builder's
+incorrect subject-`I64` row. This changes the valid artifact set even though no
+wire row changes size, so v51 and every earlier artifact are rejected rather
+than reinterpreted.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
 bounded `Iterator<(K,V)>.hasNext()`/`next()` continuations; selector spelling
@@ -432,7 +435,7 @@ changed the instruction opcode carrier to an unsigned
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
 authority consumed by the builder, verifier, artifact renderer, and dispatcher.
-XTP schema 51 preserves the compact instruction stream introduced by v34,
+XTP schema 52 preserves the compact instruction stream introduced by v34,
 appends the exact 144-byte entry-expectation section after all prior tables,
 widens each coroutine state with its function-local resume-instruction
 authority, and preserves the exact lifecycle root-map, root-slot, and cleanup
@@ -587,7 +590,7 @@ ownership, transfer, and machine representation. An exact `ref` row alone
 authorizes the C projection's additional pointer level. These rows grant no
 imported module object body, allocation, root, cleanup, guessed member lookup,
 dependency activation, unrelated argument ABI, or cross-module frame.
-The C emission projection schema 30 mechanically spells all verified dynamic
+The C emission projection schema 38 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
@@ -600,9 +603,12 @@ reordered, wrong-kind, wrong-spelling, wrong-operand, wrong-recipe, profile, tar
 projection fingerprint mutations.
 It also projects an exact raw-pointer TargetPlan binding without consulting a
 live Xi type. When and only when the same semantic `LOCAL_ADDR` value is bound
-by a SOURCE_EXPORT `ref` argument row, the projection adds one C pointer level;
-the C consumer cannot infer that level from an import name, callee type, or
-legacy representation plan.
+by an exact SOURCE_EXPORT `ref` argument row or the schema-52 direct-local
+scalar-ref-v1 row, the projection adds one C pointer level. The latter freezes
+an `int64_t *` function ABI with an `I64` pointee while its caller storage,
+callee storage, and call argument machine rows remain `I64`. The C consumer
+cannot infer that level from an import name, callee type, or legacy
+representation plan.
 For the sealed `StringBuilder()` call it owns the zero-operand
 `xrt_strbuf_new` materialization recipe. Sync and coroutine CGen have no
 name-based fallback for that constructor. For the exact String byte-slice view,
@@ -767,7 +773,7 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 - `test_xa_program_semantic_closure` proves the bounded source graph builds one
-  verified schema-51 TargetPlan, uses global rows with exact module partitions
+  verified schema-52 TargetPlan, uses global rows with exact module partitions
   and a `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge, rejects independently mutated
   or re-signed inner authority, executes its graph-owned entry through both VM
   providers in cold and exact-generation-cache modes, rejects a wrong

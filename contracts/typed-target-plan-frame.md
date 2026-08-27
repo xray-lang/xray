@@ -1,7 +1,7 @@
 # Typed TargetPlan frame contract
 
 The typed frame is a runtime-only consumer of an immutable, independently
-verified TargetPlan. It accepts exactly TargetPlan schema 51 with the complete
+verified TargetPlan. It accepts exactly TargetPlan schema 52 with the complete
 required family closure the production builder completes, and nothing else: the
 accepted mask is that whole closure rather than a hand-kept subset of it, so a
 family added to the closure cannot leave this boundary silently rejecting every
@@ -12,7 +12,7 @@ rather than reinterpreted. A schema or required family change must update this
 boundary atomically; an older or partial plan is never interpreted through
 compatibility logic.
 
-TargetPlan schema 51 additionally permits one bounded program graph whose
+TargetPlan schema 52 additionally permits one bounded program graph whose
 function, slot, value, instruction, call, argument, debug, layout, extent, and
 capability rows are globally indexed. Canonical module partitions provide
 pointer-free ranges and a local SemanticPlan owner index; they are not separate

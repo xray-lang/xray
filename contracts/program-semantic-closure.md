@@ -98,7 +98,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     operations. The independent Xi verifier rechecks all six ordinals, the `u8`
     member, both caller/callee joins, exact operation coverage, and an
     authority-free module initializer. Ordinary TypedProgram publication and
-    SemanticPlan and schema-51 TargetPlan preserve the exact six-member layout,
+    SemanticPlan and schema-52 TargetPlan preserve the exact six-member layout,
     two caller-storage calls, and ordinal-bound instructions. Typed VM and the
     hosted-fragment C projection execute only after independent TargetPlan
     verification grants the leaf-value-product family. Ordinary product
@@ -190,7 +190,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then builds one schema-51 program TargetPlan from the complete canonical
+    then builds one schema-52 program TargetPlan from the complete canonical
     SemanticPlan module set. The plan has one program-graph row, two module
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
@@ -267,7 +267,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     and their XSM round-trips close the same graph authority. Target construction
     consumes the full canonical plan set in `program_module_row` order while the
     entry fragment separately carries only its ordered direct dependency.
-    It emits one verified schema-51 TargetPlan with global functions, slots,
+    It emits one verified schema-52 TargetPlan with global functions, slots,
     values, instructions, calls, arguments, debug facts, layouts, extents, and
     capabilities; module partitions are bounded pointer-free views and are not
     independent plans. The cross-partition edge is exactly one

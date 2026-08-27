@@ -16180,9 +16180,22 @@ static XaotValueRep xicgen_place_pointee_value_rep(XiCgenCtx *ctx, const XiFunc 
     XaotValueRep rep;
     memset(&rep, 0, sizeof(rep));
     if (place && place->op == XI_LOCAL_ADDR && place->nargs == 1 && place->args[0]) {
-        const XaotValuePlan *source_plan = cg_value_plan_require_legacy(ctx, place->args[0]);
-        if (source_plan)
-            return source_plan->rep;
+        XrCValueEmissionView emission = {0};
+        CgValueEmissionStatus status =
+            cg_value_emission_view(ctx, f, place->args[0], &emission);
+        if (status == CG_VALUE_EMISSION_FOUND &&
+            cg_value_emission_xaot_rep(ctx, &emission, &rep.rep)) {
+            const XaotRepInfo *info = xaot_rep_info(rep.rep);
+            rep.kind = XAOT_VALUE_SCALAR;
+            rep.type = place->args[0]->type;
+            rep.c_type = info ? info->c_type : NULL;
+            return rep;
+        }
+        if (status == CG_VALUE_EMISSION_ERROR)
+            return rep;
+        const XaotValuePlan *legacy = cg_value_plan_require_legacy(ctx, place->args[0]);
+        if (legacy)
+            return legacy->rep;
     }
     if (place && place->op == XI_PARAM && place->aux_int >= 0) {
         const XaotFuncPlan *func_plan = cg_func_plan(ctx, f);
@@ -16202,28 +16215,48 @@ static const char *xicgen_place_pointee_c_type(XiCgenCtx *ctx, const XiFunc *f,
     return rep.c_type ? rep.c_type : ctype_str(xaot_value_storage_rep(rep));
 }
 
+static const char *xicgen_local_addr_c_type(XiCgenCtx *ctx, const XiFunc *f,
+                                            const XiValue *value) {
+    XrCValueEmissionView emission = {0};
+    CgValueEmissionStatus status = cg_value_emission_view(ctx, f, value, &emission);
+    if (status == CG_VALUE_EMISSION_FOUND) {
+        if (cg_raw_pointer_emission_is_exact(&emission) && emission.c_type)
+            return emission.c_type;
+        (void) cg_value_emission_fail(ctx, "LOCAL_ADDR C emission row is not an exact pointer");
+        return NULL;
+    }
+    if (status == CG_VALUE_EMISSION_ERROR)
+        return NULL;
+    if (status != CG_VALUE_EMISSION_NOT_COVERED &&
+        status != CG_VALUE_EMISSION_BACKEND_ONLY) {
+        (void) cg_value_emission_fail(ctx, "LOCAL_ADDR C emission authority is not configured");
+        return NULL;
+    }
+
+    XrRep adapter_rep = XR_REP_VOID;
+    bool adapter_states_rep = cg_rep_adapter_storage_rep(value, &adapter_rep);
+    const XaotValuePlan *value_plan =
+        adapter_states_rep ? NULL : cg_value_plan_require_legacy(ctx, value);
+    XrRep result_rep = adapter_states_rep ? adapter_rep
+                       : value_plan       ? xaot_value_storage_rep(value_plan->rep)
+                                          : XR_REP_RAWPTR;
+    return value_plan && value_plan->rep.c_type &&
+                   (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
+               ? value_plan->rep.c_type
+               : "void *";
+}
+
 static void xicgen_local_addr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     if (!v || v->nargs != 1 || !v->args[0]) {
         emit_codegen_abort_expr(out);
         return;
     }
-    XrRep adapter_rep = XR_REP_VOID;
-    bool adapter_states_rep = cg_rep_adapter_storage_rep(v, &adapter_rep);
-    const XaotValuePlan *value_plan =
-        adapter_states_rep ? NULL : cg_value_plan_require_legacy(ctx, v);
-    XrCValueEmissionView emission;
-    CgValueEmissionStatus emission_status = cg_value_emission_view(ctx, f, v, &emission);
-    XrRep result_rep = adapter_states_rep ? adapter_rep
-                       : value_plan       ? xaot_value_storage_rep(value_plan->rep)
-                                          : XR_REP_RAWPTR;
-    const char *result_c_type = emission_status == CG_VALUE_EMISSION_FOUND &&
-                                        emission.rep == XR_C_VALUE_REP_RAW_PTR && emission.c_type
-                                    ? emission.c_type
-                                : value_plan && value_plan->rep.c_type &&
-                                        (result_rep == XR_REP_PTR || result_rep == XR_REP_RAWPTR)
-                                    ? value_plan->rep.c_type
-                                    : "void *";
+    const char *result_c_type = xicgen_local_addr_c_type(ctx, f, v);
+    if (!result_c_type) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if ((v->aux_int & XI_LOCAL_ADDR_AUX_RAW_DEREF) != 0) {
         const XiValue *load = v->args[0];
         if (!load || load->op != XI_PTR_LOAD || load->nargs < 1 || !load->args[0]) {
@@ -16422,7 +16455,18 @@ static void xicgen_place_store(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, "(*(%s%s *)(", cleanup_live ? "volatile " : "", cty);
     emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_RAWPTR);
     fprintf(out, ")) = ");
-    const XaotValuePlan *value_plan = cg_value_plan_require_legacy(ctx, v->args[1]);
+    XrCValueEmissionView stored_emission = {0};
+    CgValueEmissionStatus stored_status =
+        cg_value_emission_view(ctx, f, v->args[1], &stored_emission);
+    const XaotValuePlan *value_plan =
+        stored_status == CG_VALUE_EMISSION_NOT_COVERED ||
+                stored_status == CG_VALUE_EMISSION_BACKEND_ONLY
+            ? cg_value_plan_require_legacy(ctx, v->args[1])
+            : NULL;
+    if (stored_status == CG_VALUE_EMISSION_ERROR) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (pointee_rep.kind == XAOT_VALUE_AGGREGATE && value_plan &&
         value_plan->rep.kind == XAOT_VALUE_AGGREGATE)
         emit_vref(out, v->args[1]);

@@ -9,6 +9,7 @@
  */
 
 #include "../../../src/incremental/xr_cache_artifact_verify.h"
+#include "../../../src/incremental/xr_cache_key.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_module.h"
@@ -16,6 +17,7 @@
 #include "../../../src/plan/format/xr_xtp_schema.h"
 #include "../../../src/plan/semantic/xr_semantic_builder.h"
 #include "../../../src/plan/target/xr_target_builder.h"
+#include "../../../src/plan/target/xr_target_profile_internal.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../plan/target_profile_test_fixture.h"
 #include <stdio.h>
@@ -154,11 +156,54 @@ static void dispose_fixture(CacheArtifactFixture *fixture) {
     memset(fixture, 0, sizeof(*fixture));
 }
 
+static void put_u32_le(uint8_t *out, uint32_t value) {
+    for (uint32_t i = 0; i < 4; i++)
+        out[i] = (uint8_t) (value >> (i * 8u));
+}
+
+static void put_u64_le(uint8_t *out, uint64_t value) {
+    for (uint32_t i = 0; i < 8; i++)
+        out[i] = (uint8_t) (value >> (i * 8u));
+}
+
+static void copy_cache_fingerprint(XrFingerprint source, XrCacheFingerprint *out) {
+    memcpy(out->bytes, source.bytes, sizeof(out->bytes));
+}
+
+static XrCacheKey legacy_schema_51_key(const CacheArtifactFixture *fixture) {
+    const XrTargetProfileDraft *facts = xr_target_profile_facts(fixture->profile);
+    REQUIRE(facts != NULL);
+    XrTargetCacheKeyInput input = {0};
+    copy_cache_fingerprint(xr_semantic_plan_fingerprint(fixture->semantic),
+                           &input.semantic_plan);
+    copy_cache_fingerprint(xr_target_profile_fingerprint(fixture->profile),
+                           &input.target_profile);
+    copy_cache_fingerprint(facts->provider_set_fingerprint,
+                           &input.provider_capabilities);
+    copy_cache_fingerprint(facts->runtime_abi_fingerprint, &input.runtime_abi);
+    uint8_t schema[24] = {0};
+    put_u32_le(schema, xr_semantic_plan_schema(fixture->semantic));
+    put_u32_le(schema + 4, XR_TARGET_PROFILE_SCHEMA_VERSION);
+    put_u32_le(schema + 8, UINT32_C(51));
+    put_u32_le(schema + 12, UINT32_C(51));
+    put_u64_le(schema + 16, XR_TARGET_REQUIRED_FAMILIES);
+    xr_cache_fingerprint_bytes(schema, sizeof(schema), &input.planner_schema);
+    input.optimization_budget = fixture->requirements.optimization_budget;
+    XrCacheKey key = {{0}};
+    xr_cache_key_target(&input, &key);
+    return key;
+}
+
 static void test_exact_xtp_cache_hit(void) {
     CacheArtifactFixture fixture = make_fixture();
     XrCacheKey repeated = {{0}};
+    XrCacheKey legacy = legacy_schema_51_key(&fixture);
     REQUIRE(xr_cache_xtp_key(&fixture.requirements, &repeated));
     REQUIRE(xr_cache_key_equal(fixture.key, repeated));
+    REQUIRE(!xr_cache_key_equal(fixture.key, legacy));
+    REQUIRE(!xr_cache_verify_xtp_artifact(
+        XR_CACHE_ARTIFACT_XTP, legacy, fixture.bytes, fixture.size,
+        &fixture.requirements));
     REQUIRE(xr_cache_verify_xtp_artifact(
         XR_CACHE_ARTIFACT_XTP, fixture.key, fixture.bytes, fixture.size,
         &fixture.requirements));

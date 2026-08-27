@@ -261,11 +261,11 @@ roots, or general product activation.
    authority. Builder and verifier derive that judgement independently from
    SemanticPlan, while String and other reference-capable children continue to
    fail closed at this element-indexing boundary.
-5. Runtime loading accepts only an XTP v51 match, decodes a bounded candidate,
+5. Runtime loading accepts only an XTP v52 match, decodes a bounded candidate,
    binds its identity to the authority, materializes typed rows, and invokes
-   independent TargetPlan verification. V51 is a breaking hard cutover from
-   v50 and all earlier XTP schemas. It requires SemanticPlan schema 43 and
-   TargetPlan schema 51, including exact PSC v6 provenance, typed program
+   independent TargetPlan verification. V52 is a breaking hard cutover from
+   v51 and all earlier XTP schemas. It requires SemanticPlan schema 43 and
+   TargetPlan schema 52, including exact PSC v6 provenance, typed program
    bindings, and the direct-local scalar-ref v1 call-row interpretation; no
    compatibility alias is accepted. It
    preserves the exact 144-byte dynamic-entry
@@ -324,7 +324,7 @@ roots, or general product activation.
    therefore remains fail closed for cross-module artifacts. The bounded scalar
    module-graph family instead uses the same public TargetPlan loader with
    PROGRAM_MODULE_SET authority, which selects the unique program-graph
-   materializer. TargetPlan schema 51 carries one program-graph row and canonical
+   materializer. TargetPlan schema 52 carries one program-graph row and canonical
    module partitions over global TargetPlan tables; each partition identifies
    its SemanticPlan through the full canonical program module set and records
    pointer-free row ranges. `MODULE_PARTITIONS` uses fixed 208-byte rows and has

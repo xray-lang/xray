@@ -2113,34 +2113,70 @@ semantic_direct_local_ref_place_is_exact(const XrSemanticPlan *plan,
             return false;
         definition = candidate;
     }
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
-    if (!definition || !operands || definition->opcode != XI_LOCAL_ADDR ||
-        definition->result_type != call_operand->type || definition->operand_count != 1 ||
-        definition->operand_begin >= operand_count ||
-        definition->effects != xi_generated_op_effects(XI_LOCAL_ADDR) ||
-        definition->flags != xi_generated_op_default_flags(XI_LOCAL_ADDR) ||
-        definition->ownership_use != xi_generated_op_own_use(XI_LOCAL_ADDR) ||
-        definition->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
-        definition->result_alias_operand != -1 || definition->return_parameter != -1 ||
-        definition->intrinsic_kind != XR_SEM_INTRINSIC_NONE || definition->metadata_count != 0 ||
-        definition->auxiliary_kind != XI_AUX_KIND_NONE || definition->semantic_immediate != 0 ||
-        definition->constant != XR_SEMANTIC_INDEX_NONE ||
-        definition->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
-        definition->allocation_key != NULL || !stable_id_is_zero(definition->allocation_id))
-        return false;
-    const XrSemanticOperandRecord *source = &operands[definition->operand_begin];
-    if (source->type != call_operand->type || source->role != XR_SEM_OPERAND_VALUE ||
-        source->parameter != -1 || source->parameter_mode != XR_PARAM_READ ||
-        source->transfer_mode != XR_TRANSFER_SHARE || source->access != XR_CALL_ARG_PLAIN ||
-        source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
-        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0 ||
-        source->ownership_action != XR_SEM_OPERAND_BORROW)
+    const XrSemanticOperandRecord *source = NULL;
+    if (!call_operand ||
+        !xr_semantic_ref_argument_local_addr_is_exact(plan, definition, call_operand->type,
+                                                      &source))
         return false;
     if (storage_value)
         *storage_value = source->value;
     return true;
+}
+
+/* One plain LOCAL_ADDR becomes pointer storage only when an exact ref-i64 call
+ * boundary names it. Other plain addresses remain with their existing owner;
+ * the opcode alone is not representation authority. */
+static bool semantic_direct_local_scalar_ref_address_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticOperationRecord *address) {
+    if (!xr_semantic_ref_argument_local_addr_is_exact(
+            plan, address, address ? address->result_type : XR_SEMANTIC_INDEX_NONE, NULL))
+        return false;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    uint32_t target_count = (uint32_t) xr_semantic_plan_call_target_count(plan);
+    for (uint32_t target_index = 0; operands && target_index < target_count; target_index++) {
+        const XrSemanticCallTargetRecord *target =
+            xr_semantic_plan_call_target(plan, target_index);
+        const XrSemanticOperationRecord *call =
+            target ? xr_semantic_plan_operation(plan, target->operation) : NULL;
+        const XrSemanticFunctionRecord *callee =
+            target ? xr_semantic_plan_function(plan, target->function) : NULL;
+        if (!target || target->kind != XR_SEM_CALL_TARGET_DIRECT_LOCAL || !call || !callee ||
+            call->function != address->function ||
+            !xr_semantic_call_target_names_local_function(
+                target, call, (uint32_t) xr_semantic_plan_function_count(plan)) ||
+            call->operand_count != (uint32_t) callee->parameter_count + 1u ||
+            call->operand_begin > operand_count ||
+            call->operand_count > operand_count - call->operand_begin)
+            continue;
+        for (uint16_t ordinal = 0; ordinal < callee->parameter_count; ordinal++) {
+            const XrSemanticParameterRecord *parameter = xr_semantic_plan_parameter(
+                plan, callee->parameter_begin + ordinal);
+            const XrSemanticOperandRecord *operand =
+                &operands[call->operand_begin + ordinal + 1u];
+            uint16_t machine_kind = XR_MACHINE_REP_COUNT;
+            uint32_t storage_value = XR_SEMANTIC_INDEX_NONE;
+            if (!parameter || parameter->function != target->function ||
+                parameter->ordinal != ordinal || operand->role != XR_SEM_OPERAND_ARGUMENT ||
+                operand->parameter != (int16_t) ordinal || operand->value != address->result_value ||
+                operand->type != address->result_type || operand->parameter_mode != XR_PARAM_REF ||
+                operand->access != XR_CALL_ARG_REF || operand->origin == XI_PLACE_ORIGIN_NONE ||
+                operand->lifetime != XI_PLACE_LIFETIME_CALL_BOUND ||
+                operand->escape != XI_PLACE_ESCAPE_NONE ||
+                operand->ownership_action != XR_SEM_OPERAND_BORROW ||
+                operand->transfer_mode != XR_TRANSFER_SHARE ||
+                operand->flags !=
+                    (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) ||
+                !semantic_direct_local_scalar_ref_parameter_is_exact(plan, parameter,
+                                                                     &machine_kind) ||
+                machine_kind != XR_MACHINE_REP_I64 ||
+                !semantic_direct_local_ref_place_is_exact(plan, operand, call->function,
+                                                          &storage_value))
+                continue;
+            return true;
+        }
+    }
+    return false;
 }
 
 /* The borrowed read of an `Array<T>` held in a shared cell. A local variable is
@@ -4615,7 +4651,8 @@ static bool collect_scalar_intents(XrTargetPlanBuilder *builder,
          * source cannot write "pointer to int". Binding it from that type gives
          * the subject's storage to the address, so the family that knows an
          * address is an address answers for it instead. */
-        if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL))
+        if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) ||
+            semantic_direct_local_scalar_ref_address_is_exact(builder->semantic_plan, operation))
             continue;
         if (operation->opcode == XI_CHAN_TRY_RECV) {
             uint16_t receive_kind = XR_MACHINE_REP_COUNT;
@@ -6970,7 +7007,8 @@ static bool note_local_address_storage_value(XrTargetPlanBuilder *builder,
                                              size_t error_size) {
     const XrSemanticOperationRecord *operation =
         xr_semantic_plan_operation(builder->semantic_plan, semantic_operation);
-    if (!xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) ||
+    if ((!xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) &&
+         !semantic_direct_local_scalar_ref_address_is_exact(builder->semantic_plan, operation)) ||
         operation->result_value >= analysis->total_values)
         return fail(error, error_size, "XR_TARGET_1001", "local address authority is incomplete");
     if (analysis->defined_values[operation->result_value])
@@ -7040,7 +7078,8 @@ static bool builder_add_local_address_storage(XrTargetPlanBuilder *builder, char
     for (uint32_t i = 0; valid && i < count; i++) {
         const XrSemanticOperationRecord *operation =
             xr_semantic_plan_operation(builder->semantic_plan, i);
-        if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL))
+        if (xr_semantic_local_addr_is_exact(builder->semantic_plan, operation, NULL) ||
+            semantic_direct_local_scalar_ref_address_is_exact(builder->semantic_plan, operation))
             valid = note_local_address_storage_value(builder, &analysis, i, error, error_size);
     }
     value_storage_analysis_dispose(&analysis);
