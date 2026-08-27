@@ -34,7 +34,18 @@ export fn eol() -> string {
 export fn getenv(name: string) -> string? { return __getenv(name) }
 export fn setenv(name: string, value: string) -> bool { return __setenv(name, value) }
 export fn unsetenv(name: string) -> bool { return __unsetenv(name) }
-export fn environ() -> Map<string, string> { return __environ() }
+// An entry without a separator, or one whose name is empty, is not a variable
+// binding and is dropped. The rule lives here so both backends read it from
+// the same place instead of each carrying a copy.
+export fn environ() -> Map<string, string> {
+    var out = Map<string, string>()
+    for (entry in __environBlock()) {
+        var eq = entry.indexOf("=")
+        if (eq <= 0) { continue }
+        out.set(entry.slice(0, eq), entry.slice(eq + 1))
+    }
+    return out
+}
 export fn exit(code: i64 = 0) { __exit(code) }
 export fn getpid() -> i64 { return __getpid() }
 export fn getcwd() -> string { return __getcwd() }

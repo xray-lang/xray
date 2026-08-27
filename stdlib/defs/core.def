@@ -1923,11 +1923,11 @@ module os {
     layer: "system"
   }
 
-  fn __environ {
-    signature: "(): Map<string, string>"
-    doc: "Get all environment variables"
-    vm: "os_environ"
-    aot: "xrt_os_environ"
+  fn __environBlock {
+    signature: "(): Array<string>"
+    doc: "Host environment block as raw NAME=VALUE entries"
+    vm: "os_environ_block"
+    aot: "xrt_os_environ_block"
     argc: 0
     arg_spec: ""
     aot_direct: true

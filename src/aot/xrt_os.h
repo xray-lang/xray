@@ -190,22 +190,17 @@ static inline XrValue xrt_os_unsetenv(const char *name, int64_t len) {
     return XR_FROM_BOOL(ok);
 }
 
-static inline void xrt_os_environ_set_entry(xrt_map_t *map, const char *entry) {
-    const char *eq = entry ? strchr(entry, '=') : NULL;
-    if (!eq || eq == entry)
-        return;
-    XrValue key = xrt_os_str_slice_value(entry, (size_t) (eq - entry));
-    const char *value = eq + 1;
-    xrt_map_set(map, key, xrt_os_str_slice_value(value, strlen(value)));
-}
-
-static inline XrValue xrt_os_environ(void) {
-    XrValue map_value = xrt_map_new(64);
-    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
-#ifdef _WIN32
+/*
+ * Publish the host environment block as raw NAME=VALUE strings, matching the
+ * VM leaf. Splitting the entries is module policy and lives in the Xray body,
+ * so neither backend carries its own copy of the rules.
+ */
+static inline XrValue xrt_os_environ_block(void) {
+    XrValue arr = xrt_array_new(0);
+#if defined(XR_OS_WINDOWS)
     LPWCH env_block = GetEnvironmentStringsW();
     if (!env_block)
-        return map_value;
+        return arr;
     for (const wchar_t *p = env_block; *p; p += wcslen(p) + 1) {
         size_t wide_len = wcslen(p);
         int required = xr_win_utf16_to_utf8_required(p, wide_len);
@@ -215,15 +210,15 @@ static inline XrValue xrt_os_environ(void) {
         if (!entry)
             break;
         if (xr_win_utf16_to_utf8(p, wide_len, entry, (size_t) required))
-            xrt_os_environ_set_entry(map, entry);
+            xrt_array_push(arr, xrt_str_from_cstr(entry));
         XRT_FREE(entry);
     }
     FreeEnvironmentStringsW(env_block);
 #else
     for (char **env = environ; env && *env; env++)
-        xrt_os_environ_set_entry(map, *env);
+        xrt_array_push(arr, xrt_str_from_cstr(*env));
 #endif
-    return map_value;
+    return arr;
 }
 
 static inline XrValue xrt_os_exit(XrValue code_value) {

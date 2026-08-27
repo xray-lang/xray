@@ -252,7 +252,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"os", "__getenv", "(name: string): string?", "Get environment variable", "os_getenv", "normal", "", "xrt_os_getenv", "s", "value", "", "", "", "system", "method", 0, 1, true},
     {"os", "__setenv", "(name: string, value: string): bool", "Set environment variable", "os_setenv", "normal", "", "xrt_os_setenv", "ss", "value", "", "", "", "system", "method", 0, 2, true},
     {"os", "__unsetenv", "(name: string): bool", "Unset environment variable", "os_unsetenv", "normal", "", "xrt_os_unsetenv", "s", "value", "", "", "", "system", "method", 0, 1, true},
-    {"os", "__environ", "(): Map<string, string>", "Get all environment variables", "os_environ", "normal", "", "xrt_os_environ", "", "value", "", "", "", "system", "method", 0, 0, true},
+    {"os", "__environBlock", "(): Array<string>", "Host environment block as raw NAME=VALUE entries", "os_environ_block", "normal", "", "xrt_os_environ_block", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__exit", "(code?: i64): ()", "Exit process", "os_exit", "normal", "", "xrt_os_exit", "v", "value", "", "", "", "system", "method", 0, 1, true},
     {"os", "__getpid", "(): i64", "Get process ID", "os_getpid", "normal", "", "xrt_os_getpid", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__getcwd", "(): string", "Get current working directory", "os_getcwd", "normal", "", "xrt_os_getcwd", "", "value", "", "", "", "system", "method", 0, 0, true},

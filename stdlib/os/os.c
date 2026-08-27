@@ -173,48 +173,33 @@ static XrValue os_unsetenv(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // environ() - Get all environment variables
-static XrValue os_environ(XrVMRuntime *X, XrValue *args, int argc) {
+/*
+ * Publish the host environment block as raw NAME=VALUE strings. Splitting the
+ * entries and deciding what a malformed one means are module policy and live
+ * in the Xray body, so the two platform paths here differ only in how the host
+ * hands over its block.
+ */
+static XrValue os_environ_block(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    XrMap *map = xr_map_new(xr_current_coro(X));
-    if (!map)
+    XrArray *arr = xr_array_new(xr_current_coro(X));
+    if (!arr)
         return xr_null();
 
 #ifdef XR_OS_WINDOWS
     LPCH env_block = GetEnvironmentStringsA();
     if (!env_block)
-        return xr_value_from_map(map);
-    for (const char *p = env_block; *p; p += strlen(p) + 1) {
-        const char *eq = strchr(p, '=');
-        if (!eq || eq == p)
-            continue;
-        size_t name_len = eq - p;
-        const char *value = eq + 1;
-        XrString *key_str = xr_string_intern(X, p, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+        return xr_value_from_array(arr);
+    for (const char *p = env_block; *p; p += strlen(p) + 1)
+        xr_array_push(arr, xrs_string_value_c(X, p));
     FreeEnvironmentStringsA(env_block);
 #else
-    for (char **env = environ; *env != NULL; env++) {
-        char *eq = strchr(*env, '=');
-        if (!eq)
-            continue;
-
-        size_t name_len = eq - *env;
-        const char *value = eq + 1;
-
-        // Directly intern with length — no temporary allocation needed
-        XrString *key_str = xr_string_intern(X, *env, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+    for (char **env = environ; *env != NULL; env++)
+        xr_array_push(arr, xrs_string_value_c(X, *env));
 #endif
 
-    return xr_value_from_map(map);
+    return xr_value_from_array(arr);
 }
 
 /* ========== Process Control ========== */

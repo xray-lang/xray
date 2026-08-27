@@ -241,7 +241,7 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__getenv", os_getenv);
     XRS_EXPORT(module, isolate, "__setenv", os_setenv);
     XRS_EXPORT(module, isolate, "__unsetenv", os_unsetenv);
-    XRS_EXPORT(module, isolate, "__environ", os_environ);
+    XRS_EXPORT(module, isolate, "__environBlock", os_environ_block);
     XRS_EXPORT(module, isolate, "__exit", os_exit);
     XRS_EXPORT(module, isolate, "__getpid", os_getpid);
     XRS_EXPORT(module, isolate, "__getcwd", os_getcwd);
