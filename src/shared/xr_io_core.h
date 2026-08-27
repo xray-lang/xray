@@ -598,14 +598,20 @@ static inline bool xr_io_core_temp_template(const char *root, char sep, const ch
     if (root_len > SIZE_MAX - stem_len - 1)
         return false;
 
-    size_t total = root_len + 1 + stem_len;
+    /* A root that already ends in a separator needs none appended. The
+     * platform hands one over routinely -- macOS sets TMPDIR with a trailing
+     * slash -- and joining unconditionally produced a doubled separator in
+     * every path built from it. */
+    bool root_ends_with_sep = xr_io_core_is_sep(root[root_len - 1]);
+    size_t total = root_len + (root_ends_with_sep ? 0 : 1) + stem_len;
     if (total >= out_cap)
         return false;
 
     size_t pos = 0;
     for (size_t i = 0; i < root_len; i++)
         out[pos++] = root[i];
-    out[pos++] = sep;
+    if (!root_ends_with_sep)
+        out[pos++] = sep;
     for (size_t i = 0; i < stem_len; i++)
         out[pos++] = stem[i];
     out[pos] = '\0';
