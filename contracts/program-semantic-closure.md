@@ -6,7 +6,7 @@ storage, ABI, TargetProfile, executor recipe, or standalone artifact codec.
 Its verified rows may enter Xi and then the pointer-free SemanticPlan/XSM
 projection defined below; they never imply TargetPlan admission on their own.
 
-1. ProgramSemanticClosure schema v6 has one mutable builder, one explicit
+1. ProgramSemanticClosure schema v7 has one mutable builder, one explicit
    `XrProgramSemanticFamily`, bounded module/dependency/type/type-field/
    function/function-parameter/call tables, and a typed failure kind. The
    builder canonicalizes all rows before freeze and cannot be reopened after
@@ -47,7 +47,7 @@ projection defined below; they never imply TargetPlan admission on their own.
    zero. Its source kind and complete locator participate in the closed-world
    evidence. A cross-module call requires an exact dependency; every function
    and module must be reachable from an explicit entry/export root.
-6. Freeze hashes schema v6, family, complete policy, every canonical row and
+6. Freeze hashes schema v7, family, complete policy, every canonical row and
    locator, then derives `XrGenerationClosureId` from the full closure
    fingerprint. The independent verifier reconstructs typed fingerprints,
    identities, ordered type-field and function-parameter domains, graph
@@ -186,7 +186,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     ordinal, stable type or source-class identity, family, flag, reserved,
     fingerprint, or join mutations fail closed even when outer framing is
     otherwise valid.
-18. The implemented execution boundary closes source -> PSC v6 -> Xi -> SemanticPlan 43 ->
+18. The implemented execution boundary closes source -> PSC v7 -> Xi -> SemanticPlan 43 ->
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
@@ -368,7 +368,7 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac522
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c 0747f1cd8aa974c95317c622cfd9b37bb10f787f2f5755b4af0e2143b191aecc
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c ff9ef7e0b8a4c640d211bf05150d84bdafd6920e1314741b8cc13ee1afb57554
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 570675d165cc6cdd58bd82ca089cbf73a7a8106cfc5d8c66087350d13b93864e
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 8e64bd712af07f39b771089d9d395039e1fbc0cb44df4a8e552f30e83cb06d1e
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c ec7b19fca28b36cade37c768a10b432b15a075c3d24676711745f062565b674f
