@@ -1,0 +1,27 @@
+// Panic tracing captures frames into an array, so each traced panic grows that
+// array's buffer. Growth must be charged to the heap that later refunds it.
+// Charging whichever coroutine happened to be running instead left root-level
+// growth unaccounted -- root execution has no current coroutine -- while
+// destruction still refunded the array's own heap, driving that heap's live
+// byte counter negative. Debug builds trap on the next allocation once the
+// counter goes negative; release builds carry the wrong total silently.
+var traced = 0
+while (traced < 8) {
+    assertPanics(() -> { var zero = 0
+        var ignored = 1 / zero })
+    traced = traced + 1
+}
+
+// Plain buffer growth and release must balance through the same owner.
+var churn = 0
+while (churn < 50) {
+    var values: Array<i64> = []
+    var index = 0
+    while (index < 40) {
+        values.push(index)
+        index = index + 1
+    }
+    churn = churn + 1
+}
+
+print("array-growth-accounting-ok")

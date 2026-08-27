@@ -74,6 +74,10 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
 struct XrArray {
     XrObjHeader hdr;
     XR_ARRAY_ABI_FIELDS;
+    /* VM-only: the heap charged for the data buffer, fixed at construction.
+     * Both sides of the byte accounting read this, so an add and its refund
+     * name the same heap no matter which coroutine happens to be running. */
+    struct XrCoroHeap *owner_heap;
     uint8_t data_on_region_heap;  // VM-only: 1 if data buffer is on owner Region heap
     uint8_t _pad[2];              // Alignment / reserved
 };
@@ -210,9 +214,11 @@ XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len
 XR_FUNC uint16_t xr_array_load_u16_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int64_t offset, bool *ok);
 XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok);
-XR_FUNC XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(
-    XrArray *dst, const void *src_data, int64_t src_length, uint8_t src_elem_type,
-    const void *src_guard);
+XR_FUNC XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(XrArray *dst,
+                                                                       const void *src_data,
+                                                                       int64_t src_length,
+                                                                       uint8_t src_elem_type,
+                                                                       const void *src_guard);
 XR_FUNC XrByteArrayRepeatResult xr_byte_array_repeat_from_tail_adapter(XrArray *arr,
                                                                        int64_t distance,
                                                                        int64_t count);
