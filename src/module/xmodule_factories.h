@@ -8,9 +8,9 @@
  * xmodule_factories.h - Standard library module factory declarations
  *
  * KEY CONCEPT:
- *   Each stdlib module provides a factory function that creates and
- *   populates an XrModule with native C functions. These are registered
- *   during isolate initialization via xr_module_register_native_factory().
+ *   Standard library modules with native leaves provide a factory that
+ *   creates and populates an XrModule. Source-only modules use the generic
+ *   loader and do not need declarations here.
  */
 
 #ifndef XMODULE_FACTORIES_H
@@ -91,7 +91,6 @@ XR_FUNC struct XrModule *xr_native_module_create_cluster(struct XrVMRuntime *iso
 XR_FUNC struct XrModule *xr_native_module_create_text(struct XrVMRuntime *isolate);
 
 #if defined(XR_HAS_DATA_FORMATS) || !defined(XR_STDLIB_MODULAR)
-XR_FUNC struct XrModule *xr_native_module_create_csv(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_toml(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_yaml(struct XrVMRuntime *isolate);
 XR_FUNC struct XrModule *xr_native_module_create_xml(struct XrVMRuntime *isolate);

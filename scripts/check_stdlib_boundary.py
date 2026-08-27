@@ -17,9 +17,11 @@ from stdlib_manifest import (
     api_inventory,
     def_public_symbols,
     dynamic_public_items,
+    loadable_modules,
     load_manifest,
     load_toml,
     registry_modules,
+    source_modules,
 )
 
 # The hosted-fragment ABI surface, as the generator emits it. Kept here rather
@@ -34,8 +36,8 @@ HOSTED_ABI_SCALAR_RESULTS = {"()", "bool", "i64", "f64"}
 def check_manifest(root: Path) -> list[str]:
     manifest = load_manifest(root)
     errors: list[str] = []
-    if manifest.raw.get("schema") != 2:
-        errors.append(f"{MANIFEST_PATH}: schema must be 2")
+    if manifest.raw.get("schema") != 3:
+        errors.append(f"{MANIFEST_PATH}: schema must be 3")
     if manifest.raw.get("governance", {}).get("export_authority") != (
         "boundary_manifest_semantic_source"
     ):
@@ -43,18 +45,20 @@ def check_manifest(root: Path) -> list[str]:
             "governance.export_authority must be 'boundary_manifest_semantic_source'"
         )
     names = [str(module.get("name", "")) for module in manifest.modules]
-    if len(names) != 33:
-        errors.append(f"{MANIFEST_PATH}: terminal module count must be 33, got {len(names)}")
+    if not names:
+        errors.append(f"{MANIFEST_PATH}: must declare at least one loadable module")
     if len(names) != len(set(names)):
         errors.append(f"{MANIFEST_PATH}: module names must be unique")
     source_registry = registry_modules(root)
-    if set(names) != set(source_registry):
-        missing = sorted(set(source_registry) - set(names))
-        stale = sorted(set(names) - set(source_registry))
+    canonical_sources = source_modules(root)
+    loadable = loadable_modules(root)
+    if set(names) != loadable:
+        missing = sorted(loadable - set(names))
+        stale = sorted(set(names) - loadable)
         if missing:
-            errors.append(f"manifest misses registered modules: {', '.join(missing)}")
+            errors.append(f"manifest misses loadable modules: {', '.join(missing)}")
         if stale:
-            errors.append(f"manifest lists unregistered modules: {', '.join(stale)}")
+            errors.append(f"manifest lists non-loadable modules: {', '.join(stale)}")
 
     ignored_dirs = {"defs", "types", "__pycache__"}
     source_dirs = {
@@ -74,7 +78,7 @@ def check_manifest(root: Path) -> list[str]:
             errors.append(f"module {name}: invalid layer {layer!r}")
         if policy not in VALID_POLICIES:
             errors.append(f"module {name}: invalid policy {policy!r}")
-        for field in ("semantic_source", "factory_source", "perf_suite"):
+        for field in ("semantic_source", "perf_suite"):
             if not module.get(field):
                 errors.append(f"module {name}: missing {field}")
         for field in ("semantic_source", "factory_source"):
@@ -82,8 +86,17 @@ def check_manifest(root: Path) -> list[str]:
             if value and not (root / str(value)).is_file():
                 errors.append(f"module {name}: {field} does not exist: {value}")
         expected_factory = source_registry.get(name)
+        factory_source = module.get("factory_source")
+        if expected_factory and not factory_source:
+            errors.append(f"module {name}: native factory requires factory_source")
+        if name in canonical_sources and not expected_factory:
+            if factory_source:
+                errors.append(f"module {name}: source-only module must not declare factory_source")
+            for field in ("public_native", "manual_public_native", "private_native_sources"):
+                if module.get(field):
+                    errors.append(f"module {name}: source-only module must not declare {field}")
         declared_factory = str(
-            module.get("factory_symbol") or Path(str(module.get("factory_source", ""))).stem
+            module.get("factory_symbol") or Path(str(factory_source or "")).stem
         )
         if expected_factory and declared_factory != expected_factory:
             errors.append(

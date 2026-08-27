@@ -18,16 +18,29 @@ from check_stdlib_boundary import (  # noqa: E402
     check_manifest,
     check_semantic_owners,
 )
-from stdlib_manifest import load_manifest, registry_modules  # noqa: E402
+from stdlib_manifest import (  # noqa: E402
+    load_manifest,
+    loadable_modules,
+    registry_modules,
+    source_modules,
+)
 from report_stdlib_self_hosting import build_report  # noqa: E402
 from check_stdlib_aot_helper_residue import check_forbidden_tokens  # noqa: E402
 
 
 class StdlibBoundaryManifestTest(unittest.TestCase):
-    def test_registered_modules_have_one_boundary_entry(self) -> None:
+    def test_loadable_modules_have_one_boundary_entry(self) -> None:
         manifest = load_manifest(ROOT)
-        self.assertEqual(set(registry_modules(ROOT)), set(manifest.by_name))
+        self.assertEqual(loadable_modules(ROOT), set(manifest.by_name))
         self.assertEqual([], check_manifest(ROOT))
+
+    def test_source_only_module_needs_no_native_factory(self) -> None:
+        manifest = load_manifest(ROOT)
+        csv = manifest.by_name["csv"]
+        self.assertIn("csv", source_modules(ROOT))
+        self.assertNotIn("csv", registry_modules(ROOT))
+        self.assertNotIn("factory_source", csv)
+        self.assertEqual([], csv.get("public_native", []))
 
     def test_semantic_native_and_fastpath_contracts_are_source_derived(self) -> None:
         self.assertEqual([], check_semantic_owners(ROOT))

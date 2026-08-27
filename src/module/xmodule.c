@@ -1064,27 +1064,30 @@ static bool load_script_extension(XrVMRuntime *isolate, XrModule *module, const 
 }
 
 /*
-** Load Native module (supports hybrid loading)
+** Load a standard library module
 **
 ** Flow:
-** 1. Create the C module through its registered factory
+** 1. Create a module through its native factory or the generic source shell
 ** 2. Find and execute same-named xray script extension (stdlib/<name>/<name>.xr)
 ** 3. Script extension can access C module exports and add/override exports
 */
-static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_name) {
+static XrModule *load_stdlib_module(XrVMRuntime *isolate, const char *module_name) {
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     if (!registry)
         return NULL;
 
     XrNativeModuleFactory factory =
         (XrNativeModuleFactory) xr_hashmap_get(registry->native_factories, module_name);
-    if (!factory)
+    bool has_embedded_source = xr_get_embedded_stdlib(module_name) != NULL;
+    if (!factory && !has_embedded_source)
         return NULL;
 
-    XrModule *module = factory(isolate);
+    XrModule *module = factory ? factory(isolate) : xr_module_create_native(isolate, module_name);
+    if (module && !factory)
+        module->requires_script = true;
 
     if (!module) {
-        xr_log_warning("module", "failed to load native module '%s'", module_name);
+        xr_log_warning("module", "failed to create standard library module '%s'", module_name);
         return NULL;
     }
 
@@ -1092,13 +1095,15 @@ static XrModule *load_native_module(XrVMRuntime *isolate, const char *module_nam
     //    Recursive imports observe INITIALIZING and fail with E0504 instead of
     //    observing a partially initialized C layer.
     if (!xr_module_begin_initialization(module)) {
-        xr_log_warning("module", "native module '%s' entered an invalid initialization state",
+        xr_log_warning("module",
+                       "standard library module '%s' entered an invalid initialization state",
                        module_name);
         xr_module_free(module);
         return NULL;
     }
     if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
-        xr_log_warning("module", "out of memory caching native module '%s'", module_name);
+        xr_log_warning("module", "out of memory caching standard library module '%s'",
+                       module_name);
         xr_module_fail(module);
         xr_module_free(module);
         return NULL;
@@ -1290,9 +1295,9 @@ XrValue xr_module_import(XrVMRuntime *isolate, const char *module_name) {
         return state == XR_MODULE_PUBLISHED ? xr_value_from_module(module) : xr_null();
     }
 
-    // 2. Try to load Native module (standard library C layer)
-    // Note: load_native_module already adds to cache internally
-    module = load_native_module(isolate, module_name);
+    // 2. Try to load a standard library module from its canonical source and native leaves.
+    // Note: load_stdlib_module already adds to cache internally.
+    module = load_stdlib_module(isolate, module_name);
     if (module) {
         return xr_value_from_module(module);
     }
@@ -1532,7 +1537,6 @@ static const StdlibEntry stdlib_cluster[] = {
 
 #if defined(XR_HAS_DATA_FORMATS)
 static const StdlibEntry stdlib_data_formats[] = {
-    {"csv", xr_native_module_create_csv},
     {"toml", xr_native_module_create_toml},
     {"yaml", xr_native_module_create_yaml},
     {"xml", xr_native_module_create_xml},

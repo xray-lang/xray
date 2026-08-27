@@ -9,6 +9,7 @@
  */
 
 #include "xmodule_resolver.h"
+#include "xstdlib_embedded.h"
 #include "xlockfile.h"
 #include "xsemver.h"
 #include "../base/xchecks.h"
@@ -214,8 +215,10 @@ static void copy_module_id(XrModuleId *dst, const XrModuleId *src) {
 
 static int resolve_stdlib(XrModuleResolver *r, const char *name, XrModuleId *out_id,
                           char **err_buf) {
-    /* Check native factory registry. */
-    if (r->config.native_factories && xr_hashmap_has(r->config.native_factories, name)) {
+    bool has_native_factory =
+        r->config.native_factories && xr_hashmap_has(r->config.native_factories, name);
+    bool has_embedded_source = xr_get_embedded_stdlib(name) != NULL;
+    if (has_native_factory || has_embedded_source) {
         char logical_path[XR_PATH_MAX];
         int logical_length =
             snprintf(logical_path, sizeof(logical_path), "%s/%s.xr", name, name);

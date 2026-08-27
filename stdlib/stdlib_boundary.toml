@@ -1,6 +1,6 @@
 # Task 196: canonical standard-library ownership and backend-boundary policy.
 # Signatures remain source-derived from .xr/.def/native type declarations.
-schema = 2
+schema = 3
 
 [governance]
 vm_fastpath_option = "XRAY_STDLIB_VM_FASTPATHS"
@@ -428,7 +428,6 @@ public = true
 layer = "L4"
 policy = "xray_semantic"
 semantic_source = "stdlib/csv/csv.xr"
-factory_source = "stdlib/csv/csv.c"
 public_native = []
 def_migration_complete = true
 aot_helper_forbidden = true

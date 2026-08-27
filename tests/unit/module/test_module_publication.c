@@ -8,6 +8,7 @@
 
 #include "../test_framework.h"
 #include "module/xmodule.h"
+#include "module/xmodule_resolver.h"
 #include "xray_vm.h"
 
 TEST(module_exports_are_invisible_until_atomic_publication) {
@@ -69,8 +70,42 @@ TEST(failed_module_never_publishes_partial_exports) {
     xray_vm_delete(isolate);
 }
 
+TEST(source_only_stdlib_uses_embedded_authority_and_generic_loader) {
+    XrModuleResolverConfig config = {0};
+    XrModuleResolver *resolver = xr_module_resolver_new(&config);
+    ASSERT_NOT_NULL(resolver);
+    XrModuleId module_id;
+    char *error = NULL;
+    ASSERT_EQ_INT(xr_module_resolver_resolve(resolver, "csv", NULL, NULL, &module_id, &error),
+                  0);
+    ASSERT_NULL(error);
+    ASSERT_EQ_INT(module_id.kind, XR_MOD_STDLIB);
+    ASSERT_STR_EQ(module_id.canonical,
+                  "stdlib-module-v1:module=3:csv:path=10:csv/csv.xr");
+    ASSERT_NULL(module_id.source_path);
+    xr_module_id_cleanup(&module_id);
+    xr_module_resolver_free(resolver);
+
+    XrVMConfig vm_config = {0};
+    XrVMRuntime *isolate = xray_vm_new_full(&vm_config);
+    ASSERT_NOT_NULL(isolate);
+    XrValue csv_value = xr_module_import(isolate, "csv");
+    ASSERT_TRUE(xr_value_is_module(csv_value));
+    XrValue parse = xr_module_get_export(isolate, xr_value_to_module(csv_value), "parse");
+    ASSERT_TRUE(xr_value_is_closure(parse));
+#if defined(XR_HAS_FILESYSTEM)
+    XrValue os_value = xr_module_import(isolate, "os");
+    ASSERT_TRUE(xr_value_is_module(os_value));
+    XrModule *os_module = xr_value_to_module(os_value);
+    ASSERT_TRUE(xr_value_is_closure(xr_module_get_export(isolate, os_module, "sleep")));
+    ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__sleep")));
+#endif
+    xray_vm_delete(isolate);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module publication");
 RUN_TEST(module_exports_are_invisible_until_atomic_publication);
 RUN_TEST(failed_module_never_publishes_partial_exports);
+RUN_TEST(source_only_stdlib_uses_embedded_authority_and_generic_loader);
 TEST_MAIN_END()
