@@ -33,6 +33,10 @@
 #define PLAN_WORKERS 4u
 #define PLAN_QUOTA (UINT64_C(16) * 1024u * 1024u)
 #define PLAN_MAX_ENTRY (4u * 1024u * 1024u)
+/* One published plan measures 3712 bytes for this fixture. The collector
+ * admits a whole object but holds fewer of them than the readers publish. */
+#define PLAN_COLLECT_QUOTA (8u * 1024u)
+#define PLAN_COLLECT_MAX_ENTRY (4u * 1024u)
 
 /* Threads that publish into one store root must start inside the same window,
  * or the first one finishes before the rest begin and the test degrades into a
@@ -879,6 +883,190 @@ TEST(equal_content_authorities_share_one_cache_identity) {
     xr_test_program_plan_store_remove(root);
 }
 
+/* A collector whose budget holds fewer objects than the readers published
+ * evicts under them while they read. Its entry budget must still admit a whole
+ * object: a store that cannot hold one discards it when it opens, which
+ * empties the root before the race rather than during it. */
+typedef struct PlanCollector {
+    PlanBarrier *barrier;
+    const char *root;
+    uint32_t rounds;
+    bool ok;
+    uint64_t evicted;
+} PlanCollector;
+
+static void *plan_collector_main(void *argument) {
+    PlanCollector *collector = (PlanCollector *) argument;
+    XrCacheStore *store = xr_test_program_plan_store_open(collector->root, PLAN_COLLECT_QUOTA,
+                                                          PLAN_COLLECT_MAX_ENTRY);
+    barrier_wait(collector->barrier);
+    collector->ok = store != NULL;
+    for (uint32_t round = 0; store && round < collector->rounds; round++) {
+        XrCacheCollectStats stats = {0};
+        if (!xr_cache_store_collect(store, &stats)) {
+            collector->ok = false;
+            break;
+        }
+        collector->evicted += stats.removed_entries;
+    }
+    xr_cache_store_close(store);
+    return NULL;
+}
+
+TEST(collection_racing_readers_still_serves_one_canonical_plan) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-collect", root, sizeof(root)), 0);
+    const uint32_t readers = PLAN_WORKERS - 1u;
+    XrSemanticPlan *semantics[PLAN_WORKERS] = {0};
+    XrTargetProfile *profiles[PLAN_WORKERS] = {0};
+    PlanWorker workers[PLAN_WORKERS] = {0};
+    PlanSerialBuild canonical[PLAN_WORKERS] = {0};
+
+    /* Each reader names a different program, so the store holds more objects
+     * than the collector's budget admits and eviction has something to take. */
+    for (uint32_t i = 0; i < readers; i++) {
+        semantics[i] = xr_test_program_plan_semantic(766u + i);
+        profiles[i] = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        ASSERT_NOT_NULL(semantics[i]);
+        ASSERT_NOT_NULL(profiles[i]);
+        workers[i].root = root;
+        workers[i].semantic = semantics[i];
+        workers[i].profile = profiles[i];
+        PlanSerialRequest warm = {
+            .root = root,
+            .semantic = semantics[i],
+            .profile = profiles[i],
+            .quota = PLAN_QUOTA,
+            .max_entry = PLAN_MAX_ENTRY,
+        };
+        serial_build(&warm, &canonical[i]);
+        ASSERT_TRUE(canonical[i].ok);
+        ASSERT_TRUE(canonical[i].result.cache_published);
+    }
+
+    XrTestProgramPlanStoreInventory primed;
+    xr_test_program_plan_store_inventory(root, &primed);
+    ASSERT_EQ_UINT(primed.objects, readers);
+
+    PlanBarrier barrier;
+    barrier_init(&barrier, readers + 1u);
+    PlanCollector collector = {.barrier = &barrier, .root = root, .rounds = 16u};
+    xr_thread_t threads[PLAN_WORKERS];
+    for (uint32_t i = 0; i < readers; i++) {
+        workers[i].barrier = &barrier;
+        ASSERT_TRUE(xr_thread_create(&threads[i], plan_worker_main, &workers[i]));
+    }
+    ASSERT_TRUE(xr_thread_create(&threads[readers], plan_collector_main, &collector));
+    for (uint32_t i = 0; i <= readers; i++)
+        ASSERT_EQ_INT(xr_thread_join(threads[i], NULL), 0);
+    barrier_destroy(&barrier);
+
+    ASSERT_TRUE(collector.ok);
+    uint32_t recomputed = 0;
+    for (uint32_t i = 0; i < readers; i++)
+        recomputed += workers[i].result.built ? 1u : 0u;
+    /* The collector opens its store before the barrier releases the readers,
+     * and a store cannot open over more bytes than it admits, so at least one
+     * object is gone before any reader looks. A reader that recomputed is the
+     * proof the race had something to race; without it the readers found an
+     * undisturbed store and the case shows nothing. */
+    ASSERT_TRUE(recomputed > 0u);
+    printf("\n    collect race: evicted=%llu readers=%u recomputed=%u\n    ",
+           (unsigned long long) collector.evicted, readers, recomputed);
+    for (uint32_t i = 0; i < readers; i++) {
+        /* A reader served from the store and a reader whose object was evicted
+         * mid-flight must be indistinguishable in what they produce. */
+        ASSERT_TRUE(workers[i].ok);
+        ASSERT_NOT_NULL(workers[i].bytes);
+        ASSERT_EQ_UINT(workers[i].size, canonical[i].size);
+        ASSERT_MEM_EQ(workers[i].bytes, canonical[i].bytes, canonical[i].size);
+        ASSERT_TRUE(workers[i].result.cache_hit || workers[i].result.built);
+    }
+    XrTestProgramPlanStoreInventory inventory;
+    xr_test_program_plan_store_inventory(root, &inventory);
+    ASSERT_EQ_UINT(inventory.temps, 0u);
+
+    workers_release(workers, readers);
+    for (uint32_t i = 0; i < readers; i++) {
+        serial_build_release(&canonical[i]);
+        xr_target_profile_free(profiles[i]);
+        xr_semantic_plan_free(semantics[i]);
+    }
+    xr_test_program_plan_store_remove(root);
+}
+
+/* A writer that died between its temp file and the atomic rename leaves a name
+ * the store must never read as a published object. */
+TEST(crash_temp_residue_is_never_served_and_is_reclaimed) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-residue", root, sizeof(root)), 0);
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(777u);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_NOT_NULL(profile);
+    PlanSerialRequest request = {
+        .root = root,
+        .semantic = semantic,
+        .profile = profile,
+        .quota = PLAN_QUOTA,
+        .max_entry = PLAN_MAX_ENTRY,
+    };
+    PlanSerialBuild canonical;
+    serial_build(&request, &canonical);
+    ASSERT_TRUE(canonical.ok);
+    ASSERT_TRUE(canonical.result.cache_published);
+
+    /* Name the residue after the live object, which is the name a writer
+     * publishing this very key would have used. */
+    char *object = single_object_path(root, "xtp");
+    ASSERT_NOT_NULL(object);
+    char *directory = xr_path_join(root, "xtp");
+    ASSERT_NOT_NULL(directory);
+    const char *base = strrchr(object, '/');
+    char residue_name[XR_PATH_MAX];
+    (void) snprintf(residue_name, sizeof(residue_name), ".tmp-%s-0", base ? base + 1 : "orphan");
+    char *residue = xr_path_join(directory, residue_name);
+    ASSERT_NOT_NULL(residue);
+    static const uint8_t junk[] = "half-written program target plan";
+    ASSERT_EQ_INT(xr_fs_write_new_file_sync(residue, junk, sizeof(junk) - 1u), 0);
+
+    XrTestProgramPlanStoreInventory before;
+    xr_test_program_plan_store_inventory(root, &before);
+    ASSERT_EQ_UINT(before.objects, 1u);
+    ASSERT_EQ_UINT(before.temps, 1u);
+
+    PlanSerialBuild served;
+    serial_build(&request, &served);
+    ASSERT_TRUE(served.ok);
+    ASSERT_TRUE(served.result.cache_hit);
+    ASSERT_EQ_UINT(served.size, canonical.size);
+    ASSERT_MEM_EQ(served.bytes, canonical.bytes, canonical.size);
+
+    /* Reclaiming the residue must not take the object beside it. */
+    XrCacheStore *store = xr_test_program_plan_store_open(root, PLAN_QUOTA, PLAN_MAX_ENTRY);
+    ASSERT_NOT_NULL(store);
+    XrCacheCollectStats stats = {0};
+    ASSERT_TRUE(xr_cache_store_collect(store, &stats));
+    xr_cache_store_close(store);
+
+    PlanSerialBuild after;
+    serial_build(&request, &after);
+    ASSERT_TRUE(after.ok);
+    ASSERT_EQ_UINT(after.size, canonical.size);
+    ASSERT_MEM_EQ(after.bytes, canonical.bytes, canonical.size);
+
+    serial_build_release(&after);
+    serial_build_release(&served);
+    serial_build_release(&canonical);
+    xr_free(residue);
+    xr_free(directory);
+    xr_free(object);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_test_program_plan_store_remove(root);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST(parallel_cold_builds_publish_one_canonical_plan);
 RUN_TEST(parallel_warm_builds_serve_one_canonical_plan);
@@ -889,4 +1077,6 @@ RUN_TEST(a_plan_for_another_machine_is_refused_under_this_machines_key);
 RUN_TEST(each_target_facet_alone_separates_the_cache_identity);
 RUN_TEST(over_budget_publication_is_refused_without_residue);
 RUN_TEST(equal_content_authorities_share_one_cache_identity);
+RUN_TEST(collection_racing_readers_still_serves_one_canonical_plan);
+RUN_TEST(crash_temp_residue_is_never_served_and_is_reclaimed);
 TEST_MAIN_END()
