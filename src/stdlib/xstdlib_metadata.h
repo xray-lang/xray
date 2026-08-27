@@ -76,6 +76,36 @@ xr_stdlib_metadata_unique_func(const char *module, const char *name) {
     return found;
 }
 
+/* A callsite identifies an overload by module, selector, and arity. Keep the
+ * uniqueness check on that complete identity: rejecting at (module, selector)
+ * would make every valid overload set unreachable, while accepting the first
+ * matching arity would make a duplicate registry row order-dependent. */
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_unique_func_arity_in_entries(const XrStdlibDefEntry *entries,
+                                                uint32_t entry_count, const char *module,
+                                                const char *name, uint16_t argument_count) {
+    if (!entries || !module || !module[0] || module[0] == '.' || !name || !name[0])
+        return NULL;
+    const XrStdlibDefEntry *found = NULL;
+    for (uint32_t i = 0; i < entry_count; i++) {
+        const XrStdlibDefEntry *entry = &entries[i];
+        if (!entry->module || !entry->name || entry->argc != argument_count ||
+            strcmp(entry->module, module) != 0 || strcmp(entry->name, name) != 0)
+            continue;
+        if (found)
+            return NULL;
+        found = entry;
+    }
+    return found;
+}
+
+static inline const XrStdlibDefEntry *
+xr_stdlib_metadata_unique_func_arity(const char *module, const char *name,
+                                     uint16_t argument_count) {
+    return xr_stdlib_metadata_unique_func_arity_in_entries(
+        xr_stdlib_def_entries, XR_STDLIB_DEF_ENTRY_COUNT, module, name, argument_count);
+}
+
 static inline bool xr_stdlib_metadata_module_known(const char *module) {
     if (!module || !module[0] || module[0] == '.')
         return false;
@@ -104,11 +134,11 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
 
 /* The frozen definition registry is the only authority over which native
  * stdlib member a namespace callsite may dispatch to without a backend lookup.
- * A member qualifies when the registry names exactly one entry for the module
- * and the selector, the declared arity matches the callsite, every argument
- * crosses the boundary as one plain tagged value, the member returns a single
- * value through the generated direct shim, and no conditional compilation,
- * result enum, or runtime capability qualifies the row.
+ * A member qualifies when the registry names exactly one entry for the module,
+ * selector, and callsite arity, every argument crosses the boundary as one
+ * plain tagged value, the member returns a single value through the generated
+ * direct shim, and no conditional compilation, result enum, or runtime
+ * capability qualifies the row.
  *
  * The `builtin` AOT form is refused on purpose and is not a module exclusion:
  * the native backend rewrites those callsites into a different operation after
@@ -118,11 +148,11 @@ static inline bool xr_stdlib_metadata_link_dependency_module_known(const char *n
 static inline const XrStdlibDefEntry *
 xr_stdlib_metadata_exact_native_direct_member(const char *module, const char *name,
                                               uint16_t argument_count) {
-    const XrStdlibDefEntry *entry = xr_stdlib_metadata_unique_func(module, name);
-    if (!entry || entry->argc != argument_count || !entry->aot_direct || !entry->aot ||
-        !entry->aot_kind || !entry->ret || !entry->vm || !entry->vm_binding ||
-        !entry->arg_spec || !entry->aot_enum || !entry->vm_ifdef || !entry->define ||
-        !entry->signature)
+    const XrStdlibDefEntry *entry =
+        xr_stdlib_metadata_unique_func_arity(module, name, argument_count);
+    if (!entry || !entry->aot_direct || !entry->aot || !entry->aot_kind || !entry->ret ||
+        !entry->vm || !entry->vm_binding || !entry->arg_spec || !entry->aot_enum ||
+        !entry->vm_ifdef || !entry->define || !entry->signature)
         return NULL;
     if (entry->aot[0] == '\0' || entry->vm[0] == '\0' ||
         strcmp(entry->aot_kind, "method") != 0 || strcmp(entry->ret, "value") != 0 ||

@@ -131,7 +131,7 @@ module-init import reference. That import record resolves against the native
 definition registry rather than against a compiled module and names the module
 path with an empty member, so a source-module namespace and a selected member
 import both stay outside. The frozen definition registry must then name exactly
-one entry for that module path and the selector, with the callsite arity, a
+one entry for the complete module-path, selector, and callsite-arity identity, a
 single returned value, an ordinary non-suspending binding, no conditional
 compilation, no result enum, no runtime capability, and every argument crossing
 as one plain tagged value. The result and every argument must be a plain
@@ -140,7 +140,9 @@ behind the call. The `builtin` AOT form of a member is refused: the native
 backend rewrites those callsites into a different operation after this plan is
 frozen, so no frozen row can describe the shape the backend emits. A local
 function sharing the selector is an ordinary call through a callee operand and
-never reaches this authority.
+never reaches this authority. Distinct arities are independent overloads;
+duplicate registry rows with the same complete identity remain ambiguous and
+fail closed.
 When the independently proven target reaches a function with a canonical
 static suspend operation (or `XI_GO`), the same row also authorizes exactly one
 coroutine-state entity for an ordinary call. A direct tail-call edge propagates
@@ -555,7 +557,7 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c 1637430f1abcbf408d707f224c1a589c6317dd99431ec898d6df148fc219e7e9
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
-anchor-sha256: src/stdlib/xstdlib_metadata.h d0fef6ba261cfe98b18a49bac4046b00b41c5dc30e491d4fcbfe5367177339a9
+anchor-sha256: src/stdlib/xstdlib_metadata.h bcb983e7b99fc3ee47f71a651d99ab15074975a4fbeab049694794782279bee4
 anchor-sha256: tests/unit/plan/test_semantic_plan.c c017de5a63589b61081c337668d61fb1c6cac394370919eaa6c5a9bdd8f4921c
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
