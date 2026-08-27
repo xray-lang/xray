@@ -14,6 +14,7 @@
 #include "../plan/format/xr_xsm_schema.h"
 #include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/semantic/xr_semantic_verify.h"
+#include "../plan/target/xr_target_plan_internal.h"
 #include "../plan/target/xr_target_profile_internal.h"
 #include "../plan/target/xr_target_verify.h"
 #include <string.h>
@@ -42,10 +43,26 @@ static bool verified_authorities(const XrCacheXtpArtifactVerifyContext *context,
         !profile_facts)
         return false;
     char error[512] = {0};
+    bool graph = context->program_semantic_module_count != 0u;
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(context->semantic_plan);
+    bool graph_authority =
+        program && program->program_family ==
+                       XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
     if (!xr_semantic_plan_is_verified(context->semantic_plan) ||
+        graph != graph_authority ||
         !xr_semantic_plan_verify_module_set(
             context->semantic_plan, context->semantic_dependencies,
             context->semantic_dependency_count, error, sizeof(error)) ||
+        (graph &&
+         (!context->program_semantic_modules ||
+          program->program_module_row >= context->program_semantic_module_count ||
+          context->program_semantic_modules[program->program_module_row] !=
+              context->semantic_plan ||
+          !xr_target_semantic_program_module_set_verify(
+              context->program_semantic_modules,
+              context->program_semantic_module_count, error, sizeof(error)))) ||
+        (!graph && context->program_semantic_modules) ||
         !xr_target_profile_verify(context->target_profile, error, sizeof(error)))
         return false;
     *profile_facts = xr_target_profile_facts(context->target_profile);
@@ -148,11 +165,19 @@ static bool materialize_verified_xtp(
     if (!xr_xtp_decode_candidate(bytes, size, &candidate, error, sizeof(error)))
         return false;
     XrTargetPlan *plan = NULL;
-    bool materialized = xr_xtp_materialize_target_plan_module_set(
-        candidate, requirements->semantic_plan,
-        requirements->semantic_dependencies,
-        requirements->semantic_dependency_count,
-        requirements->target_profile, &plan, error, sizeof(error));
+    bool materialized = requirements->program_semantic_module_count
+                            ? xr_xtp_materialize_target_plan_program_graph(
+                                  candidate,
+                                  requirements->program_semantic_modules,
+                                  requirements->program_semantic_module_count,
+                                  requirements->target_profile, &plan, error,
+                                  sizeof(error))
+                            : xr_xtp_materialize_target_plan_module_set(
+                                  candidate, requirements->semantic_plan,
+                                  requirements->semantic_dependencies,
+                                  requirements->semantic_dependency_count,
+                                  requirements->target_profile, &plan, error,
+                                  sizeof(error));
     bool verified = materialized && plan && xr_target_plan_is_verified(plan) &&
                     xr_target_plan_fingerprint_is_intact(plan) &&
                     xr_target_plan_verify(plan, error, sizeof(error));

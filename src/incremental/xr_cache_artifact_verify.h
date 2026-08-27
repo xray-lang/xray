@@ -28,6 +28,10 @@ typedef struct XrCacheXtpArtifactVerifyContext {
     const XrSemanticPlan *semantic_plan;
     const XrSemanticPlan *const *semantic_dependencies;
     uint32_t semantic_dependency_count;
+    /* A graph XTP is materialized only from this canonical PSC row order.
+     * Ordinary program plans require both fields to remain empty. */
+    const XrSemanticPlan *const *program_semantic_modules;
+    uint32_t program_semantic_module_count;
     const XrTargetProfile *target_profile;
     XrCacheFingerprint optimization_budget;
 } XrCacheXtpArtifactVerifyContext;

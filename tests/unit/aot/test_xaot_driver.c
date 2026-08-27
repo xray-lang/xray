@@ -740,6 +740,81 @@ static void test_driver_consumes_imported_summary_payload_set(void) {
     passed++;
 }
 
+static void test_driver_program_graph_uses_one_target_plan_cache_route(void) {
+    char root[XR_TEST_PATH_MAX];
+    char producer_source[XR_TEST_PATH_MAX];
+    char entry_source[XR_TEST_PATH_MAX];
+    char cache_dir[XR_TEST_PATH_MAX];
+    XaotTarget target = {0};
+    XaotBuildOptions options = {0};
+    XaotBuildResult result = {0};
+
+    ASSERT_TRUE(xr_temp_dir_create("xray-xaot-program-graph-cache", root,
+                                   sizeof(root)) == 0);
+    ASSERT_TRUE(snprintf(producer_source, sizeof(producer_source),
+                         "%s/producer.xr", root) > 0);
+    ASSERT_TRUE(snprintf(entry_source, sizeof(entry_source), "%s/entry.xr",
+                         root) > 0);
+    ASSERT_TRUE(snprintf(cache_dir, sizeof(cache_dir), "%s/cache", root) > 0);
+    ASSERT_TRUE(write_file_text(
+        producer_source,
+        "export fn add1(value: i64) -> i64 { return value + 1 }\n"));
+    ASSERT_TRUE(write_file_text(
+        entry_source, "import { add1 } from \"./producer\"\n"
+                      "fn root() -> i64 { return add1(41) }\n"));
+    ASSERT_TRUE(xaot_target_init(&target, NULL));
+    options.target = &target;
+    options.profile = XAOT_BUILD_PROFILE_HOSTED;
+    options.incremental_cache_dir = cache_dir;
+    ASSERT_TRUE(install_native_target_profile(&options, &target));
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.nmodules == 2);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1u);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 0u);
+    ASSERT_TRUE(result.target_plan_cache.published == 1u);
+    xaot_build_result_free(&result);
+
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 1u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 0u);
+    ASSERT_TRUE(result.target_plan_cache.published == 0u);
+    xaot_build_result_free(&result);
+
+    options.incremental_cache_rebuild = true;
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1u);
+    ASSERT_TRUE(result.target_plan_cache.published == 0u);
+    xaot_build_result_free(&result);
+    options.incremental_cache_rebuild = false;
+
+    XrProgramTargetPlanCancellationToken cancellation;
+    xr_program_target_plan_cancellation_token_init(&cancellation);
+    xr_program_target_plan_cancellation_token_request(&cancellation);
+    options.program_target_plan_cancellation = &cancellation;
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) != 0);
+    ASSERT_TRUE(result.target_plan_cache.cancelled == 1u);
+    ASSERT_TRUE(result.n_sources == 0);
+    xaot_build_result_free(&result);
+    options.program_target_plan_cancellation = NULL;
+
+    ASSERT_TRUE(corrupt_first_xtp_cache_object(cache_dir));
+    ASSERT_TRUE(xaot_build_script(entry_source, &options, &result) == 0);
+    ASSERT_TRUE(result.target_plan_cache.hits == 0u);
+    ASSERT_TRUE(result.target_plan_cache.misses == 1u);
+    ASSERT_TRUE(result.target_plan_cache.rejected == 1u);
+    ASSERT_TRUE(result.target_plan_cache.published == 1u);
+    xaot_build_result_free(&result);
+
+    release_target_profile(&options);
+    xaot_target_free(&target);
+    xr_test_unlink(entry_source);
+    xr_test_unlink(producer_source);
+    passed++;
+}
+
 static void test_driver_dumps_subject_bound_local_evidence(void) {
     char source_path[256];
     XaotTarget target = {0};
@@ -1430,6 +1505,11 @@ int main(void) {
         printf("%d passed, %d failed\n", passed, failed);
         return failed ? 1 : 0;
     }
+    if (filter && strcmp(filter, "program_graph_target_plan_cache") == 0) {
+        test_driver_program_graph_uses_one_target_plan_cache_route();
+        printf("%d passed, %d failed\n", passed, failed);
+        return failed ? 1 : 0;
+    }
     if (filter && strcmp(filter, "missing_program_target_plan_authority") == 0) {
         test_driver_rejects_missing_canonical_program_target_plan_authority();
         printf("%d passed, %d failed\n", passed, failed);
@@ -1458,6 +1538,7 @@ int main(void) {
     }
     test_target_simd_plan_is_explicit_and_fail_closed();
     test_driver_consumes_imported_summary_payload_set();
+    test_driver_program_graph_uses_one_target_plan_cache_route();
     test_driver_dumps_subject_bound_local_evidence();
     test_driver_rejects_invalid_imported_summary_payload_set();
     test_driver_analyzes_aggregate_layout_with_selected_target();

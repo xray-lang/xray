@@ -1715,14 +1715,19 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
                                            XrCacheStore *cache_store, bool rebuild, bool verbose,
                                            XrProgramTargetPlanCancellationToken *cancellation,
                                            XaotTargetPlanCacheStats *stats) {
-    if (!bundle || !profile || !bundle->modules || bundle->nmodules != 1u || !stats ||
-        !xr_target_profile_verify(profile, NULL, 0)) {
+    if (!bundle || !bundle->modules || !bundle->nmodules ||
+        bundle->entry_module >= bundle->nmodules || !stats) {
         if (bundle)
             bundle->error_msg =
-                "XR_TARGET_1000: product TargetPlan requires one canonical program authority";
+                "XR_TARGET_1000: product TargetPlan build input is incomplete";
         return false;
     }
-    XiModule *module = bundle->modules[0];
+    if (!profile || !xr_target_profile_verify(profile, NULL, 0)) {
+        bundle->error_msg =
+            "XR_TARGET_1000: product TargetPlan requires an exact target profile";
+        return false;
+    }
+    XiModule *module = bundle->modules[bundle->entry_module];
     const XrSemanticPlan *semantic = module && module->init
                                          ? module->init->semantic_plan
                                          : NULL;
@@ -1730,8 +1735,11 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
     uint32_t dependency_count = 0;
     if (!semantic ||
         !xaot_resolve_semantic_dependencies(bundle, semantic, &dependencies,
-                                            &dependency_count))
+                                            &dependency_count)) {
+        bundle->error_msg =
+            "XR_TARGET_1000: product semantic dependency authority is incomplete";
         return false;
+    }
 
     XrProgramTargetPlanBuildRequest request = {
         .semantic_plan = semantic,
@@ -1759,6 +1767,8 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
         const char *name = module && module->name ? module->name : "?";
         fprintf(stderr, "Error: program TargetPlan build failed for '%s': %s\n", name,
                 error[0] ? error : "unknown error");
+        bundle->error_msg =
+            "XR_TARGET_1000: program TargetPlan build did not produce verified authority";
         xr_program_target_plan_build_result_release(&build);
         xr_free(dependencies);
         return false;
@@ -1999,74 +2009,6 @@ static bool xaot_build_module_emission_plans(const XaotBundle *bundle,
     return true;
 }
 
-static void xaot_set_program_target_error(char *error, size_t error_size,
-                                          const char *message) {
-    if (error && error_size)
-        snprintf(error, error_size, "%s", message);
-}
-
-static bool xaot_build_source_program_target_plan(
-    XiModule *const *modules, uint32_t module_count, XrTargetProfile *profile,
-    XrTargetPlan **out, char *error, size_t error_size) {
-    if (error && error_size)
-        error[0] = '\0';
-    if (out)
-        *out = NULL;
-    if (!modules || !module_count ||
-        module_count > XR_TARGET_MAX_PROGRAM_MODULES || !profile || !out) {
-        xaot_set_program_target_error(
-            error, error_size,
-            "XR_TARGET_1000: source program TargetPlan input is incomplete");
-        return false;
-    }
-    const XrSemanticPlan **semantic_modules =
-        (const XrSemanticPlan **) xr_calloc(module_count,
-                                            sizeof(*semantic_modules));
-    if (!semantic_modules) {
-        xaot_set_program_target_error(
-            error, error_size,
-            "XR_EXEC_5003: source program TargetPlan module set allocation failed");
-        return false;
-    }
-    bool exact = true;
-    for (uint32_t module_index = 0; exact && module_index < module_count;
-         module_index++) {
-        const XiModule *module = modules[module_index];
-        const XrSemanticPlan *semantic =
-            module && module->init ? module->init->semantic_plan : NULL;
-        const XrSemanticProgramProvenance *program =
-            semantic ? xr_semantic_plan_program_provenance(semantic) : NULL;
-        if (!program || program->program_module_row >= module_count ||
-            semantic_modules[program->program_module_row]) {
-            exact = false;
-            break;
-        }
-        semantic_modules[program->program_module_row] = semantic;
-    }
-    for (uint32_t row = 0; exact && row < module_count; row++)
-        exact = semantic_modules[row] != NULL;
-    if (!exact) {
-        xaot_set_program_target_error(
-            error, error_size,
-            "XR_TARGET_1000: source program SemanticPlan module set is not canonical");
-        xr_free(semantic_modules);
-        return false;
-    }
-    bool built = xr_target_plan_build_program_graph(
-        semantic_modules, module_count, profile, out, error, error_size);
-    xr_free(semantic_modules);
-    if (!built || !*out || !xr_target_plan_is_verified(*out)) {
-        xr_target_plan_free(*out);
-        *out = NULL;
-        if (!error || !error_size || !error[0])
-            xaot_set_program_target_error(
-                error, error_size,
-                "XR_TARGET_1000: source program TargetPlan is not verified");
-        return false;
-    }
-    return true;
-}
-
 XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                        XaotBuildResult *result) {
     bool emit_plan_dump;
@@ -2095,7 +2037,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     char **mod_names = NULL;
     AstNode **mono_roots = NULL;
     XrProgramSemanticClosure *source_program_closure = NULL;
-    XrTargetPlan *source_program_target_plan = NULL;
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(options != NULL, "xaot_build: NULL options");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
@@ -2628,34 +2569,27 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                                             : "incomplete resolved module-set authority");
             goto fail_free_ir;
         }
-        if (!xaot_build_source_program_target_plan(
-                modules, (uint32_t) nmodules, options->target_profile,
-                &source_program_target_plan, graph_semantic_error,
-                sizeof(graph_semantic_error))) {
-            fprintf(stderr, "Error: program TargetPlan build failed: %s\n",
-                    graph_semantic_error[0]
-                        ? graph_semantic_error
-                        : "unverified source program target authority");
-            goto fail_free_ir;
-        }
+    }
+    if (!xaot_build_program_target_plan(
+            &aot_bundle, options->target_profile,
+            xr_compiler_session_cache_store(session), evidence_cache_rebuild,
+            evidence_cache_verbose, options->program_target_plan_cancellation,
+            &result->target_plan_cache)) {
+        fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
+                aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
+        goto fail_free_ir;
+    }
+    if (source_program_closure) {
+        char graph_target_error[512] = {0};
         if (!xaot_verify_program_direct_call_authority(
-                source_program_target_plan, graph_semantic_error,
-                sizeof(graph_semantic_error))) {
+                xaot_bundle_program_target_plan(&aot_bundle), graph_target_error,
+                sizeof(graph_target_error))) {
             fprintf(stderr, "Error: program AOT direct-call authority failed: %s\n",
-                    graph_semantic_error[0]
-                        ? graph_semantic_error
+                    graph_target_error[0]
+                        ? graph_target_error
                         : "unverified source program AOT binding authority");
             goto fail_free_ir;
         }
-        if (!xaot_bundle_set_program_target_plan(&aot_bundle,
-                                                 source_program_target_plan)) {
-            fprintf(stderr, "Error: program TargetPlan install failed: %s\n",
-                    aot_bundle.error_msg ? aot_bundle.error_msg
-                                         : "program plan does not own the exact Xi module set");
-            goto fail_free_ir;
-        }
-        xr_target_plan_free(source_program_target_plan);
-        source_program_target_plan = NULL;
     }
     if (!xaot_publish_module_summaries(session, graph, modules, nmodules,
                                        source_program_closure, options,
@@ -2709,7 +2643,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
         xaot_bundle_program_target_plan(&aot_bundle);
     if (program_graph_product) {
         char program_target_error[512] = {0};
-        memset(&result->target_plan_cache, 0, sizeof(result->target_plan_cache));
         if (!program_target_plan || aot_bundle.nmodules < 2u ||
             !xr_target_plan_verify(program_target_plan, program_target_error,
                                    sizeof(program_target_error)) ||
@@ -2727,15 +2660,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
                                             : aot_bundle.error_msg);
             goto fail_free_ir;
         }
-    } else if (!xaot_build_program_target_plan(
-                   &aot_bundle, options->target_profile,
-                   xr_compiler_session_cache_store(session),
-                   evidence_cache_rebuild, evidence_cache_verbose,
-                   options->program_target_plan_cancellation,
-                   &result->target_plan_cache)) {
-        fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
-                aot_bundle.error_msg ? aot_bundle.error_msg : "unknown error");
-        goto fail_free_ir;
     }
     if (!xaot_validate_module_direct_calls(&aot_bundle))
         goto fail_free_ir;
@@ -3082,8 +3006,6 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     return 0;
 
 fail_free_ir:
-    xr_target_plan_free(source_program_target_plan);
-    source_program_target_plan = NULL;
     xaot_module_emission_plans_free(emission_plans, (uint32_t) nmodules);
     xr_free(plan_dump);
     xr_free(global_evidence_dump);

@@ -677,6 +677,13 @@ add_xray_unit_test(test_xaot_driver
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_model.c
     ${CMAKE_SOURCE_DIR}/src/app/toolchain/xtc_target_profile.c
 )
+add_test(NAME test_xaot_driver_program_graph_target_plan_cache
+    COMMAND ${CMAKE_COMMAND} -E env
+            XRAY_TEST_FILTER=program_graph_target_plan_cache
+            $<TARGET_FILE:test_xaot_driver>)
+set_tests_properties(test_xaot_driver_program_graph_target_plan_cache PROPERTIES
+    LABELS "aot;program-graph;cache;target-plan;mutation"
+    TIMEOUT 120)
 add_xray_unit_test(test_xaot_transfer_plan aot/test_xaot_transfer_plan.c)
 add_xray_unit_test(test_cgen_verify_output aot/test_cgen_verify_output.c)
 set_tests_properties(test_cgen_verify_output PROPERTIES LABELS "aot;cgen;task-218")

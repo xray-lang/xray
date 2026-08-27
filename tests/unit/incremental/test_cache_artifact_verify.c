@@ -231,6 +231,20 @@ static void test_wrong_semantic_and_profile_authorities_fail_closed(void) {
         XR_CACHE_ARTIFACT_XTP, other_key, fixture.bytes, fixture.size,
         &other_requirements));
 
+    const XrSemanticPlan *pretend_program_modules[] = {fixture.semantic};
+    other_requirements = fixture.requirements;
+    other_requirements.program_semantic_modules = pretend_program_modules;
+    other_requirements.program_semantic_module_count = 1u;
+    REQUIRE(!xr_cache_xtp_key(&other_requirements, &other_key));
+    REQUIRE(!xr_cache_verify_xtp_artifact(
+        XR_CACHE_ARTIFACT_XTP, fixture.key, fixture.bytes, fixture.size,
+        &other_requirements));
+    other_requirements.program_semantic_modules = NULL;
+    REQUIRE(!xr_cache_xtp_key(&other_requirements, &other_key));
+    other_requirements.program_semantic_module_count = 0u;
+    other_requirements.program_semantic_modules = pretend_program_modules;
+    REQUIRE(!xr_cache_xtp_key(&other_requirements, &other_key));
+
     xr_target_profile_free(other_profile);
     xr_semantic_plan_free(other_semantic);
     dispose_fixture(&fixture);
