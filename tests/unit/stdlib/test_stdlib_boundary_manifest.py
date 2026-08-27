@@ -59,12 +59,12 @@ class StdlibBoundaryManifestTest(unittest.TestCase):
             )
         self.assertEqual(0, report["migration_debt_count"])
 
-    def test_completion_is_reported_after_all_blockers_clear(self) -> None:
+    def test_policy_agreement_is_reported_after_all_blockers_clear(self) -> None:
         errors, report = build_report(ROOT)
         self.assertEqual([], errors)
         self.assertTrue(report["status"]["consistent"])
-        self.assertTrue(report["status"]["complete"])
-        self.assertEqual([], report["status"]["completion_blockers"])
+        self.assertTrue(report["status"]["policy_agreement"])
+        self.assertEqual([], report["status"]["policy_agreement_blockers"])
 
 
 if __name__ == "__main__":
