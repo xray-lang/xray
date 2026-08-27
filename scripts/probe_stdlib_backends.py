@@ -44,6 +44,8 @@ SCHEMA = 1
 PROBE_ROOT = Path("tests/stdlib/contracts")
 PROBE_RELATIVE = Path("probes/current.xr")
 
+WORKSPACE_PLACEHOLDER = "<probe-workspace>"
+
 # Captured streams are evidence, not archives: a refusal states itself in its
 # opening lines, so a bounded prefix keeps the report readable while the full
 # text still backs the extracted diagnostic.
@@ -414,6 +416,24 @@ def rc_cell(result: CommandResult | None) -> str:
     return str(result.returncode)
 
 
+def redact_workspace(payload: Any, workspace: Path) -> Any:
+    """Replace the run's scratch directory with a stable placeholder.
+
+    The report is meant to be diffed between runs and committed, so a path that
+    changes every run has to be removed from it. The replacement is textual
+    because the name reaches the report inside recorded argv entries and inside
+    captured compiler output alike.
+    """
+    marker = str(workspace)
+    if isinstance(payload, str):
+        return payload.replace(marker, WORKSPACE_PLACEHOLDER)
+    if isinstance(payload, list):
+        return [redact_workspace(item, workspace) for item in payload]
+    if isinstance(payload, dict):
+        return {key: redact_workspace(value, workspace) for key, value in payload.items()}
+    return payload
+
+
 def render_table(results: list[ModuleResult], counts: dict[str, Any], baseline_ok: bool) -> str:
     lines: list[str] = []
     lines.append(f"baseline_ok: {'yes' if baseline_ok else 'NO'}")
@@ -498,6 +518,11 @@ def main(argv: list[str]) -> int:
         "refusal_clusters": cluster_refusals(results),
         "modules": [asdict(result) for result in results],
     }
+    # The scratch directory is named freshly on every run and its name reaches
+    # the report through recorded command lines and compiler output. Left as
+    # measured, two runs of the same tree would differ in the report and the
+    # difference would carry no information, so the name is normalized out.
+    payload = redact_workspace(payload, workspace)
 
     if args.json_path:
         Path(args.json_path).write_text(
