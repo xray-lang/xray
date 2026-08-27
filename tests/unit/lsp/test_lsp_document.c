@@ -28,21 +28,30 @@
 
 static int tests_passed = 0;
 static int tests_failed = 0;
+/* A failing ASSERT returns from the case body, so only the runner knows
+ * whether the case as a whole survived. Counting the verdict here rather
+ * than at the assertion keeps every case worth exactly one tally. */
+static bool current_test_failed = false;
 
 #define TEST(name) static void test_##name(void)
 #define RUN_TEST(name)                                                                             \
     do {                                                                                           \
         printf("  Testing %s... ", #name);                                                         \
+        current_test_failed = false;                                                               \
         test_##name();                                                                             \
-        printf("PASS\n");                                                                          \
-        tests_passed++;                                                                            \
+        if (current_test_failed) {                                                                 \
+            tests_failed++;                                                                        \
+        } else {                                                                                   \
+            printf("PASS\n");                                                                      \
+            tests_passed++;                                                                        \
+        }                                                                                          \
     } while (0)
 
 #define ASSERT(cond)                                                                               \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
             printf("FAIL at line %d: %s\n", __LINE__, #cond);                                      \
-            tests_failed++;                                                                        \
+            current_test_failed = true;                                                            \
             return;                                                                                \
         }                                                                                          \
     } while (0)
@@ -1383,7 +1392,8 @@ TEST(code_action_closure_cycle_offers_defer) {
         "closure cycle: this closure captures 'b' and is stored into 'b.onClick'\n"
         "Xray does not reclaim reference cycles, and `weak` is a field modifier that cannot break "
         "a capture edge.\n"
-        "hint: clear the field when the scope ends -- defer { b.onClick = null } -- or pass 'b' as a "
+        "hint: clear the field when the scope ends -- defer { b.onClick = null } -- or pass 'b' as "
+        "a "
         "parameter instead of capturing it");
     XrJsonValue *actions = xlsp_handle_code_action(server, params);
     ASSERT(actions != NULL);
