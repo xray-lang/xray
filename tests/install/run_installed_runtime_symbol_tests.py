@@ -124,6 +124,7 @@ APPROVED_RUNTIME_SOURCES = frozenset({
     "src/plan/format/xr_xtp_decode.c",
     "src/plan/format/xr_xtp_instruction_stream.c",
     "src/plan/format/xr_xtp_rows.c",
+    "src/plan/semantic/xr_i64_overflow_predicate_semantics.c",
     "src/plan/semantic/xr_semantic_graph.c",
     "src/plan/semantic/xr_semantic_ids.c",
     "src/plan/semantic/xr_semantic_ops.c",
@@ -132,6 +133,8 @@ APPROVED_RUNTIME_SOURCES = frozenset({
     "src/plan/ownership/xr_ownership_certificate.c",
     "src/plan/ownership/xr_ownership_check.c",
     "src/plan/ownership/xr_ownership_replay.c",
+    "src/plan/target/xr_i64_overflow_target_instruction.c",
+    "src/plan/target/xr_i64_overflow_target_instruction_verify.c",
     "src/plan/target/xr_target_instruction_verify.c",
     "src/plan/target/xr_target_entry_abi.c",
     "src/plan/target/xr_target_plan.c",
@@ -284,15 +287,23 @@ def member_source(member: str) -> str:
 
 
 def resolve_member_source(
-    member: str, owners: dict[str, set[str]]
+    member: str, owners: dict[str, set[str]], approved: set[str]
 ) -> tuple[str | None, list[str]]:
     source = member_source(member)
     if "/" in source:
         return source, [source]
     candidates = sorted(owners.get(source, set()))
-    if len(candidates) != 1:
-        return None, candidates
-    return candidates[0], candidates
+    if len(candidates) == 1:
+        return candidates[0], candidates
+    # Two repository files may share a basename while only one of them is a
+    # source this archive is allowed to contain. Naming that one narrows the
+    # answer rather than guessing at it: the member stays ambiguous whenever
+    # the approved set does not single out exactly one candidate, so a real
+    # collision between two approved sources still fails closed.
+    admitted = [candidate for candidate in candidates if candidate in approved]
+    if len(admitted) == 1:
+        return admitted[0], candidates
+    return None, candidates
 
 
 def verify_member_resolution_invariants() -> None:
@@ -312,20 +323,32 @@ def verify_member_resolution_invariants() -> None:
         "collision.c": {"src/base/collision.c", "src/frontend/collision.c"},
         "unique.c": {"src/base/unique.c"},
     }
-    resolved, candidates = resolve_member_source("collision.c.o", owners)
+    resolved, candidates = resolve_member_source("collision.c.o", owners, set())
     if resolved is not None or len(candidates) != 2:
         raise AssertionError("basename-only archive member collisions must fail closed")
-    resolved, _ = resolve_member_source("unknown.c.o", owners)
+    resolved, _ = resolve_member_source("unknown.c.o", owners, set())
     if resolved is not None:
         raise AssertionError("unknown basename-only archive members must fail closed")
-    resolved, _ = resolve_member_source("unique.c.o", owners)
+    resolved, _ = resolve_member_source("unique.c.o", owners, set())
     if resolved != "src/base/unique.c":
         raise AssertionError("unique basename-only archive members must resolve exactly")
     resolved, _ = resolve_member_source(
-        "objects/src/base/collision.c.obj", owners
+        "objects/src/base/collision.c.obj", owners, set()
     )
     if resolved != "src/base/collision.c":
         raise AssertionError("path-qualified archive members must preserve exact ownership")
+    resolved, candidates = resolve_member_source(
+        "collision.c.o", owners, {"src/base/collision.c"}
+    )
+    if resolved != "src/base/collision.c" or len(candidates) != 2:
+        raise AssertionError(
+            "one approved candidate must name the colliding archive member")
+    resolved, _ = resolve_member_source(
+        "collision.c.o", owners, {"src/base/collision.c", "src/frontend/collision.c"}
+    )
+    if resolved is not None:
+        raise AssertionError(
+            "a collision between two approved sources must still fail closed")
 
 
 def inspect(archive: Path, root: Path, cc: Path) -> tuple[list[str], list[str]]:
@@ -345,7 +368,7 @@ def inspect(archive: Path, root: Path, cc: Path) -> tuple[list[str], list[str]]:
     ambiguous_members = {}
     unexpected_members = []
     for member in members:
-        source, candidates = resolve_member_source(member, owners)
+        source, candidates = resolve_member_source(member, owners, approved)
         if source is None:
             ambiguous_members[member] = candidates
             continue
