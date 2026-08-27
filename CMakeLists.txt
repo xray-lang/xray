@@ -4302,6 +4302,35 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME runtime_archive_cache_symbol_lint
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --archive $<TARGET_FILE:xray_vm>
+                --archive $<TARGET_FILE:xray_rt_coro>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_archive_cache_symbol_lint PROPERTIES
+        LABELS "meta;runtime;cache;target-machine"
+        PROCESSORS 1
+        SKIP_RETURN_CODE 77
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME runtime_archive_cache_symbol_lint_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_archive_cache_symbol_lint_self_test PROPERTIES
+        LABELS "meta;runtime;cache;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME runtime_header_dependency_lint_self_test
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_header_dependencies.py
