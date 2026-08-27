@@ -1381,6 +1381,7 @@ if(XR_BUILD_DAP)
     )
     target_include_directories(test_dap_breakpoints PRIVATE
         ${CMAKE_SOURCE_DIR}/src/app/dap
+        ${CMAKE_SOURCE_DIR}/include
     )
     add_test(NAME test_dap_breakpoints COMMAND test_dap_breakpoints)
 

@@ -36,7 +36,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <math.h>
-#include "../../../include/xray_value_abi.h"
+#include "xray_value_abi.h"
 #include "../../base/xdefs.h"
 #include "../../base/xchecks.h"
 #include "../../shared/xr_int_arith_core.h"
@@ -135,24 +135,19 @@ static inline XrValue xr_make_typed_ptr_val(void *p, uint16_t heap_type) {
 // Heap object type checks (all single-branch, no SSO fallback)
 #define XR_IS_STRING(v) (XR_IS_PTR(v) && (v).heap_type == XR_TSTRING)
 
-static inline XrRuntimeObjectHeader *xr_value_runtime_object_header(
-    XrValue value) {
-    return XR_IS_STRING(value) && value.ptr
-               ? &((XrString *) value.ptr)->header
-               : NULL;
+static inline XrRuntimeObjectHeader *xr_value_runtime_object_header(XrValue value) {
+    return XR_IS_STRING(value) && value.ptr ? &((XrString *) value.ptr)->header : NULL;
 }
 
 static inline bool xr_value_runtime_string_is_transferable(XrValue value) {
     XrRuntimeObjectHeader *header = xr_value_runtime_object_header(value);
-    return header &&
-           header->domain_id == XR_RUNTIME_STRING_DOMAIN_TRANSFERABLE;
+    return header && header->domain_id == XR_RUNTIME_STRING_DOMAIN_TRANSFERABLE;
 }
 
 static inline bool xr_value_runtime_string_is_shared(XrValue value) {
     XrRuntimeObjectHeader *header = xr_value_runtime_object_header(value);
-    return header &&
-           (header->domain_id == XR_RUNTIME_STRING_DOMAIN_CONST_SHARED ||
-            header->domain_id == XR_RUNTIME_STRING_DOMAIN_SYNC_SHARED);
+    return header && (header->domain_id == XR_RUNTIME_STRING_DOMAIN_CONST_SHARED ||
+                      header->domain_id == XR_RUNTIME_STRING_DOMAIN_SYNC_SHARED);
 }
 #define XR_IS_FUNCTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TFUNCTION)
 #define XR_IS_CFUNCTION(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCFUNCTION)

@@ -915,6 +915,11 @@ endif()
 # ============================================================================
 
 set(XRAY_COMMON_INCLUDES
+    # The public headers are reachable by bare name everywhere in the tree, the
+    # way the installed SDK reaches them through <prefix>/include/xray. A header
+    # that walks out of src/ to find them instead resolves only in a source
+    # checkout and breaks once it is installed under lib/xray/sdk/src/.
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/base
     ${CMAKE_CURRENT_SOURCE_DIR}/src/os
