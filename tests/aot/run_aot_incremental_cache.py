@@ -525,12 +525,68 @@ def run_link_output_identity(rec: Recorder, config: Config,
            f"want={second.name}\ngot={identifier}")
 
 
+def object_files(cache: Path) -> list[Path]:
+    return sorted(path for path in cache.rglob("*.o") if path.is_file())
+
+
+def run_object_cache_relocation(rec: Recorder, config: Config,
+                                ws: workspace.Workspace) -> None:
+    """Moving the sources must not recompile every object.
+
+    The generated C names the source's absolute path in a `#line` directive.
+    Without debug info that name reaches nothing in the object -- two objects
+    compiled from the same program at two paths are byte-identical -- so an
+    object cache keyed by the raw text would recompile a relocated tree in
+    full and never reclaim what it already published. With debug info the name
+    is recorded, and the two paths must stay apart.
+    """
+    print("--- object-cache-relocation ---")
+    d = ws.subdir("object-relocation")
+    first, second = d / "first", d / "second"
+    for directory in (first, second):
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "app.xr").write_text("fn main() -> i64 { return 42 }\n",
+                                          encoding="utf-8")
+
+    shared = d / "cache-release"
+    cold = build(config, shared, first / "app.xr", d / "first-app")
+    if not require_build(rec, cold, "object-relocation-cold"):
+        return
+    expect_state(rec, cold.combined_text(), "app", "compiling", "object-relocation-cold")
+    published = object_files(shared)
+
+    moved = build(config, shared, second / "app.xr", d / "second-app")
+    if not require_build(rec, moved, "object-relocation-moved"):
+        return
+    expect_state(rec, moved.combined_text(), "app", "hit", "object-relocation-moved")
+    expect(rec, object_files(shared) == published,
+           "object-relocation: a relocated tree publishes no second object",
+           f"before={[p.name for p in published]}\n"
+           f"after={[p.name for p in object_files(shared)]}")
+
+    # Debug info records the file name, so there the path is a real input and
+    # the two trees must not share an object.
+    debug_cache = d / "cache-debug"
+    first_debug = build(config, debug_cache, first / "app.xr", d / "first-debug", ["-g"])
+    if not require_build(rec, first_debug, "object-relocation-debug-cold"):
+        return
+    debug_published = object_files(debug_cache)
+    second_debug = build(config, debug_cache, second / "app.xr", d / "second-debug", ["-g"])
+    if not require_build(rec, second_debug, "object-relocation-debug-moved"):
+        return
+    expect(rec, len(object_files(debug_cache)) == len(debug_published) + 1,
+           "object-relocation: a debug build keeps the two paths apart",
+           f"before={[p.name for p in debug_published]}\n"
+           f"after={[p.name for p in object_files(debug_cache)]}")
+
+
 SCENARIOS: dict[str, Callable] = {
     "basic": run_basic_modules,
     "evidence": run_evidence_manifest_cache,
     "class": run_class_symbols,
     "lto": run_lto_cache,
     "link-output": run_link_output_identity,
+    "object-relocation": run_object_cache_relocation,
 }
 
 
