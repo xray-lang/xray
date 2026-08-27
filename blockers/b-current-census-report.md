@@ -198,6 +198,13 @@ Both predate this lane and are unmodified by it.
 - The default CMake configuration cannot produce a compiler. `XRAY_STDLIB_VM_FASTPATHS`
   defaults to `ON`, and generating the fastpath harness compiles a 25-import module graph,
   which the program-authority guard refuses. `build-fastpaths-on/xray` is never produced.
+- `backend_diff_optimized` is red. It refuses cases in
+  `tests/diff/cases/semantics/evaluation_order/` with genuine capability diagnostics
+  (`XR_TARGET_1003: call target has no consumable adapter authority`,
+  `XR_TARGET_1003: direct-local signature or result storage is incomplete`,
+  `XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE`) and no probe failure. Confirmed
+  pre-existing by re-running the lane with this branch's `CMakeLists.txt` reverted to the
+  previous commit: it fails identically either way.
 - With fastpaths off, 2 of 620 build targets fail: the generated fixtures
   `tests/unit/generated/leaf_product_native.c` and `i64_overflow_native.c`. Their
   generator is the registered CTest `test_xi_program_semantic`, two of whose subtests are
