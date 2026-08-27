@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 EXPORT_RE = re.compile(
-    r"^\s*XR_FUNC\s+[A-Za-z_][\w \t*]*?[ \t*]([A-Za-z_]\w*)\s*\(", re.MULTILINE
+    r"^\s*XR_FUNC\s+[A-Za-z_][\w\s*]*?\b([A-Za-z_]\w*)\s*\(", re.MULTILINE
 )
 # nm marks a definition with a letter that is not the undefined-reference `U`.
 DEFINITION_RE = re.compile(r"^\S*\s+([A-TV-Za-tv-z])\s+(\S+)\s*$")
@@ -52,6 +52,14 @@ def defined_symbols(nm: str, archive: Path) -> set[str]:
     return symbols
 
 
+def partition_archives(archives: list[Path]) -> tuple[list[Path], list[Path]]:
+    existing: list[Path] = []
+    missing: list[Path] = []
+    for archive in archives:
+        (existing if archive.is_file() else missing).append(archive)
+    return existing, missing
+
+
 def self_test() -> int:
     sample = "XR_FUNC bool xr_cache_store_collect(XrCacheStore *store);\n"
     if EXPORT_RE.findall(sample) != ["xr_cache_store_collect"]:
@@ -61,6 +69,24 @@ def self_test() -> int:
         "xr_cache_store_open"
     ]:
         print("runtime archive cache symbol lint self-test: FAIL (pointer return)")
+        return 1
+    multiline = (
+        "XR_FUNC void\n"
+        "xr_program_target_plan_cancellation_token_request(void *token);\n"
+        "XR_FUNC const XrInvalidationRecord *\n"
+        "xr_invalidation_result_at(const void *result, size_t index);\n"
+    )
+    if EXPORT_RE.findall(multiline) != [
+        "xr_program_target_plan_cancellation_token_request",
+        "xr_invalidation_result_at",
+    ]:
+        print("runtime archive cache symbol lint self-test: FAIL (multiline exports)")
+        return 1
+    present = Path(__file__)
+    absent = present.with_name("runtime-archive-cache-symbol-lint-missing")
+    existing, missing = partition_archives([present, absent])
+    if existing != [present] or missing != [absent]:
+        print("runtime archive cache symbol lint self-test: FAIL (archive completeness)")
         return 1
     if DEFINITION_RE.match("                 U _xr_cache_store_open"):
         print("runtime archive cache symbol lint self-test: FAIL (undefined accepted)")
@@ -88,13 +114,18 @@ def main() -> int:
         print("runtime archive cache symbol lint: FAIL (no cache exports found)")
         return 1
 
+    archives, missing = partition_archives(args.archive)
+    if missing:
+        print("runtime archive cache symbol lint: SKIP (archive not built)")
+        for archive in missing:
+            print(f"  - missing archive: {archive}")
+        return SKIP_EXIT
+    if not archives:
+        print("runtime archive cache symbol lint: SKIP (no archive built)")
+        return SKIP_EXIT
     nm = shutil.which("nm")
     if not nm:
         print("runtime archive cache symbol lint: SKIP (no nm on PATH)")
-        return SKIP_EXIT
-    archives = [archive for archive in args.archive if archive.is_file()]
-    if not archives:
-        print("runtime archive cache symbol lint: SKIP (no archive built)")
         return SKIP_EXIT
 
     failed = False

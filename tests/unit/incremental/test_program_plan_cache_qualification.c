@@ -21,7 +21,6 @@
 #include "os/os_fs.h"
 #include "os/os_temp.h"
 #include "os/os_thread.h"
-#include "os/os_time.h"
 #include <stdio.h>
 #include "plan/semantic/xr_semantic_plan.h"
 #include "plan/target/xr_target_plan.h"
@@ -310,11 +309,13 @@ typedef struct PlanSerialRequest {
     uint64_t quota;
     size_t max_entry;
     bool rebuild;
+    XrProgramTargetPlanCancellationToken *cancellation;
 } PlanSerialRequest;
 
 typedef struct PlanSerialBuild {
     bool store_opened;
     bool ok;
+    bool returned_plan;
     XrProgramTargetPlanBuildResult result;
     uint8_t *bytes;
     size_t size;
@@ -335,10 +336,11 @@ static void serial_build(const PlanSerialRequest *request, PlanSerialBuild *out)
         .profile = request->profile,
         .store = store,
         .rebuild = request->rebuild,
-        .cancellation = NULL,
+        .cancellation = request->cancellation,
     };
     XrProgramTargetPlanBuildResult result = {0};
     out->ok = xr_test_program_plan_build(&input, &result, out->error, sizeof(out->error));
+    out->returned_plan = result.plan != NULL;
     if (out->ok && result.plan)
         (void) xr_test_program_plan_encode(result.plan, &out->bytes, &out->size);
     out->result = result;
@@ -397,89 +399,29 @@ static void assert_refused_then_recomputed(const PlanSerialBuild *canonical,
     ASSERT_MEM_EQ(recovered->bytes, canonical->bytes, canonical->size);
 }
 
-typedef enum PlanCancelBoundary {
-    PLAN_CANCEL_NONE = 0,      /* the build completed before the request landed */
-    PLAN_CANCEL_BEFORE_CACHE,  /* refused before the store was consulted */
-    PLAN_CANCEL_AFTER_LOAD,    /* refused after a load attempt, before building */
-    PLAN_CANCEL_AFTER_BUILD,   /* refused with a plan in hand, before publishing */
-    PLAN_CANCEL_AFTER_PUBLISH, /* refused after publication was attempted */
-    PLAN_CANCEL_BOUNDARY_COUNT,
-} PlanCancelBoundary;
+typedef struct PlanCancellationCase {
+    XrProgramTargetPlanCancellationCheckpoint checkpoint;
+    bool load_attempted;
+    bool built;
+    bool publish_attempted;
+    bool published;
+} PlanCancellationCase;
 
-static PlanCancelBoundary classify_cancel(const XrProgramTargetPlanBuildResult *result) {
-    if (!result->cancelled)
-        return PLAN_CANCEL_NONE;
-    if (result->cache_publish_attempted)
-        return PLAN_CANCEL_AFTER_PUBLISH;
-    if (result->built)
-        return PLAN_CANCEL_AFTER_BUILD;
-    if (result->cache_load_attempted)
-        return PLAN_CANCEL_AFTER_LOAD;
-    return PLAN_CANCEL_BEFORE_CACHE;
-}
-
-typedef struct PlanCanceller {
-    PlanBarrier *barrier;
-    XrProgramTargetPlanCancellationToken *token;
-    uint64_t delay_ns;
-} PlanCanceller;
-
-static void *plan_canceller_main(void *argument) {
-    PlanCanceller *canceller = (PlanCanceller *) argument;
-    barrier_wait(canceller->barrier);
-    if (canceller->delay_ns)
-        xr_time_sleep_ns(canceller->delay_ns);
-    xr_program_target_plan_cancellation_token_request(canceller->token);
-    return NULL;
-}
-
-/* Time one uncancelled cold build so the sweep below can be expressed as
- * fractions of it. A fixed delay list would either land entirely inside the
- * build on a slow machine or entirely after it on a fast one. */
-static uint64_t measure_cold_build_ns(const char *root, uint32_t ordinal) {
-    XrSemanticPlan *semantic = xr_test_program_plan_semantic(ordinal);
-    XrTargetProfile *profile =
-        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
-    if (!semantic || !profile) {
-        xr_target_profile_free(profile);
-        xr_semantic_plan_free(semantic);
-        return 0;
-    }
-    PlanSerialRequest request = {
-        .root = root,
-        .semantic = semantic,
-        .profile = profile,
-        .quota = PLAN_QUOTA,
-        .max_entry = PLAN_MAX_ENTRY,
-    };
-    PlanSerialBuild build;
-    uint64_t started = xr_time_monotonic_ns();
-    serial_build(&request, &build);
-    uint64_t elapsed = xr_time_monotonic_ns() - started;
-    serial_build_release(&build);
-    xr_target_profile_free(profile);
-    xr_semantic_plan_free(semantic);
-    return build.ok ? elapsed : 0;
-}
-
-/* Sweep the request across the whole lifetime of a build instead of only
- * asking before it starts. Which internal checkpoint observes the request is
- * timing-dependent, so the case asserts the invariants that must hold at
- * every one of them and reports which were reached. */
+/* Schedule each checkpoint explicitly. A timing sweep can pass without ever
+ * reaching a narrow checkpoint, so it cannot qualify that checkpoint's
+ * ownership and publication guarantees. */
 TEST(cancellation_across_build_boundaries_is_fail_closed) {
-    /* Eighths of one measured build, extended past its end so the sweep is
-     * proven to cross the whole lifetime rather than to stop inside it. */
-    static const uint32_t kEighths[] = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 10u, 12u, 16u};
+    static const PlanCancellationCase kCases[] = {
+        {XR_PROGRAM_TARGET_PLAN_CANCEL_BEFORE_CACHE, false, false, false, false},
+        {XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_LOAD, true, false, false, false},
+        {XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_BUILD, true, true, false, false},
+        {XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_PUBLISH, true, true, true, true},
+    };
     char root[XR_PATH_MAX];
     ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-cancel", root, sizeof(root)), 0);
-    uint32_t observed[PLAN_CANCEL_BOUNDARY_COUNT] = {0};
-    uint64_t build_ns = measure_cold_build_ns(root, 899u);
-    ASSERT_TRUE(build_ns > 0u);
 
-    for (uint32_t round = 0; round < sizeof(kEighths) / sizeof(kEighths[0]); round++) {
-        /* A fresh ordinal keys a fresh object, so every round races an actual
-         * publication rather than settling into a warm hit. */
-        XrSemanticPlan *semantic = xr_test_program_plan_semantic(900u + round);
+    for (uint32_t i = 0; i < sizeof(kCases) / sizeof(kCases[0]); i++) {
+        XrSemanticPlan *semantic = xr_test_program_plan_semantic(900u + i);
         XrTargetProfile *profile =
             xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
         ASSERT_NOT_NULL(semantic);
@@ -487,73 +429,56 @@ TEST(cancellation_across_build_boundaries_is_fail_closed) {
 
         XrProgramTargetPlanCancellationToken token;
         xr_program_target_plan_cancellation_token_init(&token);
-        PlanBarrier barrier;
-        barrier_init(&barrier, 2u);
-        PlanWorker worker = {
-            .barrier = &barrier,
-            .root = root,
-            .semantic = semantic,
-            .profile = profile,
-            .cancellation = &token,
-        };
-        PlanCanceller canceller = {
-            .barrier = &barrier,
-            .token = &token,
-            .delay_ns = build_ns * kEighths[round] / 8u,
-        };
-        xr_thread_t threads[2];
-        ASSERT_TRUE(xr_thread_create(&threads[0], plan_worker_main, &worker));
-        ASSERT_TRUE(xr_thread_create(&threads[1], plan_canceller_main, &canceller));
-        ASSERT_EQ_INT(xr_thread_join(threads[0], NULL), 0);
-        ASSERT_EQ_INT(xr_thread_join(threads[1], NULL), 0);
-        barrier_destroy(&barrier);
-
-        PlanCancelBoundary boundary = classify_cancel(&worker.result);
-        observed[boundary]++;
-        if (boundary == PLAN_CANCEL_NONE) {
-            ASSERT_TRUE(worker.ok);
-            ASSERT_NOT_NULL(worker.bytes);
-        } else {
-            ASSERT_FALSE(worker.ok);
-            ASSERT_NULL(worker.bytes);
-            ASSERT_NOT_NULL(strstr(worker.error, "cancelled"));
-        }
-        XrTestProgramPlanStoreInventory inventory;
-        xr_test_program_plan_store_inventory(root, &inventory);
-        ASSERT_EQ_UINT(inventory.temps, 0u);
-
-        /* Whatever the cancellation interrupted, an ordinary build of the same
-         * authority must still produce the one canonical answer. */
+        xr_program_target_plan_cancellation_token_request_at_checkpoint(
+            &token, kCases[i].checkpoint);
         PlanSerialRequest request = {
             .root = root,
             .semantic = semantic,
             .profile = profile,
             .quota = PLAN_QUOTA,
             .max_entry = PLAN_MAX_ENTRY,
+            .cancellation = &token,
         };
+        PlanSerialBuild cancelled;
+        serial_build(&request, &cancelled);
+        ASSERT_TRUE(cancelled.store_opened);
+        ASSERT_FALSE(cancelled.ok);
+        ASSERT_FALSE(cancelled.returned_plan);
+        ASSERT_NULL(cancelled.bytes);
+        ASSERT_TRUE(cancelled.result.cancelled);
+        ASSERT_EQ_INT(cancelled.result.cache_load_attempted, kCases[i].load_attempted);
+        ASSERT_EQ_INT(cancelled.result.built, kCases[i].built);
+        ASSERT_EQ_INT(cancelled.result.cache_publish_attempted, kCases[i].publish_attempted);
+        ASSERT_EQ_INT(cancelled.result.cache_published, kCases[i].published);
+        ASSERT_NOT_NULL(strstr(cancelled.error, "cancelled"));
+
+        XrTestProgramPlanStoreInventory inventory;
+        xr_test_program_plan_store_inventory(root, &inventory);
+        ASSERT_EQ_UINT(inventory.objects, i + (kCases[i].published ? 1u : 0u));
+        ASSERT_EQ_UINT(inventory.temps, 0u);
+
+        /* An ordinary build and its warm repeat must still produce the same
+         * canonical answer after every refusal point. */
+        request.cancellation = NULL;
         PlanSerialBuild recovery;
+        PlanSerialBuild repeated;
         serial_build(&request, &recovery);
+        serial_build(&request, &repeated);
         ASSERT_TRUE(recovery.ok);
-        ASSERT_NOT_NULL(recovery.bytes);
-        if (worker.bytes) {
-            ASSERT_EQ_UINT(recovery.size, worker.size);
-            ASSERT_MEM_EQ(recovery.bytes, worker.bytes, worker.size);
-        }
+        ASSERT_TRUE(repeated.ok);
+        ASSERT_TRUE(recovery.returned_plan);
+        ASSERT_TRUE(repeated.returned_plan);
+        ASSERT_TRUE(repeated.result.cache_hit);
+        ASSERT_EQ_UINT(recovery.size, repeated.size);
+        ASSERT_MEM_EQ(recovery.bytes, repeated.bytes, recovery.size);
+        assert_store_is_whole(root, i + 1u);
+
+        serial_build_release(&repeated);
         serial_build_release(&recovery);
-        xr_test_program_plan_encoded_free(worker.bytes);
+        serial_build_release(&cancelled);
         xr_target_profile_free(profile);
         xr_semantic_plan_free(semantic);
     }
-
-    printf("\n    cancel sweep over %llu ns: none=%u before-cache=%u after-load=%u "
-           "after-build=%u after-publish=%u\n    ",
-           (unsigned long long) build_ns, observed[PLAN_CANCEL_NONE],
-           observed[PLAN_CANCEL_BEFORE_CACHE], observed[PLAN_CANCEL_AFTER_LOAD],
-           observed[PLAN_CANCEL_AFTER_BUILD], observed[PLAN_CANCEL_AFTER_PUBLISH]);
-    /* The shortest and the longest delay must land on opposite sides of the
-     * build, or the sweep never crossed its lifetime and proved nothing. */
-    ASSERT_TRUE(observed[PLAN_CANCEL_NONE] > 0u);
-    ASSERT_TRUE(observed[PLAN_CANCEL_NONE] < sizeof(kEighths) / sizeof(kEighths[0]));
     xr_test_program_plan_store_remove(root);
 }
 
