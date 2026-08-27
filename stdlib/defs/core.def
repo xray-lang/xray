@@ -2389,7 +2389,7 @@ module io {
   }
 
   fn __readDir {
-    signature: "(path: Path): Array<string>"
+    signature: "(path: Path): Array<string>?"
     doc: "List directory entries (raw strings; io.xr wraps as Path)"
     vm: "io_readDir"
     aot: "xrt_io_read_dir"
@@ -2403,7 +2403,7 @@ module io {
   }
 
   fn __readDirRecursive {
-    signature: "(path: Path): Array<string>"
+    signature: "(path: Path): Array<string>?"
     doc: "List directory entries recursively (raw strings; io.xr wraps as Path)"
     vm: "io_readDirRecursive"
     aot: "xrt_io_read_dir_recursive"

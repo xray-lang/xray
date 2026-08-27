@@ -66,9 +66,9 @@ var touched = path.join(root, path.from("touched.txt"))
 print(io.touch(touched))
 print(io.chmod(file, 420))
 
-var entries = io.readDir(dir)
+var entries = io.readDir(dir)!
 print(len(entries) >= 2)
-var recursive = io.readDirRecursive(root)
+var recursive = io.readDirRecursive(root)!
 print(len(recursive) >= 4)
 
 var resolvedDir = io.realpath(dir)!

@@ -74,7 +74,7 @@ fn test_read_dir_recursive() {
     io.writeFile(path.join(tmpDir, path.from("file1.txt")), "1")
     io.writeFile(path.join(tmpDir, path.from("a/file2.txt")), "2")
     io.writeFile(path.join(tmpDir, path.from("a/b/file3.txt")), "3")
-    var all = io.readDirRecursive(tmpDir)
+    var all = io.readDirRecursive(tmpDir)!
     assert(len(all) >= 3)
     io.removeAll(tmpDir)
 }
