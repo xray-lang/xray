@@ -363,6 +363,93 @@ def qualify_relocation(rec: report.Report, config: Config,
                else report.Status.FAIL, str(relocated))
 
 
+
+def object_paths(cache: Path, kind: str) -> list[Path]:
+    return sorted(
+        path
+        for directory in cache.rglob(kind) if directory.is_dir()
+        for path in directory.iterdir()
+        if path.is_file() and not path.name.startswith(".")
+    )
+
+
+def qualify_hostile(rec: report.Report, config: Config,
+                    ws: workspace.Workspace) -> None:
+    """Another program's objects, planted under this program's keys.
+
+    A key is an address, not a proof of what lives at it. These are the cases
+    where the planted bytes are a whole, self-consistent artifact of a
+    different program -- carrying a different PSC and generation -- so nothing
+    short of reconstructing the identity and re-verifying can reject them. A
+    miss is not a correctness fallback: the rebuild has to land back on the
+    same identity and the same bytes.
+    """
+    d = ws.subdir("hostile")
+    mine = d / "mine"
+    theirs = d / "theirs"
+    my_cache = d / "cache-mine"
+    their_cache = d / "cache-theirs"
+    my_entry = write_product(mine, PRODUCER_V1)
+    their_entry = write_product(theirs, PRODUCER_V2)
+
+    baseline = parse(build(config, my_cache, my_entry, d / "out-mine" / "app"))
+    foreign = parse(build(config, their_cache, their_entry, d / "out-theirs" / "app"))
+    if not baseline or not foreign:
+        rec.record("hostile: both programs report their cache decisions",
+                   report.Status.FAIL, "a build produced no report")
+        return
+    canonical = objects(my_cache)
+    rec.record("hostile: the two programs are distinct authorities",
+               report.Status.PASS if (baseline.identity.psc != foreign.identity.psc and
+                                      baseline.identity.gci != foreign.identity.gci)
+               else report.Status.FAIL,
+               f"mine={baseline.identity}\ntheirs={foreign.identity}")
+
+    for kind in ("xtp", "xsm"):
+        mine_objects = object_paths(my_cache, kind)
+        their_objects = object_paths(their_cache, kind)
+        if not mine_objects or not their_objects:
+            rec.record(f"hostile: {kind} objects exist to plant",
+                       report.Status.FAIL,
+                       f"mine={len(mine_objects)} theirs={len(their_objects)}")
+            return
+
+        # A whole object from the other program, at the address this program
+        # will look up.
+        mine_objects[0].write_bytes(their_objects[0].read_bytes())
+        planted = parse(build(config, my_cache, my_entry, d / f"out-{kind}-planted" / "app"))
+        if not planted:
+            rec.record(f"hostile: the build over a planted {kind} reports its decisions",
+                       report.Status.FAIL, "no report")
+            return
+        rec.record(f"hostile: a foreign {kind} does not become this program's answer",
+                   report.Status.PASS if (planted.identity == baseline.identity and
+                                          objects(my_cache) == canonical)
+                   else report.Status.FAIL,
+                   f"want={baseline.identity}\ngot={planted.identity}\n"
+                   f"objects={sorted(objects(my_cache).items())}")
+
+        # Half an object, which no verifier may complete from context.
+        whole = mine_objects[0].read_bytes()
+        mine_objects[0].write_bytes(whole[: len(whole) // 2])
+        truncated = parse(build(config, my_cache, my_entry,
+                                d / f"out-{kind}-truncated" / "app"))
+        if not truncated:
+            rec.record(f"hostile: the build over a truncated {kind} reports its decisions",
+                       report.Status.FAIL, "no report")
+            return
+        rec.record(f"hostile: a truncated {kind} costs a rebuild of the same bytes",
+                   report.Status.PASS if (truncated.identity == baseline.identity and
+                                          objects(my_cache) == canonical)
+                   else report.Status.FAIL,
+                   f"want={baseline.identity}\ngot={truncated.identity}\n"
+                   f"objects={sorted(objects(my_cache).items())}")
+
+    rec.record("hostile: no rejection leaves unfinished residue",
+               report.Status.PASS if not residue(my_cache) else report.Status.FAIL,
+               "\n".join(residue(my_cache)))
+
+
 def qualify_parallel(rec: report.Report, config: Config, ws: workspace.Workspace,
                      workers: int) -> None:
     """Builds sharing one cache root must converge on one published object.
@@ -782,6 +869,7 @@ def main(argv: list[str]) -> int:
         qualify_lifecycle(rec, config, ws)
         qualify_relocation(rec, config, ws)
         qualify_reorder(rec, config, ws)
+        qualify_hostile(rec, config, ws)
         qualify_parallel(rec, config, ws, max(2, ns.workers))
         rec.write(verbose=True)
         if ns.measure:
