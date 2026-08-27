@@ -49,6 +49,13 @@ static XrType stub_task_array = {
 static XrType stub_u8 = {.kind = XR_KIND_INT, .id = 8, .frozen = true, .scalar_rep = XR_NATIVE_U8};
 static XrType stub_uint64 = {
     .kind = XR_KIND_INT, .id = 11, .frozen = true, .scalar_rep = XR_NATIVE_U64};
+static XrType stub_nullable_int = {
+    .kind = XR_KIND_INT,
+    .id = 15,
+    .frozen = true,
+    .is_nullable = true,
+    .scalar_rep = XR_NATIVE_I64,
+};
 static XrType stub_u8_array = {
     .kind = XR_KIND_ARRAY,
     .id = 9,
@@ -1747,6 +1754,33 @@ TEST(select_rep_unbox_param_for_arith) {
     xi_func_free(f);
 }
 
+TEST(select_rep_identity_copy_preserves_source_carrier) {
+    XiFunc *f = make_func("identity_copy_source_carrier", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *source = xi_param(f, blk, 0, &stub_nullable_int);
+    XiValue *copy = xi_value_new(f, blk, XI_COPY, &stub_int, 1);
+    XiValue *one = xi_const_int(f, blk, 1, &stub_int);
+    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, copy, one);
+    REQUIRE(source && copy && one && add);
+    copy->args[0] = source;
+    copy->aux_int = XI_COPY_KIND_IDENTITY;
+    xi_block_set_return(blk, add);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_select_rep_with_policy(f, &policy);
+
+    REQUIRE(source->rep == XR_REP_TAGGED);
+    REQUIRE(copy->rep == XR_REP_TAGGED);
+    REQUIRE(add->args[0] != copy);
+    REQUIRE(add->args[0] && add->args[0]->op == XI_UNBOX);
+    REQUIRE(add->args[0]->backend_origin == XI_BACKEND_VALUE_REP_UNBOX);
+    REQUIRE(add->args[0]->nargs == 1 && add->args[0]->args[0] == copy);
+    REQUIRE(add->args[0]->rep == XR_REP_I64);
+
+    xi_func_free(f);
+}
+
 TEST(select_rep_no_change_for_call) {
     /* CALL with TAGGED-rep params: no BOX/UNBOX needed */
     XiFunc *f = make_func("test", &stub_func);
@@ -2695,6 +2729,7 @@ int main(void) {
     /* SelectRepresentations */
     run_select_rep_box_const_for_return();
     run_select_rep_unbox_param_for_arith();
+    run_select_rep_identity_copy_preserves_source_carrier();
     run_select_rep_no_change_for_call();
     run_select_rep_arith_chain_stays_unboxed();
     run_select_rep_keeps_narrow_store_for_shared_typed_array();

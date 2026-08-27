@@ -3073,6 +3073,12 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_LEN:
             return XR_REP_I64;
         case XI_COPY:
+            /* An identity alias has no carrier of its own. In particular, a
+             * narrowed type view must not erase a nullable source's tag before
+             * the proven native use where select_rep inserts the UNBOX. */
+            if (xi_copy_is_identity_alias(v) && v->nargs == 1 && v->args && v->args[0])
+                return sr_def_rep(v->args[0], policy);
+            return sr_type_native_boundary_rep(v->type);
         case XI_SOURCE_MOVE:
         case XI_OWNER_FORWARD:
             return sr_type_native_boundary_rep(v->type);
