@@ -95,8 +95,8 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__rename", io_rename);
     XRS_EXPORT(module, isolate, "__stat", io_stat);
     XRS_EXPORT(module, isolate, "__symlink", io_symlink);
-    XRS_EXPORT(module, isolate, "__tempDir", io_tempDir);
-    XRS_EXPORT(module, isolate, "__tempFile", io_tempFile);
+    XRS_EXPORT(module, isolate, "__makeTempDir", io_make_temp_dir);
+    XRS_EXPORT(module, isolate, "__makeTempFile", io_make_temp_file);
     XRS_EXPORT(module, isolate, "__utimeNow", io_utime_now);
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeFile", io_writeFile);
     XRS_EXPORT_YIELDABLE(module, isolate, "__writeFileBytes", io_writeFileBytes);
@@ -245,7 +245,6 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__getpid", os_getpid);
     XRS_EXPORT(module, isolate, "__getcwd", os_getcwd);
     XRS_EXPORT(module, isolate, "__hostname", os_hostname);
-    XRS_EXPORT(module, isolate, "__tmpdir", os_tmpdir);
     XRS_EXPORT(module, isolate, "__systemUsername", os_system_username);
     XRS_EXPORT(module, isolate, "__homedir", os_homedir);
     XRS_EXPORT(module, isolate, "__uid", os_uid);

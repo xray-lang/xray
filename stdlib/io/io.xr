@@ -3,6 +3,7 @@
 // Native entry points are deliberately internal `__*` primitives. Resource
 // ownership, buffering, line iteration, Path shaping, and public value types
 // live here so VM and AOT compile the same Xray semantics.
+import os
 import { Path } from path
 
 export final class FileStat {
@@ -287,16 +288,29 @@ export fn stat(path: Path) -> FileStat? {
                     raw!.uid, raw!.gid, raw!.isFile, raw!.isDir, raw!.isSymlink)
 }
 
+// The root comes from the os module, which owns the environment chain. Any
+// trailing separator is trimmed here so the join never doubles one -- macOS
+// sets TMPDIR with a trailing slash, and the old C join produced a doubled
+// separator in every temporary path built on it. Only the unique-name
+// creation is left to the host, because it has to be atomic.
+fn _tempRoot() -> string {
+    var root = os.tmpdir()
+    while (len(root) > 1 && root.slice(len(root) - 1, len(root)) == "/") {
+        root = root.slice(0, len(root) - 1)
+    }
+    return root
+}
+
 export fn tempDir() -> Path? {
-    var raw = __tempDir()
-    if (raw == null) { return null }
-    return Path(raw!)
+    var made = __makeTempDir(_tempRoot())
+    if (made == null) { return null }
+    return Path(made!)
 }
 
 export fn tempFile() -> Path? {
-    var raw = __tempFile()
-    if (raw == null) { return null }
-    return Path(raw!)
+    var made = __makeTempFile(_tempRoot())
+    if (made == null) { return null }
+    return Path(made!)
 }
 
 export fn readlink(path: Path) -> Path? {

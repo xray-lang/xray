@@ -674,49 +674,67 @@ static inline const char *xrt_io_core_getenv(void *ctx, const char *name) {
     return getenv(name);
 }
 
-static inline XrValue xrt_io_temp_file(void) {
+/* Create a uniquely named entry inside a caller-chosen root; the root and the
+ * join are the module's decisions and reach here from its Xray body, so both
+ * platforms are handed the same root. */
+static inline bool xrt_io_temp_template(const char *root, char *out, size_t cap) {
+    if (!root || root[0] == '\0')
+        return false;
+    int written = snprintf(out, cap, "%s/xray_XXXXXX", root);
+    return written > 0 && (size_t) written < cap;
+}
+
+static inline XrValue xrt_io_make_temp_file(const char *root_data, int64_t root_len) {
+    char stack_root[512];
+    char *owned = NULL;
+    char *root = xrt_io_copy_cstr_arg(root_data, root_len, stack_root, sizeof(stack_root), &owned);
     char tpl[XR_PATH_LIMIT_MAX_PATH];
+    bool ok = root && xrt_io_temp_template(root, tpl, sizeof(tpl));
+    if (!ok) {
+        XRT_FREE(owned);
+        return XR_NULL_VAL;
+    }
 #if defined(XR_OS_WINDOWS)
-    char tmpdir[XR_PATH_LIMIT_MAX_PATH];
-    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
-        return XR_NULL_VAL;
-    char tmpfile[XR_PATH_LIMIT_MAX_PATH];
-    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
-        return XR_NULL_VAL;
-    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
+    char name[XR_PATH_LIMIT_MAX_PATH];
+    ok = GetTempFileNameA(root, "xr_", 0, name) != 0;
+    XRT_FREE(owned);
+    return ok ? xrt_str_from_cstr(name) : XR_NULL_VAL;
 #else
-    const char *root = xr_os_core_tmpdir(xrt_io_core_getenv, NULL);
-    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
-        return XR_NULL_VAL;
+    XRT_FREE(owned);
     int fd = mkstemp(tpl);
     if (fd < 0)
         return XR_NULL_VAL;
     close(fd);
-#endif
     return xrt_str_from_cstr(tpl);
+#endif
 }
 
-static inline XrValue xrt_io_temp_dir(void) {
+static inline XrValue xrt_io_make_temp_dir(const char *root_data, int64_t root_len) {
+    char stack_root[512];
+    char *owned = NULL;
+    char *root = xrt_io_copy_cstr_arg(root_data, root_len, stack_root, sizeof(stack_root), &owned);
     char tpl[XR_PATH_LIMIT_MAX_PATH];
+    bool ok = root && xrt_io_temp_template(root, tpl, sizeof(tpl));
+    if (!ok) {
+        XRT_FREE(owned);
+        return XR_NULL_VAL;
+    }
 #if defined(XR_OS_WINDOWS)
-    char tmpdir[XR_PATH_LIMIT_MAX_PATH];
-    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
+    char name[XR_PATH_LIMIT_MAX_PATH];
+    ok = GetTempFileNameA(root, "xr_", 0, name) != 0;
+    XRT_FREE(owned);
+    if (!ok)
         return XR_NULL_VAL;
-    char tmpfile[XR_PATH_LIMIT_MAX_PATH];
-    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
+    DeleteFileA(name);
+    if (!CreateDirectoryA(name, NULL))
         return XR_NULL_VAL;
-    DeleteFileA(tmpfile);
-    if (!CreateDirectoryA(tmpfile, NULL))
-        return XR_NULL_VAL;
-    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
+    return xrt_str_from_cstr(name);
 #else
-    const char *root = xr_os_core_tmpdir(xrt_io_core_getenv, NULL);
-    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
-        return XR_NULL_VAL;
+    XRT_FREE(owned);
     if (!mkdtemp(tpl))
         return XR_NULL_VAL;
-#endif
     return xrt_str_from_cstr(tpl);
+#endif
 }
 
 typedef struct XrtIoReadDirEmitCtx {

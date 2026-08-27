@@ -318,8 +318,8 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"__rename", "(old: Path, new: Path): bool", "Rename a file", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stat", "(path: Path): __FileStat?", "Get file stat info", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__symlink", "(target: Path, link: Path): bool", "Create symbolic link", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
-    {"__tempDir", "(): string?", "Create temporary directory (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__tempFile", "(): string?", "Create temporary file (raw string; io.xr wraps as Path)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__makeTempDir", "(root: string): string?", "Create a uniquely named directory inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__makeTempFile", "(root: string): string?", "Create a uniquely named file inside the given root", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeFile", "(path: Path, data: string): bool", "Write string to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__writeFileBytes", "(path: Path, data: Array<u8>): bool", "Write byte array to file", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -522,7 +522,6 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__getpid", "(): i64", "Get process ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__tmpdir", "(): string", "Get temporary directory path", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__systemUsername", "(): string?", "Get the host-reported current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__homedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__uid", "(): i64", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
@@ -539,7 +538,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__exec", "(cmd: string): __ExecResult?", "Execute shell command", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__spawn", "(program: string, args: Array<string>): __ExecResult?", "Execute a program without a shell (injection-safe argv)", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
 };
-#define GEN_OS_FUNCTION_COUNT 26
+#define GEN_OS_FUNCTION_COUNT 25
 
 // regex module functions
 static const XaBuiltinMember g_gen_regex_functions[] = {

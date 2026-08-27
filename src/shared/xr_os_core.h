@@ -105,28 +105,6 @@ static inline bool xr_os_core_has_env_value(const char *value) {
     return value && value[0] != '\0';
 }
 
-static inline const char *xr_os_core_tmpdir(XrOsCoreGetenvFn getenv_fn, void *ctx) {
-    if (getenv_fn) {
-        const char *tmpdir = getenv_fn(ctx, "TMPDIR");
-        if (xr_os_core_has_env_value(tmpdir))
-            return tmpdir;
-
-        tmpdir = getenv_fn(ctx, "TMP");
-        if (xr_os_core_has_env_value(tmpdir))
-            return tmpdir;
-
-        tmpdir = getenv_fn(ctx, "TEMP");
-        if (xr_os_core_has_env_value(tmpdir))
-            return tmpdir;
-    }
-
-#ifdef XR_OS_WINDOWS
-    return "C:\\Windows\\Temp";
-#else
-    return "/tmp";
-#endif
-}
-
 static inline const char *xr_os_core_homedir(XrOsCoreGetenvFn getenv_fn, void *env_ctx,
                                              XrOsCoreStringFn system_homedir_fn, void *system_ctx) {
     if (getenv_fn) {

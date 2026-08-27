@@ -273,11 +273,6 @@ static inline XrValue xrt_os_hostname(void) {
     return xrt_os_cstr_value(buf);
 }
 
-static inline XrValue xrt_os_tmpdir(void) {
-    return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
-}
-
-/* The host answer only; fallback policy lives in os.xr. */
 static inline XrValue xrt_os_system_username(void) {
 #if defined(XR_OS_WINDOWS)
     char buf[256];

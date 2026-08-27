@@ -1131,64 +1131,70 @@ static XrValue io_realpath(XrVMRuntime *X, XrValue *args, int argc) {
     return xrs_string_value_n(X, view.data, view.len);
 }
 
-// Adapter for xr_os_core_tmpdir(); fallback ordering lives in shared core.
 static const char *io_core_getenv(void *ctx, const char *name) {
     (void) ctx;
     return getenv(name);
 }
 
 // tempFile() - Create temporary file, return path
-static XrValue io_tempFile(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
+/*
+ * Create a uniquely named entry inside a caller-chosen root. Only the atomic
+ * creation stays here: choosing the root and joining the name are the module's
+ * own decisions and live in its Xray body, so both platforms are handed the
+ * same root instead of each consulting the environment its own way.
+ */
+static bool io_temp_template(const char *root, char *out, size_t cap) {
+    if (!root || root[0] == '\0')
+        return false;
+    int written = snprintf(out, cap, "%s/xray_XXXXXX", root);
+    return written > 0 && (size_t) written < cap;
+}
 
+static XrValue io_make_temp_dir(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
+    size_t root_len = 0;
+    const char *root = xrs_string_arg(args[0], &root_len);
     char tpl[XR_PATH_MAX];
+    if (!io_temp_template(root, tpl, sizeof(tpl)))
+        return xr_null();
+
 #ifdef XR_OS_WINDOWS
-    char tmpdir[XR_PATH_MAX];
-    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
+    char name[XR_PATH_MAX];
+    if (GetTempFileNameA(root, "xr_", 0, name) == 0)
         return xr_null();
-    char tmpfile[XR_PATH_MAX];
-    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
+    DeleteFileA(name);
+    if (!CreateDirectoryA(name, NULL))
         return xr_null();
-    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
+    return xrs_string_value_c(X, name);
 #else
-    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
-    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
+    if (mkdtemp(tpl) == NULL)
         return xr_null();
+    return xrs_string_value_c(X, tpl);
+#endif
+}
+
+static XrValue io_make_temp_file(XrVMRuntime *X, XrValue *args, int argc) {
+    if (argc < 1)
+        return xr_null();
+    size_t root_len = 0;
+    const char *root = xrs_string_arg(args[0], &root_len);
+    char tpl[XR_PATH_MAX];
+    if (!io_temp_template(root, tpl, sizeof(tpl)))
+        return xr_null();
+
+#ifdef XR_OS_WINDOWS
+    char name[XR_PATH_MAX];
+    if (GetTempFileNameA(root, "xr_", 0, name) == 0)
+        return xr_null();
+    return xrs_string_value_c(X, name);
+#else
     int fd = mkstemp(tpl);
     if (fd < 0)
         return xr_null();
     close(fd);
-#endif
     return xrs_string_value_c(X, tpl);
-}
-
-// tempDir() - Create temporary directory, return path
-static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-
-    char tpl[XR_PATH_MAX];
-#ifdef XR_OS_WINDOWS
-    char tmpdir[XR_PATH_MAX];
-    if (GetTempPathA(sizeof(tmpdir), tmpdir) == 0)
-        return xr_null();
-    char tmpfile[XR_PATH_MAX];
-    if (GetTempFileNameA(tmpdir, "xr_", 0, tmpfile) == 0)
-        return xr_null();
-    // GetTempFileName creates a file; remove it and create dir instead
-    DeleteFileA(tmpfile);
-    if (!CreateDirectoryA(tmpfile, NULL))
-        return xr_null();
-    snprintf(tpl, sizeof(tpl), "%s", tmpfile);
-#else
-    const char *root = xr_os_core_tmpdir(io_core_getenv, NULL);
-    if (!xr_io_core_temp_template(root, '/', "xray_XXXXXX", tpl, sizeof(tpl)))
-        return xr_null();
-    if (mkdtemp(tpl) == NULL)
-        return xr_null();
 #endif
-    return xrs_string_value_c(X, tpl);
 }
 
 /* ========== Module Loading ========== */

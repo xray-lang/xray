@@ -103,44 +103,6 @@ TEST(os_core_sep_and_eol_match_target) {
 #endif
 }
 
-TEST(os_core_tmpdir_prefers_tmpdir) {
-    const OsEnvEntry entries[] = {
-        {"TMPDIR", "/xray/tmpdir"},
-        {"TMP", "/xray/tmp"},
-        {"TEMP", "/xray/temp"},
-    };
-    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
-    ASSERT_STR_EQ(xr_os_core_tmpdir(os_core_fake_getenv, &env), "/xray/tmpdir");
-}
-
-TEST(os_core_tmpdir_skips_empty_values) {
-    const OsEnvEntry entries[] = {
-        {"TMPDIR", ""},
-        {"TMP", "/xray/tmp"},
-        {"TEMP", "/xray/temp"},
-    };
-    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
-    ASSERT_STR_EQ(xr_os_core_tmpdir(os_core_fake_getenv, &env), "/xray/tmp");
-}
-
-TEST(os_core_tmpdir_uses_temp_after_missing_tmp) {
-    const OsEnvEntry entries[] = {
-        {"TEMP", "/xray/temp"},
-    };
-    OsEnvFake env = {entries, sizeof(entries) / sizeof(entries[0])};
-    ASSERT_STR_EQ(xr_os_core_tmpdir(os_core_fake_getenv, &env), "/xray/temp");
-}
-
-TEST(os_core_tmpdir_falls_back_without_env) {
-    OsEnvFake env = {NULL, 0};
-#ifdef XR_OS_WINDOWS
-    ASSERT_STR_EQ(xr_os_core_tmpdir(os_core_fake_getenv, &env), "C:\\Windows\\Temp");
-#else
-    ASSERT_STR_EQ(xr_os_core_tmpdir(os_core_fake_getenv, &env), "/tmp");
-#endif
-    ASSERT_STR_EQ(xr_os_core_tmpdir(NULL, NULL), xr_os_core_tmpdir(os_core_fake_getenv, &env));
-}
-
 TEST(os_core_homedir_prefers_home_env) {
     const OsEnvEntry entries[] = {
         {"HOME", "/home/env"},
@@ -399,12 +361,6 @@ RUN_TEST_SUITE("OS Core - platform");
 RUN_TEST(os_core_platform_matches_target);
 RUN_TEST(os_core_arch_matches_target);
 RUN_TEST(os_core_sep_and_eol_match_target);
-
-RUN_TEST_SUITE("OS Core - tmpdir");
-RUN_TEST(os_core_tmpdir_prefers_tmpdir);
-RUN_TEST(os_core_tmpdir_skips_empty_values);
-RUN_TEST(os_core_tmpdir_uses_temp_after_missing_tmp);
-RUN_TEST(os_core_tmpdir_falls_back_without_env);
 
 RUN_TEST_SUITE("OS Core - user");
 RUN_TEST(os_core_homedir_prefers_home_env);

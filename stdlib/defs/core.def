@@ -1986,19 +1986,6 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __tmpdir {
-    signature: "(): string"
-    doc: "Get temporary directory path"
-    vm: "os_tmpdir"
-    aot: "xrt_os_tmpdir"
-    argc: 0
-    arg_spec: ""
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
   fn __systemUsername {
     signature: "(): string?"
     doc: "Get the host-reported current user name"
@@ -2546,31 +2533,29 @@ module io {
     layer: "system"
   }
 
-  fn __tempDir {
-    signature: "(): string?"
-    doc: "Create temporary directory (raw string; io.xr wraps as Path)"
-    vm: "io_tempDir"
-    aot: "xrt_io_temp_dir"
-    argc: 0
-    arg_spec: ""
+  fn __makeTempDir {
+    signature: "(root: string): string?"
+    doc: "Create a uniquely named directory inside the given root"
+    vm: "io_make_temp_dir"
+    aot: "xrt_io_make_temp_dir"
+    argc: 1
+    arg_spec: "s"
     aot_direct: true
     link_object: false
     layer: "system"
-    visibility: "internal"
     return_ownership: "fresh"
   }
 
-  fn __tempFile {
-    signature: "(): string?"
-    doc: "Create temporary file (raw string; io.xr wraps as Path)"
-    vm: "io_tempFile"
-    aot: "xrt_io_temp_file"
-    argc: 0
-    arg_spec: ""
+  fn __makeTempFile {
+    signature: "(root: string): string?"
+    doc: "Create a uniquely named file inside the given root"
+    vm: "io_make_temp_file"
+    aot: "xrt_io_make_temp_file"
+    argc: 1
+    arg_spec: "s"
     aot_direct: true
     link_object: false
     layer: "system"
-    visibility: "internal"
     return_ownership: "fresh"
   }
 

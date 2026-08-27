@@ -1,0 +1,66 @@
+// Temporary paths are built from the root the os module reports, joined once.
+// A root that already ends in a separator must not produce a doubled one: the
+// platform hands one over routinely, since macOS sets TMPDIR with a trailing
+// slash.
+
+import io
+import os
+import { Path } from path
+
+fn hasDoubleSlash(text: string) -> bool {
+    for (var i = 1; i < len(text); i++) {
+        if (text.slice(i - 1, i) == "/" && text.slice(i, i + 1) == "/") { return true }
+    }
+    return false
+}
+
+@test
+fn test_temp_dir_is_created_and_is_a_directory() {
+    var dir = io.tempDir()
+    assert(dir != null)
+    assert(io.isDir(dir!))
+    io.removeAll(dir!)
+}
+
+@test
+fn test_temp_file_is_created_and_is_a_file() {
+    var file = io.tempFile()
+    assert(file != null)
+    assert(io.isFile(file!))
+    io.remove(file!)
+}
+
+@test
+fn test_a_trailing_separator_in_the_root_is_not_doubled() {
+    var saved = os.getenv("TMPDIR")
+    assert(os.setenv("TMPDIR", "/tmp/"))
+    var dir = io.tempDir()
+    assert(dir != null)
+    assertEqual(hasDoubleSlash(dir!.toString()), false)
+    io.removeAll(dir!)
+    if (saved != null) { os.setenv("TMPDIR", saved!) }
+}
+
+@test
+fn test_the_root_comes_from_the_environment() {
+    var base = io.tempDir()!
+    var saved = os.getenv("TMPDIR")
+    assert(os.setenv("TMPDIR", base.toString()))
+
+    var inner = io.tempDir()
+    assert(inner != null)
+    // Created inside the root the environment named.
+    assert(inner!.toString().indexOf(base.toString()) == 0)
+
+    if (saved != null) { os.setenv("TMPDIR", saved!) }
+    io.removeAll(base)
+}
+
+@test
+fn test_two_calls_do_not_collide() {
+    var a = io.tempDir()!
+    var b = io.tempDir()!
+    assert(a.toString() != b.toString())
+    io.removeAll(a)
+    io.removeAll(b)
+}

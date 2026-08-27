@@ -254,15 +254,6 @@ static XrValue os_hostname(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // tmpdir() - Get temporary directory
-static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) args;
-    (void) argc;
-    return xrs_string_value_c(X, xr_os_core_tmpdir(os_core_getenv, NULL));
-}
-
-/* ========== User Information (P1) ========== */
-
-// The host answer only; fallback policy lives in os.xr.
 static XrValue os_system_username(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
