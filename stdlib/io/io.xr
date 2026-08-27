@@ -249,17 +249,22 @@ export fn realpath(path: Path) -> Path? {
     return Path(raw!)
 }
 
-export fn readDir(path: Path) -> Array<Path> {
+// A path that cannot be listed answers null rather than an empty array: an
+// empty directory and a path that is not a directory are different answers,
+// and returning the same value for both hides the second.
+export fn readDir(path: Path) -> Array<Path>? {
     var raws = __readDir(path)
+    if (raws == null) { return null }
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws); i++) { out.push(Path(raws[i])) }
+    for (var i = 0; i < len(raws!); i++) { out.push(Path(raws![i])) }
     return out
 }
 
-export fn readDirRecursive(path: Path) -> Array<Path> {
+export fn readDirRecursive(path: Path) -> Array<Path>? {
     var raws = __readDirRecursive(path)
+    if (raws == null) { return null }
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws); i++) { out.push(Path(raws[i])) }
+    for (var i = 0; i < len(raws!); i++) { out.push(Path(raws![i])) }
     return out
 }
 
