@@ -420,9 +420,11 @@ def measure_build(config: Config, cache: Path, entry: Path,
                   out: Path) -> tuple[float, int]:
     """Wall time and peak resident size of one build.
 
-    Sampling the child's resident size needs its pid while it runs, which the
-    shared process helper does not expose; `tests/target-machine/phase0` reads
-    it the same way for the same reason.
+    The kernel reports the child's high-water mark exactly; polling its live
+    resident size at any interval under-reports a build this short. Where the
+    kernel does not offer it, polling is the honest fallback and says so by
+    being the only number available. The shared process helper cannot be used
+    here because neither reading needs its pid while it runs.
     """
     import subprocess
 
@@ -430,12 +432,19 @@ def measure_build(config: Config, cache: Path, entry: Path,
             "--cache-dir", str(cache), "-o", str(out), str(entry)]
     started = time.perf_counter()
     child = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    peak = 0
-    while True:
-        peak = max(peak, process_rss_bytes(child.pid))
-        if child.poll() is not None:
-            break
-        time.sleep(0.01)
+    if hasattr(os, "wait4"):
+        _, status, usage = os.wait4(child.pid, 0)
+        child.returncode = os.waitstatus_to_exitcode(status)
+        # ru_maxrss is bytes on Darwin and kilobytes everywhere else POSIX.
+        peak = int(usage.ru_maxrss if sys.platform == "darwin"
+                   else usage.ru_maxrss * 1024)
+    else:
+        peak = 0
+        while True:
+            peak = max(peak, process_rss_bytes(child.pid))
+            if child.poll() is not None:
+                break
+            time.sleep(0.01)
     return time.perf_counter() - started, peak
 
 
