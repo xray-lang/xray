@@ -111,22 +111,6 @@ static inline XrValue xrt_os_arch(void) {
     return xrt_str_from_cstr(xrt_os_arch_cstr());
 }
 
-static inline XrValue xrt_os_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr("\\");
-#else
-    return xrt_str_from_cstr("/");
-#endif
-}
-
-static inline XrValue xrt_os_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr("\r\n");
-#else
-    return xrt_str_from_cstr("\n");
-#endif
-}
-
 static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {
     if (!s)
         return XR_NULL_VAL;
