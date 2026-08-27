@@ -1,5 +1,7 @@
 contains="system_libs": ["m", "xrayffi_smoke"]
 not_contains="xrayffi_unused"
-c_contains=extern int32_t xr_ffi_xrayffi_noarg(void) __asm__(XR_FFI_ASMNAME("xrayffi_noarg"));
-c_contains=xr_ffi_xrayffi_noarg();
-c_not_contains=xr_ffi_xrayffi_unused_float
+c_contains=extern int32_t xrayffi_noarg(void);
+c_contains=xrayffi_noarg();
+c_not_contains=) __asm__(XR_FFI_ASMNAME(
+c_not_regex=xr_ffi_[0-9]+\(
+c_not_contains=xrayffi_unused_float

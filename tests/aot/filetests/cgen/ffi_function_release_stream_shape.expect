@@ -1,9 +1,11 @@
 contains=extern-decl 0 id=1 source=malloc symbol=malloc
 contains=extern-decl 1 id=2 source=free symbol=free
-c_count=1:extern void * xr_ffi_malloc(size_t) __asm__(XR_FFI_ASMNAME("malloc"));
-c_count=1:extern void xr_ffi_free(void *) __asm__(XR_FFI_ASMNAME("free"));
-c_contains=xr_ffi_malloc(
-c_contains=xr_ffi_free(
+c_count=1:extern void * malloc(size_t);
+c_count=1:extern void free(void *);
+c_contains=malloc(
+c_contains=free(
+c_not_contains=) __asm__(XR_FFI_ASMNAME(
+c_not_regex=xr_ffi_[0-9]+\(
 c_regex=^static size_t .*_functionReleaseLike_[0-9]+\(xrt_closure_t \*_cl, size_t p0\) \{$
 c_not_contains=missing AOT value plan
 c_syntax=pass

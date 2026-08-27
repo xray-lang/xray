@@ -1,6 +1,8 @@
 contains=extern-decl 0 id=1 source=memchr symbol=memchr
-c_count=1:extern const void * xr_ffi_memchr(const void *, int32_t, size_t) __asm__(XR_FFI_ASMNAME("memchr"));
-c_contains=xr_ffi_memchr(
+c_count=1:extern const void * memchr(const void *, int32_t, size_t);
+c_contains=memchr(
+c_not_contains=) __asm__(XR_FFI_ASMNAME(
+c_not_regex=xr_ffi_[0-9]+\(
 c_regex=^static size_t .*_readUtf8Like_[0-9]+\(xrt_closure_t \*_cl, const void \* p0, size_t p1\) \{$
 c_not_contains=missing AOT value plan
 c_syntax=pass

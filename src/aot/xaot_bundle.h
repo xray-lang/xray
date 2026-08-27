@@ -104,6 +104,12 @@ typedef enum XaotEnumDescriptorEscapeKind {
     XAOT_ENUM_DESCRIPTOR_ERASED_BOX = 2,
 } XaotEnumDescriptorEscapeKind;
 
+typedef enum XaotExternCBindingKind {
+    XAOT_EXTERN_C_BINDING_UNSET = 0,
+    XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT,
+    XAOT_EXTERN_C_BINDING_GNU_ASM_LABEL,
+} XaotExternCBindingKind;
+
 /* Canonical, prepare-owned foreign declaration.  ret/params are the verified
  * AOT ABI slots; the parallel source type pointers preserve pointer and CFn
  * boundary spelling without asking Cgen to rediscover the declaration from
@@ -116,6 +122,8 @@ typedef struct XaotExternDecl {
     const char *library;
     const char *section;
     const char *interrupt_abi;
+    XaotExternCBindingKind c_binding;
+    bool symbol_qualified;
     XaotAbiSlot ret;
     XaotAbiSlot *params;
     const XrType *ret_type;

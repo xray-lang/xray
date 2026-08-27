@@ -5744,7 +5744,11 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
                 return;
             }
         }
-        fprintf(out, "xr_ffi_%s(", extern_decl->link_symbol);
+        if (!emit_canonical_extern_c_name(ctx, out, extern_decl)) {
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "(");
         for (uint16_t a = 1; a < v->nargs; a++) {
             if (a > 1)
                 fprintf(out, ", ");

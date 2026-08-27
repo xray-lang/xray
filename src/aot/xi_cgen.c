@@ -1529,6 +1529,27 @@ static bool cg_mark_extern_decl_adapter_used(XiCgenCtx *ctx, const XiFunc *func,
     return true;
 }
 
+static bool emit_canonical_extern_c_name(XiCgenCtx *ctx, FILE *out,
+                                         const XaotExternDecl *decl) {
+    if (!ctx || !out || !decl || !decl->link_symbol || !decl->link_symbol[0]) {
+        cg_ctx_set_error(ctx);
+        return false;
+    }
+    switch (decl->c_binding) {
+        case XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT:
+            fputs(decl->link_symbol, out);
+            return true;
+        case XAOT_EXTERN_C_BINDING_GNU_ASM_LABEL:
+            fprintf(out, "xr_ffi_%u", decl->stable_id);
+            return true;
+        default:
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: canonical extern declaration has no C-symbol binding\n");
+            cg_ctx_set_error(ctx);
+            return false;
+    }
+}
+
 static void cg_array_data_cache_decls_reset(XiCgenCtx *ctx) {
     if (ctx)
         ctx->narray_data_cache_decls = 0;
@@ -15410,7 +15431,10 @@ static void emit_canonical_extern_decl(XiCgenCtx *ctx, FILE *out, const XaotExte
         fprintf(out, "%s", ret_ptr);
     else
         fprintf(out, "%s", decl->ret.c_type ? decl->ret.c_type : "void");
-    fprintf(out, " xr_ffi_%s(", decl->link_symbol);
+    fprintf(out, " ");
+    if (!emit_canonical_extern_c_name(ctx, out, decl))
+        return;
+    fprintf(out, "(");
     if (decl->nparams == 0) {
         fprintf(out, "void");
     } else {
@@ -15427,7 +15451,10 @@ static void emit_canonical_extern_decl(XiCgenCtx *ctx, FILE *out, const XaotExte
                 fprintf(out, "%s", decl->params[i].c_type ? decl->params[i].c_type : "XrValue");
         }
     }
-    fprintf(out, ") __asm__(XR_FFI_ASMNAME(\"%s\"));\n", decl->link_symbol);
+    fprintf(out, ")");
+    if (decl->c_binding == XAOT_EXTERN_C_BINDING_GNU_ASM_LABEL)
+        fprintf(out, " __asm__(XR_FFI_ASMNAME(\"%s\"))", decl->link_symbol);
+    fprintf(out, ";\n");
 }
 
 static void emit_canonical_extern_decls(XiCgenCtx *ctx, FILE *out) {
@@ -15485,7 +15512,9 @@ static void emit_extern_closure_adapter_defs(XiCgenCtx *ctx, FILE *out) {
             fprintf(out, "return ");
         const char *ret_suffix =
             emit_conversion_prefix_ctx(ctx, out, decl->ret_type, ret_rep, XR_REP_TAGGED);
-        fprintf(out, "xr_ffi_%s(", decl->link_symbol);
+        if (!emit_canonical_extern_c_name(ctx, out, decl))
+            return;
+        fprintf(out, "(");
         for (uint16_t pi = 0; pi < decl->nparams; pi++) {
             if (pi > 0)
                 fprintf(out, ", ");

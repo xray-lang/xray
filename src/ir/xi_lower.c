@@ -1699,6 +1699,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
             /* Xi owns every string crossing the analyzer/lowering boundary. */
             l.func->extern_symbol = arena_strdup(l.func, native_symbol->native_name);
             l.func->extern_dylib = arena_strdup(l.func, xr_native_symbol_library(native_symbol));
+            l.func->extern_symbol_qualified = true;
         }
     }
 

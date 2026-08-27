@@ -4772,6 +4772,7 @@ static uint64_t xaot_extern_signature_hash(const XiFunc *func, const XaotFuncAbi
     const char *link_symbol =
         func && func->extern_symbol ? func->extern_symbol : (func && func->name ? func->name : "");
     hash = xaot_extern_hash_text(hash, link_symbol);
+    hash = xaot_extern_hash_u64(hash, func && func->extern_symbol_qualified ? 1u : 0u);
     hash = xaot_extern_hash_text(hash, func ? func->extern_dylib : NULL);
     hash = xaot_extern_hash_text(
         hash, func && func->link_plan
@@ -4801,6 +4802,7 @@ static bool xaot_extern_decl_matches(const XaotExternDecl *decl, const XiFunc *f
         func->extern_symbol ? func->extern_symbol : (func->name ? func->name : "");
     if (!decl || !func || !abi || decl->signature_hash != signature_hash ||
         !xaot_extern_text_equal(decl->link_symbol, link_symbol) ||
+        decl->symbol_qualified != func->extern_symbol_qualified ||
         !xaot_extern_text_equal(decl->library, func->extern_dylib) ||
         !xaot_extern_text_equal(decl->section,
                                 func->link_plan
@@ -4978,6 +4980,7 @@ XR_FUNC bool xaot_bundle_register_extern_decl(XaotBundle *bundle, XiFunc *func,
     decl->representative_func = func;
     decl->source_name = func->name;
     decl->link_symbol = link_symbol;
+    decl->symbol_qualified = func->extern_symbol_qualified;
     decl->library = func->extern_dylib;
     decl->section = func->link_plan ? func->link_plan->section
                                     : (func->entry_plan ? func->entry_plan->section : NULL);
@@ -8350,10 +8353,11 @@ XR_FUNC char *xaot_bundle_dump_plan(const XaotBundle *bundle) {
     for (uint32_t ei = 0; ei < bundle->nextern_decls; ei++) {
         const XaotExternDecl *decl = &bundle->extern_decls[ei];
         fprintf(out,
-                "extern-decl %u id=%u source=%s symbol=%s library=%s params=%u cc=c "
+                "extern-decl %u id=%u source=%s symbol=%s library=%s params=%u cc=c binding=%u "
                 "attrs=0x%x signature=%016" PRIx64 " first-module=%u first-line=%u\n",
                 ei, decl->stable_id, safe_str(decl->source_name), safe_str(decl->link_symbol),
-                safe_str(decl->library), (unsigned) decl->nparams, decl->attributes,
+                safe_str(decl->library), (unsigned) decl->nparams, (unsigned) decl->c_binding,
+                decl->attributes,
                 decl->signature_hash, decl->first_module, decl->first_source_line);
     }
 

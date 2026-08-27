@@ -7321,9 +7321,43 @@ static bool verify_abi_plan(const XaotBundle *bundle, const XaotFuncPlan *plan, 
     return true;
 }
 
+static bool verify_extern_c_identifier_is_valid(const char *name) {
+    static const char *const reserved[] = {
+        "alignas",       "alignof",  "auto",           "bool",          "break",    "case",
+        "char",          "const",    "continue",       "default",       "do",       "double",
+        "else",          "enum",     "extern",         "false",         "float",    "for",
+        "goto",          "if",       "inline",         "int",           "long",     "register",
+        "restrict",      "return",   "short",          "signed",        "sizeof",   "static",
+        "static_assert", "struct",   "switch",         "thread_local",  "true",     "typedef",
+        "union",         "unsigned", "void",           "volatile",      "while",    "_Alignas",
+        "_Alignof",      "_Atomic",  "_Bool",          "_Complex",      "_Generic", "_Imaginary",
+        "_Noreturn",     "_Pragma",  "_Static_assert", "_Thread_local",
+    };
+    if (!name || !((*name >= 'A' && *name <= 'Z') || (*name >= 'a' && *name <= 'z') ||
+                   *name == '_'))
+        return false;
+    for (const char *p = name + 1; *p; p++) {
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') ||
+              (*p >= '0' && *p <= '9') || *p == '_'))
+            return false;
+    }
+    for (size_t i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
+        if (strcmp(name, reserved[i]) == 0)
+            return false;
+    }
+    return true;
+}
+
 static bool verify_extern_registry(const XaotBundle *bundle, char *errbuf, size_t errbuf_len) {
+    const XrTargetPlan *target_plan = xaot_bundle_program_target_plan(bundle);
+    const XrTargetProfile *profile = target_plan ? xr_target_plan_profile(target_plan) : NULL;
+    const XrTargetMachineFacts *machine = profile ? xr_target_profile_machine_facts(profile) : NULL;
     if (!bundle)
         return set_error(errbuf, errbuf_len, "NULL AOT bundle for extern registry");
+    if (!target_plan || !xr_target_plan_is_verified(target_plan) || !profile ||
+        !xr_target_profile_verify(profile, NULL, 0) || !machine)
+        return set_error(errbuf, errbuf_len,
+                         "AOT extern registry has no verified target ABI authority");
     for (uint32_t i = 0; i < bundle->nextern_decls; i++) {
         const XaotExternDecl *decl = &bundle->extern_decls[i];
         const XaotFuncPlan *representative_plan =
@@ -7333,6 +7367,25 @@ static bool verify_extern_registry(const XaotBundle *bundle, char *errbuf, size_
             !decl->representative_func || !decl->representative_func->is_extern ||
             !representative_plan || representative_plan->extern_decl_id != decl->stable_id)
             return set_error(errbuf, errbuf_len, "invalid canonical AOT extern declaration");
+        bool renamed = !decl->source_name || strcmp(decl->source_name, decl->link_symbol) != 0;
+        if (decl->symbol_qualified != decl->representative_func->extern_symbol_qualified ||
+            (renamed && !decl->symbol_qualified))
+            return set_error(errbuf, errbuf_len,
+                             "AOT extern source/native qualification is stale");
+        if (machine->environment == XR_TARGET_ENV_MSVC) {
+            if (!verify_extern_c_identifier_is_valid(decl->link_symbol) ||
+                decl->c_binding != XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT)
+                return set_error(errbuf, errbuf_len,
+                                 "MSVC extern symbol has non-portable C binding");
+        } else {
+            if ((machine->environment != XR_TARGET_ENV_GNU &&
+                 machine->environment != XR_TARGET_ENV_MUSL &&
+                 machine->environment != XR_TARGET_ENV_DARWIN &&
+                 machine->environment != XR_TARGET_ENV_FREESTANDING) ||
+                decl->c_binding != XAOT_EXTERN_C_BINDING_GNU_ASM_LABEL)
+                return set_error(errbuf, errbuf_len,
+                                 "extern symbol binding is unsupported by target ABI");
+        }
         if (decl->nparams != decl->representative_func->nparams ||
             (decl->nparams > 0 && (!decl->params || !decl->param_types)))
             return set_error(errbuf, errbuf_len, "AOT extern declaration signature is incomplete");

@@ -1946,6 +1946,10 @@ typedef struct XiFunc {
     bool is_extern;
     const char *extern_symbol; /* C symbol to resolve (defaults to the xray name) */
     const char *extern_dylib;  /* extern-block dylib/link target, or NULL = default/process */
+    /* True only when extern_symbol was selected by an exact typed native-package
+     * symbol row. A source/native rename without this provenance is not a
+     * qualified foreign binding and must fail closed before C emission. */
+    bool extern_symbol_qualified;
 
     /* Link-image policy is selected by typed manifest plans, never by source
      * attributes or copied generic booleans. Plans are compiler-session owned. */

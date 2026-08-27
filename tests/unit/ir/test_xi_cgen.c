@@ -1419,6 +1419,110 @@ static bool contains(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
 }
 
+static XiFunc *test_find_child_function(XiFunc *root, const char *name) {
+    if (!root || !name)
+        return NULL;
+    if (root->name && strcmp(root->name, name) == 0)
+        return root;
+    for (uint16_t i = 0; i < root->nchildren; i++) {
+        XiFunc *found = test_find_child_function(root->children[i], name);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+TEST(cgen_extern_symbol_binding_is_portable_and_verified) {
+    const char *source = "extern \"C\" { fn abs(x: i32) -> i32 }\n"
+                         "print(unsafe { abs(-7) })\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir && test_prepare_backend_ir(ir),
+                 "portable extern binding fixture reached Backend");
+    XiModule *module = ir->module;
+    bool own_module = false;
+    if (!module) {
+        module = xi_module_new("extern_binding.xr", "extern_binding", ir);
+        TEST_REQUIRE(module != NULL, "portable extern binding module allocated");
+        own_module = true;
+    }
+    XiModule *modules[] = {module};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+    TEST_REQUIRE(plan.bundle.nextern_decls == 1 &&
+                     plan.bundle.extern_decls[0].c_binding ==
+                         XAOT_EXTERN_C_BINDING_PORTABLE_DIRECT,
+                 "valid native identifier selects one portable direct binding");
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    TEST_REQUIRE(ctx != NULL && xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle),
+                 "portable extern binding installed in CGen");
+    TestCEmissionRegistry emission_registry;
+    TEST_REQUIRE(test_c_emission_registry_install(&emission_registry, ctx, &plan.bundle),
+                 "portable extern C emission registry installed");
+    char *code = NULL;
+    size_t code_size = 0;
+    FILE *mem = xr_open_memstream(&code, &code_size);
+    TEST_REQUIRE(mem != NULL, "portable extern C output stream opened");
+    xi_cgen_program(ctx, mem, module);
+    TEST_REQUIRE(xr_close_memstream(mem, &code, &code_size) == 0,
+                 "portable extern C output stream closed");
+    TEST_REQUIRE(!xi_cgen_has_error(ctx) && code &&
+                     contains(code, "extern int32_t abs(int32_t);") &&
+                     contains(code, "abs(") &&
+                     !contains(code, ") __asm__(XR_FFI_ASMNAME(\"abs\"))") &&
+                     !contains(code, "xr_ffi_1("),
+                 "MSVC ABI emits and calls the portable native symbol without GNU asm labels");
+
+    char verify_error[256] = {0};
+    plan.bundle.extern_decls[0].c_binding = XAOT_EXTERN_C_BINDING_GNU_ASM_LABEL;
+    TEST_REQUIRE(!xaot_verify_bundle(&plan.bundle, verify_error, sizeof(verify_error)) &&
+                     strstr(verify_error, "MSVC extern symbol") != NULL,
+                 "independent verifier rejects a mutated extern C binding answer");
+
+    xr_free(code);
+    test_c_emission_registry_free(&emission_registry);
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    if (own_module) {
+        module->init = NULL;
+        xi_module_free(module);
+    }
+    xi_func_free(ir);
+}
+
+TEST(aot_extern_symbol_rename_requires_typed_qualification) {
+    const char *source = "extern \"C\" { fn abs(x: i32) -> i32 }\n"
+                         "print(unsafe { abs(-7) })\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir && test_prepare_backend_ir(ir),
+                 "extern rename authority fixture reached Backend");
+    XiFunc *foreign = test_find_child_function(ir, "abs");
+    TEST_REQUIRE(foreign && foreign->is_extern && !foreign->extern_symbol_qualified,
+                 "source-only extern has no typed native-symbol qualification");
+    foreign->extern_symbol = "qualified_abs_name";
+
+    XiModule *module = ir->module;
+    bool own_module = false;
+    if (!module) {
+        module = xi_module_new("extern_rename.xr", "extern_rename", ir);
+        TEST_REQUIRE(module != NULL, "extern rename authority module allocated");
+        own_module = true;
+    }
+    XiModule *modules[] = {module};
+    TestAotPlan plan;
+    bool prepared = test_aot_plan_try_prepare(&plan, modules, 1, 0);
+    TEST_REQUIRE(!prepared && plan.bundle.error_msg &&
+                     strstr(plan.bundle.error_msg, "lacks typed provider qualification") != NULL,
+                 "unqualified source/native rename fails before C emission");
+
+    test_aot_plan_free(&plan);
+    if (own_module) {
+        module->init = NULL;
+        xi_module_free(module);
+    }
+    xi_func_free(ir);
+}
+
 static size_t count_between(const char *start, const char *end, const char *needle) {
     size_t count = 0;
     size_t needle_len = strlen(needle);
@@ -14627,6 +14731,8 @@ int main(int argc, char **argv) {
     run_aot_type_fingerprint_includes_param_modes();
     run_aot_type_fingerprint_separates_error_recovery();
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
+    run_cgen_extern_symbol_binding_is_portable_and_verified();
+    run_aot_extern_symbol_rename_requires_typed_qualification();
     run_aot_semantic_snapshot_survives_analyzer_pool_churn();
     run_target_plan_owned_string_lifecycle_from_source();
     run_cgen_json_codec_summary_preflight_is_exact_and_fail_closed();
