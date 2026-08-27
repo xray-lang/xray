@@ -1358,7 +1358,16 @@ static void test_dynamic_entry_authority_cache_and_lifetime(void) {
     wrong_identity.generation_number++;
     wrong_owner_request.dynamic_entries = &caller->dynamic_entries;
     wrong_owner_request.generation_identity = &wrong_identity;
+    /* The decoded cache is bound to the caller's exact generation closure, so
+     * a wrong caller identity is refused there before the dynamic-entry
+     * context is ever consulted. */
     REQUIRE(xr_typed_dispatch_execute_i64(&wrong_owner_request) ==
+            XR_TYPED_DISPATCH_PLAN_IDENTITY_MISMATCH);
+    /* Without a decoded cache that earlier gate is absent, so the same wrong
+     * identity travels to the dynamic-entry owner check that owns it. */
+    XrTypedDispatchI64Request uncached_wrong_identity = wrong_owner_request;
+    uncached_wrong_identity.decoded_cache = NULL;
+    REQUIRE(xr_typed_dispatch_execute_i64(&uncached_wrong_identity) ==
             XR_TYPED_DISPATCH_ENTRY_AUTHORITY_MISMATCH);
     XrRuntimeDynamicEntryCacheStats still_untouched;
     XrModuleGenerationSnapshot caller_after_rejection;
