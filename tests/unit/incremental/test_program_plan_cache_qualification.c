@@ -719,6 +719,78 @@ TEST(over_budget_publication_is_refused_without_residue) {
     xr_test_program_plan_store_remove(root);
 }
 
+/* Two independently allocated authorities that state the same content must
+ * derive one cache identity, and two that differ must not. If any part of the
+ * key derivation or the load verifier reached for an address instead of
+ * content, a build would miss the object it published itself as soon as the
+ * authority was rebuilt at another address, which is what every process after
+ * the first one does. */
+TEST(equal_content_authorities_share_one_cache_identity) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-identity", root, sizeof(root)), 0);
+    XrSemanticPlan *first = xr_test_program_plan_semantic(644u);
+    XrSemanticPlan *second = xr_test_program_plan_semantic(644u);
+    XrSemanticPlan *other = xr_test_program_plan_semantic(645u);
+    XrTargetProfile *first_profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *second_profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(first);
+    ASSERT_NOT_NULL(second);
+    ASSERT_NOT_NULL(other);
+    ASSERT_NOT_NULL(first_profile);
+    ASSERT_NOT_NULL(second_profile);
+    ASSERT_TRUE(first != second);
+    ASSERT_TRUE(first_profile != second_profile);
+
+    PlanSerialRequest request = {
+        .root = root,
+        .semantic = first,
+        .profile = first_profile,
+        .quota = PLAN_QUOTA,
+        .max_entry = PLAN_MAX_ENTRY,
+    };
+    PlanSerialBuild published;
+    serial_build(&request, &published);
+    ASSERT_TRUE(published.ok);
+    ASSERT_TRUE(published.result.cache_published);
+
+    request.semantic = second;
+    request.profile = second_profile;
+    PlanSerialBuild served;
+    serial_build(&request, &served);
+    ASSERT_TRUE(served.ok);
+    ASSERT_TRUE(served.result.cache_hit);
+    ASSERT_FALSE(served.result.built);
+    ASSERT_EQ_UINT(served.size, published.size);
+    ASSERT_MEM_EQ(served.bytes, published.bytes, published.size);
+
+    request.semantic = other;
+    PlanSerialBuild distinct;
+    serial_build(&request, &distinct);
+    ASSERT_TRUE(distinct.ok);
+    ASSERT_FALSE(distinct.result.cache_hit);
+    ASSERT_TRUE(distinct.result.cache_published);
+    ASSERT_TRUE(distinct.size != published.size ||
+                memcmp(distinct.bytes, published.bytes, published.size) != 0);
+
+    XrTestProgramPlanStoreInventory inventory;
+    xr_test_program_plan_store_inventory(root, &inventory);
+    ASSERT_EQ_UINT(inventory.objects, 2u);
+    ASSERT_EQ_UINT(inventory.temps, 0u);
+    ASSERT_TRUE(inventory.object_bytes >= published.size);
+
+    serial_build_release(&distinct);
+    serial_build_release(&served);
+    serial_build_release(&published);
+    xr_target_profile_free(second_profile);
+    xr_target_profile_free(first_profile);
+    xr_semantic_plan_free(other);
+    xr_semantic_plan_free(second);
+    xr_semantic_plan_free(first);
+    xr_test_program_plan_store_remove(root);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST(parallel_cold_builds_publish_one_canonical_plan);
 RUN_TEST(parallel_warm_builds_serve_one_canonical_plan);
@@ -727,4 +799,5 @@ RUN_TEST(cancellation_across_build_boundaries_is_fail_closed);
 RUN_TEST(truncated_and_mutated_objects_are_refused_and_recomputed);
 RUN_TEST(foreign_target_plan_under_the_right_key_is_refused);
 RUN_TEST(over_budget_publication_is_refused_without_residue);
+RUN_TEST(equal_content_authorities_share_one_cache_identity);
 TEST_MAIN_END()
