@@ -10,6 +10,7 @@
 #include "../../../../src/vm/xr_typed_dispatch.h"
 #include "../../../../src/vm/xr_typed_frame.h"
 #include "../../../unit/plan/target_profile_test_fixture.h"
+#include "xray_build_identity.h"
 #include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -22,16 +23,6 @@
 #endif
 
 #define MAX_SAMPLES 64u
-
-#ifndef XRAY_BUILD_COMMIT
-#define XRAY_BUILD_COMMIT "unknown"
-#endif
-#ifndef XRAY_BUILD_DIRTY
-#define XRAY_BUILD_DIRTY 1
-#endif
-#ifndef XRAY_BUILD_PROFILE
-#define XRAY_BUILD_PROFILE "unknown"
-#endif
 
 #if XR_TYPED_FRAME_HAS_SLOT_STATE_METADATA
 #error "The typed target VM performance probe requires zero Release slot metadata"

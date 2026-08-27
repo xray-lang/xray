@@ -18,13 +18,10 @@
 #include "../toolchain/xtc_probe_cache.h"
 
 #include "xray_version.h"
+#include "xray_build_identity.h"
 
 #include <stdio.h>
 #include <string.h>
-
-#ifndef XRAY_BUILD_COMMIT
-#define XRAY_BUILD_COMMIT "unknown"
-#endif
 
 static bool xcmd_toolchain_json(const XrCliInvocation *inv) {
     return (inv->ctx && inv->ctx->json_output) || xr_cli_opt_bool(&inv->options, "json");

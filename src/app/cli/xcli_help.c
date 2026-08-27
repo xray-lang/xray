@@ -14,22 +14,10 @@
 
 #include "xcli_help.h"
 #include "xray.h"
+#include "xray_build_identity.h"
 #include "../../base/xchecks.h"
 #include <stdio.h>
 #include <string.h>
-
-#ifndef XRAY_BUILD_COMMIT
-#define XRAY_BUILD_COMMIT "unknown"
-#endif
-#ifndef XRAY_BUILD_DIRTY
-#define XRAY_BUILD_DIRTY 1
-#endif
-#ifndef XRAY_BUILD_PROFILE
-#define XRAY_BUILD_PROFILE "unknown"
-#endif
-#ifndef XRAY_BUILD_TARGET
-#define XRAY_BUILD_TARGET "unknown"
-#endif
 
 static void print_indent(FILE *out, int indent) {
     for (int i = 0; i < indent; i++)

@@ -20,6 +20,7 @@
 #include "../../shared/xr_crypto_core.h"
 
 #include "xray_version.h"
+#include "xray_build_identity.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,10 +32,6 @@
 #include <windows.h>
 #else
 #include <unistd.h>
-#endif
-
-#ifndef XRAY_BUILD_COMMIT
-#define XRAY_BUILD_COMMIT "unknown"
 #endif
 
 static const char xtc_probe_minimal_c[] = "int main(void) { return 0; }\n";

@@ -497,6 +497,7 @@ if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Release")
         XR_TEST_HAS_PROCESS_SHUTDOWN=1)
     target_include_directories(typed_target_vm_benchmark PRIVATE
         ${XRAY_COMMON_INCLUDES}
+        ${CMAKE_BINARY_DIR}/generated
         ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(typed_target_vm_benchmark PRIVATE xray_core)
     add_test(NAME typed_target_vm_performance_gate

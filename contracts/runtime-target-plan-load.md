@@ -429,7 +429,7 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt eea892fed2bb98f5b322941efe398ce60c47516ec9ea58819e98aed34ac19938
+anchor-sha256: CMakeLists.txt 35099d6680985ee1f678c78242fefd80b93edd61aa8955072eaef0afc40aa9db
 anchor-sha256: include/xray_runtime_api.h 07d75f03ee3baea4301bf30ac67c15b77d74feaec28322fb818c247970a1ce44
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
@@ -475,7 +475,7 @@ anchor-sha256: tests/unit/plan/test_target_plan.c 8d85c6aa1680760a5d488df1f0843e
 anchor-sha256: tests/unit/plan/test_xtp_format.c 11b639085abeaa1bb03a841c52fcf5d02a036b68e2739e0f1214dd84737503d3
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f1abf760346c76d3d574d1dc0f13e061e568e264a5b3dd7aaec391e0e49b0d21
-anchor-sha256: tests/unit/CMakeLists.txt a89f02ee74ea57792d76ee3f4e5c2f74f3a5a9676bcc352d0971acafe72e865d
+anchor-sha256: tests/unit/CMakeLists.txt 1bef6fb08ec4a4a40b53f8f9329817d7e241d38ecc06f3491f60538b13ed449d
 anchor-sha256: tests/unit/runtime/test_runtime_target_plan_load_archive.c 30015dd2f75ad8917788a30b367f203d15e85d037af8d394940a4d30af87e69a
 anchor-sha256: tests/cli/run_target_artifact_boundary_tests.py ac10e972dbd1c43784f78fa5746c5820b999529830b223f83ec3ebbf421e095f
 anchor-sha256: tests/cli/run_plan_command_tests.py 44a924d4d39b558c0e53a04080ea3fd42071044039ad3f2de539d9d1e6299f0f

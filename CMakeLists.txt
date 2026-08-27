@@ -547,11 +547,11 @@ set(XRAY_BUILD_PROFILE "${CMAKE_BUILD_TYPE}")
 if(NOT XRAY_BUILD_PROFILE)
     set(XRAY_BUILD_PROFILE "MultiConfig")
 endif()
-add_compile_definitions(
-    XRAY_BUILD_COMMIT="${XRAY_GIT_COMMIT}"
-    XRAY_BUILD_DIRTY=${XRAY_GIT_DIRTY}
-    XRAY_BUILD_PROFILE="${XRAY_BUILD_PROFILE}"
-    XRAY_BUILD_TARGET="${XRAY_RELEASE_TARGET}"
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/xray_build_identity.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/xray_build_identity.h"
+    @ONLY
 )
 
 # macOS Universal Binary support (Intel + Apple Silicon)
@@ -1790,6 +1790,7 @@ list(APPEND XRAY_CLI_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli/xcmd_builti
 list(REMOVE_DUPLICATES XRAY_CLI_SOURCES)
 set(XRAY_CLI_INCLUDES
     ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/cli
     ${CMAKE_CURRENT_SOURCE_DIR}/src/app/toolchain
 )
