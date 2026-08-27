@@ -1,0 +1,67 @@
+// removeAll descends into real directories only. A symlink is removed as the
+// link it is and never followed, so nothing outside the tree is touched. The
+// walk stops at 64 levels, and a tree deeper than that is refused whole rather
+// than partially deleted.
+
+import io
+import path
+import { Path } from path
+
+fn tree(name: string) -> Path {
+    var root = path.join(io.tempDir()!, path.from(name))
+    assert(io.mkdirp(path.join(root, path.from("a/b/c"))))
+    assert(io.writeFile(path.join(root, path.from("top")), "t"))
+    assert(io.writeFile(path.join(root, path.from("a/f1")), "1"))
+    assert(io.writeFile(path.join(root, path.from("a/b/f2")), "2"))
+    return root
+}
+
+@test
+fn test_removes_a_whole_tree() {
+    var root = tree("rmall_tree")
+    assert(io.removeAll(root))
+    assertEqual(io.exists(root), false)
+}
+
+@test
+fn test_removes_a_single_file() {
+    var target = path.join(io.tempDir()!, path.from("rmall_single"))
+    assert(io.writeFile(target, "x"))
+    assert(io.removeAll(target))
+    assertEqual(io.exists(target), false)
+}
+
+@test
+fn test_missing_path_is_reported_as_failure() {
+    var missing = path.join(io.tempDir()!, path.from("rmall_absent"))
+    assertEqual(io.removeAll(missing), false)
+}
+
+@test
+fn test_a_symlink_is_removed_without_following_it() {
+    var outside = path.join(io.tempDir()!, path.from("rmall_outside"))
+    assert(io.mkdirp(outside))
+    var keep = path.join(outside, path.from("keep"))
+    assert(io.writeFile(keep, "keep me"))
+
+    var root = tree("rmall_link")
+    assert(io.symlink(outside, path.join(root, path.from("link"))))
+
+    assert(io.removeAll(root))
+    assertEqual(io.exists(root), false)
+    // The link is gone with the tree; what it pointed at is untouched.
+    assert(io.exists(keep))
+    io.removeAll(outside)
+}
+
+@test
+fn test_a_tree_deeper_than_the_ceiling_is_refused_whole() {
+    var root = path.join(io.tempDir()!, path.from("rmall_deep"))
+    var deep = root.toString()
+    for (var i = 0; i < 70; i++) { deep = deep + "/d" }
+    assert(io.mkdirp(Path(deep)))
+
+    // Refused, and nothing below it was removed on the way down.
+    assertEqual(io.removeAll(root), false)
+    assert(io.isDir(Path(deep)))
+}

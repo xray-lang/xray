@@ -2471,11 +2471,11 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __remove {
+  fn __rmdir {
     signature: "(path: Path): bool"
-    doc: "Remove a file"
-    vm: "io_remove"
-    aot: "xrt_io_remove"
+    doc: "Remove an empty directory"
+    vm: "io_rmdir"
+    aot: "xrt_io_rmdir"
     argc: 1
     arg_spec: "p"
     aot_direct: true
@@ -2483,11 +2483,11 @@ module io {
     layer: "system"
   }
 
-  fn __removeAll {
+  fn __remove {
     signature: "(path: Path): bool"
-    doc: "Remove directory recursively"
-    vm: "io_removeAll"
-    aot: "xrt_io_remove_all"
+    doc: "Remove a file"
+    vm: "io_remove"
+    aot: "xrt_io_remove"
     argc: 1
     arg_spec: "p"
     aot_direct: true

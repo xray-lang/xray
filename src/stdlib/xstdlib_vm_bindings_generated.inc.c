@@ -89,8 +89,8 @@ static void xr_stdlib_vm_bind_io_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__readStdinBytes", io_readStdinBytes);
     XRS_EXPORT(module, isolate, "__readlink", io_readlink);
     XRS_EXPORT(module, isolate, "__realpath", io_realpath);
+    XRS_EXPORT(module, isolate, "__rmdir", io_rmdir);
     XRS_EXPORT(module, isolate, "__remove", io_remove);
-    XRS_EXPORT(module, isolate, "__removeAll", io_removeAll);
     XRS_EXPORT(module, isolate, "__rename", io_rename);
     XRS_EXPORT(module, isolate, "__stat", io_stat);
     XRS_EXPORT(module, isolate, "__symlink", io_symlink);

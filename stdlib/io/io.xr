@@ -238,7 +238,30 @@ export fn readFileBytes(path: Path) -> Array<u8>? { return __readFileBytes(path)
 export fn readStdin() -> string? { return __readStdin() }
 export fn readStdinBytes() -> Array<u8>? { return __readStdinBytes() }
 export fn remove(path: Path) -> bool { return __remove(path) }
-export fn removeAll(path: Path) -> bool { return __removeAll(path) }
+// Removal descends into real directories only. A symlink is removed as the
+// link it is, never followed, so a link pointing outside the tree cannot make
+// the walk delete anything beyond it. The depth ceiling matches the recursive
+// listing's; the C implementation had none and a deep enough tree exhausted
+// the stack. A directory's own removal is attempted even when a child failed,
+// which reports the failure while still clearing what it can.
+fn _removeTree(target: Path, depth: i64) -> bool {
+    if (depth >= 64) { return false }
+    if (!__exists(target)) { return false }
+    if (!__isDir(target) || __isSymlink(target)) { return __remove(target) }
+
+    var names = __readDir(target)
+    if (names == null) { return false }
+    var ok = true
+    for (var i = 0; i < len(names!); i++) {
+        var child = Path(target.toString() + "/" + names![i])
+        if (!_removeTree(child, depth + 1)) { ok = false }
+    }
+    return __rmdir(target) && ok
+}
+
+export fn removeAll(path: Path) -> bool {
+    return _removeTree(path, 0)
+}
 export fn rename(old: Path, newPath: Path) -> bool { return __rename(old, newPath) }
 export fn symlink(target: Path, link: Path) -> bool { return __symlink(target, link) }
 export fn touch(path: Path) -> bool { return __touch(path) }
