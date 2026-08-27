@@ -1110,12 +1110,12 @@ static void test_channel_close_row_roundtrip_and_mutate(void) {
                 XR_SEMANTIC_INDEX_NONE &&
             xr_xtp_take_u32(fixture.bytes + call_offset + 32) ==
                 XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u32(fixture.bytes + call_offset + 84) ==
+            xr_xtp_take_u32(fixture.bytes + call_offset + 100) ==
                 XR_SEMANTIC_INDEX_NONE &&
-            xr_xtp_take_u16(fixture.bytes + call_offset + 108) == 0 &&
-            fixture.bytes[call_offset + 116] ==
+            xr_xtp_take_u16(fixture.bytes + call_offset + 124) == 0 &&
+            fixture.bytes[call_offset + 134] ==
                 XR_TARGET_CALL_CONVENTION_CHANNEL_CLOSE &&
-            fixture.bytes[call_offset + 117] ==
+            fixture.bytes[call_offset + 135] ==
                 XR_TARGET_CALL_TARGET_CHANNEL_CLOSE);
 
     XrXtpCandidate *candidate = NULL;
@@ -1816,7 +1816,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 448, 58, 12, 24, 108, 28, 40, 24, 12,
-        48, 58, 112, 32, 160, 58, 20, 4, 20, 44, 12, 48, 144, 132,
+        48, 58, 112, 32, 178, 58, 20, 4, 20, 44, 12, 48, 144, 132,
         208, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
@@ -2332,9 +2332,9 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-53-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-54-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 53 cutover tests passed");
+        puts("XTP schema 54 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

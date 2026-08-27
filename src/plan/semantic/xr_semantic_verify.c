@@ -30,6 +30,7 @@
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
 #include "xr_semantic_native_module_shape.h"
+#include "xr_semantic_native_leaf_shape.h"
 #include "../ownership/xr_ownership_check.h"
 #include "../ownership/xr_ownership_certificate_internal.h"
 #include "../../base/xmalloc.h"
@@ -2653,6 +2654,17 @@ static bool verify_native_module_scalar_call(const XrSemanticPlan *plan,
                            "native module scalar call authority is not exact");
 }
 
+static bool verify_native_target_leaf_scalar_call(const XrSemanticPlan *plan,
+                                                  const XrSemanticOperationRecord *operation,
+                                                  char *error, size_t error_size) {
+    bool classified =
+        operation->intrinsic_kind == XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL;
+    bool exact = xr_semantic_native_target_leaf_call_shape_is_exact(plan, operation, NULL, NULL);
+    return classified == exact ||
+           report(error, error_size, "XR_SEM_0019",
+                  "native target leaf scalar authority is not exact");
+}
+
 static bool verify_string_builder_append_string(const XrSemanticPlan *plan,
                                                 const XrSemanticOperationRecord *operation,
                                                 char *error, size_t error_size) {
@@ -2837,6 +2849,8 @@ static bool verify_operation_records(const XrSemanticPlan *plan, const uint8_t *
         if (!verify_array_intrinsic(plan, operation, error, error_size))
             return false;
         if (!verify_native_module_scalar_call(plan, operation, error, error_size))
+            return false;
+        if (!verify_native_target_leaf_scalar_call(plan, operation, error, error_size))
             return false;
         uint32_t existing_definition = definitions[operation->result_value];
         if (existing_definition != XR_SEMANTIC_INDEX_NONE) {

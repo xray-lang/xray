@@ -38,6 +38,7 @@
 #include "../../../src/runtime/value/xenum_layout.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/vm/xr_typed_dispatch.h"
+#include "../../../src/stdlib/xstdlib_defs_generated.h"
 #include "../../../src/runtime/abi/xr_runtime_target_authority.h"
 #include "target_profile_test_fixture.h"
 #include <stdio.h>
@@ -419,6 +420,37 @@ static bool build_target_unit_fixture_semantic(XiFunc *function, XrSemanticPlan 
     bool built = xr_semantic_plan_build(function, out, error, error_size);
     function->module = NULL;
     return built;
+}
+
+static XrSemanticPlan *build_native_target_leaf_semantic(void) {
+    XiFunc *function = xi_func_new("native_target_leaf_probe", &stub_int);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiImportRef import_ref = {
+        .module_path = "os",
+        .member_name = "__getpid",
+        .resolved_mod_index = -1,
+        .resolved_shared_slot = -1,
+        .resolved_export_slot = -1,
+        .resolution_attempted = true,
+    };
+    XiValue *callee = xi_value_new(function, entry, XI_IMPORT_REF, &stub_function, 0);
+    XiValue *call = xi_value_new(function, entry, XI_CALL, &stub_int, 1);
+    REQUIRE(callee != NULL && call != NULL);
+    callee->aux = &import_ref;
+    call->args[0] = callee;
+    xi_block_set_return(entry, call);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built =
+        build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native target leaf semantic fixture failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
 }
 
 static XrSemanticPlan *build_assertion_semantic(XrCoreBuiltinId builtin_id) {
@@ -2294,7 +2326,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "828752c96dae9cb7689399dd5b889c761cc668fb5e9ff89a087fc16005f6db69") == 0);
+                   "4914c569c76b5091d159c2a1b7d924c301bac89268735d482432686a0b844ba7") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -2345,6 +2377,102 @@ static void test_plan_snapshot_and_determinism(void) {
 
     xr_target_plan_free(first);
     xr_target_plan_free(second);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_native_target_leaf_scalar_authority(void) {
+    XrSemanticPlan *semantic = build_native_target_leaf_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "native target leaf TargetPlan build failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_target_plan_verify(plan, error, sizeof(error)));
+
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    REQUIRE(calls != NULL && call_count == 1);
+    const XrTargetCallRecord *call = &calls[0];
+    REQUIRE(call->calling_convention ==
+                XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR &&
+            call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR &&
+            call->native_leaf == XR_STDLIB_TARGET_LEAF_I64_GETPID &&
+            memcmp(call->native_callee_identity.bytes,
+                   (const uint8_t[XR_STABLE_ID_BYTES]) {0}, XR_STABLE_ID_BYTES) != 0 &&
+            call->callee_function == XR_SEMANTIC_INDEX_NONE && call->argument_count == 0 &&
+            call->result_mode == XR_TARGET_CALL_VALUE &&
+            call->result_ownership == XR_TARGET_CALL_NONE);
+    uint32_t argument_count = 0;
+    REQUIRE(xr_target_plan_call_arguments(plan, &argument_count) == NULL &&
+            argument_count == 0);
+
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *instructions =
+        xr_target_plan_function_instructions(plan, call->caller_function,
+                                             &instruction_count);
+    REQUIRE(instructions != NULL && instruction_count == 2 &&
+            instructions[0].opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64 &&
+            instructions[0].immediate_bits == call->id &&
+            instructions[1].opcode == XR_TARGET_INSTRUCTION_RETURN_I64);
+
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    XrFingerprint fingerprint = xr_target_plan_fingerprint(plan);
+    int64_t first_result = 0;
+    for (size_t index = 0; index < sizeof(providers) / sizeof(providers[0]); index++) {
+        int64_t result = 0;
+        XrTypedDispatchI64Request request = {
+            .verified_plan = plan,
+            .required_plan_fingerprint = &fingerprint,
+            .result = &result,
+            .provider = providers[index],
+            .function = call->caller_function,
+            .argument_count = 0,
+        };
+        REQUIRE(xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_OK &&
+                result > 0 && (index == 0 || result == first_result));
+        first_result = result;
+    }
+
+    uint8_t *encoded = NULL;
+    size_t encoded_size = 0;
+    XrXtpCandidate *candidate = NULL;
+    XrTargetPlan *decoded = NULL;
+    REQUIRE(xr_xtp_encode_plan(plan, &encoded, &encoded_size, error, sizeof(error)) &&
+            xr_xtp_decode_candidate(encoded, encoded_size, &candidate, error, sizeof(error)) &&
+            xr_xtp_materialize_target_plan(candidate, semantic, profile, &decoded, error,
+                                           sizeof(error)) &&
+            decoded != NULL);
+    const XrTargetCallRecord *decoded_calls = xr_target_plan_calls(decoded, &call_count);
+    REQUIRE(decoded_calls != NULL && call_count == 1 &&
+            decoded_calls[0].native_leaf == XR_STDLIB_TARGET_LEAF_I64_GETPID &&
+            xr_stable_id_equal(decoded_calls[0].native_callee_identity,
+                               call->native_callee_identity) &&
+            xr_fingerprint_equal(decoded->fingerprint, plan->fingerprint));
+    xr_target_plan_free(decoded);
+    xr_xtp_candidate_release(candidate);
+    xr_xtp_encoded_free(encoded);
+
+    XrTargetCallRecord *mutable_call = &plan->calls[0];
+    uint16_t saved_leaf = mutable_call->native_leaf;
+    mutable_call->native_leaf = XR_STDLIB_TARGET_LEAF_COUNT;
+    xr_target_call_compute_fingerprint(plan, 0, &mutable_call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    mutable_call->native_leaf = saved_leaf;
+    xr_target_call_compute_fingerprint(plan, 0, &mutable_call->fingerprint);
+    XrStableId saved_native_identity = mutable_call->native_callee_identity;
+    mutable_call->native_callee_identity.bytes[0] ^= 1u;
+    xr_target_call_compute_fingerprint(plan, 0, &mutable_call->fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1003");
+    mutable_call->native_callee_identity = saved_native_identity;
+    xr_target_call_compute_fingerprint(plan, 0, &mutable_call->fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 }
@@ -4128,7 +4256,7 @@ static void test_imported_source_class_constructor_authority(void) {
             semantic_target->function == XR_SEMANTIC_INDEX_NONE &&
             semantic_target->callable_type == operation->result_type &&
             xr_stable_id_equal(semantic_target->export_identity, source_export->id) &&
-            strstr(semantic_target->canonical_key, "call-target-v10:schema=43:") != NULL &&
+            strstr(semantic_target->canonical_key, "call-target-v10:schema=44:") != NULL &&
             xr_semantic_imported_class_construction_authority_source_class(
                 semantic, dependency, &semantic->dependencies[0], source_export, operation,
                 &constructor) == 0 &&
@@ -4356,7 +4484,7 @@ static void test_channel_close_call_authority(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(plan->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "fe90039ebfa01e7ecfab748c1103d21f84bc990f37ca2fe9e54bb2868cf3ce71") == 0);
+                   "0f627ce9dbd8caf8683393ea60155476e28e90fe86232ff61891b353cd33c75c") == 0);
     for (uint32_t mutation = 0; mutation < CHANNEL_CLOSE_MUTATION_COUNT; mutation++) {
         XrTargetCallRecord saved = plan->calls[0];
         XrTargetCallArgumentRecord fabricated_argument = {0};
@@ -5107,7 +5235,7 @@ static void test_direct_local_call_adapter_family(void) {
     char call_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(first->calls[0].fingerprint, call_hex);
     REQUIRE(strcmp(call_hex,
-                   "1f3ebc76199e9d663faa64815278d6f8e8e136fe0e1d30fb603b2cc86e33fd39") == 0);
+                   "498820298b86ef83806310a462eb845ec244a16ca6d81f98ae25fcee1bb988b5") == 0);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     REQUIRE(machine != NULL);
     for (uint32_t i = 0; i < first->calls_count; i++) {
@@ -5631,7 +5759,7 @@ static void test_tail_coroutine_chain_fingerprint(void) {
     char tail_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(tail_call->fingerprint, tail_hex);
     REQUIRE(strcmp(tail_hex,
-                   "1c4f712b818d3e5a975063c9abd7bcb940535ab5be988eadbfecccece4e13aeb") == 0);
+                   "2160fec27ab426e2c5fdc9cfc738e43bdb3ac24f902b9c35ba212c19e9d42f04") == 0);
     uint32_t tail_id = tail_call->id;
     plan->calls[tail_id].flags = 0;
     expect_verify_failure(plan, "XR_TARGET_1003");
@@ -6337,9 +6465,9 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     REQUIRE(xr_xtp_encode_plan(plan, &encoded, &encoded_size, error, sizeof(error)));
     uint8_t *call_entry = target_test_xtp_directory_entry(encoded, XR_XTP_SECTION_CALLS);
     size_t call_offset = (size_t) xr_xtp_take_u64(call_entry + 8);
-    REQUIRE(encoded[call_offset + 122] == XR_TARGET_ARRAY_STORAGE_I64 &&
-            encoded[call_offset + 123] == expected->target_kind &&
-            encoded[call_offset + 124] == XR_TARGET_ARRAY_STORAGE_I64);
+    REQUIRE(encoded[call_offset + 140] == XR_TARGET_ARRAY_STORAGE_I64 &&
+            encoded[call_offset + 141] == expected->target_kind &&
+            encoded[call_offset + 142] == XR_TARGET_ARRAY_STORAGE_I64);
     REQUIRE(xr_xtp_decode_candidate(encoded, encoded_size, &candidate, error, sizeof(error)) &&
             xr_xtp_materialize_target_plan(candidate, semantic, profile, &decoded, error,
                                            sizeof(error)));
@@ -6351,7 +6479,7 @@ static void test_array_hof_call_authority_case(const ArrayHofExpectation *expect
     xr_target_plan_free(decoded);
     xr_xtp_candidate_release(candidate);
 
-    encoded[call_offset + 123] = expected->target_kind == XR_TARGET_ARRAY_HOF_MAP
+    encoded[call_offset + 141] = expected->target_kind == XR_TARGET_ARRAY_HOF_MAP
                                      ? XR_TARGET_ARRAY_HOF_FILTER
                                      : XR_TARGET_ARRAY_HOF_MAP;
     target_test_xtp_resign_section(encoded, XR_XTP_SECTION_CALLS);
@@ -8684,6 +8812,11 @@ static void test_owned_string_coroutine_lifecycle_authority(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 2 && strcmp(argv[1], "native-target-leaf-authority") == 0) {
+        test_native_target_leaf_scalar_authority();
+        puts("Native target leaf authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "fingerprint-snapshot-determinism") == 0) {
         test_plan_snapshot_and_determinism();
         puts("TargetPlan snapshot fingerprint tests passed");
@@ -8853,6 +8986,7 @@ int main(int argc, char **argv) {
     test_exact_i64_dynamic_entry_authority();
     test_profile_freeze_and_determinism();
     test_plan_snapshot_and_determinism();
+    test_native_target_leaf_scalar_authority();
     test_builder_materializes_canonical_scalar_intents();
     test_builder_materializes_parameter_without_operation();
     test_builder_materializes_effect_void_independent_of_type();

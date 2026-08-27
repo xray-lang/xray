@@ -249,11 +249,7 @@ static inline XrValue xrt_os_exit(XrValue code_value) {
 }
 
 static inline XrValue xrt_os_getpid(void) {
-#ifdef _WIN32
-    return XR_FROM_INT((int64_t) _getpid());
-#else
-    return XR_FROM_INT((int64_t) getpid());
-#endif
+    return XR_FROM_INT(xr_os_core_getpid());
 }
 
 static inline XrValue xrt_os_uid(void) {

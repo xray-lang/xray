@@ -24,6 +24,7 @@
 #include "xr_semantic_rune_is_whitespace_shape.h"
 #include "xr_semantic_string_slice_shape.h"
 #include "xr_semantic_native_module_shape.h"
+#include "xr_semantic_native_leaf_shape.h"
 #include "xr_semantic_plan_internal.h"
 #include "xr_semantic_verify.h"
 #include "../../module/xmodule_identity.h"
@@ -2581,6 +2582,21 @@ static bool resolve_native_yieldable_callee(const XiFunc *caller, const XiValue 
     return true;
 }
 
+static const XrStdlibDefEntry *
+xi_native_target_leaf_scalar_call_exact(const XiFunc *caller, const XiValue *call) {
+    if (!caller || !call || call->op != XI_CALL || call->nargs == 0 ||
+        (call->flags & XI_FLAG_MAY_SUSPEND) != 0 || !call->type || !XR_TYPE_IS_INT(call->type))
+        return NULL;
+    const XiValue *callee = strip_identity_copies(caller, call->args[0]);
+    if (!callee || callee->op != XI_IMPORT_REF || !callee->aux)
+        return NULL;
+    const XiImportRef *ref = (const XiImportRef *) callee->aux;
+    return xi_import_ref_is_grounded_native(ref)
+               ? xr_stdlib_metadata_exact_native_target_leaf(
+                     ref->module_path, ref->member_name, (uint16_t) (call->nargs - 1u))
+               : NULL;
+}
+
 static bool call_has_coroutine_state(const XiFunc *caller, const XiValue *call) {
     const XiCoroPlan *coro = caller ? caller->coro_plan : NULL;
     if (!coro || !call)
@@ -4862,6 +4878,11 @@ static bool append_operation(XrSemanticBuildContext *ctx, uint32_t function_inde
     if (xi_native_module_scalar_call_exact(ctx, function, value) &&
         semantic_native_module_scalar_call_exact(ctx, record))
         record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_MODULE_SCALAR_CALL;
+    if (xi_native_target_leaf_scalar_call_exact(function, value)) {
+        record->intrinsic_kind = XR_SEM_INTRINSIC_NATIVE_TARGET_LEAF_SCALAR_CALL;
+        if (!xr_semantic_native_target_leaf_call_is_exact(ctx->plan, record, NULL, NULL))
+            return fail(ctx, "XR_SEM_0019", "native target leaf authority is not exact");
+    }
     bool array_fill_type_exact =
         value->array_intrinsic_kind != XI_ARRAY_INTRINSIC_FILLED_NEW ||
         (value->nargs > 1 && value->args[1] && value->args[1]->type &&

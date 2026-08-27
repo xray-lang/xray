@@ -94,11 +94,9 @@ static int os_unsetenv_impl(const char *name) {
     (void) _putenv_s(name, "");
     return 0;
 }
-#define os_getpid_impl() _getpid()
 #else
 #define os_setenv_impl(name, value) setenv(name, value, 1)
 #define os_unsetenv_impl(name) unsetenv(name)
-#define os_getpid_impl() getpid()
 #endif
 
 static const char *os_core_getenv(void *ctx, const char *name) {
@@ -237,7 +235,7 @@ static XrValue os_getpid(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     (void) args;
     (void) argc;
-    return xr_int(os_getpid_impl());
+    return xr_int(xr_os_core_getpid());
 }
 
 // getcwd() - Get current working directory

@@ -111,7 +111,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
 12. For the bounded two-source-module scalar product graph, the native source
     driver publishes one independently verified schema-v5
     `SCALAR_MODULE_GRAPH_DIRECT_CALL` PSC/GCI before Xi lowering and carries
-    that immutable authority into two Xi partitions and two SemanticPlan 43
+    that immutable authority into two Xi partitions and two SemanticPlan 44
     artifacts. Each
     graph spec must match exactly one PSC module row through canonical source
     semantic module authority; duplicate, missing, stale, or foreign rows abort
@@ -122,7 +122,7 @@ invalidation, compiler-session ownership, or any compatibility reader.
     every live module, function, import/export, resolver, call, attachment, and
     dependency join. Producer and entry XSM bytes are deterministic; entry
     decode requires the exact ordered producer plan. The driver then constructs
-    one independently verified schema-53 program TargetPlan from the full
+    one independently verified schema-54 program TargetPlan from the full
     canonical SemanticPlan module set. Its single graph row, two pointer-free
     module partitions, aggregate semantic fingerprint, global Target rows, and
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge must all verify before
@@ -164,7 +164,7 @@ anchor-sha256: src/aot/xaot_driver.c d92954960de17cc4bdab92fc6510e0512b1852c03c5
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
-anchor-sha256: tests/unit/CMakeLists.txt 6e8d573ede07a1502615481c162da1f843500ba011206f695722fd3b5ce93669
+anchor-sha256: tests/unit/CMakeLists.txt 96c62976e2cf5c5f35d6f79974393661ce19258b82be0f042fd193b639817051
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 31c1a7482c97bdc17549c01257710dbfd70142d02b308a61d32b81559f63148d
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
 anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 55297a8a70bcb0c463dd03512699ecd7bc7723fd505ac75b102c585ed4c4857f

@@ -9286,6 +9286,8 @@ static bool cg_import_ref_has_no_emitted_c_use(XiCgenCtx *ctx, const XiFunc *f, 
         return false;
     if (cg_program_direct_i64_callee_operand_is_elided(ctx, f, v))
         return true;
+    if (cg_native_target_leaf_import_is_exact_callee(ctx, f, v))
+        return true;
     bool seen_use = false;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -15179,6 +15181,7 @@ static bool cg_mandatory_plans_preflight_value(XiCgenCtx *ctx, const XiFunc *fun
         return true;
 
     if (value->op == XI_IMPORT_REF &&
+        !cg_native_target_leaf_import_is_exact_callee(ctx, func, value) &&
         !cg_import_ref_has_aot_resolution(ctx, func, value, cg_value_import_ref(value))) {
         const XiImportRef *ref = cg_value_import_ref(value);
         cg_ctx_set_error(ctx);

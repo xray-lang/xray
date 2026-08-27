@@ -103,7 +103,7 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
     /* One pointer-free six-field value product whose exact x64 layout is
      * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
-     * execute only after the complete schema-53 instruction groups prove the
+     * execute only after the complete schema-54 instruction groups prove the
      * layout, ordinal accesses, caller-owned result storage, and return. */
     XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
     /* One source-backed signed-i64 predicate program whose ADD/SUB/MUL answer
@@ -324,6 +324,7 @@ typedef enum XrTargetCallConvention {
     XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_HAS_NEXT,
     XR_TARGET_CALL_CONVENTION_MAP_ENTRY_ITERATOR_NEXT,
     XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT,
+    XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR,
 } XrTargetCallConvention;
 
 /* Target dispatch authority. SOURCE_EXPORT names only the public dependency
@@ -401,6 +402,7 @@ typedef enum XrTargetCallTargetKind {
     XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_HAS_NEXT,
     XR_TARGET_CALL_TARGET_MAP_ENTRY_ITERATOR_NEXT,
     XR_TARGET_CALL_TARGET_PROGRAM_DIRECT,
+    XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR,
 } XrTargetCallTargetKind;
 
 typedef enum XrTargetArrayHofKind {
@@ -738,6 +740,7 @@ typedef struct XrTargetCallRecord {
     uint32_t source_export;
     XrStableId source_export_identity;
     XrStableId source_callee_identity;
+    XrStableId native_callee_identity;
     uint32_t result_value;
     uint32_t result_slot;
     uint32_t caller_storage_slot;
@@ -751,6 +754,7 @@ typedef struct XrTargetCallRecord {
     uint16_t argument_count;
     uint16_t adapter_count;
     uint16_t native_abi;
+    uint16_t native_leaf;
     uint16_t flags;
     uint8_t calling_convention;
     uint8_t target_kind;

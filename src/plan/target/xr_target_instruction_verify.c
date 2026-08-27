@@ -25,6 +25,7 @@
 #include "../semantic/xr_semantic_array_member_shape.h"
 #include "../semantic/xr_semantic_array_type_shape.h"
 #include "../semantic/xr_semantic_class_shape.h"
+#include "../../stdlib/xstdlib_metadata.h"
 #include "../semantic/xr_program_semantic_closure.h"
 #include <stdio.h>
 #include <string.h>
@@ -588,7 +589,8 @@ bool xr_target_instruction_rows_control_flow_is_exact(
                  contract->dispatch_kind ==
                      XR_TARGET_INSTRUCTION_DISPATCH_CALL_AGGREGATE ||
                  contract->dispatch_kind ==
-                     XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL)) {
+                     XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL ||
+                 contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_NATIVE_LEAF)) {
                 uint32_t call_index = (uint32_t) row->immediate_bits;
                 if (contract->dispatch_kind ==
                     XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL) {
@@ -989,6 +991,51 @@ static bool direct_i64_call_row_is_exact(
             parameter_slot != argument->callee_slot)
             return false;
     }
+    return true;
+}
+
+static bool native_target_leaf_i64_call_row_is_exact(
+    const XrTargetPlan *plan, const XrTargetInstructionRecord *row,
+    uint32_t function_index) {
+    uint32_t call_count = 0;
+    uint32_t slot_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(plan, &call_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(plan, &slot_count);
+    uint32_t call_index = (uint32_t) row->immediate_bits;
+    const XrTargetCallRecord *call =
+        calls && call_index < call_count ? &calls[call_index] : NULL;
+    if (!call || !slots || call->id != call_index || call->caller_function != function_index ||
+        call->semantic_call_target != XR_SEMANTIC_INDEX_NONE ||
+        call->callee_function != XR_SEMANTIC_INDEX_NONE ||
+        call->source_dependency != XR_SEMANTIC_INDEX_NONE ||
+        call->source_export != XR_SEMANTIC_INDEX_NONE ||
+        !instruction_stable_id_is_zero(call->source_export_identity) ||
+        !instruction_stable_id_is_zero(call->source_callee_identity) ||
+        instruction_stable_id_is_zero(call->native_callee_identity) ||
+        call->native_leaf <= XR_STDLIB_TARGET_LEAF_NONE ||
+        call->native_leaf >= XR_STDLIB_TARGET_LEAF_COUNT || call->flags != 0 ||
+        call->calling_convention != XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR ||
+        call->target_kind != XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR ||
+        call->argument_count != 0 || call->adapter_count != 0 ||
+        call->result_mode != XR_TARGET_CALL_VALUE ||
+        call->result_ownership != XR_TARGET_CALL_NONE ||
+        call->caller_storage_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_slot != XR_SEMANTIC_INDEX_NONE ||
+        call->error_mode != XR_TARGET_CALL_NO_CALL_OWNED_CHANNEL ||
+        call->array_intrinsic_kind != XR_TARGET_ARRAY_INTRINSIC_NONE ||
+        call->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        call->array_hof_kind != XR_TARGET_ARRAY_HOF_NONE ||
+        call->array_result_element_storage != XR_TARGET_ARRAY_STORAGE_NONE ||
+        row->result_slot != call->result_slot ||
+        !call_rep_is_i64(plan, call->result_register_rep) ||
+        !call_rep_is_i64(plan, call->result_memory_rep) ||
+        !call_rep_is_void(plan, call->error_register_rep) ||
+        !call_rep_is_void(plan, call->error_memory_rep) ||
+        call->result_slot >= slot_count ||
+        slots[call->result_slot].function != function_index ||
+        slots[call->result_slot].register_rep != call->result_register_rep ||
+        slots[call->result_slot].memory_rep != call->result_memory_rep)
+        return false;
     return true;
 }
 
@@ -2006,6 +2053,12 @@ static bool verify_function_group(const XrTargetPlan *plan, const XrTargetInstru
         if (contract->dispatch_kind ==
                 XR_TARGET_INSTRUCTION_DISPATCH_ENTRY_CALL &&
             !entry_i64_call_row_is_exact(plan, row, function_index)) {
+            valid = false;
+            call_invalid = true;
+            break;
+        }
+        if (contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_NATIVE_LEAF &&
+            !native_target_leaf_i64_call_row_is_exact(plan, row, function_index)) {
             valid = false;
             call_invalid = true;
             break;

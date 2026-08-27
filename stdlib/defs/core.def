@@ -1969,6 +1969,7 @@ module os {
     argc: 0
     arg_spec: ""
     aot_direct: true
+    target_leaf: "i64-getpid"
     link_object: false
     layer: "system"
   }

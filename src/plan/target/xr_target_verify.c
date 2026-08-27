@@ -44,6 +44,7 @@
 #include "../semantic/xr_semantic_rune_is_whitespace_shape.h"
 #include "../semantic/xr_semantic_string_slice_shape.h"
 #include "../semantic/xr_semantic_native_module_shape.h"
+#include "../semantic/xr_semantic_native_leaf_shape.h"
 #include "../semantic/xr_semantic_value_aggregate_shape.h"
 #include "../ownership/xr_ownership_certificate.h"
 #include "../semantic/xr_semantic_graph.h"
@@ -6038,6 +6039,13 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             }
             expected_calls++;
         }
+        if (xr_semantic_native_target_leaf_call_is_exact(semantic, operation, NULL, NULL)) {
+            if (expected_calls == UINT32_MAX) {
+                valid = false;
+                break;
+            }
+            expected_calls++;
+        }
         if (operation_is_exact_json_namespace_value(semantic, operation, NULL)) {
             if (expected_calls == UINT32_MAX) {
                 valid = false;
@@ -6300,6 +6308,12 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
         bool native_module_scalar =
             !semantic_target &&
             operation_is_exact_native_module_scalar_call(semantic, operation, &native_module_arity);
+        const XrStdlibDefEntry *native_target_leaf_entry = NULL;
+        XrStableId native_target_leaf_identity = {{0}};
+        bool native_target_leaf =
+            !semantic_target && xr_semantic_native_target_leaf_call_is_exact(
+                                    semantic, operation, &native_target_leaf_entry,
+                                    &native_target_leaf_identity);
         XrSemanticAdtEnumConstructorShape enum_constructor_shape = {0};
         bool adt_enum_constructor =
             !semantic_target &&
@@ -6438,6 +6452,12 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
             plan->machine_reps[call->error_register_rep].kind == XR_MACHINE_REP_VOID &&
             plan->machine_reps[call->error_memory_rep].kind == XR_MACHINE_REP_VOID &&
             call->native_abi == machine->native_abi &&
+            (native_target_leaf
+                 ? (!stable_id_is_zero(call->native_callee_identity) &&
+                    call->native_leaf > XR_STDLIB_TARGET_LEAF_NONE &&
+                    call->native_leaf < XR_STDLIB_TARGET_LEAF_COUNT)
+                 : (stable_id_is_zero(call->native_callee_identity) &&
+                    call->native_leaf == XR_STDLIB_TARGET_LEAF_NONE)) &&
             call->result_mode ==
                 (direct_aggregate_result ? XR_TARGET_CALL_CALLER_STORAGE
                                          : XR_TARGET_CALL_VALUE) &&
@@ -7726,6 +7746,29 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     call->flags == 0 &&
                     call->calling_convention == XR_TARGET_CALL_CONVENTION_NATIVE_MODULE_SCALAR &&
                     call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_MODULE_SCALAR &&
+                    call->result_ownership == XR_TARGET_CALL_NONE;
+            if (!valid)
+                break;
+        } else if (native_target_leaf) {
+            valid = result_type && native_target_leaf_entry && !suspends &&
+                    reconstruct_call_identity("xray-target-native-target-leaf-scalar-v1",
+                                              operation->id, native_target_leaf_identity,
+                                              native_target_leaf_entry->target_leaf,
+                                              &expected_identity) &&
+                    xr_stable_id_equal(call->identity, expected_identity) &&
+                    call->semantic_call_target == XR_SEMANTIC_INDEX_NONE &&
+                    call->callee_function == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_dependency == XR_SEMANTIC_INDEX_NONE &&
+                    call->source_export == XR_SEMANTIC_INDEX_NONE &&
+                    stable_id_is_zero(call->source_export_identity) &&
+                    stable_id_is_zero(call->source_callee_identity) &&
+                    xr_stable_id_equal(call->native_callee_identity,
+                                       native_target_leaf_identity) &&
+                    call->native_leaf == native_target_leaf_entry->target_leaf &&
+                    call->argument_count == 0 && call->flags == 0 &&
+                    call->calling_convention ==
+                        XR_TARGET_CALL_CONVENTION_NATIVE_TARGET_LEAF_SCALAR &&
+                    call->target_kind == XR_TARGET_CALL_TARGET_NATIVE_TARGET_LEAF_SCALAR &&
                     call->result_ownership == XR_TARGET_CALL_NONE;
             if (!valid)
                 break;
@@ -9069,6 +9112,7 @@ static uint32_t debug_operation_for_instruction(const XrTargetPlan *plan,
             return slot->semantic_operation;
     }
     if ((instruction->opcode == XR_TARGET_INSTRUCTION_CALL_DIRECT_I64 ||
+         instruction->opcode == XR_TARGET_INSTRUCTION_CALL_NATIVE_LEAF_I64 ||
          instruction->opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64) &&
         instruction->immediate_bits <= UINT32_MAX) {
         uint32_t call =

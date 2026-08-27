@@ -423,7 +423,7 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-TargetPlan schema 53 freezes the closed `i64.addOverflows`,
+TargetPlan schema 54 freezes the closed `i64.addOverflows`,
 `i64.subOverflows`, and `i64.mulOverflows` family as two exact signed-`i64`
 inputs and one `I1` result slot. The ABI answer is the function-qualified
 predicate row plus its typed instruction; a method name, Xi body shape, or
@@ -438,7 +438,7 @@ text, dispatch through the runtime method table, box the predicate, or fall
 back to a legacy value plan. Missing, duplicate, stale, swapped, or
 wrong-helper rows fail closed before C emission.
 
-TargetPlan schema 53 freezes one exact borrowed direct-local
+TargetPlan schema 54 freezes one exact borrowed direct-local
 `ref i64` boundary. The caller source and callee parameter retain scalar `I64`
 storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
 request to rewrite the parameter as a general raw-pointer value. The caller's
@@ -448,7 +448,7 @@ and transfer. C emission may project that verified boundary as `int64_t *`.
 This authority does not by itself grant representation-refinement, VM, CGen, or
 native execution coverage, and no generic ref or pointer inference is allowed.
 The AOT scalar-ref-v1 slice separately rejoins that exact SemanticPlan and
-schema-53 TargetPlan boundary. Refinement schema 6 records no adapter: it
+schema-54 TargetPlan boundary. Refinement schema 6 records no adapter: it
 materializes caller storage, callee storage, call machine rows, and load/store
 pointees as `I64`, while the caller `LOCAL_ADDR` and callee function ABI are
 `RAW_PTR` with an `I64` pointee. C-emission schema 39 is the sole C spelling
@@ -456,7 +456,17 @@ owner for `int64_t *`; prepare and independent AOT verification consume its
 immutable row, and covered CGen cannot recover a pointer level from mutable Xi
 types or a legacy value plan.
 
-The schema-53 source program graph is a distinct program-wide AOT cutover; it
+Schema 54 also freezes an exact zero-argument native target-leaf scalar ABI.
+The call row carries a generated numeric leaf kind, stable native-callee
+identity, signed-`i64` register and memory representations, no callee function,
+no argument or adapter rows, and one `CALL_NATIVE_LEAF_I64` instruction. The VM
+and AOT paths independently verify that authority before selecting the shared
+runtime-neutral scalar provider. The C spelling is a final numeric-leaf
+projection to the portable scalar helper; the `os.__getpid` source spelling,
+native-module factory, tagged `XrValue` wrapper, and legacy function table are
+not ABI owners and cannot repair missing or mutated rows.
+
+The schema-54 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
@@ -512,7 +522,7 @@ product activation; all such boundaries remain fail closed.
 The Task 281 W3 leaf-aggregate cutover is a separate bounded family. A covered
 function is identified through its owning module's frozen PSC v5 row:
 `XiFunc.psc_function_index` selects the PSC function identity and locator, which
-must join uniquely to the SemanticPlan 43 program-function binding and the exact
+must join uniquely to the SemanticPlan 44 program-function binding and the exact
 verified TargetPlan provenance and fingerprint. A mutable `XiFunc.semantic_plan`
 pointer is not required authority; when present it is only an additional exact
 agreement check. Missing, duplicate, foreign same-shape, or mutated identity
@@ -858,10 +868,10 @@ anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5a
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c c053f25b71fb2a2df09b0519bd05e9d75a960d8b1354787b2e4fee9e612cf070
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c be43babe746e19562268cc058732876f49476c73df71e66e53db42fadd97909a
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c ee09e8d9638b171daadfe2166003003206567d325390876b28a6f010bf397c19
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 51c72dc4f38a0d5da8f1d3db8b080676b27b3ce48e8d6a1adf476f4150ec8ff5
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 582d445d24eccc952c1eaf88a1e65239bc3da341de87ba907c7ff43b6b21e3a4
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c ca969baedfca00f02f660ec9f76715d248b54de629af7f3408ce45a46bf5a19b
+anchor-sha256: src/aot/xi_cgen.c b905f9a4f0f4f0220783ef43fd88b0536eafaa5574cbc31ca0c6e18ef9e9dd85
 anchor-sha256: src/aot/xrt_hosted_context.c 15545d38296d565fe38c2dc86e41147d0525d61740bdd9e8710e2ef4c8b03ec7
 anchor-sha256: src/ir/xi_opt.c c2ed1e63c3c84c2654516714e34dc061858f685ec447975e2b1777da992d0801
 anchor-sha256: src/aot/xrt_coll.h 37e45c48a5f5a68e523a853ddf3d557d3ee6976337d7ab620df4d88d39228879
@@ -881,6 +891,6 @@ anchor-sha256: src/aot/xrt_provider_abi.h 4deebceb145b02ba5c5836c8688b9c4788a130
 anchor-sha256: src/base/xnumber_parse_error.h 86432a50fe3c01efba8d57235496a4fe1bfd9f84613580b3b6b5ece8bfd9eaa4
 anchor-sha256: tests/unit/aot/test_xrt_type_identity_freestanding.c 81ede7007866a3028e84af4ebe91105ebc70cc5518287bcb5be8ebc0e0156b2e
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
-anchor-sha256: src/aot/xaot_boundary.c 58fddb930eac3cbed2d05e299ec10c4a8c61662b1651727edee880cb423a352b
+anchor-sha256: src/aot/xaot_boundary.c f12690bc5c41ec4989fc3a7465ecf3a5d0c6304eaaadc509e5b1d7a410076472
 anchor-sha256: src/aot/xaot_driver.c d92954960de17cc4bdab92fc6510e0512b1852c03c59a4f194598fcb7fd1c2bf
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687

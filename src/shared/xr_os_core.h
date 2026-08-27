@@ -18,6 +18,12 @@
 #include <stddef.h>
 #include <string.h>
 
+#ifdef XR_OS_WINDOWS
+#include <process.h>
+#else
+#include <unistd.h>
+#endif
+
 typedef const char *(*XrOsCoreGetenvFn)(void *ctx, const char *name);
 typedef const char *(*XrOsCoreStringFn)(void *ctx);
 typedef bool (*XrOsCoreEnvEntryFn)(void *ctx, const char *key, size_t key_len, const char *value,
@@ -84,6 +90,14 @@ static inline const char *xr_os_core_eol(void) {
     return "\r\n";
 #else
     return "\n";
+#endif
+}
+
+static inline int64_t xr_os_core_getpid(void) {
+#ifdef XR_OS_WINDOWS
+    return (int64_t) _getpid();
+#else
+    return (int64_t) getpid();
 #endif
 }
 

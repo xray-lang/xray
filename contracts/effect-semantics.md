@@ -444,7 +444,7 @@ row names the declared class and no callee at all; a method identity on such a
 row is refused as stale, and a class that does declare an instance constructor
 keeps the ordinary method callsite and composes that body's effects.
 
-SemanticPlan schema 43 names local and imported construction without erasing
+SemanticPlan schema 44 names local and imported construction without erasing
 their module boundary. A local construction target names only the declaration:
 the instance result and the class object loaded from its unique local shared
 slot must name the same frozen source class. An imported construction target
@@ -474,7 +474,7 @@ The admitted scalar, leaf-value, and bounded two-module scalar graph families
 consume frozen PSC and Xi authority as typed external construction/verification
 inputs. The scalar family also requires its sealed CallDecision and exact
 TargetProfile; the leaf-value and graph families require both to be absent.
-SemanticPlan schema 43 and program-provenance schema 4 project the graph into
+SemanticPlan schema 44 and program-provenance schema 4 project the graph into
 one exact plan per Xi partition. The zero-dependency producer carries its pure
 unary function/export authority; the entry carries its pure nullary function,
 ordered dependency, resolver binding, program call, and `SOURCE_EXPORT` target.
@@ -538,13 +538,13 @@ anchor-sha256: src/frontend/analyzer/xanalyzer_visitor_call.c d1c86a031eb0f9fdbb
 anchor-sha256: src/plan/format/xr_xsm_decode.c b31bf1696bacd3b435ea1383da4f92df51bb6692c45f28e7d22ab829154db8f4
 anchor-sha256: src/plan/format/xr_xsm_encode.c 35840e929f9e86086cd57790af43eb4df6b84060704eba9045bdc9b40f579f2c
 anchor-sha256: src/plan/format/xr_xsm_schema.h f5e6d875255f73803545a9cf99450e6b140e6282ee19233048afd4e0ce41362b
-anchor-sha256: src/plan/semantic/xr_semantic_builder.c 0da15ed8686ee588d5962997fd47ca58f135ff7d421763ce9402a0cf9dea1f42
+anchor-sha256: src/plan/semantic/xr_semantic_builder.c f76347a5fca3415f4f43102f1a864d92904dfdec76570f029f7dadc445e9767c
 anchor-sha256: src/plan/semantic/xr_semantic_cleanup_shape.h 9a2baf1ef059831b54641bd832b85a5279555dedd244f23b631fac349f45638d
 anchor-sha256: src/plan/semantic/xr_semantic_coroutine_lifecycle_shape.h 759cc4d7eaff12a36365922674ea9195b612f4c089222280a0aff70c86e27b38
 anchor-sha256: src/plan/semantic/xr_semantic_enum_shape.h 0fbc294a8b51e1c43a907587e744efabd944e237ebbdf928a4d62746f4dd42d0
-anchor-sha256: src/plan/semantic/xr_semantic_ids.h addb7c494e671b4a25f7e51b31b0ff387204dc40f110e3d4b374e3ff68a9a4f9
+anchor-sha256: src/plan/semantic/xr_semantic_ids.h 0940af8bed7477c4974f094eed12d77e65f5369830a1425c3c49ccd1fc61f150
 anchor-sha256: src/plan/semantic/xr_semantic_plan.c aeaad12aee601f2bfb982fbaa72484a3845b8382874fe84a86c88c1594458eb1
-anchor-sha256: src/plan/semantic/xr_semantic_plan.h bd864991027a87d48222a4eab6afc79ee6758be466e55caa8c6f3c06ffcef670
+anchor-sha256: src/plan/semantic/xr_semantic_plan.h 08b2b09c090a93214eb927deaed17534b360d427b68cced2db433d2fdd2d32dd
 anchor-sha256: src/plan/semantic/xr_semantic_plan_internal.h fbe1eb29e08425a629dda4c281f7a681ab48512c599cae9b63b379f4db338d2e
 anchor-sha256: src/plan/semantic/xr_semantic_type_admission_shape.h b3d62a8e20b7512a08225328479b21ee99eb24c9a415796a93e71f8f20677216
 anchor-sha256: src/plan/semantic/xr_semantic_string_runes_shape.h f5725458cdd6af16c555c1a8145aea90fb7f1b50cd599420590f2cfbb96980f2
@@ -553,10 +553,10 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/plan/semantic/xr_semantic_verify.c a25faa1aa9edc372eacad12823f79372cb2e8a142413360463030ac2391b35d1
+anchor-sha256: src/plan/semantic/xr_semantic_verify.c 1637430f1abcbf408d707f224c1a589c6317dd99431ec898d6df148fc219e7e9
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
-anchor-sha256: src/stdlib/xstdlib_metadata.h 834f636db2dd9127a76b4c43aee57898067ed24e60afa9640e21bf28f4eb6d30
-anchor-sha256: tests/unit/plan/test_semantic_plan.c ff9ef7e0b8a4c640d211bf05150d84bdafd6920e1314741b8cc13ee1afb57554
+anchor-sha256: src/stdlib/xstdlib_metadata.h d0fef6ba261cfe98b18a49bac4046b00b41c5dc30e491d4fcbfe5367177339a9
+anchor-sha256: tests/unit/plan/test_semantic_plan.c 003e20dc6b49ec85c0a1a33a8cfe0b01ea6da6629688d8d688c1b1881991ee9c
 anchor-sha256: src/frontend/analyzer/xa_native_member_contract.def f2fec1dbe429556d947a2548cdf657698b712b75cd90a2cb2f4a3eb2ac175b79
 anchor-sha256: src/plan/semantic/xr_semantic_number_parse_error_shape.h 1a31a79d9b4e705850d225c76f0fe9d8b4698d0a06a6c5d0223e6323b9a7dcfb
 anchor-sha256: src/shared/xr_string_parse_core.h e96e12444c85ef8d64e2b6ab0baa8b8e761c7f3636049f9f10420fe6184ad5a1
