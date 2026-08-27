@@ -1743,6 +1743,7 @@
       "owner": "shared-kernel",
       "production_callers": [
         "src/aot/xrt_exception.h",
+        "src/plan/semantic/xr_semantic_union_as_shape.h",
         "src/runtime/value/xtype_names.h",
         "src/runtime/value/xvalue_typeid.c",
         "src/shared/xr_elem_type.h"
