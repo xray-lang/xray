@@ -861,9 +861,20 @@ static bool append_rep_intent(XrTargetPlanBuilder *builder, const XrTargetMachin
     return true;
 }
 
+static bool semantic_direct_local_array_type_is_exact(const XrSemanticPlan *plan,
+                                                      uint32_t type_index,
+                                                      bool indexes_elements, uint8_t *storage);
+
 static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic_type, uint8_t kind,
                                  uint32_t element_count, const XrTargetMachineRepRecord *memory_rep,
                                  char *error, size_t error_size) {
+    /* Element storage is a property of the exact semantic Array type, not of
+     * whichever producer family first needs its layout. Generic shared-value
+     * and owner-forward families therefore project the same answer as Array
+     * allocation/call families, while non-Array layouts retain NONE. */
+    uint8_t array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    (void) semantic_direct_local_array_type_is_exact(
+        builder ? builder->semantic_plan : NULL, semantic_type, false, &array_element_storage);
     for (uint32_t i = 0; i < builder->layout_intent_count; i++) {
         XrTargetLayoutIntent *existing = &builder->layout_intents[i];
         if (existing->semantic_type != semantic_type)
@@ -875,6 +886,7 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
                                      existing->memory_rep.memory_size == memory_rep->memory_size &&
                                      existing->memory_rep.memory_align == memory_rep->memory_align;
         if (existing->kind == kind && existing->element_count == element_count &&
+            existing->array_element_storage == array_element_storage &&
             (compare_rep_record(&existing->memory_rep, memory_rep) == 0 || same_dynamic_geometry))
             return true;
         return fail(error, error_size, "XR_TARGET_1002",
@@ -889,7 +901,7 @@ static bool append_layout_intent(XrTargetPlanBuilder *builder, uint32_t semantic
     intent->memory_rep = *memory_rep;
     intent->element_count = element_count;
     intent->kind = kind;
-    intent->array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    intent->array_element_storage = array_element_storage;
     return true;
 }
 
@@ -1963,11 +1975,9 @@ static bool append_tagged_boundary_layout_intent(XrTargetPlanBuilder *builder,
         XrTargetLayoutIntent *intent = &builder->layout_intents[i];
         if (intent->semantic_type != semantic_type)
             continue;
-        if (intent->array_element_storage != XR_TARGET_ARRAY_STORAGE_NONE &&
-            intent->array_element_storage != storage)
+        if (intent->array_element_storage != storage)
             return fail(error, error_size, "XR_TARGET_1002",
                         "Array layout has conflicting element storage");
-        intent->array_element_storage = storage;
         return true;
     }
     return fail(error, error_size, "XR_TARGET_1002", "Array layout intent is missing");

@@ -263,6 +263,14 @@ static XrType stub_target_u8_array = {
     .scalar_rep = XR_SCALAR_REP_NONE,
     .container = {.element_type = &stub_target_u8},
 };
+static XrType stub_target_const_i64_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 183,
+    .frozen = true,
+    .is_const = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .container = {.element_type = &stub_int},
+};
 static XrType stub_target_string_array = {
     .kind = XR_KIND_ARRAY,
     .id = 135,
@@ -878,6 +886,30 @@ static XrSemanticPlan *build_tagged_string_array_copy_semantic(void) {
     bool built = build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
     if (!built)
         fprintf(stderr, "tagged String Array copy semantic failed: %s\n", error);
+    REQUIRE(built && semantic != NULL);
+    xi_func_free(function);
+    return semantic;
+}
+
+static XrSemanticPlan *build_shared_const_i64_array_semantic(void) {
+    XiFunc *function = xi_func_new("target_shared_const_i64_array", &stub_int);
+    XiBlock *entry = function ? xi_block_new(function) : NULL;
+    REQUIRE(function != NULL && entry != NULL);
+    XiValue *load =
+        xi_value_new(function, entry, XI_GET_SHARED, &stub_target_const_i64_array, 0);
+    XiValue *result = xi_const_int(function, entry, 0, &stub_int);
+    REQUIRE(load != NULL && result != NULL);
+    load->aux_int = 0;
+    function->nshared = 1;
+    xi_block_set_return(entry, result);
+    function->stage = XI_STAGE_OPTIMIZED;
+
+    XrSemanticPlan *semantic = NULL;
+    char error[512] = {0};
+    bool built =
+        build_target_unit_fixture_semantic(function, &semantic, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "shared const Array<i64> semantic failed: %s\n", error);
     REQUIRE(built && semantic != NULL);
     xi_func_free(function);
     return semantic;
@@ -6193,6 +6225,73 @@ static void test_tagged_string_array_copy_authority(void) {
     xr_semantic_plan_free(semantic);
 }
 
+static void test_shared_const_i64_array_layout_authority(void) {
+    XrSemanticPlan *semantic = build_shared_const_i64_array_semantic();
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "shared const Array<i64> TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_target_plan_verify(plan, error, sizeof(error)));
+
+    const XrSemanticOperationRecord *load = NULL;
+    uint32_t load_operation = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
+        const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(semantic, i);
+        if (!operation || operation->opcode != XI_GET_SHARED)
+            continue;
+        REQUIRE(load == NULL);
+        load = operation;
+        load_operation = i;
+    }
+    REQUIRE(load != NULL && load_operation != XR_SEMANTIC_INDEX_NONE);
+    const XrSemanticTypeRecord *array_type =
+        xr_semantic_plan_type(semantic, load->result_type);
+    uint32_t child_count = 0;
+    const uint32_t *children = xr_semantic_plan_type_children(semantic, &child_count);
+    REQUIRE(array_type != NULL && xr_semantic_array_type_row_is_exact(array_type) &&
+            (array_type->flags & XR_SEM_TYPE_CONST) != 0 && children != NULL &&
+            array_type->child_begin < child_count);
+    const XrSemanticTypeRecord *element =
+        xr_semantic_plan_type(semantic, children[array_type->child_begin]);
+    REQUIRE(element != NULL && element->kind == XR_KIND_INT);
+
+    const XrTargetValueRepRecord *binding =
+        xr_target_plan_value_rep(plan, load->result_value);
+    REQUIRE(binding != NULL && binding->slot < plan->slots_count &&
+            plan->slots[binding->slot].semantic_operation == load_operation &&
+            plan->slots[binding->slot].ownership == XR_TARGET_OWNERSHIP_BORROWED &&
+            plan->machine_reps[binding->register_rep].kind == XR_MACHINE_REP_DYN_VALUE &&
+            plan->machine_reps[binding->register_rep].ownership ==
+                XR_TARGET_OWNERSHIP_BORROWED);
+
+    uint32_t layout_index = XR_SEMANTIC_INDEX_NONE;
+    for (uint32_t i = 0; i < plan->layouts_count; i++) {
+        if (plan->layouts[i].semantic_type != load->result_type)
+            continue;
+        REQUIRE(layout_index == XR_SEMANTIC_INDEX_NONE);
+        layout_index = i;
+    }
+    REQUIRE(layout_index != XR_SEMANTIC_INDEX_NONE &&
+            plan->layouts[layout_index].kind == XR_TARGET_LAYOUT_DYNAMIC &&
+            plan->layouts[layout_index].array_element_storage == XR_TARGET_ARRAY_STORAGE_I64);
+
+    uint8_t saved_storage = plan->layouts[layout_index].array_element_storage;
+    plan->layouts[layout_index].array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+    xr_target_layout_compute_fingerprint(plan, layout_index,
+                                         &plan->layouts[layout_index].fingerprint);
+    expect_verify_failure(plan, "XR_TARGET_1002");
+    plan->layouts[layout_index].array_element_storage = saved_storage;
+    xr_target_layout_compute_fingerprint(plan, layout_index,
+                                         &plan->layouts[layout_index].fingerprint);
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    xr_target_plan_free(plan);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
 static void test_array_reserve_call_authority(void) {
     XrSemanticPlan *semantic = build_array_reserve_semantic();
     XrTargetProfile *profile = build_profile(0);
@@ -8354,6 +8453,11 @@ int main(int argc, char **argv) {
         puts("Tagged String Array copy TargetPlan authority tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "shared-const-i64-array-layout-authority") == 0) {
+        test_shared_const_i64_array_layout_authority();
+        puts("Shared const Array<i64> layout authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "string-slice-range-authority") == 0) {
         test_string_slice_range_call_authority();
         puts("String range-slice TargetPlan authority tests passed");
@@ -8423,6 +8527,7 @@ int main(int argc, char **argv) {
     test_array_intrinsic_call_authority();
     test_array_hof_call_authority();
     test_tagged_string_array_copy_authority();
+    test_shared_const_i64_array_layout_authority();
     test_array_reserve_call_authority();
     test_source_class_array_push_authority();
     test_source_class_array_fill_authority();
