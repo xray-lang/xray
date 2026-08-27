@@ -21,8 +21,10 @@
 #include <string.h>
 
 void xr_program_target_plan_cancellation_token_init(XrProgramTargetPlanCancellationToken *token) {
-    if (token)
+    if (token) {
         atomic_init(&token->requested, false);
+        atomic_init(&token->scheduled_checkpoint, XR_PROGRAM_TARGET_PLAN_CANCEL_NONE);
+    }
 }
 
 void xr_program_target_plan_cancellation_token_request(
@@ -31,9 +33,30 @@ void xr_program_target_plan_cancellation_token_request(
         atomic_store_explicit(&token->requested, true, memory_order_release);
 }
 
+void xr_program_target_plan_cancellation_token_request_at_checkpoint(
+    XrProgramTargetPlanCancellationToken *token,
+    XrProgramTargetPlanCancellationCheckpoint checkpoint) {
+    if (!token || checkpoint <= XR_PROGRAM_TARGET_PLAN_CANCEL_NONE ||
+        checkpoint > XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_PUBLISH)
+        return;
+    atomic_store_explicit(&token->scheduled_checkpoint, (unsigned int) checkpoint,
+                          memory_order_release);
+}
+
 bool xr_program_target_plan_cancellation_token_is_requested(
     const XrProgramTargetPlanCancellationToken *token) {
     return token && atomic_load_explicit(&token->requested, memory_order_acquire);
+}
+
+static bool cancellation_requested_at(
+    XrProgramTargetPlanCancellationToken *token,
+    XrProgramTargetPlanCancellationCheckpoint checkpoint) {
+    if (!token)
+        return false;
+    if (atomic_load_explicit(&token->scheduled_checkpoint, memory_order_acquire) ==
+        (unsigned int) checkpoint)
+        xr_program_target_plan_cancellation_token_request(token);
+    return xr_program_target_plan_cancellation_token_is_requested(token);
 }
 
 static void set_error(char *error, size_t error_size, const char *format, ...) {
@@ -133,7 +156,8 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
         return false;
     result->cache_enabled = request->cache_store != NULL;
     result->rebuild_requested = request->rebuild;
-    if (xr_program_target_plan_cancellation_token_is_requested(request->cancellation))
+    if (cancellation_requested_at(request->cancellation,
+                                  XR_PROGRAM_TARGET_PLAN_CANCEL_BEFORE_CACHE))
         return cancel_build(result, NULL, error, error_size);
     if (!program_authority_is_verified(request)) {
         set_error(error, error_size, "program TargetPlan build received wrong semantic authority");
@@ -174,7 +198,8 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
         result->load_status = xr_cache_store_load(request->cache_store, XR_CACHE_ARTIFACT_XTP, key,
                                                   xr_cache_materialize_xtp_artifact, &load, &blob);
         xr_cache_blob_release(&blob);
-        if (xr_program_target_plan_cancellation_token_is_requested(request->cancellation))
+        if (cancellation_requested_at(request->cancellation,
+                                      XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_LOAD))
             return cancel_build(result, load.accepted_plan, error, error_size);
         if (result->load_status == XR_CACHE_LOAD_HIT) {
             if (!load.accepted_plan) {
@@ -205,7 +230,8 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
         result->built = true;
     }
 
-    if (xr_program_target_plan_cancellation_token_is_requested(request->cancellation))
+    if (cancellation_requested_at(request->cancellation,
+                                  XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_BUILD))
         return cancel_build(result, plan, error, error_size);
 
     if (request->cache_store && !result->cache_hit) {
@@ -230,7 +256,8 @@ bool xr_program_target_plan_build(const XrProgramTargetPlanBuildRequest *request
         }
     }
 
-    if (xr_program_target_plan_cancellation_token_is_requested(request->cancellation))
+    if (cancellation_requested_at(request->cancellation,
+                                  XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_PUBLISH))
         return cancel_build(result, plan, error, error_size);
 
     if (!plan || !xr_target_plan_is_verified(plan) || !xr_target_plan_fingerprint_is_intact(plan) ||

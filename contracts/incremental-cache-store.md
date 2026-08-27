@@ -146,10 +146,12 @@ invalidation, compiler-session ownership, or any compatibility reader.
     once. Every surviving build owns byte-identical encoded plan bytes,
     exactly one of them publishes the object while the rest are told it
     already exists or are served it, and the root retains no unfinished temp
-    residue. A cancellation request observed at any of the builder's four
-    checkpoints refuses the build with no owned plan and no partial object,
-    and leaves an ordinary build of the same authority still producing the one
-    canonical answer. A truncated object, a payload mutated at full length,
+    residue. A token may schedule its monotonic cancellation request for one
+    named builder checkpoint without a timing race. A cancellation request
+    observed at any of the four checkpoints refuses the build with no owned
+    plan and no partial object, and leaves an ordinary build of the same
+    authority still producing the one canonical answer. A truncated object,
+    a payload mutated at full length,
     and a plan built for another target planted under this target's key are
     each refused and cost a verified recomputation of the identical bytes; a
     refused candidate never degrades into a weaker answer, and a miss is not a
@@ -172,8 +174,8 @@ anchor-sha256: src/incremental/xr_cache_artifact_verify.h 44f7e54519854bf0290c92
 anchor-sha256: src/incremental/xr_cache_artifact_verify.c dd39589de93c9771b5da9344f86e3633cfd142d0bcdb4df45dc91a1d2480c292
 anchor-sha256: src/incremental/xr_cache_store.h f34e4f86ba65f44cbc29356488f32cbc52088c8dda6848ff756a571c78c9b1d9
 anchor-sha256: src/incremental/xr_cache_store.c bb726097541fb71d58d463f106bc7f103c21295ffee344425221b67a094d305b
-anchor-sha256: src/incremental/xr_program_target_plan_build.h fce79b35699dec7f231248b891a2ebcb1ebf7ef185ace53e6cd74a314f7bc610
-anchor-sha256: src/incremental/xr_program_target_plan_build.c e36a07cff8187c284f8e8c6e7062b31b3f8403f748cda5e8658f40bd95211605
+anchor-sha256: src/incremental/xr_program_target_plan_build.h 5ed34d49b3c9341ce93eb10ffd1b06a8bac01ee2be1163d357ceb89de27a9399
+anchor-sha256: src/incremental/xr_program_target_plan_build.c 8b5b583c6427984418a670653e02030380e215f76a917e3c6702b7d047e10059
 anchor-sha256: src/incremental/xr_module_summary_build.h 1d387ea9e943fa0fcebeba7222105b8d0677bdecf05cda3677dc0d400868279b
 anchor-sha256: src/incremental/xr_module_summary_build.c 0a58ea617bb715b7448fc57c51780e1ddb99dfe8e9bfbb38001abfb28ed29cc2
 anchor-sha256: src/aot/xaot_module_summary.h ab160517cfb59565b24f75f1273afb08e0c5d6c2370f282a1c09c7f45846adcc
@@ -189,8 +191,8 @@ anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a1
 anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 50c334c80c685846c4a20ca37d580f6a1363ece8a689570792319976a52fc636
 anchor-sha256: tests/unit/incremental/program_plan_cache_fixture.h dd6b9c2bcf20ec962f82cd903c98142c7794e6fad9a9fb04441db9d714cc1b4e
 anchor-sha256: tests/unit/incremental/program_plan_cache_fixture.c 212fb025b7be38ff15a089f203df9b11457843a367f81a0485d8d4cb805fb685
-anchor-sha256: tests/unit/incremental/test_program_plan_cache_qualification.c 7829d2b856b503603caf6a2aa40be4c3c3a538cca90d375dce7627053b03df04
-anchor-sha256: scripts/check_runtime_archive_cache_symbols.py 4a5f01578a97a8211f94054101c9efc711e66abac56be605ea841d36ff3c4d95
+anchor-sha256: tests/unit/incremental/test_program_plan_cache_qualification.c a334a86a701869f07c4ed72a0a525538f9e4ae8fa2a760ede2cab45cd9c95591
+anchor-sha256: scripts/check_runtime_archive_cache_symbols.py 3137c77f025c2b790d6cce5edb4ef96ae82b28103d56d4deb807b30690ff1d13
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 117a7c617160868de286912287b70b97dc79d07f685b740deb08d1e79e3f704e
 anchor-sha256: tests/aot/run_module_summary_determinism.py dd5f9493c43dbe11e3ca4870df40d0859ee5575f1459a67e3d7a180a657fe50d
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687
