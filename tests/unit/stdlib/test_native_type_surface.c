@@ -100,7 +100,7 @@ TEST(native_receiver_alias_contracts_are_typed_data) {
     }
     const XaBuiltinMember *concat = find_type_member("Array", "concat");
     ASSERT_NOT_NULL(concat);
-    ASSERT_EQ_INT(concat->return_ownership, XA_BUILTIN_RETURN_UNKNOWN);
+    ASSERT_EQ_INT(concat->return_ownership, XA_BUILTIN_RETURN_FRESH);
 
     xray_vm_delete(iso);
 }
