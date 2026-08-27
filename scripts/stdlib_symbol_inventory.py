@@ -91,6 +91,10 @@ class ModuleRow:
     xr_sources: list[str] = field(default_factory=list)
     c_sources: list[str] = field(default_factory=list)
     c_function_count: int = 0
+    # An `.xr` file under the module directory makes the module a source module
+    # in any importing program's graph, whether or not the manifest names it as
+    # the module's semantic source.
+    enters_module_graph: bool = False
     symbol_count: int = 0
     xray_body_symbols: int = 0
     handwritten_c_symbols: int = 0
@@ -272,6 +276,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
             xr_sources=[rel(root, p) for p in xr_paths],
             c_sources=[rel(root, p) for p in c_paths],
             c_function_count=len(module_c),
+            enters_module_graph=bool(xr_paths),
         )
 
         # Every function the module's C defines, indexed for attribution.
@@ -483,7 +488,8 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
 
 
 QUEUE_ORDER = (
-    "independently-migratable",
+    "deepen-existing-xray",
+    "establish-xray-source",
     "needs-generic-loader",
     "native-leaf-only",
     "test-only",
@@ -493,10 +499,13 @@ QUEUE_ORDER = (
 def classify_queue(modules: list[ModuleRow], rows: list[SymbolRow]) -> None:
     """Assign each module the migration queue it belongs to.
 
-    The queue answers one question: can the standard-library owner start work
-    on this module now. A module whose only residue is the per-module C loader
-    cannot, because deleting that loader needs a generic source-derived load
-    path that the standard library does not own.
+    Two questions separate the queues. Can the standard-library owner start
+    work on this module now: a module whose only residue is the per-module C
+    loader cannot, because deleting that loader needs a generic source-derived
+    load path the standard library does not own. And does the module already
+    have an Xray semantic source: deleting residue behind an existing `.xr`
+    surface is a different job, at a different risk, from writing the first
+    `.xr` body for a module that has never had one.
     """
     by_module: dict[str, list[SymbolRow]] = {}
     for row in rows:
@@ -516,21 +525,21 @@ def classify_queue(modules: list[ModuleRow], rows: list[SymbolRow]) -> None:
             mrow.queue = "test-only"
             mrow.queue_reason = "not part of the production standard-library surface"
             continue
-        if mrow.policy in {"native_primitive", "native_library"}:
-            mrow.queue = "independently-migratable"
+        if not mrow.semantic_source.endswith(".xr"):
+            mrow.queue = "establish-xray-source"
             mrow.queue_reason = (
-                f"whole-module {mrow.policy} policy: the .xr semantic source has to be "
-                f"written before any C owner can be deleted"
+                f"{mrow.policy} module declares {mrow.semantic_source} as its semantic "
+                f"source, so an .xr body has to exist before any C owner can be deleted"
             )
             continue
         if mrow.public_native:
-            mrow.queue = "independently-migratable"
+            mrow.queue = "deepen-existing-xray"
             mrow.queue_reason = (
                 f"{len(mrow.public_native)} public native symbols still bypass the .xr surface"
             )
             continue
         if semantic_c:
-            mrow.queue = "independently-migratable"
+            mrow.queue = "deepen-existing-xray"
             mrow.queue_reason = (
                 f"{len(semantic_c)} handwritten C functions remain behind the .xr surface"
             )
@@ -563,8 +572,12 @@ def is_semantic_c_owner(row: SymbolRow) -> bool:
 
 def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]:
     production = [m for m in modules if m.audience == "production"]
-    production_names = {m.name for m in production}
-    production_rows = [r for r in rows if r.module in production_names]
+    # Rows are selected by their own audience, not by manifest membership.
+    # Selecting by membership would drop the rows that have no owning module --
+    # the C under `stdlib/` outside any module, and the declared modules the
+    # manifest never claims -- which are exactly the rows that most need
+    # counting, because nothing else governs them.
+    production_rows = [r for r in rows if r.audience == "production"]
     return {
         "modules": len(modules),
         "production_modules": len(production),
@@ -576,6 +589,9 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
             1 for r in production_rows if is_semantic_c_owner(r)
         ),
         "native_leaf_symbols": sum(1 for r in rows if r.native_leaf),
+        "production_native_leaf_symbols": sum(
+            1 for r in production_rows if r.native_leaf
+        ),
         "unclassified_native_leaf": sum(
             1 for r in rows if r.native_leaf and r.leaf_class == "unclassified"
         ),
@@ -588,8 +604,14 @@ def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]
         "module_specific_c_loaders": sum(
             1 for r in rows if r.kind == "module-factory"
         ),
+        "production_module_specific_c_loaders": sum(
+            1 for r in production_rows if r.kind == "module-factory"
+        ),
         "production_modules_without_xray_source": sum(
             1 for m in production if not m.semantic_source.endswith(".xr")
+        ),
+        "modules_entering_module_graph": sum(
+            1 for m in modules if m.enters_module_graph
         ),
         "c_functions_without_manifest_module": sum(
             1 for r in rows if r.blocker.startswith("C source under stdlib/")
@@ -627,7 +649,9 @@ def markdown(modules: list[ModuleRow], rows: list[SymbolRow], base: str) -> str:
         "whole_module_native_policy",
         "public_native_symbols",
         "module_specific_c_loaders",
+        "production_module_specific_c_loaders",
         "production_modules_without_xray_source",
+        "modules_entering_module_graph",
         "c_functions_without_manifest_module",
         "def_symbols_without_manifest_module",
     ):

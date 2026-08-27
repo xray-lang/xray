@@ -6,19 +6,23 @@
     "production_modules": 31,
     "test_only_modules": 2,
     "symbols": 2248,
-    "production_symbols": 2202,
+    "production_symbols": 2220,
     "xray_body_symbols": 1075,
-    "handwritten_c_semantic_owner": 947,
+    "handwritten_c_semantic_owner": 965,
     "native_leaf_symbols": 111,
+    "production_native_leaf_symbols": 111,
     "unclassified_native_leaf": 111,
     "whole_module_native_policy": 10,
     "public_native_symbols": 204,
     "module_specific_c_loaders": 33,
+    "production_module_specific_c_loaders": 31,
     "production_modules_without_xray_source": 10,
+    "modules_entering_module_graph": 23,
     "c_functions_without_manifest_module": 10,
     "def_symbols_without_manifest_module": 8,
     "queue": {
-      "independently-migratable": 15,
+      "deepen-existing-xray": 5,
+      "establish-xray-source": 10,
       "needs-generic-loader": 16,
       "native-leaf-only": 0,
       "test-only": 2
@@ -38,12 +42,13 @@
         "stdlib/prelude/prelude.c"
       ],
       "c_function_count": 8,
+      "enters_module_graph": false,
       "symbol_count": 8,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 8,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_primitive policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_primitive module declares stdlib/prelude/builtin_symbols.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -68,12 +73,13 @@
         "stdlib/time/time.c"
       ],
       "c_function_count": 12,
+      "enters_module_graph": false,
       "symbol_count": 12,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 12,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_primitive policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -141,12 +147,13 @@
         "stdlib/math/math.c"
       ],
       "c_function_count": 40,
+      "enters_module_graph": false,
       "symbol_count": 54,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 54,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_primitive policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -164,6 +171,7 @@
         "stdlib/simd/simd.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 131,
       "xray_body_symbols": 130,
       "handwritten_c_symbols": 1,
@@ -187,6 +195,7 @@
         "stdlib/path/path.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 26,
       "xray_body_symbols": 25,
       "handwritten_c_symbols": 1,
@@ -210,6 +219,7 @@
         "stdlib/base64/base64.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 12,
       "xray_body_symbols": 11,
       "handwritten_c_symbols": 1,
@@ -263,12 +273,13 @@
         "stdlib/regex/xregex_parse.c"
       ],
       "c_function_count": 168,
+      "enters_module_graph": false,
       "symbol_count": 178,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 172,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_library policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -323,12 +334,13 @@
         "stdlib/mem/mem.c"
       ],
       "c_function_count": 51,
+      "enters_module_graph": false,
       "symbol_count": 61,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 56,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_primitive policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -346,6 +358,7 @@
         "stdlib/codegen/codegen.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 3,
       "xray_body_symbols": 2,
       "handwritten_c_symbols": 1,
@@ -374,12 +387,13 @@
         "stdlib/runtime/runtime.c"
       ],
       "c_function_count": 7,
+      "enters_module_graph": false,
       "symbol_count": 8,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 7,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_primitive policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -403,11 +417,12 @@
         "stdlib/sync/sync.c"
       ],
       "c_function_count": 2,
+      "enters_module_graph": true,
       "symbol_count": 44,
       "xray_body_symbols": 42,
       "handwritten_c_symbols": 2,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
+      "queue": "deepen-existing-xray",
       "queue_reason": "5 public native symbols still bypass the .xr surface",
       "probe": {}
     },
@@ -426,6 +441,7 @@
         "stdlib/parallel/parallel.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 16,
       "xray_body_symbols": 15,
       "handwritten_c_symbols": 1,
@@ -472,12 +488,13 @@
         "stdlib/sys/sys.c"
       ],
       "c_function_count": 100,
+      "enters_module_graph": true,
       "symbol_count": 167,
       "xray_body_symbols": 48,
       "handwritten_c_symbols": 101,
       "native_leaf_symbols": 16,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_primitive policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -495,6 +512,7 @@
         "stdlib/url/url.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 31,
       "xray_body_symbols": 30,
       "handwritten_c_symbols": 1,
@@ -518,6 +536,7 @@
         "stdlib/datetime/datetime.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 47,
       "xray_body_symbols": 46,
       "handwritten_c_symbols": 1,
@@ -541,6 +560,7 @@
         "stdlib/log/log.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 29,
       "xray_body_symbols": 28,
       "handwritten_c_symbols": 1,
@@ -564,6 +584,7 @@
         "stdlib/encoding/encoding.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 14,
       "xray_body_symbols": 13,
       "handwritten_c_symbols": 1,
@@ -587,6 +608,7 @@
         "stdlib/text/text.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 10,
       "xray_body_symbols": 9,
       "handwritten_c_symbols": 1,
@@ -610,6 +632,7 @@
         "stdlib/_probe/_probe.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 1,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 1,
@@ -633,11 +656,12 @@
         "stdlib/io/io.c"
       ],
       "c_function_count": 76,
+      "enters_module_graph": true,
       "symbol_count": 142,
       "xray_body_symbols": 67,
       "handwritten_c_symbols": 74,
       "native_leaf_symbols": 37,
-      "queue": "independently-migratable",
+      "queue": "deepen-existing-xray",
       "queue_reason": "37 handwritten C functions remain behind the .xr surface",
       "probe": {}
     },
@@ -661,11 +685,12 @@
         "stdlib/os/os.c"
       ],
       "c_function_count": 43,
+      "enters_module_graph": true,
       "symbol_count": 78,
       "xray_body_symbols": 29,
       "handwritten_c_symbols": 48,
       "native_leaf_symbols": 26,
-      "queue": "independently-migratable",
+      "queue": "deepen-existing-xray",
       "queue_reason": "4 public native symbols still bypass the .xr surface",
       "probe": {}
     },
@@ -682,6 +707,7 @@
         "stdlib/test_yield/test_yield.c"
       ],
       "c_function_count": 27,
+      "enters_module_graph": false,
       "symbol_count": 27,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 27,
@@ -720,11 +746,12 @@
         "stdlib/net/xneterror.c"
       ],
       "c_function_count": 196,
+      "enters_module_graph": true,
       "symbol_count": 215,
       "xray_body_symbols": 48,
       "handwritten_c_symbols": 163,
       "native_leaf_symbols": 28,
-      "queue": "independently-migratable",
+      "queue": "deepen-existing-xray",
       "queue_reason": "11 public native symbols still bypass the .xr surface",
       "probe": {}
     },
@@ -743,6 +770,7 @@
         "stdlib/http/http.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 188,
       "xray_body_symbols": 187,
       "handwritten_c_symbols": 1,
@@ -766,6 +794,7 @@
         "stdlib/ws/ws.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 77,
       "xray_body_symbols": 76,
       "handwritten_c_symbols": 1,
@@ -792,12 +821,13 @@
         "stdlib/http2/http2_client.c"
       ],
       "c_function_count": 69,
+      "enters_module_graph": false,
       "symbol_count": 69,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 69,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_library policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -824,12 +854,13 @@
         "stdlib/crypto/crypto.c"
       ],
       "c_function_count": 55,
+      "enters_module_graph": false,
       "symbol_count": 55,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 55,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_library policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -857,12 +888,13 @@
         "stdlib/compress/compress_zlib.c"
       ],
       "c_function_count": 65,
+      "enters_module_graph": false,
       "symbol_count": 68,
       "xray_body_symbols": 0,
       "handwritten_c_symbols": 68,
       "native_leaf_symbols": 0,
-      "queue": "independently-migratable",
-      "queue_reason": "whole-module native_library policy: the .xr semantic source has to be written before any C owner can be deleted",
+      "queue": "establish-xray-source",
+      "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
       "probe": {}
     },
     {
@@ -900,11 +932,12 @@
         "stdlib/cluster/cluster_topic.c"
       ],
       "c_function_count": 186,
+      "enters_module_graph": true,
       "symbol_count": 214,
       "xray_body_symbols": 28,
       "handwritten_c_symbols": 181,
       "native_leaf_symbols": 4,
-      "queue": "independently-migratable",
+      "queue": "deepen-existing-xray",
       "queue_reason": "11 public native symbols still bypass the .xr surface",
       "probe": {}
     },
@@ -923,6 +956,7 @@
         "stdlib/csv/csv.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 43,
       "xray_body_symbols": 42,
       "handwritten_c_symbols": 1,
@@ -946,6 +980,7 @@
         "stdlib/toml/toml.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 89,
       "xray_body_symbols": 88,
       "handwritten_c_symbols": 1,
@@ -969,6 +1004,7 @@
         "stdlib/yaml/yaml.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 65,
       "xray_body_symbols": 64,
       "handwritten_c_symbols": 1,
@@ -992,6 +1028,7 @@
         "stdlib/xml/xml.c"
       ],
       "c_function_count": 1,
+      "enters_module_graph": true,
       "symbol_count": 48,
       "xray_body_symbols": 47,
       "handwritten_c_symbols": 1,
