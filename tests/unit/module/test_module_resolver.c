@@ -36,6 +36,14 @@ static void setup_tmpdir(void) {
     snprintf(g_tmpdir, sizeof(g_tmpdir), "/tmp/xray_test_resolver_XXXXXX");
     char *d = mkdtemp(g_tmpdir);
     ASSERT_NOT_NULL(d);
+    /* The resolver canonicalizes every source path it probes and the identity
+     * authority compares the two byte for byte, so the root has to be
+     * canonical as well. On Darwin /tmp is a symlink to private/tmp, which
+     * makes an uncanonicalized root escape itself. */
+    char *canonical = xr_realpath(g_tmpdir);
+    ASSERT_NOT_NULL(canonical);
+    snprintf(g_tmpdir, sizeof(g_tmpdir), "%s", canonical);
+    xr_free(canonical);
 }
 
 /* Recursively remove the temp directory. */

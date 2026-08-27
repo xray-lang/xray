@@ -314,7 +314,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 
 anchor-sha256: CMakeLists.txt d6bb0695aff42c238eef5ba92b829a982bb3977f9302bf083febe2eef4299daa
 anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec4338998ade7753489d2313dff2fc0d2
-anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
+anchor-sha256: src/module/xmodule_graph.c 0feddd8fc10e769aa4b13ca824046c227ba6dbd0037dc2979788d14c7a94da5e
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365
 anchor-sha256: src/frontend/parser/xparse_decl.c 956af54b931477adfe03b61de2271af8951a2241a9e0fa8ec8875855be2a5b06
 anchor-sha256: src/frontend/parser/xparse_import.c 6b82bda85a81a59c90d9ed04a71a86092525fc64b05d27d7e89ec10453003bec
