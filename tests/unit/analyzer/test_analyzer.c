@@ -54,6 +54,19 @@ static void setup_pool(void) {
         g_isolate = xray_vm_new_full(&p);
         g_session = xr_compiler_session_current_for_isolate(g_isolate);
         assert(g_session != NULL);
+        /* The analyzer names an enum's nominal owner after the compilation
+         * unit identity of the session it runs in, and enum metadata
+         * fail-closes when that owner is absent: every user-declared enum
+         * loses its variant layout and E.Member types as <error>. A bare
+         * session installs no identity, so these tests have to name one. */
+        const XrCompileUnitIdentity identity = {
+            .kind = XR_COMPILE_UNIT_MEMORY,
+            .module_identity = "memory-module-v1:id=19:analyzer-fixture-v1",
+        };
+        bool identity_set =
+            xr_compiler_session_set_compile_unit_identity(g_session, &identity);
+        assert(identity_set);
+        (void) identity_set;
     }
     if (!g_analyzer) {
         g_analyzer = xa_analyzer_new(g_session);
@@ -3309,9 +3322,15 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     ASSERT(entry_program != NULL);
 
     XrModuleResolverConfig cfg = {0};
+    /* The resolver canonicalizes every source path it probes and the identity
+     * authority compares the two byte for byte, so the root has to be
+     * canonical too. On Darwin /tmp is a symlink to private/tmp, which makes
+     * an uncanonicalized root escape itself. */
+    char *canonical_root = xr_test_realpath_alloc(tmpdir);
+    ASSERT(canonical_root != NULL);
     XrModuleIdentityAuthority authority = {
         .kind = XR_MODULE_IDENTITY_SCRIPT,
-        .physical_root = tmpdir,
+        .physical_root = canonical_root,
     };
     XrModuleResolver *resolver = xr_module_resolver_new(&cfg);
     ASSERT(resolver != NULL);
@@ -3619,6 +3638,7 @@ TEST(analyzer_error_effect_propagates_module_export_calls) {
     xr_free(entry_canonical);
     xr_free(entry_logical);
     free(entry_realpath);
+    free(canonical_root);
     xr_test_unlink(lib_path);
     xr_test_unlink(reexport_path);
     xr_test_unlink(star_path);
