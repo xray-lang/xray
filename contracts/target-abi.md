@@ -451,6 +451,11 @@ The transient program C-emission binding independently checks the same global
 partitions, functions, call, argument, and instruction, maps them to unique Xi
 functions and call only through SemanticPlan program bindings and PSC row
 indexes, and derives stable-identity C symbols without module-name lookup.
+The installed compiler archive exposes only pointer-free TargetPlan aggregate
+projection. Xi-bound leaf-product program emission remains a separate internal
+AOT translation unit and header, and the archive-link probe directly pulls the
+pointer-free projection object so source/Xi dependencies cannot leak into the
+installed compiler closure.
 Caller and callee use their stable program-function identities; each initializer
 uses a domain-separated hash of its canonical partition `module_identity` and
 exact SemanticFunctionRecord stable ID, because the initializer ID by itself is
@@ -806,8 +811,11 @@ anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c bf30653312565cee03b237f7ea523
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.h a5a25224c922a85295942ec72f3f2394dba722e9769aefbf414baba4daf7c3ec
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 0db57c7d713d5ccc41bcc480ef9fd66e50967c929ffb7532217b68baf0fd11d9
+anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 7d16dc053e4a544f8b9acf2e708d76c08e2022b82171b7d45d6950a9148aa779
+anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 8b195e252864f428ade7e800039df4c3d1205af552c1e6365a86c599cdad1942
+anchor-sha256: tests/target-machine/compiler_archive_link_probe.c 730c812aea11fd60d454f23e124316a89f5a2931c4bf65552e12cbe54c9acaf8
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 68deb54bcbe60ac1ff46e854d562bafbe1f745aec3ebbe52c62d4eed17c9e4e8
 anchor-sha256: src/plan/semantic/xr_semantic_shared_read_shape.h c82c3ac533b4e4b0ef944e66b8a8b1ce1c1f2d96d3772438c7fc5ab9dc9ee0ce
 anchor-sha256: src/plan/semantic/xr_semantic_string_shape.h 0c35fd29c8d8cc53636354f04fac70e7ec29e565e2af8ec2ff5d0ec4cda78ab8
@@ -823,7 +831,7 @@ anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c be43babe746e19562268cc0587328
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2686f615976867b7658f3f7976c8d73debe9d6444b55a32bc6a3a98b5bd5b35c
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c d1afd5c1fe6e96dae59e4b2e0a42f12f8b1a5b25a3f531cd111821b58e09a789
+anchor-sha256: src/aot/xi_cgen.c 81807bdfd871505d3bea4dff48e79ba02e6514f17415e76f849c647e48974aed
 anchor-sha256: src/ir/xi_opt.c 44fdacef3233931ba3e9f5b165a70d978b0cb365510bde8db2e00a84c9625b8f
 anchor-sha256: src/aot/xrt_coll.h 37e45c48a5f5a68e523a853ddf3d557d3ee6976337d7ab620df4d88d39228879
 anchor-sha256: src/aot/xrt_core_freestanding.h 5d4e9b2da067c44aa23d0b46b0ae133abeaae6e1b49a8efee617b384cb45cfb6

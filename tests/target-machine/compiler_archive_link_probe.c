@@ -5,6 +5,7 @@
  */
 
 #include "aot/emit_c/xr_c_emission_plan.h"
+#include "aot/xr_target_aggregate_c_projection.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/format/xr_xtp_schema.h"
 #include "plan/target/xr_target_builder.h"
@@ -28,5 +29,7 @@ int main(void) {
         return 3;
     if (xr_c_emission_plan_build(NULL, zero, &emission, error, sizeof(error)) || emission)
         return 4;
+    if (xr_c_leaf_aggregate_projection(NULL, 0, NULL))
+        return 5;
     return 0;
 }

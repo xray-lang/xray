@@ -14,6 +14,7 @@
 #include "aot/xaot_bundle.h"
 #include "aot/xi_cgen.h"
 #include "aot/xr_target_aggregate_c_projection.h"
+#include "aot/xr_leaf_value_product_program_emission.h"
 #include "base/xmalloc.h"
 #include "base/xmemstream.h"
 #include "base/xsha256.h"

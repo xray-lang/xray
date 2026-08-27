@@ -51,9 +51,14 @@ slot, call, and instruction rows. The dedicated one-shot hosted-fragment
 emitter first verifies the complete PSC/Xi/SemanticPlan-to-TargetPlan function
 join inside the same call, derives symbols from stable function identities into
 a private non-escaping binding, and then emits C mechanically from that binding
-and the verified TargetPlan rows. Generic aggregate projection and the legacy
-per-module CEmissionPlan reject every product provenance, including damaged
-product type bindings. The ordinary executable artifact route remains
+and the verified TargetPlan rows. This Xi-bound one-shot emitter is a separate
+AOT translation unit and header from the pointer-free aggregate projection.
+Only the pointer-free projection belongs to the installed compiler archive;
+its archive-link probe calls that projection directly, so a reintroduced Xi or
+frontend dependency fails the installed product closure instead of being
+silently satisfied by the development core. Generic aggregate projection and
+the legacy per-module CEmissionPlan reject every product provenance, including
+damaged product type bindings. The ordinary executable artifact route remains
 fail-closed because this family does not yet define one unique process entry.
 Managed tuple, tagged place/aggregate-reference, dynamic, boxed, name-derived,
 and legacy leaf-aggregate routes are forbidden for covered product functions.
@@ -852,17 +857,20 @@ anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759e
 anchor-sha256: src/aot/xaot_driver.c d92954960de17cc4bdab92fc6510e0512b1852c03c59a4f194598fcb7fd1c2bf
 anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94fedf203659abda9c8ecca6d
 anchor-sha256: src/aot/xaot_verify.c 993d814044a131d6b6405bd06f621b7c74e37a0310c3db90677289244582701b
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.h a5a25224c922a85295942ec72f3f2394dba722e9769aefbf414baba4daf7c3ec
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 0db57c7d713d5ccc41bcc480ef9fd66e50967c929ffb7532217b68baf0fd11d9
+anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 7d16dc053e4a544f8b9acf2e708d76c08e2022b82171b7d45d6950a9148aa779
+anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 8b195e252864f428ade7e800039df4c3d1205af552c1e6365a86c599cdad1942
+anchor-sha256: tests/target-machine/compiler_archive_link_probe.c 730c812aea11fd60d454f23e124316a89f5a2931c4bf65552e12cbe54c9acaf8
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c bf30653312565cee03b237f7ea5239057bf4569f41e9b834124569d929bc6b43
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
-anchor-sha256: src/aot/xi_cgen.c d1afd5c1fe6e96dae59e4b2e0a42f12f8b1a5b25a3f531cd111821b58e09a789
+anchor-sha256: src/aot/xi_cgen.c 81807bdfd871505d3bea4dff48e79ba02e6514f17415e76f849c647e48974aed
 anchor-sha256: src/aot/xi_cgen_call_resolve.inc.c 518a2f1e2ab3425448e95f5112920d7b20abda109827419f6c728a4dbe66de06
 anchor-sha256: src/aot/xi_cgen_import_helpers.inc.c 30076f1af20caef31c12ed09d9a7b99c81e9dbc0882090f4f043f306a8627bb3
 anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c684556117c14fe6aa0a1fe4bfbf29d9d713dc65bfe0a638321d43ca15a7d117
 anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2686f615976867b7658f3f7976c8d73debe9d6444b55a32bc6a3a98b5bd5b35c
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 499524fa526d60465e597448a2f4278a109fc8e8a5f81da2c13f11c35ec0a24c
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3b901b00eccccdbf6444db9a78aa8225e539e4500b84c6cf2473c997e70872b3
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687

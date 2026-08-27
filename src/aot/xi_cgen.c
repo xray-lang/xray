@@ -32,6 +32,7 @@
 #include "xaot_layout_gen.h"
 #include "xaot_struct_name.h"
 #include "xr_target_aggregate_c_projection.h"
+#include "xr_leaf_value_product_program_emission.h"
 #include "xi_backend_plan_contract.h"
 #include "xi_to_c_dispatch_gen.h"
 #include "xi_to_c_stmt_dispatch_gen.h"
