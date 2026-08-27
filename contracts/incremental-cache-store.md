@@ -142,10 +142,29 @@ invalidation, compiler-session ownership, or any compatibility reader.
     closed and cannot turn a cache hit into a per-module, name-based, or legacy
     execution path.
 
+13. Several verified program TargetPlan builds may share one store root at
+    once. Every surviving build owns byte-identical encoded plan bytes,
+    exactly one of them publishes the object while the rest are told it
+    already exists or are served it, and the root retains no unfinished temp
+    residue. A cancellation request observed at any of the builder's four
+    checkpoints refuses the build with no owned plan and no partial object,
+    and leaves an ordinary build of the same authority still producing the one
+    canonical answer. A truncated object, a payload mutated at full length,
+    and a plan built for another target planted under this target's key are
+    each refused and cost a verified recomputation of the identical bytes; a
+    refused candidate never degrades into a weaker answer, and a miss is not a
+    correctness fallback. Publication of an object over the entry budget
+    refuses the build and leaves the root empty. Cache identity follows
+    content alone: two independently allocated authorities stating the same
+    content share one address while a differing one publishes beside it. No
+    runtime-only archive defines a symbol the cache owner exports.
+
 Changing the root-lock coverage, rejected-snapshot identity, quota reservation
 order, atomic publication sequence, directory/link boundary, lock cleanup,
-XSM summary derivation, task preflight/publication ordering, or mandatory
-verification is a contract change.
+XSM summary derivation, task preflight/publication ordering, concurrent
+publication singularity, cancellation-boundary refusal, hostile-artifact
+recomputation, entry-budget refusal, content-only identity, runtime archive
+exclusion, or mandatory verification is a contract change.
 
 ## Digest anchors
 
@@ -164,10 +183,14 @@ anchor-sha256: src/aot/xaot_driver.c d92954960de17cc4bdab92fc6510e0512b1852c03c5
 anchor-sha256: src/os/os_fs.h 9b1c4d8779dbe274049c8eafbc887501cb5131c82e15170d56663a0b74a7b253
 anchor-sha256: src/os/unix/fs_unix.c fe178220141229044606cba6e2dc0df6a80767e07b43c93ede189b74434569ef
 anchor-sha256: src/os/win/fs_win.c 2ca47d9c0ce3b0b2b999e5dcbc2f855e1b6e80113e32625aa82940cb4450c104
-anchor-sha256: tests/unit/CMakeLists.txt 6e8d573ede07a1502615481c162da1f843500ba011206f695722fd3b5ce93669
+anchor-sha256: tests/unit/CMakeLists.txt 7ceede294e3f2f86c1e1822c0ba40250ed8999042b474f1522f1235c40c895bc
 anchor-sha256: tests/unit/incremental/test_cache_artifact_verify.c 31c1a7482c97bdc17549c01257710dbfd70142d02b308a61d32b81559f63148d
 anchor-sha256: tests/unit/incremental/test_cache_store.c 927f5058b962d5cda2471a14aed9d03730daba396cd6934e7b9add8fd8128618
-anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 55297a8a70bcb0c463dd03512699ecd7bc7723fd505ac75b102c585ed4c4857f
+anchor-sha256: tests/unit/incremental/test_program_target_plan_build.c 50c334c80c685846c4a20ca37d580f6a1363ece8a689570792319976a52fc636
+anchor-sha256: tests/unit/incremental/program_plan_cache_fixture.h dd6b9c2bcf20ec962f82cd903c98142c7794e6fad9a9fb04441db9d714cc1b4e
+anchor-sha256: tests/unit/incremental/program_plan_cache_fixture.c 212fb025b7be38ff15a089f203df9b11457843a367f81a0485d8d4cb805fb685
+anchor-sha256: tests/unit/incremental/test_program_plan_cache_qualification.c 7829d2b856b503603caf6a2aa40be4c3c3a538cca90d375dce7627053b03df04
+anchor-sha256: scripts/check_runtime_archive_cache_symbols.py 4a5f01578a97a8211f94054101c9efc711e66abac56be605ea841d36ff3c4d95
 anchor-sha256: tests/unit/incremental/test_module_summary_build.c 117a7c617160868de286912287b70b97dc79d07f685b740deb08d1e79e3f704e
 anchor-sha256: tests/aot/run_module_summary_determinism.py dd5f9493c43dbe11e3ca4870df40d0859ee5575f1459a67e3d7a180a657fe50d
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687
