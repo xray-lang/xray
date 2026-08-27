@@ -47,8 +47,7 @@ static XrVMRuntime *make_repl_iso(void) {
 }
 
 static XrProto *eval_repl(XrCompilerSession *session, XrVMRuntime *isolate, const char *source) {
-    XrReplEvalResult result =
-        xr_repl_eval(session, isolate, source, &k_repl_memory_authority);
+    XrReplEvalResult result = xr_repl_eval(session, isolate, source, &k_repl_memory_authority);
     if (result.status == XR_REPL_EVAL_OK)
         return result.proto;
     if (result.proto)
@@ -93,8 +92,7 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
     };
     XrTargetProfile *expected = NULL;
     char error[256] = {0};
-    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(
-        &expected, error, sizeof(error)));
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&expected, error, sizeof(error)));
 
     XrVMRuntime *iso = make_repl_iso();
     for (size_t i = 0; i < sizeof(profiles) / sizeof(profiles[0]); i++) {
@@ -104,12 +102,10 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
         ASSERT_NOT_NULL(iso->vm.globals);
         ASSERT_EQ_INT((int) xr_global_dict_count(iso->vm.globals), 0);
 
-        XrCompilerSession *installed_session =
-            xr_compiler_session_current_for_isolate(iso);
+        XrCompilerSession *installed_session = xr_compiler_session_current_for_isolate(iso);
         ASSERT_NOT_NULL(installed_session);
         ASSERT_TRUE(xr_target_profile_require_exact(
-            expected, xr_compiler_session_target_profile(installed_session),
-            error, sizeof(error)));
+            expected, xr_compiler_session_target_profile(installed_session), error, sizeof(error)));
 
         if (i == 0) {
             XrCompilerSessionConfig config = {
@@ -117,12 +113,11 @@ TEST(product_profiles_install_exact_authority_and_reject_missing_profile) {
                 .source_file = "<missing-target-profile>",
                 .repl_mode = true,
             };
-            XrCompilerSession *missing_session =
-                xr_compiler_session_new(&config);
+            XrCompilerSession *missing_session = xr_compiler_session_new(&config);
             ASSERT_NOT_NULL(missing_session);
             ASSERT_NULL(xr_compiler_session_target_profile(missing_session));
-            XrReplEvalResult result = xr_repl_eval(
-                missing_session, iso, "1 + 2\n", &k_repl_memory_authority);
+            XrReplEvalResult result =
+                xr_repl_eval(missing_session, iso, "1 + 2\n", &k_repl_memory_authority);
             ASSERT_EQ(XR_REPL_EVAL_COMPILE_ERROR, result.status);
             ASSERT_NULL(result.proto);
             xr_compiler_session_delete(missing_session);
@@ -772,8 +767,7 @@ TEST(repl_it_is_reserved_for_implicit_results) {
     ASSERT_NOT_NULL(iso);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
 
-    XrReplEvalResult result =
-        xr_repl_eval(session, iso, "var it = 1\n", &k_repl_memory_authority);
+    XrReplEvalResult result = xr_repl_eval(session, iso, "var it = 1\n", &k_repl_memory_authority);
     ASSERT_EQ_INT(result.status, XR_REPL_EVAL_COMPILE_ERROR);
     ASSERT_NULL(result.proto);
     ASSERT_FALSE(xr_repl_has_last_result(iso));
@@ -786,7 +780,7 @@ TEST(repl_cross_input_call_rejects_missing_type_authority) {
     ASSERT_NOT_NULL(iso);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
 
-    XrProto *p1 = eval_repl(session, iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    XrProto *p1 = eval_repl(session, iso, "fn inc(n: i64) -> i64 { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     XrReplSymbolTable *table = xr_repl_symbols_of(iso);
     int index = find_symbol(table, "inc");
@@ -807,7 +801,7 @@ TEST(repl_cross_input_call_rejects_invalid_symbol_authority) {
     ASSERT_NOT_NULL(iso);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(iso);
 
-    XrProto *p1 = eval_repl(session, iso, "fn inc(n: int) -> int { return n + 1 }\n");
+    XrProto *p1 = eval_repl(session, iso, "fn inc(n: i64) -> i64 { return n + 1 }\n");
     ASSERT_NOT_NULL(p1);
     XrReplSymbolTable *table = xr_repl_symbols_of(iso);
     int index = find_symbol(table, "inc");

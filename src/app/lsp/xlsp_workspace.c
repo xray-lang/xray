@@ -131,7 +131,11 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
         // 1. Skip re-analysis if content_hash unchanged
         // 2. Remove old symbols before adding new ones
         // 3. Propagate dirty flags to dependent files
+        XlspAnalysisIdentity file_identity;
+        xlsp_analysis_identity_push(&file_identity,
+                                    xr_compiler_session_current_for_isolate(server->isolate), uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, uri, (XrAstNode *) ast, content_hash);
+        xlsp_analysis_identity_pop(&file_identity);
         lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long) content_hash);
     }
 
