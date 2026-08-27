@@ -53,19 +53,39 @@ def sha256_file(path: Path) -> str:
 
 
 def resolve_include(root: Path, owner: Path, spelling: str) -> Path:
-    candidates = ((owner.parent / spelling).resolve(), (root / "include" / spelling).resolve())
-    for candidate in candidates:
-        if candidate.is_file():
-            try:
-                candidate.relative_to(root)
-            except ValueError as error:
-                raise ClosureError(f"quoted include escapes the source tree: {owner}: {spelling}") \
-                    from error
-            return candidate
+    # Compare against resolved paths throughout: a candidate is resolved to
+    # follow the spelling, so a root reached through a symlinked prefix would
+    # otherwise never contain it.
+    root = root.resolve()
+    owner = owner.resolve()
+    relative = (owner.parent / spelling).resolve()
+    public = (root / "include" / spelling).resolve()
+    for index, candidate in enumerate((relative, public)):
+        if not candidate.is_file():
+            continue
+        try:
+            inside = candidate.relative_to(root)
+        except ValueError as error:
+            raise ClosureError(f"quoted include escapes the source tree: {owner}: {spelling}") \
+                from error
+        # A relative spelling only keeps its meaning where the install layout
+        # preserves the directories it walks. src/ installs under
+        # lib/xray/sdk/src/ with its structure intact, but the public headers
+        # install flat under include/xray/, so a relative walk out of src/ into
+        # include/ resolves in a checkout and points at nothing once installed.
+        # Those headers are reachable by bare name from both include roots.
+        if index == 0 and inside.parts[0] != owner.relative_to(root).parts[0]:
+            raise ClosureError(
+                f"quoted include leaves the installed source root: {owner}: {spelling}"
+            )
+        return candidate
     raise ClosureError(f"quoted include is not source-backed: {owner}: {spelling}")
 
 
 def derive(root: Path) -> list[Path]:
+    # Every path below is resolved, so the root has to be as well: reached
+    # through a symlinked prefix it would contain none of them.
+    root = root.resolve()
     pending = [(root / relative).resolve() for relative in (*PRIVATE_ROOTS, *PUBLIC_ROOTS)]
     seen: set[Path] = set()
     while pending:
@@ -98,6 +118,7 @@ def install_path(relative: str) -> str:
 
 
 def render_cmake(root: Path, files: list[Path]) -> str:
+    root = root.resolve()
     public = []
     private = []
     for path in files:
@@ -116,6 +137,7 @@ def render_cmake(root: Path, files: list[Path]) -> str:
 
 
 def render_manifest(root: Path, files: list[Path]) -> str:
+    root = root.resolve()
     entries = []
     for path in files:
         relative = path.relative_to(root).as_posix()
