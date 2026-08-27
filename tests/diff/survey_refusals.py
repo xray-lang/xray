@@ -37,18 +37,42 @@ GENERATOR = "tests/diff/survey_refusals.py"
 SURVEY = re.compile(
     r"^\[refusal-survey\] owner=([a-z0-9-]+) family=([^\s]+)(?:\s+(.*))?$"
 )
-# A diagnostic code is identified by the code itself, not by the punctuation
-# that follows it. Sources spell the same registered code both as "XR_X: text"
-# and as "XR_X text", so a colon-only pattern reports a refusal that carries a
-# stable code as one that carries none, and then demands a code that already
-# exists. Accept either separator; require one so a bare code at end of line
-# does not absorb the following line as its message.
-DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+)(?::[ \t]*|[ \t]+)([^\r\n]+)")
+DIAGNOSTIC_REGISTRY = "contracts/target-machine/diagnostic-codes.toml"
+REGISTRY_CODE = re.compile(r'^id = "(XR_[A-Z]+_[0-9]{4})"$', re.M)
+# Only the governed registry decides what a diagnostic code is. Matching an
+# XR_-shaped token instead answers a different question: it accepts internal
+# enumerator names that carry no stable identity, and it rejects or accepts
+# registered codes according to the punctuation that happens to follow them.
+# Both spellings a source may use are covered because the code, not its
+# separator, is what is looked up.
+DIAGNOSTIC_SHAPE = re.compile(r"\b(XR_[A-Z0-9_]+)(?::[ \t]*|[ \t]+)([^\r\n]+)")
 OWNER_VALUES = {
     "semantic-plan-verifier",
     "target-plan-builder",
     "aot-representation-refinement",
 }
+
+
+def registered_diagnostic_codes(root: Path) -> frozenset[str]:
+    """Load the governed diagnostic registry, the sole authority over code identity."""
+    path = root / DIAGNOSTIC_REGISTRY
+    if not path.is_file():
+        raise RuntimeError(f"diagnostic registry missing: {DIAGNOSTIC_REGISTRY}")
+    codes = frozenset(REGISTRY_CODE.findall(path.read_text(encoding="utf-8", errors="strict")))
+    if not codes:
+        raise RuntimeError(f"diagnostic registry declares no codes: {DIAGNOSTIC_REGISTRY}")
+    return codes
+
+
+def find_diagnostic(text: str, codes: frozenset[str]) -> dict[str, str] | None:
+    """Report the first registered code in the log, with the message it introduces."""
+    best: tuple[int, str, str] | None = None
+    for match in DIAGNOSTIC_SHAPE.finditer(text):
+        if match.group(1) not in codes:
+            continue
+        if best is None or match.start() < best[0]:
+            best = (match.start(), match.group(1), match.group(2).strip())
+    return None if best is None else {"code": best[1], "message": best[2]}
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -178,7 +202,9 @@ def blocking_fact(family: str, detail: str) -> str:
     return "|".join(parts)
 
 
-def parse_refusals(log: bytes) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
+def parse_refusals(
+    log: bytes, codes: frozenset[str]
+) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
     rows: list[dict[str, Any]] = []
     text = log.decode("utf-8", errors="backslashreplace")
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -198,14 +224,7 @@ def parse_refusals(log: bytes) -> tuple[list[dict[str, Any]], dict[str, str] | N
             "detail": detail,
             "blocking_fact": blocking_fact(family, detail),
         })
-    diagnostic_match = DIAGNOSTIC.search(text)
-    diagnostic = None
-    if diagnostic_match:
-        diagnostic = {
-            "code": diagnostic_match.group(1),
-            "message": diagnostic_match.group(2).strip(),
-        }
-    return rows, diagnostic
+    return rows, find_diagnostic(text, codes)
 
 
 def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | None]:
@@ -223,6 +242,11 @@ def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | N
 
 
 def self_test() -> int:
+    codes = registered_diagnostic_codes(ROOT)
+    for required in ("XR_TARGET_1000", "XR_TARGET_1003", "XR_CORO_4003"):
+        if required not in codes:
+            print(f"diagnostic registry does not carry {required}", file=sys.stderr)
+            return 1
     decision_source = (
         "[refusal-survey] owner=target-plan-builder family=calls "
         "XR_TARGET_1003: unsupported storage opcode=17 parameter-ordinal=2"
@@ -232,7 +256,7 @@ def self_test() -> int:
         "XR_TARGET_1000: product TargetPlan requires one canonical program authority"
     )
     log = ("noise\n" + decision_source + "\n" + product_source + "\n").encode("utf-8")
-    rows, diagnostic = parse_refusals(log)
+    rows, diagnostic = parse_refusals(log, codes)
     if len(rows) != 2 or rows[0]["sequence"] != 0 or rows[1]["sequence"] != 1 \
             or rows[0]["line_number"] != 2 or rows[1]["line_number"] != 3 \
             or rows[0]["source_text"] != decision_source \
@@ -257,7 +281,7 @@ def self_test() -> int:
         b"Error: Xi pipeline failed at ownership: XR_CORO_4003 func '<main>': "
         b"state 1 error continuation is not derivable\n"
     )
-    colon_free_rows, colon_free = parse_refusals(colon_free_log)
+    colon_free_rows, colon_free = parse_refusals(colon_free_log, codes)
     if colon_free_rows or colon_free != {
         "code": "XR_CORO_4003",
         "message": "func '<main>': state 1 error continuation is not derivable",
@@ -271,11 +295,28 @@ def self_test() -> int:
             file=sys.stderr,
         )
         return 1
+    # An internal enumerator name is XR_-shaped but carries no registered
+    # identity, so a refusal that names one still owes a stable diagnostic.
+    # Reading it as a code would report that debt as already paid.
+    unregistered_log = (
+        b"Error: module representation materialization failed for 'm': "
+        b"XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE record=0 value=5 operation=6\n"
+    )
+    if "XR_AOT_REFINEMENT_INCOMPLETE_COVERAGE" in codes:
+        print("registry unexpectedly carries an enumerator name", file=sys.stderr)
+        return 1
+    unregistered_rows, unregistered = parse_refusals(unregistered_log, codes)
+    if unregistered_rows or unregistered is not None:
+        print(
+            "live refusal generator self-test read an unregistered name as a code",
+            file=sys.stderr,
+        )
+        return 1
     # The uncoded classification must be reached through the log parser, not by
-    # handing it None: that shortcut leaves the pattern itself untested and is
+    # handing it None: that shortcut leaves the lookup itself untested and is
     # how a code-losing pattern stayed green.
     uncoded_log = b"Error: Xi pipeline failed at ownership: coroutine lowering failed closed\n"
-    uncoded_rows, uncoded = parse_refusals(uncoded_log)
+    uncoded_rows, uncoded = parse_refusals(uncoded_log, codes)
     if uncoded_rows or uncoded is not None or missing_evidence_gap(uncoded) != {
         "classification": "opaque-refusal-without-structured-diagnostic",
         "diagnostic_code": None,
@@ -375,6 +416,7 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
     identity = qualified_compiler_identity(identity_owner, build)
     binary = identity_owner.compiler_binary_path(build)
     provider = toolchain_identity(binary, timeout)
+    codes = registered_diagnostic_codes(ROOT)
 
     extra_cases = str(backend_diff.SCRIPT_DIR / "coro_regression_cases.txt")
     cases = [
@@ -445,7 +487,7 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             log_name = f"{result.order:04d}-{digest[:16]}.log"
             log_path = log_root / log_name
             log_path.write_bytes(log)
-            refusals, diagnostic = parse_refusals(log)
+            refusals, diagnostic = parse_refusals(log, codes)
             if not refusals:
                 invalid = True
                 gap = missing_evidence_gap(diagnostic)
@@ -531,6 +573,7 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             "cases": inputs,
             "divergence_baseline": file_row(divergence_path),
             "refusal_baseline": file_row(refusal_path),
+            "diagnostic_registry": file_row(ROOT / DIAGNOSTIC_REGISTRY),
         },
         "results": manifest_results,
         "root_causes": roots,

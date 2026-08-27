@@ -115,6 +115,26 @@ name = "invalid-operation-table"
 message = "semantic operation table contains an invalid record or SSA definition"
 
 [[code]]
+id = "XR_SEM_0016"
+name = "ssa-dominance-violation"
+message = "SSA definition or PHI incoming edge does not dominate its use"
+
+[[code]]
+id = "XR_SEM_0017"
+name = "invalid-operation-registry"
+message = "semantic operation registry is incomplete, duplicated, or inconsistent"
+
+[[code]]
+id = "XR_SEM_0018"
+name = "invalid-capture-or-argument-contract"
+message = "semantic capture or call argument contract is absent, untyped, or mismatched"
+
+[[code]]
+id = "XR_SEM_0019"
+name = "inexact-source-authority"
+message = "source-derived authority for the operation is not exact"
+
+[[code]]
 id = "XR_TARGET_1000"
 name = "profile-fingerprint-mismatch"
 message = "target profile fingerprint does not match the requested executor or emitter"
@@ -203,6 +223,21 @@ message = "owner identity was lost across PHI, adapter, capture, spill, or view"
 id = "XR_OWN_3003"
 name = "invalid-generation-pin"
 message = "callback, destructor, or release path has no valid generation pin"
+
+[[code]]
+id = "XR_OWN_3004"
+name = "inexact-borrow-provenance"
+message = "borrowed value escapes or joins parameter loans with no exact root"
+
+[[code]]
+id = "XR_OWN_3005"
+name = "disposition-not-post-dominating"
+message = "single ownership disposition does not post-dominate its acquisition"
+
+[[code]]
+id = "XR_OWN_3006"
+name = "invalid-loop-ownership-invariant"
+message = "ownership loop invariant is incomplete or disagrees with checked dataflow"
 
 [[code]]
 id = "XR_CORO_4000"

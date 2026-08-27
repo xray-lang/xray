@@ -593,7 +593,37 @@ def validate_policies(root: Path) -> list[str]:
     required_forbidden = {"pointer-or-address", "insertion-or-worker-completion-order"}
     if not required_forbidden.issubset(forbidden):
         errors.append("identity policy does not reject address/order inputs")
+    if diagnostics.get("policy", {}).get("unknown_code") == "error":
+        errors.extend(unregistered_emitted_codes(root, seen, ranges))
     return errors
+
+
+def unregistered_emitted_codes(
+    root: Path, registered: set[str], ranges: dict[str, tuple[int, int]]
+) -> list[str]:
+    """Enforce the registry's unknown_code policy against what the sources emit.
+
+    A code reaches a user the moment a source spells it, so the registry is only
+    the sole authority over code identity while every emitted code is in it.
+    Without this the policy is a statement no gate makes true, and a family-shaped
+    code can ship with no stable name, message, or owner behind it.
+    """
+    shape = re.compile(
+        r'"(' + "|".join(re.escape(prefix) for prefix in sorted(ranges)) + r')([0-9]{4})'
+    )
+    emitted: dict[str, str] = {}
+    for path in sorted((root / "src").rglob("*")):
+        if path.suffix not in (".c", ".h"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for match in shape.finditer(text):
+            emitted.setdefault(
+                match.group(1) + match.group(2), str(path.relative_to(root))
+            )
+    return [
+        f"emitted diagnostic code is not registered: {code} ({emitted[code]})"
+        for code in sorted(set(emitted) - registered)
+    ]
 
 
 def validate_phase0_evidence(root: Path) -> list[str]:
