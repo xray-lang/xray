@@ -3130,6 +3130,23 @@ if(BUILD_TESTS)
         TIMEOUT 180
     )
 
+    if(CMAKE_HOST_WIN32 AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
+        foreach(_portable_c11_family fixed-array slice)
+            add_test(
+                NAME aot_portable_c11_${_portable_c11_family}_msvc
+                COMMAND ${XRAY_PYTHON}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_portable_c11_msvc_regressions.py
+                        $<TARGET_FILE:xray>
+                        --family ${_portable_c11_family}
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            )
+            set_tests_properties(aot_portable_c11_${_portable_c11_family}_msvc PROPERTIES
+                LABELS "aot;generated-c;msvc;portable-c11;task-270"
+                TIMEOUT 180
+            )
+        endforeach()
+    endif()
+
     add_test(
         NAME global_evidence_cache_package_benchmark
         COMMAND ${CMAKE_COMMAND} -E env

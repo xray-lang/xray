@@ -3129,6 +3129,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (emit_portable_map_class_ctor_value_stmt(ctx, out, f, prefix, v, true))
         return;
 
+    if (emit_span_print_value_stmt(ctx, out, f, v))
+        return;
+
+    if (emit_span_to_string_value_stmt(ctx, out, f, v, true))
+        return;
+
     if (emit_str_concat_value_stmt(ctx, out, f, v, true))
         return;
 

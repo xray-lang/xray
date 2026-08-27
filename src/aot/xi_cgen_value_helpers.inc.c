@@ -1311,7 +1311,7 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *functi
             emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
         } else {
             fprintf(out, "xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_display_tagged(ctx, out, v->args[i]);
+            emit_value_as_display_tagged(ctx, out, v->args[i], NULL);
         }
         fprintf(out, "); ");
     }
@@ -1345,8 +1345,21 @@ static bool emit_str_concat_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *
                     piece_signed ? "int64_t" : "uint64_t");
             emit_value_as_rep_ctx(ctx, out, source, XR_REP_I64);
         } else {
+            char span_view_name[48] = {0};
+            const char *span_view = NULL;
+            if (v->args[i] && cg_value_plan_is_span_aggregate(ctx, v->args[i])) {
+                snprintf(span_view_name, sizeof(span_view_name), "_xspan_concat_view_%u_%u",
+                         (unsigned) v->id, (unsigned) i);
+                if (!emit_span_array_view_local_init(ctx, out, v->args[i], span_view_name,
+                                                     "        ")) {
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: Slice concat lacks typed element plan\n");
+                    return true;
+                }
+                span_view = span_view_name;
+            }
             fprintf(out, "        xrt_strpart_init(&_scp_%u[%u], ", v->id, (unsigned) i);
-            emit_value_as_display_tagged(ctx, out, v->args[i]);
+            emit_value_as_display_tagged(ctx, out, v->args[i], span_view);
         }
         fprintf(out, ");\n");
     }

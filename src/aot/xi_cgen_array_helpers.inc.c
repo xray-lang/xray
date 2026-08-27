@@ -5017,13 +5017,16 @@ static bool cg_span_value_has_elem_info(XiCgenCtx *ctx, const XiValue *value) {
     return cg_span_elem_info_from_value(ctx, value, &info) && info.elem_name && info.ctype;
 }
 
-static bool emit_span_array_view_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
+static bool emit_span_array_view_local_init(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                            const char *view_name, const char *indent) {
     CgArrayElemInfo info;
-    if (!cg_span_elem_info_from_value(ctx, value, &info) || !info.elem_name || !info.ctype)
+    if (!out || !view_name || !indent ||
+        !cg_span_elem_info_from_value(ctx, value, &info) || !info.elem_name || !info.ctype)
         return false;
-    fprintf(out, "xrt_array_stack_borrow_span_view_typed(");
+    fprintf(out, "%sxrt_array_t %s;\n", indent, view_name);
+    fprintf(out, "%sxrt_array_stack_borrow_span_view_init(&%s, ", indent, view_name);
     emit_span_ref_expr(out, value);
-    fprintf(out, ", %s, sizeof(%s), %u, %u)", info.elem_name, info.ctype,
+    fprintf(out, ", %s, sizeof(%s), %u, %u);\n", info.elem_name, info.ctype,
             (unsigned) xr_type_to_tid(info.type),
             (unsigned) (strcmp(info.elem_name, "XR_ELEM_ANY") == 0));
     return true;

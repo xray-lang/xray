@@ -10250,6 +10250,12 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_fixed_array_index_set_stmt(ctx, out, f, prefix, v))
         return;
 
+    if (emit_span_print_value_stmt(ctx, out, f, v))
+        return;
+
+    if (emit_span_to_string_value_stmt(ctx, out, f, v, false))
+        return;
+
     if (xicgen_emit_planned_type_switch_method_stmt(ctx, out, f, v, prefix))
         return;
 

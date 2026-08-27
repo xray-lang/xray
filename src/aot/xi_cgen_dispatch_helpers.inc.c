@@ -6048,7 +6048,8 @@ static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc 
     return saw_print;
 }
 
-static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
+static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *span_view_name) {
     XR_DCHECK(v->nargs >= 1, "xicgen_emit_print_expr: missing print value");
     int flags = (int) v->aux_int;
     bool add_space = (flags & 1) != 0;
@@ -6078,9 +6079,12 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
             fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
             if (print_span) {
                 fprintf(out, "xr_mkptr(");
-                if (!emit_span_array_view_ptr_expr(ctx, out, v->args[0])) {
+                if (span_view_name) {
+                    fprintf(out, "&%s", span_view_name);
+                } else {
                     ctx->error = true;
-                    fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
+                    fprintf(stderr,
+                            "[xi_cgen] ERROR: print Slice lacks scoped borrowed-view storage\n");
                     emit_codegen_abort_expr(out);
                 }
                 fprintf(out, ", XR_TAG_ARRAY)");
@@ -6119,9 +6123,12 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
         fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
         if (print_span) {
             fprintf(out, "xr_mkptr(");
-            if (!emit_span_array_view_ptr_expr(ctx, out, v->args[0])) {
+            if (span_view_name) {
+                fprintf(out, "&%s", span_view_name);
+            } else {
                 ctx->error = true;
-                fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: print Slice lacks scoped borrowed-view storage\n");
                 emit_codegen_abort_expr(out);
             }
             fprintf(out, ", XR_TAG_ARRAY)");
@@ -6137,7 +6144,64 @@ static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
 static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) prefix;
-    xicgen_emit_print_expr(ctx, out, f, v);
+    xicgen_emit_print_expr(ctx, out, f, v, NULL);
+}
+
+static bool emit_span_print_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const XiValue *v) {
+    if (!ctx || !out || !v || v->op != XI_PRINT || v->nargs < 1 || !v->args[0] ||
+        !cg_value_plan_is_span_aggregate(ctx, v->args[0]))
+        return false;
+
+    char view_name[48];
+    snprintf(view_name, sizeof(view_name), "_xspan_print_view_%u", (unsigned) v->id);
+    fprintf(out, "    {\n");
+    if (!emit_span_array_view_local_init(ctx, out, v->args[0], view_name, "        ")) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: print Slice lacks typed element plan\n");
+        fprintf(out, "        ");
+        emit_codegen_abort_expr(out);
+        fprintf(out, ";\n    }\n");
+        return true;
+    }
+    fprintf(out, "        (void)(");
+    xicgen_emit_print_expr(ctx, out, f, v, view_name);
+    fprintf(out, ");\n    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    return true;
+}
+
+static bool emit_span_to_string_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, bool storage_predeclared) {
+    if (!ctx || !out || !f || !v || (v->op != XI_AS && v->op != XI_CONVERT) || v->nargs < 1 ||
+        !v->args[0] || !v->type || v->type->kind != XR_KIND_STRING ||
+        !cg_value_plan_is_span_aggregate(ctx, v->args[0]))
+        return false;
+
+    char view_name[48];
+    snprintf(view_name, sizeof(view_name), "_xspan_string_view_%u", (unsigned) v->id);
+    if (!storage_predeclared && !ctx->pre_decl_all) {
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
+        emit_vref(out, v);
+        fprintf(out, ";\n");
+    }
+    fprintf(out, "    {\n");
+    if (!emit_span_array_view_local_init(ctx, out, v->args[0], view_name, "        ")) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: string(Slice) lacks typed element plan\n");
+        fprintf(out, "        ");
+        emit_codegen_abort_expr(out);
+        fprintf(out, ";\n    }\n");
+        return true;
+    }
+    fprintf(out, "        ");
+    emit_vref(out, v);
+    fprintf(out, " = xrt_to_string(");
+    emit_value_as_display_tagged(ctx, out, v->args[0], view_name);
+    fprintf(out, ");\n    }\n");
+    emit_value_generated_line_reset(ctx, out, v);
+    emit_debug_source_var_sync(ctx, out, f, v);
+    return true;
 }
 
 static const XaotObjectAccessPlan *xicgen_require_object_field_access(XiCgenCtx *ctx,
@@ -6713,7 +6777,7 @@ static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
                     fprintf(out, ")");
                 } else {
                     fprintf(out, "xrt_to_string(");
-                    emit_value_as_display_tagged(ctx, out, v->args[0]);
+                    emit_value_as_display_tagged(ctx, out, v->args[0], NULL);
                     fprintf(out, ")");
                 }
                 return;
@@ -7444,7 +7508,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     if (bn[0] == '\0' && v->aux_int == 0 && v->nargs == 0) {
         fprintf(out, "XR_FROM_BOOL(false)");
     } else if (strcmp(bn, "print") == 0) {
-        xicgen_emit_print_expr(ctx, out, f, v);
+        xicgen_emit_print_expr(ctx, out, f, v, NULL);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
@@ -14810,7 +14874,7 @@ static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         } else {
             fprintf(out, "xrt_to_string(");
-            emit_value_as_display_tagged(ctx, out, v->args[0]);
+            emit_value_as_display_tagged(ctx, out, v->args[0], NULL);
             fprintf(out, ")");
         }
     } else if (v->type->kind == XR_KIND_BOOL) {

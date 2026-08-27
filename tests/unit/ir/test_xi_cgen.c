@@ -3455,6 +3455,31 @@ TEST(cgen_span_passed_only_to_direct_call_omits_data_cache) {
     xi_func_free(ir);
 }
 
+TEST(cgen_span_print_materializes_scoped_portable_view) {
+    const char *src = "fn run() {\n"
+                      "    var values: Array<i64> = [1, 2, 3, 4]\n"
+                      "    const tail: Slice<i64> = values[-2:]\n"
+                      "    print(tail)\n"
+                      "}\n"
+                      "run()\n";
+    XiFunc *ir = compile_to_ir(src);
+    TEST_REQUIRE(ir != NULL, "Slice print fixture should compile");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    TEST_REQUIRE(code != NULL && !had_error, "Slice print fixture should generate");
+    TEST_REQUIRE(contains(code, "xrt_array_t _xspan_print_view_"),
+                 "Slice print must materialize one scoped native view");
+    TEST_REQUIRE(contains(code, "xrt_array_stack_borrow_span_view_init(&_xspan_print_view_"),
+                 "Slice print must initialize the scoped view through the typed runtime owner");
+    TEST_REQUIRE(!contains(code, "xrt_array_stack_borrow_span_view_typed") &&
+                     !contains(code, "({ xr_span_t"),
+                 "Slice print must not retain the retired GNU statement-expression path");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unused_shared_load_is_debug_only_when_source_bound) {
     XrType u64_type = {.kind = XR_KIND_INT, .id = 933, .scalar_rep = XR_NATIVE_U64, .frozen = true};
     XiFunc *ir = xi_func_new("manual_debug_shared", &u64_type);
@@ -14774,6 +14799,7 @@ int main(int argc, char **argv) {
     run_cgen_rune_to_string_consumes_immutable_emission_recipe();
     run_cgen_rune_is_whitespace_consumes_immutable_emission_recipe();
     run_cgen_span_passed_only_to_direct_call_omits_data_cache();
+    run_cgen_span_print_materializes_scoped_portable_view();
     run_cgen_unused_shared_load_is_debug_only_when_source_bound();
     run_cgen_consumed_shared_load_stays_release_materialized();
     run_cgen_shared_store_uses_portable_owned_value_helper();

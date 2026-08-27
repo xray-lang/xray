@@ -278,11 +278,10 @@ static bool cg_value_plan_is_span_aggregate(XiCgenCtx *ctx, const XiValue *v) {
     return plan && cg_value_rep_is_span_aggregate(plan->rep);
 }
 
-/* Defined in xi_cgen_array_helpers.inc.c, which is included later: boxes a span
- * through a typed borrowed xrt_array_t view carrying its element type, and
- * reports whether that view can be built at all. */
-static bool emit_span_array_view_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiValue *value);
+/* Defined in xi_cgen_array_helpers.inc.c, which is included later. */
 static bool cg_span_value_has_elem_info(XiCgenCtx *ctx, const XiValue *value);
+static bool emit_span_array_view_local_init(XiCgenCtx *ctx, FILE *out, const XiValue *value,
+                                            const char *view_name, const char *indent);
 static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep);
 
 /*
@@ -298,14 +297,23 @@ static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, X
  * one shape feeds all of them. The Slice value ABI is untouched: this is a
  * borrowed view built at the use site, not a change to how slices are passed.
  */
-static void emit_value_as_display_tagged(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
-    /* An erased element type leaves no view to build; the ordinary tagged form
-     * is then the only thing we can emit. */
-    if (ctx && v && cg_value_plan_is_span_aggregate(ctx, v) &&
-        cg_span_value_has_elem_info(ctx, cg_unwrap_identity_value(v))) {
-        fprintf(out, "xr_mkptr(");
-        (void) emit_span_array_view_ptr_expr(ctx, out, cg_unwrap_identity_value(v));
-        fprintf(out, ", XR_TAG_ARRAY)");
+static void emit_value_as_display_tagged(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                         const char *span_view_name) {
+    if (ctx && v && cg_value_plan_is_span_aggregate(ctx, v)) {
+        if (!cg_span_value_has_elem_info(ctx, cg_unwrap_identity_value(v))) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: Slice display lacks typed element plan\n");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        if (!span_view_name) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: Slice display lacks scoped borrowed-view storage\n");
+            emit_codegen_abort_expr(out);
+            return;
+        }
+        fprintf(out, "xr_mkptr(&%s, XR_TAG_ARRAY)", span_view_name);
         return;
     }
     emit_value_as_rep_ctx(ctx, out, v, XR_REP_TAGGED);

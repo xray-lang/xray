@@ -1359,19 +1359,6 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
     })
 #endif
 
-#ifndef xrt_array_stack_borrow_span_view_typed
-#define xrt_array_stack_borrow_span_view_typed(span_expr, elem_type_expr, elem_size_expr,          \
-                                               elem_tid_expr, contains_refs_expr)                  \
-    ({                                                                                             \
-        xr_span_t _span = (span_expr);                                                             \
-        xrt_array_t *_view = (xrt_array_t *) __builtin_alloca(sizeof(xrt_array_t));                \
-        xrt_array_stack_borrow_span_view_init(                                                     \
-            _view, _span, (uint8_t) (elem_type_expr), (uint16_t) (elem_size_expr),                 \
-            (uint8_t) (elem_tid_expr), (uint8_t) (contains_refs_expr));                            \
-        _view;                                                                                     \
-    })
-#endif
-
 /* =========================================================================
  * StringBuilder runtime
  * ========================================================================= */
