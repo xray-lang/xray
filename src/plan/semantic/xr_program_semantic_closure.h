@@ -24,7 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(7)
+#define XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION UINT32_C(8)
 
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES UINT32_C(256)
 #define XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES UINT32_C(4096)
@@ -45,6 +45,10 @@ typedef enum XrProgramSemanticFamily {
     XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL,
     XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL,
     XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE,
+    /* Complete reachable source-module graph identity. This family freezes
+     * module and dependency authority only; it grants no executable function,
+     * Xi, TargetPlan, VM, or AOT authority by itself. */
+    XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH,
     XR_PROGRAM_SEMANTIC_FAMILY_COUNT,
 } XrProgramSemanticFamily;
 
@@ -87,6 +91,7 @@ typedef struct XrProgramSemanticSourceLocator {
 typedef enum XrProgramSemanticDependencyKind {
     XR_PROGRAM_SEMANTIC_DEPENDENCY_OPAQUE = 0,
     XR_PROGRAM_SEMANTIC_DEPENDENCY_SELECTIVE_FUNCTION_IMPORT,
+    XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE,
     XR_PROGRAM_SEMANTIC_DEPENDENCY_KIND_COUNT,
 } XrProgramSemanticDependencyKind;
 

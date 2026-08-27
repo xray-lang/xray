@@ -36,4 +36,20 @@ XR_FUNC bool xr_source_semantic_scalar_i64_import_binding(
     XrStableId exported_function, XrStableId return_type, XrFingerprint signature,
     XrFingerprint effect, uint64_t capability_mask, XrStableId *out);
 
+/* Canonical whole-source module-graph identities. These deliberately bind
+ * only source/module/dependency facts and never manufacture functions or
+ * executable-plan authority. */
+XR_FUNC bool xr_source_semantic_module_graph_policy(XrFingerprint *out);
+XR_FUNC bool xr_source_semantic_module_graph_exports(
+    const XrProgramSemanticModuleInput *module, XrFingerprint *out);
+XR_FUNC bool xr_source_semantic_module_graph_import_binding(
+    const XrProgramSemanticModuleInput *source,
+    const XrProgramSemanticModuleInput *dependency,
+    XrProgramSemanticSourceLocator import_locator, XrStableId *out);
+XR_FUNC bool xr_source_semantic_module_graph_dependency_contract(
+    const XrProgramSemanticModuleInput *source,
+    const XrProgramSemanticModuleInput *dependency,
+    XrProgramSemanticSourceLocator import_locator, XrStableId resolver_binding,
+    XrFingerprint *out);
+
 #endif  // XR_SOURCE_SEMANTIC_IDENTITY_H

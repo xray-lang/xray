@@ -18,6 +18,7 @@
 #include "../parser/xast_nodes.h"
 #include "../parser/xast_walk.h"
 #include "../../base/xsha256.h"
+#include "../../base/xmalloc.h"
 #include "../../module/xmodule_graph.h"
 #include "../../module/xmodule_identity.h"
 #include "../../runtime/class/xclass_info.h"
@@ -1390,6 +1391,237 @@ xa_program_semantic_closure_publish_scalar_module_graph(
     ok = ok && xr_program_semantic_closure_add_call(
                    closure, &call_input, &ignored_call, error, error_size) &&
          xr_program_semantic_closure_freeze(closure, error, error_size) &&
+         xr_program_semantic_closure_verify(closure, error, error_size);
+    if (!ok) {
+        XrProgramSemanticClosureFailureKind failure =
+            xr_program_semantic_closure_failure_kind(closure);
+        xr_program_semantic_closure_free(closure);
+        return failure == XR_PROGRAM_SEMANTIC_CLOSURE_FAILURE_RESOURCE
+                   ? XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE
+                   : XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    }
+    *out = closure;
+    return XA_PROGRAM_SEMANTIC_CLOSURE_READY;
+}
+
+static int source_graph_locator_compare(XrProgramSemanticSourceLocator left,
+                                        XrProgramSemanticSourceLocator right) {
+    if (left.start_line != right.start_line)
+        return left.start_line < right.start_line ? -1 : 1;
+    if (left.start_column != right.start_column)
+        return left.start_column < right.start_column ? -1 : 1;
+    if (left.end_line != right.end_line)
+        return left.end_line < right.end_line ? -1 : 1;
+    if (left.end_column != right.end_column)
+        return left.end_column < right.end_column ? -1 : 1;
+    if (left.kind != right.kind)
+        return left.kind < right.kind ? -1 : 1;
+    return 0;
+}
+
+static bool source_graph_edge_locator(const XrModuleGraph *graph,
+                                      const XrModuleSpec *source,
+                                      const XrModuleSpec *dependency,
+                                      XrProgramSemanticSourceLocator *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    const AstNode *program = source ? source->ast : NULL;
+    if (!out || !graph || !graph->resolver || !source || !dependency ||
+        !dependency->canonical || !program || program->type != AST_PROGRAM ||
+        (program->as.program.count && !program->as.program.statements))
+        return false;
+    bool found = false;
+    for (int i = 0; i < program->as.program.count; i++) {
+        const AstNode *statement = program->as.program.statements[i];
+        const char *specifier = NULL;
+        if (statement && statement->type == AST_IMPORT_STMT)
+            specifier = statement->as.import_stmt.module_name;
+        else if (statement && statement->type == AST_EXPORT_STMT)
+            specifier = statement->as.export_stmt.from_path;
+        if (!specifier)
+            continue;
+        XrModuleId resolved = {0};
+        int status = xr_module_resolver_resolve(
+            graph->resolver, specifier, source->source_path, &source->authority,
+            &resolved, NULL);
+        bool exact = status == 0 && resolved.canonical &&
+                     strcmp(resolved.canonical, dependency->canonical) == 0;
+        if (status == 0)
+            xr_module_id_cleanup(&resolved);
+        if (!exact)
+            continue;
+        XrProgramSemanticSourceLocator candidate = leaf_locator(statement);
+        if (!leaf_locator_valid(candidate))
+            return false;
+        if (!found || source_graph_locator_compare(candidate, *out) < 0) {
+            *out = candidate;
+            found = true;
+        }
+    }
+    return found;
+}
+
+typedef struct XaSourceGraphAuthority {
+    XrProgramSemanticModuleInput *modules;
+    uint32_t dependency_count;
+} XaSourceGraphAuthority;
+
+static void source_graph_authority_cleanup(XaSourceGraphAuthority *authority) {
+    if (!authority)
+        return;
+    xr_free(authority->modules);
+    memset(authority, 0, sizeof(*authority));
+}
+
+static XaProgramSemanticClosurePublishStatus source_graph_collect_authority(
+    XaAnalyzer *analyzer, const XrModuleGraph *graph,
+    XaSourceGraphAuthority *authority, char *error, size_t error_size) {
+    if (!analyzer || !graph || !authority || analyzer->graph != graph ||
+        !graph->resolver || graph->has_cycle || graph->spec_count <= 0 ||
+        graph->spec_count > (int) XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES ||
+        graph->entry_index < 0 || graph->entry_index >= graph->spec_count ||
+        graph->topo_count != graph->spec_count || !graph->topo_order) {
+        bridge_fail(error, error_size,
+                    "source module graph authority is incomplete or unbounded");
+        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    }
+    authority->modules =
+        (XrProgramSemanticModuleInput *) xr_calloc((size_t) graph->spec_count,
+                                                   sizeof(*authority->modules));
+    uint8_t *topo_seen = (uint8_t *) xr_calloc((size_t) graph->spec_count, 1u);
+    uint32_t *indegree =
+        (uint32_t *) xr_calloc((size_t) graph->spec_count, sizeof(*indegree));
+    if (!authority->modules || !topo_seen || !indegree) {
+        xr_free(topo_seen);
+        xr_free(indegree);
+        source_graph_authority_cleanup(authority);
+        bridge_fail(error, error_size,
+                    "source module graph publication allocation failed");
+        return XA_PROGRAM_SEMANTIC_CLOSURE_RESOURCE_FAILURE;
+    }
+    bool valid = true;
+    for (int topo = 0; valid && topo < graph->topo_count; topo++) {
+        int index = graph->topo_order[topo];
+        valid = index >= 0 && index < graph->spec_count && !topo_seen[index];
+        if (valid)
+            topo_seen[index] = 1u;
+    }
+    for (int i = 0; valid && i < graph->spec_count; i++) {
+        const XrModuleSpec *spec = &graph->specs[i];
+        XrFingerprint exports = {{0}};
+        valid = topo_seen[i] && spec->status == XR_MODSPEC_ANALYZED && spec->ast &&
+                spec->ast->type == AST_PROGRAM &&
+                (!spec->ast->as.program.count || spec->ast->as.program.statements) &&
+                spec->dep_count >= 0 && (!spec->dep_count || spec->dep_indices) &&
+                leaf_module_authority(spec, &authority->modules[i]) &&
+                xr_source_semantic_module_graph_exports(&authority->modules[i],
+                                                        &exports);
+        if (!valid)
+            break;
+        if ((uint32_t) spec->dep_count >
+            XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES -
+                authority->dependency_count) {
+            valid = false;
+            break;
+        }
+        authority->modules[i].export_fingerprint = exports;
+        authority->dependency_count += (uint32_t) spec->dep_count;
+        for (int edge = 0; valid && edge < spec->dep_count; edge++) {
+            int target = spec->dep_indices[edge];
+            valid = target >= 0 && target < graph->spec_count && target != i;
+            for (int prior = 0; valid && prior < edge; prior++)
+                valid = spec->dep_indices[prior] != target;
+            if (valid)
+                indegree[target]++;
+        }
+    }
+    uint32_t roots = 0;
+    for (int i = 0; valid && i < graph->spec_count; i++) {
+        if (indegree[i] != 0)
+            continue;
+        roots++;
+        valid = i == graph->entry_index && roots == 1u;
+    }
+    xr_free(topo_seen);
+    xr_free(indegree);
+    if (valid && roots == 1u)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_READY;
+    source_graph_authority_cleanup(authority);
+    bridge_fail(error, error_size,
+                "source module graph has no exact reachable entry topology");
+    return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+}
+
+static bool source_graph_add_rows(
+    XrProgramSemanticClosure *closure, const XrModuleGraph *graph,
+    const XaSourceGraphAuthority *authority, char *error, size_t error_size) {
+    bool ok = true;
+    for (int i = 0; ok && i < graph->spec_count; i++)
+        ok = xr_program_semantic_closure_add_module(
+            closure, &authority->modules[i], error, error_size);
+    for (int source_index = 0; ok && source_index < graph->spec_count;
+         source_index++) {
+        const XrModuleSpec *source = &graph->specs[source_index];
+        for (int edge = 0; ok && edge < source->dep_count; edge++) {
+            int dependency_index = source->dep_indices[edge];
+            XrProgramSemanticSourceLocator locator = {0};
+            XrStableId binding = {{0}};
+            XrFingerprint contract = {{0}};
+            ok = source_graph_edge_locator(graph, source,
+                                           &graph->specs[dependency_index], &locator) &&
+                 xr_source_semantic_module_graph_import_binding(
+                     &authority->modules[source_index],
+                     &authority->modules[dependency_index], locator, &binding) &&
+                 xr_source_semantic_module_graph_dependency_contract(
+                     &authority->modules[source_index],
+                     &authority->modules[dependency_index], locator, binding,
+                     &contract);
+            XrProgramSemanticDependencyInput input = {
+                .source_module = authority->modules[source_index].module_identity,
+                .dependency_module =
+                    authority->modules[dependency_index].module_identity,
+                .import_locator = locator,
+                .resolver_binding = binding,
+                .contract_fingerprint = contract,
+                .kind = XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE,
+            };
+            ok = ok && xr_program_semantic_closure_add_dependency(
+                           closure, &input, error, error_size);
+        }
+    }
+    return ok;
+}
+
+XaProgramSemanticClosurePublishStatus
+xa_program_semantic_closure_publish_source_module_graph(
+    XaAnalyzer *analyzer, const XrModuleGraph *graph,
+    XrProgramSemanticClosure **out, char *error, size_t error_size) {
+    if (out)
+        *out = NULL;
+    if (!out || !analyzer || !graph)
+        return XA_PROGRAM_SEMANTIC_CLOSURE_INVALID;
+    XaSourceGraphAuthority authority = {0};
+    XaProgramSemanticClosurePublishStatus collected =
+        source_graph_collect_authority(analyzer, graph, &authority, error,
+                                       error_size);
+    if (collected != XA_PROGRAM_SEMANTIC_CLOSURE_READY)
+        return collected;
+    XrFingerprint policy = {{0}};
+    XrProgramSemanticClosure *closure = NULL;
+    XrProgramSemanticClosureLimits limits = {
+        .max_modules = (uint32_t) graph->spec_count,
+        .max_dependencies = authority.dependency_count,
+        .max_functions = 1u,
+    };
+    bool ok = xr_source_semantic_module_graph_policy(&policy) &&
+              xr_program_semantic_closure_create(&limits, policy, &closure, error,
+                                                 error_size) &&
+              xr_program_semantic_closure_set_family(
+                  closure, XR_PROGRAM_SEMANTIC_FAMILY_SOURCE_MODULE_GRAPH, error,
+                  error_size);
+    ok = ok && source_graph_add_rows(closure, graph, &authority, error, error_size);
+    source_graph_authority_cleanup(&authority);
+    ok = ok && xr_program_semantic_closure_freeze(closure, error, error_size) &&
          xr_program_semantic_closure_verify(closure, error, error_size);
     if (!ok) {
         XrProgramSemanticClosureFailureKind failure =

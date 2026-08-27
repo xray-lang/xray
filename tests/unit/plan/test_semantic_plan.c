@@ -2844,7 +2844,7 @@ static void test_xsm_roundtrip_and_determinism(void) {
 
 static void test_xsm_program_provenance_roundtrip(void) {
     REQUIRE(XR_SEMANTIC_SCHEMA_VERSION == UINT32_C(44));
-    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(7));
+    REQUIRE(XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION == UINT32_C(8));
     REQUIRE(XR_SEMANTIC_PROGRAM_PROVENANCE_SCHEMA_VERSION == UINT32_C(4));
     XrSemanticPlan *plan = build_xsm_scalar_program_plan();
     const XrSemanticProgramProvenance *provenance = xr_semantic_plan_program_provenance(plan);

@@ -231,3 +231,115 @@ XR_FUNC bool xr_source_semantic_scalar_i64_import_binding(
     *out = finish_id(&context);
     return true;
 }
+
+static bool source_graph_module_valid(const XrProgramSemanticModuleInput *module,
+                                      bool require_exports) {
+    return module &&
+           !bytes_zero(module->module_identity.bytes, sizeof(module->module_identity.bytes)) &&
+           !bytes_zero(module->module_authority_fingerprint.bytes,
+                       sizeof(module->module_authority_fingerprint.bytes)) &&
+           !bytes_zero(module->source_fingerprint.bytes,
+                       sizeof(module->source_fingerprint.bytes)) &&
+           (!require_exports ||
+            !bytes_zero(module->export_fingerprint.bytes,
+                        sizeof(module->export_fingerprint.bytes)));
+}
+
+static bool source_graph_locator_valid(XrProgramSemanticSourceLocator locator) {
+    return locator.kind != 0 && locator.start_line != 0 && locator.start_column != 0 &&
+           locator.end_line != 0 && locator.end_column != 0 &&
+           (locator.end_line > locator.start_line ||
+            (locator.end_line == locator.start_line &&
+             locator.end_column > locator.start_column));
+}
+
+bool xr_source_semantic_module_graph_policy(XrFingerprint *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!out)
+        return false;
+    XrSHA256Context context;
+    begin_program_identity(&context, "xray-source-module-graph-policy-v1");
+    put_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_MAX_MODULES);
+    put_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_MAX_DEPENDENCIES);
+    put_u32(&context, XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE);
+    /* Exactly one graph entry, all rows reachable, and no dependency cycle. */
+    put_u32(&context, 1);
+    put_u32(&context, 1);
+    put_u32(&context, 1);
+    *out = finish_fingerprint(&context);
+    return true;
+}
+
+bool xr_source_semantic_module_graph_exports(
+    const XrProgramSemanticModuleInput *module, XrFingerprint *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!out || !source_graph_module_valid(module, false))
+        return false;
+    XrSHA256Context context;
+    begin_program_identity(&context, "xray-source-module-graph-exports-v1");
+    put_id(&context, module->module_identity);
+    put_fingerprint(&context, module->module_authority_fingerprint);
+    put_fingerprint(&context, module->source_fingerprint);
+    *out = finish_fingerprint(&context);
+    return true;
+}
+
+bool xr_source_semantic_module_graph_import_binding(
+    const XrProgramSemanticModuleInput *source,
+    const XrProgramSemanticModuleInput *dependency,
+    XrProgramSemanticSourceLocator import_locator, XrStableId *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!out || !source_graph_module_valid(source, true) ||
+        !source_graph_module_valid(dependency, true) ||
+        !source_graph_locator_valid(import_locator) ||
+        memcmp(source->module_identity.bytes, dependency->module_identity.bytes,
+               sizeof(source->module_identity.bytes)) == 0)
+        return false;
+    XrSHA256Context context;
+    begin_program_identity(&context, "xray-source-module-graph-import-binding-v1");
+    put_id(&context, source->module_identity);
+    put_fingerprint(&context, source->module_authority_fingerprint);
+    put_fingerprint(&context, source->source_fingerprint);
+    put_fingerprint(&context, source->export_fingerprint);
+    put_id(&context, dependency->module_identity);
+    put_fingerprint(&context, dependency->module_authority_fingerprint);
+    put_fingerprint(&context, dependency->source_fingerprint);
+    put_fingerprint(&context, dependency->export_fingerprint);
+    put_u32(&context, XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE);
+    put_locator(&context, import_locator);
+    *out = finish_id(&context);
+    return true;
+}
+
+bool xr_source_semantic_module_graph_dependency_contract(
+    const XrProgramSemanticModuleInput *source,
+    const XrProgramSemanticModuleInput *dependency,
+    XrProgramSemanticSourceLocator import_locator, XrStableId resolver_binding,
+    XrFingerprint *out) {
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!out || !source_graph_module_valid(source, true) ||
+        !source_graph_module_valid(dependency, true) ||
+        !source_graph_locator_valid(import_locator) ||
+        bytes_zero(resolver_binding.bytes, sizeof(resolver_binding.bytes)))
+        return false;
+    XrSHA256Context context;
+    begin_program_identity(&context,
+                           "xray-source-module-graph-dependency-contract-v1");
+    put_id(&context, source->module_identity);
+    put_fingerprint(&context, source->module_authority_fingerprint);
+    put_fingerprint(&context, source->source_fingerprint);
+    put_fingerprint(&context, source->export_fingerprint);
+    put_id(&context, dependency->module_identity);
+    put_fingerprint(&context, dependency->module_authority_fingerprint);
+    put_fingerprint(&context, dependency->source_fingerprint);
+    put_fingerprint(&context, dependency->export_fingerprint);
+    put_u32(&context, XR_PROGRAM_SEMANTIC_DEPENDENCY_SOURCE_MODULE_EDGE);
+    put_locator(&context, import_locator);
+    put_id(&context, resolver_binding);
+    *out = finish_fingerprint(&context);
+    return true;
+}
