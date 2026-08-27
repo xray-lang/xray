@@ -1,7 +1,7 @@
 import os
 
-assert(len(os.platform) > 0)
-assert(len(os.arch) > 0)
+assert(len(os.platform()) > 0)
+assert(len(os.arch()) > 0)
 assert(os.cpuCount() >= 1)
 assert(len(os.hostname()) > 0)
 assert(os.getenv("XRAY_STDLIB_LEGACY_ORACLE_MISSING_221") == null)

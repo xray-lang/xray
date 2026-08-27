@@ -7,13 +7,13 @@
     "test_only_modules": 2,
     "symbols": 2255,
     "production_symbols": 2227,
-    "xray_body_symbols": 1075,
-    "handwritten_c_semantic_owner": 972,
-    "native_leaf_symbols": 111,
-    "production_native_leaf_symbols": 111,
-    "unclassified_native_leaf": 111,
+    "xray_body_symbols": 1079,
+    "handwritten_c_semantic_owner": 966,
+    "native_leaf_symbols": 113,
+    "production_native_leaf_symbols": 113,
+    "unclassified_native_leaf": 113,
     "whole_module_native_policy": 10,
-    "public_native_symbols": 204,
+    "public_native_symbols": 200,
     "module_specific_c_loaders": 33,
     "production_module_specific_c_loaders": 31,
     "production_modules_without_xray_source": 10,
@@ -672,12 +672,7 @@
       "audience": "production",
       "semantic_source": "stdlib/os/os.xr",
       "factory_source": "stdlib/os/os.c",
-      "public_native": [
-        "arch",
-        "eol",
-        "platform",
-        "sep"
-      ],
+      "public_native": [],
       "xr_sources": [
         "stdlib/os/os.xr"
       ],
@@ -687,11 +682,11 @@
       "c_function_count": 43,
       "enters_module_graph": true,
       "symbol_count": 78,
-      "xray_body_symbols": 29,
-      "handwritten_c_symbols": 48,
-      "native_leaf_symbols": 26,
+      "xray_body_symbols": 33,
+      "handwritten_c_symbols": 44,
+      "native_leaf_symbols": 28,
       "queue": "deepen-existing-xray",
-      "queue_reason": "4 public native symbols still bypass the .xr surface",
+      "queue_reason": "16 handwritten C functions remain behind the .xr surface",
       "probe": {}
     },
     {
@@ -11048,6 +11043,36 @@
     },
     {
       "module": "os",
+      "symbol": "__platform",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/os/os.c",
+      "native_leaf": true,
+      "leaf_class": "unclassified",
+      "leaf_reason": "proposed host_abi_leaf: operating-system ABI boundary",
+      "plan_coverage": "native_binding",
+      "vm_binding": "os_platform",
+      "aot_binding": "xrt_os_platform",
+      "covered_c_deletion": "stdlib/os/os.c"
+    },
+    {
+      "module": "os",
+      "symbol": "__arch",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/defs/core.def",
+      "handwritten_c_body": "stdlib/os/os.c",
+      "native_leaf": true,
+      "leaf_class": "unclassified",
+      "leaf_reason": "proposed host_abi_leaf: operating-system ABI boundary",
+      "plan_coverage": "native_binding",
+      "vm_binding": "os_arch",
+      "aot_binding": "xrt_os_arch",
+      "covered_c_deletion": "stdlib/os/os.c"
+    },
+    {
+      "module": "os",
       "symbol": "__getenv",
       "kind": "function",
       "audience": "production",
@@ -11422,50 +11447,6 @@
     },
     {
       "module": "os",
-      "symbol": "platform",
-      "kind": "const",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os.platform",
-      "aot_binding": "xrt_os_platform"
-    },
-    {
-      "module": "os",
-      "symbol": "arch",
-      "kind": "const",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os.arch",
-      "aot_binding": "xrt_os_arch"
-    },
-    {
-      "module": "os",
-      "symbol": "sep",
-      "kind": "const",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os.sep",
-      "aot_binding": "xrt_os_sep"
-    },
-    {
-      "module": "os",
-      "symbol": "eol",
-      "kind": "const",
-      "audience": "production",
-      "semantic_source": "stdlib/defs/core.def",
-      "handwritten_c_body": "external",
-      "plan_coverage": "native_binding",
-      "vm_binding": "os.eol",
-      "aot_binding": "xrt_os_eol"
-    },
-    {
-      "module": "os",
       "symbol": "__ExecResult",
       "kind": "handle",
       "audience": "production",
@@ -11522,6 +11503,15 @@
     },
     {
       "module": "os",
+      "symbol": "arch",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/os/os.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "os",
       "symbol": "clock",
       "kind": "function",
       "audience": "production",
@@ -11541,6 +11531,15 @@
     {
       "module": "os",
       "symbol": "environ",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/os/os.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "os",
+      "symbol": "eol",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/os/os.xr",
@@ -11648,7 +11647,25 @@
     },
     {
       "module": "os",
+      "symbol": "platform",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/os/os.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "os",
       "symbol": "ppid",
+      "kind": "function",
+      "audience": "production",
+      "semantic_source": "stdlib/os/os.xr",
+      "xray_body": true,
+      "plan_coverage": "xray_source"
+    },
+    {
+      "module": "os",
+      "symbol": "sep",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/os/os.xr",
@@ -11889,26 +11906,6 @@
     {
       "module": "os",
       "symbol": "get_arch",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/os/os.c",
-      "handwritten_c_body": "stdlib/os/os.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/os/os.c"
-    },
-    {
-      "module": "os",
-      "symbol": "get_sep",
-      "kind": "c-function",
-      "audience": "production",
-      "semantic_source": "stdlib/os/os.c",
-      "handwritten_c_body": "stdlib/os/os.c",
-      "plan_coverage": "c_internal",
-      "covered_c_deletion": "stdlib/os/os.c"
-    },
-    {
-      "module": "os",
-      "symbol": "get_eol",
       "kind": "c-function",
       "audience": "production",
       "semantic_source": "stdlib/os/os.c",

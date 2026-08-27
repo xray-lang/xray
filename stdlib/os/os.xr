@@ -17,6 +17,20 @@ fn _execResult(raw: __ExecResult?) -> ExecResult? {
     return ExecResult(raw!.stdout, raw!.stderr, raw!.exitCode)
 }
 
+// Path separator and line ending are derived from the platform name rather
+// than queried, so the host reports one fact and the two spellings of it
+// cannot disagree.
+export fn platform() -> string { return __platform() }
+export fn arch() -> string { return __arch() }
+export fn sep() -> string {
+    if (__platform() == "windows") { return "\\" }
+    return "/"
+}
+export fn eol() -> string {
+    if (__platform() == "windows") { return "\r\n" }
+    return "\n"
+}
+
 export fn getenv(name: string) -> string? { return __getenv(name) }
 export fn setenv(name: string, value: string) -> bool { return __setenv(name, value) }
 export fn unsetenv(name: string) -> bool { return __unsetenv(name) }

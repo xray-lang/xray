@@ -8,25 +8,25 @@ import path
 
 @test
 fn test_platform() {
-    var p = os.platform
+    var p = os.platform()
     assert(p == "darwin" || p == "linux" || p == "windows")
 }
 
 @test
 fn test_arch() {
-    var a = os.arch
+    var a = os.arch()
     assert(a == "arm64" || a == "x64" || a == "x86")
 }
 
 @test
 fn test_sep() {
-    var s = os.sep
+    var s = os.sep()
     assert(s == "/" || s == "\\")
 }
 
 @test
 fn test_eol() {
-    var e = os.eol
+    var e = os.eol()
     assert(e == "\n" || e == "\r\n")
 }
 

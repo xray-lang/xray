@@ -9,11 +9,11 @@ import { Dylib } from sys
 
 var libPath = ""
 var symName = "printf"
-if (os.platform == "darwin") {
+if (os.platform() == "darwin") {
     libPath = "/usr/lib/libSystem.B.dylib"
-} else if (os.platform == "linux") {
+} else if (os.platform() == "linux") {
     libPath = "libc.so.6"
-} else if (os.platform == "windows") {
+} else if (os.platform() == "windows") {
     libPath = "kernel32.dll"
     symName = "GetCurrentProcessId"
 }

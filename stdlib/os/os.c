@@ -1097,8 +1097,13 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
 /* ========== Platform Information ========== */
 
 // Get operating system name
+/* The architecture table matches the one the AOT runtime reports, so a program
+ * naming its host receives the same answer whichever backend ran it. Selection
+ * keys on the repository architecture macros rather than compiler built-ins:
+ * the built-in spellings cover four architectures, which is why this table
+ * used to answer "unknown" on hosts the AOT side named exactly. */
 static const char *get_platform(void) {
-#if defined(XR_OS_WINDOWS) || defined(_WIN64)
+#if defined(XR_OS_WINDOWS)
     return "windows";
 #elif defined(XR_OS_MACOS) && defined(__MACH__)
     return "darwin";
@@ -1106,42 +1111,41 @@ static const char *get_platform(void) {
     return "linux";
 #elif defined(XR_OS_BSD)
     return "freebsd";
-#elif defined(XR_OS_BSD)
-    return "openbsd";
 #else
     return "unknown";
 #endif
 }
 
-// Get processor architecture
 static const char *get_arch(void) {
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
     return "arm64";
-#elif defined(__x86_64__) || defined(_M_X64)
+#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
     return "x64";
-#elif defined(__i386__) || defined(_M_IX86)
+#elif defined(XR_ARCH_X86) || defined(_M_IX86)
     return "x86";
-#elif defined(__arm__) || defined(_M_ARM)
+#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
     return "arm";
+#elif defined(XR_ARCH_POWERPC64)
+    return "ppc64";
+#elif defined(XR_ARCH_LOONGARCH64)
+    return "loongarch64";
+#elif defined(XR_ARCH_RISCV64)
+    return "riscv64";
 #else
     return "unknown";
 #endif
 }
 
-static const char *get_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return "\\";
-#else
-    return "/";
-#endif
+static XrValue os_platform(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xrs_string_value_c(X, get_platform());
 }
 
-static const char *get_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return "\r\n";
-#else
-    return "\n";
-#endif
+static XrValue os_arch(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xrs_string_value_c(X, get_arch());
 }
 
 /* ========== Module Loading ========== */

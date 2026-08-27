@@ -10,7 +10,7 @@ print(io.writeFile(file, "mode"))
 
 print(io.chmod(file, 420))
 var st = io.stat(file)
-if (os.platform == "windows") {
+if (os.platform() == "windows") {
     print(st != null)
 } else {
     print(st != null && st.mode == 420)
@@ -18,7 +18,7 @@ if (os.platform == "windows") {
 
 print(io.chmod(file, 0))
 var st2 = io.stat(file)
-if (os.platform == "windows") {
+if (os.platform() == "windows") {
     print(st2 != null)
 } else {
     print(st2 != null && st2.mode == 0)
