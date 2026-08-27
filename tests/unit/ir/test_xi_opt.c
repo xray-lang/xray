@@ -124,6 +124,29 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 /* Create function with sealed entry block. */
+/* The SemanticPlan builder requires a lowered graph to carry a typed durable
+ * module identity and synthesizes none, so each fixture names its own
+ * memory-namespace identity derived from the function it wraps. xi_func_free
+ * owns the module it is attached to and releases it with the function. */
+static void attach_fixture_module(XiFunc *root) {
+    if (root->module && root->module->identity)
+        return;
+    const char *name = root->name ? root->name : "xi_opt_fixture";
+    char identity[256];
+    int written = snprintf(identity, sizeof(identity), "memory-module-v1:id=%zu:%s",
+                           strlen(name), name);
+    /* This translation unit builds with NDEBUG, so assert evaluates nothing:
+     * every call here has to happen outside one. */
+    bool formatted = written > 0 && (size_t) written < sizeof(identity);
+    assert(formatted);
+    (void) formatted;
+    if (!root->module)
+        root->module = xi_module_new("xi_opt_fixture.xr", "xi_opt_fixture", root);
+    bool named = root->module && xi_module_set_identity(root->module, identity);
+    assert(named);
+    (void) named;
+}
+
 static XiFunc *make_func(const char *name, XrType *ret_type) {
     XiFunc *f = xi_func_new(name, ret_type);
     XiBlock *entry = xi_block_new(f);
@@ -1535,6 +1558,7 @@ static bool build_array_hof_rep_fixture(uint8_t kind,
         xi_block_set_return(entry,
                             xi_const_int(root, entry, 0, &stub_hof_int));
     root->stage = callback->stage = XI_STAGE_OPTIMIZED;
+    attach_fixture_module(root);
     if (!xr_semantic_plan_build_and_attach(root, error, error_size)) {
         xi_func_free(root);
         return false;
@@ -1640,11 +1664,23 @@ TEST(select_rep_array_hof_mutation_cannot_authorize_native_seed) {
                 plan->operands[operation->operand_begin].value;
             REQUIRE(!xr_semantic_plan_verify(plan, error, sizeof(error)));
         } else {
+            /* Lowering marks a higher-order call before captures are known,
+             * so the mark is a candidate the plan may decline. Declining it
+             * records no higher-order row; it does not refuse the function,
+             * because that would reject every capturing arr.map in the
+             * program. A map kind over three reduce operands is exactly such a
+             * declined candidate. */
             fixture.hof->array_hof_kind = XI_ARRAY_HOF_MAP;
             XrSemanticPlan *rebuilt = NULL;
-            REQUIRE(!xr_semantic_plan_build(fixture.root, &rebuilt, error,
-                                            sizeof(error)));
-            REQUIRE(rebuilt == NULL);
+            REQUIRE(xr_semantic_plan_build(fixture.root, &rebuilt, error,
+                                           sizeof(error)));
+            REQUIRE(rebuilt != NULL);
+            bool granted = false;
+            for (uint32_t op = 0; op < rebuilt->operation_count; op++)
+                granted = granted || rebuilt->operations[op].intrinsic_kind ==
+                                         XR_SEM_INTRINSIC_ARRAY_HOF;
+            REQUIRE(!granted);
+            xr_semantic_plan_free(rebuilt);
         }
 
         XiRepPolicy policy = xi_rep_policy_tagged_boundary();
@@ -1867,6 +1903,7 @@ TEST(select_rep_advances_empty_func_tree) {
     assert(coro != NULL);
     XiOptimizedProgram *optimized = xi_program_finish_optimization(coro, error, sizeof(error));
     assert(optimized != NULL);
+    attach_fixture_module(root);
     assert(xr_semantic_plan_build_and_attach(root, error, sizeof(error)));
     XiSemanticPlannedProgram *semantic =
         xi_program_freeze_semantics(optimized, error, sizeof(error));
@@ -2212,6 +2249,7 @@ TEST(box_elim_preserves_frozen_semantic_operation_identity) {
     f->stage = XI_STAGE_OPTIMIZED;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
     char error[256] = {0};
+    attach_fixture_module(f);
     assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
 
     xi_opt_box_elim(f);
@@ -2234,6 +2272,7 @@ TEST(box_elim_preserves_backend_adapter_over_frozen_semantic_identity) {
     f->stage = XI_STAGE_OPTIMIZED;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_OPTIMIZED);
     char error[256] = {0};
+    attach_fixture_module(f);
     assert(xr_semantic_plan_build_and_attach(f, error, sizeof(error)));
 
     XiValue *unbox = xi_value_new(f, blk, XI_UNBOX, &stub_int, 1);
