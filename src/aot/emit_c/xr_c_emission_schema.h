@@ -167,7 +167,7 @@ typedef struct XrCValueEmissionView {
     const XrCRecipeArgumentView *recipe_arguments;
 } XrCValueEmissionView;
 
-/* Exact C boundary for one direct-local ref Array argument.  This row is
+/* Exact C boundary for one direct-local ref argument.  This row is
  * keyed by the semantic CALL result and parameter ordinal; it deliberately
  * carries no selector, source name, analyzer type, or mutable Xi pointer. */
 typedef struct XrCCallArgumentEmissionView {

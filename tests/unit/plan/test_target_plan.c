@@ -3041,6 +3041,109 @@ static void set_single_parameter_ownership(XiFunc *function, XiOwnership ownersh
     function->arc_borrow_sig->valid = true;
 }
 
+static XrSemanticPlan *build_direct_local_scalar_ref_semantic(void) {
+    XiFunc *root = xi_func_new("target_scalar_ref_root", &stub_int);
+    XiFunc *child = xi_func_new("target_scalar_ref_child", &stub_int);
+    XiFunc *decoy = xi_func_new("target_scalar_ref_decoy", &stub_int);
+    REQUIRE(root != NULL && child != NULL && decoy != NULL);
+    XiBlock *root_entry = xi_block_new(root);
+    XiBlock *child_entry = xi_block_new(child);
+    XiBlock *decoy_entry = xi_block_new(decoy);
+    REQUIRE(root_entry != NULL && child_entry != NULL && decoy_entry != NULL);
+
+    root->nparams = root->min_params = 1;
+    child->nparams = child->min_params = 1;
+    decoy->nparams = decoy->min_params = 1;
+    root->params = (XiValue **) xr_calloc(1, sizeof(*root->params));
+    child->params = (XiValue **) xr_calloc(1, sizeof(*child->params));
+    decoy->params = (XiValue **) xr_calloc(1, sizeof(*decoy->params));
+    REQUIRE(root->params != NULL && child->params != NULL && decoy->params != NULL);
+    root->params[0] = xi_param(root, root_entry, 0, &stub_int);
+    child->params[0] = xi_param(child, child_entry, 0, &stub_int);
+    decoy->params[0] = xi_param(decoy, decoy_entry, 0, &stub_int);
+    REQUIRE(root->params[0] != NULL && child->params[0] != NULL && decoy->params[0] != NULL);
+    REQUIRE(xi_func_set_param_passing_mode(child, 0, XR_PARAM_REF));
+    root->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    child->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    decoy->params[0]->transfer_mode = XR_TRANSFER_SHARE;
+    set_single_parameter_ownership(root, XI_OWN_NONE);
+    set_single_parameter_ownership(child, XI_OWN_NONE);
+    set_single_parameter_ownership(decoy, XI_OWN_NONE);
+
+    XiValue *child_result = xi_const_int(child, child_entry, 7, &stub_int);
+    REQUIRE(child_result != NULL);
+    xi_block_set_return(child_entry, child_result);
+
+    /* The decoy deliberately assigns the same Xi-local id to a LOCAL_ADDR as
+     * the caller below. SemanticPlan globalizes both through each function's
+     * value_begin, so neither TargetPlan materialization nor lookup may confuse
+     * them. */
+    XiValue *decoy_copy = xi_value_new(decoy, decoy_entry, XI_COPY, &stub_int, 1);
+    XiValue *decoy_place = xi_value_new(decoy, decoy_entry, XI_LOCAL_ADDR, &stub_int, 1);
+    XiValue *decoy_result = xi_const_int(decoy, decoy_entry, 0, &stub_int);
+    REQUIRE(decoy_copy != NULL && decoy_place != NULL && decoy_result != NULL);
+    decoy_copy->args[0] = decoy->params[0];
+    decoy_copy->aux_int = XI_COPY_KIND_IDENTITY;
+    decoy_place->args[0] = decoy_copy;
+    xi_block_set_return(decoy_entry, decoy_result);
+
+    root->children = (XiFunc **) xr_calloc(2, sizeof(*root->children));
+    REQUIRE(root->children != NULL);
+    root->children[0] = child;
+    root->children[1] = decoy;
+    root->nchildren = root->children_cap = 2;
+    child->parent_func = root;
+    decoy->parent_func = root;
+
+    XiValue *closure = xi_value_new(root, root_entry, XI_STACK_ALLOC, &stub_function, 0);
+    XiValue *place = xi_value_new(root, root_entry, XI_LOCAL_ADDR, &stub_int, 1);
+    XiValue *call = xi_value_new(root, root_entry, XI_CALL, &stub_int, 2);
+    REQUIRE(closure != NULL && place != NULL && call != NULL && place->id == decoy_place->id);
+    closure->aux_int = XI_CLOSURE_NEW;
+    closure->aux = child;
+    place->args[0] = root->params[0];
+    call->args[0] = closure;
+    call->args[1] = place;
+
+    XiCallPlan *call_plan = (XiCallPlan *) xi_func_arena_alloc(root, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan =
+        (XiCallArgPlan *) xi_func_arena_alloc(root, (uint32_t) sizeof(*argument_plan));
+    REQUIRE(call_plan != NULL && argument_plan != NULL);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_REF;
+    argument_plan->access = XR_CALL_ARG_REF;
+    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+    argument_plan->addressable = true;
+    argument_plan->origin_var_id = 0;
+    argument_plan->place = place;
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+    call->call_plan = call_plan;
+    xi_block_set_return(root_entry, call);
+    root->stage = child->stage = decoy->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule fixture_module = {
+        .identity = "memory-module-v1:id=28:target-scalar-ref-fixture-v1",
+        .path = "target-scalar-ref-fixture.xr",
+        .name = "target_scalar_ref_fixture",
+        .init = root,
+    };
+    root->module = &fixture_module;
+    XrSemanticPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_semantic_plan_build(root, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local scalar ref semantic fixture failed: %s\n", error);
+    REQUIRE(built && plan != NULL && xr_semantic_plan_call_target_count(plan) == 1);
+    root->module = NULL;
+    xi_func_free(root);
+    return plan;
+}
+
 static XrSemanticPlan *build_direct_local_class_argument_semantic(XiOwnership callee_ownership) {
     XiFunc *root = xi_func_new("target_class_argument_root", &stub_int);
     XiFunc *child = xi_func_new("target_class_argument_child", &stub_int);
@@ -5057,6 +5160,165 @@ static void test_direct_local_call_adapter_family(void) {
 
     xr_target_plan_free(second);
     xr_target_plan_free(first);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+}
+
+static void test_direct_local_scalar_ref_argument_authority(void) {
+    XrSemanticPlan *semantic = build_direct_local_scalar_ref_semantic();
+    const XrSemanticCallTargetRecord *target = xr_semantic_plan_call_target(semantic, 0);
+    const XrSemanticOperationRecord *call_operation =
+        target ? xr_semantic_plan_operation(semantic, target->operation) : NULL;
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
+    const XrSemanticOperandRecord *call_operand =
+        call_operation && call_operation->operand_begin + 1u < operand_count
+            ? &operands[call_operation->operand_begin + 1u]
+            : NULL;
+    const XrSemanticOperationRecord *caller_place = NULL;
+    const XrSemanticOperationRecord *same_local_id_decoy = NULL;
+    for (uint32_t i = 0; call_operand && i < semantic->operation_count; i++) {
+        const XrSemanticOperationRecord *operation = &semantic->operations[i];
+        if (operation->opcode != XI_LOCAL_ADDR)
+            continue;
+        const XrSemanticFunctionRecord *function =
+            xr_semantic_plan_function(semantic, operation->function);
+        if (!function || operation->result_value < function->value_begin)
+            continue;
+        if (operation->function == call_operation->function &&
+            operation->result_value == call_operand->value) {
+            REQUIRE(caller_place == NULL);
+            caller_place = operation;
+            continue;
+        }
+        if (!caller_place || operation->function == caller_place->function)
+            continue;
+        const XrSemanticFunctionRecord *caller_function =
+            xr_semantic_plan_function(semantic, caller_place->function);
+        if (caller_function &&
+            operation->result_value - function->value_begin ==
+                caller_place->result_value - caller_function->value_begin)
+            same_local_id_decoy = operation;
+    }
+    const XrSemanticFunctionRecord *caller_function =
+        caller_place ? xr_semantic_plan_function(semantic, caller_place->function) : NULL;
+    const XrSemanticFunctionRecord *decoy_function =
+        same_local_id_decoy
+            ? xr_semantic_plan_function(semantic, same_local_id_decoy->function)
+            : NULL;
+    REQUIRE(target && call_operation && call_operand && caller_place && same_local_id_decoy &&
+            caller_function && decoy_function &&
+            caller_place->result_value != same_local_id_decoy->result_value &&
+            caller_place->result_value - caller_function->value_begin ==
+                same_local_id_decoy->result_value - decoy_function->value_begin &&
+            xr_semantic_plan_verify(semantic, NULL, 0));
+
+    XrTargetProfile *profile = build_profile(0);
+    XrTargetPlan *plan = NULL;
+    char error[512] = {0};
+    bool built = xr_target_plan_build(semantic, profile, &plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local scalar ref TargetPlan failed: %s\n", error);
+    REQUIRE(built && plan && plan->calls_count == 1 && plan->call_arguments_count == 1 &&
+            xr_target_plan_verify(plan, error, sizeof(error)));
+    XrTargetCallRecord *call = &plan->calls[0];
+    XrTargetCallArgumentRecord *argument = &plan->call_arguments[0];
+    const XrSemanticFunctionRecord *callee =
+        xr_semantic_plan_function(semantic, call->callee_function);
+    const XrSemanticParameterRecord *parameter =
+        callee ? xr_semantic_plan_parameter(semantic, callee->parameter_begin) : NULL;
+    const XrSemanticOperandRecord *place_source =
+        caller_place->operand_count == 1 && caller_place->operand_begin < operand_count
+            ? &operands[caller_place->operand_begin]
+            : NULL;
+    const XrTargetValueRepRecord *caller_value =
+        place_source ? xr_target_plan_value_rep(plan, place_source->value) : NULL;
+    const XrTargetValueRepRecord *callee_value =
+        parameter ? xr_target_plan_value_rep(plan, parameter->value) : NULL;
+    const XrTargetValueRepRecord *caller_place_value =
+        xr_target_plan_value_rep(plan, caller_place->result_value);
+    const XrTargetValueRepRecord *decoy_place_value =
+        xr_target_plan_value_rep(plan, same_local_id_decoy->result_value);
+    REQUIRE(parameter && place_source && caller_value && callee_value &&
+            caller_place_value && decoy_place_value && caller_place_value != decoy_place_value &&
+            caller_place_value->semantic_value == caller_place->result_value &&
+            decoy_place_value->semantic_value == same_local_id_decoy->result_value &&
+            argument->semantic_value == caller_place->result_value &&
+            argument->caller_slot == caller_value->slot &&
+            argument->callee_slot == callee_value->slot &&
+            argument->mode == XR_TARGET_CALL_REFERENCE &&
+            argument->ownership == XR_TARGET_CALL_BORROW &&
+            argument->transfer_mode == XR_TRANSFER_SHARE &&
+            argument->flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+            argument->register_rep == argument->callee_register_rep &&
+            argument->memory_rep == argument->callee_memory_rep &&
+            plan->machine_reps[argument->register_rep].kind == XR_MACHINE_REP_I64 &&
+            plan->slots[argument->caller_slot].function == call->caller_function &&
+            plan->slots[argument->caller_slot].semantic_value == place_source->value &&
+            plan->slots[argument->callee_slot].function == call->callee_function &&
+            plan->slots[argument->callee_slot].semantic_value == parameter->value);
+
+    XrTargetCallArgumentRecord saved_argument = *argument;
+    XrTargetCallRecord saved_call = *call;
+    XrFingerprint saved_plan_fingerprint = plan->fingerprint;
+    argument->semantic_value = same_local_id_decoy->result_value;
+    xr_target_call_compute_fingerprint(plan, argument->call, &call->fingerprint);
+    xr_target_plan_compute_fingerprint(plan, &plan->fingerprint);
+    REQUIRE(!xr_target_plan_verify(plan, error, sizeof(error)));
+    *argument = saved_argument;
+    *call = saved_call;
+    plan->fingerprint = saved_plan_fingerprint;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
+    XrCEmissionPlan *emission = NULL;
+    bool emission_built =
+        xr_c_emission_plan_build(plan, profile_fingerprint, &emission, error, sizeof(error));
+    if (!emission_built)
+        fprintf(stderr, "direct-local scalar ref C emission failed: %s\n", error);
+    REQUIRE(emission_built &&
+            emission && xr_c_emission_plan_call_argument_count(emission) == 1 &&
+            xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error,
+                                      sizeof(error)));
+    XrCCallArgumentEmissionView view = {0};
+    REQUIRE(xr_c_emission_plan_call_argument_view(emission, call->result_value, 0, &view, error,
+                                                  sizeof(error)) &&
+            view.semantic_value == caller_place->result_value &&
+            view.callee_parameter == callee->parameter_begin && view.ordinal == 0 &&
+            view.caller_register_kind == XR_MACHINE_REP_I64 &&
+            view.caller_memory_kind == XR_MACHINE_REP_I64 &&
+            view.callee_register_kind == XR_MACHINE_REP_I64 &&
+            view.callee_memory_kind == XR_MACHINE_REP_I64 &&
+            view.mode == XR_TARGET_CALL_REFERENCE && view.ownership == XR_TARGET_CALL_BORROW &&
+            view.transfer_mode == XR_TRANSFER_SHARE &&
+            view.flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            view.array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE && view.c_type &&
+            strcmp(view.c_type, "int64_t *") == 0);
+    const char *saved_c_type = emission->call_arguments[0].c_type;
+    emission->call_arguments[0].c_type = "uint64_t *";
+    REQUIRE(!xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+    emission->call_arguments[0].c_type = saved_c_type;
+    REQUIRE(xr_c_emission_plan_verify(emission, plan, profile_fingerprint, error, sizeof(error)));
+
+    XrFingerprint plan_fingerprint = xr_target_plan_fingerprint(plan);
+    int64_t vm_argument = 41;
+    int64_t vm_result = 99;
+    XrTypedDispatchI64Request request = {
+        .verified_plan = plan,
+        .required_plan_fingerprint = &plan_fingerprint,
+        .arguments = &vm_argument,
+        .result = &vm_result,
+        .provider = XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        .function = call->caller_function,
+        .argument_count = 1,
+    };
+    REQUIRE(xr_target_plan_function_execution_family_mask(plan, call->caller_function) == 0 &&
+            xr_typed_dispatch_execute_i64(&request) == XR_TYPED_DISPATCH_PROGRAM_UNAVAILABLE &&
+            vm_result == 0);
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(plan);
     xr_target_profile_free(profile);
     xr_semantic_plan_free(semantic);
 }
@@ -8407,6 +8669,11 @@ int main(int argc, char **argv) {
         puts("Direct-local call fingerprint tests passed");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "direct-local-scalar-ref-authority") == 0) {
+        test_direct_local_scalar_ref_argument_authority();
+        puts("Direct-local scalar ref authority tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "fingerprint-tail-coroutine-chain") == 0) {
         test_tail_coroutine_chain_fingerprint();
         puts("Tail-coroutine call fingerprint tests passed");
@@ -8565,6 +8832,7 @@ int main(int argc, char **argv) {
     test_builder_materializes_struct_and_named_aggregates();
     test_unknown_call_target_fails_closed();
     test_direct_local_call_adapter_family();
+    test_direct_local_scalar_ref_argument_authority();
     test_direct_local_class_argument_authority();
     test_direct_local_source_class_array_ref_authority();
     test_direct_local_managed_aggregate_precursor_fails_closed();

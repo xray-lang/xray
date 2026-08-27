@@ -1300,6 +1300,22 @@ static bool semantic_direct_local_tagged_ref_parameter_is_exact_verify(
                                                                       true, true, storage);
 }
 
+static bool semantic_direct_local_scalar_ref_parameter_is_exact_verify(
+    const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter,
+    uint16_t *machine_kind) {
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    if (!semantic || !parameter ||
+        parameter->function >= xr_semantic_plan_function_count(semantic) ||
+        parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_REF ||
+        parameter->ownership != XI_OWN_NONE || parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        semantic_type_expected_rep(xr_semantic_plan_type(semantic, parameter->type), &kind) != 1)
+        return false;
+    if (machine_kind)
+        *machine_kind = kind;
+    return true;
+}
+
 static bool semantic_direct_local_array_value_parameter_is_exact_verify(
     const XrSemanticPlan *semantic, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
     return semantic_direct_local_array_parameter_is_exact_verify(semantic, parameter, XR_PARAM_READ,
@@ -1332,41 +1348,46 @@ static bool semantic_direct_local_array_result_is_exact_verify(const XrSemanticP
 }
 
 static bool
-semantic_direct_local_tagged_ref_place_is_exact_verify(const XrSemanticPlan *semantic,
-                                                       const XrSemanticOperandRecord *call_operand,
-                                                       uint32_t *storage_value) {
+semantic_direct_local_ref_place_is_exact_verify(const XrSemanticPlan *semantic,
+                                                const XrSemanticOperandRecord *call_operand,
+                                                uint32_t semantic_function,
+                                                uint32_t *storage_value) {
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(semantic);
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(semantic, &operand_count);
     const XrSemanticOperationRecord *definition = NULL;
-    for (uint32_t i = 0; operands && i < operation_count; i++) {
+    for (uint32_t i = 0; semantic && call_operand && i < operation_count; i++) {
         const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(semantic, i);
-        if (!candidate || candidate->result_value != call_operand->value)
+        if (!candidate || candidate->function != semantic_function ||
+            candidate->result_value != call_operand->value)
             continue;
         if (definition)
             return false;
         definition = candidate;
     }
-    if (!definition || definition->opcode != XI_LOCAL_ADDR ||
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands =
+        xr_semantic_plan_operands(semantic, &operand_count);
+    if (!definition || !operands || definition->opcode != XI_LOCAL_ADDR ||
         definition->result_type != call_operand->type || definition->operand_count != 1 ||
         definition->operand_begin >= operand_count ||
         definition->effects != xi_generated_op_effects(XI_LOCAL_ADDR) ||
         definition->flags != xi_generated_op_default_flags(XI_LOCAL_ADDR) ||
         definition->ownership_use != xi_generated_op_own_use(XI_LOCAL_ADDR) ||
         definition->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
-        definition->result_alias_operand != -1 ||
+        definition->result_alias_operand != -1 || definition->return_parameter != -1 ||
         definition->intrinsic_kind != XR_SEM_INTRINSIC_NONE || definition->metadata_count != 0 ||
         definition->auxiliary_kind != XI_AUX_KIND_NONE || definition->semantic_immediate != 0 ||
         definition->constant != XR_SEMANTIC_INDEX_NONE ||
         definition->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE)
+        definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        definition->allocation_key != NULL || !stable_id_is_zero(definition->allocation_id))
         return false;
     const XrSemanticOperandRecord *source = &operands[definition->operand_begin];
     if (source->type != call_operand->type || source->role != XR_SEM_OPERAND_VALUE ||
         source->parameter != -1 || source->parameter_mode != XR_PARAM_READ ||
-        source->access != XR_CALL_ARG_PLAIN || source->origin != XI_PLACE_ORIGIN_NONE ||
-        source->lifetime != XI_PLACE_LIFETIME_NONE || source->escape != XI_PLACE_ESCAPE_NONE ||
-        source->flags != 0 || source->ownership_action != XR_SEM_OPERAND_BORROW)
+        source->transfer_mode != XR_TRANSFER_SHARE || source->access != XR_CALL_ARG_PLAIN ||
+        source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
+        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0 ||
+        source->ownership_action != XR_SEM_OPERAND_BORROW)
         return false;
     if (storage_value)
         *storage_value = source->value;
@@ -1502,7 +1523,8 @@ static bool semantic_direct_local_tagged_ref_place_load_is_exact_verify(
     return argument && call && target && parameter && call_operation && call_operand &&
            semantic_direct_local_tagged_ref_parameter_is_exact_verify(semantic, parameter,
                                                                       &storage) &&
-           semantic_direct_local_tagged_ref_place_is_exact_verify(semantic, call_operand, NULL) &&
+           semantic_direct_local_ref_place_is_exact_verify(semantic, call_operand,
+                                                            call_operation->function, NULL) &&
            target->kind == XR_SEM_CALL_TARGET_DIRECT_LOCAL &&
            target->operation == call->semantic_operation &&
            target->function == call->callee_function &&
@@ -6439,9 +6461,10 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     xr_semantic_plan_parameter(semantic, parameter_index);
                 const XrSemanticOperandRecord *operand = &operands[semantic_operand];
                 uint32_t caller_storage_value = operand->value;
-                bool argument_tagged_ref_place =
-                    semantic_direct_local_tagged_ref_place_is_exact_verify(semantic, operand,
-                                                                           &caller_storage_value);
+                bool argument_ref_place =
+                    semantic_direct_local_ref_place_is_exact_verify(semantic, operand,
+                                                                    operation->function,
+                                                                    &caller_storage_value);
                 const XrTargetValueRepRecord *caller_value =
                     xr_target_plan_value_rep(plan, caller_storage_value);
                 const XrTargetValueRepRecord *callee_value =
@@ -6463,6 +6486,19 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                          xr_semantic_adt_enum_type_is_exact(
                                              xr_semantic_plan_type(semantic, operand->type));
                 uint8_t array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
+                bool argument_scalar_ref =
+                    parameter && parameter->type == operand->type &&
+                    semantic_direct_local_scalar_ref_parameter_is_exact_verify(
+                        semantic, parameter, NULL) &&
+                    operand->parameter_mode == XR_PARAM_REF && operand->access == XR_CALL_ARG_REF &&
+                    operand->origin != XI_PLACE_ORIGIN_NONE &&
+                    operand->lifetime == XI_PLACE_LIFETIME_CALL_BOUND &&
+                    operand->escape == XI_PLACE_ESCAPE_NONE &&
+                    operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+                    operand->transfer_mode == XR_TRANSFER_SHARE &&
+                    operand->flags ==
+                        (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
+                    argument_ref_place;
                 bool argument_tagged_ref =
                     parameter && parameter->type == operand->type &&
                     semantic_direct_local_tagged_ref_parameter_is_exact_verify(
@@ -6474,7 +6510,8 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     operand->ownership_action == XR_SEM_OPERAND_BORROW &&
                     operand->transfer_mode == XR_TRANSFER_SHARE &&
                     operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
-                    argument_tagged_ref_place;
+                    argument_ref_place;
+                bool argument_reference = argument_scalar_ref || argument_tagged_ref;
                 /* An Array or a String handed over by value travels the plain
                  * argument path: the tagged value is copied and the allocation
                  * shared, so the row states no place, no element storage, and
@@ -6593,8 +6630,9 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                                                ? XR_TARGET_OWNERSHIP_OWNED
                                                                : XR_TARGET_OWNERSHIP_BORROWED);
                 const char *argument_identity_domain =
-                    argument_tagged_ref ? "xray-target-direct-tagged-ref-argument-v2"
-                                        : "xray-target-call-argument-v1";
+                    argument_scalar_ref ? "xray-target-direct-scalar-ref-argument-v1"
+                    : argument_tagged_ref ? "xray-target-direct-tagged-ref-argument-v2"
+                                          : "xray-target-call-argument-v1";
                 /* Kept in step with the builder through one shared judgement:
                  * a
                  * raw pointer argument may state a mutability the parameter
@@ -6621,7 +6659,7 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                     (argument_scalar == 1 || argument_u8_slice || argument_unit_enum ||
                      argument_adt_enum || argument_class_instance || argument_tagged_ref ||
                      argument_container_value || argument_leaf_aggregate) &&
-                    (argument_tagged_ref ||
+                    (argument_reference ||
                      (parameter->mode == XR_PARAM_READ && operand->access == XR_CALL_ARG_PLAIN &&
                       (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) == 0)) &&
                     /* A String by value is absent from this table because its
@@ -6662,12 +6700,12 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                                                    : argument_kind) &&
                     argument->ordinal == ordinal &&
                     argument->mode ==
-                        (argument_tagged_ref ? XR_TARGET_CALL_REFERENCE : XR_TARGET_CALL_VALUE) &&
+                        (argument_reference ? XR_TARGET_CALL_REFERENCE : XR_TARGET_CALL_VALUE) &&
                     argument->ownership ==
-                        (argument_tagged_ref ? XR_TARGET_CALL_BORROW : ownership) &&
+                        (argument_reference ? XR_TARGET_CALL_BORROW : ownership) &&
                     argument->transfer_mode == operand->transfer_mode &&
                     argument->flags ==
-                        (argument_tagged_ref ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0) &&
+                        (argument_reference ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0) &&
                     argument->array_element_storage == (argument_tagged_ref
                                                             ? array_element_storage
                                                             : XR_TARGET_ARRAY_STORAGE_NONE) &&

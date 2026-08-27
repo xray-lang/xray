@@ -2029,6 +2029,26 @@ static bool semantic_direct_local_tagged_ref_parameter_is_exact(
                                                                storage);
 }
 
+/* A scalar `ref T` parameter borrows the caller's scalar place. The source
+ * parameter mode is the ownership fact: scalar values themselves carry no ARC
+ * ownership, while the call operand proves the addressable borrow. */
+static bool semantic_direct_local_scalar_ref_parameter_is_exact(
+    const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter,
+    uint16_t *machine_kind) {
+    uint16_t kind = XR_MACHINE_REP_COUNT;
+    if (!plan || !parameter ||
+        parameter->function >= xr_semantic_plan_function_count(plan) ||
+        parameter->value == XR_SEMANTIC_INDEX_NONE || parameter->mode != XR_PARAM_REF ||
+        parameter->ownership != XI_OWN_NONE || parameter->transfer_mode != XR_TRANSFER_SHARE ||
+        (parameter->flags & ~XR_SEM_PARAMETER_REQUIRED) != 0 || parameter->reserved != 0 ||
+        classify_scalar_type(xr_semantic_plan_type(plan, parameter->type), &kind) !=
+            XR_TARGET_SCALAR_VALUE)
+        return false;
+    if (machine_kind)
+        *machine_kind = kind;
+    return true;
+}
+
 static bool semantic_direct_local_array_value_parameter_is_exact(
     const XrSemanticPlan *plan, const XrSemanticParameterRecord *parameter, uint8_t *storage) {
     return semantic_direct_local_array_parameter_is_exact(plan, parameter, XR_PARAM_READ, storage);
@@ -2078,41 +2098,45 @@ static bool semantic_direct_local_array_result_is_exact(const XrSemanticPlan *pl
 }
 
 static bool
-semantic_direct_local_tagged_ref_place_is_exact(const XrSemanticPlan *plan,
-                                                const XrSemanticOperandRecord *call_operand,
-                                                uint32_t *storage_value) {
+semantic_direct_local_ref_place_is_exact(const XrSemanticPlan *plan,
+                                         const XrSemanticOperandRecord *call_operand,
+                                         uint32_t semantic_function,
+                                         uint32_t *storage_value) {
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
-    uint32_t operand_count = 0;
-    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
     const XrSemanticOperationRecord *definition = NULL;
-    for (uint32_t i = 0; operands && i < operation_count; i++) {
+    for (uint32_t i = 0; plan && call_operand && i < operation_count; i++) {
         const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
-        if (!candidate || candidate->result_value != call_operand->value)
+        if (!candidate || candidate->function != semantic_function ||
+            candidate->result_value != call_operand->value)
             continue;
         if (definition)
             return false;
         definition = candidate;
     }
-    if (!definition || definition->opcode != XI_LOCAL_ADDR ||
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    if (!definition || !operands || definition->opcode != XI_LOCAL_ADDR ||
         definition->result_type != call_operand->type || definition->operand_count != 1 ||
         definition->operand_begin >= operand_count ||
         definition->effects != xi_generated_op_effects(XI_LOCAL_ADDR) ||
         definition->flags != xi_generated_op_default_flags(XI_LOCAL_ADDR) ||
         definition->ownership_use != xi_generated_op_own_use(XI_LOCAL_ADDR) ||
         definition->result_ownership != XI_GEN_RESULT_OWNERSHIP_BORROWED ||
-        definition->result_alias_operand != -1 ||
+        definition->result_alias_operand != -1 || definition->return_parameter != -1 ||
         definition->intrinsic_kind != XR_SEM_INTRINSIC_NONE || definition->metadata_count != 0 ||
         definition->auxiliary_kind != XI_AUX_KIND_NONE || definition->semantic_immediate != 0 ||
         definition->constant != XR_SEMANTIC_INDEX_NONE ||
         definition->callable_function != XR_SEMANTIC_INDEX_NONE ||
-        definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE)
+        definition->import_resolution != XR_SEM_IMPORT_RESOLUTION_NONE ||
+        definition->allocation_key != NULL || !stable_id_is_zero(definition->allocation_id))
         return false;
     const XrSemanticOperandRecord *source = &operands[definition->operand_begin];
     if (source->type != call_operand->type || source->role != XR_SEM_OPERAND_VALUE ||
         source->parameter != -1 || source->parameter_mode != XR_PARAM_READ ||
-        source->access != XR_CALL_ARG_PLAIN || source->origin != XI_PLACE_ORIGIN_NONE ||
-        source->lifetime != XI_PLACE_LIFETIME_NONE || source->escape != XI_PLACE_ESCAPE_NONE ||
-        source->flags != 0 || source->ownership_action != XR_SEM_OPERAND_BORROW)
+        source->transfer_mode != XR_TRANSFER_SHARE || source->access != XR_CALL_ARG_PLAIN ||
+        source->origin != XI_PLACE_ORIGIN_NONE || source->lifetime != XI_PLACE_LIFETIME_NONE ||
+        source->escape != XI_PLACE_ESCAPE_NONE || source->flags != 0 ||
+        source->ownership_action != XR_SEM_OPERAND_BORROW)
         return false;
     if (storage_value)
         *storage_value = source->value;
@@ -5308,8 +5332,9 @@ static bool builder_add_direct_local_tagged_ref_argument_storage(XrTargetPlanBui
                 operand->ownership_action != XR_SEM_OPERAND_BORROW ||
                 operand->transfer_mode != XR_TRANSFER_SHARE ||
                 operand->flags != (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) ||
-                !semantic_direct_local_tagged_ref_place_is_exact(builder->semantic_plan, operand,
-                                                                 &caller_storage_value))
+                !semantic_direct_local_ref_place_is_exact(builder->semantic_plan, operand,
+                                                          call->function,
+                                                          &caller_storage_value))
                 continue;
             if (caller_storage_value >= analysis.total_values) {
                 valid = fail(error, error_size, "XR_TARGET_1001",
@@ -10215,6 +10240,23 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             xr_semantic_adt_enum_type_is_exact(xr_semantic_plan_type(plan, operand->type));
         uint8_t array_element_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         uint32_t caller_storage_value = operand->value;
+        uint32_t reference_storage_value = operand->value;
+        bool exact_ref_place =
+            semantic_direct_local_ref_place_is_exact(plan, operand, operation->function,
+                                                      &reference_storage_value);
+        bool exact_scalar_ref_parameter =
+            parameter && parameter->type == operand->type &&
+            semantic_direct_local_scalar_ref_parameter_is_exact(plan, parameter, NULL);
+        bool exact_scalar_ref =
+            exact_scalar_ref_parameter &&
+            operand->parameter_mode == XR_PARAM_REF && operand->access == XR_CALL_ARG_REF &&
+            operand->origin != XI_PLACE_ORIGIN_NONE &&
+            operand->lifetime == XI_PLACE_LIFETIME_CALL_BOUND &&
+            operand->escape == XI_PLACE_ESCAPE_NONE &&
+            operand->ownership_action == XR_SEM_OPERAND_BORROW &&
+            operand->transfer_mode == XR_TRANSFER_SHARE &&
+            operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
+            exact_ref_place;
         bool exact_tagged_ref =
             parameter && parameter->type == operand->type &&
             semantic_direct_local_tagged_ref_parameter_is_exact(plan, parameter,
@@ -10226,7 +10268,10 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             operand->ownership_action == XR_SEM_OPERAND_BORROW &&
             operand->transfer_mode == XR_TRANSFER_SHARE &&
             operand->flags == (XR_SEM_OPERAND_CALL_CONTRACT | XR_SEM_OPERAND_ADDRESSABLE) &&
-            semantic_direct_local_tagged_ref_place_is_exact(plan, operand, &caller_storage_value);
+            exact_ref_place;
+        bool exact_reference = exact_scalar_ref || exact_tagged_ref;
+        if (exact_reference)
+            caller_storage_value = reference_storage_value;
         /* A class instance is admitted as an argument through the same shared
          * judgement that binds its storage on the callee side, so a parameter
          * this call passes can never be one the callee's own family refused. */
@@ -10300,7 +10345,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
              !exact_class_instance && !exact_tagged_ref && !exact_array_value &&
              !exact_string_value && !exact_leaf_aggregate_argument &&
              !exact_leaf_product_argument) ||
-            (!exact_tagged_ref &&
+            (!exact_reference &&
              (parameter->mode != XR_PARAM_READ || operand->access != XR_CALL_ARG_PLAIN ||
               (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0)) ||
             /* A String by value is absent from the table below because it does
@@ -10353,6 +10398,11 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                 target_trace_type(plan, "the type every family below was asked about",
                                   operand->type);
                 target_trace_judgement("argument is an exact scalar", exact_scalar);
+                target_trace_judgement("parameter is an exact scalar ref",
+                                       exact_scalar_ref_parameter);
+                target_trace_judgement("argument names one exact local ref place",
+                                       exact_ref_place);
+                target_trace_judgement("argument is an exact scalar ref", exact_scalar_ref);
                 target_trace_judgement("argument is an exact u8 slice", exact_u8_slice);
                 target_trace_judgement("argument is an exact unit enum", exact_unit_enum);
                 target_trace_judgement("argument is an exact ADT enum", exact_adt_enum);
@@ -10366,7 +10416,7 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                                        exact_leaf_aggregate_argument);
                 target_trace_judgement("argument is an exact managed aggregate precursor",
                                        exact_managed_aggregate);
-                if (parameter && !exact_tagged_ref) {
+                if (parameter && !exact_reference) {
                     fprintf(stderr,
                             "[target]   everything but an Array by reference travels the plain "
                             "read path:\n");
@@ -10438,18 +10488,19 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
             .caller_storage_value = caller_storage_value,
             .callee_parameter = parameter_index,
             .ordinal = (uint16_t) ordinal,
-            .mode = exact_tagged_ref ? XR_TARGET_CALL_REFERENCE : XR_TARGET_CALL_VALUE,
-            .ownership = exact_tagged_ref ? XR_TARGET_CALL_BORROW
+            .mode = exact_reference ? XR_TARGET_CALL_REFERENCE : XR_TARGET_CALL_VALUE,
+            .ownership = exact_reference ? XR_TARGET_CALL_BORROW
                          : operand->ownership_action == XR_SEM_OPERAND_CONSUME
                              ? XR_TARGET_CALL_CONSUME
                              : XR_TARGET_CALL_READ,
             .transfer_mode = operand->transfer_mode,
-            .flags = exact_tagged_ref ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0,
+            .flags = exact_reference ? XR_TARGET_CALL_ARGUMENT_ADDRESSABLE : 0,
             .array_element_storage = array_element_storage,
         };
-        const char *argument_identity_domain = exact_tagged_ref
-                                                   ? "xray-target-direct-tagged-ref-argument-v2"
-                                                   : "xray-target-call-argument-v1";
+        const char *argument_identity_domain =
+            exact_scalar_ref ? "xray-target-direct-scalar-ref-argument-v1"
+            : exact_tagged_ref ? "xray-target-direct-tagged-ref-argument-v2"
+                               : "xray-target-call-argument-v1";
         if (!stable_identity_from_pair(argument_identity_domain, target->id, parameter->id, ordinal,
                                        &argument.identity) ||
             !append_call_argument_intent(builder, &argument, error, error_size))

@@ -1131,6 +1131,67 @@ static XiFunc *compile_to_ir_with_module_graph(const char *source) {
     return compile_to_ir_with_module_graph_config(source, cfg);
 }
 
+TEST(target_plan_scalar_ref_c_emission_from_source) {
+    const char *source = "fn set(value: ref i64) { value = 42 }\n"
+                         "fn run() -> i64 {\n"
+                         "    var value = 0\n"
+                         "    set(ref value)\n"
+                         "    return value\n"
+                         "}\n"
+                         "print(run())\n";
+    XiFunc *ir = compile_to_ir(source);
+    TEST_REQUIRE(ir && ir->semantic_plan,
+                 "source scalar-ref fixture froze SemanticPlan authority");
+
+    XrTargetProfile *profile = xr_test_target_profile_build(
+        false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetPlan *target = NULL;
+    XrCEmissionPlan *emission = NULL;
+    char error[512] = {0};
+    TEST_REQUIRE(profile &&
+                     xr_target_plan_build(ir->semantic_plan, profile, &target, error,
+                                          sizeof(error)),
+                 "source scalar-ref fixture built TargetPlan authority");
+
+    uint32_t argument_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(target, &argument_count);
+    TEST_REQUIRE(arguments && argument_count == 1,
+                 "source scalar-ref fixture has one frozen call argument");
+    const XrTargetCallArgumentRecord *argument = &arguments[0];
+    uint32_t call_count = 0;
+    const XrTargetCallRecord *calls = xr_target_plan_calls(target, &call_count);
+    TEST_REQUIRE(calls && argument->call < call_count,
+                 "source scalar-ref argument names its frozen call");
+
+    TEST_REQUIRE(xr_c_emission_plan_build(
+                     target, xr_target_profile_fingerprint(profile), &emission, error,
+                     sizeof(error)),
+                 "source scalar-ref fixture built C-emission authority");
+    XrCCallArgumentEmissionView view = {0};
+    TEST_REQUIRE(xr_c_emission_plan_call_argument_view(
+                     emission, calls[argument->call].result_value, argument->ordinal, &view,
+                     error, sizeof(error)) &&
+                     view.semantic_operand == argument->semantic_operand &&
+                     view.semantic_value == argument->semantic_value &&
+                     view.mode == XR_TARGET_CALL_REFERENCE &&
+                     view.ownership == XR_TARGET_CALL_BORROW &&
+                     view.transfer_mode == XR_TRANSFER_SHARE &&
+                     view.flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+                     view.caller_register_kind == XR_MACHINE_REP_I64 &&
+                     view.caller_memory_kind == XR_MACHINE_REP_I64 &&
+                     view.callee_register_kind == XR_MACHINE_REP_I64 &&
+                     view.callee_memory_kind == XR_MACHINE_REP_I64 &&
+                     view.array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE &&
+                     view.c_type && strcmp(view.c_type, "int64_t *") == 0,
+                 "source scalar-ref fixture projects one exact immutable C row");
+
+    xr_c_emission_plan_free(emission);
+    xr_target_plan_free(target);
+    xr_target_profile_free(profile);
+    xi_func_free(ir);
+}
+
 static void require_detached_semantic_snapshot(const XiFunc *func) {
     TEST_REQUIRE(func != NULL, "detached semantic snapshot function exists");
     TEST_REQUIRE(func->semantic_snapshot_detached,
@@ -14762,6 +14823,7 @@ int main(int argc, char **argv) {
     run_aot_extern_registry_deduplicates_and_rejects_conflicts();
     run_cgen_extern_symbol_binding_is_portable_and_verified();
     run_aot_extern_symbol_rename_requires_typed_qualification();
+    run_target_plan_scalar_ref_c_emission_from_source();
     run_aot_semantic_snapshot_survives_analyzer_pool_churn();
     run_target_plan_owned_string_lifecycle_from_source();
     run_cgen_json_codec_summary_preflight_is_exact_and_fail_closed();
