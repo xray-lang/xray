@@ -46,7 +46,7 @@ XR_FUNC bool xr_c_leaf_aggregate_projection(const XrTargetPlan *target_plan,
                                              XrCAggregateProjection *out);
 
 /* Validates and freezes the one PSC/Xi-to-TargetPlan join internally, then
- * emits solely from that opaque binding and schema-50 TargetPlan rows.  No
+ * emits solely from that opaque binding and schema-51 TargetPlan rows.  No
  * mutable binding escapes this call.  The output contains no test oracle or
  * process entry point and is released with xr_free(). */
 XR_FUNC bool xr_c_leaf_value_product_program_emit(

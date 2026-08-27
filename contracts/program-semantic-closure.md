@@ -98,7 +98,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     operations. The independent Xi verifier rechecks all six ordinals, the `u8`
     member, both caller/callee joins, exact operation coverage, and an
     authority-free module initializer. Ordinary TypedProgram publication and
-    SemanticPlan and schema-50 TargetPlan preserve the exact six-member layout,
+    SemanticPlan and schema-51 TargetPlan preserve the exact six-member layout,
     two caller-storage calls, and ordinal-bound instructions. Typed VM and the
     hosted-fragment C projection execute only after independent TargetPlan
     verification grants the leaf-value-product family. Ordinary product
@@ -190,7 +190,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     XSM for both single-module families and the bounded product graph. The graph
     path lowers two exact Xi partitions, verifies the complete resolved module
     set, verifies producer/entry SemanticPlans as one dependency set, and only
-    then builds one schema-50 program TargetPlan from the complete canonical
+    then builds one schema-51 program TargetPlan from the complete canonical
     SemanticPlan module set. The plan has one program-graph row, two module
     partitions over global rows, one aggregate semantic fingerprint, and the
     exact `PROGRAM_DIRECT`/`CALL_DIRECT_I64` call and argument authority. Only
@@ -267,7 +267,7 @@ projection defined below; they never imply TargetPlan admission on their own.
     and their XSM round-trips close the same graph authority. Target construction
     consumes the full canonical plan set in `program_module_row` order while the
     entry fragment separately carries only its ordered direct dependency.
-    It emits one verified schema-50 TargetPlan with global functions, slots,
+    It emits one verified schema-51 TargetPlan with global functions, slots,
     values, instructions, calls, arguments, debug facts, layouts, extents, and
     capabilities; module partitions are bounded pointer-free views and are not
     independent plans. The cross-partition edge is exactly one
@@ -368,10 +368,10 @@ anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac522
 anchor-sha256: tests/unit/plan/test_program_semantic_closure.c e8ad9cbcaf1f69de191165ff8736253241b8bc1c5f1fed94a0d9abebecc5c262
 anchor-sha256: tests/unit/plan/test_scalar_call_decision.c 01a96bd0b8bf666d48bdf7f533873e290fa3ac2e2d266895baf43f68dcae9285
 anchor-sha256: tests/unit/plan/test_semantic_plan.c ff9ef7e0b8a4c640d211bf05150d84bdafd6920e1314741b8cc13ee1afb57554
-anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f1abf760346c76d3d574d1dc0f13e061e568e264a5b3dd7aaec391e0e49b0d21
+anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 570675d165cc6cdd58bd82ca089cbf73a7a8106cfc5d8c66087350d13b93864e
 anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515143ed4d61f4ed42105b0180377bda6cec
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3faed709ec5d779d5df0778bae33cd67fd8d86f094ef1007ae1d5ac450387398
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 499524fa526d60465e597448a2f4278a109fc8e8a5f81da2c13f11c35ec0a24c
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
 anchor-sha256: tests/unit/CMakeLists.txt a026dbbd6ae2ac796e11e3c3e5d824a1d3ea438f37dacf049a050ccf8d561503
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da

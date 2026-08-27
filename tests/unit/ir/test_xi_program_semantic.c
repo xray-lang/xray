@@ -1063,7 +1063,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
     ASSERT_NOT_NULL(semantic);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(xr_target_plan_schema_version(plan), XR_TARGET_PLAN_SCHEMA_VERSION);
-    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 50);
+    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 51);
     ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(plan));
     ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(plan),
@@ -2668,7 +2668,7 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     uint8_t saved_target_schema[4] = {
         target_encoded[4], target_encoded[5], target_encoded[6], target_encoded[7],
     };
-    target_encoded[4] = 49;
+    target_encoded[4] = 50;
     target_encoded[5] = 0;
     target_encoded[6] = 0;
     target_encoded[7] = 0;

@@ -423,7 +423,17 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-The schema-50 source program graph is a distinct program-wide AOT cutover; it
+TargetPlan schema 51 additionally freezes one exact borrowed direct-local
+`ref i64` boundary. The caller source and callee parameter retain scalar `I64`
+storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
+request to rewrite the parameter as a general raw-pointer value. The caller's
+`LOCAL_ADDR` remains the unique `RAW_PTR` address operand, while the call row
+binds its stable v1 identity, caller/callee slots, representations, ownership,
+and transfer. C emission may project that verified boundary as `int64_t *`.
+This authority does not by itself grant representation-refinement, VM, CGen, or
+native execution coverage, and no generic ref or pointer inference is allowed.
+
+The schema-51 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
@@ -784,19 +794,19 @@ anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94f
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78
 anchor-sha256: src/aot/xaot_verify.c 993d814044a131d6b6405bd06f621b7c74e37a0310c3db90677289244582701b
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 37138428d686308954349f148e7bb6a484aef3be05480d6e5bb61cc261a73ea6
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c b8668a6fddcd781f7d8f37b354b90ca27ceaf1dce88910da8c53bfb3d89fd355
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 20143c8af944dcddf795b0b43ca2dad7fe52d097b60edaefa81c678b834a9a2f
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 7f0bc59a3f95b1eace294c853a78dec23e14e11254cd87be15f69132774bab3a
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 7e748b287211ccbc2acb61ef01729d70e7d44473234490c03e065afba709c9e8
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 7116d17b3c38fb432d60f1646c4f815496798c133a6ffd2a90b136d4352272ac
-anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 0bb6b5995c89f5e7a8071cf20b7bc69a6adddbb3f626c2eeda539617e61363fd
+anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h f3b7efab43d508b4a6926002d1ce2e1d9fde3fa2510181b5a61cb769a8d95e74
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 17353e09b9c5891e92c7df2bac284ca66092b4554bd8c2109a0b447d73c5fed0
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c dbf75d9642a2e927ecf1396ae3e039060567576ef734dfb7405a1246151a3739
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c bf30653312565cee03b237f7ea5239057bf4569f41e9b834124569d929bc6b43
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
-anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 91e0881d324bfd26bfb1d3e26877c9b07b5dbe5de3f7ef7fdee2882d030d9332
+anchor-sha256: src/aot/xr_target_aggregate_c_projection.h a5a25224c922a85295942ec72f3f2394dba722e9769aefbf414baba4daf7c3ec
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 0db57c7d713d5ccc41bcc480ef9fd66e50967c929ffb7532217b68baf0fd11d9
 anchor-sha256: src/plan/semantic/xr_semantic_value_aggregate_shape.h 68deb54bcbe60ac1ff46e854d562bafbe1f745aec3ebbe52c62d4eed17c9e4e8
 anchor-sha256: src/plan/semantic/xr_semantic_shared_read_shape.h c82c3ac533b4e4b0ef944e66b8a8b1ce1c1f2d96d3772438c7fc5ab9dc9ee0ce
