@@ -378,7 +378,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"cluster", "__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", "cluster_join", "yieldable", "", "xrt_cluster_join", "s", "value", "", "cluster.__join", "", "runtime", "method", XR_CAP_CHANNEL, 1, true},
     {"cluster", "__self", "(): string", "Get own node name", "cluster_self", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},
     {"cluster", "__nodes", "(): Array<string>", "List cluster node names", "cluster_nodes", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},
-    {"cluster", "monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 0, 2, false},
+    {"cluster", "__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", "cluster_monitor_coro_fn", "normal", "", "", "vv", "value", "", "", "", "runtime", "", 0, 2, false},
     {"cluster", "__discover", "(): ()", "Start LAN auto-discovery", "cluster_discover_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},
     {"cluster", "__stop", "(): ()", "Stop cluster node", "cluster_stop_fn", "normal", "", "xrt_cluster_stop", "", "value", "", "cluster.__stop", "", "runtime", "method", XR_CAP_CHANNEL, 0, true},
     {"cluster", "info", "(): ClusterInfo?", "Get cluster status info", "cluster_info_fn", "normal", "", "", "", "value", "", "", "", "runtime", "", 0, 0, false},

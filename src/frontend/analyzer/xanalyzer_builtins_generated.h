@@ -204,7 +204,7 @@ static const XaBuiltinMember g_gen_cluster_functions[] = {
     {"__join", "(addr: string): bool", "Join cluster by address without blocking the scheduler worker", true, false, true, false, true, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__self", "(): string", "Get own node name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__nodes", "(): Array<string>", "List cluster node names", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__monitor", "(name: string, coro_name?: string): Channel<string>", "Monitor node or remote coroutine", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__discover", "(): ()", "Start LAN auto-discovery", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__stop", "(): ()", "Stop cluster node", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"info", "(): ClusterInfo?", "Get cluster status info", true, false, false, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},

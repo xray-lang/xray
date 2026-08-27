@@ -3781,8 +3781,8 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn monitor {
-    signature: "(name: string, coro_name?: string): Channel"
+  fn __monitor {
+    signature: "(name: string, coro_name?: string): Channel<string>"
     doc: "Monitor node or remote coroutine"
     vm: "cluster_monitor_coro_fn"
     argc: 2
