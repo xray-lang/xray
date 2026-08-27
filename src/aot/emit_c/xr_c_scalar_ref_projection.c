@@ -177,16 +177,35 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_address(
     XrCScalarRefProjection *out) {
     if (out)
         memset(out, 0, sizeof(*out));
+    if (!plan || !binding || !out)
+        return XR_C_SCALAR_REF_MALFORMED;
+    uint32_t argument_count = 0;
+    const XrTargetCallArgumentRecord *arguments =
+        xr_target_plan_call_arguments(plan, &argument_count);
+    bool matched = false;
+    XrCScalarRefProjection projection = {0};
+    for (uint32_t i = 0; arguments && i < argument_count; i++) {
+        if (arguments[i].semantic_value != binding->semantic_value)
+            continue;
+        XrCScalarRefProjection candidate = {0};
+        XrCScalarRefProjectionStatus status =
+            xr_c_scalar_ref_project_argument(plan, &arguments[i], &candidate);
+        if (status == XR_C_SCALAR_REF_MALFORMED ||
+            (status == XR_C_SCALAR_REF_EXACT && matched))
+            return XR_C_SCALAR_REF_MALFORMED;
+        if (status == XR_C_SCALAR_REF_EXACT) {
+            matched = true;
+            projection = candidate;
+        }
+    }
+    if (!matched)
+        return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
     const XrTargetMachineRepRecord *register_rep =
         binding ? xr_target_plan_machine_rep(plan, binding->register_rep) : NULL;
     const XrTargetMachineRepRecord *memory_rep =
         binding ? xr_target_plan_machine_rep(plan, binding->memory_rep) : NULL;
-    bool claim = register_rep && memory_rep &&
-                 register_rep->kind == XR_MACHINE_REP_RAW_PTR &&
-                 memory_rep->kind == XR_MACHINE_REP_RAW_PTR;
-    if (!claim)
-        return XR_C_SCALAR_REF_NOT_THIS_FAMILY;
-    if (!plan || !binding || !out || register_rep->register_bits != 64 ||
+    if (!register_rep || !memory_rep || register_rep->kind != XR_MACHINE_REP_RAW_PTR ||
+        memory_rep->kind != XR_MACHINE_REP_RAW_PTR || register_rep->register_bits != 64 ||
         register_rep->memory_size != 8 || register_rep->memory_align != 8 ||
         memory_rep->register_bits != 64 || memory_rep->memory_size != 8 ||
         memory_rep->memory_align != 8 ||
@@ -195,20 +214,7 @@ XR_FUNC XrCScalarRefProjectionStatus xr_c_scalar_ref_project_address(
         register_rep->root_kind != XR_TARGET_ROOT_NONE ||
         memory_rep->root_kind != XR_TARGET_ROOT_NONE)
         return XR_C_SCALAR_REF_MALFORMED;
-    uint32_t argument_count = 0;
-    const XrTargetCallArgumentRecord *arguments =
-        xr_target_plan_call_arguments(plan, &argument_count);
-    const XrTargetCallArgumentRecord *match = NULL;
-    for (uint32_t i = 0; arguments && i < argument_count; i++) {
-        if (arguments[i].semantic_value != binding->semantic_value)
-            continue;
-        if (match)
-            return XR_C_SCALAR_REF_MALFORMED;
-        match = &arguments[i];
-    }
-    if (!match || xr_c_scalar_ref_project_argument(plan, match, out) !=
-                      XR_C_SCALAR_REF_EXACT)
-        return XR_C_SCALAR_REF_MALFORMED;
+    *out = projection;
     return XR_C_SCALAR_REF_EXACT;
 }
 

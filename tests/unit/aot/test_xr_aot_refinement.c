@@ -2524,7 +2524,8 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
     REQUIRE(!xr_c_emission_plan_build(
         target, xr_target_profile_fingerprint(fixture.target_profile), &legacy_rejected, error,
         sizeof(error)));
-    REQUIRE(legacy_rejected == NULL && strstr(error, "tagged ref argument") != NULL);
+    REQUIRE(legacy_rejected == NULL && strstr(error, "XR_TARGET_1001") != NULL &&
+            strstr(error, "direct-local ref argument has no exact C projection") != NULL);
     *argument = saved_argument;
     target->calls[0] = saved_call;
     target->fingerprint = saved_target_fingerprint;
@@ -2560,8 +2561,9 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
             REQUIRE(!xr_c_emission_plan_build(
                 target, xr_target_profile_fingerprint(fixture.target_profile),
                 &rejected, error, sizeof(error)));
-            REQUIRE(rejected == NULL &&
-                    strstr(error, "direct-local tagged ref argument") != NULL);
+            REQUIRE(rejected == NULL && strstr(error, "XR_TARGET_1001") != NULL &&
+                    strstr(error,
+                           "direct-local ref argument has no exact C projection") != NULL);
         }
         REQUIRE(!xr_target_plan_verify(target, error, sizeof(error)));
     }

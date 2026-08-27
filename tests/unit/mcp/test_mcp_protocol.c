@@ -46,6 +46,7 @@ void xmcp_send_progress_notification(XmcpServer *s, const XrJsonValue *t, int64_
 
 static int tests_passed = 0;
 static int tests_failed = 0;
+static const char test_run_module_id[] = "mcp-protocol-run";
 
 #define TEST(name) static void test_##name(void)
 #define RUN_TEST(name)                                                                             \
@@ -709,6 +710,7 @@ TEST(tools_call_rejects_fractional_integers) {
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
     XJSON_SET_STRING(args, "code", "print(\"ok\")\n");
+    XJSON_SET_STRING(args, "moduleId", test_run_module_id);
     xjson_object_set(args, "timeoutMs", xjson_new_number(1.5));
     xjson_object_set(params, "arguments", args);
 
@@ -941,6 +943,21 @@ TEST(tools_list_runner_enabled_includes_run) {
     ASSERT(xjson_get_bool(ann, "readOnlyHint") == false);
     ASSERT(xjson_get_bool(ann, "openWorldHint") == true);
 
+    XrJsonValue *input_schema = xjson_get_object(run_tool, "inputSchema");
+    ASSERT_NOT_NULL(input_schema);
+    XrJsonValue *input_props = xjson_get_object(input_schema, "properties");
+    ASSERT_NOT_NULL(xjson_get_object(input_props, "code"));
+    ASSERT_NOT_NULL(xjson_get_object(input_props, "moduleId"));
+    XrJsonValue *required = xjson_get_array(input_schema, "required");
+    ASSERT_NOT_NULL(required);
+    ASSERT_EQ(xjson_array_len(required), 2);
+    XrJsonValue *required_code = xjson_array_get(required, 0);
+    XrJsonValue *required_module_id = xjson_array_get(required, 1);
+    ASSERT(xjson_is_string(required_code));
+    ASSERT(xjson_is_string(required_module_id));
+    ASSERT_STR_EQ(required_code->as.string, "code");
+    ASSERT_STR_EQ(required_module_id->as.string, "moduleId");
+
     XrJsonValue *output_schema = xjson_get_object(run_tool, "outputSchema");
     ASSERT_NOT_NULL(output_schema);
     XrJsonValue *output_props = xjson_get_object(output_schema, "properties");
@@ -961,6 +978,7 @@ static XrJsonValue *make_run_params(const char *code) {
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
     XJSON_SET_STRING(args, "code", code);
+    XJSON_SET_STRING(args, "moduleId", test_run_module_id);
     xjson_object_set(params, "arguments", args);
     return params;
 }
@@ -984,6 +1002,22 @@ TEST(tools_call_run_basic_print_returns_structured) {
 
     xjson_free(params);
     xjson_free(result);
+}
+
+TEST(tools_call_run_requires_module_identity) {
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "print(\"hello\")\n");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "missing required parameter 'moduleId'") != NULL);
+
+    xjson_free(params);
 }
 
 TEST(resources_read_stdlib_list_omits_json_module) {
@@ -1015,6 +1049,7 @@ TEST(tools_call_run_output_truncated) {
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
     XJSON_SET_STRING(args, "code", "print(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\")\n");
+    XJSON_SET_STRING(args, "moduleId", test_run_module_id);
     XJSON_SET_INT(args, "outputLimit", 10);
     xjson_object_set(params, "arguments", args);
 
@@ -1038,6 +1073,7 @@ TEST(tools_call_run_deadline_exceeded) {
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
     XJSON_SET_STRING(args, "code", "var i = 0\nwhile (i == 0) { var x = 1 }\n");
+    XJSON_SET_STRING(args, "moduleId", test_run_module_id);
     XJSON_SET_INT(args, "timeoutMs", 50);
     xjson_object_set(params, "arguments", args);
 
@@ -1060,6 +1096,7 @@ TEST(tools_call_run_deadline_keeps_server_usable) {
     XJSON_SET_STRING(params, "name", "xray_run");
     XrJsonValue *args = xjson_new_object();
     XJSON_SET_STRING(args, "code", "var i = 0\nwhile (i == 0) { var x = 1 }\n");
+    XJSON_SET_STRING(args, "moduleId", test_run_module_id);
     XJSON_SET_INT(args, "timeoutMs", 50);
     xjson_object_set(params, "arguments", args);
 
@@ -1908,6 +1945,7 @@ int main(void) {
     RUN_TEST(tools_call_run_disabled_by_default);
     RUN_TEST(tools_list_runner_enabled_includes_run);
     RUN_TEST(tools_call_run_basic_print_returns_structured);
+    RUN_TEST(tools_call_run_requires_module_identity);
     RUN_TEST(tools_call_run_output_truncated);
     RUN_TEST(tools_call_run_deadline_exceeded);
     RUN_TEST(tools_call_run_deadline_keeps_server_usable);
