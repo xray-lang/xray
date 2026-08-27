@@ -23,6 +23,13 @@
 #include <string.h>
 
 typedef struct XrAotTargetIndex {
+    const XrSemanticPlan *semantic;
+    XrFingerprint semantic_fingerprint;
+    XrStableId module_identity;
+    uint32_t target_partition;
+    uint32_t program_module_row;
+    uint32_t layouts_begin;
+    uint32_t layouts_count;
     uint32_t semantic_value_count;
     uint32_t *operation_by_value;
     uint32_t *parameter_by_value;
@@ -72,6 +79,53 @@ static bool fail_diag(XrAotRefinementDiagnostic *diag, uint32_t issue,
 static bool fingerprint_is_zero(XrFingerprint fingerprint) {
     static const XrFingerprint zero = {{0}};
     return xr_fingerprint_equal(fingerprint, zero);
+}
+
+/* Resolve the root SemanticPlan through the verified program-module authority
+ * before any module-local semantic index is interpreted.  A local value
+ * ordinal is meaningful only after this join has selected one exact TargetPlan
+ * partition. */
+static bool target_index_resolve_root_scope(const XrTargetPlan *target_plan,
+                                            XrAotTargetIndex *index) {
+    if (!index)
+        return false;
+    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
+    uint32_t partition = UINT32_MAX;
+    if (!semantic || !xr_target_plan_partition_for_semantic(
+                         target_plan, semantic, &partition))
+        return false;
+    XrFingerprint semantic_fingerprint = xr_semantic_plan_fingerprint(semantic);
+    if (fingerprint_is_zero(semantic_fingerprint))
+        return false;
+    const XrSemanticProgramProvenance *provenance =
+        xr_semantic_plan_program_provenance(semantic);
+    XrStableId module_identity = {{0}};
+    uint32_t program_module_row = 0u;
+    if (provenance) {
+        module_identity = provenance->program_module;
+        program_module_row = provenance->program_module_row;
+    }
+    uint32_t partition_count = 0u;
+    const XrTargetModulePartitionRecord *partitions =
+        xr_target_plan_module_partitions(target_plan, &partition_count);
+    uint32_t layouts_begin = 0u;
+    uint32_t layouts_count = 0u;
+    if (!partition_count) {
+        (void) xr_target_plan_layouts(target_plan, &layouts_count);
+    } else {
+        if (!partitions || partition >= partition_count)
+            return false;
+        layouts_begin = partitions[partition].layouts_begin;
+        layouts_count = partitions[partition].layouts_count;
+    }
+    index->semantic = semantic;
+    index->semantic_fingerprint = semantic_fingerprint;
+    index->module_identity = module_identity;
+    index->target_partition = partition;
+    index->program_module_row = program_module_row;
+    index->layouts_begin = layouts_begin;
+    index->layouts_count = layouts_count;
+    return true;
 }
 
 static bool baseline_valid(const XrAotBaselineRef *baseline) {
@@ -147,10 +201,9 @@ static bool target_index_init(const XrTargetPlan *target_plan,
     if (!target_plan || !index)
         return false;
     memset(index, 0, sizeof(*index));
-    const XrSemanticPlan *semantic =
-        xr_target_plan_semantic_plan(target_plan);
-    if (!semantic)
+    if (!target_index_resolve_root_scope(target_plan, index))
         return false;
+    const XrSemanticPlan *semantic = index->semantic;
     uint32_t function_count =
         (uint32_t) xr_semantic_plan_function_count(semantic);
     uint64_t value_count = 0;
@@ -266,6 +319,8 @@ static void representation_record_fingerprint(
                      sizeof(baseline->target_profile_fingerprint.bytes));
     hash_u32(&ctx, record->source_function);
     hash_u32(&ctx, record->source_value);
+    hash_u32(&ctx, record->source_partition);
+    hash_u32(&ctx, record->source_program_module_row);
     hash_u32(&ctx, record->source_operation);
     hash_u32(&ctx, record->source_type);
     hash_u32(&ctx, record->source_kind);
@@ -288,6 +343,12 @@ static void representation_record_fingerprint(
     hash_u32(&ctx, record->use_flags);
     hash_u64(&ctx, (uint64_t) record->source_semantic_immediate);
     hash_u64(&ctx, (uint64_t) record->use_semantic_immediate);
+    xr_sha256_update(&ctx, record->source_semantic_fingerprint.bytes,
+                     sizeof(record->source_semantic_fingerprint.bytes));
+    xr_sha256_update(&ctx, record->source_module_identity.bytes,
+                     sizeof(record->source_module_identity.bytes));
+    xr_sha256_update(&ctx, record->source_function_id.bytes,
+                     sizeof(record->source_function_id.bytes));
     xr_sha256_update(&ctx, record->source_operation_id.bytes,
                      sizeof(record->source_operation_id.bytes));
     xr_sha256_update(&ctx, record->source_type_id.bytes,
@@ -347,8 +408,13 @@ static uint32_t derive_representation_record(
         request->output_rep_kind >= XR_MACHINE_REP_COUNT ||
         fingerprint_is_zero(request->policy_fingerprint))
         return XR_AOT_REFINEMENT_REPRESENTATION;
-    const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target_plan);
-    if (!semantic)
+    const XrSemanticPlan *semantic = index->semantic;
+    if (!semantic || request->source_partition != index->target_partition ||
+        request->source_program_module_row != index->program_module_row ||
+        !xr_fingerprint_equal(request->source_semantic_fingerprint,
+                              index->semantic_fingerprint) ||
+        !xr_stable_id_equal(request->source_module_identity,
+                            index->module_identity))
         return XR_AOT_REFINEMENT_SOURCE_IDENTITY;
 
     uint32_t source_operation = XR_SEMANTIC_INDEX_NONE;
@@ -402,7 +468,9 @@ static uint32_t derive_representation_record(
         return XR_AOT_REFINEMENT_SOURCE_IDENTITY;
     const XrSemanticTypeRecord *source_type =
         xr_semantic_plan_type(semantic, source_type_index);
-    if (!source_type)
+    const XrSemanticFunctionRecord *source_function_record =
+        xr_semantic_plan_function(semantic, source_function);
+    if (!source_type || !source_function_record)
         return XR_AOT_REFINEMENT_SOURCE_TYPE;
 
     XrStableId use_id = {{0}};
@@ -440,6 +508,8 @@ static uint32_t derive_representation_record(
     *out = (XrAotRepresentationAdapterRecord) {
         .source_function = source_function,
         .source_value = request->source_value,
+        .source_partition = request->source_partition,
+        .source_program_module_row = request->source_program_module_row,
         .source_operation = source_operation,
         .source_type = source_type_index,
         .source_kind = source_kind,
@@ -460,6 +530,9 @@ static uint32_t derive_representation_record(
         .use_flags = use_flags,
         .source_semantic_immediate = source_immediate,
         .use_semantic_immediate = use_immediate,
+        .source_semantic_fingerprint = request->source_semantic_fingerprint,
+        .source_module_identity = request->source_module_identity,
+        .source_function_id = source_function_record->id,
         .source_operation_id = source_id,
         .source_type_id = source_type->id,
         .use_operation_id = use_id,
@@ -467,11 +540,13 @@ static uint32_t derive_representation_record(
     };
 
     const XrTargetValueRepRecord *value_rep =
-        xr_target_plan_value_rep(target_plan, request->source_value);
+        xr_target_plan_value_rep_for_module(target_plan, index->target_partition,
+                                            request->source_value);
     const XrTargetMachineRepRecord *machine =
         value_rep
             ? xr_target_plan_machine_rep(target_plan, value_rep->register_rep)
             : NULL;
+    bool identity = request->adapter_kind == XR_AOT_REP_ADAPTER_IDENTITY;
     bool enum_descriptor =
         request->adapter_kind == XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_BOX ||
         request->adapter_kind == XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX;
@@ -483,20 +558,27 @@ static uint32_t derive_representation_record(
     }
 
     bool boxes = request->adapter_kind == XR_AOT_REP_ADAPTER_BOX;
-    uint16_t expected_input = boxes ? machine->kind : XR_MACHINE_REP_DYN_VALUE;
-    uint16_t expected_output = boxes ? XR_MACHINE_REP_DYN_VALUE : machine->kind;
-    uint16_t recipe = representation_recipe(request->adapter_kind, machine->kind);
+    uint16_t expected_input = identity ? machine->kind
+                              : boxes  ? machine->kind
+                                       : XR_MACHINE_REP_DYN_VALUE;
+    uint16_t expected_output = identity ? machine->kind
+                               : boxes  ? XR_MACHINE_REP_DYN_VALUE
+                                        : machine->kind;
+    uint16_t recipe = identity ? XR_AOT_REP_RECIPE_NONE
+                               : representation_recipe(request->adapter_kind, machine->kind);
     if (request->input_rep_kind != expected_input ||
         request->output_rep_kind != expected_output ||
         machine->kind == XR_MACHINE_REP_VOID ||
         machine->kind == XR_MACHINE_REP_DYN_VALUE ||
-        recipe == XR_AOT_REP_RECIPE_NONE)
+        (!identity && recipe == XR_AOT_REP_RECIPE_NONE))
         return XR_AOT_REFINEMENT_REPRESENTATION;
 
     uint32_t layout_count = 0;
     const XrTargetLayoutRecord *layouts =
         xr_target_plan_layouts(target_plan, &layout_count);
     if (!layouts || request->layout >= layout_count ||
+        request->layout < index->layouts_begin ||
+        request->layout - index->layouts_begin >= index->layouts_count ||
         layouts[request->layout].semantic_type != source_type_index ||
         fingerprint_is_zero(layouts[request->layout].fingerprint))
         return XR_AOT_REFINEMENT_LAYOUT;
@@ -1650,6 +1732,8 @@ static bool verify_view(const XrAotRefinementPlanView *view,
             &record->representation_adapter;
         XrAotRepresentationAdapterRequest request = {
             .source_value = actual->source_value,
+            .source_partition = actual->source_partition,
+            .source_program_module_row = actual->source_program_module_row,
             .use_operation = actual->use_operation,
             .use_block = actual->use_block,
             .use_operand = actual->use_operand,
@@ -1658,6 +1742,8 @@ static bool verify_view(const XrAotRefinementPlanView *view,
             .input_rep_kind = actual->input_rep_kind,
             .output_rep_kind = actual->output_rep_kind,
             .layout = actual->layout,
+            .source_semantic_fingerprint = actual->source_semantic_fingerprint,
+            .source_module_identity = actual->source_module_identity,
             .policy_fingerprint = actual->policy_fingerprint,
         };
         XrAotRepresentationAdapterRecord derived = {0};
@@ -1682,12 +1768,21 @@ static bool verify_view(const XrAotRefinementPlanView *view,
                              record->protocol.pass_id, 0);
         if (actual->source_function != derived.source_function ||
             actual->source_value != derived.source_value ||
+            actual->source_partition != derived.source_partition ||
+            actual->source_program_module_row !=
+                derived.source_program_module_row ||
+            !xr_fingerprint_equal(actual->source_semantic_fingerprint,
+                                  derived.source_semantic_fingerprint) ||
+            !xr_stable_id_equal(actual->source_module_identity,
+                                derived.source_module_identity) ||
             actual->source_operation != derived.source_operation ||
             actual->source_kind != derived.source_kind ||
             actual->source_auxiliary_kind != derived.source_auxiliary_kind ||
             actual->source_flags != derived.source_flags ||
             actual->source_semantic_immediate !=
                 derived.source_semantic_immediate ||
+            !xr_stable_id_equal(actual->source_function_id,
+                                derived.source_function_id) ||
             !xr_stable_id_equal(actual->source_operation_id,
                                 derived.source_operation_id))
             return fail_diag(diag, XR_AOT_REFINEMENT_SOURCE_IDENTITY, i,

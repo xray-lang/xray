@@ -1762,6 +1762,8 @@ static void test_immutable_authority_matches_backend_materialization(void) {
         xr_aot_refinement_representation_protocol(27902);
     XrAotRepresentationAdapterRequest partial_request = {
         .source_value = first_adapter->source_value,
+        .source_partition = first_adapter->source_partition,
+        .source_program_module_row = first_adapter->source_program_module_row,
         .use_operation = first_adapter->use_operation,
         .use_block = first_adapter->use_block,
         .use_operand = first_adapter->use_operand,
@@ -1770,6 +1772,8 @@ static void test_immutable_authority_matches_backend_materialization(void) {
         .input_rep_kind = first_adapter->input_rep_kind,
         .output_rep_kind = first_adapter->output_rep_kind,
         .layout = first_adapter->layout,
+        .source_semantic_fingerprint = first_adapter->source_semantic_fingerprint,
+        .source_module_identity = first_adapter->source_module_identity,
         .policy_fingerprint = first_adapter->policy_fingerprint,
     };
     uint32_t decision = XR_AOT_REFINEMENT_REFUSED;
@@ -3283,6 +3287,31 @@ static void test_representation_record_mutations_fail_closed(void) {
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
 
     memcpy(records, original.records, sizeof(records));
+    records[0].representation_adapter.source_partition++;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, original.records, sizeof(records));
+    records[0].representation_adapter.source_program_module_row++;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, original.records, sizeof(records));
+    records[0].representation_adapter.source_semantic_fingerprint.bytes[0] ^= 1u;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, original.records, sizeof(records));
+    records[0].representation_adapter.source_module_identity.bytes[0] ^= 1u;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, original.records, sizeof(records));
+    records[0].representation_adapter.source_function_id.bytes[0] ^= 1u;
+    REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
+    REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_IDENTITY);
+
+    memcpy(records, original.records, sizeof(records));
     records[0].representation_adapter.source_type_id.bytes[0] ^= 1u;
     REQUIRE(!xr_aot_refinement_verify(&mutated, fixture.target_plan, &diag));
     REQUIRE(diag.issue == XR_AOT_REFINEMENT_SOURCE_TYPE);
@@ -3510,7 +3539,7 @@ static void test_fixed_array_backing_projection_is_exact_and_fail_closed(void) {
     REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target, &policy, &refinement, &diag));
     REQUIRE(refinement != NULL &&
-            xr_aot_refinement_plan_view(refinement).record_count == 0);
+            xr_aot_refinement_plan_view(refinement).record_count == 1);
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;
@@ -3842,7 +3871,7 @@ static void test_direct_local_tagged_ref_parameter_index_is_exact_and_fail_close
     REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target, &policy, &plan, &diag));
     REQUIRE(plan != NULL &&
-            xr_aot_refinement_plan_view(plan).record_count == 0);
+            xr_aot_refinement_plan_view(plan).record_count == 1);
     xr_aot_refinement_plan_free(plan);
 
     uint8_t saved_ownership = target->slots[binding->slot].ownership;
@@ -3878,6 +3907,8 @@ static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
         xr_aot_refinement_representation_protocol(27903);
     XrAotRepresentationAdapterRequest request = {
         .source_value = native->source_value,
+        .source_partition = native->source_partition,
+        .source_program_module_row = native->source_program_module_row,
         .use_operation = native->use_operation,
         .use_block = native->use_block,
         .use_operand = native->use_operand,
@@ -3886,6 +3917,8 @@ static void test_enum_descriptor_adapter_refuses_without_layout_family(void) {
         .input_rep_kind = native->input_rep_kind,
         .output_rep_kind = native->output_rep_kind,
         .layout = XR_SEMANTIC_INDEX_NONE,
+        .source_semantic_fingerprint = native->source_semantic_fingerprint,
+        .source_module_identity = native->source_module_identity,
         .policy_fingerprint = native->policy_fingerprint,
     };
     uint32_t decision = XR_AOT_REFINEMENT_APPLIED;
@@ -4094,7 +4127,7 @@ static void test_scalar_array_allocation_storage_is_exact_and_fail_closed(void) 
     REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target, &policy, &refinement, &diag));
     REQUIRE(refinement != NULL &&
-            xr_aot_refinement_plan_view(refinement).record_count == 0);
+            xr_aot_refinement_plan_view(refinement).record_count == 1);
     xr_aot_refinement_plan_free(refinement);
 
     XrCEmissionPlan *emission = NULL;
@@ -4186,6 +4219,7 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
     XrTargetPlan *target = build_attached_target_plan(function, &profile);
     const XrSemanticPlan *semantic = xr_target_plan_semantic_plan(target);
     uint32_t array_operation = XR_SEMANTIC_INDEX_NONE;
+    uint32_t write_operation = XR_SEMANTIC_INDEX_NONE;
     uint32_t read_value = XR_SEMANTIC_INDEX_NONE;
     for (uint32_t i = 0;
          i < (uint32_t) xr_semantic_plan_operation_count(semantic); i++) {
@@ -4194,14 +4228,30 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
         if (operation && operation->opcode == XI_CALL_BUILTIN &&
             operation->intrinsic_kind == XR_SEM_INTRINSIC_ARRAY_FILLED_NEW)
             array_operation = i;
+        if (operation && operation->opcode == XI_INDEX_SET)
+            write_operation = i;
         if (operation && operation->opcode == XI_INDEX_GET)
             read_value = operation->result_value;
     }
     REQUIRE(array_operation != XR_SEMANTIC_INDEX_NONE &&
+            write_operation != XR_SEMANTIC_INDEX_NONE &&
             read_value != XR_SEMANTIC_INDEX_NONE);
     const XrSemanticOperationRecord *array_semantic =
         xr_semantic_plan_operation(semantic, array_operation);
-    REQUIRE(array_semantic != NULL);
+    const XrSemanticOperationRecord *write_semantic =
+        xr_semantic_plan_operation(semantic, write_operation);
+    uint32_t semantic_operand_count = 0u;
+    const XrSemanticOperandRecord *semantic_operands =
+        xr_semantic_plan_operands(semantic, &semantic_operand_count);
+    REQUIRE(array_semantic && write_semantic && semantic_operands &&
+            write_semantic->operand_count == 3u &&
+            write_semantic->operand_begin <= semantic_operand_count &&
+            write_semantic->operand_count <=
+                semantic_operand_count - write_semantic->operand_begin);
+    uint32_t index_value =
+        semantic_operands[write_semantic->operand_begin + 1u].value;
+    uint32_t element_value =
+        semantic_operands[write_semantic->operand_begin + 2u].value;
     const XrTargetValueRepRecord *array_binding =
         xr_target_plan_value_rep(target, array_semantic->result_value);
     const XrTargetValueRepRecord *read_binding =
@@ -4233,7 +4283,48 @@ static void test_array_intrinsic_index_storage_is_exact_and_fail_closed(void) {
     XrAotRefinementPlan *plan = NULL;
     REQUIRE(xr_aot_representation_refinement_build_from_authority(
         target, &policy, &plan, &diag));
-    REQUIRE(plan != NULL && xr_aot_refinement_plan_view(plan).record_count == 0);
+    XrAotRefinementPlanView refinement_view =
+        xr_aot_refinement_plan_view(plan);
+    REQUIRE(plan != NULL && refinement_view.frozen && refinement_view.verified &&
+            refinement_view.record_count == 1u);
+    const XrAotRepresentationAdapterRecord *index_identity =
+        &refinement_view.records[0].representation_adapter;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(semantic, write_semantic->function);
+    REQUIRE(index_identity && semantic_function &&
+            index_identity->source_value == index_value &&
+            index_identity->source_partition == 0u &&
+            index_identity->source_program_module_row == 0u &&
+            xr_fingerprint_equal(index_identity->source_semantic_fingerprint,
+                                 xr_semantic_plan_fingerprint(semantic)) &&
+            xr_stable_id_equal(index_identity->source_function_id,
+                               semantic_function->id) &&
+            xr_stable_id_equal(index_identity->use_operation_id,
+                               write_semantic->id) &&
+            index_identity->use_operation == write_operation &&
+            index_identity->use_operand == 1u &&
+            index_identity->adapter_kind == XR_AOT_REP_ADAPTER_IDENTITY &&
+            index_identity->recipe == XR_AOT_REP_RECIPE_NONE &&
+            index_identity->input_rep_kind == XR_MACHINE_REP_I64 &&
+            index_identity->output_rep_kind == XR_MACHINE_REP_I64 &&
+            index_identity->target_register_rep < target->machine_reps_count &&
+            index_identity->target_memory_rep < target->machine_reps_count &&
+            target->machine_reps[index_identity->target_register_rep].kind ==
+                XR_MACHINE_REP_I64 &&
+            target->machine_reps[index_identity->target_memory_rep].kind ==
+                XR_MACHINE_REP_I64);
+
+    XrAotTransformationRecord mutated_records[1];
+    memcpy(mutated_records, refinement_view.records, sizeof(mutated_records));
+    XrAotRefinementPlanView mutated_view = refinement_view;
+    mutated_view.records = mutated_records;
+    mutated_records[0].representation_adapter.source_value = element_value;
+    REQUIRE(!xr_aot_refinement_verify(&mutated_view, target, &diag));
+    REQUIRE(diag.issue != XR_AOT_REFINEMENT_OK);
+
+    xi_opt_refresh_representations_with_policy(function, &policy);
+    REQUIRE(xr_aot_representation_materialization_verify(
+        &refinement_view, function, target, &policy, &diag));
     xr_aot_refinement_plan_free(plan);
 
     char error[512] = {0};

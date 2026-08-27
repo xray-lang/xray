@@ -21,7 +21,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(5)
+#define XR_AOT_REFINEMENT_SCHEMA_VERSION UINT32_C(6)
 #define XR_AOT_REFINEMENT_MAX_RECORDS UINT32_C(1048576)
 
 typedef enum XrAotInvariant {
@@ -177,6 +177,10 @@ typedef enum XrAotRepresentationAdapterKind {
     XR_AOT_REP_ADAPTER_UNBOX,
     XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_BOX,
     XR_AOT_REP_ADAPTER_ENUM_DESCRIPTOR_UNBOX,
+    /* A proved use of the value in exactly the TargetPlan storage it already
+     * occupies.  This is a persisted identity obligation, not an instruction
+     * to synthesize a no-op adapter. */
+    XR_AOT_REP_ADAPTER_IDENTITY,
     XR_AOT_REP_ADAPTER_COUNT,
 } XrAotRepresentationAdapterKind;
 
@@ -203,6 +207,8 @@ typedef enum XrAotRepresentationRecipe {
 
 typedef struct XrAotRepresentationAdapterRequest {
     uint32_t source_value;
+    uint32_t source_partition;
+    uint32_t source_program_module_row;
     uint32_t use_operation;
     uint32_t use_block;
     uint16_t use_operand;
@@ -211,12 +217,16 @@ typedef struct XrAotRepresentationAdapterRequest {
     uint16_t input_rep_kind;
     uint16_t output_rep_kind;
     uint32_t layout;
+    XrFingerprint source_semantic_fingerprint;
+    XrStableId source_module_identity;
     XrFingerprint policy_fingerprint;
 } XrAotRepresentationAdapterRequest;
 
 typedef struct XrAotRepresentationAdapterRecord {
     uint32_t source_function;
     uint32_t source_value;
+    uint32_t source_partition;
+    uint32_t source_program_module_row;
     uint32_t source_operation;
     uint32_t source_type;
     uint16_t source_kind;
@@ -239,6 +249,9 @@ typedef struct XrAotRepresentationAdapterRecord {
     uint8_t use_flags;
     int64_t source_semantic_immediate;
     int64_t use_semantic_immediate;
+    XrFingerprint source_semantic_fingerprint;
+    XrStableId source_module_identity;
+    XrStableId source_function_id;
     XrStableId source_operation_id;
     XrStableId source_type_id;
     XrStableId use_operation_id;

@@ -964,6 +964,11 @@ XR_FUNC const XrSemanticPlan *xr_target_plan_program_module(const XrTargetPlan *
                                                             uint32_t program_module);
 XR_FUNC const XrSemanticPlan *xr_target_plan_semantic_module(const XrTargetPlan *plan,
                                                              uint32_t partition);
+/* Resolve one verified SemanticPlan to its unique program-module partition.
+ * Callers may interpret module-local semantic indexes only after this join. */
+XR_FUNC bool xr_target_plan_partition_for_semantic(const XrTargetPlan *plan,
+                                                    const XrSemanticPlan *semantic_plan,
+                                                    uint32_t *partition);
 XR_FUNC const XrSemanticPlan *xr_target_plan_module_for_function(const XrTargetPlan *plan,
                                                                  uint32_t target_function,
                                                                  uint32_t *partition);

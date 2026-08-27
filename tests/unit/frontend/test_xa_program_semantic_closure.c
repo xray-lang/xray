@@ -2086,10 +2086,18 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
             xr_target_plan_semantic_module(target, graph->entry_partition);
         const XrSemanticPlan *producer_owner =
             xr_target_plan_semantic_module(target, graph->producer_partition);
+        uint32_t entry_scope = UINT32_MAX;
+        uint32_t producer_scope = UINT32_MAX;
         const XrSemanticPlan *bound_semantic = NULL;
         uint32_t bound_function = XR_SEMANTIC_INDEX_NONE;
         uint32_t found_function = XR_SEMANTIC_INDEX_NONE;
         exact = entry_owner == entry && producer_owner == producer &&
+                xr_target_plan_partition_for_semantic(
+                    target, entry, &entry_scope) &&
+                entry_scope == graph->entry_partition &&
+                xr_target_plan_partition_for_semantic(
+                    target, producer, &producer_scope) &&
+                producer_scope == graph->producer_partition &&
                 call->calling_convention == XR_TARGET_CALL_CONVENTION_PROGRAM_DIRECT &&
                 call->target_kind == XR_TARGET_CALL_TARGET_PROGRAM_DIRECT &&
                 call->callee_function == graph->producer_target_function &&
@@ -2108,6 +2116,29 @@ static bool scalar_graph_target_plan_is_exact(ScalarGraphPlanFixture *fixture) {
             dynamic += instructions[i].opcode == XR_TARGET_INSTRUCTION_CALL_ENTRY_I64;
         }
         exact = exact && direct == 1u && dynamic == 0u;
+        if (exact) {
+            XrTargetModulePartitionRecord *producer_partition =
+                &target->module_partitions[graph->producer_partition];
+            uint32_t saved_row = producer_partition->program_module_row;
+            producer_partition->program_module_row =
+                target->module_partitions[graph->entry_partition]
+                    .program_module_row;
+            producer_scope = UINT32_MAX;
+            exact = !xr_target_plan_partition_for_semantic(
+                        target, producer, &producer_scope) &&
+                    producer_scope == UINT32_MAX;
+            producer_partition->program_module_row = saved_row;
+        }
+        if (exact) {
+            XrTargetModulePartitionRecord *producer_partition =
+                &target->module_partitions[graph->producer_partition];
+            producer_partition->semantic_fingerprint.bytes[0] ^= UINT8_C(0x80);
+            producer_scope = UINT32_MAX;
+            exact = !xr_target_plan_partition_for_semantic(
+                        target, producer, &producer_scope) &&
+                    producer_scope == UINT32_MAX;
+            producer_partition->semantic_fingerprint.bytes[0] ^= UINT8_C(0x80);
+        }
     }
     exact = exact && scalar_graph_bundle_owner_is_exact(fixture, target) &&
             scalar_graph_c_emission_binding_is_exact(fixture, target) &&

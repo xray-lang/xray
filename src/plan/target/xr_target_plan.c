@@ -1334,6 +1334,56 @@ const XrSemanticPlan *xr_target_plan_semantic_module(const XrTargetPlan *plan,
                : NULL;
 }
 
+bool xr_target_plan_partition_for_semantic(const XrTargetPlan *plan,
+                                           const XrSemanticPlan *semantic_plan,
+                                           uint32_t *partition) {
+    if (partition)
+        *partition = UINT32_MAX;
+    if (!xr_target_plan_is_verified(plan) || !semantic_plan || !partition ||
+        !xr_semantic_plan_is_frozen(semantic_plan) ||
+        !xr_semantic_plan_is_verified(semantic_plan))
+        return false;
+    XrFingerprint semantic_fingerprint =
+        xr_semantic_plan_fingerprint(semantic_plan);
+    const XrSemanticProgramProvenance *program =
+        xr_semantic_plan_program_provenance(semantic_plan);
+    if (!plan->module_partitions_count) {
+        if (semantic_plan != plan->semantic_plan ||
+            plan->semantic_module_count != 0u ||
+            !xr_fingerprint_equal(plan->semantic_fingerprint,
+                                  semantic_fingerprint) ||
+            (program && (program->module_count != 1u ||
+                         program->program_module_row != 0u)))
+            return false;
+        *partition = 0u;
+        return true;
+    }
+    if (!program || !program->module_count ||
+        program->program_module_row >= program->module_count ||
+        plan->module_partitions_count != plan->semantic_module_count ||
+        plan->semantic_module_count != program->module_count)
+        return false;
+    uint32_t match = UINT32_MAX;
+    for (uint32_t i = 0u; i < plan->module_partitions_count; i++) {
+        const XrTargetModulePartitionRecord *candidate =
+            &plan->module_partitions[i];
+        if (candidate->program_module_row != program->program_module_row ||
+            !xr_stable_id_equal(candidate->module_identity,
+                                program->program_module) ||
+            !xr_fingerprint_equal(candidate->semantic_fingerprint,
+                                  semantic_fingerprint) ||
+            xr_target_plan_semantic_module(plan, i) != semantic_plan)
+            continue;
+        if (match != UINT32_MAX)
+            return false;
+        match = i;
+    }
+    if (match == UINT32_MAX)
+        return false;
+    *partition = match;
+    return true;
+}
+
 const XrSemanticPlan *xr_target_plan_module_for_function(const XrTargetPlan *plan,
                                                          uint32_t target_function,
                                                          uint32_t *partition) {
