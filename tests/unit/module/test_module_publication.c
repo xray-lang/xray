@@ -7,6 +7,7 @@
  */
 
 #include "../test_framework.h"
+#include "base/xmalloc.h"
 #include "module/xmodule.h"
 #include "module/xmodule_resolver.h"
 #include "xray_vm.h"
@@ -46,6 +47,30 @@ TEST(module_exports_are_invisible_until_atomic_publication) {
     ASSERT_EQ_INT(XR_TO_INT(xr_module_get_sym(module, 10)), 41);
     ASSERT_FALSE(xr_module_publish(module));
 
+    XrValue text_value = xr_module_import(isolate, "text");
+    ASSERT_TRUE(xr_value_is_module(text_value));
+    XrValue lower = xr_module_get_export(isolate, xr_value_to_module(text_value), "lower");
+    ASSERT_TRUE(xr_value_is_closure(lower));
+
+#if defined(XR_HAS_DATA_FORMATS)
+    XrValue csv_value = xr_module_import(isolate, "csv");
+    ASSERT_TRUE(xr_value_is_module(csv_value));
+    XrValue parse = xr_module_get_export(isolate, xr_value_to_module(csv_value), "parse");
+    ASSERT_TRUE(xr_value_is_closure(parse));
+#else
+    ASSERT_TRUE(XR_IS_NULL(xr_module_import(isolate, "csv")));
+#endif
+
+#if defined(XR_HAS_FILESYSTEM)
+    XrValue os_value = xr_module_import(isolate, "os");
+    ASSERT_TRUE(xr_value_is_module(os_value));
+    XrModule *os_module = xr_value_to_module(os_value);
+    ASSERT_TRUE(xr_value_is_closure(xr_module_get_export(isolate, os_module, "sleep")));
+    ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__sleep")));
+#else
+    ASSERT_TRUE(XR_IS_NULL(xr_module_import(isolate, "os")));
+#endif
+
     xr_module_free(module);
     xray_vm_delete(isolate);
 }
@@ -70,42 +95,54 @@ TEST(failed_module_never_publishes_partial_exports) {
     xray_vm_delete(isolate);
 }
 
-TEST(source_only_stdlib_uses_embedded_authority_and_generic_loader) {
+TEST(stdlib_resolver_follows_build_authority) {
     XrModuleResolverConfig config = {0};
     XrModuleResolver *resolver = xr_module_resolver_new(&config);
     ASSERT_NOT_NULL(resolver);
-    XrModuleId module_id;
+
+    XrModuleId text_id = {0};
     char *error = NULL;
-    ASSERT_EQ_INT(xr_module_resolver_resolve(resolver, "csv", NULL, NULL, &module_id, &error),
+    ASSERT_EQ_INT(xr_module_resolver_resolve(resolver, "text", NULL, NULL, &text_id, &error),
                   0);
     ASSERT_NULL(error);
-    ASSERT_EQ_INT(module_id.kind, XR_MOD_STDLIB);
-    ASSERT_STR_EQ(module_id.canonical,
-                  "stdlib-module-v1:module=3:csv:path=10:csv/csv.xr");
-    ASSERT_NULL(module_id.source_path);
-    xr_module_id_cleanup(&module_id);
-    xr_module_resolver_free(resolver);
+    ASSERT_EQ_INT(text_id.kind, XR_MOD_STDLIB);
+    ASSERT_STR_EQ(text_id.canonical,
+                  "stdlib-module-v1:module=4:text:path=12:text/text.xr");
+    ASSERT_NULL(text_id.source_path);
+    xr_module_id_cleanup(&text_id);
 
-    XrVMConfig vm_config = {0};
-    XrVMRuntime *isolate = xray_vm_new_full(&vm_config);
-    ASSERT_NOT_NULL(isolate);
-    XrValue csv_value = xr_module_import(isolate, "csv");
-    ASSERT_TRUE(xr_value_is_module(csv_value));
-    XrValue parse = xr_module_get_export(isolate, xr_value_to_module(csv_value), "parse");
-    ASSERT_TRUE(xr_value_is_closure(parse));
-#if defined(XR_HAS_FILESYSTEM)
-    XrValue os_value = xr_module_import(isolate, "os");
-    ASSERT_TRUE(xr_value_is_module(os_value));
-    XrModule *os_module = xr_value_to_module(os_value);
-    ASSERT_TRUE(xr_value_is_closure(xr_module_get_export(isolate, os_module, "sleep")));
-    ASSERT_TRUE(xr_value_is_cfunction(xr_module_get_export(isolate, os_module, "__sleep")));
+    XrModuleId csv_id = {0};
+#if defined(XR_HAS_DATA_FORMATS)
+    ASSERT_EQ_INT(xr_module_resolver_resolve(resolver, "csv", NULL, NULL, &csv_id, &error),
+                  0);
+    ASSERT_NULL(error);
+    ASSERT_EQ_INT(csv_id.kind, XR_MOD_STDLIB);
+    ASSERT_STR_EQ(csv_id.canonical,
+                  "stdlib-module-v1:module=3:csv:path=10:csv/csv.xr");
+    ASSERT_NULL(csv_id.source_path);
+    xr_module_id_cleanup(&csv_id);
+#else
+    ASSERT_EQ_INT(xr_module_resolver_resolve(resolver, "csv", NULL, NULL, &csv_id, &error),
+                  -1);
+    ASSERT_NOT_NULL(error);
+    xr_free(error);
+    error = NULL;
 #endif
-    xray_vm_delete(isolate);
+
+#if !defined(XR_HAS_FILESYSTEM)
+    XrModuleId os_id = {0};
+    ASSERT_EQ_INT(xr_module_resolver_resolve(resolver, "os", NULL, NULL, &os_id, &error),
+                  -1);
+    ASSERT_NOT_NULL(error);
+    xr_free(error);
+    error = NULL;
+#endif
+    xr_module_resolver_free(resolver);
 }
 
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Module publication");
 RUN_TEST(module_exports_are_invisible_until_atomic_publication);
 RUN_TEST(failed_module_never_publishes_partial_exports);
-RUN_TEST(source_only_stdlib_uses_embedded_authority_and_generic_loader);
+RUN_TEST(stdlib_resolver_follows_build_authority);
 TEST_MAIN_END()

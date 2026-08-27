@@ -310,9 +310,17 @@ projection defined below; they never imply TargetPlan admission on their own.
     graph shapes, containers, coroutines, dynamic reload, and general product
     activation remain unavailable.
 
+The runtime standard-library source loader is an input boundary, not semantic
+or target authority. Its generated source-module descriptor set follows the
+same build feature gates as native factories and private-leaf binders; a source
+file that merely exists in the repository cannot enable a disabled module.
+Loading and atomically publishing such a module does not grant PSC,
+SemanticPlan, TargetPlan, XTP, typed-VM, or AOT admission. Those stages still
+require the independently verified program authority frozen above.
+
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt d6bb0695aff42c238eef5ba92b829a982bb3977f9302bf083febe2eef4299daa
+anchor-sha256: CMakeLists.txt 4ecedc6abe596d3d72baf9c5745f7ffea82d598de910c977d06a19e879efe0f4
 anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec4338998ade7753489d2313dff2fc0d2
 anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365

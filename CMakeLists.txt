@@ -1067,6 +1067,7 @@ file(GLOB STDLIB_CORE_SRC CONFIGURE_DEPENDS
     "stdlib/sync/*.c"
     "stdlib/parallel/*.c"
     "stdlib/simd/*.c"
+    "stdlib/codegen/*.c"
     "stdlib/sys/*.c"
     "stdlib/regex/*.c"
     "stdlib/path/*.c"
@@ -1174,6 +1175,32 @@ else()
 endif()
 
 file(GLOB XRAY_STDLIB_SCRIPT_SOURCES CONFIGURE_DEPENDS "stdlib/*/*.xr")
+if(NOT XR_STDLIB_FULL)
+    # The generated embedded-source table is the binary's source-module
+    # descriptor set. Keep it aligned with the same feature gates that select
+    # native factories and private-leaf binders; a source file that merely
+    # exists in the repository must not make a disabled module loadable.
+    if(NOT XR_STDLIB_FILESYSTEM)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/(io|os)/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_NET)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/(net|http)/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_DATA)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/(csv|toml|yaml|xml)/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_CLUSTER)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/cluster/[^/]+\\.xr$")
+    endif()
+    if(NOT XR_STDLIB_WS)
+        list(FILTER XRAY_STDLIB_SCRIPT_SOURCES EXCLUDE REGEX
+            "stdlib/ws/[^/]+\\.xr$")
+    endif()
+endif()
 set(XRAY_STDLIB_EMBEDDED_SOURCE_INC
     "${CMAKE_CURRENT_BINARY_DIR}/generated/stdlib_embedded_sources.inc")
 set(XRAY_STDLIB_BOOTSTRAP_BYTECODE_DIR
