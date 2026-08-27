@@ -1004,6 +1004,22 @@ TEST(tools_call_run_basic_print_returns_structured) {
     xjson_free(result);
 }
 
+TEST(tools_call_run_requires_module_identity) {
+    XmcpServer server = test_server_with_runner(true);
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_run");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "code", "print(\"hello\")\n");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT(result == NULL);
+    ASSERT_EQ(g_test_rpc_err.code, XMCP_ERR_INVALID_PARAMS);
+    ASSERT(strstr(g_test_rpc_err.message, "missing required parameter 'moduleId'") != NULL);
+
+    xjson_free(params);
+}
+
 TEST(resources_read_stdlib_list_omits_json_module) {
     XmcpServer server = test_server();
     XrJsonValue *params = xjson_new_object();
@@ -1929,6 +1945,7 @@ int main(void) {
     RUN_TEST(tools_call_run_disabled_by_default);
     RUN_TEST(tools_list_runner_enabled_includes_run);
     RUN_TEST(tools_call_run_basic_print_returns_structured);
+    RUN_TEST(tools_call_run_requires_module_identity);
     RUN_TEST(tools_call_run_output_truncated);
     RUN_TEST(tools_call_run_deadline_exceeded);
     RUN_TEST(tools_call_run_deadline_keeps_server_usable);
