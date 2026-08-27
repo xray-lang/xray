@@ -3757,7 +3757,7 @@ module cluster {
     caps: "channel"
   }
 
-  fn self {
+  fn __self {
     signature: "(): string"
     doc: "Get own node name"
     vm: "cluster_self"
@@ -3769,7 +3769,7 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn nodes {
+  fn __nodes {
     signature: "(): Array<string>"
     doc: "List cluster node names"
     vm: "cluster_nodes"
@@ -3793,7 +3793,7 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn discover {
+  fn __discover {
     signature: "(): ()"
     doc: "Start LAN auto-discovery"
     vm: "cluster_discover_fn"

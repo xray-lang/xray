@@ -31,12 +31,12 @@ static const XlspSymbolInfo g_xlsp_stdlib_base64_symbols[] = {
 
 // cluster module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_cluster_symbols[] = {
-    {"self", XLSP_SYM_FUNCTION, "fn(): string", "Get own node name", NULL, 0},
-    {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "List cluster node names", NULL, 0},
     {"monitor", XLSP_SYM_FUNCTION, "fn(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine", NULL, 0},
-    {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "Start LAN auto-discovery", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): ClusterInfo?", "Get cluster status info", NULL, 0},
     {"send", XLSP_SYM_FUNCTION, "fn(topic: string, envelope: move Buffer): ClusterDelivery", "Hand one canonical opaque service envelope to local and connected transports", NULL, 0},
+    {"self", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"nodes", XLSP_SYM_FUNCTION, "fn(): Array<string>", "", NULL, 0},
+    {"discover", XLSP_SYM_FUNCTION, "fn(): ()", "", NULL, 0},
     {"validNodeName", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
     {"parseAddress", XLSP_SYM_FUNCTION, "fn(addr: string): NodeAddress", "", NULL, 0},
     {"validTopicName", XLSP_SYM_FUNCTION, "fn(topic: string): bool", "", NULL, 0},
