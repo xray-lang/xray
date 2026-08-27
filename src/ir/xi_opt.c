@@ -1722,7 +1722,10 @@ XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
     compute_use_counts(f);
 
     /* Iteratively remove dead values (values with 0 uses and no side effects).
-     * Removing a value may make its operands dead, so we iterate. */
+     * PHIs live outside blk->values[], but they are pure SSA definitions too;
+     * leaving an unused PHI behind makes ownership inference manufacture a
+     * release for a value the program never observes. Removing either kind of
+     * definition may make its operands dead, so iterate to a fixed point. */
     bool changed = true;
     while (changed) {
         changed = false;
@@ -1749,6 +1752,26 @@ XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
                 chg.values_changed = true;
                 chg.n_removed++;
                 /* Don't increment i: next value shifted into position */
+            }
+
+            XiPhi **previous = &blk->phis;
+            XiPhi *phi = blk->phis;
+            while (phi) {
+                XiPhi *next = phi->next;
+                if (phi->value.uses > 0) {
+                    previous = &phi->next;
+                    phi = next;
+                    continue;
+                }
+                for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                    if (phi->value.args[a])
+                        phi->value.args[a]->uses--;
+                }
+                *previous = next;
+                changed = true;
+                chg.values_changed = true;
+                chg.n_removed++;
+                phi = next;
             }
         }
     }

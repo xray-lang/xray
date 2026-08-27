@@ -70,6 +70,14 @@ static void xi_own_dump_recursive(XiFunc *f) {
         xi_own_dump_recursive(f->children[i]);
 }
 
+static void xi_opt_dce_recursive(XiFunc *f) {
+    if (!f)
+        return;
+    xi_opt_dce(f);
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_opt_dce_recursive(f->children[i]);
+}
+
 /* Sum RC ops that survive xi_arc_elim across a function tree. This is the
  * backend-independent static dup/drop budget consumed by regression gates. */
 static void xi_count_rc_ops_recursive(const XiFunc *f, uint64_t *retain, uint64_t *release) {
@@ -706,13 +714,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_VERIFY_RAW))
         goto fail;
 
+    bool enum_type_lookup_changed = false;
     if (cfg->run_backend_lower) {
         XiPassChange enum_type_lookup = xi_opt_compact_enum_payload_type_lookup(ir);
-        if (enum_type_lookup.values_changed) {
-            xi_opt_dce(ir);
-            if (!xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
-                return res;
-        }
+        enum_type_lookup_changed = enum_type_lookup.values_changed;
     }
 
     /* A concrete EnumVariant<E>/EnumPayloadField<E> is a scalar while E is
@@ -720,6 +725,16 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
      * allocation, so materialize it before escape and ARC analysis for both
      * VM and AOT instead of hiding it in AOT representation selection. */
     xi_opt_materialize_enum_descriptor_erasure(ir);
+
+    /* Ownership must describe observable SSA, not dead definitions. In
+     * particular, result PHIs for statement-valued control flow can carry an
+     * erased reference type even though their result is never read. If ARC sees
+     * them first it creates a RELEASE, making the dead PHI artificially live
+     * and forcing every backend to represent a value the program discarded. */
+    xi_opt_dce_recursive(ir);
+    if (enum_type_lookup_changed &&
+        !xi_pipeline_verify_barrier(&res, XI_PIPE_STAGE_OPTIMIZE))
+        return res;
 
     /* Escape analysis: compute escape levels for heap-allocating values.
      * Ownership is made explicit before semantic optimization. */

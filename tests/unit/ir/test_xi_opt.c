@@ -35,6 +35,7 @@ static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
+static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 14, .frozen = true};
 static XrType stub_task = {
     .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
 static XrType stub_result_group = {
@@ -1174,6 +1175,56 @@ TEST(dce_cascading) {
     /* Only c99 should remain */
     assert(blk->nvalues == 1 && "only the live return value should remain");
     assert(blk->values[0] == c99);
+    xi_func_free(f);
+}
+
+TEST(dce_removes_unused_typed_phi_and_inputs) {
+    XiFunc *f = make_func("dead_typed_phi", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *left_null = xi_const_null(f, entry, &stub_null);
+    XiValue *right_null = xi_const_null(f, entry, &stub_null);
+
+    XiBlock *merge = xi_block_new(f);
+    xi_block_add_pred(merge, entry);
+    xi_block_add_pred(merge, entry);
+    merge->sealed = true;
+    XiPhi *phi = xi_phi_new(f, merge, &stub_any, 2);
+    phi->value.args[0] = left_null;
+    phi->value.args[1] = right_null;
+    xi_block_set_return(merge, NULL);
+
+    XiPassChange change = xi_opt_dce(f);
+
+    assert(change.values_changed && change.n_removed == 3 &&
+           "dead typed PHI and its two now-unused inputs must be removed");
+    assert(merge->phis == NULL && "dead PHI must not survive outside the value list");
+    assert(entry->nvalues == 0 && "dead PHI inputs must be removed at the fixed point");
+    xi_func_free(f);
+}
+
+TEST(dce_keeps_observed_typed_phi) {
+    XiFunc *f = make_func("live_typed_phi", &stub_void);
+    XiBlock *entry = f->entry;
+    XiValue *left_null = xi_const_null(f, entry, &stub_null);
+    XiValue *right_null = xi_const_null(f, entry, &stub_null);
+
+    XiBlock *merge = xi_block_new(f);
+    xi_block_add_pred(merge, entry);
+    xi_block_add_pred(merge, entry);
+    merge->sealed = true;
+    XiPhi *phi = xi_phi_new(f, merge, &stub_any, 2);
+    phi->value.args[0] = left_null;
+    phi->value.args[1] = right_null;
+    XiValue *print = xi_value_new(f, merge, XI_PRINT, &stub_void, 1);
+    print->args[0] = &phi->value;
+    print->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(merge, NULL);
+
+    XiPassChange change = xi_opt_dce(f);
+
+    assert(!change.values_changed && "an observed typed PHI is not dead");
+    assert(merge->phis == phi && print->args[0] == &phi->value &&
+           "DCE must preserve the live PHI type view");
     xi_func_free(f);
 }
 
@@ -2620,6 +2671,8 @@ int main(void) {
     run_dce_keeps_side_effects();
     run_codegen_opaque_blocks_constant_folding_and_fence_survives_dce();
     run_dce_cascading();
+    run_dce_removes_unused_typed_phi_and_inputs();
+    run_dce_keeps_observed_typed_phi();
 
     /* Phi simplification */
     run_phi_simplify_trivial();
