@@ -290,7 +290,6 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "__mkdir", "(path: Path): bool", "Create directory", "io_mkdir", "normal", "", "xrt_io_mkdir", "p", "value", "", "", "", "system", "method", 0, 1, true},
     {"io", "__mkdirp", "(path: Path): bool", "Create directory recursively", "io_mkdirp", "normal", "", "xrt_io_mkdirp", "p", "value", "", "", "", "system", "method", 0, 1, true},
     {"io", "__readDir", "(path: Path): Array<string>?", "List directory entries (raw strings; io.xr wraps as Path)", "io_readDir", "normal", "", "xrt_io_read_dir", "p", "value", "", "", "", "system", "method", 0, 1, true},
-    {"io", "__readDirRecursive", "(path: Path): Array<string>?", "List directory entries recursively (raw strings; io.xr wraps as Path)", "io_readDirRecursive", "normal", "", "xrt_io_read_dir_recursive", "p", "value", "", "", "", "system", "method", 0, 1, true},
     {"io", "__readFile", "(path: Path): string?", "Read entire file as string", "io_readFile", "yieldable", "", "xrt_io_read_file", "p", "value", "", "", "", "system", "method", 0, 1, true},
     {"io", "__readFileBytes", "(path: Path): Array<u8>?", "Read entire file as byte array", "io_readFileBytes", "yieldable", "", "xrt_io_read_file_bytes", "p", "value", "", "", "", "system", "method", 0, 1, true},
     {"io", "__readStdin", "(): string?", "Read all data from standard input", "io_readStdin", "normal", "", "xrt_io_read_stdin", "", "value", "", "", "", "system", "method", 0, 0, true},

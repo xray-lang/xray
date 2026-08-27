@@ -2401,20 +2401,6 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __readDirRecursive {
-    signature: "(path: Path): Array<string>?"
-    doc: "List directory entries recursively (raw strings; io.xr wraps as Path)"
-    vm: "io_readDirRecursive"
-    aot: "xrt_io_read_dir_recursive"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    visibility: "internal"
-    return_ownership: "fresh"
-  }
-
   fn __readFile {
     signature: "(path: Path): string?"
     doc: "Read entire file as string"

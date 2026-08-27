@@ -260,11 +260,32 @@ export fn readDir(path: Path) -> Array<Path>? {
     return out
 }
 
+// Entries are reported relative to the listed directory with '/' as the only
+// separator, and the walk stops at 64 levels. A symlinked directory is listed
+// but not descended into, so a cycle through one cannot make the walk repeat.
+fn _walkDir(full: string, rel: string, depth: i64, out: ref Array<string>) {
+    if (depth >= 64) { return }
+    var names = __readDir(Path(full))
+    if (names == null) { return }
+    for (var i = 0; i < len(names!); i++) {
+        var name = names![i]
+        var childFull = full + "/" + name
+        var childRel = name
+        if (len(rel) > 0) { childRel = rel + "/" + name }
+        out.push(childRel)
+        var child = Path(childFull)
+        if (__isDir(child) && !__isSymlink(child)) {
+            _walkDir(childFull, childRel, depth + 1, ref out)
+        }
+    }
+}
+
 export fn readDirRecursive(path: Path) -> Array<Path>? {
-    var raws = __readDirRecursive(path)
-    if (raws == null) { return null }
+    if (!__isDir(path)) { return null }
+    var raw: Array<string> = []
+    _walkDir(path.toString(), "", 0, ref raw)
     var out: Array<Path> = []
-    for (var i = 0; i < len(raws!); i++) { out.push(Path(raws![i])) }
+    for (var i = 0; i < len(raw); i++) { out.push(Path(raw[i])) }
     return out
 }
 
