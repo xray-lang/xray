@@ -1691,8 +1691,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     }
 
     /* Add descriptor to constant pool and emit bytecode */
-    XrValue desc_val = XR_FROM_PTR(desc);
-    int desc_idx = xr_instruction_unit_add_constant(ctx->proto, desc_val);
+    int desc_idx = xr_instruction_unit_add_class_descriptor_constant(ctx->proto, desc);
     if (desc_idx < 0 || (uint64_t) desc_idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
         return;

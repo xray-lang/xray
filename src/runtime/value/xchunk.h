@@ -226,6 +226,7 @@ typedef struct XrLocVar {
 #define XR_ENTRY_GENERATOR 2  // generator function (supports yield)
 
 struct XrFFISig;
+struct XrClassDescriptor;
 
 // Function prototype (compiled function)
 typedef struct XrProto {
@@ -364,6 +365,11 @@ XR_FUNC void xr_instruction_unit_set_ir_free_fn(XrProtoOpaqueFreeFn free_fn);
 // Bytecode Operations
 XR_FUNC void xr_instruction_unit_write(XrProto *proto, XrInstruction inst, int line);
 XR_FUNC int xr_instruction_unit_add_constant(XrProto *proto, XrValue value);
+/* Class descriptors are not XrObjHeader-backed runtime values.  This is the
+ * sole constant owner for OP_CLASS_CREATE_FROM_DESCRIPTOR and deduplicates
+ * descriptors only by pointer identity. */
+XR_FUNC int xr_instruction_unit_add_class_descriptor_constant(
+    XrProto *proto, const struct XrClassDescriptor *descriptor);
 XR_FUNC int xr_instruction_unit_add_child(XrProto *proto, XrProto *child);
 XR_FUNC int xr_instruction_unit_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode,
                                     uint8_t is_const, uint8_t slot_type, uint8_t source,

@@ -10,6 +10,7 @@
 #include "../../../src/ir/xi_emit.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/class/xclass_descriptor.h"
 #include "../../../src/base/xmalloc.h"
 #include "../../../src/frontend/analyzer/xa_intrinsic_registry.h"
 #include "../../../src/plan/semantic/xr_semantic_plan_internal.h"
@@ -71,6 +72,36 @@ static XrVMRuntime *new_test_isolate(void) {
 }
 
 /* ========== Basic Emission Tests ========== */
+
+TEST(class_descriptor_constants_use_opaque_pointer_identity) {
+    XrProto *proto = xr_instruction_unit_new();
+    assert(proto != NULL);
+
+    /* The first bytes of a descriptor are a class-name pointer, not an
+     * XrObjHeader.  These hostile values would make XR_FROM_PTR misclassify
+     * both descriptors as strings and permit deep-equality to merge them. */
+    XrClassDescriptor first = {0};
+    XrClassDescriptor second = {0};
+    first.class_name = (const char *) (uintptr_t) XR_TSTRING;
+    second.class_name = (const char *) (uintptr_t) XR_TSTRING;
+
+    int first_index = xr_instruction_unit_add_class_descriptor_constant(proto, &first);
+    int first_again = xr_instruction_unit_add_class_descriptor_constant(proto, &first);
+    int second_index = xr_instruction_unit_add_class_descriptor_constant(proto, &second);
+
+    assert(first_index == 0);
+    assert(first_again == first_index);
+    assert(second_index == 1);
+    assert(PROTO_CONST_COUNT(proto) == 2);
+    XrValue first_value = PROTO_CONSTANT(proto, first_index);
+    XrValue second_value = PROTO_CONSTANT(proto, second_index);
+    assert(XR_IS_PTR(first_value) && first_value.heap_type == 0 &&
+           XR_TO_PTR(first_value) == &first);
+    assert(XR_IS_PTR(second_value) && second_value.heap_type == 0 &&
+           XR_TO_PTR(second_value) == &second);
+
+    xr_instruction_unit_free(proto);
+}
 
 TEST(emit_return_const_int) {
     /* fn() { return 42 } */
@@ -1631,6 +1662,7 @@ int main(void) {
     run_number_parse_error_builtin_identity_requires_matching_typed_metadata();
 
     /* Basic emission */
+    run_class_descriptor_constants_use_opaque_pointer_identity();
     run_emit_return_const_int();
     run_emit_return_void();
     run_emit_target_layout_queries_use_canonical_target_layout();

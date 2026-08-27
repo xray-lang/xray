@@ -239,6 +239,22 @@ int xr_instruction_unit_add_constant(XrProto *proto, XrValue value) {
     return xr_valuearray_add(&proto->constants, value);
 }
 
+int xr_instruction_unit_add_class_descriptor_constant(
+    XrProto *proto, const struct XrClassDescriptor *descriptor) {
+    XR_DCHECK(proto != NULL, "proto_add_class_descriptor_constant: NULL proto");
+    XR_DCHECK(descriptor != NULL, "proto_add_class_descriptor_constant: NULL descriptor");
+
+    int count = DYNARRAY_COUNT(&proto->constants);
+    for (int i = 0; i < count; i++) {
+        XrValue existing = DYNARRAY_GET(&proto->constants, i, XrValue);
+        if (XR_IS_PTR(existing) && existing.heap_type == 0 && existing.ptr == descriptor)
+            return i;
+    }
+
+    XrValue descriptor_value = xr_make_typed_ptr_val((void *) descriptor, 0);
+    return DYNARRAY_ADD(&proto->constants, descriptor_value, XrValue);
+}
+
 // Add nested function prototype
 // Returns prototype index
 int xr_instruction_unit_add_child(XrProto *proto, XrProto *child) {

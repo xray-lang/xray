@@ -746,7 +746,7 @@ TEST(bytecode_roundtrips_class_descriptor_constants) {
     desc->instance_fields[0].type_name = "Int";
     desc->instance_fields[0].default_value = xr_int(42);
 
-    int kidx = xr_valuearray_add(&proto->constants, XR_FROM_PTR(desc));
+    int kidx = xr_instruction_unit_add_class_descriptor_constant(proto, desc);
     ASSERT_EQ_INT(kidx, 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
@@ -869,10 +869,10 @@ TEST(bytecode_roundtrips_canonical_layout_matrix_deterministically) {
     XrClassDescriptor desc_distinct = test_layout_descriptor("Other", &outer_distinct);
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_outer)), 0);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_copy)), 1);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_union)), 2);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc_distinct)), 3);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc_outer), 0);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc_copy), 1);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc_union), 2);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc_distinct), 3);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
@@ -950,7 +950,7 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     XrClassDescriptor desc = test_layout_descriptor("Scalar", &scalar);
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
@@ -1006,7 +1006,7 @@ TEST(bytecode_layout_reader_rejects_abi_offset_count_cycle_and_truncation_corrup
     XrClassDescriptor nested_desc = test_layout_descriptor("Nested", &outer);
     proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&nested_desc)), 0);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &nested_desc), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
@@ -1038,7 +1038,7 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     XrClassDescriptor desc = test_layout_descriptor("WrongTarget", &wrong_target);
     XrProto *proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
@@ -1062,7 +1062,7 @@ TEST(bytecode_layout_writer_rejects_target_mismatch_and_excessive_depth) {
     desc = test_layout_descriptor("TooDeep", &chain[0]);
     proto = make_minimal_proto();
     ASSERT_NOT_NULL(proto);
-    ASSERT_EQ_INT(xr_valuearray_add(&proto->constants, XR_FROM_PTR(&desc)), 0);
+    ASSERT_EQ_INT(xr_instruction_unit_add_class_descriptor_constant(proto, &desc), 0);
     proto->code.count = 0;
     proto->lineinfo.count = 0;
     xr_instruction_unit_write(proto, CREATE_ABx(OP_CLASS_CREATE_FROM_DESCRIPTOR, 0, 0), 1);
