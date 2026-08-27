@@ -12,6 +12,7 @@
 #include "xi_program_semantic.h"
 #include "xi_core_api.h"
 #include "xi_effect.h"
+#include "../plan/semantic/xr_semantic_plan.h"
 #include "../plan/target/xr_target_profile.h"
 #include "../runtime/value/xtype.h"
 #include "../shared/xr_exact_scalar_registry.h"
@@ -91,6 +92,116 @@ static bool call_contract_exact(const XiValue *value) {
            !value->call_return_ownership.complete && value->result_alias_operand == -1;
 }
 
+static bool planned_call_shape_exact(const XiFunc *owner, const XiValue *value) {
+    const XrSemanticPlan *plan = owner ? owner->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *provenance =
+        plan ? xr_semantic_plan_program_provenance(plan) : NULL;
+    if (!owner || !value || owner->stage < XI_STAGE_REPPED || !plan ||
+        !xr_semantic_plan_is_verified(plan) || !provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ||
+        owner->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE ||
+        value->id == UINT32_MAX)
+        return false;
+    const XrSemanticFunctionRecord *function =
+        xr_semantic_plan_function(plan, owner->semantic_plan_function_index);
+    if (!function || value->id >= function->value_count ||
+        function->value_begin > UINT32_MAX - value->id)
+        return false;
+    uint32_t semantic_value = function->value_begin + value->id;
+    const XrSemanticOperationRecord *operation = NULL;
+    uint32_t operation_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->function != owner->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (operation)
+            return false;
+        operation = candidate;
+        operation_index = i;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticProgramCallBinding *binding =
+        operation ? xr_semantic_plan_program_call_for_operation(plan, operation_index) : NULL;
+    if (!operation || !binding || !operands || operation->opcode != XI_CALL_METHOD ||
+        operation->operand_count != 2 || operation->operand_begin > operand_count ||
+        operation->operand_count > operand_count - operation->operand_begin ||
+        binding->program_row != value->psc_call_index)
+        return false;
+    for (uint16_t i = 0; i < 2; i++) {
+        const XiValue *argument = xi_value_trace_identity(value->args[i]);
+        if (!argument || !argument->block || argument->block->func != owner ||
+            argument->id >= function->value_count ||
+            function->value_begin > UINT32_MAX - argument->id ||
+            operands[operation->operand_begin + i].value !=
+                function->value_begin + argument->id)
+            return false;
+    }
+    return true;
+}
+
+static bool call_identity_exact(const XiFunc *owner, const XiValue *value,
+                                const XrProgramSemanticClosure *closure,
+                                const XrI64OverflowDecisionTable *table) {
+    if (!owner || !value || !closure || !table ||
+        owner->psc_function_index == XI_PSC_ROW_NONE ||
+        value->psc_call_index == XI_PSC_ROW_NONE)
+        return false;
+    uint32_t row_index = value->psc_call_index;
+    const XrProgramSemanticCallRecord *call =
+        xr_program_semantic_closure_call(closure, row_index);
+    const XrI64OverflowDecisionRow *decision =
+        xr_i64_overflow_decision_for_program_row(table, row_index);
+    const XrProgramSemanticFunctionRecord *function =
+        xr_program_semantic_closure_function(closure, owner->psc_function_index);
+    bool semantic_shape = value->args && value->nargs == 2 && value->args[0] &&
+                          value->args[1] && exact_i64(value->args[0]->type) &&
+                          exact_i64(value->args[1]->type) && exact_bool(value->type) &&
+                          value->args[0]->psc_type_index == 0 &&
+                          value->args[1]->psc_type_index == 0 &&
+                          value->psc_type_index == XI_PSC_ROW_NONE;
+    bool value_shape = owner->stage >= XI_STAGE_REPPED
+                           ? planned_call_shape_exact(owner, value)
+                           : semantic_shape;
+    return call && decision && function && same_id(function->id, call->caller_function) &&
+           same_id(decision->program_call, call->id) &&
+           same_id(decision->callsite, call->callsite_identity) &&
+           same_id(decision->caller_function, call->caller_function) &&
+           same_id(decision->builtin_identity, call->callee_function) &&
+           locator_exact(value, call->locator) && value->op == XI_CALL_METHOD && !value->aux &&
+           value->aux_kind == XI_AUX_KIND_NONE && value->nargs == 2 && value->args &&
+           value->args[0] && value->args[1] &&
+           value->aux_int == ((int64_t) decision->method_symbol << 1) &&
+           decision->receiver_rep == XR_MACHINE_REP_I64 &&
+           decision->argument_rep == XR_MACHINE_REP_I64 &&
+           decision->result_rep == XR_MACHINE_REP_I1 && value_shape;
+}
+
+static bool call_authority_exact(const XiFunc *owner, const XiValue *value,
+                                 const XrProgramSemanticClosure *closure,
+                                 const XrI64OverflowDecisionTable *table) {
+    return call_identity_exact(owner, value, closure, table) && call_contract_exact(value);
+}
+
+XR_FUNC bool xi_i64_overflow_call_is_exact(const XiModule *module,
+                                            const XiFunc *function,
+                                            const XiValue *call,
+                                            const XrTargetProfile *target_profile) {
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    const XrI64OverflowDecisionTable *table = module ? module->i64_overflow_decisions : NULL;
+    return module && closure && table && target_profile && module->scalar_target_profile &&
+           xr_target_profile_require_exact(module->scalar_target_profile, target_profile, NULL,
+                                           0) &&
+           xr_program_semantic_closure_family(closure) ==
+               XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
+           xr_program_semantic_closure_is_frozen(closure) &&
+           xr_program_semantic_closure_is_verified(closure) &&
+           xr_i64_overflow_decision_verify(table, closure, target_profile, NULL, 0) &&
+           call_authority_exact(function, call, closure, table);
+}
+
 static bool verify_values(const XiFunc *owner, const XrProgramSemanticClosure *closure,
                           const XrI64OverflowDecisionTable *table, bool *seen,
                           uint32_t *indexed_count, char *error, size_t error_size) {
@@ -112,29 +223,8 @@ static bool verify_values(const XiFunc *owner, const XrProgramSemanticClosure *c
                 continue;
             }
             uint32_t row_index = value->psc_call_index;
-            const XrProgramSemanticCallRecord *call =
-                xr_program_semantic_closure_call(closure, row_index);
-            const XrI64OverflowDecisionRow *decision =
-                row_index < table->row_count && table->rows ? &table->rows[row_index] : NULL;
-            const XrProgramSemanticFunctionRecord *function =
-                owner->psc_function_index != XI_PSC_ROW_NONE
-                    ? xr_program_semantic_closure_function(closure,
-                                                           owner->psc_function_index)
-                    : NULL;
-            if (!call || !decision || !function || seen[row_index] ||
-                !same_id(function->id, call->caller_function) ||
-                !same_id(decision->program_call, call->id) ||
-                !same_id(decision->callsite, call->callsite_identity) ||
-                !same_id(decision->caller_function, call->caller_function) ||
-                !same_id(decision->builtin_identity, call->callee_function) ||
-                !locator_exact(value, call->locator) || !call_contract_exact(value) ||
-                value->aux_int != ((int64_t) decision->method_symbol << 1) ||
-                decision->receiver_rep != XR_MACHINE_REP_I64 ||
-                decision->argument_rep != XR_MACHINE_REP_I64 ||
-                decision->result_rep != XR_MACHINE_REP_I1 || !exact_i64(value->args[0]->type) ||
-                !exact_i64(value->args[1]->type) || !exact_bool(value->type) ||
-                value->args[0]->psc_type_index != 0 || value->args[1]->psc_type_index != 0 ||
-                value->psc_type_index != XI_PSC_ROW_NONE)
+            if (row_index >= table->row_count || seen[row_index] ||
+                !call_authority_exact(owner, value, closure, table))
                 return fail(error, error_size, "overflow Xi call does not match its decision row");
             seen[row_index] = true;
             (*indexed_count)++;
@@ -149,23 +239,28 @@ bool xi_i64_overflow_program_verify(const XiModule *module,
     const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
     const XrI64OverflowDecisionTable *table =
         module ? module->i64_overflow_decisions : NULL;
-    if (!module || !closure || !table || !target_profile || !module->scalar_target_profile ||
-        !xr_target_profile_require_exact(module->scalar_target_profile, target_profile, NULL, 0) ||
-        !xr_i64_overflow_decision_verify(table, closure, target_profile, NULL, 0) ||
-        xr_program_semantic_closure_family(closure) !=
+    if (!module || !closure || !table || !target_profile || !module->scalar_target_profile)
+        return fail(error, error_size, "overflow Xi authority owner is missing");
+    if (!xr_target_profile_require_exact(module->scalar_target_profile, target_profile, NULL, 0))
+        return fail(error, error_size, "overflow Xi target profile is not exact");
+    if (!xr_i64_overflow_decision_verify(table, closure, target_profile, NULL, 0))
+        return fail(error, error_size, "overflow Xi decision table is not exact");
+    if (xr_program_semantic_closure_family(closure) !=
             XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ||
         xr_program_semantic_closure_module_count(closure) != 1 ||
         xr_program_semantic_closure_dependency_count(closure) != 0 ||
         xr_program_semantic_closure_type_count(closure) != 1 ||
         xr_program_semantic_closure_function_count(closure) != 1 ||
-        xr_program_semantic_closure_call_count(closure) == 0 || module->nfuncs != 1 ||
-        !module->functions || !module->init || module->init->nchildren != 1 ||
-        module->init->children[0] != module->functions[0] ||
-        module->init->psc_function_index != XI_PSC_ROW_NONE ||
+        xr_program_semantic_closure_call_count(closure) == 0)
+        return fail(error, error_size, "overflow Xi closure inventory is not exact");
+    if (module->nfuncs != 1 || !module->functions || !module->init ||
+        module->init->nchildren != 1 || module->init->children[0] != module->functions[0])
+        return fail(error, error_size, "overflow Xi module function topology is not exact");
+    if (module->init->psc_function_index != XI_PSC_ROW_NONE ||
         module->init->psc_return_type_index != XI_PSC_ROW_NONE ||
         module->init->psc_declaration_locator.kind != 0 ||
         !span_empty(module->init->psc_declaration_locator.span))
-        return fail(error, error_size, "overflow Xi authorities are incomplete");
+        return fail(error, error_size, "overflow Xi module initializer carries function authority");
     const XrProgramSemanticTypeRecord *i64 = xr_program_semantic_closure_type(closure, 0);
     const XrProgramSemanticFunctionRecord *function_row =
         xr_program_semantic_closure_function(closure, 0);

@@ -10831,32 +10831,6 @@ static bool xicgen_emit_int_numeric_method(XiCgenCtx *ctx, FILE *out, const XiVa
         return true;
     }
 
-    /* 1-arg int -> bool (overflow predicates). */
-    const char *pred = NULL;
-    if (strcmp(method, "addOverflows") == 0)
-        pred = "xr_arith_core_add_overflows";
-    else if (strcmp(method, "subOverflows") == 0)
-        pred = "xr_arith_core_sub_overflows";
-    else if (strcmp(method, "mulOverflows") == 0)
-        pred = "xr_arith_core_mul_overflows";
-    if (pred) {
-        bool box_bool = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
-        const char *conv_suffix = box_bool
-                                      ? NULL
-                                      : emit_conversion_prefix(out, v->type, XR_REP_I64,
-                                                               cg_value_plan_storage_rep(ctx, v));
-        if (box_bool)
-            fprintf(out, "XR_FROM_BOOL(");
-        fprintf(out, "(%s(", pred);
-        emit_value_as_rep_ctx(ctx, out, recv, XR_REP_I64);
-        fprintf(out, ", ");
-        emit_value_as_rep_ctx(ctx, out, arg, XR_REP_I64);
-        fprintf(out, ") != 0)");
-        if (box_bool)
-            fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-        return true;
-    }
     return false;
 }
 
@@ -11580,6 +11554,19 @@ static bool xicgen_emit_import_module_member_call(XiCgenCtx *ctx, FILE *out, con
 
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
+    XrCValueEmissionView overflow = {0};
+    if (cg_i64_overflow_predicate_emission_view(ctx, f, v, &overflow)) {
+        fprintf(out, "(%s(", overflow.recipe_symbol);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ") != 0)");
+        return;
+    }
+    if (cg_i64_overflow_predicate_required(f)) {
+        emit_codegen_abort_expr(out);
+        return;
+    }
     if (emit_tagged_array_push_recipe_expr(ctx, out, f, v))
         return;
     XrCValueEmissionView string_slice_range = {0};

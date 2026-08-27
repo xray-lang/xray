@@ -13,6 +13,11 @@
 
 struct XrTargetProfile;
 
+XR_FUNC bool xi_i64_overflow_call_is_exact(const XiModule *module,
+                                            const XiFunc *function,
+                                            const XiValue *call,
+                                            const struct XrTargetProfile *target_profile);
+
 XR_FUNC bool xi_i64_overflow_program_verify(const XiModule *module,
                                              const struct XrTargetProfile *target_profile,
                                              char *error, size_t error_size);

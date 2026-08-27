@@ -11,8 +11,6 @@
 #include "xstdlib_vm_fastpaths_generated.c"
 #include "../../include/xray_yieldable_abi.h"
 
-XR_THREAD_LOCAL const XrAotContext *xrt_hosted_aot_context = NULL;
-
 #define XR_STDLIB_VM_FASTPATH_EMIT_ADAPTERS 1
 #include "xstdlib_vm_fastpaths_generated.inc.c"
 

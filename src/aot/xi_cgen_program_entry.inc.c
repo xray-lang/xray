@@ -785,7 +785,10 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiMod
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
             continue;
-        fprintf(out, "XRT_INTERNAL XrValue ");
+        fprintf(out, "%sXrValue ",
+                cg_func_forward_linkage(
+                    ctx, modules[m]->init,
+                    modules[m]->name ? modules[m]->name : "mod", false));
         emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
         fprintf(out, "(xrt_closure_t *_cl);\n");
     }

@@ -40,7 +40,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(38)
+#define XR_C_EMISSION_PLAN_SCHEMA_VERSION UINT32_C(39)
 #define XR_C_CHANNEL_NEW_SYMBOL "xr_aot_channel_new"
 #define XR_C_STRINGBUILDER_NEW_SYMBOL "xrt_strbuf_new"
 #define XR_C_CHANNEL_RECV_INT_SYMBOL "XR_TO_INT"
@@ -65,6 +65,144 @@
 #define XR_C_ARRAY_NEW_SYMBOL "xrt_array_new_typed"
 #define XR_C_RELEASE_SYMBOL "xrt_release"
 #define XR_C_STRING_SLICE_RANGE_SYMBOL "xrt_string_slice_range"
+
+typedef enum XrCI64OverflowRecipeMatch {
+    XR_C_I64_OVERFLOW_RECIPE_NOT_APPLICABLE = 0,
+    XR_C_I64_OVERFLOW_RECIPE_EXACT,
+    XR_C_I64_OVERFLOW_RECIPE_MALFORMED,
+} XrCI64OverflowRecipeMatch;
+
+typedef struct XrCI64OverflowRecipe {
+    uint32_t receiver_value;
+    uint32_t argument_value;
+    uint8_t kind;
+    const char *symbol;
+} XrCI64OverflowRecipe;
+
+static const char *build_i64_overflow_recipe_symbol(uint8_t kind) {
+    switch (kind) {
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_ADD:
+            return "xr_arith_core_add_overflows";
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_SUB:
+            return "xr_arith_core_sub_overflows";
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_MUL:
+            return "xr_arith_core_mul_overflows";
+        default:
+            return NULL;
+    }
+}
+
+static XrCI64OverflowRecipeMatch build_i64_overflow_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    XrCI64OverflowRecipe *out) {
+    uint32_t predicate_count = 0, slot_count = 0;
+    const XrTargetI64OverflowPredicateRecord *predicates =
+        xr_target_plan_i64_overflow_predicates(target_plan, &predicate_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetI64OverflowPredicateRecord *match = NULL;
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!target_plan || !binding || !out)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    if (!predicate_count)
+        return XR_C_I64_OVERFLOW_RECIPE_NOT_APPLICABLE;
+    if (!predicates || !slots)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    for (uint32_t i = 0; i < predicate_count; i++) {
+        const XrTargetI64OverflowPredicateRecord *candidate = &predicates[i];
+        if (candidate->result_slot >= slot_count || candidate->receiver_slot >= slot_count ||
+            candidate->argument_slot >= slot_count)
+            return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+        if (candidate->result_slot != binding->slot)
+            continue;
+        if (match)
+            return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+        match = candidate;
+    }
+    if (!match)
+        return XR_C_I64_OVERFLOW_RECIPE_NOT_APPLICABLE;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!register_rep || !memory_rep || match->result_slot != binding->slot ||
+        slots[match->result_slot].id != match->result_slot ||
+        slots[match->result_slot].function != match->function ||
+        slots[match->result_slot].semantic_value != binding->semantic_value ||
+        slots[match->receiver_slot].function != match->function ||
+        slots[match->argument_slot].function != match->function ||
+        register_rep->kind != XR_MACHINE_REP_I1 || memory_rep->kind != XR_MACHINE_REP_I1)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    out->symbol = build_i64_overflow_recipe_symbol(match->kind);
+    if (!out->symbol)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    out->receiver_value = slots[match->receiver_slot].semantic_value;
+    out->argument_value = slots[match->argument_slot].semantic_value;
+    out->kind = match->kind;
+    return XR_C_I64_OVERFLOW_RECIPE_EXACT;
+}
+
+/* This reconstruction deliberately does not call the builder-side projector
+ * or symbol selector. */
+static XrCI64OverflowRecipeMatch verify_i64_overflow_recipe(
+    const XrTargetPlan *target_plan, const XrTargetValueRepRecord *binding,
+    XrCI64OverflowRecipe *out) {
+    uint32_t predicate_count = 0, slot_count = 0;
+    const XrTargetI64OverflowPredicateRecord *predicates =
+        xr_target_plan_i64_overflow_predicates(target_plan, &predicate_count);
+    const XrTargetSlotRecord *slots = xr_target_plan_slots(target_plan, &slot_count);
+    const XrTargetI64OverflowPredicateRecord *match = NULL;
+    if (out)
+        memset(out, 0, sizeof(*out));
+    if (!target_plan || !binding || !out)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    if (!predicate_count)
+        return XR_C_I64_OVERFLOW_RECIPE_NOT_APPLICABLE;
+    if (!predicates || !slots)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    for (uint32_t i = 0; i < predicate_count; i++) {
+        const XrTargetI64OverflowPredicateRecord *candidate = &predicates[i];
+        if (candidate->id != i || candidate->result_slot >= slot_count ||
+            candidate->receiver_slot >= slot_count || candidate->argument_slot >= slot_count)
+            return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+        if (candidate->result_slot != binding->slot)
+            continue;
+        if (match)
+            return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+        match = candidate;
+    }
+    if (!match)
+        return XR_C_I64_OVERFLOW_RECIPE_NOT_APPLICABLE;
+    const XrTargetMachineRepRecord *register_rep =
+        xr_target_plan_machine_rep(target_plan, binding->register_rep);
+    const XrTargetMachineRepRecord *memory_rep =
+        xr_target_plan_machine_rep(target_plan, binding->memory_rep);
+    if (!register_rep || !memory_rep || match->result_slot != binding->slot ||
+        slots[match->result_slot].id != match->result_slot ||
+        slots[match->result_slot].function != match->function ||
+        slots[match->result_slot].semantic_value != binding->semantic_value ||
+        slots[match->receiver_slot].function != match->function ||
+        slots[match->argument_slot].function != match->function ||
+        register_rep->kind != XR_MACHINE_REP_I1 || memory_rep->kind != XR_MACHINE_REP_I1)
+        return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    switch (match->kind) {
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_ADD:
+            out->symbol = "xr_arith_core_add_overflows";
+            break;
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_SUB:
+            out->symbol = "xr_arith_core_sub_overflows";
+            break;
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_MUL:
+            out->symbol = "xr_arith_core_mul_overflows";
+            break;
+        default:
+            return XR_C_I64_OVERFLOW_RECIPE_MALFORMED;
+    }
+    out->receiver_value = slots[match->receiver_slot].semantic_value;
+    out->argument_value = slots[match->argument_slot].semantic_value;
+    out->kind = match->kind;
+    return XR_C_I64_OVERFLOW_RECIPE_EXACT;
+}
 
 #include "xr_c_emission_rule_rows.inc.c"
 
@@ -3147,7 +3285,7 @@ static bool target_plan_has_call_result_rep(const XrTargetPlan *target_plan, uin
 }
 
 static void compute_fingerprint(const XrCEmissionPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-c-emission-plan-v26\0";
+    static const uint8_t domain[] = "xray-c-emission-plan-v27\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1u);
@@ -3492,6 +3630,15 @@ static bool verify_value(const XrCValueEmissionView *value) {
                        value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
                        value->recipe_argument_value == UINT32_MAX && value->recipe_symbol &&
                        strcmp(value->recipe_symbol, XR_C_RUNE_IS_WHITESPACE_SYMBOL) == 0;
+    bool i64_overflow_recipe =
+        value->materialization == XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE;
+    if (i64_overflow_recipe)
+        recipe_valid = value->rep == XR_C_VALUE_REP_BOOL && value->literal_byte_length == 0 &&
+                       value->literal_bytes == NULL && value->recipe_operand_value != UINT32_MAX &&
+                       value->recipe_argument_value != UINT32_MAX &&
+                       value->recipe_discriminant >= XR_TARGET_I64_OVERFLOW_PREDICATE_ADD &&
+                       value->recipe_discriminant <= XR_TARGET_I64_OVERFLOW_PREDICATE_MUL &&
+                       value->recipe_symbol && value->recipe_symbol[0] != '\0';
     bool typed_rule =
         value->materialization == XR_C_VALUE_MATERIALIZATION_ARRAY_PUSH_TAGGED;
     if (typed_rule)
@@ -3688,10 +3835,13 @@ static bool verify_value(const XrCValueEmissionView *value) {
     }
     if (value->materialization != XR_C_VALUE_MATERIALIZATION_ADT_ENUM_CONSTRUCTOR &&
         !array_recipe && !array_fill_member && !array_allocation && !direct_tagged_ref_parameter &&
-        !array_hof_direct && !typed_rule)
+        !array_hof_direct && !typed_rule && !i64_overflow_recipe)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_discriminant == 0 && value->recipe_type_name == NULL &&
                        value->recipe_member_name == NULL;
+    if (i64_overflow_recipe)
+        recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
+                       value->recipe_type_name == NULL && value->recipe_member_name == NULL;
     if (array_recipe || array_allocation)
         recipe_valid = recipe_valid && value->recipe_layout_id == 0 &&
                        value->recipe_type_name == NULL && value->recipe_member_name == NULL;
@@ -4165,8 +4315,17 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             expected_local_address = true;
             expected_local_address_source = expected_scalar_ref_address_source;
         }
+        XrCI64OverflowRecipe expected_overflow = {0};
+        XrCI64OverflowRecipeMatch expected_overflow_match =
+            verify_i64_overflow_recipe(target_plan, binding, &expected_overflow);
+        if (expected_overflow_match == XR_C_I64_OVERFLOW_RECIPE_MALFORMED)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "i64 overflow C recipe authority is malformed");
+        bool expected_i64_overflow =
+            expected_overflow_match == XR_C_I64_OVERFLOW_RECIPE_EXACT;
         uint8_t expected_recipe =
-            expected_typed_rule      ? row->materialization
+            expected_i64_overflow    ? XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE
+            : expected_typed_rule      ? row->materialization
             : expected_scalar_alias  ? XR_C_VALUE_MATERIALIZATION_SCALAR_ADDRESSABLE_ALIAS
             : expected_local_address ? XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS
             : expected_direct_tagged_ref_parameter
@@ -4192,7 +4351,8 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_string_concat ? XR_C_VALUE_MATERIALIZATION_STRING_CONCAT
                                      : XR_C_VALUE_MATERIALIZATION_NONE;
         uint32_t expected_operand =
-            expected_typed_rule                ? typed_location.receiver_value
+            expected_i64_overflow              ? expected_overflow.receiver_value
+            : expected_typed_rule                ? typed_location.receiver_value
             : expected_scalar_alias            ? expected_scalar_source
             : expected_local_address          ? expected_local_address_source
             : expected_adt_enum               ? expected_enum.receiver_value
@@ -4212,13 +4372,15 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
             : expected_append_string          ? expected_append_string_receiver
                                               : UINT32_MAX;
         uint32_t expected_argument =
-            expected_typed_rule ? typed_location.element_value
+            expected_i64_overflow ? expected_overflow.argument_value
+            : expected_typed_rule ? typed_location.element_value
             : expected_stringbuilder_append ? expected_append_argument
             : expected_append_string        ? expected_append_string_argument
             : expected_iterator_rune_nth    ? expected_iterator_rune_nth_index
                                             : UINT32_MAX;
         const char *expected_symbol =
-            expected_typed_rule               ? row->recipe_symbol
+            expected_i64_overflow             ? expected_overflow.symbol
+            : expected_typed_rule               ? row->recipe_symbol
             : expected_adt_enum               ? XR_C_ADT_ENUM_CONSTRUCTOR_SYMBOL
             : expected_channel                ? XR_C_CHANNEL_NEW_SYMBOL
             : expected_receive_symbol         ? expected_receive_symbol
@@ -4260,13 +4422,16 @@ bool xr_c_emission_plan_verify(const XrCEmissionPlan *plan, const XrTargetPlan *
         size_t expected_length = expected_literal ? strlen(expected_literal) : 0;
         if (row->materialization != expected_recipe || row->reserved != 0 ||
             row->recipe_rule_id !=
-                (expected_typed_rule ? typed_actual.rule_id : XR_C_EMISSION_RULE_NONE) ||
+                (expected_i64_overflow
+                     ? XR_C_EMISSION_RULE_NONE
+                     : expected_typed_rule ? typed_actual.rule_id : XR_C_EMISSION_RULE_NONE) ||
             row->literal_byte_length != expected_length ||
             row->recipe_operand_value != expected_operand ||
             row->recipe_argument_value != expected_argument ||
             row->recipe_layout_id != (expected_adt_enum ? expected_enum.layout_id : 0) ||
             row->recipe_discriminant !=
-                (expected_typed_rule                   ? typed_actual.storage
+                (expected_i64_overflow                 ? expected_overflow.kind
+                 : expected_typed_rule                   ? typed_actual.storage
                  : expected_adt_enum                   ? expected_enum.member_ordinal
                  : expected_array_fill_member          ? expected_array_fill_member_storage
                  : expected_array                      ? expected_array_storage
@@ -4518,10 +4683,6 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "leaf-value product forbids the legacy C emission plan");
-    if (provenance &&
-        provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE)
-        return emission_error(error, error_size, "XR_TARGET_1001",
-                              "i64 overflow predicates require a verified C recipe");
     const uint64_t required_value_families =
         XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE |
         XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |
@@ -4622,6 +4783,12 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             return emission_error(error, error_size, "XR_TARGET_1001",
                                   "TargetPlan value binding has no exact C projection");
         }
+        XrCI64OverflowRecipe overflow_recipe = {0};
+        XrCI64OverflowRecipeMatch overflow_match =
+            build_i64_overflow_recipe(target_plan, binding, &overflow_recipe);
+        if (overflow_match == XR_C_I64_OVERFLOW_RECIPE_MALFORMED)
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "i64 overflow C recipe authority is malformed");
         uint8_t direct_tagged_ref_storage = XR_TARGET_ARRAY_STORAGE_NONE;
         uint32_t local_address_source = UINT32_MAX;
         if (register_rep->kind == XR_MACHINE_REP_RAW_PTR && !scalar_ref_address &&
@@ -4912,7 +5079,26 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             local_address = true;
             local_address_source = scalar_ref_address_source;
         }
-        if (typed_rule) {
+        XrCI64OverflowRecipe overflow_recipe = {0};
+        XrCI64OverflowRecipeMatch overflow_match =
+            build_i64_overflow_recipe(target_plan, binding, &overflow_recipe);
+        if (overflow_match == XR_C_I64_OVERFLOW_RECIPE_MALFORMED) {
+            xr_c_emission_plan_free(plan);
+            return emission_error(error, error_size, "XR_TARGET_1001",
+                                  "i64 overflow C recipe authority is malformed");
+        }
+        if (overflow_match == XR_C_I64_OVERFLOW_RECIPE_EXACT) {
+            value->recipe_symbol = xr_strdup(overflow_recipe.symbol);
+            if (!value->recipe_symbol) {
+                xr_c_emission_plan_free(plan);
+                return emission_error(error, error_size, "XR_EXEC_5003",
+                                      "i64 overflow C recipe allocation failed");
+            }
+            value->materialization = XR_C_VALUE_MATERIALIZATION_I64_OVERFLOW_PREDICATE;
+            value->recipe_operand_value = overflow_recipe.receiver_value;
+            value->recipe_argument_value = overflow_recipe.argument_value;
+            value->recipe_discriminant = overflow_recipe.kind;
+        } else if (typed_rule) {
             value->recipe_symbol = xr_strdup(typed_decision.symbol);
             if (!value->recipe_symbol) {
                 xr_c_emission_plan_free(plan);

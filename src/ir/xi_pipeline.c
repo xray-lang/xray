@@ -866,7 +866,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrVMRuntime *X,
     if (ir->module && (ir->module->program_semantic_closure || ir->module->scalar_call_decision)) {
         XrCompilerSession *program_session = xr_compiler_session_current_for_isolate(X);
         const XrTargetProfile *program_profile =
-            ir->module->scalar_call_decision && program_session
+            (ir->module->scalar_call_decision || ir->module->i64_overflow_decisions) &&
+                    program_session
                 ? xr_compiler_session_target_profile(program_session)
                 : NULL;
         if (!xi_program_semantic_verify_partition(ir->module, program_profile, transition_error,

@@ -18,6 +18,8 @@
 #include "xi_coro_analyze.h"
 #include "xi_coro_exception_verify.h"
 #include "xi_coro_lower.h"
+#include "xi_i64_overflow_program.h"
+#include "xi_module.h"
 #include "xi_ops_gen.h"
 #include "xi_verify_gen.h"
 #include "xi_op_name.h"
@@ -1168,6 +1170,15 @@ static void verify_error_check_producers(VerifyCtx *ctx, const XiFunc *f) {
  * A zero symbol_id means the lowerer failed to resolve the method name
  * at lowering time (only valid when isolate is NULL during AOT).
  * The is_super bit must be 0 or 1.  aux (method name) must be non-NULL. */
+static bool call_method_is_sealed_i64_overflow(const XiFunc *f, const XiValue *v) {
+    const XiFunc *root = f;
+    while (root && !root->module)
+        root = root->parent_func;
+    const XiModule *module = root ? root->module : NULL;
+    return module && xi_i64_overflow_call_is_exact(module, f, v,
+                                                    module->scalar_target_profile);
+}
+
 static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1181,8 +1192,9 @@ static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
             if (!v || v->op != XI_CALL_METHOD)
                 continue;
 
-            /* aux must carry the method name string */
-            if (!v->aux) {
+            /* The sealed overflow family is name-free: its PSC row and target decision are the
+             * sole operation authority. Every other method call must retain the source name. */
+            if (!v->aux && !call_method_is_sealed_i64_overflow(f, v)) {
                 verr(ctx,
                      "func '%s': XI_CALL_METHOD v%u in b%u has NULL aux "
                      "(expected method name string)",

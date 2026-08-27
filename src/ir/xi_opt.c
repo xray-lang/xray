@@ -35,6 +35,7 @@
 #include "xi_value_query.h"
 #include "../frontend/analyzer/xa_intrinsic_registry.h"
 #include "../plan/semantic/xr_semantic_plan.h"
+#include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/semantic/xr_semantic_number_parse_error_shape.h"
 #include "../os/os_thread.h"
 #include "../shared/xr_int_arith_core.h"
@@ -2795,6 +2796,61 @@ typedef struct SrArrayHofIdentity {
     uint16_t operand_count;
 } SrArrayHofIdentity;
 
+/* Representation selection consumes the verified SemanticPlan family and
+ * operation join, never the erased method spelling. TargetPlan later freezes
+ * the exact add/sub/mul kind; this boundary only needs the shared I64/I1
+ * storage shape so it does not insert a tagged receiver adapter first. */
+static bool sr_i64_overflow_predicate_identity_is_exact(const XiValue *value) {
+    const XiFunc *function = value && value->block ? value->block->func : NULL;
+    const XrSemanticPlan *plan = function ? function->semantic_plan : NULL;
+    const XrSemanticProgramProvenance *provenance =
+        plan ? xr_semantic_plan_program_provenance(plan) : NULL;
+    if (!function || !plan || !xr_semantic_plan_is_verified(plan) || !provenance ||
+        provenance->program_family != XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ||
+        function->semantic_plan_function_index == XR_SEMANTIC_INDEX_NONE ||
+        value->op != XI_CALL_METHOD || value->nargs != 2 || !value->args ||
+        !value->args[0] || !value->args[1])
+        return false;
+    const XrSemanticFunctionRecord *semantic_function =
+        xr_semantic_plan_function(plan, function->semantic_plan_function_index);
+    if (!semantic_function || value->id >= semantic_function->value_count ||
+        semantic_function->value_begin > UINT32_MAX - value->id)
+        return false;
+    uint32_t semantic_value = semantic_function->value_begin + value->id;
+    const XrSemanticOperationRecord *match = NULL;
+    uint32_t match_index = XR_SEMANTIC_INDEX_NONE;
+    uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(plan);
+    for (uint32_t i = 0; i < operation_count; i++) {
+        const XrSemanticOperationRecord *candidate = xr_semantic_plan_operation(plan, i);
+        if (!candidate || candidate->function != function->semantic_plan_function_index ||
+            candidate->result_value != semantic_value)
+            continue;
+        if (match)
+            return false;
+        match = candidate;
+        match_index = i;
+    }
+    uint32_t operand_count = 0;
+    const XrSemanticOperandRecord *operands = xr_semantic_plan_operands(plan, &operand_count);
+    const XrSemanticProgramCallBinding *call =
+        match ? xr_semantic_plan_program_call_for_operation(plan, match_index) : NULL;
+    if (!match || !call || !operands || match->opcode != XI_CALL_METHOD ||
+        match->operand_count != 2 || match->operand_begin > operand_count ||
+        match->operand_count > operand_count - match->operand_begin ||
+        value->psc_call_index != call->program_row)
+        return false;
+    for (uint16_t i = 0; i < 2; i++) {
+        const XiValue *argument = value->args[i];
+        if (!argument->block || argument->block->func != function ||
+            argument->id >= semantic_function->value_count ||
+            semantic_function->value_begin > UINT32_MAX - argument->id ||
+            operands[match->operand_begin + i].value !=
+                semantic_function->value_begin + argument->id)
+            return false;
+    }
+    return true;
+}
+
 /* Representation selection consumes the already verified SemanticPlan HOF
  * identity.  The analyzer marker is only a live consistency check: no method
  * selector, live type, or argument count can create this authority. */
@@ -2998,6 +3054,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_OWNER_FORWARD:
             return sr_type_native_boundary_rep(v->type);
         case XI_CALL_METHOD: {
+            if (sr_i64_overflow_predicate_identity_is_exact(v))
+                return XR_REP_I64;
             SrArrayHofIdentity hof = {0};
             if (sr_array_hof_identity_is_exact(v, &hof)) {
                 if (hof.kind == XI_ARRAY_HOF_MAP || hof.kind == XI_ARRAY_HOF_FILTER)
@@ -3450,6 +3508,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
             if (user->op == XI_CALL_METHOD) {
+                if (sr_i64_overflow_predicate_identity_is_exact(user))
+                    return arg_idx < 2 ? XR_REP_I64 : XR_REP_TAGGED;
                 SrArrayHofIdentity hof = {0};
                 if (sr_array_hof_identity_is_exact(user, &hof)) {
                     if (arg_idx < 2)
