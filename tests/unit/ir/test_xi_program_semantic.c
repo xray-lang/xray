@@ -52,6 +52,7 @@
 #include "plan/target/xr_target_instruction_verify.h"
 #include "plan/target/xr_target_plan_internal.h"
 #include "plan/target/xr_target_profile.h"
+#include "plan/target/xr_target_profile_internal.h"
 #include "plan/target/xr_target_verify.h"
 #include "runtime/class/xclass_info.h"
 #include "runtime/abi/xr_runtime_target_authority.h"
@@ -394,6 +395,67 @@ static void expect_leaf_target_build_rejection(XrSemanticPlan *semantic, XrTarge
     resign_leaf_semantic(semantic);
     ASSERT_FALSE(xr_target_plan_build(semantic, profile, &candidate, error, sizeof(error)));
     ASSERT_NULL(candidate);
+}
+
+static XrTargetProfile *leaf_projection_profile_for_architecture(
+    const XrTargetProfile *base, uint16_t architecture) {
+    if (!base || (architecture != XR_TARGET_ARCH_AARCH64 &&
+                  architecture != XR_TARGET_ARCH_POWERPC64))
+        return NULL;
+    XrTargetProfileDraft draft = *xr_target_profile_facts(base);
+    draft.machine.architecture = architecture;
+    draft.machine.vector_feature_mask = 0;
+    draft.machine.maximum_vector_bits = 0;
+    if (architecture == XR_TARGET_ARCH_POWERPC64) {
+        draft.machine.operating_system = XR_TARGET_OS_LINUX;
+        draft.machine.environment = XR_TARGET_ENV_GNU;
+        draft.machine.native_abi = XR_TARGET_ABI_PPC64_ELFV2;
+    } else {
+        switch (draft.machine.operating_system) {
+            case XR_TARGET_OS_WINDOWS:
+                draft.machine.native_abi = XR_TARGET_ABI_WIN64_AARCH64;
+                break;
+            case XR_TARGET_OS_LINUX:
+            case XR_TARGET_OS_FREESTANDING:
+                draft.machine.native_abi = XR_TARGET_ABI_AAPCS64;
+                break;
+            case XR_TARGET_OS_MACOS:
+                draft.machine.native_abi = XR_TARGET_ABI_DARWIN_AARCH64;
+                break;
+            default:
+                return NULL;
+        }
+    }
+    XrTargetProfile *profile = NULL;
+    if (!xr_target_profile_freeze(&draft, &profile, NULL, 0))
+        return NULL;
+    return profile;
+}
+
+static void assert_leaf_projection_architecture_boundary(XrSemanticPlan *semantic,
+                                                         XrTargetProfile *base_profile) {
+    char error[512] = {0};
+    XrTargetProfile *aarch64 =
+        leaf_projection_profile_for_architecture(base_profile, XR_TARGET_ARCH_AARCH64);
+    ASSERT_NOT_NULL(aarch64);
+    XrTargetPlan *aarch64_plan = NULL;
+    ASSERT_MSG(xr_target_plan_build(semantic, aarch64, &aarch64_plan, error, sizeof(error)),
+               error);
+    ASSERT_NOT_NULL(aarch64_plan);
+    ASSERT_TRUE(xr_target_plan_verify(aarch64_plan, error, sizeof(error)));
+    xr_target_plan_free(aarch64_plan);
+    xr_target_profile_free(aarch64);
+
+    XrTargetProfile *powerpc64 =
+        leaf_projection_profile_for_architecture(base_profile, XR_TARGET_ARCH_POWERPC64);
+    ASSERT_NOT_NULL(powerpc64);
+    XrTargetPlan *powerpc64_plan = NULL;
+    memset(error, 0, sizeof(error));
+    ASSERT_FALSE(
+        xr_target_plan_build(semantic, powerpc64, &powerpc64_plan, error, sizeof(error)));
+    ASSERT_NULL(powerpc64_plan);
+    ASSERT_NOT_NULL(strstr(error, "XR_TARGET_1003"));
+    xr_target_profile_free(powerpc64);
 }
 
 static void assert_leaf_product_target_shape(XrSemanticPlan *semantic, XrTargetPlan *plan,
@@ -2537,6 +2599,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
     ASSERT_NOT_NULL(leaf_target);
     LeafAggregateTargetEvidence target_evidence = {0};
     assert_leaf_aggregate_target_shape(semantic, leaf_target, &target_evidence);
+    assert_leaf_projection_architecture_boundary(semantic, leaf_profile);
     assert_leaf_aggregate_vm_execution(leaf_target, &target_evidence);
     assert_leaf_aggregate_target_mutations(semantic, leaf_target, target_evidence);
     assert_leaf_aggregate_target_input_rejections(
@@ -2767,6 +2830,7 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     ASSERT_NOT_NULL(target);
     ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
     ASSERT_TRUE(xr_target_instruction_program_verify(target, error, sizeof(error)));
+    assert_leaf_projection_architecture_boundary(semantic, profile);
     XrRuntimeTargetAuthority freestanding_authority;
     const uint64_t freestanding_providers =
         XR_TARGET_PROVIDER_MASK(XR_TARGET_PROVIDER_ALLOCATOR) |

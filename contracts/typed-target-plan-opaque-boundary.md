@@ -44,7 +44,7 @@ rather than passing because of stale fingerprint bytes.
 
 anchor-sha256: src/plan/target/xr_target_plan.h 4dbdf15a87a3753ca11ab29c7f4ae54476c1877d59bba97b5ab443b2dd564dbf
 anchor-sha256: src/plan/target/xr_target_builder.c 21139d575c570f89a23d9439dac3893bad05f2e0d1ca5f7ae13f63ff242a35cd
-anchor-sha256: src/plan/target/xr_target_verify.c d8631873b327203dfd54a5ba09c40d884328e5ffcc19a5e45913800b09be3bb3
+anchor-sha256: src/plan/target/xr_target_verify.c 8aedfa88bfe85382b0c6e98bf06343f6286b72962b45facca677f278ee607b1c
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: src/vm/xr_typed_frame.h 1a139fbf8e4dfe08169fa67186c889c79665639f28674f5ecf53babd4f83120c
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
