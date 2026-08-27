@@ -1366,6 +1366,7 @@ add_executable(test_cli_spec
 )
 target_include_directories(test_cli_spec PRIVATE
     ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/src/app/cli
 )
 target_link_libraries(test_cli_spec PRIVATE xray_core)
