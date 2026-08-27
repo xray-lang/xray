@@ -1456,3 +1456,5 @@ add_test(
         ${CMAKE_SOURCE_DIR}/scripts/check_xi_template_lowering.py
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+xray_prepend_windows_asan_runtime_to_directory_tests()

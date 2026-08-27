@@ -121,6 +121,17 @@ class CacheInspectionTest(unittest.TestCase):
               mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
             self.assertEqual(Path(sanitizer.resolve_compiler_command("clang")), compiler)
 
+    def test_clang_cl_does_not_need_to_be_on_windows_path(self):
+        llvm_bin = self.build / "LLVM" / "bin"
+        llvm_bin.mkdir(parents=True)
+        compiler = llvm_bin / "clang-cl.exe"
+        compiler.write_text("binary\n", encoding="utf-8")
+        with (mock.patch.object(sanitizer.shutil, "which", return_value=None),
+              mock.patch.object(sanitizer.platform, "IS_WINDOWS", True),
+              mock.patch.dict(os.environ, {"ProgramFiles": str(self.build)})):
+            self.assertEqual(
+                Path(sanitizer.resolve_compiler_command("clang-cl")), compiler)
+
     def test_windows_dynamic_asan_runtime_is_inherited_from_clang(self):
         resource = self.build / "LLVM" / "lib" / "clang" / "22"
         runtime = resource / "lib" / "windows"

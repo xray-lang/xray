@@ -633,6 +633,14 @@ endif()
 option(ENABLE_LLVM_BACKEND "Enable LLVM backend" OFF)
 option(BUILD_TESTS "Build unit tests" ON)
 option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
+include(cmake/XrayWindowsAsanRuntime.cmake)
+xray_discover_windows_asan_runtime(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
+set(_xray_windows_asan_output_dirs "${CMAKE_BINARY_DIR}")
+if(BUILD_TESTS)
+    list(APPEND _xray_windows_asan_output_dirs
+        "${CMAKE_BINARY_DIR}/tests/unit")
+endif()
+xray_stage_windows_asan_runtime(${_xray_windows_asan_output_dirs})
 # Development-mode reference-cycle detector: reports cycles,
 # reclaims nothing. OFF by default and compiled out entirely — the production
 # binary contains none of its symbols, which a test asserts with `nm`.
@@ -1975,6 +1983,23 @@ message(STATUS "Main executable: xray (${MODULES_ENABLED})")
 
 if(BUILD_TESTS)
     enable_testing()
+
+    if(XRAY_WINDOWS_ASAN_RUNTIME_DIR)
+        add_test(
+            NAME windows_asan_runtime_path
+            COMMAND ${XRAY_PYTHON}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_windows_asan_runtime.py
+                    --expected-dir ${XRAY_WINDOWS_ASAN_RUNTIME_DIR}
+                    --staged-dir ${CMAKE_BINARY_DIR}
+                    --staged-dir ${CMAKE_BINARY_DIR}/tests/unit
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+        set_tests_properties(windows_asan_runtime_path PROPERTIES
+            LABELS "sanitizer;asan;windows;runtime"
+            PROCESSORS 1
+            TIMEOUT 30
+        )
+    endif()
 
     if(CMAKE_HOST_WIN32 AND MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
         set(_xray_showincludes_regression_dir
@@ -4660,6 +4685,10 @@ if(BUILD_TESTS)
         PROCESSORS 1
         TIMEOUT 30
     )
+
+    # Root tests and tests/unit are distinct CMake directory scopes; each scope
+    # applies the same compiler-owned runtime without changing test commands.
+    xray_prepend_windows_asan_runtime_to_directory_tests()
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)
