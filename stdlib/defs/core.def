@@ -2405,19 +2405,6 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __readLines {
-    signature: "(path: Path): Array<string>"
-    doc: "Read file as lines"
-    vm: "io_readLines"
-    aot: "xrt_io_read_lines"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-    return_ownership: "fresh"
-  }
-
   fn __readStdin {
     signature: "(): string?"
     doc: "Read all data from standard input"
