@@ -268,6 +268,11 @@ def archive_members(archive: Path, cc: Path) -> list[str]:
     if result.returncode != 0:
         raise AssertionError(f"archive member inspection failed:\n{result.stdout}")
     members = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    # BSD ar lists the archive's own symbol index as a member. It is archive
+    # bookkeeping rather than a compiled source, and leaving it in makes every
+    # host without llvm-ar fail closed on a member that has no source to find.
+    members = [name for name in members
+               if not Path(name).name.startswith("__.SYMDEF")]
     if not members:
         raise AssertionError("installed runtime archive has no inspectable members")
     return members
@@ -316,10 +321,23 @@ def member_defined_symbols(archive: Path, member: str) -> set[str]:
 
 
 def source_defines_any(path: Path, symbols: set[str]) -> bool:
+    """Whether the source defines any of these symbols as a function.
+
+    Matching the bare name would also hit calls, declarations and comments, so a
+    file that merely calls a symbol could be mistaken for the one that produced
+    the member. Require the definition's shape instead: the parameter list
+    followed by the body, allowing one level of nesting for function-pointer
+    parameters.
+    """
     if not path.is_file():
         return False
     text = path.read_text(encoding="utf-8", errors="replace")
-    return any(re.search(rf"\b{re.escape(symbol)}\s*\(", text) for symbol in symbols)
+    return any(
+        re.search(
+            rf"\b{re.escape(symbol)}\s*\((?:[^()]|\([^()]*\))*\)\s*\{{", text
+        )
+        for symbol in symbols
+    )
 
 
 def resolve_member_source(
@@ -373,6 +391,30 @@ def verify_member_resolution_invariants() -> None:
     )
     if resolved != "src/base/collision.c":
         raise AssertionError("path-qualified archive members must preserve exact ownership")
+    with tempfile.TemporaryDirectory() as scratch:
+        definition = Path(scratch) / "definition.c"
+        definition.write_text(
+            "int sample_symbol(int a, void (*cb)(int)) {\n"
+            "    (void) cb;\n"
+            "    return a;\n"
+            "}\n",
+            encoding="utf-8",
+        )
+        caller = Path(scratch) / "caller.c"
+        caller.write_text(
+            "int sample_symbol(int, void (*)(int));\n"
+            "int other(void);\n"
+            "int other(void) { return sample_symbol(1, 0); }\n",
+            encoding="utf-8",
+        )
+        if not source_defines_any(definition, {"sample_symbol"}):
+            raise AssertionError("archive member resolution misses a real definition")
+        if source_defines_any(caller, {"sample_symbol"}):
+            raise AssertionError(
+                "archive member resolution accepts a declaration or call as a definition"
+            )
+
+
 def inspect(archive: Path, root: Path, cc: Path) -> tuple[list[str], list[str]]:
     names = binlib.defined_symbol_names(archive)
     if names is None:
