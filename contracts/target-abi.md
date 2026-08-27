@@ -116,6 +116,11 @@ materialization. AOT prepare runs only after every required BOX or UNBOX is
 present at its recorded source and use, and rejects a missing, extra, reordered,
 or stale adapter before ABI planning. This adds no public value representation,
 layout, or calling-convention change.
+An unsafe checked conversion out of a source union consumes its tagged carrier
+only when the frozen target type id and spelling identify exactly one structural
+scalar or String member of that union. Safe conversions, non-member targets,
+and id/spelling disagreements remain unclaimed; no plan schema or public ABI is
+added by this use-site judgement.
 Refinement asks which storage a value holds, not which instruction defined it
 or which one consumes it. A reference family that carries its own carrier names
 that carrier first and keeps its priority, and a use site that requires a
@@ -842,13 +847,13 @@ anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94f
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78
 anchor-sha256: src/aot/xaot_verify.c 77792254ac2246618a0eff6644fae9d6107bf5a4afcc1b1333f1275f45b4eb0e
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c c96476a92b7363a4f1f54342b53e1301317a9bac341554a60379762a77f98096
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 5fe000c8fec1ae308b3e5e3855f4d86c20baebc72c135fbefbaaa42e79dcd304
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
 anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 20143c8af944dcddf795b0b43ca2dad7fe52d097b60edaefa81c678b834a9a2f
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c adeaec89f179ee972311ba9574b67c640fbc93af3ccfaf50abade4ea854f664d
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 76244782819e6e858e36f27e4507b77a362d3b2891f6e1b8083f67a4eda13c25
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 7116d17b3c38fb432d60f1646c4f815496798c133a6ffd2a90b136d4352272ac
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h 650a3f6009010841b462567a86b104c00feb2112cc180905511da4f2f3040dff
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 17353e09b9c5891e92c7df2bac284ca66092b4554bd8c2109a0b447d73c5fed0

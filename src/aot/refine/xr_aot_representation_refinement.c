@@ -44,6 +44,7 @@
 #include "../../plan/semantic/xr_semantic_value_aggregate_shape.h"
 #include "../../plan/semantic/xr_semantic_container_copy_shape.h"
 #include "../../plan/semantic/xr_semantic_dynamic_value_shape.h"
+#include "../../plan/semantic/xr_semantic_union_as_shape.h"
 #include "../../plan/semantic/xr_semantic_direct_callee_shape.h"
 #include "../../plan/semantic/xr_semantic_local_addr_shape.h"
 #include "../../plan/semantic/xr_semantic_panic_catch_shape.h"
@@ -10100,15 +10101,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_AS: {
             /* The checked NumberParseError narrowing consumes the same tagged
              * pending-error carrier that its preceding IS inspected. Keep this
-             * rule tied to the exact builtin enum identity; an arbitrary AS or
-             * another enum receives no storage authority here. */
-            uint32_t caught_value = XR_SEMANTIC_INDEX_NONE;
+             * rule tied to the exact builtin enum identity. A checked source
+             * union conversion is the other admitted shape: SemanticPlan must
+             * prove structurally that the named runtime target is one exact
+             * member. An arbitrary AS still receives no storage authority. */
+            uint32_t narrowed_value = XR_SEMANTIC_INDEX_NONE;
             XrRep definition_storage = XR_REP_VOID;
             uint16_t definition_kind = XR_MACHINE_REP_COUNT;
-            if (operand_index != 0 ||
-                !xr_semantic_number_parse_error_catch_narrow_is_exact(
-                    ctx->semantic, operation, &caught_value) ||
-                caught_value != source_value ||
+            bool exact_number_parse_error =
+                xr_semantic_number_parse_error_catch_narrow_is_exact(
+                    ctx->semantic, operation, &narrowed_value);
+            bool exact_union_conversion =
+                !exact_number_parse_error && xr_semantic_union_as_conversion_is_exact(
+                                                 ctx->semantic, operation, &narrowed_value);
+            if (operand_index != 0 || (!exact_number_parse_error && !exact_union_conversion) ||
+                narrowed_value != source_value ||
                 !oracle_definition_storage(ctx, source_value, &definition_storage,
                                            &definition_kind) ||
                 definition_storage != XR_REP_TAGGED ||
