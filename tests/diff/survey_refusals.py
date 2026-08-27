@@ -31,7 +31,7 @@ import run_backend_diff as backend_diff
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SCHEMA = 1
+SCHEMA = 2
 KIND = "xray-live-refusal-root-cause"
 GENERATOR = "tests/diff/survey_refusals.py"
 SURVEY = re.compile(
@@ -172,25 +172,25 @@ def blocking_fact(family: str, detail: str) -> str:
     return "|".join(parts)
 
 
-def parse_refusals(log: bytes) -> tuple[list[dict[str, str]], dict[str, str] | None]:
-    rows: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
+def parse_refusals(log: bytes) -> tuple[list[dict[str, Any]], dict[str, str] | None]:
+    rows: list[dict[str, Any]] = []
     text = log.decode("utf-8", errors="backslashreplace")
-    for line in text.splitlines():
-        match = SURVEY.fullmatch(line.strip())
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        source_text = line.strip()
+        match = SURVEY.fullmatch(source_text)
         if not match:
             continue
         owner, family, detail = match.group(1), match.group(2), match.group(3) or ""
         if owner not in OWNER_VALUES:
             raise RuntimeError(f"unknown refusal owner {owner!r}")
-        key = (owner, family, blocking_fact(family, detail))
-        if key in seen:
-            continue
-        seen.add(key)
         rows.append({
+            "sequence": len(rows),
+            "line_number": line_number,
+            "source_text": source_text,
             "owner": owner,
             "family": family,
-            "blocking_fact": key[2],
+            "detail": detail,
+            "blocking_fact": blocking_fact(family, detail),
         })
     diagnostic_match = DIAGNOSTIC.search(text)
     diagnostic = None
@@ -200,6 +200,49 @@ def parse_refusals(log: bytes) -> tuple[list[dict[str, str]], dict[str, str] | N
             "message": diagnostic_match.group(2).strip(),
         }
     return rows, diagnostic
+
+
+def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | None]:
+    if diagnostic is not None:
+        return {
+            "classification": "diagnostic-without-structured-refusal",
+            "diagnostic_code": diagnostic["code"],
+            "required_action": "emit-source-owned-structured-refusal",
+        }
+    return {
+        "classification": "opaque-refusal-without-structured-diagnostic",
+        "diagnostic_code": None,
+        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+    }
+
+
+def self_test() -> int:
+    source = (
+        "[refusal-survey] owner=target-plan-builder family=calls "
+        "XR_TARGET_1003: unsupported storage opcode=17 parameter-ordinal=2"
+    )
+    log = ("noise\n" + source + "\n" + source + "\n").encode("utf-8")
+    rows, diagnostic = parse_refusals(log)
+    if len(rows) != 2 or rows[0]["sequence"] != 0 or rows[1]["sequence"] != 1 \
+            or rows[0]["line_number"] != 2 or rows[1]["line_number"] != 3 \
+            or rows[0]["source_text"] != source or rows[1]["source_text"] != source \
+            or rows[0]["detail"] != rows[1]["detail"] \
+            or diagnostic != {"code": "XR_TARGET_1003", "message": "unsupported storage opcode=17 parameter-ordinal=2"}:
+        print("live refusal generator self-test lost or reordered source evidence", file=sys.stderr)
+        return 1
+    if missing_evidence_gap(diagnostic) != {
+        "classification": "diagnostic-without-structured-refusal",
+        "diagnostic_code": "XR_TARGET_1003",
+        "required_action": "emit-source-owned-structured-refusal",
+    } or missing_evidence_gap(None) != {
+        "classification": "opaque-refusal-without-structured-diagnostic",
+        "diagnostic_code": None,
+        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+    }:
+        print("live refusal generator self-test misclassified evidence gaps", file=sys.stderr)
+        return 1
+    print("live refusal manifest generator self-test: PASS")
+    return 0
 
 
 def toolchain_identity(binary: Path, timeout: int) -> dict[str, Any]:
@@ -333,7 +376,9 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
 
     log_root.mkdir(parents=True, exist_ok=True)
     manifest_results: list[dict[str, Any]] = []
-    root_cases: dict[tuple[str, str, str], list[str]] = collections.defaultdict(list)
+    root_events: collections.Counter[tuple[str, str, str]] = collections.Counter()
+    root_cases: dict[tuple[str, str, str], set[str]] = collections.defaultdict(set)
+    gap_cases: dict[tuple[str, str | None, str], list[str]] = collections.defaultdict(list)
     invalid = False
     input_by_case = {row["path"]: row for row in inputs}
     for result in sorted(results, key=lambda row: row.order):
@@ -348,6 +393,7 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             "refusals": [],
             "diagnostic": None,
             "build_log": None,
+            "evidence_gap": None,
         }
         if result.status == "refused":
             log = result.refusal_build_logs.get("aot", b"")
@@ -360,6 +406,13 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             refusals, diagnostic = parse_refusals(log)
             if not refusals:
                 invalid = True
+                gap = missing_evidence_gap(diagnostic)
+                row["evidence_gap"] = gap
+                gap_key = (
+                    str(gap["classification"]), gap["diagnostic_code"],
+                    str(gap["required_action"]),
+                )
+                gap_cases[gap_key].append(result.name)
             row["refusals"] = refusals
             row["first_refusal"] = refusals[0] if refusals else None
             row["diagnostic"] = diagnostic
@@ -370,7 +423,8 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             }
             for refusal in refusals:
                 key = (refusal["owner"], refusal["family"], refusal["blocking_fact"])
-                root_cases[key].append(result.name)
+                root_events[key] += 1
+                root_cases[key].add(result.name)
         elif result.status == "fail":
             invalid = True
             row["diagnostic"] = {"code": "DIFFERENTIAL_FAILURE", "message": result.output}
@@ -389,10 +443,23 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             "owner": owner,
             "family": family,
             "blocking_fact": fact,
+            "event_count": root_events[(owner, family, fact)],
             "case_count": len(case_names),
             "cases": sorted(case_names),
         }
         for (owner, family, fact), case_names in sorted(root_cases.items())
+    ]
+    evidence_gaps = [
+        {
+            "classification": classification,
+            "diagnostic_code": diagnostic_code,
+            "required_action": required_action,
+            "case_count": len(case_names),
+            "cases": sorted(case_names),
+        }
+        for (classification, diagnostic_code, required_action), case_names in sorted(
+            gap_cases.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][2])
+        )
     ]
     manifest = {
         "schema": SCHEMA,
@@ -425,6 +492,7 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
         },
         "results": manifest_results,
         "root_causes": roots,
+        "evidence_gaps": evidence_gaps,
         "summary": {
             "case_count": len(manifest_results),
             "comparable_count": counts["pass"],
@@ -432,6 +500,13 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             "refused_count": counts["refused"],
             "skipped_count": counts["skip"],
             "failed_count": counts["fail"],
+            "structured_refusal_count": counts["refused"] - sum(
+                len(case_names) for case_names in gap_cases.values()
+            ),
+            "missing_refusal_evidence_count": sum(
+                len(case_names) for case_names in gap_cases.values()
+            ),
+            "refusal_event_count": sum(root_events.values()),
             "root_cause_count": len(roots),
         },
     }
@@ -442,11 +517,16 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--build", required=True, type=Path)
-    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--build", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--jobs", type=int, default=min(os.cpu_count() or 1, 8))
     parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--self-test", action="store_true")
     options = parser.parse_args()
+    if options.self_test:
+        return self_test()
+    if options.build is None or options.output is None:
+        parser.error("--build and --output are required unless --self-test is used")
     if options.jobs < 1 or options.timeout < 1:
         parser.error("--jobs and --timeout must be positive")
     try:
@@ -463,9 +543,19 @@ def main() -> int:
         f"comparable={summary['comparable_count']} refused={summary['refused_count']} "
         f"expected-rejection={summary['expected_rejection_count']} "
         f"skipped={summary['skipped_count']} failed={summary['failed_count']} "
+        f"structured-refusals={summary['structured_refusal_count']} "
+        f"missing-refusal-evidence={summary['missing_refusal_evidence_count']} "
+        f"refusal-events={summary['refusal_event_count']} "
         f"new-refusals={len(manifest['coverage']['new_refusals'])} "
         f"resolved-refusals={len(manifest['coverage']['resolved_refusals'])}"
     )
+    for gap in manifest["evidence_gaps"]:
+        print(
+            "  evidence gap: "
+            f"classification={gap['classification']} "
+            f"diagnostic={gap['diagnostic_code'] or '<none>'} "
+            f"cases={gap['case_count']} action={gap['required_action']}"
+        )
     for label, field in (
         ("new refusal", "new_refusals"),
         ("listed refusal now building", "resolved_refusals"),

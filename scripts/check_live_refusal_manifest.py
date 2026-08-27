@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA = 1
+SCHEMA = 2
 KIND = "xray-live-refusal-root-cause"
 GENERATOR = "tests/diff/survey_refusals.py"
 OWNERS = {
@@ -28,6 +28,7 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 SURVEY_LINE = re.compile(
     r"^\[refusal-survey\]\s+owner=([a-z0-9-]+)\s+family=([^\s]+)(?:\s+(.*))?$"
 )
+DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+):\s*([^\r\n]+)")
 
 
 def load_module(name: str, path: Path) -> Any:
@@ -167,20 +168,47 @@ def fact_from_detail(family: str, detail: str) -> str:
     return "|".join(facts)
 
 
-def refusal_rows(log: bytes) -> list[dict[str, str]]:
-    rows = []
-    seen = set()
-    for raw in log.decode("utf-8", errors="backslashreplace").splitlines():
-        match = SURVEY_LINE.fullmatch(raw.strip())
+def refusal_rows(log: bytes) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for line_number, raw in enumerate(
+        log.decode("utf-8", errors="backslashreplace").splitlines(), start=1
+    ):
+        source_text = raw.strip()
+        match = SURVEY_LINE.fullmatch(source_text)
         if not match:
             continue
         owner, family, detail = match.group(1), match.group(2), match.group(3) or ""
-        key = (owner, family, fact_from_detail(family, detail))
-        if key in seen:
-            continue
-        seen.add(key)
-        rows.append({"owner": owner, "family": family, "blocking_fact": key[2]})
+        rows.append({
+            "sequence": len(rows),
+            "line_number": line_number,
+            "source_text": source_text,
+            "owner": owner,
+            "family": family,
+            "detail": detail,
+            "blocking_fact": fact_from_detail(family, detail),
+        })
     return rows
+
+
+def diagnostic_row(log: bytes) -> dict[str, str] | None:
+    match = DIAGNOSTIC.search(log.decode("utf-8", errors="backslashreplace"))
+    if match is None:
+        return None
+    return {"code": match.group(1), "message": match.group(2).strip()}
+
+
+def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | None]:
+    if diagnostic is not None:
+        return {
+            "classification": "diagnostic-without-structured-refusal",
+            "diagnostic_code": diagnostic["code"],
+            "required_action": "emit-source-owned-structured-refusal",
+        }
+    return {
+        "classification": "opaque-refusal-without-structured-diagnostic",
+        "diagnostic_code": None,
+        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+    }
 
 
 def stable_toolchain(data: dict[str, Any]) -> dict[str, Any]:
@@ -209,7 +237,7 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
     errors: list[str] = []
     top = {
         "schema", "kind", "generator", "status", "identity", "coverage", "measurement",
-        "inputs", "results", "root_causes", "summary",
+        "inputs", "results", "root_causes", "evidence_gaps", "summary",
     }
     if not exact_keys(manifest, top, "manifest", errors):
         return errors
@@ -260,9 +288,14 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
     if result_paths != paths:
         errors.append("results are not in exact governed input order")
 
-    aggregates: dict[tuple[str, str, str], list[str]] = collections.defaultdict(list)
+    aggregate_events: collections.Counter[tuple[str, str, str]] = collections.Counter()
+    aggregate_cases: dict[tuple[str, str, str], set[str]] = collections.defaultdict(set)
+    gap_cases: dict[tuple[str, str | None, str], list[str]] = collections.defaultdict(list)
     counts: collections.Counter[str] = collections.Counter()
-    result_keys = {"case", "outcome", "first_refusal", "refusals", "diagnostic", "build_log"}
+    result_keys = {
+        "case", "outcome", "first_refusal", "refusals", "diagnostic", "build_log",
+        "evidence_gap",
+    }
     input_by_path = {row["path"]: row for row in input_cases}
     for index, row in enumerate(results):
         where = f"results[{index}]"
@@ -271,6 +304,8 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
         outcome = row.get("outcome")
         if outcome not in {"pass", "expected-rejection", "refused", "skip"}:
             errors.append(f"{where} has a non-qualifying outcome")
+            if isinstance(outcome, str):
+                counts[outcome] += 1
             continue
         counts[outcome] += 1
         rejection_oracle = input_by_path[row["case"]].get("oracle", {}).get("kind") \
@@ -279,7 +314,7 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
             errors.append(f"{where} expected-rejection does not match its governed oracle")
         if outcome != "refused":
             if row.get("first_refusal") is not None or row.get("refusals") != [] \
-                    or row.get("build_log") is not None:
+                    or row.get("build_log") is not None or row.get("evidence_gap") is not None:
                 errors.append(f"{where} non-refusal carries refusal evidence")
             continue
         log_row = row.get("build_log")
@@ -300,16 +335,35 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
             errors.append(f"{where} log identity mismatch")
             continue
         reconstructed = refusal_rows(data)
-        if not reconstructed or reconstructed != row.get("refusals"):
+        reconstructed_diagnostic = diagnostic_row(data)
+        if reconstructed_diagnostic != row.get("diagnostic"):
+            errors.append(f"{where} diagnostic does not match raw log")
+        if reconstructed != row.get("refusals"):
             errors.append(f"{where} refusal rows do not match raw log")
             continue
+        if not reconstructed:
+            if row.get("first_refusal") is not None:
+                errors.append(f"{where} has a first refusal absent from the raw log")
+            gap = missing_evidence_gap(reconstructed_diagnostic)
+            if row.get("evidence_gap") != gap:
+                errors.append(f"{where} evidence-gap classification does not match raw log")
+                continue
+            key = (
+                str(gap["classification"]), gap["diagnostic_code"],
+                str(gap["required_action"]),
+            )
+            gap_cases[key].append(row["case"])
+            continue
+        if row.get("evidence_gap") is not None:
+            errors.append(f"{where} structured refusal carries a false evidence gap")
         if row.get("first_refusal") != reconstructed[0]:
             errors.append(f"{where} first refusal is not the first source-emitted row")
         for refusal in reconstructed:
             if refusal["owner"] not in OWNERS:
                 errors.append(f"{where} has an unknown refusal owner")
             key = (refusal["owner"], refusal["family"], refusal["blocking_fact"])
-            aggregates[key].append(row["case"])
+            aggregate_events[key] += 1
+            aggregate_cases[key].add(row["case"])
 
     refused_names = {row["case"] for row in results if row.get("outcome") == "refused"}
     skipped_names = {row["case"] for row in results if row.get("outcome") == "skip"}
@@ -332,20 +386,47 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
             "owner": owner,
             "family": family,
             "blocking_fact": fact,
+            "event_count": aggregate_events[(owner, family, fact)],
             "case_count": len(cases),
             "cases": sorted(cases),
         }
-        for (owner, family, fact), cases in sorted(aggregates.items())
+        for (owner, family, fact), cases in sorted(aggregate_cases.items())
     ]
     if manifest.get("root_causes") != expected_roots:
         errors.append("root cause aggregation is not independently reproducible")
+    expected_gaps = [
+        {
+            "classification": classification,
+            "diagnostic_code": diagnostic_code,
+            "required_action": required_action,
+            "case_count": len(cases),
+            "cases": sorted(cases),
+        }
+        for (classification, diagnostic_code, required_action), cases in sorted(
+            gap_cases.items(), key=lambda item: (item[0][0], item[0][1] or "", item[0][2])
+        )
+    ]
+    if manifest.get("evidence_gaps") != expected_gaps:
+        errors.append("evidence-gap aggregation is not independently reproducible")
+    for gap in expected_gaps:
+        errors.append(
+            "missing source-emitted refusal evidence: "
+            f"classification={gap['classification']} "
+            f"diagnostic={gap['diagnostic_code'] or '<none>'} "
+            f"cases={gap['case_count']} required-action={gap['required_action']}"
+        )
     expected_summary = {
         "case_count": len(results),
         "comparable_count": counts["pass"],
         "expected_rejection_count": counts["expected-rejection"],
         "refused_count": counts["refused"],
         "skipped_count": counts["skip"],
-        "failed_count": 0,
+        "failed_count": counts["fail"],
+        "structured_refusal_count": counts["refused"] - sum(
+            len(cases) for cases in gap_cases.values()
+        ),
+        "missing_refusal_evidence_count": sum(len(cases) for cases in gap_cases.values()),
+        "refusal_event_count": sum(aggregate_events.values()),
         "root_cause_count": len(expected_roots),
     }
     if manifest.get("summary") != expected_summary:
@@ -402,27 +483,33 @@ def validate_current(root: Path, build: Path, manifest_path: Path, manifest: dic
 
 
 def self_test() -> int:
-    decision_log = (
-        b"[refusal-survey] owner=target-plan-builder family=calls "
-        b"XR_TARGET_1003: direct-local argument contract needs unsupported storage or ownership "
-        b"opcode=17 parameter-ordinal=2 storage-mask=4 operand-mode=1 parameter-mode=0 "
-        b"operand-transfer=2 parameter-transfer=1 operand-ownership=3 parameter-ownership=2 "
-        b"operand-access=1 operand-role=4 expected-role=4 type-match=1 ordinal-match=1 "
-        b"contract-flag=1 addressable=0\n"
+    decision_source = (
+        "[refusal-survey] owner=target-plan-builder family=calls "
+        "XR_TARGET_1003: direct-local argument contract needs unsupported storage or ownership "
+        "opcode=17 parameter-ordinal=2 storage-mask=4 operand-mode=1 parameter-mode=0 "
+        "operand-transfer=2 parameter-transfer=1 operand-ownership=3 parameter-ownership=2 "
+        "operand-access=1 operand-role=4 expected-role=4 type-match=1 ordinal-match=1 "
+        "contract-flag=1 addressable=0"
+    )
+    decision_log = ("noise\n" + decision_source + "\n" + decision_source + "\n").encode()
+    expected_fact = (
+        "calls|XR_TARGET_1003: direct-local argument contract needs unsupported storage or "
+        "ownership|opcode=17|parameter-ordinal=2|storage-mask=4|operand-mode=1|"
+        "parameter-mode=0|operand-transfer=2|parameter-transfer=1|operand-ownership=3|"
+        "parameter-ownership=2|operand-access=1|operand-role=4|expected-role=4|type-match=1|"
+        "ordinal-match=1|contract-flag=1|addressable=0"
     )
     expected_decision = [{
+        "sequence": sequence,
+        "line_number": sequence + 2,
+        "source_text": decision_source,
         "owner": "target-plan-builder",
         "family": "calls",
-        "blocking_fact": (
-            "calls|XR_TARGET_1003: direct-local argument contract needs unsupported storage or "
-            "ownership|opcode=17|parameter-ordinal=2|storage-mask=4|operand-mode=1|"
-            "parameter-mode=0|operand-transfer=2|parameter-transfer=1|operand-ownership=3|"
-            "parameter-ownership=2|operand-access=1|operand-role=4|expected-role=4|type-match=1|"
-            "ordinal-match=1|contract-flag=1|addressable=0"
-        ),
-    }]
+        "detail": decision_source.split(" family=calls ", 1)[1],
+        "blocking_fact": expected_fact,
+    } for sequence in range(2)]
     if refusal_rows(decision_log) != expected_decision:
-        print("self-test rejected stable decision facts", file=sys.stderr)
+        print("self-test lost, deduplicated or reordered stable decision facts", file=sys.stderr)
         return 1
     with tempfile.TemporaryDirectory(prefix="xray-live-refusal-check-") as temp:
         base = Path(temp)
@@ -431,21 +518,20 @@ def self_test() -> int:
         log = (
             b"[refusal-survey] owner=target-plan-builder family=calls "
             b"XR_TARGET_1001: unsupported argument operation=4 opcode=17\n"
+            b"[refusal-survey] owner=target-plan-builder family=calls "
+            b"XR_TARGET_1001: unsupported argument operation=4 opcode=17\n"
         )
         log_path = log_dir / "0000.log"
         log_path.write_bytes(log)
-        refusal = {
-            "owner": "target-plan-builder",
-            "family": "calls",
-            "blocking_fact": "calls|XR_TARGET_1001: unsupported argument|opcode=17",
-        }
+        refusals = refusal_rows(log)
+        refusal = refusals[0]
         case = {
             "path": "tests/diff/cases/a.xr", "source": {}, "args": None, "stdin": None,
             "project": None, "oracle": {}, "diff_backends": [],
             "listed_refusal": True, "listed_divergence": False,
         }
         manifest = {
-            "schema": 1, "kind": KIND, "generator": GENERATOR, "status": "passed",
+            "schema": SCHEMA, "kind": KIND, "generator": GENERATOR, "status": "passed",
             "identity": {},
             "coverage": {
                 "listed_refusal_count": 1, "observed_refusal_count": 1,
@@ -463,21 +549,48 @@ def self_test() -> int:
             "inputs": {"case_roots": ["tests/diff/cases"], "case_manifests": [], "case_count": 1, "cases": [case]},
             "results": [{
                 "case": case["path"], "outcome": "refused", "first_refusal": refusal,
-                "refusals": [refusal], "diagnostic": None,
+                "refusals": refusals,
+                "diagnostic": {
+                    "code": "XR_TARGET_1001",
+                    "message": "unsupported argument operation=4 opcode=17",
+                },
                 "build_log": {"path": "evidence.json.logs/0000.log", "sha256": digest_bytes(log), "size_bytes": len(log)},
+                "evidence_gap": None,
             }],
-            "root_causes": [{**refusal, "case_count": 1, "cases": [case["path"]]}],
-            "summary": {"case_count": 1, "comparable_count": 0, "expected_rejection_count": 0, "refused_count": 1, "skipped_count": 0, "failed_count": 0, "root_cause_count": 1},
+            "root_causes": [{
+                "owner": refusal["owner"], "family": refusal["family"],
+                "blocking_fact": refusal["blocking_fact"], "event_count": 2,
+                "case_count": 1, "cases": [case["path"]],
+            }],
+            "evidence_gaps": [],
+            "summary": {
+                "case_count": 1, "comparable_count": 0, "expected_rejection_count": 0,
+                "refused_count": 1, "skipped_count": 0, "failed_count": 0,
+                "structured_refusal_count": 1, "missing_refusal_evidence_count": 0,
+                "refusal_event_count": 2, "root_cause_count": 1,
+            },
         }
         path = base / "evidence.json"
         if validate_core(manifest, path):
             print("self-test rejected valid fixture", file=sys.stderr)
             return 1
         mutations = []
+        bad = copy.deepcopy(manifest); bad["schema"] = 1; mutations.append(bad)
         bad = copy.deepcopy(manifest); bad["results"][0]["first_refusal"]["owner"] = "legacy"; mutations.append(bad)
         bad = copy.deepcopy(manifest); bad["summary"]["refused_count"] = 0; mutations.append(bad)
         bad = copy.deepcopy(manifest); bad["root_causes"] = []; mutations.append(bad)
         bad = copy.deepcopy(manifest); bad["coverage"]["observed_refusal_count"] = 0; mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0]["refusals"][0]["sequence"] = 1; mutations.append(bad)
+        bad = copy.deepcopy(manifest); del bad["results"][0]["refusals"][0]["line_number"]; mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0]["refusals"][0]["source_text"] += " "; mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0]["evidence_gap"] = missing_evidence_gap(None); mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0]["refusals"].reverse(); mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0]["refusals"].append(copy.deepcopy(refusal)); mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0]["refusals"].pop(); mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["results"][0].update({
+            "first_refusal": None, "refusals": [],
+            "evidence_gap": missing_evidence_gap(bad["results"][0]["diagnostic"]),
+        }); mutations.append(bad)
         for index, mutation in enumerate(mutations):
             if not validate_core(mutation, path):
                 print(f"self-test mutation {index} was accepted", file=sys.stderr)
@@ -485,6 +598,37 @@ def self_test() -> int:
         log_path.write_bytes(log + b"mutation\n")
         if not validate_core(manifest, path):
             print("self-test log mutation was accepted", file=sys.stderr)
+            return 1
+        missing_log = b"Error: XR_TARGET_1000: authority was not produced\n"
+        log_path.write_bytes(missing_log)
+        gap = missing_evidence_gap(diagnostic_row(missing_log))
+        missing = copy.deepcopy(manifest)
+        missing["status"] = "failed"
+        missing["results"][0].update({
+            "first_refusal": None,
+            "refusals": [],
+            "diagnostic": diagnostic_row(missing_log),
+            "build_log": {
+                "path": "evidence.json.logs/0000.log",
+                "sha256": digest_bytes(missing_log),
+                "size_bytes": len(missing_log),
+            },
+            "evidence_gap": gap,
+        })
+        missing["root_causes"] = []
+        missing["evidence_gaps"] = [{
+            **gap, "case_count": 1, "cases": [case["path"]],
+        }]
+        missing["summary"].update({
+            "structured_refusal_count": 0,
+            "missing_refusal_evidence_count": 1,
+            "refusal_event_count": 0,
+            "root_cause_count": 0,
+        })
+        missing_errors = validate_core(missing, path)
+        if not any("missing source-emitted refusal evidence" in error for error in missing_errors) \
+                or any("refusal rows do not match raw log" in error for error in missing_errors):
+            print("self-test did not classify missing source evidence precisely", file=sys.stderr)
             return 1
     print("live refusal manifest injection self-test: PASS")
     return 0
