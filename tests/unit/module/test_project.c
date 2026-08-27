@@ -284,13 +284,15 @@ TEST(module_identity_authority_is_manifest_typed) {
     XrModuleIdentityAuthority authority = {0};
     char *namespace_id = NULL;
     char *physical_root = NULL;
+    char error[256];
     XrProject project = {
         .root = g_tmpdir,
         .name = "identity-project",
     };
 
     ASSERT_TRUE(xr_project_module_identity_authority(
-        &project, &authority, &namespace_id, &physical_root));
+        &project, &authority, &namespace_id, &physical_root, error, sizeof(error)));
+    ASSERT_STR_EQ(error, "");
     ASSERT_EQ_INT(authority.kind, XR_MODULE_IDENTITY_PROJECT);
     ASSERT_STR_EQ(authority.namespace_id, "identity-project");
     ASSERT_TRUE(authority.physical_root[0] != '\0');
@@ -301,7 +303,8 @@ TEST(module_identity_authority_is_manifest_typed) {
     project.name = "xray/identity-package";
     project.version = "1.2.3-beta.1+build.7";
     ASSERT_TRUE(xr_project_module_identity_authority(
-        &project, &authority, &namespace_id, &physical_root));
+        &project, &authority, &namespace_id, &physical_root, error, sizeof(error)));
+    ASSERT_STR_EQ(error, "");
     ASSERT_EQ_INT(authority.kind, XR_MODULE_IDENTITY_PACKAGE);
     ASSERT_STR_EQ(authority.namespace_id,
                   "xray/identity-package@1.2.3-beta.1+build.7");
@@ -313,20 +316,22 @@ TEST(module_identity_authority_is_manifest_typed) {
         bool is_package;
         const char *name;
         const char *version;
+        const char *error_fragment;
     } rejected[] = {
-        {false, NULL, NULL},
-        {false, "xray/project", NULL},
-        {true, "xray/package", NULL},
-        {true, "package", "1.0.0"},
-        {true, "xray/package", "^1.0.0"},
-        {true, "xray/package", "not-a-version"},
+        {false, NULL, NULL, "package or project name"},
+        {false, "xray/project", NULL, "[project] name"},
+        {true, "xray/package", NULL, "exact semantic version"},
+        {true, "package", "1.0.0", "[package] name"},
+        {true, "xray/package", "^1.0.0", "exact semantic version"},
+        {true, "xray/package", "not-a-version", "exact semantic version"},
     };
     for (size_t i = 0; i < sizeof(rejected) / sizeof(rejected[0]); i++) {
         project.is_package = rejected[i].is_package;
         project.name = (char *) rejected[i].name;
         project.version = (char *) rejected[i].version;
         ASSERT_FALSE(xr_project_module_identity_authority(
-            &project, &authority, &namespace_id, &physical_root));
+            &project, &authority, &namespace_id, &physical_root, error, sizeof(error)));
+        ASSERT_TRUE(strstr(error, rejected[i].error_fragment) != NULL);
         ASSERT_NULL(namespace_id);
         ASSERT_NULL(physical_root);
     }

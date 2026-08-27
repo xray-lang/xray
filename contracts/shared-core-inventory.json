@@ -1102,8 +1102,10 @@
       "id": "os",
       "owner": "shared-kernel",
       "production_callers": [
+        "src/aot/xi_cgen_dispatch_helpers.inc.c",
         "src/aot/xrt_io.h",
         "src/aot/xrt_os.h",
+        "src/stdlib/xstdlib_target_leaf.h",
         "stdlib/io/io.c",
         "stdlib/os/os.c"
       ],
@@ -1121,6 +1123,7 @@
         "xr_os_core_exec_buffer_append_raw",
         "xr_os_core_exec_buffer_next_cap",
         "xr_os_core_exec_windows_exit_code",
+        "xr_os_core_getpid",
         "xr_os_core_has_env_value",
         "xr_os_core_homedir",
         "xr_os_core_loadavg_from_fixed",
@@ -1136,6 +1139,7 @@
       ],
       "status": "production",
       "test_callers": [
+        "tests/unit/ir/test_xi_cgen.c",
         "tests/unit/stdlib/test_os_core.c"
       ]
     },

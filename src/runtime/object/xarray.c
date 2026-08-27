@@ -118,6 +118,18 @@ static inline bool xr_array_charges_coro_heap(const XrArray *arr) {
     return arr && !XR_OBJ_IS_SHARED(&arr->hdr) && !XR_OBJ_IS_TRANSFER(&arr->hdr);
 }
 
+/* The heap that owes a refund for this array's buffer.
+ *
+ * Every add and sub of array bytes must route through this, exactly as the map
+ * and set accounting does.  Reading the running coroutine's heap instead makes
+ * the two sides agree only by coincidence: root-level execution has no current
+ * coroutine at all, so the add silently reached a NULL heap while the refund
+ * still named the heap the array was allocated on, driving totalbytes (and so
+ * runtime.liveBytes()) negative. */
+static inline XrCoroHeap *xr_array_accounting_heap(const XrArray *arr) {
+    return arr ? arr->owner_heap : NULL;
+}
+
 static void xr_array_storage_account_resize(XrArrayStorage *s, int64_t new_bytes) {
     if (!s || !s->account_heap)
         return;
@@ -168,9 +180,8 @@ static bool xr_array_ensure_storage(XrArray *arr) {
         /* Existing malloc-backed local arrays already charged their owner heap;
          * region-backed arrays did not. After promotion, storage owns a system
          * heap buffer, so charge it exactly once to the source heap. */
-        XrCoroHeap *heap = xr_current_coro_heap();
         bool add_now = arr->data_on_region_heap;
-        xr_array_storage_account_attach(s, heap, bytes, add_now);
+        xr_array_storage_account_attach(s, xr_array_accounting_heap(arr), bytes, add_now);
     }
     /* Release the old buffer per its current storage mode now that it is copied.
      * For ANY this frees the raw buffer only — the element refs moved to storage. */
@@ -314,10 +325,14 @@ static XrArray *xr_array_with_capacity_alloc(XrAllocationContext *alloc, struct 
     arr->data_on_region_heap = 0;
     memset(arr->_pad, 0, sizeof(arr->_pad));
 
+    /* Fix the accounting owner before any buffer is charged, so a later grow
+     * on another coroutine still refunds the heap that was charged. */
+    XrCoroHeap *heap = alloc ? alloc->local_heap : xr_coro_get_heap(coro);
+    arr->owner_heap = heap;
+
     // Allocate data as GC blob on Region heap (no free needed, GC reclaims)
     if (capacity > 0) {
         size_t data_bytes = (size_t) esz * capacity;
-        XrCoroHeap *heap = alloc ? alloc->local_heap : xr_coro_get_heap(coro);
         if (heap) {
             arr->data = xr_coro_alloc_blob(heap, data_bytes);
             if (arr->data) {
@@ -365,6 +380,7 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     arr->content_version = XR_ARRAY_CONTENT_VERSION_INIT;
     arr->deferred_submit_version = 0;
     arr->data_on_region_heap = 0;  // always 0 for inplace arrays
+    arr->owner_heap = NULL;        // system-heap arrays are charged to nobody
     memset(arr->_pad, 0, sizeof(arr->_pad));
 
     // Allocate data (no GC accounting for system heap arrays)
@@ -497,8 +513,7 @@ XrArrayPushStatus xr_array_push_owned_checked(XrValue receiver, XrValue value) {
     if (!XR_IS_ARRAY(receiver))
         return XR_ARRAY_PUSH_INVALID_ARRAY;
     XrArray *arr = XR_TO_ARRAY(receiver);
-    if (!arr || arr->length < 0 || arr->capacity < arr->length ||
-        (arr->capacity && !arr->data))
+    if (!arr || arr->length < 0 || arr->capacity < arr->length || (arr->capacity && !arr->data))
         return XR_ARRAY_PUSH_INVALID_ARRAY;
     if (xr_array_is_slice(arr))
         return XR_ARRAY_PUSH_SLICE;
@@ -520,8 +535,7 @@ XrArrayPushStatus xr_array_push_owned_checked(XrValue receiver, XrValue value) {
 void xr_array_push(XrArray *arr, XrValue value) {
     XR_DCHECK(arr != NULL, "array_push: NULL array");
     XR_DCHECK(XR_OBJ_GET_TYPE(&arr->hdr) == XR_TARRAY, "array_push: object is not an array");
-    XrArrayPushStatus status =
-        xr_array_push_owned_checked(xr_value_from_array(arr), value);
+    XrArrayPushStatus status = xr_array_push_owned_checked(xr_value_from_array(arr), value);
     XR_DCHECK(status == XR_ARRAY_PUSH_OK || status == XR_ARRAY_PUSH_SLICE,
               "array_push: element is not storable");
 }
@@ -885,7 +899,7 @@ void xr_array_grow(XrArray *arr) {
         arr->data_on_region_heap = 0;
         arr->capacity = new_capacity;
         if (xr_array_charges_coro_heap(arr))
-            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
+            xr_coro_heap_add_external(xr_array_accounting_heap(arr), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -894,7 +908,8 @@ void xr_array_grow(XrArray *arr) {
         arr->data = new_data;
         arr->capacity = new_capacity;
         if (xr_array_charges_coro_heap(arr))
-            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
+            xr_coro_heap_add_external(xr_array_accounting_heap(arr),
+                                      (int64_t) (new_bytes - old_bytes));
     }
 }
 
@@ -943,7 +958,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         arr->data_on_region_heap = 0;
         arr->capacity = new_capacity;
         if (xr_array_charges_coro_heap(arr))
-            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) new_bytes);
+            xr_coro_heap_add_external(xr_array_accounting_heap(arr), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -952,7 +967,8 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         arr->data = new_data;
         arr->capacity = new_capacity;
         if (xr_array_charges_coro_heap(arr))
-            xr_coro_heap_add_external(xr_current_coro_heap(), (int64_t) (new_bytes - old_bytes));
+            xr_coro_heap_add_external(xr_array_accounting_heap(arr),
+                                      (int64_t) (new_bytes - old_bytes));
     }
 }
 
@@ -1062,7 +1078,7 @@ void xr_obj_destroy_array(XrObjHeader *obj, struct XrCoroHeap *owner_heap) {
             xr_free(arr->data);
             arr->data = NULL;
             if (xr_array_charges_coro_heap(arr))
-                xr_coro_heap_sub_external(owner_heap, (int64_t) data_bytes);
+                xr_coro_heap_sub_external(xr_array_accounting_heap(arr), (int64_t) data_bytes);
         }
     }
 }
@@ -1104,8 +1120,7 @@ uint64_t xr_array_load_u64_le(XrArray *arr, int64_t offset, bool *ok) {
     return xr_array_core_bytes_load_u64_le(arr->data, arr->length, arr->elem_type, offset, ok);
 }
 
-static bool xr_byte_array_append_reserve(void *ctx, XrByteArrayAppendView *view,
-                                         int64_t capacity) {
+static bool xr_byte_array_append_reserve(void *ctx, XrByteArrayAppendView *view, int64_t capacity) {
     XrArray *dst = (XrArray *) ctx;
     if (!dst || !view || capacity < 0 || capacity > INT32_MAX)
         return false;
@@ -1115,9 +1130,10 @@ static bool xr_byte_array_append_reserve(void *ctx, XrByteArrayAppendView *view,
     return dst->capacity >= capacity && (capacity == 0 || dst->data != NULL);
 }
 
-XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(
-    XrArray *dst, const void *src_data, int64_t src_length, uint8_t src_elem_type,
-    const void *src_guard) {
+XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(XrArray *dst, const void *src_data,
+                                                               int64_t src_length,
+                                                               uint8_t src_elem_type,
+                                                               const void *src_guard) {
     XrByteArrayAppendView view = {0};
     if (dst) {
         view.data = dst->data;
@@ -1127,9 +1143,9 @@ XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(
         view.resizable = !xr_array_is_slice(dst);
         view.identity = dst;
     }
-    XrByteArrayAppendResult result = xr_byte_array_append_core(
-        dst ? &view : NULL, src_data, src_length, src_elem_type, src_guard,
-        xr_byte_array_append_reserve, dst);
+    XrByteArrayAppendResult result =
+        xr_byte_array_append_core(dst ? &view : NULL, src_data, src_length, src_elem_type,
+                                  src_guard, xr_byte_array_append_reserve, dst);
     if (dst && result.status == XR_BYTE_ARRAY_APPEND_OK) {
         dst->length = (int32_t) view.length;
         if (result.changed)
@@ -1138,8 +1154,7 @@ XrByteArrayAppendResult xr_byte_array_append_from_span_adapter(
     return result;
 }
 
-static bool xr_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view,
-                                         int64_t capacity) {
+static bool xr_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view, int64_t capacity) {
     XrArray *arr = (XrArray *) ctx;
     if (!arr || !view || capacity < 0 || capacity > INT32_MAX)
         return false;
@@ -1150,7 +1165,7 @@ static bool xr_byte_array_repeat_reserve(void *ctx, XrByteArrayRepeatView *view,
 }
 
 XrByteArrayRepeatResult xr_byte_array_repeat_from_tail_adapter(XrArray *arr, int64_t distance,
-                                                                int64_t count) {
+                                                               int64_t count) {
     XrByteArrayRepeatView view = {0};
     if (arr) {
         view.data = arr->data;

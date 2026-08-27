@@ -29,13 +29,12 @@
 #include <string.h>
 
 static int usage(void) {
-    fprintf(stderr,
-            "usage:\n"
-            "  xray_stdlib_bcgen compile <input.xr> --output <bytecode-output> "
-            "--format bytecode [--stdlib-module <canonical-name>] "
-            "[--strip-debug] [--strip-source]\n"
-            "  xray_stdlib_bcgen native-fastpaths <input.xr> --output <output.c> "
-            "--header <output.h>\n");
+    fprintf(stderr, "usage:\n"
+                    "  xray_stdlib_bcgen compile <input.xr> --output <bytecode-output> "
+                    "--format bytecode [--stdlib-module <canonical-name>] "
+                    "[--strip-debug] [--strip-source]\n"
+                    "  xray_stdlib_bcgen native-fastpaths <input.xr> --output <output.c> "
+                    "--header <output.h>\n");
     return 2;
 }
 
@@ -96,8 +95,8 @@ static int generate_native_fastpaths(int argc, char **argv) {
     XrTargetCodegenFacts codegen;
     char profile_error[256];
     if (!xaot_target_profile_codegen_facts(&target, &codegen) ||
-        !xtc_target_profile_build_current_native_hosted(
-            &codegen, &target_profile, profile_error, sizeof(profile_error))) {
+        !xtc_target_profile_build_current_native_hosted(&codegen, &target_profile, profile_error,
+                                                        sizeof(profile_error))) {
         fprintf(stderr, "xray_stdlib_bcgen: %s\n", profile_error);
         xaot_target_free(&target);
         xr_project_free(project);
@@ -106,11 +105,12 @@ static int generate_native_fastpaths(int argc, char **argv) {
     options.target = &target;
     options.target_profile = target_profile;
     options.native_package_plan = project->native_plan;
-    if (!xr_project_module_identity_authority(
-            project, &entry_authority, &entry_authority_namespace,
-            &entry_authority_root)) {
-        fprintf(stderr,
-                "Error: invalid generated fastpath module identity authority\n");
+    char authority_err[256];
+    if (!xr_project_module_identity_authority(project, &entry_authority, &entry_authority_namespace,
+                                              &entry_authority_root, authority_err,
+                                              sizeof(authority_err))) {
+        fprintf(stderr, "Error: invalid generated fastpath module identity authority: %s\n",
+                authority_err);
         xr_target_profile_free(target_profile);
         xaot_target_free(&target);
         xr_project_free(project);
@@ -136,8 +136,7 @@ static int generate_native_fastpaths(int argc, char **argv) {
     size_t c_size = 0;
     char *c_source = xaot_build_result_amalgamate(&result, &c_size);
     const char *header_source = result.c_export_header;
-    bool ok = c_source && header_source &&
-              write_bytes(output, c_source, c_size) &&
+    bool ok = c_source && header_source && write_bytes(output, c_source, c_size) &&
               write_bytes(header, header_source, strlen(header_source));
     xr_free(c_source);
     xaot_build_result_free(&result);
@@ -207,13 +206,12 @@ int main(int argc, char **argv) {
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(X);
     XrModuleIdentityAuthority authority = {0};
     char *authority_root = NULL;
-    bool have_authority = stdlib_module ||
-                          xr_module_identity_script_authority_from_source(
-                              input, &authority, &authority_root);
-    bool ok = have_authority &&
-              (stdlib_module
-                   ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)
-                   : xr_compile_to_file(session, input, output, flags, &authority));
+    bool have_authority = stdlib_module || xr_module_identity_script_authority_from_source(
+                                               input, &authority, &authority_root);
+    bool ok =
+        have_authority &&
+        (stdlib_module ? xr_compile_stdlib_to_file(session, stdlib_module, input, output, flags)
+                       : xr_compile_to_file(session, input, output, flags, &authority));
     xr_free(authority_root);
     xray_vm_delete(X);
     return ok ? 0 : 1;

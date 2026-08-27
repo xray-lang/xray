@@ -1,1 +1,3 @@
 tests/diff/cases/semantics/exception/core_assertion_channels.xr
+tests/diff/cases/semantics/exception/assertion_same_t_parity.xr
+tests/unit/fixtures/assertion/retired_names_are_ordinary.xr

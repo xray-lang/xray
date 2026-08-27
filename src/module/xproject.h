@@ -81,10 +81,14 @@ XR_FUNC XrProject *xr_project_load(XrVMRuntime *isolate, const char *project_roo
 XR_FUNC void xr_project_free(XrProject *project);
 
 /* Build the exact typed entry authority declared by the manifest. Both
- * returned strings are xr_malloc-owned and back the authority fields. */
-XR_FUNC bool xr_project_module_identity_authority(
-    const XrProject *project, XrModuleIdentityAuthority *authority,
-    char **namespace_out, char **physical_root_out);
+ * returned strings are xr_malloc-owned and back the authority fields.
+ * On failure `err` receives the manifest field that made the authority
+ * inexact, so a caller can name the required spelling instead of reporting
+ * that some authority could not be established. */
+XR_FUNC bool xr_project_module_identity_authority(const XrProject *project,
+                                                  XrModuleIdentityAuthority *authority,
+                                                  char **namespace_out, char **physical_root_out,
+                                                  char *err, size_t err_size);
 
 // Returns local path (caller frees), or NULL for non-local dependencies
 XR_FUNC char *xr_resolve_local_dependency(XrProject *project, const char *package_name);

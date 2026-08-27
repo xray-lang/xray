@@ -852,6 +852,11 @@ add_test(NAME test_assertion_same_t_contextual
             ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/assertion/same_t_contextual.xr)
 set_tests_properties(test_assertion_same_t_contextual PROPERTIES
     LABELS "frontend;vm;assertion;type-system")
+add_test(NAME test_array_growth_accounting
+    COMMAND $<TARGET_FILE:xray> run
+            ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/runtime/array_growth_accounting.xr)
+set_tests_properties(test_array_growth_accounting PROPERTIES
+    LABELS "vm;runtime;memory")
 add_executable(test_xrt_assertion_freestanding aot/test_xrt_assertion_freestanding.c)
 target_compile_definitions(test_xrt_assertion_freestanding PRIVATE
     XRAY_PROFILE_FREESTANDING=1)

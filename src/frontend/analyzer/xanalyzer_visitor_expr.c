@@ -1149,6 +1149,27 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
 
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
 
+    /* A direct-only core intrinsic has one call-site plan and no value
+     * representation, so referencing it outside a callee position has no
+     * meaning. The call visitor consumes its own callee, so reaching here
+     * means the name is being used as a value. Rejecting it now keeps the
+     * registry's declared call form enforced where the user can see it,
+     * instead of surfacing as a missing symbol during lowering. */
+    const XrCoreIntrinsicDesc *core_intrinsic =
+        links ? xr_core_intrinsic_by_id(links->core_builtin_id) : NULL;
+    if (core_intrinsic && !ctx->allow_core_intrinsic_callee &&
+        core_intrinsic->call_form == XR_CORE_INTRINSIC_CALL_FORM_DIRECT_ONLY) {
+        XrLocation core_loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+        char core_msg[256];
+        snprintf(core_msg, sizeof(core_msg),
+                 "'%s' is a direct-only core intrinsic (%s) and cannot be used as a value; "
+                 "call it directly",
+                 core_intrinsic->source_name, core_intrinsic->diagnostic_name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_INTRINSIC_NOT_A_VALUE, core_msg, &core_loc);
+        return xr_type_new_error(ctx->analyzer->isolate);
+    }
+
     if (sym->kind == XA_SYM_ENUM) {
         XaSymbolLinks *enum_links = links;
         xa_report_deprecated_use(ctx, node, sym, enum_links);

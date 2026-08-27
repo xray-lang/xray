@@ -1,5 +1,5 @@
 [package]
-name = "native-output-fixture"
+name = "tests/native-output-fixture"
 version = "1.0.0"
 license = "MIT"
 

@@ -360,18 +360,19 @@ static int explain_backend_topic(const XrCliInvocation *inv, const char *topic,
         goto cleanup;
     }
     entry = xr_path_join(root, project->main);
-    if (!xr_project_module_identity_authority(
-            project, &entry_authority, &entry_authority_namespace,
-            &entry_authority_root)) {
-        xr_cli_error("explain", "project has no valid module identity authority");
+    char authority_err[256];
+    if (!xr_project_module_identity_authority(project, &entry_authority, &entry_authority_namespace,
+                                              &entry_authority_root, authority_err,
+                                              sizeof(authority_err))) {
+        xr_cli_error("explain", "%s", authority_err);
         goto cleanup;
     }
     XrTargetCodegenFacts codegen;
     char profile_error[256];
     if (!entry || !xaot_target_init(&target, "native-c90") ||
         !xaot_target_profile_codegen_facts(&target, &codegen) ||
-        !xtc_target_profile_build_current_native_hosted(
-            &codegen, &target_profile, profile_error, sizeof(profile_error))) {
+        !xtc_target_profile_build_current_native_hosted(&codegen, &target_profile, profile_error,
+                                                        sizeof(profile_error))) {
         rc = XR_CLI_EXIT_INTERNAL;
         goto cleanup;
     }
