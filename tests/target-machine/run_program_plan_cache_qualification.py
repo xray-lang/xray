@@ -92,6 +92,18 @@ class Report:
     plan_cache: str
 
 
+@dataclass(frozen=True)
+class MeasuredBuild:
+    """One timed build. `did_work` is false when it never reached its cache
+    decisions -- a provider probe timeout under load, most often -- and such a
+    sample must be discarded rather than averaged in."""
+
+    seconds: float
+    peak_rss: int
+    report: "Report | None"
+    did_work: bool
+
+
 @dataclass
 class Config:
     xray: Path
@@ -568,7 +580,7 @@ def distribution(values: list[float], unit: str) -> dict:
 
 
 def measure_build(config: Config, cache: Path, entry: Path, out: Path,
-                  extra: tuple = ()) -> tuple[float, int, "Report | None"]:
+                  extra: tuple = ()) -> "MeasuredBuild":
     """Wall time, peak resident size, and the cache report of one build.
 
     The kernel reports the child's high-water mark exactly; polling its live
@@ -601,7 +613,11 @@ def measure_build(config: Config, cache: Path, entry: Path, out: Path,
                 time.sleep(0.01)
     elapsed = time.perf_counter() - started
     text = log.read_bytes()
-    return elapsed, peak, parse(proc.ProcResult(tuple(argv), child.returncode, text, b"", False))
+    parsed = parse(proc.ProcResult(tuple(argv), child.returncode, text, b"", False))
+    # A build that never reached its cache decisions did not do the work being
+    # timed. Under load the native provider probe times out at ten seconds, and
+    # folding those into a median reports the probe as the cache's cost.
+    return MeasuredBuild(elapsed, peak, parsed, parsed is not None)
 
 
 def directory_bytes(path: Path) -> int:
@@ -712,27 +728,32 @@ def measure_paired(config: Config, d: Path, entry: Path) -> tuple[dict, dict]:
     warm_rss: list[float] = []
     cold_report = None
     warm_report = None
+    discarded = 0
     cache = d / "paired-0"
     for sample in range(config.samples + 1):
         cache = d / f"paired-{sample}"
-        cold_seconds, cold_peak, cold_r = measure_build(
-            config, cache, entry, d / f"paired-cold-{sample}" / "app")
-        warm_seconds, warm_peak, warm_r = measure_build(
-            config, cache, entry, d / f"paired-warm-{sample}" / "app")
+        cold_build = measure_build(config, cache, entry, d / f"paired-cold-{sample}" / "app")
+        warm_build = measure_build(config, cache, entry, d / f"paired-warm-{sample}" / "app")
         if sample == 0:
             continue
-        cold_times.append(cold_seconds)
-        cold_rss.append(float(cold_peak))
-        warm_times.append(warm_seconds)
-        warm_rss.append(float(warm_peak))
-        cold_report = cold_r or cold_report
-        warm_report = warm_r or warm_report
+        # Both halves of a pair are kept or dropped together: half a pair says
+        # nothing about the relation the pairing exists to measure.
+        if not (cold_build.did_work and warm_build.did_work):
+            discarded += 1
+            continue
+        cold_times.append(cold_build.seconds)
+        cold_rss.append(float(cold_build.peak_rss))
+        warm_times.append(warm_build.seconds)
+        warm_rss.append(float(warm_build.peak_rss))
+        cold_report = cold_build.report or cold_report
+        warm_report = warm_build.report or warm_report
 
     cold = {
         "seconds": distribution(cold_times, "s"),
         "peak_rss": distribution(cold_rss, "bytes"),
         "objects_on_disk": len(objects(cache)),
         "disk_bytes": directory_bytes(cache),
+        "discarded_pairs": discarded,
     }
     warm = {
         "seconds": distribution(warm_times, "s"),
@@ -773,8 +794,9 @@ def measure(config: Config, ws: workspace.Workspace, workers: int) -> dict:
     # The edit and its revert run against the warm cache, so their breadth is
     # measured against a store that already holds the unedited program.
     (source / "producer.xr").write_text(PRODUCER_V2, encoding="utf-8")
-    edit_seconds, edit_rss, edited = measure_build(config, warm_cache, entry,
-                                                   d / "edit-out" / "app")
+    edit_build = measure_build(config, warm_cache, entry, d / "edit-out" / "app")
+    edit_seconds, edit_rss, edited = (edit_build.seconds, edit_build.peak_rss,
+                                      edit_build.report)
     edited_objects = objects(warm_cache)
     leaf_edit = {
         "seconds": round(edit_seconds, 6),
@@ -787,8 +809,9 @@ def measure(config: Config, ws: workspace.Workspace, workers: int) -> dict:
     }
 
     (source / "producer.xr").write_text(PRODUCER_V1, encoding="utf-8")
-    revert_seconds, revert_rss, reverted = measure_build(config, warm_cache, entry,
-                                                         d / "revert-out" / "app")
+    revert_build = measure_build(config, warm_cache, entry, d / "revert-out" / "app")
+    revert_seconds, revert_rss, reverted = (revert_build.seconds, revert_build.peak_rss,
+                                            revert_build.report)
     revert = {
         "seconds": round(revert_seconds, 6),
         "peak_rss": revert_rss,
@@ -837,6 +860,7 @@ def measure_concurrent(config: Config, d: Path, entry: Path, workers: int) -> di
     do that time. The spread across repeats is the part worth keeping.
     """
     result = {}
+    discarded = 0
     for phase in ("cold", "warm"):
         walls: list[float] = []
         times: list[float] = []
@@ -866,11 +890,12 @@ def measure_concurrent(config: Config, d: Path, entry: Path, workers: int) -> di
                 value = finished.get(str(index))
                 if isinstance(value, BaseException) or value is None:
                     continue
-                seconds, peak, report_ = value
-                times.append(seconds)
-                peaks.append(float(peak))
-                if report_:
-                    round_recomputed += report_.recomputed
+                if not value.did_work:
+                    discarded += 1
+                    continue
+                times.append(value.seconds)
+                peaks.append(float(value.peak_rss))
+                round_recomputed += value.report.recomputed
             walls.append(wall)
             recomputed.append(float(round_recomputed))
         result[phase] = {
@@ -881,6 +906,7 @@ def measure_concurrent(config: Config, d: Path, entry: Path, workers: int) -> di
             # Serial cold recomputes each module once; anything beyond that is
             # work the concurrent builds duplicated.
             "recomputed_per_round": distribution(recomputed, "modules"),
+            "discarded": discarded,
         }
     return result
 
@@ -896,22 +922,26 @@ def measure_relocation(config: Config, d: Path, workers: int) -> dict:
     original = write_product(d / "relocation-src", PRODUCER_V1)
     measure_build(config, cache, original, d / "relocation-prime" / "app")
     before = directory_bytes(cache)
+    discarded = 0
     times: list[float] = []
     peaks: list[float] = []
     hits: list[float] = []
     for sample in range(config.samples + 1):
         moved = write_product(d / f"relocation-moved-{sample}", PRODUCER_V1)
-        seconds, peak, report_ = measure_build(config, cache, moved,
-                                               d / f"relocation-out-{sample}" / "app")
+        built = measure_build(config, cache, moved, d / f"relocation-out-{sample}" / "app")
         if sample == 0:
             continue
-        times.append(seconds)
-        peaks.append(float(peak))
-        hits.append(float(report_.hits if report_ else -1))
+        if not built.did_work:
+            discarded += 1
+            continue
+        times.append(built.seconds)
+        peaks.append(float(built.peak_rss))
+        hits.append(float(built.report.hits))
     return {
         "seconds": distribution(times, "s"),
         "peak_rss": distribution(peaks, "bytes"),
         "hits": distribution(hits, "modules"),
+        "discarded": discarded,
         "disk_bytes_before": before,
         "disk_bytes_after": directory_bytes(cache),
     }
@@ -928,6 +958,7 @@ def measure_crash_residue(config: Config, d: Path) -> dict:
     entry = write_product(d / "residue-src", PRODUCER_V1)
     measure_build(config, cache, entry, d / "residue-prime" / "app")
     live = objects(cache)
+    discarded = 0
     times: list[float] = []
     peaks: list[float] = []
     hits: list[float] = []
@@ -943,17 +974,20 @@ def measure_crash_residue(config: Config, d: Path) -> dict:
                     orphan = directory / f".tmp-{path.name}-{sample}"
                     orphan.write_bytes(b"half-written program target plan")
                     planted += 1
-        seconds, peak, report_ = measure_build(config, cache, entry,
-                                               d / f"residue-out-{sample}" / "app")
+        built = measure_build(config, cache, entry, d / f"residue-out-{sample}" / "app")
         if sample == 0:
             continue
-        times.append(seconds)
-        peaks.append(float(peak))
-        hits.append(float(report_.hits if report_ else -1))
+        if not built.did_work:
+            discarded += 1
+            continue
+        times.append(built.seconds)
+        peaks.append(float(built.peak_rss))
+        hits.append(float(built.report.hits))
     return {
         "seconds": distribution(times, "s"),
         "peak_rss": distribution(peaks, "bytes"),
         "hits": distribution(hits, "modules"),
+        "discarded": discarded,
         "residues_planted": planted,
         "live_objects_intact": objects(cache) == live,
         "disk_bytes": directory_bytes(cache),
