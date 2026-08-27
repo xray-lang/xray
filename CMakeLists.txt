@@ -3131,7 +3131,7 @@ if(BUILD_TESTS)
     )
 
     if(CMAKE_HOST_WIN32 AND (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC"))
-        foreach(_portable_c11_family fixed-array slice)
+        foreach(_portable_c11_family array-fill fixed-array slice)
             add_test(
                 NAME aot_portable_c11_${_portable_c11_family}_msvc
                 COMMAND ${XRAY_PYTHON}

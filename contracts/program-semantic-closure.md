@@ -312,7 +312,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt 41a56b040c944ac96d7df0025fcf6a22ec525b5cebcf5b6f833d0f2ac5426c3a
+anchor-sha256: CMakeLists.txt eea892fed2bb98f5b322941efe398ce60c47516ec9ea58819e98aed34ac19938
 anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec4338998ade7753489d2313dff2fc0d2
 anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365
@@ -349,11 +349,11 @@ anchor-sha256: src/plan/semantic/xr_semantic_verify.c f255b5868f54b94bcb2c95a601
 anchor-sha256: src/plan/target/xr_scalar_call_decision.h 35d3f167734562525e36406f61ddb794f7308311453a29f5695aa3e24a1c8153
 anchor-sha256: src/plan/target/xr_scalar_call_decision.c 642eff61fb0b06185d2aec4c0ce8d91919148de3d29d74a17e68bd1a5016b3fa
 anchor-sha256: src/plan/target/xr_scalar_call_decision_verify.c 838f7adc60c3de52fda23ed25c07edb678a6274eb87d0deec2da033e701dca10
-anchor-sha256: src/ir/xi.h 2999326e873b3b7904cd5760760f415e5037c0843c82ac569c89206b43a319ac
+anchor-sha256: src/ir/xi.h 089354e3324b62754b0c53c65f9e7451e735ce3bcbdcebcd3afc33c6ba44336e
 anchor-sha256: src/ir/xi.c 0a8386b9b6f09578571726a6117444e9a60c4bb08b58f8dce59fadbae3417bd2
 anchor-sha256: src/ir/xi_module.h 7d4be4a43230d300e8090b59db559ecf76f29934560682d1d8e1bbe4da75d3a8
 anchor-sha256: src/ir/xi_lower.h 297d6165a47ac164a12df522091e970093fcc2ce35153378d5fd717019a8da72
-anchor-sha256: src/ir/xi_lower.c e76300335b9c149808a2bd3c4c55d783cce6848e4f3d11b8db557078b7caa1a6
+anchor-sha256: src/ir/xi_lower.c 5c83d887833b6197c71328aa2f126d4a18bd8dfc318f73cdc9e745fd2b4408e7
 anchor-sha256: src/ir/xi_lower_expr.c f59a90d78d6fedf13701532fd4c169de68bc53c9e5b3aa01d0fd3f6552ef9898
 anchor-sha256: src/ir/xi_lower_stmt.c 063e8ead6151fd583b84554e1e4d8c23892d53c537f1b287d541337b72845c32
 anchor-sha256: src/ir/xi_pipeline.c fcd087786a75ad823d651f1e8d3632ab9f13516a7356eff3a1300ec8c3e2b639
@@ -373,7 +373,7 @@ anchor-sha256: tests/unit/frontend/test_parser.c d106777632742a1a1187c95c93c0515
 anchor-sha256: tests/unit/module/test_module_identity.c f2054fb4d6e514c740fc635ec4204031c589ba8ff1d0b1c377fab4f4d45f2cfe
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3faed709ec5d779d5df0778bae33cd67fd8d86f094ef1007ae1d5ac450387398
 anchor-sha256: tests/unit/ir/test_xi_pipeline.c 238976d247a3099fcc85c60a43f33c420075e75e599ae89bd5d083bd875b5f48
-anchor-sha256: tests/unit/CMakeLists.txt 836bea1878e361715d3d64ad2be0478d86895a926d512db6018a7af1316ab244
+anchor-sha256: tests/unit/CMakeLists.txt a89f02ee74ea57792d76ee3f4e5c2f74f3a5a9676bcc352d0971acafe72e865d
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 58fddb930eac3cbed2d05e299ec10c4a8c61662b1651727edee880cb423a352b
-anchor-sha256: src/aot/xaot_bundle.c 2b56409182e3c61c130db314160dbc87c1eca8ef4d6831684b8e90b11539dcee
+anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78

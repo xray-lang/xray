@@ -829,6 +829,13 @@ static inline XrValue xrt_array_fill_value(XrValue arr_value, XrValue fill_value
                                       xr_value_to_int64_coerce(end_value));
 }
 
+static inline XrValue xrt_array_fill_all_value(XrValue arr_value, XrValue fill_value) {
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
+        return arr_value;
+    const xrt_array_t *array = (const xrt_array_t *) arr_value.ptr;
+    return xrt_array_fill_range_value(arr_value, fill_value, 0, array->length);
+}
+
 #define XRT_INDEXOF_LOOP(T)                                                                        \
     do {                                                                                           \
         const T *d = (const T *) a->data;                                                          \

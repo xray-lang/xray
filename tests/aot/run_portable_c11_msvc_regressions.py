@@ -13,6 +13,9 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 CASES = {
+    "array-fill": (
+        Path("tests/diff/cases/semantics/collections/array_member_scalar_target.xr"),
+    ),
     "fixed-array": (
         Path("tests/diff/cases/semantics/int_wrap/fixed_array_uint64_lane.xr"),
     ),
@@ -94,7 +97,12 @@ def main() -> int:
             c_text = generated.read_text(encoding="utf-8")
             for token in ("({", "xrt_array_stack_borrow_span_view_typed", "__builtin_alloca"):
                 require(token not in c_text, f"non-portable generated-C token {token!r} in {relative}")
-            if args.family == "fixed-array":
+            if args.family == "array-fill":
+                require(
+                    "xrt_array_fill_all_value(" in c_text,
+                    f"portable scalar Array.fill owner is missing in {relative}",
+                )
+            elif args.family == "fixed-array":
                 require(
                     "xrt_fixed_index_checked(" in c_text,
                     f"fixed-array checked-index owner is missing in {relative}",

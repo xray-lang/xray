@@ -3590,7 +3590,7 @@
     "legacy_translation": "forbidden"
   },
   "schema": 1,
-  "source_tree_fingerprint": "aef9d1c0016c18e2dc0d485e789eeeea39b27ae19d8da1b3477a6a8adcc928b4",
+  "source_tree_fingerprint": "d0db02e0d9aba1e252cf279ca57b6f04f995c8a0265b93c5e81703ddcfb346a4",
   "tagged_frame_sites": [
     {
       "path": "src/vm/xr_typed_dispatch.c",

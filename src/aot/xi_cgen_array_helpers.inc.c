@@ -5971,6 +5971,15 @@ static bool emit_typed_array_fill_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
 
     const char *conv_suffix = emit_conversion_prefix(out, call->type, XR_REP_TAGGED,
                                                      cg_value_plan_storage_rep(ctx, call));
+    if (!bulk || bulk->action == XAOT_BULK_RUNTIME_HELPER) {
+        fprintf(out, "xrt_array_fill_all_value(");
+        emit_value_as_rep_ctx(ctx, out, call->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep_ctx(ctx, out, call->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
+        return true;
+    }
     fprintf(out, "({ xrt_array_t *_a = ");
     emit_typed_array_ptr_expr(ctx, out, f, call->args[0], prefix);
     bool zero_bits = cg_array_fill_value_is_zero_bits_literal(call->args[1]);

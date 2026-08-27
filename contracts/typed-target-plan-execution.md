@@ -178,6 +178,15 @@ builder and verifier consume SemanticPlan/TargetPlan authority directly; the
 VM never reads an AOT CEmission recipe and never derives an executable answer
 from a selector spelling.
 
+Generic shared-value and owner-forward layout intents do not invent Array
+storage. When the exact SemanticPlan value type is `Array<T>`, production
+construction projects the element storage from that semantic type and the
+independent verifier reconstructs the same judgement. `NONE`, a stale tagged
+producer hint, or a different element family is invalid even when adjacent
+rows are re-fingerprinted. This layout rule grants no additional typed
+instruction family; execution remains unavailable until a complete family
+owns the corresponding rows.
+
 The second executable family adds only non-suspending SOURCE_EXPORT calls whose
 parameters and result are exact signed `i64`, whose ownership is trivial, and
 whose adapter is identity. `CALL_ENTRY_I64` names a dense expectation row, not
@@ -774,7 +783,7 @@ anchor-sha256: src/plan/target/xr_target_plan.h 3c108d888c2506d80d5a9237c96ac00f
 anchor-sha256: src/plan/target/xr_target_plan.c 69530ab3b48a3ea3ef81d4b1d151f3d46ee8f6ac38d86b32e998bb0ee9a9ceb0
 anchor-sha256: src/plan/target/xr_target_plan_internal.h 98b93650f62e5cfae811bbd8e357eccc5adbc316631a35de580358bfc11a038b
 anchor-sha256: src/plan/target/xr_target_builder.h 4d3d604216a064eb6be4a787afda9ee168f057dc640b5c6065f63f2829e6d05e
-anchor-sha256: src/plan/target/xr_target_builder.c 55d765906844ad837b555c89fe4ae1b6f8b7598819ec7658f6a0565c65365d60
+anchor-sha256: src/plan/target/xr_target_builder.c 76b3fac066b1b5b9313f0537be787808fe7c2d5c3e7c4d82deb8cdec828844c5
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 654643cf477b27b7518d6cfbace38c19c0d1760a699f1020a153a88ee148368d
 anchor-sha256: src/plan/target/xr_target_verify.c 1e9169019d391a5e3e057326debe1c75d60bac3581b88f0d38acd42713ca3b0a
@@ -804,13 +813,13 @@ anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c f1abf76034
 anchor-sha256: tests/fuzz/fuzz_xtp_decode.c 8ef332c992bb8e44a2dbe06bd5463458ff84df41d9088d0596ace17e5e806d94
 anchor-sha256: tests/unit/runtime/test_typed_frame_runtime_archive.c 3f49976a53aa6422da074107bedd4e0afd428fc76018bc4c44f144a8bc33a61e
 anchor-sha256: scripts/check_coroutine_lifecycle_projection.py 74fdc88cea8045a258dae39f2194839ec54f3a2b8759fa56f1b537226fdbc1a2
-anchor-sha256: tests/unit/ir/test_xi_cgen.c c5ba83e1522437c77a2a35fa9ae13981d2ddf5e7741225466e5037453b5f02c4
+anchor-sha256: tests/unit/ir/test_xi_cgen.c 004f45ee46c24d84ddbb6acf4fc3d0d1aa0191b0fe300fba0f9abdbb87ca40a4
 anchor-sha256: tests/unit/ir/test_xi_opt.c 96b1ceb9789cd6b7742bcf29757087e2a27c144cf1107eaa70c0547295086beb
 anchor-sha256: tests/unit/runtime/test_vm_decoded_cache_runtime_archive.c 8e8a3b987ae81542254495a889b838d7a325a9a2e06d5c80092bc9db92373aa5
 anchor-sha256: include/xray_runtime_generation.h e2540f1ff42e095c1a7e5a27387a74fbb26d778ead89846acc502b4b542da631
 anchor-sha256: src/runtime/xr_module_generation.c 9d70db67ddea2319c30099b5c2cfad2259677e3e3471f337cf8a0256595f2e30
 anchor-sha256: tests/unit/runtime/test_runtime_generation.c f4422072f94b01c4411b4677cb62ba72304553753c9225074d981b6b20f43fa3
-anchor-sha256: CMakeLists.txt 41a56b040c944ac96d7df0025fcf6a22ec525b5cebcf5b6f833d0f2ac5426c3a
+anchor-sha256: CMakeLists.txt eea892fed2bb98f5b322941efe398ce60c47516ec9ea58819e98aed34ac19938
 anchor-sha256: xisa/target/vm_ops.def ee61754242000fbf44b53a443e07549748e2881e7f980052214c145253c880cf
 anchor-sha256: tools/xisagen/xisagen.py c372916d8f0581e5ea62dcc78c6f3178ae457d253ecfa89a122faf5823251d71
 anchor-sha256: src/plan/target/xr_target_entry_abi.h 80cd119cbc095ddfddbf95ff5085fbaa23659256feb8d18a36e43416013747ea
@@ -827,29 +836,29 @@ anchor-sha256: src/runtime/object/xarray.c 102a52b887e0e777a79da3c78be8e025e1b28
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c 934176e9e784ccf2588fcb7bc205042e0a8530e394fc003355428976c56ebfd1
+anchor-sha256: tests/unit/plan/test_target_plan.c 8d85c6aa1680760a5d488df1f0843e10e6d833394474074dc235e0ce4f0cab0e
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c ad03d77d583441969756a1f2d1be2cde504624c0cd4ed26ddae96a50c8a79ed5
-anchor-sha256: tests/unit/CMakeLists.txt 836bea1878e361715d3d64ad2be0478d86895a926d512db6018a7af1316ab244
+anchor-sha256: tests/unit/CMakeLists.txt a89f02ee74ea57792d76ee3f4e5c2f74f3a5a9676bcc352d0971acafe72e865d
 anchor-sha256: src/aot/xaot_boundary.h e36d4576dbd11c6b321bb22d339a779820ed4962304bab20840a83b25c1085da
 anchor-sha256: src/aot/xaot_boundary.c 58fddb930eac3cbed2d05e299ec10c4a8c61662b1651727edee880cb423a352b
-anchor-sha256: src/aot/xaot_bundle.c 2b56409182e3c61c130db314160dbc87c1eca8ef4d6831684b8e90b11539dcee
+anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78
 anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759eb00fd65b40b648f0fc7c661
-anchor-sha256: src/aot/xaot_driver.c 225c535b8b9ac5751ad5d413712105c446910244593be7c0a9f44a4c8f54fe32
-anchor-sha256: src/aot/xaot_prepare.c 9a1613fb8d49402b3bf7beca936fbff9a4c4f4b4245db8b8bd7bd4d3c5590118
-anchor-sha256: src/aot/xaot_verify.c be9e8104fb8943f8f65e921a9479c3e5de7774f6560ec124694ab8dd7c605a49
+anchor-sha256: src/aot/xaot_driver.c c73c334d145d7acf03bbe210f3ac763ff2d625cc142a6b7f5ba83fafeaf9014b
+anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94fedf203659abda9c8ecca6d
+anchor-sha256: src/aot/xaot_verify.c 993d814044a131d6b6405bd06f621b7c74e37a0310c3db90677289244582701b
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h 91e0881d324bfd26bfb1d3e26877c9b07b5dbe5de3f7ef7fdee2882d030d9332
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 0db57c7d713d5ccc41bcc480ef9fd66e50967c929ffb7532217b68baf0fd11d9
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c dbf75d9642a2e927ecf1396ae3e039060567576ef734dfb7405a1246151a3739
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
-anchor-sha256: src/aot/xi_cgen.c 46ba3391cdf82750f2f0259f10dbf80a1cd0d4b03ddf8bc2a05a6376cf32ff69
+anchor-sha256: src/aot/xi_cgen.c d1afd5c1fe6e96dae59e4b2e0a42f12f8b1a5b25a3f531cd111821b58e09a789
 anchor-sha256: src/aot/xi_cgen_call_resolve.inc.c 518a2f1e2ab3425448e95f5112920d7b20abda109827419f6c728a4dbe66de06
 anchor-sha256: src/aot/xi_cgen_import_helpers.inc.c 30076f1af20caef31c12ed09d9a7b99c81e9dbc0882090f4f043f306a8627bb3
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c d2ff150f8974ba28f6392b6db1df6f46cf4d20242451515ce8ea73d3d9fcc899
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 40ee4f36cea8e202ffb21bc45c542b2815e56500e832ce04a3ab9b22c9a8f9b1
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c684556117c14fe6aa0a1fe4bfbf29d9d713dc65bfe0a638321d43ca15a7d117
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2686f615976867b7658f3f7976c8d73debe9d6444b55a32bc6a3a98b5bd5b35c
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
 anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3faed709ec5d779d5df0778bae33cd67fd8d86f094ef1007ae1d5ac450387398
-anchor-sha256: tests/unit/aot/test_xaot_driver.c 067bc64b28de1e058dc91b49bd78d80c290bfdab73cd97bfdb3e2fc98920339d
+anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687
