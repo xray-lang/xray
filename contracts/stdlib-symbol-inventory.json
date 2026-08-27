@@ -11290,7 +11290,7 @@
     },
     {
       "module": "os",
-      "symbol": "__homedir",
+      "symbol": "__systemHomedir",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
@@ -11299,8 +11299,8 @@
       "leaf_class": "unclassified",
       "leaf_reason": "proposed host_abi_leaf: operating-system ABI boundary",
       "plan_coverage": "native_binding",
-      "vm_binding": "os_homedir",
-      "aot_binding": "xrt_os_homedir",
+      "vm_binding": "os_system_homedir",
+      "aot_binding": "xrt_os_system_homedir",
       "covered_c_deletion": "stdlib/os/os.c"
     },
     {

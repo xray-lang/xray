@@ -113,29 +113,6 @@ static inline const char *xr_os_core_tmpdir(XrOsCoreGetenvFn getenv_fn, void *ct
 #endif
 }
 
-static inline const char *xr_os_core_homedir(XrOsCoreGetenvFn getenv_fn, void *env_ctx,
-                                             XrOsCoreStringFn system_homedir_fn, void *system_ctx) {
-    if (getenv_fn) {
-        const char *home = getenv_fn(env_ctx, "HOME");
-        if (xr_os_core_has_env_value(home))
-            return home;
-
-#ifdef XR_OS_WINDOWS
-        home = getenv_fn(env_ctx, "USERPROFILE");
-        if (xr_os_core_has_env_value(home))
-            return home;
-#endif
-    }
-
-    if (system_homedir_fn) {
-        const char *home = system_homedir_fn(system_ctx);
-        if (xr_os_core_has_env_value(home))
-            return home;
-    }
-
-    return NULL;
-}
-
 static inline bool xr_os_core_environ_entry(const char *entry, XrOsCoreEnvEntryFn fn, void *ctx) {
     if (!entry || !fn)
         return false;

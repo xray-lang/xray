@@ -2011,11 +2011,11 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __homedir {
+  fn __systemHomedir {
     signature: "(): string?"
     doc: "Get user home directory"
-    vm: "os_homedir"
-    aot: "xrt_os_homedir"
+    vm: "os_system_homedir"
+    aot: "xrt_os_system_homedir"
     argc: 0
     arg_spec: ""
     aot_direct: true

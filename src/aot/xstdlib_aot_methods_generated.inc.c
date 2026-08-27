@@ -116,7 +116,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"os", "__hostname", 0, "xrt_os_hostname", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__tmpdir", 0, "xrt_os_tmpdir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__systemUsername", 0, "xrt_os_system_username", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"os", "__homedir", 0, "xrt_os_homedir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"os", "__systemHomedir", 0, "xrt_os_system_homedir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__uid", 0, "xrt_os_uid", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__gid", 0, "xrt_os_gid", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"os", "__cpuCount", 0, "xrt_os_cpu_count", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

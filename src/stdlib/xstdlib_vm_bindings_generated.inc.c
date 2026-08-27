@@ -246,7 +246,7 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT(module, isolate, "__hostname", os_hostname);
     XRS_EXPORT(module, isolate, "__tmpdir", os_tmpdir);
     XRS_EXPORT(module, isolate, "__systemUsername", os_system_username);
-    XRS_EXPORT(module, isolate, "__homedir", os_homedir);
+    XRS_EXPORT(module, isolate, "__systemHomedir", os_system_homedir);
     XRS_EXPORT(module, isolate, "__uid", os_uid);
     XRS_EXPORT(module, isolate, "__gid", os_gid);
     XRS_EXPORT(module, isolate, "__cpuCount", os_cpuCount);
