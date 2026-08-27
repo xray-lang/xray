@@ -10110,6 +10110,11 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
     uint32_t operation_count = (uint32_t) xr_semantic_plan_operation_count(ctx->semantic);
     bool survey = rep_survey_enabled();
     uint32_t refused_operands = 0;
+    /* Successful adapter requests clear the shared diagnostic. A survey keeps
+     * walking after a refusal, so preserve its first precise failure and
+     * restore it if the completed walk still contains refused operands. */
+    XrAotRefinementDiagnostic first_refusal = {0};
+    bool has_first_refusal = false;
     for (uint32_t i = 0; i < operation_count; i++) {
         const XrSemanticOperationRecord *operation = xr_semantic_plan_operation(ctx->semantic, i);
         if (!operation || operation->operand_begin > operand_count ||
@@ -10144,6 +10149,10 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                     XR_REP_COUNT);
                 set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                          ctx->record_count, source_value, i);
+                if (!has_first_refusal && ctx->diag) {
+                    first_refusal = *ctx->diag;
+                    has_first_refusal = true;
+                }
                 refused_operands++;
                 if (!survey)
                     return false;
@@ -10183,6 +10192,10 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                               XR_REP_COUNT);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, block->control_value, XR_SEMANTIC_INDEX_NONE);
+            if (!has_first_refusal && ctx->diag) {
+                first_refusal = *ctx->diag;
+                has_first_refusal = true;
+            }
             refused_operands++;
             if (!survey)
                 return false;
@@ -10202,6 +10215,10 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
                               XR_REP_COUNT);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION_SCHEMA_UNAVAILABLE,
                      ctx->record_count, block->control_value, XR_SEMANTIC_INDEX_NONE);
+            if (!has_first_refusal && ctx->diag) {
+                first_refusal = *ctx->diag;
+                has_first_refusal = true;
+            }
             refused_operands++;
             if (!survey)
                 return false;
@@ -10214,6 +10231,8 @@ static bool authority_collect_obligations_indexed(CollectContext *ctx,
             return false;
     }
     if (refused_operands) {
+        if (has_first_refusal && ctx->diag)
+            *ctx->diag = first_refusal;
         fprintf(stderr, "[refusal-survey] refinement operands refused: %u\n", refused_operands);
         return false;
     }
