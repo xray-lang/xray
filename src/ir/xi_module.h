@@ -20,6 +20,7 @@
 
 struct XrProgramSemanticClosure;
 struct XrScalarCallDecision;
+struct XrI64OverflowDecisionTable;
 struct XrTargetProfile;
 
 /* ========== Module Metadata ========== */
@@ -103,6 +104,7 @@ typedef struct XiModule {
     struct XrProgramSemanticClosure *program_semantic_closure;
     uint32_t psc_module_index;
     struct XrScalarCallDecision *scalar_call_decision;
+    struct XrI64OverflowDecisionTable *i64_overflow_decisions;
     struct XrTargetProfile *scalar_target_profile;
 } XiModule;
 

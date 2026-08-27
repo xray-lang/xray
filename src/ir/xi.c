@@ -14,6 +14,7 @@
 
 #include "xi.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
+#include "../plan/target/xr_i64_overflow_decision.h"
 #include "../plan/target/xr_target_profile.h"
 #include "xi_evidence.h"
 #include "xi_loop.h"
@@ -788,6 +789,11 @@ XR_FUNC void xi_module_free(XiModule *mod) {
         return;
     xr_free(mod->scalar_call_decision);
     mod->scalar_call_decision = NULL;
+    if (mod->i64_overflow_decisions) {
+        xr_i64_overflow_decision_dispose(mod->i64_overflow_decisions);
+        xr_free(mod->i64_overflow_decisions);
+        mod->i64_overflow_decisions = NULL;
+    }
     xr_target_profile_free(mod->scalar_target_profile);
     mod->scalar_target_profile = NULL;
     xr_program_semantic_closure_free(mod->program_semantic_closure);

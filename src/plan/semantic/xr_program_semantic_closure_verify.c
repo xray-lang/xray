@@ -13,6 +13,7 @@
  */
 
 #include "xr_program_semantic_closure_internal.h"
+#include "xr_i64_overflow_predicate_semantics.h"
 #include "xr_scalar_call_semantics.h"
 #include "../../base/xmalloc.h"
 #include "../../base/xsha256.h"
@@ -59,6 +60,10 @@ static void verifier_hash_u32(XrSHA256Context *context, uint32_t value) {
     xr_sha256_update(context, bytes, sizeof(bytes));
 }
 
+static void verifier_hash_u8(XrSHA256Context *context, uint8_t value) {
+    xr_sha256_update(context, &value, sizeof(value));
+}
+
 static void verifier_hash_u64(XrSHA256Context *context, uint64_t value) {
     uint8_t bytes[8];
     for (uint32_t i = 0; i < sizeof(bytes); i++)
@@ -95,6 +100,120 @@ static XrStableId verifier_finish_id(XrSHA256Context *context) {
     xr_sha256_final(context, digest);
     memcpy(id.bytes, digest, sizeof(id.bytes));
     return id;
+}
+
+static XrFingerprint verifier_finish_fingerprint(XrSHA256Context *context) {
+    XrFingerprint result;
+    xr_sha256_final(context, result.bytes);
+    return result;
+}
+
+static void verifier_hash_locator(XrSHA256Context *context,
+                                  XrProgramSemanticSourceLocator locator);
+
+static void verifier_overflow_hash_begin(XrSHA256Context *context, const char *domain) {
+    xr_sha256_init(context);
+    verifier_hash_framed_bytes(context, (const uint8_t *) domain, strlen(domain));
+    verifier_hash_u32(context, XR_I64_OVERFLOW_PREDICATE_SEMANTICS_SCHEMA_VERSION);
+}
+
+static XrFingerprint verifier_overflow_policy(void) {
+    XrSHA256Context context;
+    verifier_overflow_hash_begin(&context, "xray-i64-overflow-program-policy-v1");
+    verifier_hash_u32(&context, XR_I64_OVERFLOW_PREDICATE_COUNT - 1u);
+    return verifier_finish_fingerprint(&context);
+}
+
+static XrFingerprint verifier_overflow_entry_signature(void) {
+    XrSHA256Context context;
+    verifier_overflow_hash_begin(&context,
+                                 "xray-language-i64-overflow-entry-signature-v1");
+    verifier_hash_u32(&context, 2);
+    verifier_hash_u32(&context, 2);
+    verifier_hash_u8(&context, 0);
+    for (uint32_t i = 0; i < 2; i++) {
+        verifier_hash_u32(&context, XR_EXACT_SCALAR_I64);
+        verifier_hash_u8(&context, XR_PARAM_READ);
+    }
+    verifier_hash_u32(&context, XR_EXACT_SCALAR_I64);
+    return verifier_finish_fingerprint(&context);
+}
+
+static XrFingerprint verifier_overflow_entry_effect(void) {
+    XrSHA256Context context;
+    verifier_overflow_hash_begin(&context, "xray-language-i64-overflow-entry-effect-v1");
+    for (uint32_t i = 0; i < 9; i++)
+        verifier_hash_u32(&context, 0);
+    return verifier_finish_fingerprint(&context);
+}
+
+static bool verifier_overflow_builtin(XrStableId identity,
+                                      XrI64OverflowPredicateKind *kind_out) {
+    if (kind_out)
+        *kind_out = XR_I64_OVERFLOW_PREDICATE_INVALID;
+    for (uint32_t raw = XR_I64_OVERFLOW_PREDICATE_ADD;
+         raw < XR_I64_OVERFLOW_PREDICATE_COUNT; raw++) {
+        uint32_t symbol = raw == XR_I64_OVERFLOW_PREDICATE_ADD
+                              ? XR_I64_OVERFLOW_METHOD_SYMBOL_ADD
+                          : raw == XR_I64_OVERFLOW_PREDICATE_SUB
+                              ? XR_I64_OVERFLOW_METHOD_SYMBOL_SUB
+                              : XR_I64_OVERFLOW_METHOD_SYMBOL_MUL;
+        XrSHA256Context context;
+        verifier_overflow_hash_begin(&context, "xray-language-i64-overflow-builtin-v1");
+        verifier_hash_u32(&context, symbol);
+        XrStableId expected = verifier_finish_id(&context);
+        if (verifier_id_equal(identity, expected)) {
+            if (kind_out)
+                *kind_out = (XrI64OverflowPredicateKind) raw;
+            return true;
+        }
+    }
+    return false;
+}
+
+static XrFingerprint verifier_overflow_call_contract(XrI64OverflowPredicateKind kind) {
+    uint32_t symbol = kind == XR_I64_OVERFLOW_PREDICATE_ADD
+                          ? XR_I64_OVERFLOW_METHOD_SYMBOL_ADD
+                      : kind == XR_I64_OVERFLOW_PREDICATE_SUB
+                          ? XR_I64_OVERFLOW_METHOD_SYMBOL_SUB
+                          : XR_I64_OVERFLOW_METHOD_SYMBOL_MUL;
+    XrSHA256Context context;
+    verifier_overflow_hash_begin(&context,
+                                 "xray-language-i64-overflow-call-contract-v1");
+    verifier_hash_u32(&context, symbol);
+    verifier_hash_u32(&context, XR_EXACT_SCALAR_I64);
+    verifier_hash_u32(&context, XR_EXACT_SCALAR_I64);
+    verifier_hash_u32(&context, 1u);
+    verifier_hash_u32(&context, XR_PARAM_READ);
+    verifier_hash_u32(&context, 0u);
+    return verifier_finish_fingerprint(&context);
+}
+
+static XrStableId verifier_overflow_function_declaration(
+    const XrProgramSemanticModuleRecord *module,
+    const XrProgramSemanticFunctionRecord *function) {
+    static const uint8_t domain[] = "xray-source-i64-overflow-entry-declaration-v1";
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    verifier_hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_framed_id(&context, module->module_identity);
+    verifier_hash_framed_fingerprint(&context, module->source_fingerprint);
+    verifier_hash_locator(&context, function->declaration_locator);
+    verifier_hash_framed_fingerprint(&context, function->signature_fingerprint);
+    return verifier_finish_id(&context);
+}
+
+static XrStableId verifier_overflow_function_instance(
+    XrStableId declaration, XrFingerprint signature) {
+    static const uint8_t domain[] = "xray-source-i64-overflow-entry-instance-v1";
+    XrSHA256Context context;
+    xr_sha256_init(&context);
+    verifier_hash_framed_bytes(&context, domain, sizeof(domain) - 1u);
+    verifier_hash_u32(&context, XR_PROGRAM_SEMANTIC_CLOSURE_SCHEMA_VERSION);
+    verifier_hash_framed_id(&context, declaration);
+    verifier_hash_framed_fingerprint(&context, signature);
+    return verifier_finish_id(&context);
 }
 
 static void verifier_hash_locator(XrSHA256Context *context,
@@ -680,7 +799,8 @@ static bool verify_module_rows(const XrProgramSemanticClosure *closure, char *er
             verifier_fingerprint_zero(row->export_fingerprint) ||
             ((closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL ||
               closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
-              closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL) &&
+              closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL ||
+              closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) &&
              !verifier_fingerprint_equal(row->export_fingerprint, expected_exports)) ||
             (i && verifier_id_compare(closure->modules[i - 1u].module_identity,
                                       row->module_identity) >= 0))
@@ -1001,6 +1121,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
     uint32_t scalar_callees = 0;
     uint32_t graph_entries = 0;
     uint32_t graph_exports = 0;
+    uint32_t overflow_entries = 0;
     uint32_t parameter_cursor = 0;
     for (uint32_t i = 0; i < closure->function_count; i++) {
         const XrProgramSemanticFunctionRecord *row = &closure->functions[i];
@@ -1009,12 +1130,14 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
             closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
         bool scalar = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_DIRECT_CALL;
         bool graph = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL;
-        bool typed = leaf || product || graph;
+        bool overflow = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+        bool typed = leaf || product || graph || overflow;
         bool leaf_entry = leaf && (row->flags & XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY) != 0;
         if (row->parameter_begin > closure->function_parameter_count ||
             row->parameter_count > closure->function_parameter_count - row->parameter_begin ||
             (row->parameter_count && !closure->function_parameters) ||
-            (typed ? (row->parameter_count > 1 || verifier_stable_id_zero(row->return_type))
+            (typed ? (row->parameter_count > (overflow ? 2u : 1u) ||
+                      verifier_stable_id_zero(row->return_type))
                    : (!verifier_stable_id_zero(row->return_type) || row->parameter_count != 0)))
             return reject(error, error_size, "XR_SEM_0019",
                           "concrete function signature rows are out of bounds");
@@ -1026,9 +1149,11 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
             : scalar ? verifier_scalar_signature(
                            row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 0u : 1u)
             : graph  ? verifier_scalar_signature(row->parameter_count)
+            : overflow ? verifier_overflow_entry_signature()
                      : row->signature_fingerprint;
         XrFingerprint expected_effect = (leaf || product)   ? verifier_leaf_effect()
                                         : (scalar || graph) ? verifier_scalar_effect()
+                                        : overflow ? verifier_overflow_entry_effect()
                                                             : row->effect_fingerprint;
         int function_module = find_module(closure, row->module_identity);
         XrStableId expected_declaration = row->declaration_identity;
@@ -1049,6 +1174,11 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
                 &closure->modules[(uint32_t) function_module], row);
             expected_instance =
                 verifier_scalar_graph_function_instance(expected_declaration, expected_signature);
+        } else if (overflow && function_module >= 0) {
+            expected_declaration = verifier_overflow_function_declaration(
+                &closure->modules[(uint32_t) function_module], row);
+            expected_instance = verifier_overflow_function_instance(expected_declaration,
+                                                                    expected_signature);
         }
         if (verifier_stable_id_zero(row->declaration_identity) ||
             verifier_stable_id_zero(row->concrete_instance_identity) ||
@@ -1057,7 +1187,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
             verifier_fingerprint_zero(row->effect_fingerprint) ||
             !verifier_fingerprint_equal(row->signature_fingerprint, expected_signature) ||
             !verifier_fingerprint_equal(row->effect_fingerprint, expected_effect) ||
-            ((leaf || product || scalar || graph) &&
+            ((leaf || product || scalar || graph || overflow) &&
              (!verifier_id_equal(row->declaration_identity, expected_declaration) ||
               !verifier_id_equal(row->concrete_instance_identity, expected_instance))) ||
             (leaf && (find_type(closure, row->return_type) < 0 ||
@@ -1085,6 +1215,14 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
                             ? row->parameter_count != 0
                             : row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED ||
                                   row->parameter_count != 1))) ||
+            (overflow &&
+             (find_type(closure, row->return_type) < 0 ||
+              closure->types[find_type(closure, row->return_type)].kind !=
+                  XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
+              closure->types[find_type(closure, row->return_type)].exact_scalar !=
+                  XR_EXACT_SCALAR_I64 ||
+              row->capability_mask != 0 || row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+              row->parameter_count != 2)) ||
             function_module < 0 ||
             (row->flags &
              ~(XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY | XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED)) != 0 ||
@@ -1107,7 +1245,7 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
                 memcmp(record->reserved, (uint8_t[3]) {0}, sizeof(record->reserved)) != 0 ||
                 type < 0 ||
                 (leaf ? closure->types[type].kind != XR_PROGRAM_SEMANTIC_TYPE_LEAF_VALUE_AGGREGATE
-                      : !graph ||
+                      : (!graph && !overflow) ||
                             closure->types[type].kind != XR_PROGRAM_SEMANTIC_TYPE_EXACT_SCALAR ||
                             closure->types[type].exact_scalar != XR_EXACT_SCALAR_I64) ||
                 !verifier_id_equal(record->type, row->return_type))
@@ -1146,6 +1284,8 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
             graph_entries += row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
             graph_exports += row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED ? 1u : 0u;
         }
+        if (overflow)
+            overflow_entries += row->flags == XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ? 1u : 0u;
     }
     if (parameter_cursor != closure->function_parameter_count)
         return reject(error, error_size, "XR_SEM_0019",
@@ -1166,6 +1306,10 @@ static bool verify_function_rows(const XrProgramSemanticClosure *closure, char *
         (graph_entries != 1u || graph_exports != 1u || roots != 2u))
         return reject(error, error_size, "XR_SEM_0019",
                       "scalar module graph requires one entry and one exported unary function");
+    if (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
+        (overflow_entries != 1u || roots != 1u))
+        return reject(error, error_size, "XR_SEM_0019",
+                      "overflow predicate family requires one exact entry function");
     return roots > 0 || reject(error, error_size, "XR_SEM_0019",
                                "program closure requires a concrete entry or export root");
 }
@@ -1176,6 +1320,10 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
         const XrProgramSemanticCallRecord *row = &closure->calls[i];
         int caller = find_function(closure, row->caller_function);
         int callee = find_function(closure, row->callee_function);
+        bool overflow = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
+        XrI64OverflowPredicateKind overflow_kind = XR_I64_OVERFLOW_PREDICATE_INVALID;
+        bool overflow_builtin = overflow && verifier_overflow_builtin(row->callee_function,
+                                                                      &overflow_kind);
         XrFingerprint expected_contract = row->contract_fingerprint;
         if (callee >= 0 &&
             (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_AGGREGATE_DIRECT_CALL ||
@@ -1190,6 +1338,8 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
                     closure->family ==
                         XR_PROGRAM_SEMANTIC_FAMILY_SCALAR_MODULE_GRAPH_DIRECT_CALL)) {
             expected_contract = verifier_scalar_call_contract();
+        } else if (overflow_builtin) {
+            expected_contract = verifier_overflow_call_contract(overflow_kind);
         }
         if (verifier_stable_id_zero(row->callsite_identity) ||
             verifier_fingerprint_zero(row->contract_fingerprint) ||
@@ -1197,12 +1347,14 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
                  ? verifier_stable_id_zero(row->resolver_binding)
                  : !verifier_stable_id_zero(row->resolver_binding)) ||
             !verifier_fingerprint_equal(row->contract_fingerprint, expected_contract) ||
-            !verifier_call_locator_valid(row->locator) || caller < 0 || callee < 0 ||
+            !verifier_call_locator_valid(row->locator) || caller < 0 ||
+            (!overflow_builtin && callee < 0) ||
             !verifier_id_equal(row->id, verifier_call_identity(closure->policy_fingerprint, row)))
             return reject(error, error_size, "XR_SEM_0013",
                           "resolved call identity is incomplete or non-canonical");
         const XrProgramSemanticFunctionRecord *caller_row = &closure->functions[(uint32_t) caller];
-        const XrProgramSemanticFunctionRecord *callee_row = &closure->functions[(uint32_t) callee];
+        const XrProgramSemanticFunctionRecord *callee_row =
+            callee >= 0 ? &closure->functions[(uint32_t) callee] : NULL;
         if (!verifier_locator_contains(caller_row->declaration_locator, row->locator))
             return reject(error, error_size, "XR_SEM_0019",
                           "resolved call locator is outside its caller declaration");
@@ -1226,6 +1378,11 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
              callee_row->parameter_count != 1))
             return reject(error, error_size, "XR_SEM_0019",
                           "scalar module call does not join entry to exported unary function");
+        if (overflow &&
+            (caller_row->flags != XR_PROGRAM_SEMANTIC_FUNCTION_ENTRY ||
+             caller_row->parameter_count != 2 || !overflow_builtin || callee_row))
+            return reject(error, error_size, "XR_SEM_0019",
+                          "overflow call does not join the exact builtin authority");
         int caller_module_index = find_module(closure, caller_row->module_identity);
         if (caller_module_index < 0 ||
             !verifier_id_equal(
@@ -1250,8 +1407,8 @@ static bool verify_call_rows(const XrProgramSemanticClosure *closure, char *erro
             return reject(error, error_size, "XR_SEM_0013",
                           "resolved call identity is incomplete or non-canonical");
         XrStableId caller_module = caller_row->module_identity;
-        XrStableId callee_module = closure->functions[(uint32_t) callee].module_identity;
-        if (!verifier_id_equal(caller_module, callee_module) &&
+        XrStableId callee_module = callee_row ? callee_row->module_identity : caller_module;
+        if (!overflow && !verifier_id_equal(caller_module, callee_module) &&
             !has_direct_dependency(closure, caller_module, callee_module))
             return reject(error, error_size, "XR_SEM_0019",
                           "cross-module call lacks an exact dependency contract");
@@ -1442,6 +1599,7 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure, char *err
         return reject(error, error_size, "XR_EXEC_5003",
                       "program call graph verification allocation failed");
     }
+    bool overflow = closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     for (uint32_t i = 0; i < closure->call_count; i++) {
         uint32_t caller = (uint32_t) find_function(closure, closure->calls[i].caller_function);
         begin[caller + 1u]++;
@@ -1460,8 +1618,9 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure, char *err
     memcpy(cursor, begin, (size_t) count * sizeof(*cursor));
     for (uint32_t i = 0; i < closure->call_count; i++) {
         uint32_t caller = (uint32_t) find_function(closure, closure->calls[i].caller_function);
-        targets[cursor[caller]++] =
-            (uint32_t) find_function(closure, closure->calls[i].callee_function);
+        if (!overflow)
+            targets[cursor[caller]++] =
+                (uint32_t) find_function(closure, closure->calls[i].callee_function);
     }
     xr_free(cursor);
     uint32_t head = 0;
@@ -1474,7 +1633,7 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure, char *err
     }
     while (head < tail) {
         uint32_t node = queue[head++];
-        for (uint32_t edge = begin[node]; edge < begin[node + 1u]; edge++) {
+        for (uint32_t edge = begin[node]; !overflow && edge < begin[node + 1u]; edge++) {
             uint32_t target = targets[edge];
             if (!reachable[target]) {
                 reachable[target] = 1u;
@@ -1495,7 +1654,7 @@ static bool verify_call_graph(const XrProgramSemanticClosure *closure, char *err
 
 static void verifier_closure_fingerprint(const XrProgramSemanticClosure *closure,
                                          XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-program-semantic-closure-v6\0";
+    static const uint8_t domain[] = "xray-program-semantic-closure-v7\0";
     XrSHA256Context context;
     xr_sha256_init(&context);
     xr_sha256_update(&context, domain, sizeof(domain) - 1u);
@@ -1673,7 +1832,14 @@ bool xr_program_semantic_closure_verify(const XrProgramSemanticClosure *closure,
           closure->function_count != 2 || closure->function_parameter_count != 1 ||
           closure->call_count != 1 ||
           !verifier_fingerprint_equal(closure->policy_fingerprint,
-                                      verifier_scalar_graph_policy()))))
+                                      verifier_scalar_graph_policy()))) ||
+        (closure->family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE &&
+         (closure->module_count != 1 || closure->dependency_count != 0 ||
+          closure->type_count != 1 || closure->type_field_count != 0 ||
+          closure->function_count != 1 || closure->function_parameter_count != 2 ||
+          closure->call_count == 0 ||
+          !verifier_fingerprint_equal(closure->policy_fingerprint,
+                                      verifier_overflow_policy()))))
         return reject(error, error_size, "XR_SEM_0019",
                       "program semantic family does not match its typed facts");
     if (!verify_module_rows(closure, error, error_size) ||

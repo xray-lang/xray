@@ -19,6 +19,7 @@
 #include "base/xmemstream.h"
 #include "base/xsha256.h"
 #include "frontend/analyzer/xa_program_semantic_closure.h"
+#include "frontend/analyzer/xa_i64_overflow_program.h"
 #include "frontend/analyzer/xa_typed_program.h"
 #include "frontend/analyzer/xanalyzer.h"
 #include "ir/xi_arc.h"
@@ -85,6 +86,14 @@ static const char kLeafProductXiSource[] =
     "fn validatePath() -> (i64, i64, u8, i64, i64, i64) {\n"
     "    var value = scan()\n"
     "    return (value.0, value.1, value.2, value.3, value.4, value.5)\n"
+    "}\n";
+
+static const char kI64OverflowPredicateSource[] =
+    "fn overflow(a: i64, b: i64) -> i64 {\n"
+    "    if (a.addOverflows(b)) { return 1 }\n"
+    "    if (a.subOverflows(b)) { return 2 }\n"
+    "    if (a.mulOverflows(b)) { return 3 }\n"
+    "    return 0\n"
     "}\n";
 
 typedef struct ScalarFixture {
@@ -1470,12 +1479,13 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     XiProgramSemanticInput input = {
         .closure = closure,
         .decision = &decision,
+        .target_profile = profile,
     };
     XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, profile, 0,
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, &decision, NULL, profile, 0,
                                                  error, sizeof(error)));
     ASSERT_NULL(closure);
     bool verified = xi_program_semantic_verify(root->module, profile, error, sizeof(error));
@@ -1876,7 +1886,7 @@ TEST(stable_rows_survive_mutation_and_ownership_gates) {
     ASSERT_TRUE(
         build_authorities(&fixture, profile, &second, &second_decision, error, sizeof(error)));
     XrProgramSemanticClosure *second_owner = second;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, profile,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &second, &second_decision, NULL, profile,
                                                   0, error, sizeof(error)));
     ASSERT_TRUE(second == second_owner);
     xr_program_semantic_closure_free(second);
@@ -1918,7 +1928,7 @@ TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected) {
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
     char error[512] = {0};
     ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
                                          sizeof(error)));
     ASSERT_NULL(closure);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
@@ -2057,7 +2067,7 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         (XrProgramSemanticClosure *) foreign_authority_published);
     ASSERT_NOT_NULL(foreign_authority);
     XrProgramSemanticClosure *foreign_authority_owner = foreign_authority;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL, 0,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_authority, NULL, NULL, NULL, 0,
                                                   error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_authority, foreign_authority_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
@@ -2067,14 +2077,14 @@ TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates) {
         xr_program_semantic_closure_retain((XrProgramSemanticClosure *) foreign_source_published);
     ASSERT_NOT_NULL(foreign_source);
     XrProgramSemanticClosure *foreign_source_owner = foreign_source;
-    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, 0,
+    ASSERT_FALSE(xi_module_take_program_semantics(root->module, &foreign_source, NULL, NULL, NULL, 0,
                                                   error, sizeof(error)));
     ASSERT_EQ_PTR(foreign_source, foreign_source_owner);
     ASSERT_NULL(root->module->program_semantic_closure);
     xr_program_semantic_closure_free(foreign_source);
 
     ASSERT_TRUE(
-        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+        xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
                                          sizeof(error)));
     ASSERT_NULL(closure);
     bool xi_verified = xi_program_semantic_verify(root->module, NULL, error, sizeof(error));
@@ -2466,7 +2476,7 @@ TEST(leaf_product_uses_canonical_construct_project_joins) {
     ASSERT_NOT_NULL(root);
     ASSERT_NOT_NULL(root->module);
     ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
-    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, 0, error,
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, NULL, NULL, 0, error,
                                                  sizeof(error)));
     ASSERT_NULL(closure);
     ASSERT_TRUE(xi_program_semantic_verify(root->module, NULL, error, sizeof(error)));
@@ -2744,11 +2754,164 @@ TEST(retain_rejects_mutable_closure) {
     xr_program_semantic_closure_free(collecting);
 }
 
+TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
+    XrCompilerSessionConfig session_config = {0};
+    XrCompilerSession *session = xr_compiler_session_new(&session_config);
+    ASSERT_NOT_NULL(session);
+    ScalarFixture fixture;
+    ASSERT_TRUE(fixture_analyze(&fixture, session, "xi-i64-overflow", kI64OverflowPredicateSource));
+    char error[512] = {0};
+    XrProgramSemanticClosure *source_closure = NULL;
+    XaProgramSemanticClosurePublishStatus source_status = xa_i64_overflow_program_publish(
+        fixture.analyzer, fixture.spec->ast, fixture.spec, &source_closure, error, sizeof(error));
+    ASSERT_EQ_UINT(source_status, XA_PROGRAM_SEMANTIC_CLOSURE_READY);
+    ASSERT_NOT_NULL(source_closure);
+    xr_program_semantic_closure_free(source_closure);
+    ASSERT_TRUE(fixture_publish(&fixture));
+    const XrProgramSemanticClosure *published =
+        xa_typed_program_program_semantic_closure(fixture.typed);
+    ASSERT_NOT_NULL(published);
+    ASSERT_EQ_UINT(xr_program_semantic_closure_family(published),
+                   XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE);
+    XrProgramSemanticClosure *closure =
+        xr_program_semantic_closure_retain((XrProgramSemanticClosure *) published);
+    ASSERT_NOT_NULL(closure);
+    memset(error, 0, sizeof(error));
+    XrTargetProfile *profile = NULL;
+    ASSERT_TRUE(xr_runtime_target_profile_build_native_hosted(&profile, error, sizeof(error)));
+    XrI64OverflowDecisionTable decisions = {0};
+    ASSERT_TRUE(xr_i64_overflow_decision_build(
+        closure, xr_program_semantic_closure_generation_id(closure), profile, &decisions, error,
+        sizeof(error)));
+    XiProgramSemanticInput input = {
+        .closure = closure,
+        .overflow_decisions = &decisions,
+        .target_profile = profile,
+        .module_index = 0,
+    };
+    ASSERT_TRUE(xi_program_semantic_input_is_consistent(&input, error, sizeof(error)));
+    XiFunc *root = xi_lower_program(fixture.typed, NULL, false, &input);
+    ASSERT_NOT_NULL(root);
+    ASSERT_NOT_NULL(root->module);
+    ASSERT_TRUE(xi_module_set_identity(root->module, fixture.spec->canonical));
+    ASSERT_TRUE(xi_module_take_program_semantics(root->module, &closure, NULL, &decisions,
+                                                 profile, 0, error, sizeof(error)));
+    ASSERT_NULL(closure);
+    xr_i64_overflow_decision_dispose(&decisions);
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    ASSERT_EQ_UINT(root->module->nfuncs, 1);
+    XiFunc *function = root->module->functions[0];
+    ASSERT_NOT_NULL(function);
+    XiValue *calls[3] = {NULL, NULL, NULL};
+    uint32_t call_count = 0;
+    for (uint32_t b = 0; b < function->nblocks; b++) {
+        XiBlock *block = function->blocks[b];
+        for (uint32_t i = 0; block && i < block->nvalues; i++) {
+            XiValue *value = block->values[i];
+            if (value && value->psc_call_index != XI_PSC_ROW_NONE) {
+                ASSERT_TRUE(call_count < 3);
+                calls[call_count++] = value;
+                ASSERT_EQ_UINT(value->op, XI_CALL_METHOD);
+                ASSERT_NULL(value->aux);
+                ASSERT_EQ_UINT(value->nargs, 2);
+            }
+        }
+    }
+    ASSERT_EQ_UINT(call_count, 3);
+    int64_t saved_symbol = calls[0]->aux_int;
+    calls[0]->aux_int = calls[1]->aux_int;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    calls[0]->aux_int = saved_symbol;
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    uint32_t saved_row = calls[0]->psc_call_index;
+    calls[0]->psc_call_index = calls[1]->psc_call_index;
+    ASSERT_FALSE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    calls[0]->psc_call_index = saved_row;
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+
+    dce_and_mark_tree_optimized(root);
+    ASSERT_TRUE(xi_program_semantic_verify(root->module, profile, error, sizeof(error)));
+    XrSemanticPlan *semantic = NULL;
+    ASSERT_MSG(xr_semantic_plan_build(root, &semantic, error, sizeof(error)), error);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+    ASSERT_EQ_UINT(semantic->program_function_binding_count, 1);
+    ASSERT_EQ_UINT(semantic->program_call_binding_count, 3);
+    ASSERT_EQ_UINT(semantic->call_target_count, 0);
+    for (uint32_t i = 0; i < semantic->program_call_binding_count; i++) {
+        const XrSemanticProgramCallBinding *binding =
+            &semantic->program_call_bindings[i];
+        ASSERT_EQ_UINT(binding->target_function, XR_SEMANTIC_INDEX_NONE);
+        ASSERT_EQ_UINT(binding->program_dependency, XR_SEMANTIC_INDEX_NONE);
+        ASSERT_TRUE(binding->operation < semantic->operation_count);
+        ASSERT_EQ_UINT(semantic->operations[binding->operation].opcode, XI_CALL_METHOD);
+    }
+
+    XrFingerprint original = semantic->fingerprint;
+    uint32_t first_operation = semantic->program_call_bindings[0].operation;
+    int64_t saved_immediate = semantic->operations[first_operation].semantic_immediate;
+    semantic->operations[first_operation].semantic_immediate =
+        semantic->operations[semantic->program_call_bindings[1].operation].semantic_immediate;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                 sizeof(error)));
+    semantic->operations[first_operation].semantic_immediate = saved_immediate;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_TRUE(xr_fingerprint_equal(semantic->fingerprint, original));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+
+    XrStableId saved_builtin = semantic->program_call_bindings[0].callee_program_function;
+    semantic->program_call_bindings[0].callee_program_function =
+        semantic->program_call_bindings[1].callee_program_function;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_FALSE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                 sizeof(error)));
+    semantic->program_call_bindings[0].callee_program_function = saved_builtin;
+    xr_semantic_plan_compute_fingerprint(semantic, &semantic->fingerprint);
+    ASSERT_TRUE(xr_fingerprint_equal(semantic->fingerprint, original));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+
+    saved_symbol = calls[0]->aux_int;
+    calls[0]->aux_int = calls[1]->aux_int;
+    ASSERT_TRUE(xr_semantic_plan_verify(semantic, error, sizeof(error)));
+    ASSERT_FALSE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                 sizeof(error)));
+    calls[0]->aux_int = saved_symbol;
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, semantic, profile, error,
+                                                sizeof(error)));
+
+    uint8_t *encoded = NULL;
+    size_t encoded_size = 0;
+    ASSERT_TRUE(xr_xsm_encode(semantic, &encoded, &encoded_size, error, sizeof(error)));
+    ASSERT_TRUE(encoded_size >= XR_XSM_HEADER_SIZE);
+    XrSemanticPlan *decoded = NULL;
+    ASSERT_TRUE(xr_xsm_decode(encoded, encoded_size, &decoded, error, sizeof(error)));
+    ASSERT_NOT_NULL(decoded);
+    ASSERT_TRUE(xr_semantic_plan_verify(decoded, error, sizeof(error)));
+    ASSERT_TRUE(xi_program_semantic_plan_verify(root, decoded, profile, error,
+                                                sizeof(error)));
+    ASSERT_EQ_UINT(decoded->program_call_binding_count, 3);
+    ASSERT_EQ_UINT(decoded->call_target_count, 0);
+    xr_semantic_plan_free(decoded);
+    xr_free(encoded);
+    xr_semantic_plan_free(semantic);
+    xi_func_free(root);
+    xr_target_profile_free(profile);
+    fixture_cleanup(&fixture);
+    xr_compiler_session_delete(session);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("PSC-backed Xi/SemanticPlan binding");
 RUN_TEST(stable_rows_survive_mutation_and_ownership_gates);
 RUN_TEST(leaf_aggregate_canonical_semantic_shape_mismatch_is_rejected);
 RUN_TEST(leaf_aggregate_rows_survive_xi_semantic_and_xsm_gates);
 RUN_TEST(leaf_product_uses_canonical_construct_project_joins);
+RUN_TEST(i64_overflow_program_uses_only_sealed_decision_rows);
 RUN_TEST(retain_rejects_mutable_closure);
 TEST_MAIN_END()

@@ -14,6 +14,7 @@
 #include "xi_module.h"
 #include "../plan/semantic/xr_program_semantic_closure.h"
 #include "../plan/target/xr_scalar_call_decision.h"
+#include "../plan/target/xr_i64_overflow_decision.h"
 
 struct XrTargetProfile;
 
@@ -22,12 +23,17 @@ typedef struct XiProgramSemanticInput {
     const XrProgramSemanticClosure *closure;
     /* Present only for the already-sealed scalar target family. */
     const XrScalarCallDecision *decision;
+    /* Present only for the sealed i64 overflow-predicate family. */
+    const XrI64OverflowDecisionTable *overflow_decisions;
+    const struct XrTargetProfile *target_profile;
     /* Exact local partition in closure->modules. */
     uint32_t module_index;
 } XiProgramSemanticInput;
 
 XR_FUNC bool xi_program_semantic_input_prepare(
     const XrProgramSemanticClosure *closure, const XrScalarCallDecision *decision,
+    const XrI64OverflowDecisionTable *overflow_decisions,
+    const struct XrTargetProfile *target_profile,
     const XrProgramSemanticModuleInput *source_module, XiProgramSemanticInput *out, char *error,
     size_t error_size);
 XR_FUNC bool xi_program_semantic_input_is_consistent(const XiProgramSemanticInput *input,
@@ -63,6 +69,7 @@ XR_FUNC const XiValue *xi_program_semantic_call_for_row(const XiFunc *function,
  * copy of the pointer-free decision. Failure changes neither owner. */
 XR_FUNC bool xi_module_take_program_semantics(XiModule *module, XrProgramSemanticClosure **closure,
                                               const XrScalarCallDecision *decision,
+                                              const XrI64OverflowDecisionTable *overflow_decisions,
                                               const struct XrTargetProfile *target_profile,
                                               uint32_t module_index,
                                               char *error, size_t error_size);

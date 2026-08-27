@@ -1343,6 +1343,8 @@ set(XRAY_COMPILER_BACKEND_SOURCES
     src/plan/target/xr_target_builder.c
     src/plan/target/xr_scalar_call_decision.c
     src/plan/target/xr_scalar_call_decision_verify.c
+    src/plan/target/xr_i64_overflow_decision.c
+    src/plan/target/xr_i64_overflow_decision_verify.c
     src/plan/target/xr_target_entry_abi.c
     src/plan/target/xr_target_instruction_verify.c
     src/plan/target/xr_target_plan.c

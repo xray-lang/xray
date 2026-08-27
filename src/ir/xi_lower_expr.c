@@ -6767,6 +6767,11 @@ static bool lower_scalar_i64_type_is_exact(const XrType *type) {
            type->scalar_rep == XR_NATIVE_I64;
 }
 
+static bool lower_scalar_bool_type_is_exact(const XrType *type) {
+    return type && type->kind == XR_KIND_BOOL && !type->is_nullable &&
+           (type->scalar_rep == XR_SCALAR_REP_NONE || type->scalar_rep == XR_NATIVE_BOOL);
+}
+
 /* A published program capability is a closed lowering lane. The source call is
  * joined to PSC
  * before any generic/name/member resolver can observe it; every mismatch therefore hard-fails
@@ -6786,6 +6791,9 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
     bool product = l && l->program_semantics &&
                    xr_program_semantic_closure_family(l->program_semantics->closure) ==
                        XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    bool overflow = l && l->program_semantics &&
+                    xr_program_semantic_closure_family(l->program_semantics->closure) ==
+                        XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     if (!l || !l->program_semantics || !node || !call || !call->callee ||
         call->default_arg_count != 0 || call->type_arg_count != 0 ||
         (product ? (call->arg_count != 0)
@@ -6796,6 +6804,40 @@ static XiValue *lower_program_semantic_call(XiLower *l, AstNode *node, CallExprN
         if (l)
             l->had_error = true;
         return NULL;
+    }
+    if (overflow) {
+        const MemberAccessNode *member =
+            call->callee->type == AST_MEMBER_ACCESS ? &call->callee->as.member_access : NULL;
+        const XrI64OverflowDecisionRow *decision =
+            xr_i64_overflow_decision_for_program_row(
+                l->program_semantics->overflow_decisions, call_index);
+        XiValue *receiver = member ? xi_lower_expr(l, member->object) : NULL;
+        XiValue *argument = receiver ? xi_lower_expr(l, call->arguments[0]) : NULL;
+        XrType *result_type = xi_lower_node_type(l, node);
+        if (!member || !decision || !receiver || !argument || !result_type ||
+            !lower_scalar_i64_type_is_exact(receiver->type) ||
+            !lower_scalar_i64_type_is_exact(argument->type) ||
+            !lower_scalar_bool_type_is_exact(result_type) ||
+            decision->receiver_rep != XR_MACHINE_REP_I64 ||
+            decision->argument_rep != XR_MACHINE_REP_I64 ||
+            decision->result_rep != XR_MACHINE_REP_I1 || decision->method_symbol == 0) {
+            l->had_error = true;
+            return NULL;
+        }
+        XiValue *value = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, 2);
+        if (!value) {
+            l->had_error = true;
+            return NULL;
+        }
+        value->args[0] = receiver;
+        value->args[1] = argument;
+        value->aux = NULL;
+        value->aux_int = (int64_t) decision->method_symbol << 1;
+        value->line = (uint32_t) node->line;
+        value->source_kind = locator.kind;
+        value->source_span = locator.span;
+        value->psc_call_index = call_index;
+        return value;
     }
     XiValue *callee = xi_lower_expr(l, call->callee);
     XiValue *argument = !product && callee ? xi_lower_expr(l, call->arguments[0]) : NULL;

@@ -9,6 +9,7 @@
  */
 
 #include "xi_program_semantic_plan.h"
+#include "xi_i64_overflow_semantic_plan.h"
 #include "xi_module.h"
 #include "xi_ops_gen.h"
 #include "xi_own.h"
@@ -1266,5 +1267,8 @@ bool xi_program_semantic_plan_verify(const XiFunc *root, const XrSemanticPlan *p
                                         "graph SemanticPlan cannot consume a target profile");
         return semantic_graph_partition_plan_verify(root, plan, error, error_size);
     }
+    if (family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE)
+        return xi_i64_overflow_semantic_plan_verify(root, plan, target_profile,
+                                                    error, error_size);
     return semantic_scalar_fail(error, error_size, "SemanticPlan program family is unsupported");
 }

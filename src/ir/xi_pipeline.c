@@ -1147,6 +1147,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 
     XrProgramSemanticClosure *program_closure = NULL;
     XrScalarCallDecision scalar_decision = {0};
+    XrI64OverflowDecisionTable overflow_decisions = {0};
     XiProgramSemanticInput program_input = {0};
     const XiProgramSemanticInput *program_input_ptr = NULL;
     const XrTargetProfile *target_profile = NULL;
@@ -1211,15 +1212,39 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
                                       "published PSC retention failed");
                 return gate;
             }
+            if (xr_program_semantic_closure_family(program_closure) ==
+                XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE) {
+                target_profile = session ? xr_compiler_session_target_profile(session) : NULL;
+                if (!target_profile ||
+                    !xr_target_profile_verify(target_profile, scalar_error,
+                                              sizeof(scalar_error)) ||
+                    !xr_i64_overflow_decision_build(
+                        program_closure,
+                        xr_program_semantic_closure_generation_id(program_closure),
+                        target_profile, &overflow_decisions, scalar_error,
+                        sizeof(scalar_error))) {
+                    xr_program_semantic_closure_free(program_closure);
+                    xa_typed_program_free(typed.program);
+                    xa_analyzer_pop_file_scope(analyzer, &file_scope);
+                    xi_pipeline_set_error(
+                        &gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER, XI_VERIFY_STRUCTURE,
+                        NULL, NULL, NULL,
+                        scalar_error[0] ? scalar_error
+                                        : "overflow program requires exact target decisions");
+                    return gate;
+                }
+            }
         }
     }
     if (program_closure &&
         !xi_program_semantic_input_prepare(
             program_closure, xa_typed_program_scalar_authority(typed.program) ? &scalar_decision
                                                                              : NULL,
+            overflow_decisions.sealed ? &overflow_decisions : NULL, target_profile,
             xa_typed_program_source_module_authority(typed.program), &program_input, scalar_error,
             sizeof(scalar_error))) {
         xr_program_semantic_closure_free(program_closure);
+        xr_i64_overflow_decision_dispose(&overflow_decisions);
         xa_typed_program_free(typed.program);
         xa_analyzer_pop_file_scope(analyzer, &file_scope);
         xi_pipeline_set_error(&gate, XI_PIPE_ERR_INTERNAL, XI_PIPE_STAGE_LOWER,
@@ -1248,6 +1273,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
     if (ir && program_input_ptr &&
         (!ir->module ||
          !xi_module_take_program_semantics(ir->module, &program_closure, program_input.decision,
+                                           program_input.overflow_decisions,
                                            target_profile, program_input.module_index, scalar_error,
                                            sizeof(scalar_error)) ||
          !xi_program_semantic_verify_partition(ir->module, target_profile, scalar_error,
@@ -1259,6 +1285,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
             NULL, scalar_error[0] ? scalar_error : "PSC/CallDecision to Xi verification failed");
     }
     xr_program_semantic_closure_free(program_closure);
+    xr_i64_overflow_decision_dispose(&overflow_decisions);
     xa_typed_program_free(typed.program);
 
     xa_analyzer_pop_file_scope(analyzer, &file_scope);
