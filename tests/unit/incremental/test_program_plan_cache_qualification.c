@@ -981,6 +981,34 @@ TEST(crash_temp_residue_is_never_served_and_is_reclaimed) {
     ASSERT_EQ_UINT(after.size, canonical.size);
     ASSERT_MEM_EQ(after.bytes, canonical.bytes, canonical.size);
 
+    /* The writer that died never reached its rename, so the object it was
+     * publishing does not exist and only the residue carries its name. That
+     * key must miss -- reading the residue as the object would serve a
+     * half-written plan -- and the recomputation must be able to publish over
+     * the name the dead writer left behind. */
+    ASSERT_EQ_INT(xr_fs_remove(object), 0);
+    /* The reclamation above may or may not have reached a residue this young,
+     * so re-plant it from a known state rather than depending on which. */
+    (void) xr_fs_remove(residue);
+    ASSERT_EQ_INT(xr_fs_write_new_file_sync(residue, junk, sizeof(junk) - 1u), 0);
+    XrTestProgramPlanStoreInventory orphaned;
+    xr_test_program_plan_store_inventory(root, &orphaned);
+    ASSERT_EQ_UINT(orphaned.objects, 0u);
+    ASSERT_EQ_UINT(orphaned.temps, 1u);
+
+    PlanSerialBuild recovered;
+    serial_build(&request, &recovered);
+    ASSERT_TRUE(recovered.ok);
+    ASSERT_TRUE(recovered.result.cache_load_attempted);
+    ASSERT_FALSE(recovered.result.cache_hit);
+    ASSERT_EQ_INT(recovered.result.load_status, XR_CACHE_LOAD_MISS);
+    ASSERT_TRUE(recovered.result.built);
+    ASSERT_EQ_INT(recovered.result.publish_status, XR_CACHE_PUBLISH_OK);
+    ASSERT_TRUE(recovered.result.cache_published);
+    ASSERT_EQ_UINT(recovered.size, canonical.size);
+    ASSERT_MEM_EQ(recovered.bytes, canonical.bytes, canonical.size);
+
+    serial_build_release(&recovered);
     serial_build_release(&after);
     serial_build_release(&served);
     serial_build_release(&canonical);
