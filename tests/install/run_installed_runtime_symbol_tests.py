@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -129,10 +130,13 @@ APPROVED_RUNTIME_SOURCES = frozenset({
     "src/plan/semantic/xr_semantic_ops.c",
     "src/plan/semantic/xr_semantic_plan.c",
     "src/plan/semantic/xr_semantic_verify.c",
+    "src/plan/semantic/xr_i64_overflow_predicate_semantics.c",
     "src/plan/ownership/xr_ownership_certificate.c",
     "src/plan/ownership/xr_ownership_check.c",
     "src/plan/ownership/xr_ownership_replay.c",
     "src/plan/target/xr_target_instruction_verify.c",
+    "src/plan/target/xr_i64_overflow_target_instruction.c",
+    "src/plan/target/xr_i64_overflow_target_instruction_verify.c",
     "src/plan/target/xr_target_entry_abi.c",
     "src/plan/target/xr_target_plan.c",
     "src/plan/target/xr_target_profile.c",
@@ -283,16 +287,59 @@ def member_source(member: str) -> str:
     return normalized.rsplit("/", 1)[-1]
 
 
+def member_defined_symbols(archive: Path, member: str) -> set[str]:
+    """Symbols one archive member defines.
+
+    A Unix archiver records members by basename alone, so the name cannot say
+    which of two same-named repository sources produced it. The member's own
+    symbol table can: it is the compiled output of exactly one of them.
+    """
+    tool = binlib.find_nm()
+    if not tool:
+        return set()
+    result = run([tool, "-g", str(archive)])
+    if result.returncode != 0:
+        return set()
+    defined: set[str] = set()
+    current = None
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.endswith(":"):
+            current = stripped[:-1].replace("\\", "/").rsplit("/", 1)[-1]
+            continue
+        if current != member:
+            continue
+        fields = stripped.split()
+        if len(fields) >= 2 and fields[-2] not in ("U", "u", "w", "W"):
+            defined.add(binlib.strip_underscore(fields[-1]))
+    return defined
+
+
+def source_defines_any(path: Path, symbols: set[str]) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return any(re.search(rf"\b{re.escape(symbol)}\s*\(", text) for symbol in symbols)
+
+
 def resolve_member_source(
-    member: str, owners: dict[str, set[str]]
+    member: str, owners: dict[str, set[str]],
+    archive: Path | None = None, root: Path | None = None,
 ) -> tuple[str | None, list[str]]:
     source = member_source(member)
     if "/" in source:
         return source, [source]
     candidates = sorted(owners.get(source, set()))
-    if len(candidates) != 1:
-        return None, candidates
-    return candidates[0], candidates
+    if len(candidates) == 1:
+        return candidates[0], candidates
+    if len(candidates) > 1 and archive is not None and root is not None:
+        defined = member_defined_symbols(archive, member)
+        if defined:
+            matched = [name for name in candidates
+                       if source_defines_any(root / name, defined)]
+            if len(matched) == 1:
+                return matched[0], candidates
+    return None, candidates
 
 
 def verify_member_resolution_invariants() -> None:
@@ -345,7 +392,8 @@ def inspect(archive: Path, root: Path, cc: Path) -> tuple[list[str], list[str]]:
     ambiguous_members = {}
     unexpected_members = []
     for member in members:
-        source, candidates = resolve_member_source(member, owners)
+        source, candidates = resolve_member_source(
+            member, owners, archive, root)
         if source is None:
             ambiguous_members[member] = candidates
             continue
