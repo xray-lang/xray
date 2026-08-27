@@ -295,7 +295,9 @@ static void lsp_error_callback(void *user_data, int line, int column, int end_li
 /* Drop the graph built for the previously parsed document.  The analyzer holds
  * a borrowed pointer, so clear that first: a stale graph is a dangling read on
  * the next completion. */
-static void lsp_release_module_graph(XrLspServer *server) {
+void xlsp_release_module_graph(XrLspServer *server) {
+    if (!server)
+        return;
     if (server->workspace_analyzer)
         xa_analyzer_set_graph(server->workspace_analyzer, NULL);
     if (server->module_graph) {
@@ -323,7 +325,7 @@ static void lsp_release_module_graph(XrLspServer *server) {
  * Dependencies are read from disk. An unsaved buffer is authoritative only for
  * the document being parsed, which keeps its own analysis below. */
 static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
-    lsp_release_module_graph(server);
+    xlsp_release_module_graph(server);
     if (!server->workspace_analyzer || !server->isolate || !doc || !doc->uri)
         return;
 

@@ -55,6 +55,12 @@ XR_FUNC void xlsp_extract_symbols(XrLspDocument *doc, SymbolTable *table);
 // Uses server->workspace_analyzer for cross-file analysis
 XR_FUNC void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server);
 
+/* Release the module graph built for the last parsed document, clearing the
+ * analyzer's borrowed pointer to it first. Call before tearing the analyzer
+ * down: the graph outlives a single parse on purpose, so nothing else frees
+ * it at shutdown. */
+XR_FUNC void xlsp_release_module_graph(XrLspServer *server);
+
 // Rename (moved to xlsp_rename.h / xlsp_rename.c)
 
 // Format (moved to xlsp_format.h / xlsp_format.c)
