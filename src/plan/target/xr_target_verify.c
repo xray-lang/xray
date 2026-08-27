@@ -7864,6 +7864,19 @@ static bool verify_calls(const XrTargetPlan *plan, char *error, size_t error_siz
                            "call/adapter tables do not exactly cover target authority");
 }
 
+/* The leaf value families project their scalars at eight bytes with eight-byte
+ * alignment. That projection is a property of the LP64 data layout rather than
+ * of one instruction set, and it is proven here on both LP64 hosts this
+ * compiler runs on. The other architectures stay refused until they carry
+ * their own proof: WASM32 shares the i64 layout but not the rest of the model,
+ * so the data layout alone cannot stand in for the architecture. */
+static bool machine_projects_leaf_lp64_scalars(const XrTargetMachineFacts *facts) {
+    return facts &&
+           (facts->architecture == XR_TARGET_ARCH_X86_64 ||
+            facts->architecture == XR_TARGET_ARCH_AARCH64) &&
+           facts->data_layout.i64.size == 8 && facts->data_layout.i64.align == 8;
+}
+
 static bool verify_leaf_aggregate_machine_rep(const XrTargetPlan *plan, uint16_t rep_index,
                                               uint32_t layout_index) {
     if (rep_index >= plan->machine_reps_count)
@@ -7895,9 +7908,7 @@ static bool verify_leaf_program_target_layout(const XrTargetPlan *plan,
     int aggregate_index =
         target_plan_layout_for_type(plan, shape->aggregate_binding->semantic_type);
     int scalar_index = target_plan_layout_for_type(plan, shape->scalar_binding->semantic_type);
-    if (!machine || machine->architecture != XR_TARGET_ARCH_X86_64 ||
-        machine->data_layout.i64.size != 8 || machine->data_layout.i64.align != 8 ||
-        aggregate_index < 0 || scalar_index < 0)
+    if (!machine_projects_leaf_lp64_scalars(machine) || aggregate_index < 0 || scalar_index < 0)
         return false;
     const XrTargetLayoutRecord *aggregate = &plan->layouts[aggregate_index];
     const XrTargetLayoutRecord *scalar = &plan->layouts[scalar_index];
@@ -8138,9 +8149,8 @@ static bool verify_product_target_layout(const XrTargetPlan *plan,
     int product_index = target_plan_layout_for_type(plan, shape->product->semantic_type);
     int i64_index = target_plan_layout_for_type(plan, shape->i64->semantic_type);
     int u8_index = target_plan_layout_for_type(plan, shape->u8->semantic_type);
-    if (!machine || machine->architecture != XR_TARGET_ARCH_X86_64 ||
-        machine->data_layout.i64.size != 8 || machine->data_layout.i64.align != 8 ||
-        product_index < 0 || i64_index < 0 || u8_index < 0)
+    if (!machine_projects_leaf_lp64_scalars(machine) || product_index < 0 || i64_index < 0 ||
+        u8_index < 0)
         return false;
     const XrTargetLayoutRecord *product = &plan->layouts[product_index];
     const XrTargetLayoutRecord *i64 = &plan->layouts[i64_index];
