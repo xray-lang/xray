@@ -15,9 +15,14 @@
  *   recomputation rather than a silently weaker answer.
  */
 
+#include "base/xfileio.h"
+#include "base/xmalloc.h"
+#include "os/os_dir.h"
 #include "os/os_fs.h"
 #include "os/os_temp.h"
 #include "os/os_thread.h"
+#include "os/os_time.h"
+#include <stdio.h>
 #include "plan/semantic/xr_semantic_plan.h"
 #include "plan/target/xr_target_plan.h"
 #include "program_plan_cache_fixture.h"
@@ -292,8 +297,434 @@ TEST(writer_and_readers_agree_on_one_canonical_plan) {
     harness_release(&harness);
 }
 
+/* One build run with no concurrency, used by the cases that need a known
+ * canonical answer before and after a hostile artifact is planted. */
+typedef struct PlanSerialRequest {
+    const char *root;
+    const XrSemanticPlan *semantic;
+    XrTargetProfile *profile;
+    uint64_t quota;
+    size_t max_entry;
+    bool rebuild;
+} PlanSerialRequest;
+
+typedef struct PlanSerialBuild {
+    bool store_opened;
+    bool ok;
+    XrProgramTargetPlanBuildResult result;
+    uint8_t *bytes;
+    size_t size;
+    char error[512];
+} PlanSerialBuild;
+
+static void serial_build(const PlanSerialRequest *request, PlanSerialBuild *out) {
+    memset(out, 0, sizeof(*out));
+    XrCacheStore *store =
+        xr_test_program_plan_store_open(request->root, request->quota, request->max_entry);
+    out->store_opened = store != NULL;
+    if (!store)
+        return;
+    XrTestProgramPlanBuildInput input = {
+        .semantic = request->semantic,
+        .dependencies = NULL,
+        .dependency_count = 0u,
+        .profile = request->profile,
+        .store = store,
+        .rebuild = request->rebuild,
+        .cancellation = NULL,
+    };
+    XrProgramTargetPlanBuildResult result = {0};
+    out->ok = xr_test_program_plan_build(&input, &result, out->error, sizeof(out->error));
+    if (out->ok && result.plan)
+        (void) xr_test_program_plan_encode(result.plan, &out->bytes, &out->size);
+    out->result = result;
+    out->result.plan = NULL;
+    xr_program_target_plan_build_result_release(&result);
+    xr_cache_store_close(store);
+}
+
+static void serial_build_release(PlanSerialBuild *build) {
+    xr_test_program_plan_encoded_free(build->bytes);
+    build->bytes = NULL;
+    build->size = 0;
+}
+
+/* The store names an object by its key, so the single file under a kind
+ * directory is the artifact a hostile case must corrupt in place. */
+static char *single_object_path(const char *root, const char *kind) {
+    char *directory = xr_path_join(root, kind);
+    if (!directory)
+        return NULL;
+    XrDirIter *iterator = xr_dir_open(directory);
+    char *found = NULL;
+    if (iterator) {
+        XrDirEntry entry;
+        while (xr_dir_next(iterator, &entry)) {
+            if (entry.is_dir || strncmp(entry.name, ".tmp-", 5u) == 0)
+                continue;
+            if (found) {
+                xr_free(found);
+                found = NULL;
+                break;
+            }
+            found = xr_path_join(directory, entry.name);
+        }
+        xr_dir_close(iterator);
+    }
+    xr_free(directory);
+    return found;
+}
+
+static bool replace_object(const char *path, const uint8_t *bytes, size_t size) {
+    return xr_fs_remove(path) == 0 && xr_fs_write_new_file_sync(path, bytes, size) == 0;
+}
+
+/* A refused candidate must cost a verified recomputation of the same answer.
+ * Serving a weaker plan, or accepting the planted bytes, would both show up
+ * as a byte difference against the canonical encoding. */
+static void assert_refused_then_recomputed(const PlanSerialBuild *canonical,
+                                           const PlanSerialBuild *recovered) {
+    ASSERT_TRUE(recovered->ok);
+    ASSERT_TRUE(recovered->result.cache_load_attempted);
+    ASSERT_FALSE(recovered->result.cache_hit);
+    ASSERT_TRUE(recovered->result.cache_candidate_rejected);
+    ASSERT_TRUE(recovered->result.built);
+    ASSERT_EQ_UINT(recovered->size, canonical->size);
+    ASSERT_MEM_EQ(recovered->bytes, canonical->bytes, canonical->size);
+}
+
+typedef enum PlanCancelBoundary {
+    PLAN_CANCEL_NONE = 0,      /* the build completed before the request landed */
+    PLAN_CANCEL_BEFORE_CACHE,  /* refused before the store was consulted */
+    PLAN_CANCEL_AFTER_LOAD,    /* refused after a load attempt, before building */
+    PLAN_CANCEL_AFTER_BUILD,   /* refused with a plan in hand, before publishing */
+    PLAN_CANCEL_AFTER_PUBLISH, /* refused after publication was attempted */
+    PLAN_CANCEL_BOUNDARY_COUNT,
+} PlanCancelBoundary;
+
+static PlanCancelBoundary classify_cancel(const XrProgramTargetPlanBuildResult *result) {
+    if (!result->cancelled)
+        return PLAN_CANCEL_NONE;
+    if (result->cache_publish_attempted)
+        return PLAN_CANCEL_AFTER_PUBLISH;
+    if (result->built)
+        return PLAN_CANCEL_AFTER_BUILD;
+    if (result->cache_load_attempted)
+        return PLAN_CANCEL_AFTER_LOAD;
+    return PLAN_CANCEL_BEFORE_CACHE;
+}
+
+typedef struct PlanCanceller {
+    PlanBarrier *barrier;
+    XrProgramTargetPlanCancellationToken *token;
+    uint64_t delay_ns;
+} PlanCanceller;
+
+static void *plan_canceller_main(void *argument) {
+    PlanCanceller *canceller = (PlanCanceller *) argument;
+    barrier_wait(canceller->barrier);
+    if (canceller->delay_ns)
+        xr_time_sleep_ns(canceller->delay_ns);
+    xr_program_target_plan_cancellation_token_request(canceller->token);
+    return NULL;
+}
+
+/* Time one uncancelled cold build so the sweep below can be expressed as
+ * fractions of it. A fixed delay list would either land entirely inside the
+ * build on a slow machine or entirely after it on a fast one. */
+static uint64_t measure_cold_build_ns(const char *root, uint32_t ordinal) {
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(ordinal);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    if (!semantic || !profile) {
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+        return 0;
+    }
+    PlanSerialRequest request = {
+        .root = root,
+        .semantic = semantic,
+        .profile = profile,
+        .quota = PLAN_QUOTA,
+        .max_entry = PLAN_MAX_ENTRY,
+    };
+    PlanSerialBuild build;
+    uint64_t started = xr_time_monotonic_ns();
+    serial_build(&request, &build);
+    uint64_t elapsed = xr_time_monotonic_ns() - started;
+    serial_build_release(&build);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    return build.ok ? elapsed : 0;
+}
+
+/* Sweep the request across the whole lifetime of a build instead of only
+ * asking before it starts. Which internal checkpoint observes the request is
+ * timing-dependent, so the case asserts the invariants that must hold at
+ * every one of them and reports which were reached. */
+TEST(cancellation_across_build_boundaries_is_fail_closed) {
+    /* Eighths of one measured build, extended past its end so the sweep is
+     * proven to cross the whole lifetime rather than to stop inside it. */
+    static const uint32_t kEighths[] = {0u, 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u, 10u, 12u, 16u};
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-cancel", root, sizeof(root)), 0);
+    uint32_t observed[PLAN_CANCEL_BOUNDARY_COUNT] = {0};
+    uint64_t build_ns = measure_cold_build_ns(root, 899u);
+    ASSERT_TRUE(build_ns > 0u);
+
+    for (uint32_t round = 0; round < sizeof(kEighths) / sizeof(kEighths[0]); round++) {
+        /* A fresh ordinal keys a fresh object, so every round races an actual
+         * publication rather than settling into a warm hit. */
+        XrSemanticPlan *semantic = xr_test_program_plan_semantic(900u + round);
+        XrTargetProfile *profile =
+            xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        ASSERT_NOT_NULL(semantic);
+        ASSERT_NOT_NULL(profile);
+
+        XrProgramTargetPlanCancellationToken token;
+        xr_program_target_plan_cancellation_token_init(&token);
+        PlanBarrier barrier;
+        barrier_init(&barrier, 2u);
+        PlanWorker worker = {
+            .barrier = &barrier,
+            .root = root,
+            .semantic = semantic,
+            .profile = profile,
+            .cancellation = &token,
+        };
+        PlanCanceller canceller = {
+            .barrier = &barrier,
+            .token = &token,
+            .delay_ns = build_ns * kEighths[round] / 8u,
+        };
+        xr_thread_t threads[2];
+        ASSERT_TRUE(xr_thread_create(&threads[0], plan_worker_main, &worker));
+        ASSERT_TRUE(xr_thread_create(&threads[1], plan_canceller_main, &canceller));
+        ASSERT_EQ_INT(xr_thread_join(threads[0], NULL), 0);
+        ASSERT_EQ_INT(xr_thread_join(threads[1], NULL), 0);
+        barrier_destroy(&barrier);
+
+        PlanCancelBoundary boundary = classify_cancel(&worker.result);
+        observed[boundary]++;
+        if (boundary == PLAN_CANCEL_NONE) {
+            ASSERT_TRUE(worker.ok);
+            ASSERT_NOT_NULL(worker.bytes);
+        } else {
+            ASSERT_FALSE(worker.ok);
+            ASSERT_NULL(worker.bytes);
+            ASSERT_NOT_NULL(strstr(worker.error, "cancelled"));
+        }
+        XrTestProgramPlanStoreInventory inventory;
+        xr_test_program_plan_store_inventory(root, &inventory);
+        ASSERT_EQ_UINT(inventory.temps, 0u);
+
+        /* Whatever the cancellation interrupted, an ordinary build of the same
+         * authority must still produce the one canonical answer. */
+        PlanSerialRequest request = {
+            .root = root,
+            .semantic = semantic,
+            .profile = profile,
+            .quota = PLAN_QUOTA,
+            .max_entry = PLAN_MAX_ENTRY,
+        };
+        PlanSerialBuild recovery;
+        serial_build(&request, &recovery);
+        ASSERT_TRUE(recovery.ok);
+        ASSERT_NOT_NULL(recovery.bytes);
+        if (worker.bytes) {
+            ASSERT_EQ_UINT(recovery.size, worker.size);
+            ASSERT_MEM_EQ(recovery.bytes, worker.bytes, worker.size);
+        }
+        serial_build_release(&recovery);
+        xr_test_program_plan_encoded_free(worker.bytes);
+        xr_target_profile_free(profile);
+        xr_semantic_plan_free(semantic);
+    }
+
+    printf("\n    cancel sweep over %llu ns: none=%u before-cache=%u after-load=%u "
+           "after-build=%u after-publish=%u\n    ",
+           (unsigned long long) build_ns, observed[PLAN_CANCEL_NONE],
+           observed[PLAN_CANCEL_BEFORE_CACHE], observed[PLAN_CANCEL_AFTER_LOAD],
+           observed[PLAN_CANCEL_AFTER_BUILD], observed[PLAN_CANCEL_AFTER_PUBLISH]);
+    /* The shortest and the longest delay must land on opposite sides of the
+     * build, or the sweep never crossed its lifetime and proved nothing. */
+    ASSERT_TRUE(observed[PLAN_CANCEL_NONE] > 0u);
+    ASSERT_TRUE(observed[PLAN_CANCEL_NONE] < sizeof(kEighths) / sizeof(kEighths[0]));
+    xr_test_program_plan_store_remove(root);
+}
+
+TEST(truncated_and_mutated_objects_are_refused_and_recomputed) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-hostile", root, sizeof(root)), 0);
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(611u);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_NOT_NULL(profile);
+    PlanSerialRequest request = {
+        .root = root,
+        .semantic = semantic,
+        .profile = profile,
+        .quota = PLAN_QUOTA,
+        .max_entry = PLAN_MAX_ENTRY,
+    };
+    PlanSerialBuild canonical;
+    serial_build(&request, &canonical);
+    ASSERT_TRUE(canonical.ok);
+    ASSERT_TRUE(canonical.result.cache_published);
+
+    char *object = single_object_path(root, "xtp");
+    ASSERT_NOT_NULL(object);
+    uint8_t *original = NULL;
+    size_t original_size = 0;
+    ASSERT_EQ_INT(xr_fs_read_regular_file(object, PLAN_MAX_ENTRY, &original, &original_size), 0);
+    ASSERT_TRUE(original_size > 8u);
+
+    ASSERT_TRUE(replace_object(object, original, original_size / 2u));
+    PlanSerialBuild truncated;
+    serial_build(&request, &truncated);
+    assert_refused_then_recomputed(&canonical, &truncated);
+    serial_build_release(&truncated);
+
+    /* Restore the full length and move one payload byte instead, so the
+     * refusal cannot be credited to the shorter file alone. */
+    uint8_t *mutated = xr_malloc(original_size);
+    ASSERT_NOT_NULL(mutated);
+    memcpy(mutated, original, original_size);
+    mutated[original_size - 1u] = (uint8_t) (mutated[original_size - 1u] ^ 0xffu);
+    ASSERT_TRUE(replace_object(object, mutated, original_size));
+    PlanSerialBuild flipped;
+    serial_build(&request, &flipped);
+    assert_refused_then_recomputed(&canonical, &flipped);
+    serial_build_release(&flipped);
+
+    XrTestProgramPlanStoreInventory inventory;
+    xr_test_program_plan_store_inventory(root, &inventory);
+    ASSERT_EQ_UINT(inventory.temps, 0u);
+    xr_free(mutated);
+    xr_free(original);
+    xr_free(object);
+    serial_build_release(&canonical);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_test_program_plan_store_remove(root);
+}
+
+/* A plan built for another machine, planted under the key this machine would
+ * look up. The key alone must not be treated as proof of what the bytes mean. */
+TEST(foreign_target_plan_under_the_right_key_is_refused) {
+    char native_root[XR_PATH_MAX];
+    char foreign_root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-native", native_root, sizeof(native_root)),
+                  0);
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-foreign", foreign_root, sizeof(foreign_root)),
+                  0);
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(622u);
+    XrTargetProfile *native = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    XrTargetProfile *foreign =
+        xr_test_target_profile_build(true, XR_TARGET_RUNTIME_PROFILE_FREESTANDING);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_NOT_NULL(native);
+    ASSERT_NOT_NULL(foreign);
+
+    PlanSerialRequest native_request = {
+        .root = native_root,
+        .semantic = semantic,
+        .profile = native,
+        .quota = PLAN_QUOTA,
+        .max_entry = PLAN_MAX_ENTRY,
+    };
+    PlanSerialRequest foreign_request = native_request;
+    foreign_request.root = foreign_root;
+    foreign_request.profile = foreign;
+
+    PlanSerialBuild canonical;
+    PlanSerialBuild other;
+    serial_build(&native_request, &canonical);
+    serial_build(&foreign_request, &other);
+    ASSERT_TRUE(canonical.ok);
+    ASSERT_TRUE(other.ok);
+    ASSERT_TRUE(canonical.size != other.size ||
+                memcmp(canonical.bytes, other.bytes, canonical.size) != 0);
+
+    char *native_object = single_object_path(native_root, "xtp");
+    char *foreign_object = single_object_path(foreign_root, "xtp");
+    ASSERT_NOT_NULL(native_object);
+    ASSERT_NOT_NULL(foreign_object);
+    uint8_t *foreign_bytes = NULL;
+    size_t foreign_size = 0;
+    ASSERT_EQ_INT(
+        xr_fs_read_regular_file(foreign_object, PLAN_MAX_ENTRY, &foreign_bytes, &foreign_size), 0);
+    ASSERT_TRUE(replace_object(native_object, foreign_bytes, foreign_size));
+
+    PlanSerialBuild recovered;
+    serial_build(&native_request, &recovered);
+    assert_refused_then_recomputed(&canonical, &recovered);
+
+    serial_build_release(&recovered);
+    xr_free(foreign_bytes);
+    xr_free(foreign_object);
+    xr_free(native_object);
+    serial_build_release(&other);
+    serial_build_release(&canonical);
+    xr_target_profile_free(foreign);
+    xr_target_profile_free(native);
+    xr_semantic_plan_free(semantic);
+    xr_test_program_plan_store_remove(foreign_root);
+    xr_test_program_plan_store_remove(native_root);
+}
+
+/* An object the store refuses to hold must refuse the build, not quietly
+ * hand back a plan nobody can prove was cached. */
+TEST(over_budget_publication_is_refused_without_residue) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-budget", root, sizeof(root)), 0);
+    XrSemanticPlan *semantic = xr_test_program_plan_semantic(633u);
+    XrTargetProfile *profile =
+        xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+    ASSERT_NOT_NULL(semantic);
+    ASSERT_NOT_NULL(profile);
+
+    PlanSerialRequest request = {
+        .root = root,
+        .semantic = semantic,
+        .profile = profile,
+        .quota = PLAN_QUOTA,
+        .max_entry = 16u,
+    };
+    PlanSerialBuild refused;
+    serial_build(&request, &refused);
+    ASSERT_TRUE(refused.store_opened);
+    ASSERT_FALSE(refused.ok);
+    ASSERT_TRUE(refused.result.built);
+    ASSERT_TRUE(refused.result.cache_publish_attempted);
+    ASSERT_EQ_INT(refused.result.publish_status, XR_CACHE_PUBLISH_TOO_LARGE);
+    ASSERT_FALSE(refused.result.cache_published);
+    ASSERT_NULL(refused.bytes);
+    assert_store_is_whole(root, 0u);
+
+    /* The same authority under a budget that admits the object must still
+     * publish one object, so the refusal was the budget and not the plan. */
+    request.max_entry = PLAN_MAX_ENTRY;
+    PlanSerialBuild admitted;
+    serial_build(&request, &admitted);
+    ASSERT_TRUE(admitted.ok);
+    ASSERT_TRUE(admitted.result.cache_published);
+    assert_store_is_whole(root, 1u);
+
+    serial_build_release(&admitted);
+    serial_build_release(&refused);
+    xr_target_profile_free(profile);
+    xr_semantic_plan_free(semantic);
+    xr_test_program_plan_store_remove(root);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST(parallel_cold_builds_publish_one_canonical_plan);
 RUN_TEST(parallel_warm_builds_serve_one_canonical_plan);
 RUN_TEST(writer_and_readers_agree_on_one_canonical_plan);
+RUN_TEST(cancellation_across_build_boundaries_is_fail_closed);
+RUN_TEST(truncated_and_mutated_objects_are_refused_and_recomputed);
+RUN_TEST(foreign_target_plan_under_the_right_key_is_refused);
+RUN_TEST(over_budget_publication_is_refused_without_residue);
 TEST_MAIN_END()
