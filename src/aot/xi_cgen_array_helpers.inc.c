@@ -2656,11 +2656,6 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         return true;
     }
     const char *conv_suffix = emit_load_conversion_prefix(ctx, out, v, info.rep);
-    if (!unchecked) {
-        fprintf(out, "({ int64_t _idx = ");
-        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
-        fprintf(out, "; XR_LIKELY(_idx >= 0 && _idx < %u) ? ", (unsigned) info.count);
-    }
     emit_fixed_array_lane_load_prefix(out, &info, target_rep);
     if (static_slot_read)
         cg_emit_static_fixed_array_name(ctx, out, static_module, static_slot);
@@ -2676,16 +2671,14 @@ static bool emit_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     else
         emit_fixed_array_lane_ptr_expr(ctx, out, v->args[0], &info);
     fprintf(out, "[");
-    if (unchecked)
+    if (unchecked) {
         emit_array_i64_arg(ctx, out, v->args[1]);
-    else
-        fprintf(out, "_idx");
-    fprintf(out, "]");
-    if (!unchecked) {
-        fprintf(out, " : (xrt_fixed_index_oob(_idx, %u), ", (unsigned) info.count);
-        emit_fixed_array_lane_oob_fallback(out, &info);
-        fprintf(out, "); })");
+    } else {
+        fprintf(out, "xrt_fixed_index_checked(");
+        emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
+        fprintf(out, ", %u)", (unsigned) info.count);
     }
+    fprintf(out, "]");
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }

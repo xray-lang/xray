@@ -7588,8 +7588,10 @@ TEST(cgen_fixed_array_local_uses_stack_array_ref_storage) {
            "local fixed array constant stores should use direct stack lanes");
     assert(contains(code, "((uint8_t*)") && contains(code, "[INT64_C(0)]") &&
            "fixed-array parameters should use direct typed lanes");
-    assert(contains(code, "xrt_fixed_index_oob(_idx, 4)") &&
-           "dynamic fixed-array parameter indexes should use fixed-array OOB checks");
+    assert(contains(code, "xrt_fixed_index_checked(") &&
+           "dynamic fixed-array parameter indexes should use the portable checked-index helper");
+    assert(!contains(code, "({") &&
+           "fixed-array checked loads must remain portable ISO C expressions");
     assert(!contains(code, "xrt_index_get(") && !contains(code, "xrt_index_set(") &&
            "fixed array index operations should not call generic index helpers");
     assert(!contains(code, "((xrt_array_t*)") &&
@@ -7655,8 +7657,10 @@ TEST(cgen_fixed_array_index_ops_elide_boxed_operands) {
     TEST_REQUIRE(!contains_between(run, run_end, "XR_FROM_INT("),
                  "fixed-array native indexes and lanes must not retain boxed temporaries");
     TEST_REQUIRE(contains_between(run, run_end, "_fa") &&
-                     contains_between(run, run_end, "xrt_fixed_index_oob("),
+                     contains_between(run, run_end, "xrt_fixed_index_checked("),
                  "fixed-array direct storage and dynamic bounds checks must remain");
+    TEST_REQUIRE(!contains_between(run, run_end, "({"),
+                 "fixed-array native checked loads must not use GNU statement expressions");
 
     printf("  Generated fixed-array native operands %zu bytes of C code\n", strlen(code));
     xr_free(code);

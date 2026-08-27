@@ -11,6 +11,16 @@ XRT_COLD _Noreturn void xrt_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_fixed_index_oob(int64_t idx, int64_t length);
 XRT_COLD _Noreturn void xrt_type_no_index(const char *message);
 
+/* Preserve the native fixed-array lane representation while keeping checked
+ * indexing an ordinary ISO C expression.  The former emitter wrapped the
+ * check and load in a GNU statement expression; returning the verified index
+ * gives every C11 provider one canonical bounds-check path instead. */
+static inline int64_t xrt_fixed_index_checked(int64_t idx, int64_t length) {
+    if (XR_UNLIKELY(idx < 0 || idx >= length))
+        xrt_fixed_index_oob(idx, length);
+    return idx;
+}
+
 static inline XrValue xrt_fixed_array_get(void *base, uint8_t native_type, int64_t idx) {
     uint8_t *p = (uint8_t *) base + (size_t) idx * xrt_value_native_type_size(native_type);
     switch (native_type) {
