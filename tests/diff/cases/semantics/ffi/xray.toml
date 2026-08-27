@@ -1,5 +1,5 @@
 [package]
-name = "backend-diff-ffi"
+name = "tests/backend-diff-ffi"
 version = "1.0.0"
 license = "MIT"
 
