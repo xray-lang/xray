@@ -624,6 +624,39 @@ def load_average() -> list:
         return []
 
 
+def contention(cold: dict, warm: dict, load: dict) -> dict:
+    """Whether these numbers are this cache's, or another lane's compile.
+
+    This host is shared. When another lane is building, a sample lands tens of
+    seconds off its median, and both the absolute figures and the warm/cold
+    ratio stop describing the cache. A report that does not say so invites a
+    performance claim it cannot support, so the spread decides it here rather
+    than the reader guessing.
+    """
+    def spread(phase: dict) -> float:
+        seconds = phase.get("seconds", {})
+        median = seconds.get("p50") or 0.0
+        return round((seconds.get("p95") or 0.0) / median, 3) if median else 0.0
+
+    cold_spread = spread(cold)
+    warm_spread = spread(warm)
+    # A quiet machine holds p95 within roughly half again the median. Anything
+    # wider means a sample waited on someone else.
+    quiet = max(cold_spread, warm_spread) <= 1.5
+    return {
+        "cold_p95_over_p50": cold_spread,
+        "warm_p95_over_p50": warm_spread,
+        "peak_load_average_1m": max(
+            [load.get("before", [0])[0] if load.get("before") else 0,
+             load.get("after", [0])[0] if load.get("after") else 0]),
+        "quiet_enough_for_absolute_numbers": quiet,
+        "note": "" if quiet else
+                "another lane was building during this run: treat the absolute "
+                "seconds and the warm/cold ratio as unusable and read only the "
+                "counts, byte totals and invalidation breadth",
+    }
+
+
 def environment(config: Config) -> dict:
     """What a later run has to match for these numbers to be comparable.
 
@@ -769,9 +802,11 @@ def measure(config: Config, ws: workspace.Workspace, workers: int) -> dict:
         "disk_bytes": directory_bytes(warm_cache),
     }
 
+    load = {"before": load_before, "after": load_average()}
     return {
         "environment": environment(config),
-        "load_average": {"before": load_before, "after": load_average()},
+        "load_average": load,
+        "contention": contention(cold, warm, load),
         "replay": {
             # Nothing here draws on a random source: repeats differ only in the
             # scheduler's interleaving, and the concurrent phases align their
