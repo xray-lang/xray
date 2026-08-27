@@ -655,6 +655,13 @@ emission rather than falling back to compiler-host layout.
   one scoped `xrt_array_t` view and never use a statement expression, retired
   span macro, or `__builtin_alloca`. These are exact generated-C families and
   do not by themselves qualify every whole-program shape for MSVC.
+- T4h: the link output cache is keyed by the output it is asked to produce.
+  The output path is a linker input wherever the artifact records it -- Mach-O
+  ad-hoc signing takes its identifier from the output name -- so two outputs of
+  one program never share an entry, and a warm output is the binary that output
+  builds cold. A cache that answered without the output would sign one
+  program's binary with another's name and make a binary differ from its own
+  cold build.
 - T5: a scalar place may alias its source field only when the semantic value,
   AOT representation, and generated-C type are identical. A value-preserving
   conversion such as ILP32 `usize` to 64-bit `int` must materialize distinct
@@ -879,7 +886,7 @@ anchor-sha256: src/aot/xrt_core_freestanding.h 5d4e9b2da067c44aa23d0b46b0ae133ab
 anchor-sha256: src/aot/xrt_method.h ec377657645eeb7468eb4fe33307beaa296543911293edd03e5aabf3dc92c8e7
 anchor-sha256: src/aot/xrt_time.h 4d65fd48c6014eebffd2747b89c42652a1f1380a24cddbb07d0f1f79fa2c6aa7
 anchor-sha256: include/xray_hosted_fragment_abi.h 7006c7c84c50e138c7837e1737de9756c153a29fc757256e593782f52f535678
-anchor-sha256: src/app/cli/xcmd_build.c 052601774894e0ec8d5a09cb02b71d63700a59cd2e6271bbe056879ecf6b0c6c
+anchor-sha256: src/app/cli/xcmd_build.c 56a40902cd751859d4ca1b67cbaae121b15a9d9a08f32c42b4b9f350c1860940
 anchor-sha256: src/app/toolchain/xtc_model.c 91a6446ae4ffcda1178a979849c38c835b3092b4f8fdbffbf928c474a5ee1ac6
 anchor-sha256: src/app/toolchain/xtc_probe.c 883a5ee95f39dbf335144289a5db2b693112a5a072d96dcf85ecf4abcfd42a09
 anchor-sha256: src/ir/xi.h 089354e3324b62754b0c53c65f9e7451e735ce3bcbdcebcd3afc33c6ba44336e

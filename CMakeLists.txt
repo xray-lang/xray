@@ -4329,6 +4329,65 @@ if(BUILD_TESTS)
     )
 
     add_test(
+        NAME program_plan_cache_qualification_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/run_program_plan_cache_qualification.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(program_plan_cache_qualification_self_test PROPERTIES
+        LABELS "meta;target-machine;cache;target-plan"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
+        NAME program_plan_cache_qualification
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/target-machine/run_program_plan_cache_qualification.py
+                $<TARGET_FILE:xray>
+                --samples 3
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    # Measured ~10s: four concurrent link-tagged builds plus the serial phases.
+    set_tests_properties(program_plan_cache_qualification PROPERTIES
+        LABELS "aot;cache;target-plan;incremental;concurrency"
+        PROCESSORS 4
+        SKIP_RETURN_CODE 77
+        COST 15
+        TIMEOUT 300
+    )
+
+    add_test(
+        NAME runtime_archive_cache_symbol_lint
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+                --archive $<TARGET_FILE:xray_vm>
+                --archive $<TARGET_FILE:xray_rt_coro>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_archive_cache_symbol_lint PROPERTIES
+        LABELS "meta;runtime;cache;target-machine"
+        PROCESSORS 1
+        SKIP_RETURN_CODE 77
+        TIMEOUT 60
+    )
+
+    add_test(
+        NAME runtime_archive_cache_symbol_lint_self_test
+        COMMAND ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_archive_cache_symbols.py
+                --self-test
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(runtime_archive_cache_symbol_lint_self_test PROPERTIES
+        LABELS "meta;runtime;cache;target-machine"
+        PROCESSORS 1
+        TIMEOUT 30
+    )
+
+    add_test(
         NAME runtime_header_dependency_lint_self_test
         COMMAND ${XRAY_PYTHON}
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_runtime_header_dependencies.py

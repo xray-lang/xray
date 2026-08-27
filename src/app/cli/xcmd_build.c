@@ -2371,19 +2371,37 @@ static uint64_t xaot_object_cache_key(const char *c_source, const char *opt_flag
     return h;
 }
 
-static uint64_t xaot_link_output_cache_key(const XaotBuildResult *result, const char *opt_flag,
-                                           const XrToolchainTarget *target,
-                                           const XrToolchainSelection *plan, const char *sysroot,
-                                           bool strip_symbols, bool shared_library,
-                                           XiCgenCDialect c_dialect) {
+/* Everything the linker is given, including the output it is asked to produce.
+ * The output path is a real linker input: Mach-O ad-hoc signing takes the
+ * artifact's identifier from it, so two outputs sharing one cache entry would
+ * be served each other's binary. */
+typedef struct XaotLinkOutputCacheInput {
+    const XaotBuildResult *result;
+    const char *opt_flag;
+    const XrToolchainTarget *target;
+    const XrToolchainSelection *plan;
+    const char *sysroot;
+    const char *output;
+    bool strip_symbols;
+    bool shared_library;
+    XiCgenCDialect c_dialect;
+} XaotLinkOutputCacheInput;
+
+static uint64_t xaot_link_output_cache_key(const XaotLinkOutputCacheInput *input) {
+    const XaotBuildResult *result = input->result;
+    const XrToolchainTarget *target = input->target;
+    const XrToolchainSelection *plan = input->plan;
+    const char *sysroot = input->sysroot;
+    XiCgenCDialect c_dialect = input->c_dialect;
     uint64_t h = XR_FNV64_OFFSET_BASIS;
 
-    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v4");
+    h = xaot_hash_fold_str(h, "xaot-link-output-cache-v5");
     h = xaot_hash_fold(h, &c_dialect, sizeof(c_dialect));
+    h = xaot_hash_fold_str(h, input->output);
     h = xaot_hash_fold(h, &(uint64_t) {xaot_aot_runtime_source_key()}, sizeof(uint64_t));
-    h = xaot_hash_fold_str(h, opt_flag);
-    h = xaot_hash_fold_bool(h, strip_symbols);
-    h = xaot_hash_fold_bool(h, shared_library);
+    h = xaot_hash_fold_str(h, input->opt_flag);
+    h = xaot_hash_fold_bool(h, input->strip_symbols);
+    h = xaot_hash_fold_bool(h, input->shared_library);
     h = xaot_hash_fold_str(h, getenv("XRAY_INCLUDE"));
     h = xaot_hash_fold_str(h, getenv("XRAY_LIB"));
     h = xaot_hash_fold_str(h, getenv("XRAY_OPENSSL_LIBDIR"));
@@ -3777,9 +3795,18 @@ static int cmd_build_native(
                                  !verbose && !debug_symbols && !library_artifact && !keep_c;
     uint64_t link_output_cache_key = 0;
     if (use_link_output_cache) {
-        link_output_cache_key =
-            xaot_link_output_cache_key(&aot_result, opt_flag, target, toolchain_plan, sysroot,
-                                       strip, library_artifact, c_dialect);
+        XaotLinkOutputCacheInput cache_input = {
+            .result = &aot_result,
+            .opt_flag = opt_flag,
+            .target = target,
+            .plan = toolchain_plan,
+            .sysroot = sysroot,
+            .output = output,
+            .strip_symbols = strip,
+            .shared_library = library_artifact,
+            .c_dialect = c_dialect,
+        };
+        link_output_cache_key = xaot_link_output_cache_key(&cache_input);
         int cache_hit =
             xaot_restore_link_output_cache(cache_dir, link_output_cache_key, output, verbose);
         if (cache_hit > 0) {
@@ -3797,11 +3824,19 @@ static int cmd_build_native(
         const char *inputs[1];
         int object_n;
         int ret;
-        uint64_t key =
-            link_output_cache_key
-                ? link_output_cache_key
-                : xaot_link_output_cache_key(&aot_result, opt_flag, target, toolchain_plan, sysroot,
-                                             strip, library_artifact, c_dialect);
+        XaotLinkOutputCacheInput fast_test_input = {
+            .result = &aot_result,
+            .opt_flag = opt_flag,
+            .target = target,
+            .plan = toolchain_plan,
+            .sysroot = sysroot,
+            .output = output,
+            .strip_symbols = strip,
+            .shared_library = library_artifact,
+            .c_dialect = c_dialect,
+        };
+        uint64_t key = link_output_cache_key ? link_output_cache_key
+                                             : xaot_link_output_cache_key(&fast_test_input);
         if (xaot_write_temp_c_source(cache_dir, key, &aot_result.sources[0], c_file,
                                      sizeof(c_file)) != 0) {
             xaot_build_result_free(&aot_result);

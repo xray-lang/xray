@@ -21,16 +21,29 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
+typedef enum XrProgramTargetPlanCancellationCheckpoint {
+    XR_PROGRAM_TARGET_PLAN_CANCEL_NONE = 0,
+    XR_PROGRAM_TARGET_PLAN_CANCEL_BEFORE_CACHE,
+    XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_LOAD,
+    XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_BUILD,
+    XR_PROGRAM_TARGET_PLAN_CANCEL_AFTER_PUBLISH,
+} XrProgramTargetPlanCancellationCheckpoint;
+
 /* One build owns one token. Cancellation is monotonic: callers create a new
- * token instead of racing a reset with an active build. */
+ * token instead of racing a reset with an active build. A scheduled checkpoint
+ * lets a synchronous caller place the same bound without a timing race. */
 typedef struct XrProgramTargetPlanCancellationToken {
     atomic_bool requested;
+    atomic_uint scheduled_checkpoint;
 } XrProgramTargetPlanCancellationToken;
 
 XR_FUNC void
 xr_program_target_plan_cancellation_token_init(XrProgramTargetPlanCancellationToken *token);
 XR_FUNC void
 xr_program_target_plan_cancellation_token_request(XrProgramTargetPlanCancellationToken *token);
+XR_FUNC void xr_program_target_plan_cancellation_token_request_at_checkpoint(
+    XrProgramTargetPlanCancellationToken *token,
+    XrProgramTargetPlanCancellationCheckpoint checkpoint);
 XR_FUNC bool xr_program_target_plan_cancellation_token_is_requested(
     const XrProgramTargetPlanCancellationToken *token);
 

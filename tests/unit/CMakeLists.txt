@@ -734,7 +734,14 @@ add_xray_unit_test(test_cache_artifact_verify
                    ${XR_TARGET_PROFILE_TEST_FIXTURE})
 add_xray_unit_test(test_program_target_plan_build
                    incremental/test_program_target_plan_build.c
+                   incremental/program_plan_cache_fixture.c
                    ${XR_TARGET_PROFILE_TEST_FIXTURE})
+add_xray_unit_test(test_program_plan_cache_qualification
+                   incremental/test_program_plan_cache_qualification.c
+                   incremental/program_plan_cache_fixture.c
+                   ${XR_TARGET_PROFILE_TEST_FIXTURE})
+set_tests_properties(test_program_plan_cache_qualification PROPERTIES
+    LABELS "cache;target-plan;concurrency;mutation")
 add_xray_unit_test(test_dependency_graph incremental/test_dependency_graph.c)
 add_xray_unit_test(test_module_summary_build incremental/test_module_summary_build.c)
 add_xray_unit_test(test_compiler_session_generation
