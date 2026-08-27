@@ -1363,6 +1363,57 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
     return true;
 }
 
+/* main() writes its ordered module-initializer sequence straight from the
+ * verified program binding instead of through emit_fname(), so the cross-module
+ * name collector never records the initializers that another translation unit
+ * defines.  The entry unit states those imported prototypes from the same
+ * verified ABI rows that produced the calls: without them the generated C calls
+ * an undeclared function, which C99 and later reject outright and which assumes
+ * a wrong `int` return type wherever a provider still accepts it. */
+static bool cg_emit_program_direct_i64_initializer_decls(XiCgenCtx *ctx, FILE *out,
+                                                         int mod_index) {
+    if (!ctx || !out || !ctx->program_direct_i64_required)
+        return true;
+    if (ctx->artifact_kind != XAOT_ARTIFACT_EXECUTABLE)
+        return true;
+    const XiModule *module =
+        ctx->all_modules && mod_index >= 0 && mod_index < ctx->all_nmodules
+            ? ctx->all_modules[mod_index]
+            : NULL;
+    if (!ctx->program_direct_i64_bound || !module || !module->init ||
+        !ctx->program_direct_i64.initializers) {
+        ctx->error = true;
+        return false;
+    }
+    for (uint32_t partition = 0;
+         partition < ctx->program_direct_i64.initializer_count; partition++) {
+        const XrCProgramXiFunctionBinding *initializer =
+            &ctx->program_direct_i64.initializers[partition];
+        const void *symbol_end =
+            memchr(initializer->c_symbol, '\0', sizeof(initializer->c_symbol));
+        if (!initializer->xi_function || !initializer->c_symbol[0] || !symbol_end) {
+            ctx->error = true;
+            return false;
+        }
+        /* This unit defines its own initializer, so its forward declaration is
+         * already stated in full alongside the rest of the unit's functions. */
+        if (initializer->xi_function == module->init)
+            continue;
+        XrCFunctionAbiEmissionView return_view = {0};
+        if (!xr_c_program_direct_i64_function_abi_view(
+                &ctx->program_direct_i64, initializer->xi_function, 0u, &return_view) ||
+            return_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_TAGGED ||
+            return_view.rep != (uint8_t) XR_C_VALUE_REP_TAGGED ||
+            return_view.parameter_count != 0u || !return_view.c_type) {
+            ctx->error = true;
+            return false;
+        }
+        fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl);\n", return_view.c_type,
+                initializer->c_symbol);
+    }
+    return true;
+}
+
 /* Emit one self-contained translation unit for modules[mod_index], suitable
  * for independent compilation into its own object file (114 separate
  * compilation).  Cross-module symbols use external linkage: every module's
@@ -1570,6 +1621,8 @@ XR_FUNC void xi_cgen_module_tu(XiCgenCtx *ctx, FILE *out, XiModule **modules, in
         emit_extern_closure_adapter_decls(ctx, unit);
         emit_forward_decls(ctx, unit, module->init, prefix);
         (void) cg_emit_program_direct_i64_callee_decl(ctx, unit, mod_index);
+        if (is_entry)
+            (void) cg_emit_program_direct_i64_initializer_decls(ctx, unit, mod_index);
         for (int i = 0; i < ctx->n_xmod_refs; i++)
             emit_one_forward_decl(ctx, unit, ctx->xmod_ref_funcs[i], ctx->xmod_ref_prefixes[i],
                                   true);
