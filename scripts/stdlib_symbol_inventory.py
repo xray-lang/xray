@@ -678,6 +678,43 @@ def is_semantic_c_owner(row: SymbolRow) -> bool:
     return True
 
 
+def attach_probe_results(modules: list[ModuleRow], path: Path) -> None:
+    """Record each module's measured backend outcome on its row.
+
+    Whether a module's public surface actually runs is a measurement, not a
+    property of the source, so it is read from a probe report rather than
+    derived here. A module the report does not mention keeps an empty record,
+    which reads as unmeasured rather than as passing.
+    """
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    entries = report.get("modules") or report.get("results") or []
+    if isinstance(entries, dict):
+        entries = list(entries.values())
+    measured: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("module", ""))
+        if not name:
+            continue
+        vm = entry.get("vm") or {}
+        aot = entry.get("aot") or {}
+        refusal = entry.get("first_refusal") or {}
+        generated = entry.get("generated_c") or {}
+        measured[name] = {
+            "vm_returncode": vm.get("returncode"),
+            "aot_returncode": aot.get("returncode"),
+            "first_refusal_code": refusal.get("code") or "",
+            "first_refusal_stage": refusal.get("stage") or "",
+            "generated_c_reproducible": generated.get("identical"),
+        }
+    for module in modules:
+        module.probe = measured.get(module.name, {})
+
+
 def summarize(modules: list[ModuleRow], rows: list[SymbolRow]) -> dict[str, Any]:
     production = [m for m in modules if m.audience == "production"]
     # Rows are selected by their own audience, not by manifest membership.
@@ -768,14 +805,24 @@ def markdown(modules: list[ModuleRow], rows: list[SymbolRow], base: str) -> str:
     out.append("## Modules")
     out.append("")
     out.append(
-        "| module | layer | policy | audience | symbols | xray body | handwritten C | native leaf | C functions | queue |"
+        "| module | layer | policy | audience | symbols | xray body | handwritten C | native leaf | C functions | vm | aot | queue |"
     )
-    out.append("|---|---|---|---|---:|---:|---:|---:|---:|---|")
+    out.append("|---|---|---|---|---:|---:|---:|---:|---:|---|---|---|")
     for m in sorted(modules, key=lambda x: x.name):
+        vm = m.probe.get("vm_returncode")
+        aot = m.probe.get("aot_returncode")
+        code = m.probe.get("first_refusal_code") or ""
+        vm_cell = "-" if vm is None else ("ok" if vm == 0 else "fail")
+        if aot is None:
+            aot_cell = "-"
+        elif aot == 0:
+            aot_cell = "ok"
+        else:
+            aot_cell = code or "fail"
         out.append(
             f"| {m.name} | {m.layer} | {m.policy} | {m.audience} | {m.symbol_count} | "
             f"{m.xray_body_symbols} | {m.handwritten_c_symbols} | {m.native_leaf_symbols} | "
-            f"{m.c_function_count} | {m.queue} |"
+            f"{m.c_function_count} | {vm_cell} | {aot_cell} | {m.queue} |"
         )
     out.append("")
     out.append("## Queue")
@@ -811,6 +858,11 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--markdown", dest="md_path", help="write the human-readable matrix")
     parser.add_argument("--base", default="", help="source commit recorded in the output")
     parser.add_argument(
+        "--probe-json",
+        dest="probe_json",
+        help="attach measured VM and AOT outcomes from a backend probe report",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="fail when a symbol or C function is left unattributed",
@@ -819,6 +871,8 @@ def main(argv: list[str]) -> int:
 
     root = Path(args.root).resolve()
     modules, rows, defects = build_rows(root)
+    if args.probe_json:
+        attach_probe_results(modules, Path(args.probe_json))
     counts = summarize(modules, rows)
 
     payload = {

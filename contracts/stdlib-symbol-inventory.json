@@ -49,7 +49,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/prelude/builtin_symbols.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "time",
@@ -80,7 +86,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 0,
+        "first_refusal_code": "",
+        "first_refusal_stage": "",
+        "generated_c_reproducible": true
+      }
     },
     {
       "name": "math",
@@ -154,7 +166,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "simd",
@@ -178,7 +196,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "path",
@@ -202,7 +226,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "base64",
@@ -226,7 +256,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "",
+        "first_refusal_stage": "semantic",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "regex",
@@ -280,7 +316,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "mem",
@@ -341,7 +383,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "codegen",
@@ -365,7 +413,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "runtime",
@@ -394,7 +448,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "sync",
@@ -424,7 +484,13 @@
       "native_leaf_symbols": 0,
       "queue": "deepen-existing-xray",
       "queue_reason": "5 public native symbols still bypass the .xr surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "",
+        "first_refusal_stage": "semantic",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "parallel",
@@ -448,7 +514,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "sys",
@@ -495,7 +567,13 @@
       "native_leaf_symbols": 16,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "url",
@@ -519,7 +597,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "datetime",
@@ -543,7 +627,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "log",
@@ -567,7 +657,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "encoding",
@@ -591,7 +687,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "text",
@@ -615,7 +717,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "_probe",
@@ -639,7 +747,13 @@
       "native_leaf_symbols": 0,
       "queue": "test-only",
       "queue_reason": "not part of the production standard-library surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "",
+        "first_refusal_stage": "semantic",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "io",
@@ -663,7 +777,13 @@
       "native_leaf_symbols": 36,
       "queue": "deepen-existing-xray",
       "queue_reason": "37 handwritten C functions remain behind the .xr surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "os",
@@ -687,7 +807,13 @@
       "native_leaf_symbols": 28,
       "queue": "deepen-existing-xray",
       "queue_reason": "16 handwritten C functions remain behind the .xr surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "test_yield",
@@ -709,7 +835,13 @@
       "native_leaf_symbols": 0,
       "queue": "test-only",
       "queue_reason": "not part of the production standard-library surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "",
+        "first_refusal_stage": "parse",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "net",
@@ -748,7 +880,13 @@
       "native_leaf_symbols": 28,
       "queue": "deepen-existing-xray",
       "queue_reason": "11 public native symbols still bypass the .xr surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 1,
+        "aot_returncode": 1,
+        "first_refusal_code": "",
+        "first_refusal_stage": "semantic",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "http",
@@ -772,7 +910,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "ws",
@@ -796,7 +940,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "http2",
@@ -823,7 +973,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "crypto",
@@ -856,7 +1012,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "compress",
@@ -890,7 +1052,13 @@
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_library module declares stdlib/defs/core.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1003",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "cluster",
@@ -928,7 +1096,13 @@
       "native_leaf_symbols": 10,
       "queue": "deepen-existing-xray",
       "queue_reason": "5 public native symbols still bypass the .xr surface",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "csv",
@@ -952,7 +1126,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "toml",
@@ -976,7 +1156,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "yaml",
@@ -1000,7 +1186,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_TARGET_1000",
+        "first_refusal_stage": "target_plan",
+        "generated_c_reproducible": null
+      }
     },
     {
       "name": "xml",
@@ -1024,7 +1216,13 @@
       "native_leaf_symbols": 0,
       "queue": "needs-generic-loader",
       "queue_reason": "only residue is the per-module C loader, which a generic source-derived load path has to replace",
-      "probe": {}
+      "probe": {
+        "vm_returncode": 0,
+        "aot_returncode": 1,
+        "first_refusal_code": "XR_SEM_0019",
+        "first_refusal_stage": "semantic",
+        "generated_c_reproducible": null
+      }
     }
   ],
   "symbols": [
