@@ -150,6 +150,31 @@ modules. It converts a masked refusal into a measurable one, which is what the
 standard library needs in order to report a real per-symbol gap. The size of
 the layer behind it is unmeasured, and this packet does not claim otherwise.
 
+## The cohort gate cannot currently fail
+
+`scripts/stdlib_migration.py verify <module>` is the per-slice backend
+convergence gate. Measured on this tree:
+
+```
+$ python3 scripts/stdlib_migration.py verify io --root . --xray build/xray
+=== Results: 0 passed, 0 failed, 2 refused, 0 skipped ===
+== stdlib backend convergence: io (legacy_oracle=executable) ==
+OK: 1 stdlib contract(s) are consistent; 1 have executable legacy oracles
+```
+
+Every case was refused and the gate reported OK, exit status 0. `text` behaves
+the same way.
+
+The differential runner is not at fault: it classifies a refusal as answering
+nothing about agreement and leaves it to the coverage ratchet, which is a
+deliberate separation. The consequence is what matters here. While AOT refuses
+every module graph containing an Xray standard-library module, this gate is
+green for reasons unrelated to convergence, so a passing run is not evidence
+that a slice's backends agree, and a slice cannot be called READY on it.
+
+Any accounting of standard-library progress that leans on this gate is
+measuring the refusal, not the module.
+
 ## Consequence for the migration
 
 Migrating a module from C to Xray currently removes what AOT capability it

@@ -1,0 +1,899 @@
+{
+  "schema": 1,
+  "generated_at": "2026-08-28",
+  "repo_worktree": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369",
+  "compiler_used": "./build/xray  (xray v0.9.2 (VM+AOT, TLS, arm64-darwin)) — not rebuilt",
+  "scope": "31 public native symbols on the 4 xray_semantic modules that still export public native surface",
+  "manifest_field_semantics": {
+    "authority": "scripts/check_stdlib_boundary.py:309-338 (check_semantic_owners) via scripts/stdlib_manifest.py:90-106 (def_public_symbols)",
+    "public_native": "MUST equal (non-internal entries parsed out of stdlib/defs/core.def for this module) UNION manual_public_native. It is a derived assertion, not a free-form list.",
+    "manual_public_native": "The subset of public_native that does NOT come from core.def at all, i.e. names the C factory registers directly with xr_module_add_export. Each entry is additionally verified to appear as a quoted string literal inside the module's factory_source (checker lines 334-339).",
+    "relationship_for_sync": "NOT two different things and NOT redundant: sync has no `module sync {` block in core.def at all (verified). def_public_symbols('sync') is empty, so public_native == manual_public_native is the only value that satisfies the equality. The duplication is an artifact of the equality check, not a second policy.",
+    "is_internal_derivation": {
+      "source": "tools/stdlibgen/stdlibgen.py",
+      "StdlibMethodEntry": "visibility == 'internal'; visibility defaults to 'internal' when the name starts with '__' (stdlibgen.py:593-594). So `fn __x` drops out of public_native.",
+      "StdlibConstEntry": "HAS NO is_internal property (stdlibgen.py:125-143). getattr(..., 'is_internal', False) is always False, so EVERY core.def const is unconditionally public_native, even if it were named __x.",
+      "StdlibNativeClassEntry": "HAS NO is_internal property (stdlibgen.py:265-276). Same consequence: renaming NetConn to __NetConn would NOT remove it from public_native.",
+      "StdlibClassMethodEntry": "HAS NO is_internal property (stdlibgen.py:293-304). Same consequence.",
+      "StdlibHandleEntry / StdlibObjectShapeEntry / StdlibEnumEntry": "is_internal = name.startswith('__'). This is why os's `handle __ExecResult` is already invisible to public_native and is the working precedent for a wrap-in-.xr migration."
+    },
+    "second_pin": "scripts/check_binary_public_native_readiness.py:26-40 (L2_PUBLIC_NATIVE) independently hard-codes the same os/net sets; scripts/check_stdlib_boundary.py:224-241 (check_l2_thinning) is the first. Both must be edited in the same commit as any os or net change.",
+    "inventory_blind_spot": "scripts/stdlib_symbol_inventory.py reads core.def, so the 5 sync symbols do NOT appear in its per-symbol rows at all (verified: 44 sync rows, none of them Semaphore/CountdownLatch/EventCount/WorkQueue/ResultGroup). Any gate built on that inventory is blind to them."
+  },
+  "category_counts": {
+    "pure_constant": 4,
+    "thin_abi": 10,
+    "has_policy": 4,
+    "runtime_object": 13,
+    "total": 31
+  },
+  "runtime_object_subaxis": {
+    "vm_builtin_global": [
+      "sync.Semaphore",
+      "sync.CountdownLatch",
+      "sync.EventCount",
+      "sync.WorkQueue",
+      "sync.ResultGroup"
+    ],
+    "native_class": [
+      "net.NetConn",
+      "net.NetListener"
+    ],
+    "generated_descriptor_pure_data": [
+      "net.NetError",
+      "cluster.ClusterDelivery",
+      "cluster.ClusterNodeState",
+      "cluster.ClusterTlsStatus",
+      "cluster.ClusterNodeInfo",
+      "cluster.ClusterInfo"
+    ],
+    "note": "Only vm_builtin_global and native_class are compiler-blocked. All six generated_descriptor names were experimentally confirmed declarable in .xr today."
+  },
+  "symbols": [
+    {
+      "module": "os",
+      "symbol": "platform",
+      "kind": "const",
+      "category": "pure_constant",
+      "impl_vm": "stdlib/os/os.c:1100-1114 get_platform() — #ifdef ladder returning a static string; bound at stdlib/defs/core.def:1861-1869 via vm_value 'xrs_string_value_c(isolate, get_platform())', emitted into src/stdlib/xstdlib_vm_bindings_generated.inc.c:264",
+      "impl_aot": "src/aot/xrt_os.h:72-84 xrt_os_platform_cstr() / :106-108 xrt_os_platform(); dispatched by the hand-written branch at src/aot/xi_cgen_dispatch_helpers.inc.c:13767-13777",
+      "proposed_xr": "export const platform: string = __platform()",
+      "new_private_leaves": [
+        {
+          "name": "__platform",
+          "signature": "(): string",
+          "aot": "xrt_os_platform",
+          "vm": "os_platform"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "notes": "Two independent C implementations of the same constant exist today."
+    },
+    {
+      "module": "os",
+      "symbol": "arch",
+      "kind": "const",
+      "category": "pure_constant",
+      "impl_vm": "stdlib/os/os.c:1117-1129 get_arch()",
+      "impl_aot": "src/aot/xrt_os.h:86-104 xrt_os_arch_cstr()",
+      "proposed_xr": "export const arch: string = __arch()",
+      "new_private_leaves": [
+        {
+          "name": "__arch",
+          "signature": "(): string",
+          "aot": "xrt_os_arch",
+          "vm": "os_arch"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "defect_found": "The two implementations DISAGREE. stdlib/os/os.c:1117 handles only arm64/x64/x86/arm and falls through to \"unknown\"; src/aot/xrt_os.h:86 additionally returns ppc64, loongarch64, riscv64. LANGUAGE_SPEC.md:6623 documents ppc64 and riscv64 as valid values, so the VM is spec-noncompliant on those targets today. os.c also uses raw compiler macros (__aarch64__, __x86_64__) while xrt_os.h uses the project's XR_ARCH_* macros."
+    },
+    {
+      "module": "os",
+      "symbol": "sep",
+      "kind": "const",
+      "category": "pure_constant",
+      "impl_vm": "stdlib/os/os.c:1131-1137 get_sep() — #ifdef XR_OS_WINDOWS ? \"\\\\\" : \"/\"",
+      "impl_aot": "src/aot/xrt_os.h:114-120 xrt_os_sep()",
+      "proposed_xr": "export const sep: string = _sepFor(platform)   // private helper in os.xr, no leaf",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "notes": "Fully derivable from platform. Needs no native leaf at all."
+    },
+    {
+      "module": "os",
+      "symbol": "eol",
+      "kind": "const",
+      "category": "pure_constant",
+      "impl_vm": "stdlib/os/os.c:1139-1145 get_eol()",
+      "impl_aot": "src/aot/xrt_os.h:122-128 xrt_os_eol()",
+      "proposed_xr": "export const eol: string = _eolFor(platform)   // private helper in os.xr, no leaf",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false
+    },
+    {
+      "module": "sync",
+      "symbol": "Semaphore",
+      "kind": "runtime-class",
+      "category": "runtime_object",
+      "impl": "Registered as a VM builtin GLOBAL SLOT, not a module symbol. src/base/xglobal_indices.h:50 XR_GLOBAL_VAR_SEMAPHORE 32; populated src/api/xisolate_full.c:222-224; name->slot table src/ir/xi_lower_expr.c:121; runtime type XR_TSEMAPHORE (src/shared/xr_obj_header.h:159); implementation src/coro/xsemaphore.c (391 lines) + src/coro/xsemaphore_native.c (127 lines). stdlib/sync/sync.c:46 only re-exports the already-registered class value into the sync module namespace.",
+      "visibility_gate": "src/frontend/analyzer/xanalyzer.c:1931-1939 xa_register_sync_native_class_symbols — a hard-coded FILE PATH check (xa_path_is_sync_stdlib_module, xanalyzer.c:1791) that makes these 5 names resolvable ONLY inside stdlib/sync/sync.xr.",
+      "proposed_xr": null,
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "Cannot be defined in .xr. Occupies a reserved VM global index and is wired into the analyzer native-type table, xvalue_typeid, ownership certificates, coro suspend analysis and the IR value-query layer. Redeclaring the name in .xr aborts the semantic-plan stage."
+    },
+    {
+      "module": "sync",
+      "symbol": "CountdownLatch",
+      "kind": "runtime-class",
+      "category": "runtime_object",
+      "impl": "XR_GLOBAL_VAR_COUNTDOWNLATCH 31 (src/base/xglobal_indices.h:49); src/coro/xcountdown_latch.c; re-exported at stdlib/sync/sync.c:47",
+      "proposed_xr": null,
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as Semaphore"
+    },
+    {
+      "module": "sync",
+      "symbol": "EventCount",
+      "kind": "runtime-class",
+      "category": "runtime_object",
+      "impl": "XR_GLOBAL_VAR_EVENTCOUNT 33 (src/base/xglobal_indices.h:51); re-exported at stdlib/sync/sync.c:48",
+      "proposed_xr": null,
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as Semaphore"
+    },
+    {
+      "module": "sync",
+      "symbol": "WorkQueue",
+      "kind": "runtime-class",
+      "category": "runtime_object",
+      "impl": "XR_GLOBAL_VAR_WORKQUEUE 28 (src/base/xglobal_indices.h:46); re-exported at stdlib/sync/sync.c:49",
+      "proposed_xr": null,
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as Semaphore, plus it is generic (WorkQueue<T>) with compiler-side generic resolution"
+    },
+    {
+      "module": "sync",
+      "symbol": "ResultGroup",
+      "kind": "runtime-class",
+      "category": "runtime_object",
+      "impl": "XR_GLOBAL_VAR_RESULTGROUP 29 (src/base/xglobal_indices.h:47); re-exported at stdlib/sync/sync.c:50",
+      "proposed_xr": null,
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as Semaphore"
+    },
+    {
+      "module": "net",
+      "symbol": "NetConn",
+      "kind": "native-class",
+      "category": "runtime_object",
+      "impl": "core.def:3282 native_class NetConn -> generated registration src/stdlib/xstdlib_class_bindings_generated.inc.c:166-185; native body descriptor src/io/xnet_handle.c:180-189 (g_netconn_body_desc, COPY_FORBID, destroy=netconn_body_destroy); struct XrNetConn src/io/xnet_handle.h:69-87 (fd, kind, closed, tls_state, isolate, deadlines, last_errno, last_error, udp_from_*); registered unconditionally at isolate init from stdlib/prelude/prelude.c:237",
+      "proposed_xr": "export final class NetConn { _h: __NetConn ... }  (requires renaming the native class to __NetConn first)",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "The name is a reserved builtin. Declaring `class NetConn` in .xr fails with E0350 'class NetConn redeclares the builtin NetConn — builtin names are reserved, choose a different name'. Additionally StdlibNativeClassEntry has no is_internal, so a __NetConn rename alone does not clear public_native — the checker/stdlibgen must be taught name-based internality for native_class and class_method entries."
+    },
+    {
+      "module": "net",
+      "symbol": "NetListener",
+      "kind": "native-class",
+      "category": "runtime_object",
+      "impl": "core.def:3289; registration src/stdlib/xstdlib_class_bindings_generated.inc.c:187-206; body desc src/io/xnet_handle.c:191-200; struct src/io/xnet_handle.h:91-101; prelude.c:238",
+      "proposed_xr": "export final class NetListener { _h: __NetListener ... }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn"
+    },
+    {
+      "module": "net",
+      "symbol": "NetError",
+      "kind": "enum",
+      "category": "runtime_object",
+      "subaxis": "generated_descriptor_pure_data",
+      "impl": "Zero-payload enum generated from core.def:3271. Compile-time table src/frontend/analyzer/xanalyzer_builtins_generated.h:440-457; def rows src/stdlib/xstdlib_defs_generated.h:552; lazily built XrEnumType at stdlib/stdlib_cache.c:178-206. NOT bound as a module export by the generated binder. net.xr already owns the classification: stdlib/net/net.xr:31-41 _classify() maps the frozen _CODE_* integers (net.xr:15-23) onto variants.",
+      "proposed_xr": "export enum NetError { Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "blocker_non_compiler": "C builds NetError values for the yieldable primitives' error channel: stdlib/net/net.c:1259-1320 (NetErrorVariant parallel enum, net_error_variant_index, net_error_type, net_publish_error). Every such site must be converted to publish a portable i64 code that net.xr's existing _classify() turns into a NetError. Also OutOfMemory is unreachable from _classify today (only a NET_BIDI_ERROR_OUT_OF_MEMORY=251 sentinel at net.c:1251).",
+      "experiment": "Declaring `export enum NetError { ... }` in a user .xr with `import net` compiles and runs — the name is NOT reserved."
+    },
+    {
+      "module": "net",
+      "symbol": "NetConn.fd",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2344-2350 — unwrap_conn(self) then xr_int(c ? c->fd : -1). Pure field read. AOT twin src/aot/xrt_net.h:847-852 xrt_net_fd.",
+      "proposed_xr": "fd() -> i64 { return __fd(this._h) }   (leaf __fd already exists, core.def:3513)",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "Cannot be migrated independently of NetConn: .xr cannot add a method to a native class, so the method only moves when the class becomes an .xr wrapper.",
+      "notes": "Zero callers inside stdlib/**/*.xr. net.xr uses the free function net.fd(handle) -> __fd instead."
+    },
+    {
+      "module": "net",
+      "symbol": "NetConn.close",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2352-2360 — one-line delegate to xr_net_conn_close (src/io/xnet_handle.c:137-151: idempotency guard, TLS conn free, netpoll deregistration, socket close, last_error=CLOSED). AOT twin src/aot/xrt_net.h:842-845 (which additionally calls shutdown(fd, SHUT_RDWR) — behavioural drift from the VM path).",
+      "proposed_xr": "close() { __close(this._h) }   (leaf __close already exists, core.def:3501)",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd",
+      "notes": "The teardown policy is not expressible in Xray and stays in the existing __close leaf; nothing needs splitting."
+    },
+    {
+      "module": "net",
+      "symbol": "NetConn.isClosed",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2362-2368 — xr_bool(!c || c->closed). Pure field read.",
+      "proposed_xr": "isClosed() -> bool { return __fd(this._h) < 0 }  or a new __isClosed leaf",
+      "new_private_leaves": [
+        {
+          "name": "__isClosed",
+          "signature": "(handle: __NetConn | __NetListener): bool",
+          "optional": true
+        }
+      ],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd",
+      "defect_found": "The VM method checks only c->closed, while xr_net_conn_is_closed (src/io/xnet_handle.c:93) and the AOT twin xrt_net_is_closed (src/aot/xrt_net.h:1389) also check fd < 0. Three spellings of one predicate."
+    },
+    {
+      "module": "net",
+      "symbol": "NetConn.isTLS",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2370-2376 — xr_bool(c && c->kind == XR_NETCONN_TLS). Pure enum compare.",
+      "proposed_xr": "isTLS() -> bool { return __isTLS(this._h) }",
+      "new_private_leaves": [
+        {
+          "name": "__isTLS",
+          "signature": "(conn: __NetConn): bool"
+        }
+      ],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd"
+    },
+    {
+      "module": "net",
+      "symbol": "NetListener.fd",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2378-2384 — pure field read",
+      "proposed_xr": "fd() -> i64 { return __fd(this._h) }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd"
+    },
+    {
+      "module": "net",
+      "symbol": "NetListener.port",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2386-2392 — pure field read (l->port). AOT twin src/aot/xrt_net.h:1384.",
+      "proposed_xr": "port() -> i64 { return __listenerPort(this._h) }",
+      "new_private_leaves": [
+        {
+          "name": "__listenerPort",
+          "signature": "(listener: __NetListener): i64"
+        }
+      ],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd"
+    },
+    {
+      "module": "net",
+      "symbol": "NetListener.close",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2394-2402 — delegate to xr_net_listener_close (src/io/xnet_handle.c:153-161: netpoll dereg + close)",
+      "proposed_xr": "close() { __close(this._h) }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd"
+    },
+    {
+      "module": "net",
+      "symbol": "NetListener.isClosed",
+      "kind": "class-method",
+      "category": "thin_abi",
+      "impl": "stdlib/net/net.c:2404-2410 — pure field read",
+      "proposed_xr": "isClosed() -> bool { return __fd(this._h) < 0 }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": true,
+      "blocker": "same as NetConn.fd"
+    },
+    {
+      "module": "cluster",
+      "symbol": "self",
+      "kind": "function",
+      "category": "thin_abi",
+      "impl": "stdlib/cluster/cluster.c:1172-1179 cluster_self — one field deref via cluster_runtime_self_name (cluster.c:683-685) plus a string intern. No lock, no loop, no policy.",
+      "proposed_xr": "export fn self() -> string { return __self() }",
+      "new_private_leaves": [
+        {
+          "name": "__self",
+          "signature": "(): string",
+          "note": "rename of the existing entry; no new C body"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "notes": "aot_direct: false today (core.def:3780) — VM-only. Migration does not fix that but makes it visible."
+    },
+    {
+      "module": "cluster",
+      "symbol": "nodes",
+      "kind": "function",
+      "category": "thin_abi",
+      "impl": "stdlib/cluster/cluster.c:1182-1203 cluster_nodes — walks c->nodes under nodes_lock, interning a VM string and pushing into a VM array per node, inside the critical section.",
+      "proposed_xr": "export fn nodes() -> Array<string> { return __nodes() }",
+      "new_private_leaves": [
+        {
+          "name": "__nodes",
+          "signature": "(): Array<string>",
+          "note": "rename of the existing entry"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "defect_found": "The comment says 'connected node names' but the loop lists every node regardless of node->state. Also allocates inside the lock."
+    },
+    {
+      "module": "cluster",
+      "symbol": "discover",
+      "kind": "function",
+      "category": "has_policy",
+      "impl": "stdlib/cluster/cluster.c:1206-1215 is a 10-line shim; the substance is cluster_discovery_start (stdlib/cluster/cluster_discovery.c:320-373): FNV-1a hash of the shared secret, announce-frame construction, multicast socket creation, native coroutine spawn onto the worker pool. The rest of cluster_discovery.c (401 lines) is the announce/receive state machine and IP_DROP_MEMBERSHIP teardown.",
+      "proposed_xr": "export fn discover() -> bool { return __discover() }",
+      "new_private_leaves": [
+        {
+          "name": "__discover",
+          "signature": "(): bool",
+          "note": "rename; the transport stays native"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "defect_found": "core.def declares `signature: \"(): ()\"` but the C returns xr_bool(rc == 0) — the start/failure result is silently discarded by the declared type. Migrating to .xr forces the signature to be stated once and is the natural place to fix it (an API change from () to bool)."
+    },
+    {
+      "module": "cluster",
+      "symbol": "info",
+      "kind": "function",
+      "category": "has_policy",
+      "impl": "stdlib/cluster/cluster.c:1374-1513 (140 lines). Builds ClusterInfo + N ClusterNodeInfo + ClusterTlsStatus via xr_object_instance_set_by_key (~13 + 16*N symbol-table interning calls), holding nodes_lock across the whole per-node construction loop and dead_nodes_lock for the tombstone count, and computing a live phi-accrual score (cluster_phi_value, stdlib/cluster/cluster_node.c:233-250).",
+      "proposed_xr": "export fn info() -> ClusterInfo?  with ClusterInfo/ClusterNodeInfo/ClusterTlsStatus defined as .xr classes and populated from a scalar snapshot leaf",
+      "new_private_leaves": [
+        {
+          "name": "__infoSnapshot",
+          "signature": "(): __ClusterInfoRaw?",
+          "note": "one internal `handle` carrying the flat scalars, or ~10 scalar accessors"
+        },
+        {
+          "name": "__nodeCount",
+          "signature": "(): i64"
+        },
+        {
+          "name": "__nodeField*",
+          "signature": "(index: i64): ...",
+          "note": "16 fields per node; either 16 indexed accessors or one internal handle per node"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "defect_found": "Three early-return paths (cluster.c:1407-1408, 1462-1463, 1505-1506) unlock and return xr_null() while leaking node_arr and the partially built info/nj instances."
+    },
+    {
+      "module": "cluster",
+      "symbol": "monitor",
+      "kind": "function",
+      "category": "has_policy",
+      "impl": "stdlib/cluster/cluster.c:1516-1539 is arity dispatch only; cluster_monitor_node (stdlib/cluster/cluster_monitor.c:60-88) chooses a capacity-8 channel and links a monitor record under monitors_lock; cluster_monitor_coro (cluster_monitor.c:134-179) additionally does refcounted node lookup, state gating, capacity-1 channel, wire-frame encode (cluster_frame_encode_coro_monitor) and transport enqueue.",
+      "proposed_xr": "export fn monitor(name: string, coroName: string? = null) -> Channel? { if (coroName == null) { return __monitorNode(name) }  return __monitorCoro(name, coroName!) }",
+      "new_private_leaves": [
+        {
+          "name": "__monitorNode",
+          "signature": "(name: string): Channel?"
+        },
+        {
+          "name": "__monitorCoro",
+          "signature": "(node: string, coro: string): Channel?"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "defect_found": "core.def:3799 declares the return type as non-nullable `Channel`, but cluster_monitor_coro_fn returns xr_null() on five distinct failure paths. The .xr signature must be Channel? — an API correction, not a pure move.",
+      "notes": "Splitting the arity dispatch into two leaves is the whole Xray-side policy; everything else stays native."
+    },
+    {
+      "module": "cluster",
+      "symbol": "send",
+      "kind": "function",
+      "category": "has_policy",
+      "impl": "stdlib/cluster/cluster.c:1328-1341 checks argument shape and boxes the enum (cluster_delivery_value, cluster.c:1317-1325). Below it cluster_transport_send (stdlib/cluster/cluster_topic.c:514-543) -> cluster_transport_deliver_local (cluster_topic.c:391-448, topic-trie walk under topics_lock, per-target Buffer copy, channel back-pressure classification) + transport_broadcast_envelope (cluster_topic.c:453-477, hop-limited peer flood under nodes_lock). The 6-way ACCEPTED/INVALID_TOPIC/INVALID_ENVELOPE/UNAVAILABLE/OVERLOADED/DISCONNECTED classification is entirely native.",
+      "proposed_xr": "export fn send(topic: string, envelope: move Buffer) -> ClusterDelivery { return __send(topic, envelope) }",
+      "new_private_leaves": [
+        {
+          "name": "__send",
+          "signature": "(topic: string, envelope: move Buffer): ClusterDelivery",
+          "note": "rename; ret enum_i64 + aot_enum must be preserved"
+        }
+      ],
+      "blocked_by_compiler": false,
+      "notes": "The only aot_direct: true public cluster fn (core.def:3855). Also the only place where cluster.xr's own Xray topic grammar (validTopicName/validTopicPattern/topicMatches, cluster.xr:102-137) could take over from the C grammar in stdlib/cluster/cluster_topic_core.h:25-92 — today those are two independent sources of truth for the same rules."
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterDelivery",
+      "kind": "enum",
+      "category": "runtime_object",
+      "subaxis": "generated_descriptor_pure_data",
+      "impl": "core.def:3720; variants src/stdlib/xstdlib_defs_generated.h:531; layout id 4282747530; built lazily by stdlib/stdlib_cache.c:178-206. Ordinals are hand-kept in sync with XrClusterDelivery (stdlib/cluster/cluster_internal.h:91-98) and the AOT variant name array (src/aot/xstdlib_aot_methods_generated.inc.c:23-30) — nothing statically asserts the alignment.",
+      "proposed_xr": "export enum ClusterDelivery { Accepted, InvalidTopic, InvalidEnvelope, Unavailable, Overloaded, Disconnected }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "blocker_non_compiler": "The AOT path returns a raw i64 ordinal (ret: enum_i64) validated only by `ordinal < 6` + abort() in the generated boxing sidecar. The enum's layout id is baked into the generated AOT method row, so moving the declaration to .xr requires the .xr enum to keep the same nominal layout id or the AOT row to be re-derived.",
+      "experiment": "Declaring `export enum ClusterDelivery { ... }` in a user .xr with `import cluster` compiles and runs — the name is NOT reserved."
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterNodeState",
+      "kind": "enum",
+      "category": "runtime_object",
+      "subaxis": "generated_descriptor_pure_data",
+      "impl": "core.def:3725; variants src/stdlib/xstdlib_defs_generated.h:540; layout id 2784952505; C builds values at stdlib/cluster/cluster.c:1365-1372 (cluster_node_state_value)",
+      "proposed_xr": "export enum ClusterNodeState { Idle, Connecting, Handshaking, Connected, Closing }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "blocker_non_compiler": "Only constructed by C inside cluster_info_fn; it moves with info()."
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterTlsStatus",
+      "kind": "object-shape",
+      "category": "runtime_object",
+      "subaxis": "generated_descriptor_pure_data",
+      "impl": "core.def:3729; field table src/stdlib/xstdlib_defs_generated.h:450; class built lazily by stdlib/stdlib_cache.c:82-116 (canonical field-name sort) and cached by xr_stdlib_record_class_get (stdlib_cache.c:222-253); constructed only at stdlib/cluster/cluster.c:1504",
+      "proposed_xr": "export final class ClusterTlsStatus { enabled: bool  clientReady: bool  serverReady: bool }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "experiment": "Declaring this class in a user .xr with `import cluster` compiles and runs — name NOT reserved."
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterNodeInfo",
+      "kind": "object-shape",
+      "category": "runtime_object",
+      "subaxis": "generated_descriptor_pure_data",
+      "impl": "core.def:3734 (16 fields); field table src/stdlib/xstdlib_defs_generated.h:456; constructed only at stdlib/cluster/cluster.c:1397",
+      "proposed_xr": "export final class ClusterNodeInfo { name, host, port, state, framesSent, framesReceived, bytesSent, bytesReceived, sendErrors, slowConsumerEvents, rttMs, outQueueBytes, outQueueFrames, slow, phi, missedHeartbeats }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "blocker_non_compiler": "16 fields must reach Xray from the C node table; needs either an internal handle per node or 16 indexed scalar accessors. Moves with info()."
+    },
+    {
+      "module": "cluster",
+      "symbol": "ClusterInfo",
+      "kind": "object-shape",
+      "category": "runtime_object",
+      "subaxis": "generated_descriptor_pure_data",
+      "impl": "core.def:3740 (10 fields incl. Array<ClusterNodeInfo> and nested ClusterTlsStatus); field table src/stdlib/xstdlib_defs_generated.h:475; constructed only at stdlib/cluster/cluster.c:1381",
+      "proposed_xr": "export final class ClusterInfo { self, port, running, nodes: Array<ClusterNodeInfo>, listeners, deadNodes, heartbeatIntervalMs, heartbeatTimeoutMs, maxMissedHeartbeats, tls: ClusterTlsStatus }",
+      "new_private_leaves": [],
+      "blocked_by_compiler": false,
+      "experiment": "A three-class .xr shape with an Array<ClusterNodeInfo> field and a nested ClusterTlsStatus field compiles and runs today.",
+      "blocker_non_compiler": "Moves with info()."
+    }
+  ],
+  "slices": [
+    {
+      "order": 1,
+      "id": "os-platform-constants",
+      "symbols": [
+        "os.platform",
+        "os.arch",
+        "os.sep",
+        "os.eol"
+      ],
+      "removes_from_public_native": 4,
+      "new_private_leaves": [
+        {
+          "name": "__platform",
+          "signature": "(): string",
+          "vm": "os_platform",
+          "aot": "xrt_os_platform"
+        },
+        {
+          "name": "__arch",
+          "signature": "(): string",
+          "vm": "os_arch",
+          "aot": "xrt_os_arch"
+        }
+      ],
+      "xr_surface": [
+        "fn _sepFor(p: string) -> string { if (p == \"windows\") { return \"\\\\\" }\\n return \"/\" }",
+        "fn _eolFor(p: string) -> string { if (p == \"windows\") { return \"\\r\\n\" }\\n return \"\\n\" }",
+        "export const platform: string = __platform()",
+        "export const arch: string = __arch()",
+        "export const sep: string = _sepFor(platform)",
+        "export const eol: string = _eolFor(platform)"
+      ],
+      "files_to_change": [
+        "stdlib/defs/core.def:1862-1901 (the four `const` blocks between `handle __ExecResult` and `fn __getenv` inside `module os {` at :1858) — delete them, add `fn __platform` and `fn __arch` blocks",
+        "stdlib/os/os.xr — add the 4 export consts and 2 private helpers",
+        "stdlib/os/os.c:1100-1145 — get_platform/get_arch become the bodies behind the two new VM cfuncs; delete get_sep/get_eol",
+        "src/aot/xrt_os.h:114-128 — delete xrt_os_sep/xrt_os_eol (now Xray-derived); keep xrt_os_platform/xrt_os_arch as the aot: targets",
+        "src/aot/xi_cgen_dispatch_helpers.inc.c:13767-13777 — delete the hand-written os const-field branch",
+        "REGENERATE: src/stdlib/xstdlib_defs_generated.h:403-406, src/stdlib/xstdlib_vm_bindings_generated.inc.c:264-267, src/aot/xstdlib_aot_methods_generated.inc.c:256-259",
+        "stdlib/stdlib_boundary.toml — os public_native = []",
+        "scripts/check_stdlib_boundary.py:226 — os expected set to empty",
+        "scripts/check_binary_public_native_readiness.py:28 — os expected set to empty",
+        "meta gates: contract_freeze CMakeLists.txt sha256 re-anchor and the shrink-only residue inventory, per the repo's ratchet rules"
+      ],
+      "consumers_to_reverify": [
+        "tests/stdlib/contracts/os/probes/current.xr:3-4 and probes/legacy.xr",
+        "tests/diff/cases/semantics/stdlib/os_query_system_direct.xr (already in tests/diff/known_failures_not_comparable.txt:426)",
+        "tests/regression/10_stdlib/1160_os_basic.xr:11,17,23,29",
+        "tests/diff/cases/semantics/stdlib/sys_dylib_direct.xr, io_chmod_shared_core.xr, tests/regression/10_stdlib/1192_io_extended.xr, 1161_os_extended.xr",
+        "No stdlib/*.xr module consumes any of the four — verified by grep."
+      ],
+      "compiler_blockers": [],
+      "fixes_defect": "Collapses the two divergent C arch tables into one; today the VM cannot report ppc64/loongarch64/riscv64 that LANGUAGE_SPEC.md:6623 documents.",
+      "cost": "smallest"
+    },
+    {
+      "order": 2,
+      "id": "cluster-thin-passthroughs",
+      "symbols": [
+        "cluster.self",
+        "cluster.nodes",
+        "cluster.discover"
+      ],
+      "removes_from_public_native": 3,
+      "new_private_leaves": [
+        {
+          "name": "__self",
+          "signature": "(): string"
+        },
+        {
+          "name": "__nodes",
+          "signature": "(): Array<string>"
+        },
+        {
+          "name": "__discover",
+          "signature": "(): bool"
+        }
+      ],
+      "xr_surface": [
+        "export fn self() -> string { return __self() }",
+        "export fn nodes() -> Array<string> { return __nodes() }",
+        "export fn discover() -> bool { return __discover() }"
+      ],
+      "files_to_change": [
+        "stdlib/defs/core.def:3778-3826 — rename the three `fn` entries to `__self`/`__nodes`/`__discover`; correct discover's signature to `(): bool`",
+        "stdlib/cluster/cluster.xr — add the three passthrough exports",
+        "REGENERATE: src/stdlib/xstdlib_defs_generated.h, src/stdlib/xstdlib_vm_bindings_generated.inc.c",
+        "stdlib/stdlib_boundary.toml — drop the three names from cluster public_native",
+        "tests/stdlib/contracts/cluster/{cases.jsonl,probes} — reverify"
+      ],
+      "compiler_blockers": [],
+      "notes": "No new C body: the C functions keep their implementations, only the def entry name changes. discover's return type changes from () to bool, which is a (currently latent) API correction.",
+      "cost": "small — comparable to slice 1, possibly smaller since no new C is written"
+    },
+    {
+      "order": 3,
+      "id": "cluster-send-and-monitor",
+      "symbols": [
+        "cluster.send",
+        "cluster.monitor",
+        "cluster.ClusterDelivery"
+      ],
+      "removes_from_public_native": 3,
+      "new_private_leaves": [
+        {
+          "name": "__send",
+          "signature": "(topic: string, envelope: move Buffer): ClusterDelivery",
+          "note": "must keep ret: enum_i64, aot_enum: ClusterDelivery, aot_direct: true, link_object: true"
+        },
+        {
+          "name": "__monitorNode",
+          "signature": "(name: string): Channel?"
+        },
+        {
+          "name": "__monitorCoro",
+          "signature": "(node: string, coro: string): Channel?"
+        }
+      ],
+      "xr_surface": [
+        "export enum ClusterDelivery { Accepted, InvalidTopic, InvalidEnvelope, Unavailable, Overloaded, Disconnected }",
+        "export fn send(topic: string, envelope: move Buffer) -> ClusterDelivery { return __send(topic, envelope) }",
+        "export fn monitor(name: string, coroName: string? = null) -> Channel? {\\n if (coroName == null) { return __monitorNode(name) }\\n return __monitorCoro(name, coroName!)\\n}"
+      ],
+      "files_to_change": [
+        "stdlib/defs/core.def — rename send/monitor; split monitor into two leaves; delete `enum ClusterDelivery`",
+        "stdlib/cluster/cluster.c:1516-1539 — split cluster_monitor_coro_fn into two cfuncs",
+        "stdlib/cluster/cluster.c:1317-1325 — cluster_delivery_value must stop resolving the enum by name once .xr owns it; the leaf should return the raw ordinal and let .xr map it",
+        "REGENERATE the def/binding/aot-method headers",
+        "stdlib/stdlib_boundary.toml, both boundary checkers"
+      ],
+      "compiler_blockers": [],
+      "risks": [
+        "ClusterDelivery layout id 4282747530 is baked into src/aot/xstdlib_aot_methods_generated.inc.c:221; an .xr-declared enum must produce the same nominal layout id or the row must be re-derived.",
+        "monitor's declared return type must become Channel? — a public API correction that needs its own decision."
+      ],
+      "cost": "medium"
+    },
+    {
+      "order": 4,
+      "id": "net-error-enum",
+      "symbols": [
+        "net.NetError"
+      ],
+      "removes_from_public_native": 1,
+      "new_private_leaves": [],
+      "xr_surface": [
+        "export enum NetError { Timeout, Closed, Reset, Refused, Dns, Tls, Io, Invalid, Cancelled, OutOfMemory }"
+      ],
+      "files_to_change": [
+        "stdlib/defs/core.def:3271-3274 — delete `enum NetError`",
+        "stdlib/net/net.xr — declare the enum (the _classify mapping at net.xr:31-41 already exists and does not change)",
+        "stdlib/net/net.c:1259-1320 — delete NetErrorVariant / net_error_variant_index / net_error_type / net_publish_error; every yieldable primitive that published a NetError must instead store a portable code that callers read via the existing __lastCode leaf",
+        "REGENERATE src/stdlib/xstdlib_defs_generated.h, src/frontend/analyzer/xanalyzer_builtins_generated.h",
+        "stdlib/stdlib_boundary.toml, both boundary checkers",
+        "downstream consumers: stdlib/http/http.xr:21 imports NetError; stdlib/ws/ws.xr:13"
+      ],
+      "compiler_blockers": [],
+      "blocker_non_compiler": "The C error channel is the real work, not the enum declaration.",
+      "cost": "medium"
+    },
+    {
+      "order": 5,
+      "id": "cluster-info-and-shapes",
+      "symbols": [
+        "cluster.info",
+        "cluster.ClusterInfo",
+        "cluster.ClusterNodeInfo",
+        "cluster.ClusterTlsStatus",
+        "cluster.ClusterNodeState"
+      ],
+      "removes_from_public_native": 5,
+      "new_private_leaves": [
+        {
+          "name": "__infoSelf/__infoPort/__infoRunning/__infoListeners/__infoDeadNodes/__infoHeartbeat*/__infoTls*",
+          "signature": "scalar accessors",
+          "note": "or one internal `handle __ClusterInfoRaw` carrying the flat scalars"
+        },
+        {
+          "name": "__nodeCount",
+          "signature": "(): i64"
+        },
+        {
+          "name": "__nodeAt",
+          "signature": "(index: i64): __ClusterNodeRaw?",
+          "note": "16 fields; a handle avoids 16 separate leaves"
+        }
+      ],
+      "xr_surface": [
+        "the three classes and the enum declared in cluster.xr, with export fn info() -> ClusterInfo? assembling them"
+      ],
+      "files_to_change": [
+        "stdlib/defs/core.def:3725-3752 — delete the three `object` shapes and `enum ClusterNodeState`; add the internal handles/accessors",
+        "stdlib/cluster/cluster.c:1360-1513 — delete cluster_info_fn and cluster_object_new/cluster_node_state_value; replace with the flat accessors",
+        "stdlib/cluster/cluster.xr — declare the shapes and assemble info()",
+        "REGENERATE the def headers; stdlib/stdlib_boundary.toml; both checkers"
+      ],
+      "compiler_blockers": [],
+      "notes": "Not compiler-blocked — the three-class nested shape was experimentally confirmed to compile and run in .xr. The cost is the ~30-value snapshot ABI and preserving the snapshot's lock discipline. Fixes the three leak-on-error paths at cluster.c:1407, 1462, 1505.",
+      "cost": "large"
+    },
+    {
+      "order": 6,
+      "id": "net-handles-and-methods",
+      "symbols": [
+        "net.NetConn",
+        "net.NetListener",
+        "net.NetConn.fd",
+        "net.NetConn.close",
+        "net.NetConn.isClosed",
+        "net.NetConn.isTLS",
+        "net.NetListener.fd",
+        "net.NetListener.port",
+        "net.NetListener.close",
+        "net.NetListener.isClosed"
+      ],
+      "removes_from_public_native": 10,
+      "variants": {
+        "6A_api_preserving": {
+          "shape": "rename the native classes to __NetConn/__NetListener, declare `export final class NetConn { _h: __NetConn }` in net.xr, re-express the 8 methods as .xr methods over __fd/__close/__isTLS/__listenerPort",
+          "new_private_leaves": [
+            {
+              "name": "__isTLS",
+              "signature": "(conn: __NetConn): bool"
+            },
+            {
+              "name": "__listenerPort",
+              "signature": "(listener: __NetListener): i64"
+            }
+          ],
+          "compiler_blockers": [
+            "E0350 name reservation: the native class name must be freed first",
+            "StdlibNativeClassEntry / StdlibClassMethodEntry have no is_internal, so stdlibgen + the boundary checker must be taught name-based internality or the renamed entries stay in public_native"
+          ],
+          "additional_cost": "NetConn identity is referenced by ARC/ownership certificates, coro analysis, xvalue_typeid, AOT value tags XR_TAG_NET_CONN/XR_TAG_NET_LISTENER, and the two independent NetConn implementations (VM XrNetConn vs AOT xrt_net_conn_object_t). All 27 net.xr functions gain an unwrap at the boundary, and http.xr/ws.xr handle flows change type."
+        },
+        "6B_api_reducing": {
+          "shape": "delete the 8 class_method entries outright; net.fd(handle) / net.close(handle) already exist in net.xr and are what all of stdlib actually uses",
+          "evidence": "A grep for .fd()/.close()/.isClosed()/.isTLS()/.port() across stdlib/**/*.xr finds only io.xr:127, io.xr:147 (file handles) and ws.xr:1175 (a WsConn). The 8 net methods have zero stdlib callers.",
+          "cost": "small, but it is a published-API removal and needs an explicit product decision. It does not clear NetConn/NetListener from public_native — only the 8 methods."
+        }
+      },
+      "cost": "largest (6A) / small-but-breaking (6B)"
+    },
+    {
+      "order": 7,
+      "id": "sync-primitive-classes",
+      "symbols": [
+        "sync.Semaphore",
+        "sync.CountdownLatch",
+        "sync.EventCount",
+        "sync.WorkQueue",
+        "sync.ResultGroup"
+      ],
+      "removes_from_public_native": 0,
+      "status": "BLOCKED — not migratable as stated",
+      "compiler_blockers": [
+        "They are VM builtin globals (src/base/xglobal_indices.h:46,47,49,50,51), not module symbols; the name->slot table lives in src/ir/xi_lower_expr.c:118-122.",
+        "Their visibility is gated by a hard-coded file-path test in the analyzer (src/frontend/analyzer/xanalyzer.c:1931-1939 + :1791), so the names resolve only inside stdlib/sync/sync.xr.",
+        "Redeclaring the name in .xr aborts the semantic-plan stage with XR_SEM_0002."
+      ],
+      "recommendation": "Reclassify rather than migrate. sync.c is a 54-line namespace re-export of runtime primitives that sit on the same footing as Array/Map/Set/Channel/Atomic. Either (a) record them as prelude-level runtime primitives outside the stdlib public_native ledger, or (b) accept them as a permanent, per-symbol-approved native surface. Both options are manifest/checker edits, not compiler work.",
+      "cost": "n/a"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E1",
+      "question": "Does AOT already reject a program importing os?",
+      "command": "./build/xray build --native os_probe.xr",
+      "result": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+      "conclusion": "AOT is blocked at baseline for every .xr-sourced stdlib module; the os slice cannot regress it. Confirmed independently by tests/diff/known_failures_not_comparable.txt:426."
+    },
+    {
+      "id": "E2",
+      "question": "Can a module-level `export const` be initialized by a function call and consumed across a module boundary?",
+      "code": "plat.xr: import os / fn _sepFor(p: string) -> string { if (p == \"windows\") { return \"\\\\\" } return \"/\" } / export const PLATFORM: string = os.platform / export const CWD: string = os.getcwd() / export const SEP: string = _sepFor(PLATFORM)   ---   main.xr imports and prints them",
+      "command": "./build/xray run c2/main.xr",
+      "result": "PLATFORM=darwin / CWD_ok=true / SEP=/ / EOL_len=1",
+      "conclusion": "The exact shape slice 1 needs works at RUNTIME in the VM."
+    },
+    {
+      "id": "E3",
+      "question": "Does the analyzer accept a module-level const initialized by a SAME-MODULE private native inside stdlib/os/os.xr?",
+      "method": "Copied stdlib/ to scratch, appended `export const probeCwd: string = __getcwd()` plus derived consts, ran with XRAY_STDLIB_PATH pointed at the copy.",
+      "result": "compiled",
+      "negative_control": "Appending `export const deliberateTypeError: i64 = __getcwd()` produced: '.../stdlibcopy/os/os.xr:64:14: error: Type 'string' is not assignable to type 'i64'' — proving the analyzer really reads the overridden copy.",
+      "caveat": "XRAY_STDLIB_PATH steers the ANALYZER only; the VM still executes embedded bytecode (XR_STDLIB_FROM_FILE=OFF in build/CMakeCache.txt). Runtime execution of the new stdlib top-level code was NOT observed and needs a rebuild to confirm. E2 is the runtime evidence for the equivalent shape."
+    },
+    {
+      "id": "E4",
+      "question": "Does an .xr const named the same as a core.def const conflict?",
+      "method": "Appended `export const platform/arch/sep/eol` to the copied stdlib/os/os.xr while core.def still declares them.",
+      "result": "compiled; a consumer doing len(os.platform), len(os.sep) etc. type-checked and ran; negative control `var n: i64 = os.sep` correctly failed with \"Type 'string' is not assignable to type 'i64'\".",
+      "conclusion": "The .xr declaration wins in module scope. Slice 1 is not blocked by a name collision, and it can be staged .xr-first before the core.def deletion."
+    },
+    {
+      "id": "E5",
+      "question": "Are the 5 sync classes reachable outside stdlib/sync/sync.xr?",
+      "code": "const s = Semaphore(1) ... WorkQueue<i64>(2,2) ... ResultGroup(1)   (no import)",
+      "result": "error[E0365]: undefined type 'WorkQueue' / error[E0365]: undefined type 'ResultGroup' / error[E0351]: Undeclared variable 'Semaphore' / 'CountdownLatch' / 'EventCount' / 'WorkQueue' / 'ResultGroup'",
+      "conclusion": "Not prelude-visible. Their in-sync.xr visibility comes from the hard-coded path gate at src/frontend/analyzer/xanalyzer.c:1931-1939."
+    },
+    {
+      "id": "E6",
+      "question": "Can .xr declare a class named Semaphore?",
+      "code": "export final class Semaphore { _n: i64  constructor(n: i64) { this._n = n }  tryAcquire() -> bool { return this._n > 0 } }",
+      "result": "[xcompiler] Xi IR pipeline failed at semantic-plan: XR_SEM_0002: builtin type identity is not exact (func=<main>)",
+      "conclusion": "Blocked, and blocked badly — the analyzer lets it through and the IR pipeline aborts at the plan stage instead of producing a clean E0350 like NetConn does. Diagnostic-quality defect in its own right."
+    },
+    {
+      "id": "E7",
+      "question": "Can .xr declare a class named NetConn?",
+      "code": "export final class NetConn { _fd: i64  constructor(fd: i64) { this._fd = fd }  fd() -> i64 { return this._fd } }",
+      "result": "error[E0350]: class 'NetConn' redeclares the builtin 'NetConn' — builtin names are reserved, choose a different name",
+      "also": "Same error with `import net` present.",
+      "conclusion": "The native class name must be freed (renamed to __NetConn) before .xr can own the public name. Clean diagnostic, unlike E6."
+    },
+    {
+      "id": "E8",
+      "question": "Can .xr declare the cluster object shapes and enums, and the NetError enum?",
+      "code": "import cluster / export enum ClusterDelivery { Accepted, ... Disconnected }   ||   import net / export enum NetError { Timeout, ... OutOfMemory }   ||   import cluster / three nested classes ClusterTlsStatus + ClusterNodeInfo + ClusterInfo with an Array<ClusterNodeInfo> field",
+      "result": "delivery ok=true   /   neterror ok=true   /   info ok=a,1,true",
+      "conclusion": "All six generated_descriptor type names are FREE — .xr can own them today. Their migration is a C-side construction problem, not a compiler capability problem."
+    },
+    {
+      "id": "E9",
+      "question": "Can an .xr class hold a native handle field (the ExecResult-style wrapper the net migration needs)?",
+      "code": "import net / export final class Conn { _h: NetConn  constructor(h: NetConn) { this._h = h }  fd() -> i64 { return net.fd(this._h) } ... }  plus a Channel<i64>-field class",
+      "result": "compiles and runs (listener port>0=true)",
+      "conclusion": "The wrapper shape itself is supported. What is missing is only the ability to take over the public name."
+    },
+    {
+      "id": "E10",
+      "question": "Do the two ways of reaching sync.Semaphore behave the same?",
+      "code": "import sync / import { Semaphore } from sync / var a = Semaphore(2); a.tryAcquire() x3  /  var b = sync.Semaphore(2); b.tryAcquire() x2",
+      "result": "named a1=true, a2=true, a3=false  |  ns b1=false, ns b2=false  |  CountdownLatch behaves identically both ways",
+      "conclusion": "DEFECT, pre-existing and unrelated to migration: namespace-qualified construction sync.Semaphore(n) drops the permit-count argument and yields a 0-permit semaphore, while the named-import form is correct. Only Semaphore is affected among the two tested."
+    }
+  ],
+  "defects_found_in_passing": [
+    {
+      "where": "stdlib/os/os.c:1117-1129 vs src/aot/xrt_os.h:86-104",
+      "what": "os.arch has two divergent C tables; the VM one cannot report ppc64/loongarch64/riscv64 that LANGUAGE_SPEC.md:6623 documents."
+    },
+    {
+      "where": "stdlib/os/os.c:1100-1114",
+      "what": "get_platform has an unreachable duplicated branch: `#elif defined(XR_OS_BSD) return \"freebsd\"` followed by `#elif defined(XR_OS_BSD) return \"openbsd\"` — openbsd is dead."
+    },
+    {
+      "where": "sync.Semaphore namespace construction",
+      "what": "sync.Semaphore(n).tryAcquire() is false for any n; the named-import form is correct. See experiment E10."
+    },
+    {
+      "where": "src/frontend/analyzer + Xi plan",
+      "what": "Redeclaring a sync builtin name in .xr aborts at semantic-plan with XR_SEM_0002 instead of the clean E0350 that NetConn produces. See E6/E7."
+    },
+    {
+      "where": "stdlib/defs/core.def discover entry vs stdlib/cluster/cluster.c:1206-1215",
+      "what": "declared `(): ()` but the C returns a bool; discovery start/failure is silently discarded."
+    },
+    {
+      "where": "stdlib/defs/core.def monitor entry vs stdlib/cluster/cluster.c:1516-1539",
+      "what": "declared return type is non-nullable Channel but the C returns null on five failure paths."
+    },
+    {
+      "where": "stdlib/cluster/cluster.c:1407-1408, 1462-1463, 1505-1506",
+      "what": "cluster_info_fn leaks node_arr and partially built instances on three early-return-under-lock paths."
+    },
+    {
+      "where": "stdlib/cluster/cluster.c:1182-1203",
+      "what": "cluster_nodes claims to list connected nodes but lists all of them, and allocates VM objects inside nodes_lock."
+    },
+    {
+      "where": "stdlib/net/net.c:2362 vs src/io/xnet_handle.c:93 vs src/aot/xrt_net.h:1389",
+      "what": "three spellings of isClosed; the VM class method omits the fd < 0 check."
+    },
+    {
+      "where": "src/aot/xrt_net.h:292-300 vs stdlib/net/net.c:2352",
+      "what": "the AOT close path calls shutdown(fd, SHUT_RDWR) before closing; the VM path does not."
+    },
+    {
+      "where": "src/aot/xi_cgen_dispatch_helpers.inc.c:13777-13793",
+      "what": "the cgen hard-codes log.DEBUG/INFO/WARN/ERROR/FATAL integer constants that do not exist in stdlib/log/log.xr at all (log.xr uses a LogLevel enum) — apparently dead."
+    },
+    {
+      "where": "stdlib/cluster/cluster.xr:102-137 vs stdlib/cluster/cluster_topic_core.h:25-92",
+      "what": "topic grammar validation and matching are implemented twice, independently, in Xray and in C."
+    },
+    {
+      "where": "scripts/stdlib_symbol_inventory.py",
+      "what": "the per-symbol inventory reads core.def and therefore cannot see the 5 sync manual_public_native symbols at all."
+    },
+    {
+      "where": "src/base/xplatform.h:37-49 vs stdlib/os/os.c:1118-1120",
+      "what": "os.c bypasses the project's XR_ARCH_* macros for raw __aarch64__/__x86_64__/_M_ARM64. This is the stdlib-side twin of the _WIN32-vs-XR_OS_* contract violation the concurrent blocker packet flags in src/aot/xrt_os.h, and it is the mechanical reason the two arch tables drifted."
+    }
+  ],
+  "open_questions": [
+    "Runtime execution of a stdlib .xr module-level native call was not observed (E3 caveat). Confirming it requires a rebuild, which this investigation did not perform.",
+    "Whether an .xr-declared enum reproduces the same nominal layout id that the generated AOT method rows bake in (ClusterDelivery 4282747530, NetError 2184710811) — needs confirmation before slices 3 and 4.",
+    "Whether the contract_freeze / residue-inventory meta gates accept a net-negative core.def edit without extra re-anchoring beyond the CMakeLists.txt sha256."
+  ],
+  "source_commits": {
+    "investigation_started_at": "2d5bb8dec",
+    "head_at_completion": "40bc46213",
+    "note": "A concurrent session advanced this worktree mid-run. No repository writes were made by this investigation (git status clean). Re-verified that none of the files cited with line numbers were changed by those 8 commits; scripts/stdlib_symbol_inventory.py was changed and its sync blind spot was re-confirmed against the new HEAD.",
+    "related_packet": "blockers/a-stdlib-vm-aot-leaf-semantic-divergence.md (commit 9f83cafa8) records four VM/AOT leaf divergences: io.exists lstat-vs-stat, os.username fallback, net.copyBidirectional TLS refusal, sys.processWait blocking. None of them overlap the defects listed here."
+  }
+}

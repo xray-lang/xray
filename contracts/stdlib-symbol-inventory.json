@@ -5,10 +5,10 @@
     "modules": 33,
     "production_modules": 31,
     "test_only_modules": 2,
-    "symbols": 2250,
-    "production_symbols": 2222,
+    "symbols": 2255,
+    "production_symbols": 2227,
     "xray_body_symbols": 1075,
-    "handwritten_c_semantic_owner": 967,
+    "handwritten_c_semantic_owner": 972,
     "native_leaf_symbols": 111,
     "production_native_leaf_symbols": 111,
     "unclassified_native_leaf": 111,
@@ -418,9 +418,9 @@
       ],
       "c_function_count": 2,
       "enters_module_graph": true,
-      "symbol_count": 44,
+      "symbol_count": 49,
       "xray_body_symbols": 42,
-      "handwritten_c_symbols": 2,
+      "handwritten_c_symbols": 7,
       "native_leaf_symbols": 0,
       "queue": "deepen-existing-xray",
       "queue_reason": "5 public native symbols still bypass the .xr surface",
@@ -6402,6 +6402,51 @@
       "plan_coverage": "c_loader",
       "covered_c_deletion": "stdlib/sync/sync.c",
       "blocker": "module-specific C loader; needs a generic source-derived loader"
+    },
+    {
+      "module": "sync",
+      "symbol": "CountdownLatch",
+      "kind": "undeclared-public-native",
+      "audience": "production",
+      "handwritten_c_body": "external",
+      "plan_coverage": "unknown",
+      "blocker": "declared public native with no .def entry, .xr export or stdlib C definition to trace it to"
+    },
+    {
+      "module": "sync",
+      "symbol": "EventCount",
+      "kind": "undeclared-public-native",
+      "audience": "production",
+      "handwritten_c_body": "external",
+      "plan_coverage": "unknown",
+      "blocker": "declared public native with no .def entry, .xr export or stdlib C definition to trace it to"
+    },
+    {
+      "module": "sync",
+      "symbol": "ResultGroup",
+      "kind": "undeclared-public-native",
+      "audience": "production",
+      "handwritten_c_body": "external",
+      "plan_coverage": "unknown",
+      "blocker": "declared public native with no .def entry, .xr export or stdlib C definition to trace it to"
+    },
+    {
+      "module": "sync",
+      "symbol": "Semaphore",
+      "kind": "undeclared-public-native",
+      "audience": "production",
+      "handwritten_c_body": "external",
+      "plan_coverage": "unknown",
+      "blocker": "declared public native with no .def entry, .xr export or stdlib C definition to trace it to"
+    },
+    {
+      "module": "sync",
+      "symbol": "WorkQueue",
+      "kind": "undeclared-public-native",
+      "audience": "production",
+      "handwritten_c_body": "external",
+      "plan_coverage": "unknown",
+      "blocker": "declared public native with no .def entry, .xr export or stdlib C definition to trace it to"
     },
     {
       "module": "parallel",

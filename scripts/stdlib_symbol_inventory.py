@@ -487,6 +487,45 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
                 )
             )
 
+        # A declared public native symbol that none of the three sources
+        # reached. `sync` exposes five such names: they have no `.def` block
+        # and are not `.xr` exports, because the VM installs them as builtin
+        # globals. Without this pass the inventory would report the module as
+        # having no public native surface while the manifest declares five,
+        # and every gate reading the inventory would be blind to them.
+        seen = {r.symbol for r in rows if r.module == name}
+        for symbol in public_native:
+            if symbol in seen:
+                continue
+            rows.append(
+                SymbolRow(
+                    module=name,
+                    symbol=symbol,
+                    kind="undeclared-public-native",
+                    audience=audience,
+                    semantic_source="",
+                    xray_body=False,
+                    handwritten_c_body="external",
+                    generated_c_only=False,
+                    native_leaf=False,
+                    leaf_class="",
+                    leaf_reason="",
+                    factory_loader="",
+                    plan_coverage="unknown",
+                    vm_binding="",
+                    aot_binding="",
+                    covered_c_deletion="",
+                    blocker=(
+                        "declared public native with no .def entry, .xr export "
+                        "or stdlib C definition to trace it to"
+                    ),
+                )
+            )
+            defects.append(
+                f"stdlib/stdlib_boundary.toml: {name}.{symbol} is declared public "
+                f"native but has no traceable declaration source"
+            )
+
         module_rows = [r for r in rows if r.module == name]
         mrow.symbol_count = len(module_rows)
         mrow.xray_body_symbols = sum(1 for r in module_rows if r.xray_body)
