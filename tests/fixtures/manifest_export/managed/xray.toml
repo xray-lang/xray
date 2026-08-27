@@ -1,5 +1,5 @@
 [package]
-name = "managed-export-smoke"
+name = "tests/managed-export-smoke"
 version = "1.0.0"
 license = "MIT"
 main = "main.xr"

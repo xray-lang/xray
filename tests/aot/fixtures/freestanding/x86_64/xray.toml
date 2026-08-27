@@ -1,5 +1,5 @@
 [package]
-name = "freestanding-qemu-smoke"
+name = "tests/freestanding-qemu-smoke"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_qemu_io.xr"

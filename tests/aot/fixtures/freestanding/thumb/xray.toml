@@ -1,5 +1,5 @@
 [package]
-name = "freestanding-thumb-qemu-smoke"
+name = "tests/freestanding-thumb-qemu-smoke"
 version = "1.0.0"
 license = "MIT"
 main = "freestanding_thumb_uart.xr"
