@@ -1998,11 +1998,11 @@ module os {
     return_ownership: "fresh"
   }
 
-  fn __username {
+  fn __systemUsername {
     signature: "(): string?"
     doc: "Get current user name"
-    vm: "os_username"
-    aot: "xrt_os_username"
+    vm: "os_system_username"
+    aot: "xrt_os_system_username"
     argc: 0
     arg_spec: ""
     aot_direct: true

@@ -51,7 +51,21 @@ export fn getpid() -> i64 { return __getpid() }
 export fn getcwd() -> string { return __getcwd() }
 export fn hostname() -> string { return __hostname() }
 export fn tmpdir() -> string { return __tmpdir() }
-export fn username() -> string? { return __username() }
+// The host answer wins; the environment chain is the documented fallback the
+// two backends used to disagree about, so it is stated once here.
+export fn username() -> string? {
+    var system = __systemUsername()
+    if (system != null && len(system!) > 0) { return system }
+    if (platform() == "windows") {
+        var named = __getenv("USERNAME")
+        if (named != null && len(named!) > 0) { return named }
+    }
+    var user = __getenv("USER")
+    if (user != null && len(user!) > 0) { return user }
+    var login = __getenv("LOGNAME")
+    if (login != null && len(login!) > 0) { return login }
+    return null
+}
 export fn homedir() -> string? { return __homedir() }
 export fn uid() -> i64 { return __uid() }
 export fn gid() -> i64 { return __gid() }

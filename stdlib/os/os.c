@@ -272,8 +272,8 @@ static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== User Information (P1) ========== */
 
-// username() - Get current user name
-static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
+// The host's own answer only; the fallback chain is the module's Xray body.
+static XrValue os_system_username(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 

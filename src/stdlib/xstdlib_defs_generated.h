@@ -258,7 +258,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"os", "__getcwd", "(): string", "Get current working directory", "os_getcwd", "normal", "", "xrt_os_getcwd", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__hostname", "(): string", "Get hostname", "os_hostname", "normal", "", "xrt_os_hostname", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__tmpdir", "(): string", "Get temporary directory path", "os_tmpdir", "normal", "", "xrt_os_tmpdir", "", "value", "", "", "", "system", "method", 0, 0, true},
-    {"os", "__username", "(): string?", "Get current user name", "os_username", "normal", "", "xrt_os_username", "", "value", "", "", "", "system", "method", 0, 0, true},
+    {"os", "__systemUsername", "(): string?", "Get current user name", "os_system_username", "normal", "", "xrt_os_system_username", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__homedir", "(): string?", "Get user home directory", "os_homedir", "normal", "", "xrt_os_homedir", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__uid", "(): i64", "Get user ID", "os_uid", "normal", "", "xrt_os_uid", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"os", "__gid", "(): i64", "Get group ID", "os_gid", "normal", "", "xrt_os_gid", "", "value", "", "", "", "system", "method", 0, 0, true},

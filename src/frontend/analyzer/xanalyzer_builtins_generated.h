@@ -524,7 +524,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"__getcwd", "(): string", "Get current working directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__hostname", "(): string", "Get hostname", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__tmpdir", "(): string", "Get temporary directory path", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
-    {"__username", "(): string?", "Get current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
+    {"__systemUsername", "(): string?", "Get current user name", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__homedir", "(): string?", "Get user home directory", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_FRESH},
     {"__uid", "(): i64", "Get user ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},
     {"__gid", "(): i64", "Get group ID", true, false, true, false, false, {0}, XA_ALLOCATION_CONTRACT_MISSING, false, XA_BUILTIN_RETURN_UNKNOWN},

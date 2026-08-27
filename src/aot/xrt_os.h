@@ -294,22 +294,19 @@ static inline XrValue xrt_os_tmpdir(void) {
     return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
 }
 
-static inline XrValue xrt_os_username(void) {
-#ifdef _WIN32
-    const char *user = getenv("USERNAME");
-    if (!user)
-        user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
+/* The host's own answer only; the fallback chain is the module's Xray body. */
+static inline XrValue xrt_os_system_username(void) {
+#if defined(XR_OS_WINDOWS)
+    char buf[256];
+    DWORD size = sizeof(buf);
+    if (GetUserNameA(buf, &size))
+        return xrt_os_cstr_value(buf);
+    return XR_NULL_VAL;
 #else
     struct passwd *pw = getpwuid(getuid());
     if (pw && pw->pw_name)
         return xrt_os_cstr_value(pw->pw_name);
-    const char *user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
+    return XR_NULL_VAL;
 #endif
 }
 

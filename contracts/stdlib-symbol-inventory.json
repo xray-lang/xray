@@ -11375,7 +11375,7 @@
     },
     {
       "module": "os",
-      "symbol": "__username",
+      "symbol": "__systemUsername",
       "kind": "function",
       "audience": "production",
       "semantic_source": "stdlib/defs/core.def",
@@ -11384,8 +11384,8 @@
       "leaf_class": "unclassified",
       "leaf_reason": "proposed host_abi_leaf: operating-system ABI boundary",
       "plan_coverage": "native_binding",
-      "vm_binding": "os_username",
-      "aot_binding": "xrt_os_username",
+      "vm_binding": "os_system_username",
+      "aot_binding": "xrt_os_system_username",
       "covered_c_deletion": "stdlib/os/os.c"
     },
     {
