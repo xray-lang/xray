@@ -175,21 +175,6 @@ static bool io_remove_all_fake_for_each(void *ctx, const char *path, XrIoCoreDir
     return true;
 }
 
-static bool io_remove_all_fake_log(IoRemoveAllFake *fake, const char *kind, const char *path) {
-    if (fake->log_count >= 16)
-        return false;
-    snprintf(fake->log[fake->log_count++], sizeof(fake->log[0]), "%s:%s", kind, path);
-    return !fake->fail_path || strcmp(fake->fail_path, path) != 0;
-}
-
-static bool io_remove_all_fake_remove_leaf(void *ctx, const char *path) {
-    return io_remove_all_fake_log((IoRemoveAllFake *) ctx, "leaf", path);
-}
-
-static bool io_remove_all_fake_remove_dir(void *ctx, const char *path) {
-    return io_remove_all_fake_log((IoRemoveAllFake *) ctx, "dir", path);
-}
-
 static void *io_remove_all_fake_alloc(void *ctx, size_t size) {
     IoRemoveAllFake *fake = (IoRemoveAllFake *) ctx;
     fake->alloc_count++;
@@ -200,20 +185,6 @@ static void io_remove_all_fake_free(void *ctx, void *ptr) {
     IoRemoveAllFake *fake = (IoRemoveAllFake *) ctx;
     fake->free_count++;
     free(ptr);
-}
-
-static XrIoCoreRemoveAllOps io_remove_all_fake_ops(IoRemoveAllFake *fake) {
-    XrIoCoreRemoveAllOps ops = {
-        .kind = io_remove_all_fake_kind,
-        .for_each_entry = io_remove_all_fake_for_each,
-        .remove_leaf = io_remove_all_fake_remove_leaf,
-        .remove_dir = io_remove_all_fake_remove_dir,
-        .alloc = io_remove_all_fake_alloc,
-        .free = io_remove_all_fake_free,
-        .alloc_ctx = fake,
-        .sep = '/',
-    };
-    return ops;
 }
 
 static XrIoCoreReadDirOps io_read_dir_fake_ops(IoRemoveAllFake *fake) {
@@ -502,71 +473,6 @@ TEST(io_core_touch_rejects_create_failure_and_invalid_args) {
     ASSERT_FALSE(xr_io_core_touch(NULL, io_touch_fake_update, io_touch_fake_create, &fake));
     ASSERT_FALSE(xr_io_core_touch("x", NULL, io_touch_fake_create, &fake));
     ASSERT_FALSE(xr_io_core_touch("x", io_touch_fake_update, NULL, &fake));
-}
-
-TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries) {
-    IoRemoveAllFake fake = {
-        .nodes =
-            {
-                {.path = "root",
-                 .kind = XR_IO_CORE_PATH_DIR,
-                 .entries = {".", "..", "a", "sub"},
-                 .entry_count = 4},
-                {.path = "root/a", .kind = XR_IO_CORE_PATH_LEAF},
-                {.path = "root/sub",
-                 .kind = XR_IO_CORE_PATH_DIR,
-                 .entries = {"b"},
-                 .entry_count = 1},
-                {.path = "root/sub/b", .kind = XR_IO_CORE_PATH_LEAF},
-            },
-        .node_count = 4,
-    };
-    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
-
-    ASSERT_TRUE(xr_io_core_remove_all("root", &ops, &fake));
-    ASSERT_EQ_UINT(fake.log_count, 4);
-    ASSERT_STR_EQ(fake.log[0], "leaf:root/a");
-    ASSERT_STR_EQ(fake.log[1], "leaf:root/sub/b");
-    ASSERT_STR_EQ(fake.log[2], "dir:root/sub");
-    ASSERT_STR_EQ(fake.log[3], "dir:root");
-    ASSERT_EQ_UINT(fake.alloc_count, 3);
-    ASSERT_EQ_UINT(fake.free_count, 3);
-}
-
-TEST(io_core_remove_all_handles_leaf_and_missing_paths) {
-    IoRemoveAllFake fake = {
-        .nodes = {{.path = "file", .kind = XR_IO_CORE_PATH_LEAF}},
-        .node_count = 1,
-    };
-    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
-
-    ASSERT_TRUE(xr_io_core_remove_all("file", &ops, &fake));
-    ASSERT_EQ_UINT(fake.log_count, 1);
-    ASSERT_STR_EQ(fake.log[0], "leaf:file");
-    ASSERT_FALSE(xr_io_core_remove_all("missing", &ops, &fake));
-}
-
-TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs) {
-    IoRemoveAllFake fake = {
-        .nodes =
-            {
-                {.path = "root", .kind = XR_IO_CORE_PATH_DIR, .entries = {"sub"}, .entry_count = 1},
-                {.path = "root/sub",
-                 .kind = XR_IO_CORE_PATH_DIR,
-                 .entries = {"bad"},
-                 .entry_count = 1},
-                {.path = "root/sub/bad", .kind = XR_IO_CORE_PATH_LEAF},
-            },
-        .node_count = 3,
-        .fail_path = "root/sub/bad",
-    };
-    XrIoCoreRemoveAllOps ops = io_remove_all_fake_ops(&fake);
-
-    ASSERT_FALSE(xr_io_core_remove_all("root", &ops, &fake));
-    ASSERT_EQ_UINT(fake.log_count, 3);
-    ASSERT_STR_EQ(fake.log[0], "leaf:root/sub/bad");
-    ASSERT_STR_EQ(fake.log[1], "dir:root/sub");
-    ASSERT_STR_EQ(fake.log[2], "dir:root");
 }
 
 TEST(io_core_read_dir_filters_dot_entries) {
@@ -938,11 +844,6 @@ RUN_TEST_SUITE("IO Core - touch");
 RUN_TEST(io_core_touch_prefers_timestamp_update);
 RUN_TEST(io_core_touch_creates_when_update_fails);
 RUN_TEST(io_core_touch_rejects_create_failure_and_invalid_args);
-
-RUN_TEST_SUITE("IO Core - remove all");
-RUN_TEST(io_core_remove_all_recurses_depth_first_and_skips_dot_entries);
-RUN_TEST(io_core_remove_all_handles_leaf_and_missing_paths);
-RUN_TEST(io_core_remove_all_reports_child_failure_but_still_visits_parent_dirs);
 
 RUN_TEST_SUITE("IO Core - read dir");
 RUN_TEST(io_core_read_dir_filters_dot_entries);

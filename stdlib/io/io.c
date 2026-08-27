@@ -651,7 +651,28 @@ static XrValue io_remove(XrVMRuntime *X, XrValue *args, int argc) {
     if (!path)
         return xr_bool(false);
 
+#ifdef XR_OS_WINDOWS
+    /* A read-only attribute blocks deletion. Clearing it is part of asking the
+     * host to delete rather than a choice the module makes, and the recursive
+     * removal path has always done it, so both paths answer the same here. */
+    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
+#endif
     return xr_bool(remove(path) == 0);
+}
+
+static XrValue io_rmdir(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 1)
+        return xr_bool(false);
+    const char *path = xrs_path_arg(args[0], NULL);
+    if (!path)
+        return xr_bool(false);
+
+#ifdef XR_OS_WINDOWS
+    return xr_bool(RemoveDirectoryA(path) != 0);
+#else
+    return xr_bool(rmdir(path) == 0);
+#endif
 }
 
 // rename(old, new) - Rename file
@@ -700,23 +721,6 @@ static bool io_dir_for_each_entry(void *ctx, const char *path, XrIoCoreDirEntryF
 
     xr_dir_close(it);
     return ok;
-}
-
-static XrIoCorePathKind io_path_kind(void *ctx, const char *path) {
-    (void) ctx;
-#ifdef XR_OS_WINDOWS
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs == INVALID_FILE_ATTRIBUTES)
-        return XR_IO_CORE_PATH_MISSING;
-    if ((attrs & FILE_ATTRIBUTE_DIRECTORY) && !(attrs & FILE_ATTRIBUTE_REPARSE_POINT))
-        return XR_IO_CORE_PATH_DIR;
-    return XR_IO_CORE_PATH_LEAF;
-#else
-    struct stat st;
-    if (lstat(path, &st) != 0)
-        return XR_IO_CORE_PATH_MISSING;
-    return S_ISDIR(st.st_mode) ? XR_IO_CORE_PATH_DIR : XR_IO_CORE_PATH_LEAF;
-#endif
 }
 
 typedef struct IoReadDirEmitCtx {
@@ -1037,59 +1041,6 @@ static bool io_touch_create(void *ctx, const char *path) {
     return fclose(f) == 0;
 }
 
-#ifdef XR_OS_WINDOWS
-static bool io_remove_all_leaf(void *ctx, const char *path) {
-    (void) ctx;
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
-        return RemoveDirectoryA(path) != 0;
-    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
-    return DeleteFileA(path) != 0;
-}
-
-static bool io_remove_all_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return RemoveDirectoryA(path) != 0;
-}
-#else
-static bool io_remove_all_leaf(void *ctx, const char *path) {
-    (void) ctx;
-    return remove(path) == 0;
-}
-
-static bool io_remove_all_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return rmdir(path) == 0;
-}
-#endif
-
-// removeAll(path) - Recursively remove directory
-static XrValue io_removeAll(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-
-    XrIoCoreRemoveAllOps ops = {
-        .kind = io_path_kind,
-        .for_each_entry = io_dir_for_each_entry,
-        .remove_leaf = io_remove_all_leaf,
-        .remove_dir = io_remove_all_dir,
-        .alloc = io_core_alloc,
-        .free = io_core_free,
-        .sep =
-#ifdef XR_OS_WINDOWS
-            '\\',
-#else
-            '/',
-#endif
-    };
-    return xr_bool(xr_io_core_remove_all(path, &ops, NULL));
-}
-
-// chmod(path, mode) - Change file permissions
 static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;
     if (argc < 2)

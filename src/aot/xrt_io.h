@@ -289,6 +289,22 @@ static inline XrValue xrt_io_remove(const char *path_data, int64_t path_len) {
     return XR_FROM_BOOL(ok);
 }
 
+static inline XrValue xrt_io_rmdir(const char *path_data, int64_t path_len) {
+    char stack_path[512];
+    char *owned = NULL;
+    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
+    bool ok = false;
+    if (path) {
+#if defined(XR_OS_WINDOWS)
+        ok = RemoveDirectoryA(path) != 0;
+#else
+        ok = rmdir(path) == 0;
+#endif
+    }
+    XRT_FREE(owned);
+    return XR_FROM_BOOL(ok);
+}
+
 static inline XrValue xrt_io_rename(const char *old_data, int64_t old_len, const char *new_data,
                                     int64_t new_len) {
     char old_stack[512];
@@ -566,19 +582,6 @@ static inline bool xrt_io_dir_for_each_entry(void *ctx, const char *path, XrIoCo
     return ok;
 }
 
-static inline bool xrt_io_remove_all_leaf(void *ctx, const char *path) {
-    (void) ctx;
-    DWORD attrs = GetFileAttributesA(path);
-    if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
-        return RemoveDirectoryA(path) != 0;
-    SetFileAttributesA(path, FILE_ATTRIBUTE_NORMAL);
-    return DeleteFileA(path) != 0;
-}
-
-static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return RemoveDirectoryA(path) != 0;
-}
 #else
 static inline XrIoCorePathKind xrt_io_path_kind(void *ctx, const char *path) {
     (void) ctx;
@@ -610,39 +613,7 @@ static inline bool xrt_io_dir_for_each_entry(void *ctx, const char *path, XrIoCo
     return ok;
 }
 
-static inline bool xrt_io_remove_all_leaf(void *ctx, const char *path) {
-    (void) ctx;
-    return remove(path) == 0;
-}
-
-static inline bool xrt_io_remove_all_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return rmdir(path) == 0;
-}
 #endif
-
-static inline XrValue xrt_io_remove_all(const char *path_data, int64_t path_len) {
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    XrIoCoreRemoveAllOps ops = {
-        .kind = xrt_io_path_kind,
-        .for_each_entry = xrt_io_dir_for_each_entry,
-        .remove_leaf = xrt_io_remove_all_leaf,
-        .remove_dir = xrt_io_remove_all_dir,
-        .alloc = xrt_io_core_alloc,
-        .free = xrt_io_core_free,
-        .sep =
-#if defined(XR_OS_WINDOWS)
-            '\\',
-#else
-            '/',
-#endif
-    };
-    bool ok = path && xr_io_core_remove_all(path, &ops, NULL);
-    XRT_FREE(owned);
-    return XR_FROM_BOOL(ok);
-}
 
 static inline XrValue xrt_io_symlink(const char *target_data, int64_t target_len,
                                      const char *path_data, int64_t path_len) {

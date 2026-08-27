@@ -58,17 +58,6 @@ typedef enum XrIoCorePathKind {
 
 typedef XrIoCorePathKind (*XrIoCorePathKindFn)(void *ctx, const char *path);
 
-typedef struct XrIoCoreRemoveAllOps {
-    XrIoCorePathKindFn kind;
-    XrIoCoreForEachDirEntryFn for_each_entry;
-    XrIoCorePathFn remove_leaf;
-    XrIoCorePathFn remove_dir;
-    XrIoCoreAllocFn alloc;
-    XrIoCoreFreeFn free;
-    void *alloc_ctx;
-    char sep;
-} XrIoCoreRemoveAllOps;
-
 #define XR_IO_CORE_READ_DIR_MAX_DEPTH 64
 
 typedef struct XrIoCoreReadDirOps {
@@ -414,67 +403,6 @@ static inline bool xr_io_core_join_child_path(const char *parent, char sep, cons
         out[pos++] = name[i];
     out[pos] = '\0';
     return true;
-}
-
-static inline bool xr_io_core_remove_all_impl(const char *path, const XrIoCoreRemoveAllOps *ops,
-                                              void *ctx);
-
-typedef struct XrIoCoreRemoveAllVisitCtx {
-    const XrIoCoreRemoveAllOps *ops;
-    void *ctx;
-    const char *parent;
-    bool ok;
-} XrIoCoreRemoveAllVisitCtx;
-
-static inline bool xr_io_core_remove_all_visit(void *visit_ctx, const char *name) {
-    XrIoCoreRemoveAllVisitCtx *v = (XrIoCoreRemoveAllVisitCtx *) visit_ctx;
-    if (!v || !v->ops || xr_io_core_is_dot_dir_entry(name))
-        return true;
-
-    size_t child_len = 0;
-    if (!xr_io_core_join_child_len(v->parent, name, &child_len)) {
-        v->ok = false;
-        return true;
-    }
-
-    char *child = (char *) v->ops->alloc(v->ops->alloc_ctx, child_len + 1);
-    if (!child) {
-        v->ok = false;
-        return true;
-    }
-    char sep = v->ops->sep ? v->ops->sep : '/';
-    if (!xr_io_core_join_child_path(v->parent, sep, name, child, child_len + 1)) {
-        v->ops->free(v->ops->alloc_ctx, child);
-        v->ok = false;
-        return true;
-    }
-
-    if (!xr_io_core_remove_all_impl(child, v->ops, v->ctx))
-        v->ok = false;
-    v->ops->free(v->ops->alloc_ctx, child);
-    return true;
-}
-
-static inline bool xr_io_core_remove_all_impl(const char *path, const XrIoCoreRemoveAllOps *ops,
-                                              void *ctx) {
-    XrIoCorePathKind kind = ops->kind(ctx, path);
-    if (kind == XR_IO_CORE_PATH_MISSING)
-        return false;
-    if (kind == XR_IO_CORE_PATH_LEAF)
-        return ops->remove_leaf(ctx, path);
-
-    XrIoCoreRemoveAllVisitCtx visit_ctx = {.ops = ops, .ctx = ctx, .parent = path, .ok = true};
-    if (!ops->for_each_entry(ctx, path, xr_io_core_remove_all_visit, &visit_ctx))
-        visit_ctx.ok = false;
-    return ops->remove_dir(ctx, path) && visit_ctx.ok;
-}
-
-static inline bool xr_io_core_remove_all(const char *path, const XrIoCoreRemoveAllOps *ops,
-                                         void *ctx) {
-    if (!path || !ops || !ops->kind || !ops->for_each_entry || !ops->remove_leaf ||
-        !ops->remove_dir || !ops->alloc || !ops->free)
-        return false;
-    return xr_io_core_remove_all_impl(path, ops, ctx);
 }
 
 typedef struct XrIoCoreReadDirVisitCtx {
