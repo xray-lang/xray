@@ -151,6 +151,9 @@ def fact_from_detail(family: str, detail: str) -> str:
         ("value-machine", r"\bvalue-machine=(\d+)"),
         ("value-shape", r"\bvalue-shape=(\d+)"),
         ("value-flags", r"\bvalue-flags=(\d+)"),
+        ("definition-rep", r"\bdefinition-rep=(\d+)"),
+        ("use-rep", r"\buse-rep=(\d+)"),
+        ("machine-rep", r"\bmachine-rep=(\d+)"),
         ("parameter-ordinal", r"\bparameter-ordinal=(\d+)"),
         ("storage-mask", r"\bstorage-mask=(\d+)"),
         ("operand-mode", r"\boperand-mode=(\d+)"),
@@ -704,6 +707,37 @@ def self_test() -> int:
         "message": "func '<main>': state 1 error continuation is not derivable",
     }:
         print("self-test lost a space-separated diagnostic code", file=sys.stderr)
+        return 1
+    materialization_source = (
+        "[refusal-survey] owner=aot-representation-refinement "
+        "family=refinement_materialization XR_TARGET_1006: materialized AOT value "
+        "representation does not match verified refinement authority "
+        "definer-opcode=4 use-opcode=17 definition-rep=3 use-rep=0 machine-rep=0"
+    )
+    materialization_log = (
+        materialization_source + "\n"
+        "Error: XR_TARGET_1006: module representation materialization failed for 'm': "
+        "XR_AOT_REFINEMENT_REPRESENTATION record=0 value=5 operation=6\n"
+    ).encode("utf-8")
+    materialization_rows = refusal_rows(materialization_log)
+    expected_materialization_fact = (
+        "refinement_materialization|XR_TARGET_1006: materialized AOT value representation "
+        "does not match verified refinement authority|definer-opcode=4|use-opcode=17|"
+        "definition-rep=3|use-rep=0|machine-rep=0"
+    )
+    if len(materialization_rows) != 1 \
+            or materialization_rows[0]["owner"] != "aot-representation-refinement" \
+            or materialization_rows[0]["family"] != "refinement_materialization" \
+            or materialization_rows[0]["blocking_fact"] != expected_materialization_fact \
+            or diagnostic_row(materialization_log, codes) != {
+                "code": "XR_TARGET_1006",
+                "message": (
+                    "materialized AOT value representation does not match verified refinement "
+                    "authority definer-opcode=4 use-opcode=17 definition-rep=3 use-rep=0 "
+                    "machine-rep=0"
+                ),
+            }:
+        print("self-test lost materialization refusal evidence", file=sys.stderr)
         return 1
     # An internal enumerator name is XR_-shaped but carries no registered
     # identity, so a refusal that names one still owes a stable diagnostic.

@@ -774,6 +774,59 @@ static void rep_trace_refusal(const VerifyAuthority *ctx, const char *stage, con
             use_operation, source_value, source_value);
 }
 
+/* This row is emitted by the verifier that owns the refusal, after the build
+ * has already become invalid. The numeric storage facts are stable enum
+ * identities; names and source locations remain trace-only diagnostics. */
+static void rep_materialization_survey_row(const VerifyAuthority *ctx, uint32_t source_value,
+                                           uint32_t use_operation, XrRep definition_rep,
+                                           XrRep use_rep, uint16_t machine_rep) {
+    if (!rep_survey_enabled())
+        return;
+    uint32_t definer =
+        ctx && ctx->operation_by_value && source_value < ctx->value_count
+            ? ctx->operation_by_value[source_value]
+            : XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticOperationRecord *definition =
+        definer != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, definer)
+            : NULL;
+    const XrSemanticOperationRecord *use =
+        use_operation != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(ctx->semantic, use_operation)
+            : NULL;
+    fprintf(stderr,
+            "[refusal-survey] owner=aot-representation-refinement "
+            "family=refinement_materialization XR_TARGET_1006: materialized AOT value "
+            "representation does not match verified refinement authority "
+            "definer-opcode=%u use-opcode=%u definition-rep=%u use-rep=%u machine-rep=%u\n",
+            definition ? definition->opcode : 9999u, use ? use->opcode : 9999u,
+            (unsigned) definition_rep, (unsigned) use_rep, (unsigned) machine_rep);
+}
+
+static void rep_materialized_adapter_survey_row(
+    const XrSemanticPlan *semantic, const XrAotRepresentationAdapterRecord *record,
+    const XiValue *source, const XiValue *adapter) {
+    if (!rep_survey_enabled() || !semantic || !record)
+        return;
+    const XrSemanticOperationRecord *definition =
+        record->source_operation != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(semantic, record->source_operation)
+            : NULL;
+    const XrSemanticOperationRecord *use =
+        record->use_operation != XR_SEMANTIC_INDEX_NONE
+            ? xr_semantic_plan_operation(semantic, record->use_operation)
+            : NULL;
+    fprintf(stderr,
+            "[refusal-survey] owner=aot-representation-refinement "
+            "family=refinement_materialization XR_TARGET_1006: materialized AOT value "
+            "representation does not match verified refinement authority "
+            "definer-opcode=%u use-opcode=%u definition-rep=%u use-rep=%u machine-rep=%u\n",
+            definition ? definition->opcode : 9999u, use ? use->opcode : 9999u,
+            source ? (unsigned) source->rep : (unsigned) XR_REP_COUNT,
+            adapter ? (unsigned) adapter->rep : (unsigned) XR_REP_COUNT,
+            (unsigned) record->output_rep_kind);
+}
+
 static bool oracle_dynamic_array_intrinsic_storage(const VerifyAuthority *ctx,
                                                    uint32_t semantic_value, XrRep *out_storage,
                                                    uint16_t *out_machine_kind);
@@ -11533,6 +11586,7 @@ bool xr_aot_representation_materialization_verify(const XrAotRefinementPlanView 
                 record->input_rep_kind != XR_MACHINE_REP_I64 ||
                 record->output_rep_kind != XR_MACHINE_REP_I64 ||
                 record->recipe != XR_AOT_REP_RECIPE_NONE) {
+                rep_materialized_adapter_survey_row(semantic, record, source, adapter);
                 set_diag(diag, XR_AOT_REFINEMENT_REPRESENTATION, i,
                          record->source_value, record->use_operation);
                 valid = false;
@@ -11542,6 +11596,7 @@ bool xr_aot_representation_materialization_verify(const XrAotRefinementPlanView 
         if (!adapter || adapter->nargs != 1 || !adapter->args || adapter->args[0] != source ||
             !materialized_adapter_kind_matches(record, adapter) ||
             !xr_aot_rep_adapter_value_is_exact(target_plan, function, adapter, NULL, 0)) {
+            rep_materialized_adapter_survey_row(semantic, record, source, adapter);
             set_diag(diag, XR_AOT_REFINEMENT_REPRESENTATION, i, record->source_value,
                      record->use_operation);
             valid = false;
@@ -11733,6 +11788,8 @@ static bool verify_exact_obligation(VerifyAuthority *ctx, uint32_t source_value,
         if (use_kind != XR_AOT_REP_USE_OPERATION ||
             input_storage != XR_REP_I64 || output_storage != XR_REP_I64 ||
             machine_kind != XR_MACHINE_REP_I64) {
+            rep_materialization_survey_row(ctx, source_value, use_operation, input_storage,
+                                           output_storage, machine_kind);
             set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION,
                      (uint32_t) ctx->work, source_value, use_operation);
             return false;
@@ -11816,6 +11873,8 @@ static bool verify_exact_obligation(VerifyAuthority *ctx, uint32_t source_value,
         record->adapter_kind != expected_adapter ||
         record->recipe != expected_recipe || record->input_rep_kind != expected_input ||
         record->output_rep_kind != expected_output) {
+        rep_materialization_survey_row(ctx, source_value, use_operation, input_storage,
+                                       output_storage, machine_kind);
         set_diag(ctx->diag, XR_AOT_REFINEMENT_REPRESENTATION, record_index, source_value,
                  use_operation);
         return false;

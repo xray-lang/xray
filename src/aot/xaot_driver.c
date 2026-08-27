@@ -1967,11 +1967,15 @@ static bool xaot_install_module_representation_refinements(XaotBundle *bundle,
         XrAotRefinementPlanView view = xr_aot_refinement_plan_view(refinement);
         if (!xr_aot_representation_materialization_verify(&view, module->init, target_plan, policy,
                                                           &diag)) {
+            const char *code = diag.issue == XR_AOT_REFINEMENT_REPRESENTATION
+                                   ? "XR_TARGET_1006: "
+                                   : "";
             fprintf(stderr,
-                    "Error: module representation materialization failed for '%s': "
+                    "Error: %smodule representation materialization failed for '%s': "
                     "%s record=%u value=%u operation=%u\n",
-                    module->name ? module->name : "?", xr_aot_refinement_issue_name(diag.issue),
-                    diag.record_index, diag.semantic_value, diag.semantic_operation);
+                    code, module->name ? module->name : "?",
+                    xr_aot_refinement_issue_name(diag.issue), diag.record_index,
+                    diag.semantic_value, diag.semantic_operation);
             xr_aot_refinement_plan_free(refinement);
             return false;
         }

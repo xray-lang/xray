@@ -165,6 +165,11 @@ name = "invalid-instruction-program"
 message = "typed instruction rows are not a canonical closed function-local program"
 
 [[code]]
+id = "XR_TARGET_1006"
+name = "representation-materialization-mismatch"
+message = "materialized AOT value representation does not match verified refinement authority"
+
+[[code]]
 id = "XR_ARTIFACT_2000"
 name = "schema-mismatch"
 message = "artifact schema is not exactly supported"
