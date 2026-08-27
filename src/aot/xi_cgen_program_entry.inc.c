@@ -786,9 +786,8 @@ static void xi_cgen_hosted_fragment_initializer(XiCgenCtx *ctx, FILE *out, XiMod
         if (!modules[m] || !modules[m]->init)
             continue;
         fprintf(out, "%sXrValue ",
-                cg_func_forward_linkage(
-                    ctx, modules[m]->init,
-                    modules[m]->name ? modules[m]->name : "mod", false));
+                cg_func_forward_linkage(ctx, modules[m]->init,
+                                        modules[m]->name ? modules[m]->name : "mod", false));
         emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
         fprintf(out, "(xrt_closure_t *_cl);\n");
     }
@@ -928,8 +927,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             ctx->error = true;
             fprintf(out, "    return 1;\n");
         } else {
-            for (uint32_t partition = 0;
-                 partition < ctx->program_direct_i64.initializer_count;
+            for (uint32_t partition = 0; partition < ctx->program_direct_i64.initializer_count;
                  partition++) {
                 const XrCProgramXiFunctionBinding *initializer =
                     &ctx->program_direct_i64.initializers[partition];
@@ -939,8 +937,8 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
                     break;
                 }
                 fprintf(out, "    %s(NULL);\n", initializer->c_symbol);
-                cg_emit_main_pending_error_return(
-                    out, entry_needs_runtime, cg_can_report_uncaught_error(ctx));
+                cg_emit_main_pending_error_return(out, entry_needs_runtime,
+                                                  cg_can_report_uncaught_error(ctx));
             }
         }
     } else {
@@ -948,34 +946,31 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
             if (!modules[m] || !modules[m]->init)
                 continue;
             if (m == entry_index && entry_is_coro) {
-            fprintf(out, "    void *_entry_frame = ");
-            emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
-                              modules[m]->init, "_aot_frame_new");
-            fprintf(out, "();\n");
-            fprintf(out, "    xr_aot_run_main(rt, &");
-            emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
-                              modules[m]->init, "_aot_desc");
-            fprintf(out, ", _entry_frame);\n");
-            cg_emit_main_pending_error_return(out, entry_needs_runtime,
-                                              cg_can_report_uncaught_error(ctx));
+                fprintf(out, "    void *_entry_frame = ");
+                emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
+                                  modules[m]->init, "_aot_frame_new");
+                fprintf(out, "();\n");
+                fprintf(out, "    xr_aot_run_main(rt, &");
+                emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
+                                  modules[m]->init, "_aot_desc");
+                fprintf(out, ", _entry_frame);\n");
+                cg_emit_main_pending_error_return(out, entry_needs_runtime,
+                                                  cg_can_report_uncaught_error(ctx));
             } else {
                 if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
-                fprintf(stderr,
-                        "[xi_cgen] ERROR: suspendable AOT dependency module init '%s' must "
-                        "be the entry module\n",
-                        modules[m]->name ? modules[m]->name : "mod");
-                ctx->error = true;
-                fprintf(out, "    return 1;\n");
-                continue;
+                    fprintf(stderr,
+                            "[xi_cgen] ERROR: suspendable AOT dependency module init '%s' must "
+                            "be the entry module\n",
+                            modules[m]->name ? modules[m]->name : "mod");
+                    ctx->error = true;
+                    fprintf(out, "    return 1;\n");
+                    continue;
                 }
                 fprintf(out, "    ");
-                emit_fname(ctx, out,
-                           modules[m]->name ? modules[m]->name : "mod",
-                           modules[m]->init);
+                emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
                 fprintf(out, "(NULL);\n");
-                cg_emit_main_pending_error_return(
-                    out, entry_needs_runtime,
-                    cg_can_report_uncaught_error(ctx));
+                cg_emit_main_pending_error_return(out, entry_needs_runtime,
+                                                  cg_can_report_uncaught_error(ctx));
             }
         }
     }
@@ -990,33 +985,27 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     fprintf(out, "}\n");
 }
 
-XR_FUNC XiCgenLeafProductRoute xi_cgen_leaf_product_program_route(
-    const XiModule *module, const XrTargetPlan *plan) {
-    const XrProgramSemanticClosure *closure =
-        module ? module->program_semantic_closure : NULL;
-    bool module_product =
-        closure &&
-        xr_program_semantic_closure_family(closure) ==
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+XR_FUNC XiCgenLeafProductRoute xi_cgen_leaf_product_program_route(const XiModule *module,
+                                                                  const XrTargetPlan *plan) {
+    const XrProgramSemanticClosure *closure = module ? module->program_semantic_closure : NULL;
+    bool module_product = closure && xr_program_semantic_closure_family(closure) ==
+                                         XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     const XrSemanticPlan *plan_semantic = xr_target_plan_semantic_plan(plan);
     const XrSemanticProgramProvenance *plan_provenance =
         xr_semantic_plan_program_provenance(plan_semantic);
     bool plan_product =
-        plan_provenance &&
-        plan_provenance->program_family ==
-            XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+        plan_provenance && plan_provenance->program_family ==
+                               XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
     if (!module_product && !plan_product)
         return XI_CGEN_LEAF_PRODUCT_ROUTE_ORDINARY;
     return module_product == plan_product ? XI_CGEN_LEAF_PRODUCT_ROUTE_CLAIM
                                           : XI_CGEN_LEAF_PRODUCT_ROUTE_REJECT;
 }
 
-static bool cg_try_emit_leaf_value_product_program(XiCgenCtx *ctx, FILE *out,
-                                                   XiModule *module) {
+static bool cg_try_emit_leaf_value_product_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
     const XrTargetPlan *plan = xaot_bundle_program_target_plan(bundle);
-    XiCgenLeafProductRoute route =
-        xi_cgen_leaf_product_program_route(module, plan);
+    XiCgenLeafProductRoute route = xi_cgen_leaf_product_program_route(module, plan);
     if (route == XI_CGEN_LEAF_PRODUCT_ROUTE_ORDINARY)
         return false;
     if (route == XI_CGEN_LEAF_PRODUCT_ROUTE_REJECT) {
@@ -1026,15 +1015,12 @@ static bool cg_try_emit_leaf_value_product_program(XiCgenCtx *ctx, FILE *out,
     const XrTargetProfile *profile = xr_target_plan_profile(plan);
     const XrTargetMachineFacts *machine = xr_target_profile_machine_facts(profile);
     uint32_t function_count = 0;
-    const XrTargetFunctionRecord *functions =
-        xr_target_plan_functions(plan, &function_count);
-    if (!bundle || bundle->nmodules != 1u || !bundle->modules ||
-        bundle->modules[0] != module || !functions || function_count != 4u ||
-        !xaot_bundle_program_semantic_for_module(bundle, 0) ||
+    const XrTargetFunctionRecord *functions = xr_target_plan_functions(plan, &function_count);
+    if (!bundle || bundle->nmodules != 1u || !bundle->modules || bundle->modules[0] != module ||
+        !functions || function_count != 4u || !xaot_bundle_program_semantic_for_module(bundle, 0) ||
         ctx->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT ||
         bundle->artifact_kind != XAOT_ARTIFACT_HOSTED_FRAGMENT ||
-        bundle->artifact_kind != ctx->artifact_kind ||
-        ctx->freestanding_profile || !machine ||
+        bundle->artifact_kind != ctx->artifact_kind || ctx->freestanding_profile || !machine ||
         machine->runtime_profile != XR_TARGET_RUNTIME_PROFILE_HOSTED) {
         ctx->error = true;
         return true;
@@ -1042,8 +1028,8 @@ static bool cg_try_emit_leaf_value_product_program(XiCgenCtx *ctx, FILE *out,
     char error[256] = {0};
     char *source = NULL;
     size_t source_size = 0;
-    if (!xr_c_leaf_value_product_program_emit(plan, module, &source, &source_size,
-                                              error, sizeof(error)) ||
+    if (!xr_c_leaf_value_product_program_emit(plan, module, &source, &source_size, error,
+                                              sizeof(error)) ||
         !source || fwrite(source, 1, source_size, out) != source_size) {
         xr_free(source);
         ctx->error = true;
@@ -1308,19 +1294,16 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
  * through the bundle's verified module-to-partition join; matching its frozen
  * partition id identifies the caller unit without a module-name or live
  * import-table lookup. */
-static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
-                                                    int mod_index) {
+static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out, int mod_index) {
     if (!ctx || !out || !ctx->program_direct_i64_required)
         return true;
     const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
-    const XiModule *module =
-        ctx->all_modules && mod_index >= 0 && mod_index < ctx->all_nmodules
-            ? ctx->all_modules[mod_index]
-            : NULL;
+    const XiModule *module = ctx->all_modules && mod_index >= 0 && mod_index < ctx->all_nmodules
+                                 ? ctx->all_modules[mod_index]
+                                 : NULL;
     uint32_t partition = UINT32_MAX;
     if (!ctx->program_direct_i64_bound || !bundle || !module ||
-        !xaot_bundle_program_partition_for_xi_module(bundle, module,
-                                                      &partition) ||
+        !xaot_bundle_program_partition_for_xi_module(bundle, module, &partition) ||
         partition >= ctx->program_direct_i64.initializer_count ||
         !ctx->program_direct_i64.initializers || !module->init) {
         if (ctx)
@@ -1332,8 +1315,7 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
         &ctx->program_direct_i64.initializers[partition];
     const XrCProgramXiFunctionBinding *caller = &ctx->program_direct_i64.caller;
     const XrCProgramXiFunctionBinding *callee = &ctx->program_direct_i64.callee;
-    if (initializer->target_partition != partition ||
-        initializer->xi_function != module->init) {
+    if (initializer->target_partition != partition || initializer->xi_function != module->init) {
         ctx->error = true;
         return false;
     }
@@ -1344,22 +1326,22 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
     XrCFunctionAbiEmissionView parameter_view = {0};
     const void *symbol_end = memchr(callee->c_symbol, '\0', sizeof(callee->c_symbol));
     if (!callee->xi_function || !callee->c_symbol[0] || !symbol_end ||
-        !xr_c_program_direct_i64_function_abi_view(
-            &ctx->program_direct_i64, callee->xi_function, 0u, &return_view) ||
-        !xr_c_program_direct_i64_function_abi_view(
-            &ctx->program_direct_i64, callee->xi_function, 1u, &parameter_view) ||
+        !xr_c_program_direct_i64_function_abi_view(&ctx->program_direct_i64, callee->xi_function,
+                                                   0u, &return_view) ||
+        !xr_c_program_direct_i64_function_abi_view(&ctx->program_direct_i64, callee->xi_function,
+                                                   1u, &parameter_view) ||
         return_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
         parameter_view.boundary_kind != (uint8_t) XR_C_ABI_BOUNDARY_NATIVE ||
         return_view.parameter_count != 1u || parameter_view.parameter_count != 1u ||
         return_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
-        parameter_view.rep != (uint8_t) XR_C_VALUE_REP_I64 ||
-        !return_view.c_type || !parameter_view.c_type) {
+        parameter_view.rep != (uint8_t) XR_C_VALUE_REP_I64 || !return_view.c_type ||
+        !parameter_view.c_type) {
         ctx->error = true;
         return false;
     }
 
-    fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl, %s p0);\n",
-            return_view.c_type, callee->c_symbol, parameter_view.c_type);
+    fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl, %s p0);\n", return_view.c_type,
+            callee->c_symbol, parameter_view.c_type);
     return true;
 }
 
@@ -1370,27 +1352,24 @@ static bool cg_emit_program_direct_i64_callee_decl(XiCgenCtx *ctx, FILE *out,
  * verified ABI rows that produced the calls: without them the generated C calls
  * an undeclared function, which C99 and later reject outright and which assumes
  * a wrong `int` return type wherever a provider still accepts it. */
-static bool cg_emit_program_direct_i64_initializer_decls(XiCgenCtx *ctx, FILE *out,
-                                                         int mod_index) {
+static bool cg_emit_program_direct_i64_initializer_decls(XiCgenCtx *ctx, FILE *out, int mod_index) {
     if (!ctx || !out || !ctx->program_direct_i64_required)
         return true;
     if (ctx->artifact_kind != XAOT_ARTIFACT_EXECUTABLE)
         return true;
-    const XiModule *module =
-        ctx->all_modules && mod_index >= 0 && mod_index < ctx->all_nmodules
-            ? ctx->all_modules[mod_index]
-            : NULL;
+    const XiModule *module = ctx->all_modules && mod_index >= 0 && mod_index < ctx->all_nmodules
+                                 ? ctx->all_modules[mod_index]
+                                 : NULL;
     if (!ctx->program_direct_i64_bound || !module || !module->init ||
         !ctx->program_direct_i64.initializers) {
         ctx->error = true;
         return false;
     }
-    for (uint32_t partition = 0;
-         partition < ctx->program_direct_i64.initializer_count; partition++) {
+    for (uint32_t partition = 0; partition < ctx->program_direct_i64.initializer_count;
+         partition++) {
         const XrCProgramXiFunctionBinding *initializer =
             &ctx->program_direct_i64.initializers[partition];
-        const void *symbol_end =
-            memchr(initializer->c_symbol, '\0', sizeof(initializer->c_symbol));
+        const void *symbol_end = memchr(initializer->c_symbol, '\0', sizeof(initializer->c_symbol));
         if (!initializer->xi_function || !initializer->c_symbol[0] || !symbol_end) {
             ctx->error = true;
             return false;
@@ -1408,8 +1387,24 @@ static bool cg_emit_program_direct_i64_initializer_decls(XiCgenCtx *ctx, FILE *o
             ctx->error = true;
             return false;
         }
-        fprintf(out, "XRT_INTERNAL %s %s(xrt_closure_t *_cl);\n", return_view.c_type,
-                initializer->c_symbol);
+        /* Take the linkage from the same helper the unit's own declarations
+         * use, so a change to how an initializer is linked cannot leave this
+         * declaration disagreeing with the definition it stands for. */
+        const char *initializer_prefix = NULL;
+        for (int i = 0; i < ctx->all_nmodules; i++) {
+            const XiModule *owner = ctx->all_modules[i];
+            if (owner && owner->init == initializer->xi_function) {
+                initializer_prefix = owner->name ? owner->name : "mod";
+                break;
+            }
+        }
+        if (!initializer_prefix) {
+            ctx->error = true;
+            return false;
+        }
+        fprintf(out, "%s%s %s(xrt_closure_t *_cl);\n",
+                cg_func_forward_linkage(ctx, initializer->xi_function, initializer_prefix, true),
+                return_view.c_type, initializer->c_symbol);
     }
     return true;
 }

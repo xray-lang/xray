@@ -402,7 +402,11 @@ def expect_product_native(rec: Recorder, config: Config, result: proc.ProcResult
         ]
         for symbol in imported_initializers
     }
-    expect(rec, len(imported_initializers) == 1 and main_at >= 0 and
+    # Count the imported initializers rather than pinning how many there are:
+    # the property is that every one main() calls is declared before it, which
+    # holds for a graph of any width. Requiring at least one keeps the check
+    # from passing vacuously on a program whose initializers are all local.
+    expect(rec, imported_initializers and main_at >= 0 and
            all(len(starts) == 1 and starts[0] < main_at
                for starts in imported_prototypes.values()),
            f"{label}: entry unit declares every imported initializer main() calls",
