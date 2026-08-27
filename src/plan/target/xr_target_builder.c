@@ -317,6 +317,24 @@ static void target_survey_row(const char *family, const char *detail) {
             detail && detail[0] ? detail : "refused without a detail");
 }
 
+/* Stable refusal-evidence bits. They describe which exact storage judgements
+ * accepted a result or argument; the live refusal manifest freezes the numeric
+ * mask together with the decision facts below, so adding a family requires a
+ * new bit rather than reusing an old one. */
+enum {
+    XR_TARGET_SURVEY_STORAGE_SCALAR = 1u << 0,
+    XR_TARGET_SURVEY_STORAGE_NULLABLE_SCALAR = 1u << 1,
+    XR_TARGET_SURVEY_STORAGE_STRING = 1u << 2,
+    XR_TARGET_SURVEY_STORAGE_ADT_ENUM = 1u << 3,
+    XR_TARGET_SURVEY_STORAGE_UNIT_ENUM = 1u << 4,
+    XR_TARGET_SURVEY_STORAGE_ARRAY = 1u << 5,
+    XR_TARGET_SURVEY_STORAGE_CLASS_INSTANCE = 1u << 6,
+    XR_TARGET_SURVEY_STORAGE_TAGGED_REFERENCE = 1u << 7,
+    XR_TARGET_SURVEY_STORAGE_U8_SLICE = 1u << 8,
+    XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE = 1u << 9,
+    XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT = 1u << 10,
+};
+
 /* Setting XRAY_TARGET_TRACE prints, on stderr, why this pass refused to build a
  * TargetPlan. Unset, the variable is never read and nothing is printed: every
  * call below sits on a path that is already failing the build, so a compile
@@ -10087,8 +10105,39 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                     "refusal; if all of them match, the result type reached no storage family and "
                     "the last five lines say which families declined it.\n");
         }
-        return fail(error, error_size, "XR_TARGET_1003",
-                    "direct-local signature or result storage is incomplete");
+        uint32_t result_storage_mask =
+            (call_type_is_exact_scalar(plan, operation->result_type)
+                 ? XR_TARGET_SURVEY_STORAGE_SCALAR
+                 : 0u) |
+            (semantic_direct_local_nullable_scalar_result_is_exact(plan, operation, callee)
+                 ? XR_TARGET_SURVEY_STORAGE_NULLABLE_SCALAR
+                 : 0u) |
+            (semantic_direct_local_string_result_is_exact(plan, operation, callee)
+                 ? XR_TARGET_SURVEY_STORAGE_STRING
+                 : 0u) |
+            (xr_semantic_direct_local_adt_enum_result_is_exact(plan, operation, callee)
+                 ? XR_TARGET_SURVEY_STORAGE_ADT_ENUM
+                 : 0u) |
+            (xr_semantic_direct_local_unit_enum_result_is_exact(plan, operation, callee)
+                 ? XR_TARGET_SURVEY_STORAGE_UNIT_ENUM
+                 : 0u) |
+            (semantic_direct_local_array_result_is_exact(plan, operation, callee)
+                 ? XR_TARGET_SURVEY_STORAGE_ARRAY
+                 : 0u) |
+            (xr_semantic_class_instance_result_source_class(plan, operation) !=
+                     XR_SEMANTIC_INDEX_NONE
+                 ? XR_TARGET_SURVEY_STORAGE_CLASS_INSTANCE
+                 : 0u) |
+            (exact_leaf_aggregate ? XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE : 0u) |
+            (exact_leaf_product ? XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT : 0u);
+        char detail[384];
+        snprintf(detail, sizeof(detail),
+                 "direct-local signature or result storage is incomplete opcode=%u "
+                 "operand-count=%u parameter-count=%u result-type-match=%u storage-mask=%u "
+                 "method=%u",
+                 operation->opcode, operation->operand_count, callee->parameter_count,
+                 operation->result_type == callee->return_type, result_storage_mask, method);
+        return fail(error, error_size, "XR_TARGET_1003", detail);
     }
     /* Only a direct call has a head operand outside the parameter list. The
      * method's receiver fills parameter 0, so the loop below checks it under
@@ -10342,8 +10391,35 @@ static bool collect_direct_local_call_intent(XrTargetPlanBuilder *builder, uint3
                 return fail(error, error_size, "XR_TARGET_1003",
                             "direct-local managed aggregate needs frozen clone, drop, root, and "
                             "generation authority");
-            return fail(error, error_size, "XR_TARGET_1003",
-                        "direct-local argument contract needs unsupported storage or ownership");
+            uint32_t argument_storage_mask =
+                (exact_scalar ? XR_TARGET_SURVEY_STORAGE_SCALAR : 0u) |
+                (exact_u8_slice ? XR_TARGET_SURVEY_STORAGE_U8_SLICE : 0u) |
+                (exact_unit_enum ? XR_TARGET_SURVEY_STORAGE_UNIT_ENUM : 0u) |
+                (exact_adt_enum ? XR_TARGET_SURVEY_STORAGE_ADT_ENUM : 0u) |
+                (exact_class_instance ? XR_TARGET_SURVEY_STORAGE_CLASS_INSTANCE : 0u) |
+                (exact_tagged_ref ? XR_TARGET_SURVEY_STORAGE_TAGGED_REFERENCE : 0u) |
+                (exact_array_value ? XR_TARGET_SURVEY_STORAGE_ARRAY : 0u) |
+                (exact_string_value ? XR_TARGET_SURVEY_STORAGE_STRING : 0u) |
+                (exact_leaf_aggregate_argument ? XR_TARGET_SURVEY_STORAGE_LEAF_AGGREGATE : 0u) |
+                (exact_leaf_product_argument ? XR_TARGET_SURVEY_STORAGE_LEAF_PRODUCT : 0u);
+            char detail[512];
+            snprintf(
+                detail, sizeof(detail),
+                "direct-local argument contract needs unsupported storage or ownership "
+                "opcode=%u parameter-ordinal=%u storage-mask=%u operand-mode=%u "
+                "parameter-mode=%u operand-transfer=%u parameter-transfer=%u "
+                "operand-ownership=%u parameter-ownership=%u operand-access=%u "
+                "operand-role=%u expected-role=%u type-match=%u ordinal-match=%u "
+                "contract-flag=%u addressable=%u",
+                operation->opcode, ordinal, argument_storage_mask, operand->parameter_mode,
+                parameter ? parameter->mode : UINT32_MAX, operand->transfer_mode,
+                parameter ? parameter->transfer_mode : UINT32_MAX, operand->ownership_action,
+                parameter ? parameter->ownership : UINT32_MAX, operand->access, operand->role,
+                expected_role, parameter && operand->type == parameter->type,
+                operand->parameter == expected_parameter,
+                (operand->flags & XR_SEM_OPERAND_CALL_CONTRACT) != 0,
+                (operand->flags & XR_SEM_OPERAND_ADDRESSABLE) != 0);
+            return fail(error, error_size, "XR_TARGET_1003", detail);
         }
         XrTargetCallArgumentIntent argument = {
             .call_intent = call_intent,

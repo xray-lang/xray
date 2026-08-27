@@ -93,14 +93,14 @@ def expected_inputs(root: Path, diff: Any) -> dict[str, Any]:
         expected = Path(str(case) + ".expected")
         rejection = diff.read_first_directive(case, "// diff-aot-reject: ", 5)
         backends = diff.read_first_directive(case, "// diff-backends: ", 5)
-        if expected.is_file():
-            oracle = {"kind": "checked-in-stdout", "asset": file_identity(root, expected)}
-        elif rejection:
+        if rejection:
             oracle = {
                 "kind": "vm-plus-native-rejection",
-                "asset": None,
+                "asset": optional_identity(root, expected),
                 "native_diagnostic": rejection,
             }
+        elif expected.is_file():
+            oracle = {"kind": "checked-in-stdout", "asset": file_identity(root, expected)}
         else:
             oracle = {"kind": "differential-vm", "asset": None}
         rows.append({
@@ -128,7 +128,7 @@ def fact_from_detail(family: str, detail: str) -> str:
     """Verifier-side reconstruction; intentionally not imported from generator."""
     facts = [family]
     diagnostic = re.search(
-        r"(XR_[A-Z0-9_]+: [a-z][^\n]*?)(?:\s+(?:operation|function|value)=|$)", detail
+        r"(XR_[A-Z0-9_]+: [a-z][^\n]*?)(?:\s+[a-z][a-z0-9-]*=|$)", detail
     )
     if diagnostic:
         facts.append(diagnostic.group(1).strip())
@@ -140,6 +140,25 @@ def fact_from_detail(family: str, detail: str) -> str:
         ("value-machine", r"\bvalue-machine=(\d+)"),
         ("value-shape", r"\bvalue-shape=(\d+)"),
         ("value-flags", r"\bvalue-flags=(\d+)"),
+        ("parameter-ordinal", r"\bparameter-ordinal=(\d+)"),
+        ("storage-mask", r"\bstorage-mask=(\d+)"),
+        ("operand-mode", r"\boperand-mode=(\d+)"),
+        ("parameter-mode", r"\bparameter-mode=(\d+)"),
+        ("operand-transfer", r"\boperand-transfer=(\d+)"),
+        ("parameter-transfer", r"\bparameter-transfer=(\d+)"),
+        ("operand-ownership", r"\boperand-ownership=(\d+)"),
+        ("parameter-ownership", r"\bparameter-ownership=(\d+)"),
+        ("operand-access", r"\boperand-access=(\d+)"),
+        ("operand-role", r"\boperand-role=(\d+)"),
+        ("expected-role", r"\bexpected-role=(\d+)"),
+        ("type-match", r"(?<!-)\btype-match=(\d+)"),
+        ("ordinal-match", r"\bordinal-match=(\d+)"),
+        ("contract-flag", r"\bcontract-flag=(\d+)"),
+        ("addressable", r"\baddressable=(\d+)"),
+        ("operand-count", r"\boperand-count=(\d+)"),
+        ("parameter-count", r"\bparameter-count=(\d+)"),
+        ("result-type-match", r"\bresult-type-match=(\d+)"),
+        ("method", r"\bmethod=(\d+)"),
     )
     for label, pattern in patterns:
         match = re.search(pattern, detail)
@@ -172,7 +191,7 @@ def stable_toolchain(data: dict[str, Any]) -> dict[str, Any]:
         "request": data.get("request"),
         "selection": data.get("selection"),
         "capabilities": data.get("capabilities"),
-        "probe": {"id": probe.get("id"), "fingerprint": probe.get("fingerprint")},
+        "probe": {"fingerprint": probe.get("fingerprint")},
     }
 
 
@@ -189,7 +208,7 @@ def exact_keys(value: Any, keys: set[str], where: str, errors: list[str]) -> boo
 def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
     errors: list[str] = []
     top = {
-        "schema", "kind", "generator", "status", "identity", "measurement",
+        "schema", "kind", "generator", "status", "identity", "coverage", "measurement",
         "inputs", "results", "root_causes", "summary",
     }
     if not exact_keys(manifest, top, "manifest", errors):
@@ -258,10 +277,6 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
             == "vm-plus-native-rejection"
         if (outcome == "expected-rejection") != rejection_oracle:
             errors.append(f"{where} expected-rejection does not match its governed oracle")
-        listed_refusal = input_by_path[row["case"]].get("listed_refusal") is True
-        if (outcome == "refused" and not listed_refusal) \
-                or (listed_refusal and outcome not in {"refused", "skip"}):
-            errors.append(f"{where} violates the refusal coverage ratchet")
         if outcome != "refused":
             if row.get("first_refusal") is not None or row.get("refusals") != [] \
                     or row.get("build_log") is not None:
@@ -295,6 +310,22 @@ def validate_core(manifest: dict[str, Any], manifest_path: Path) -> list[str]:
                 errors.append(f"{where} has an unknown refusal owner")
             key = (refusal["owner"], refusal["family"], refusal["blocking_fact"])
             aggregates[key].append(row["case"])
+
+    refused_names = {row["case"] for row in results if row.get("outcome") == "refused"}
+    skipped_names = {row["case"] for row in results if row.get("outcome") == "skip"}
+    listed_names = {
+        row["path"] for row in input_cases if row.get("listed_refusal") is True
+    }
+    expected_coverage = {
+        "listed_refusal_count": len(listed_names),
+        "observed_refusal_count": len(refused_names),
+        "new_refusals": sorted(refused_names - listed_names),
+        "resolved_refusals": sorted(listed_names - refused_names - skipped_names),
+    }
+    if manifest.get("coverage") != expected_coverage:
+        errors.append("coverage drift is not independently reproducible")
+    if expected_coverage["new_refusals"] or expected_coverage["resolved_refusals"]:
+        errors.append("manifest violates the refusal coverage ratchet")
 
     expected_roots = [
         {
@@ -371,6 +402,28 @@ def validate_current(root: Path, build: Path, manifest_path: Path, manifest: dic
 
 
 def self_test() -> int:
+    decision_log = (
+        b"[refusal-survey] owner=target-plan-builder family=calls "
+        b"XR_TARGET_1003: direct-local argument contract needs unsupported storage or ownership "
+        b"opcode=17 parameter-ordinal=2 storage-mask=4 operand-mode=1 parameter-mode=0 "
+        b"operand-transfer=2 parameter-transfer=1 operand-ownership=3 parameter-ownership=2 "
+        b"operand-access=1 operand-role=4 expected-role=4 type-match=1 ordinal-match=1 "
+        b"contract-flag=1 addressable=0\n"
+    )
+    expected_decision = [{
+        "owner": "target-plan-builder",
+        "family": "calls",
+        "blocking_fact": (
+            "calls|XR_TARGET_1003: direct-local argument contract needs unsupported storage or "
+            "ownership|opcode=17|parameter-ordinal=2|storage-mask=4|operand-mode=1|"
+            "parameter-mode=0|operand-transfer=2|parameter-transfer=1|operand-ownership=3|"
+            "parameter-ownership=2|operand-access=1|operand-role=4|expected-role=4|type-match=1|"
+            "ordinal-match=1|contract-flag=1|addressable=0"
+        ),
+    }]
+    if refusal_rows(decision_log) != expected_decision:
+        print("self-test rejected stable decision facts", file=sys.stderr)
+        return 1
     with tempfile.TemporaryDirectory(prefix="xray-live-refusal-check-") as temp:
         base = Path(temp)
         log_dir = base / "evidence.json.logs"
@@ -394,6 +447,10 @@ def self_test() -> int:
         manifest = {
             "schema": 1, "kind": KIND, "generator": GENERATOR, "status": "passed",
             "identity": {},
+            "coverage": {
+                "listed_refusal_count": 1, "observed_refusal_count": 1,
+                "new_refusals": [], "resolved_refusals": [],
+            },
             "measurement": {
                 "profile": "hosted", "artifact": "native-executable",
                 "host_c_optimization": "0", "xi_optimization": "pipeline-default",
@@ -420,6 +477,7 @@ def self_test() -> int:
         bad = copy.deepcopy(manifest); bad["results"][0]["first_refusal"]["owner"] = "legacy"; mutations.append(bad)
         bad = copy.deepcopy(manifest); bad["summary"]["refused_count"] = 0; mutations.append(bad)
         bad = copy.deepcopy(manifest); bad["root_causes"] = []; mutations.append(bad)
+        bad = copy.deepcopy(manifest); bad["coverage"]["observed_refusal_count"] = 0; mutations.append(bad)
         for index, mutation in enumerate(mutations):
             if not validate_core(mutation, path):
                 print(f"self-test mutation {index} was accepted", file=sys.stderr)

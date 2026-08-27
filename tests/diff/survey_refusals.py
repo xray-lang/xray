@@ -107,14 +107,14 @@ def case_input(case: Path, refusal_baseline: set[str], divergence_baseline: set[
     aot_reject = backend_diff.read_first_directive(case, "// diff-aot-reject: ", 5)
     diff_backends = backend_diff.read_first_directive(case, "// diff-backends: ", 5)
     oracle: dict[str, Any]
-    if expected.is_file():
-        oracle = {"kind": "checked-in-stdout", "asset": file_row(expected)}
-    elif aot_reject:
+    if aot_reject:
         oracle = {
             "kind": "vm-plus-native-rejection",
-            "asset": None,
+            "asset": optional_file_row(expected),
             "native_diagnostic": aot_reject,
         }
+    elif expected.is_file():
+        oracle = {"kind": "checked-in-stdout", "asset": file_row(expected)}
     else:
         oracle = {"kind": "differential-vm", "asset": None}
     return {
@@ -134,7 +134,7 @@ def blocking_fact(family: str, detail: str) -> str:
     """Derive the stable blocking fact from source-emitted authority facts."""
     parts = [family]
     message = re.search(
-        r"(XR_[A-Z0-9_]+: [a-z][^\n]*?)(?:\s+(?:operation|function|value)=|$)", detail
+        r"(XR_[A-Z0-9_]+: [a-z][^\n]*?)(?:\s+[a-z][a-z0-9-]*=|$)", detail
     )
     if message:
         parts.append(message.group(1).strip())
@@ -146,6 +146,25 @@ def blocking_fact(family: str, detail: str) -> str:
         ("value-machine", r"\bvalue-machine=(\d+)"),
         ("value-shape", r"\bvalue-shape=(\d+)"),
         ("value-flags", r"\bvalue-flags=(\d+)"),
+        ("parameter-ordinal", r"\bparameter-ordinal=(\d+)"),
+        ("storage-mask", r"\bstorage-mask=(\d+)"),
+        ("operand-mode", r"\boperand-mode=(\d+)"),
+        ("parameter-mode", r"\bparameter-mode=(\d+)"),
+        ("operand-transfer", r"\boperand-transfer=(\d+)"),
+        ("parameter-transfer", r"\bparameter-transfer=(\d+)"),
+        ("operand-ownership", r"\boperand-ownership=(\d+)"),
+        ("parameter-ownership", r"\bparameter-ownership=(\d+)"),
+        ("operand-access", r"\boperand-access=(\d+)"),
+        ("operand-role", r"\boperand-role=(\d+)"),
+        ("expected-role", r"\bexpected-role=(\d+)"),
+        ("type-match", r"(?<!-)\btype-match=(\d+)"),
+        ("ordinal-match", r"\bordinal-match=(\d+)"),
+        ("contract-flag", r"\bcontract-flag=(\d+)"),
+        ("addressable", r"\baddressable=(\d+)"),
+        ("operand-count", r"\boperand-count=(\d+)"),
+        ("parameter-count", r"\bparameter-count=(\d+)"),
+        ("result-type-match", r"\bresult-type-match=(\d+)"),
+        ("method", r"\bmethod=(\d+)"),
     ):
         match = re.search(pattern, detail)
         if match:
@@ -218,7 +237,7 @@ def toolchain_identity(binary: Path, timeout: int) -> dict[str, Any]:
         "request": request,
         "selection": selection,
         "capabilities": data.get("capabilities"),
-        "probe": {"id": probe.get("id"), "fingerprint": probe.get("fingerprint")},
+        "probe": {"fingerprint": probe.get("fingerprint")},
     }
 
 
@@ -356,12 +375,15 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
             invalid = True
             row["diagnostic"] = {"code": "DIFFERENTIAL_FAILURE", "message": result.output}
         governed = input_by_case[result.name]
-        if (outcome == "refused" and not governed["listed_refusal"]) \
-                or (governed["listed_refusal"] and outcome not in {"refused", "skip"}):
-            invalid = True
         manifest_results.append(row)
 
     counts = collections.Counter(row["outcome"] for row in manifest_results)
+    refused_names = {row["case"] for row in manifest_results if row["outcome"] == "refused"}
+    skipped_names = {row["case"] for row in manifest_results if row["outcome"] == "skip"}
+    new_refusals = sorted(refused_names - refusal_baseline)
+    resolved_refusals = sorted(refusal_baseline - refused_names - skipped_names)
+    if new_refusals or resolved_refusals:
+        invalid = True
     roots = [
         {
             "owner": owner,
@@ -378,6 +400,12 @@ def generate(build: Path, output: Path, jobs: int, timeout: int) -> tuple[dict[s
         "generator": GENERATOR,
         "status": "failed" if invalid else "passed",
         "identity": identity,
+        "coverage": {
+            "listed_refusal_count": len(refusal_baseline),
+            "observed_refusal_count": len(refused_names),
+            "new_refusals": new_refusals,
+            "resolved_refusals": resolved_refusals,
+        },
         "measurement": {
             "profile": "hosted",
             "artifact": "native-executable",
@@ -434,8 +462,16 @@ def main() -> int:
         f"{manifest['status']} cases={summary['case_count']} "
         f"comparable={summary['comparable_count']} refused={summary['refused_count']} "
         f"expected-rejection={summary['expected_rejection_count']} "
-        f"skipped={summary['skipped_count']} failed={summary['failed_count']}"
+        f"skipped={summary['skipped_count']} failed={summary['failed_count']} "
+        f"new-refusals={len(manifest['coverage']['new_refusals'])} "
+        f"resolved-refusals={len(manifest['coverage']['resolved_refusals'])}"
     )
+    for label, field in (
+        ("new refusal", "new_refusals"),
+        ("listed refusal now building", "resolved_refusals"),
+    ):
+        for case in manifest["coverage"][field]:
+            print(f"  {label}: {case}")
     return status
 
 

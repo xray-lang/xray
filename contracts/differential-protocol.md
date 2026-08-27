@@ -59,18 +59,27 @@ the program-output comparison remain byte-native and are not normalized.
     builder, or AOT representation owner. Missing identity, zero cases,
     differential failure, a refusal without source-emitted owner/fact evidence,
     or a raw-log/hash/aggregation mismatch fails the manifest; none can become
-    skip. Source-declared backend exclusions remain skips, and the two governed
+    skip. Direct-local call refusals include the deciding opcode, parameter
+    ordinal, admitted-storage mask, modes, ownership, transfer, access, role,
+    contract and type/ordinal equality facts; result refusals include arity,
+    result-type equality and the independently admitted-storage mask, so unlike
+    call shapes do not collapse under one generic diagnostic. Source-declared
+    backend exclusions remain skips, and the two governed
     VM-plus-native-rejection oracles are reported as expected rejections rather
     than as comparable executions. Verification independently rediscovers the
     inputs, rechecks the current compiler/provider, reparses raw logs, and
-    reconstructs first-refusal and root-cause aggregates.
+    reconstructs first-refusal and root-cause aggregates. The canonical refusal
+    coverage ratchet remains a qualification gate: the manifest records every
+    newly refusing and every newly building case separately, and either drift
+    keeps its status failed until the source or governed shrinking baseline is
+    corrected; generating the census never rewrites that baseline.
 
 ## Digest anchors
 
 anchor-sha256: tests/diff/run_backend_diff.py 9b30566a476c0816a1939f41a281cbac3709b2062482ddcc0620b72b7424484d
-anchor-sha256: tests/diff/survey_refusals.py df3d181d065cc4dc09cee43e78483bf5684ec80034d585b55300bc2773841acc
-anchor-sha256: scripts/check_live_refusal_manifest.py c58d30a24df4ea616e18985892dd746330d107bf08cba85c62f28b21ae1222b4
+anchor-sha256: tests/diff/survey_refusals.py 586537bf095ee10aeb3f7f0a4256f7ae896b83b5e763ec19440c137cfc73f4a5
+anchor-sha256: scripts/check_live_refusal_manifest.py 004e1f66aebc1d1c58ccece66ceb8d1d7bbcdae3e7590f3582b5cea7007e0637
 anchor-sha256: src/plan/semantic/xr_semantic_verify.c f255b5868f54b94bcb2c95a601d94eb30fcfb10730a7962d2d527acb45fdaf1f
-anchor-sha256: src/plan/target/xr_target_builder.c 266a3addfefb4e51230dffc44b59a73b009ea4959652fca2e3021575b8d0127b
+anchor-sha256: src/plan/target/xr_target_builder.c 55d765906844ad837b555c89fe4ae1b6f8b7598819ec7658f6a0565c65365d60
 anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c 24508f47e743b25ae98ea09489e3d246095f9230ae9dbf192e475d7571c6c5bd
 anchor-sha256: tests/aot/TOMBSTONES.tsv 1ad7d280093c5a3aedecdf490fe88dc9c48f79215de9ea1d1c8216373cd56eb7
