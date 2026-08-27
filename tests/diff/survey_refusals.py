@@ -37,7 +37,13 @@ GENERATOR = "tests/diff/survey_refusals.py"
 SURVEY = re.compile(
     r"^\[refusal-survey\] owner=([a-z0-9-]+) family=([^\s]+)(?:\s+(.*))?$"
 )
-DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+):\s*([^\r\n]+)")
+# A diagnostic code is identified by the code itself, not by the punctuation
+# that follows it. Sources spell the same registered code both as "XR_X: text"
+# and as "XR_X text", so a colon-only pattern reports a refusal that carries a
+# stable code as one that carries none, and then demands a code that already
+# exists. Accept either separator; require one so a bare code at end of line
+# does not absorb the following line as its message.
+DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+)(?::[ \t]*|[ \t]+)([^\r\n]+)")
 OWNER_VALUES = {
     "semantic-plan-verifier",
     "target-plan-builder",
@@ -246,6 +252,36 @@ def self_test() -> int:
         "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
     }:
         print("live refusal generator self-test misclassified evidence gaps", file=sys.stderr)
+        return 1
+    colon_free_log = (
+        b"Error: Xi pipeline failed at ownership: XR_CORO_4003 func '<main>': "
+        b"state 1 error continuation is not derivable\n"
+    )
+    colon_free_rows, colon_free = parse_refusals(colon_free_log)
+    if colon_free_rows or colon_free != {
+        "code": "XR_CORO_4003",
+        "message": "func '<main>': state 1 error continuation is not derivable",
+    } or missing_evidence_gap(colon_free) != {
+        "classification": "diagnostic-without-structured-refusal",
+        "diagnostic_code": "XR_CORO_4003",
+        "required_action": "emit-source-owned-structured-refusal",
+    }:
+        print(
+            "live refusal generator self-test lost a space-separated diagnostic code",
+            file=sys.stderr,
+        )
+        return 1
+    # The uncoded classification must be reached through the log parser, not by
+    # handing it None: that shortcut leaves the pattern itself untested and is
+    # how a code-losing pattern stayed green.
+    uncoded_log = b"Error: Xi pipeline failed at ownership: coroutine lowering failed closed\n"
+    uncoded_rows, uncoded = parse_refusals(uncoded_log)
+    if uncoded_rows or uncoded is not None or missing_evidence_gap(uncoded) != {
+        "classification": "opaque-refusal-without-structured-diagnostic",
+        "diagnostic_code": None,
+        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+    }:
+        print("live refusal generator self-test misread an uncoded refusal", file=sys.stderr)
         return 1
     print("live refusal manifest generator self-test: PASS")
     return 0

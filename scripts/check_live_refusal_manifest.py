@@ -28,7 +28,11 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 SURVEY_LINE = re.compile(
     r"^\[refusal-survey\]\s+owner=([a-z0-9-]+)\s+family=([^\s]+)(?:\s+(.*))?$"
 )
-DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+):\s*([^\r\n]+)")
+# Must stay identical to the generator's pattern: this checker independently
+# replays every build log and rejects the manifest when its reconstructed
+# diagnostic differs, so any drift between the two spellings fails the manifest
+# rather than the source it is meant to describe.
+DIAGNOSTIC = re.compile(r"\b(XR_[A-Z0-9_]+)(?::[ \t]*|[ \t]+)([^\r\n]+)")
 
 
 def load_module(name: str, path: Path) -> Any:
@@ -649,6 +653,26 @@ def self_test() -> int:
                 or any("refusal rows do not match raw log" in error for error in missing_errors):
             print("self-test did not classify missing source evidence precisely", file=sys.stderr)
             return 1
+    colon_free_log = (
+        b"Error: Xi pipeline failed at ownership: XR_CORO_4003 func '<main>': "
+        b"state 1 error continuation is not derivable\n"
+    )
+    if diagnostic_row(colon_free_log) != {
+        "code": "XR_CORO_4003",
+        "message": "func '<main>': state 1 error continuation is not derivable",
+    }:
+        print("self-test lost a space-separated diagnostic code", file=sys.stderr)
+        return 1
+    # Reach the uncoded classification through the log reader, not by passing
+    # None: that shortcut leaves the pattern untested on this path.
+    uncoded_log = b"Error: Xi pipeline failed at ownership: coroutine lowering failed closed\n"
+    if diagnostic_row(uncoded_log) is not None or missing_evidence_gap(diagnostic_row(uncoded_log)) != {
+        "classification": "opaque-refusal-without-structured-diagnostic",
+        "diagnostic_code": None,
+        "required_action": "emit-stable-diagnostic-and-source-owned-structured-refusal",
+    }:
+        print("self-test misread an uncoded refusal", file=sys.stderr)
+        return 1
     print("live refusal manifest injection self-test: PASS")
     return 0
 
