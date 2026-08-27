@@ -85,6 +85,16 @@ static const uint32_t xaot_evidence_cache_phases[XG_EVIDENCE_CACHE_PHASE_COUNT] 
     XG_EVIDENCE_CACHE_GLOBAL_EVIDENCE,
 };
 
+/* Preserve the exact TargetPlan diagnostic at the product build boundary when
+ * the live-refusal survey is enabled. This is evidence only: the caller has
+ * already rejected the build, and the ordinary diagnostic remains unchanged. */
+static void xaot_survey_target_plan_refusal(const char *family, const char *detail) {
+    if (getenv("XRAY_COLLECT_ALL_REFUSALS") == NULL)
+        return;
+    fprintf(stderr, "[refusal-survey] owner=target-plan-builder family=%s %s\n", family,
+            detail && detail[0] ? detail : "refused without a detail");
+}
+
 static bool xaot_func_has_explicit_vector_ops(const XiFunc *func) {
     if (!func)
         return false;
@@ -1765,6 +1775,10 @@ static bool xaot_build_program_target_plan(XaotBundle *bundle, XrTargetProfile *
     stats->cancelled = build.cancelled ? 1u : 0u;
     if (!planned) {
         const char *name = module && module->name ? module->name : "?";
+        xaot_survey_target_plan_refusal(
+            "program_build",
+            error[0] ? error
+                     : "XR_TARGET_1000: program TargetPlan build did not produce a diagnostic");
         fprintf(stderr, "Error: program TargetPlan build failed for '%s': %s\n", name,
                 error[0] ? error : "unknown error");
         bundle->error_msg =
@@ -2547,6 +2561,7 @@ XR_FUNC int xaot_build(const char *input_path, const XaotBuildOptions *options,
     if (!source_program_closure && nmodules != 1) {
         aot_bundle.error_msg =
             "XR_TARGET_1000: product TargetPlan requires one canonical program authority";
+        xaot_survey_target_plan_refusal("program_authority", aot_bundle.error_msg);
         fprintf(stderr, "Error: product Program TargetPlan build failed: %s\n",
                 aot_bundle.error_msg);
         goto fail_free_ir;

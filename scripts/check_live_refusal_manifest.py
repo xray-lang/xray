@@ -511,6 +511,25 @@ def self_test() -> int:
     if refusal_rows(decision_log) != expected_decision:
         print("self-test lost, deduplicated or reordered stable decision facts", file=sys.stderr)
         return 1
+    product_source = (
+        "[refusal-survey] owner=target-plan-builder family=program_build "
+        "XR_TARGET_1003: call result or argument partition cannot bind canonical storage"
+    )
+    product_rows = refusal_rows((product_source + "\n").encode())
+    if product_rows != [{
+        "sequence": 0,
+        "line_number": 1,
+        "source_text": product_source,
+        "owner": "target-plan-builder",
+        "family": "program_build",
+        "detail": product_source.split(" family=program_build ", 1)[1],
+        "blocking_fact": (
+            "program_build|XR_TARGET_1003: call result or argument partition cannot bind "
+            "canonical storage"
+        ),
+    }]:
+        print("self-test lost product TargetPlan refusal evidence", file=sys.stderr)
+        return 1
     with tempfile.TemporaryDirectory(prefix="xray-live-refusal-check-") as temp:
         base = Path(temp)
         log_dir = base / "evidence.json.logs"

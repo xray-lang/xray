@@ -217,16 +217,22 @@ def missing_evidence_gap(diagnostic: dict[str, str] | None) -> dict[str, str | N
 
 
 def self_test() -> int:
-    source = (
+    decision_source = (
         "[refusal-survey] owner=target-plan-builder family=calls "
         "XR_TARGET_1003: unsupported storage opcode=17 parameter-ordinal=2"
     )
-    log = ("noise\n" + source + "\n" + source + "\n").encode("utf-8")
+    product_source = (
+        "[refusal-survey] owner=target-plan-builder family=program_authority "
+        "XR_TARGET_1000: product TargetPlan requires one canonical program authority"
+    )
+    log = ("noise\n" + decision_source + "\n" + product_source + "\n").encode("utf-8")
     rows, diagnostic = parse_refusals(log)
     if len(rows) != 2 or rows[0]["sequence"] != 0 or rows[1]["sequence"] != 1 \
             or rows[0]["line_number"] != 2 or rows[1]["line_number"] != 3 \
-            or rows[0]["source_text"] != source or rows[1]["source_text"] != source \
-            or rows[0]["detail"] != rows[1]["detail"] \
+            or rows[0]["source_text"] != decision_source \
+            or rows[1]["source_text"] != product_source \
+            or rows[1]["family"] != "program_authority" \
+            or rows[1]["detail"] != product_source.split(" family=program_authority ", 1)[1] \
             or diagnostic != {"code": "XR_TARGET_1003", "message": "unsupported storage opcode=17 parameter-ordinal=2"}:
         print("live refusal generator self-test lost or reordered source evidence", file=sys.stderr)
         return 1
