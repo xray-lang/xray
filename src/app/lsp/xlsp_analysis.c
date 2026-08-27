@@ -399,137 +399,6 @@ static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
     lsp_log("graph: %d module(s) for %s", graph->spec_count, entry_path);
 }
 
-// Parse and index imported files on demand
-static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const char *base_uri) {
-    if (!server || !ast || !base_uri || !server->workspace_analyzer)
-        return;
-    if (ast->type != AST_PROGRAM)
-        return;
-
-    // Extract base directory from URI
-    char base_dir[XLSP_MAX_PATH];
-    const char *uri_path = base_uri;
-    uri_path = xlsp_uri_to_path(uri_path);
-    strncpy(base_dir, uri_path, sizeof(base_dir) - 1);
-    base_dir[sizeof(base_dir) - 1] = '\0';
-    char *last_slash = strrchr(base_dir, '/');
-    if (last_slash)
-        *last_slash = '\0';
-
-    // Scan for import statements
-    for (int i = 0; i < ast->as.program.count; i++) {
-        AstNode *stmt = ast->as.program.statements[i];
-        if (!stmt || stmt->type != AST_IMPORT_STMT)
-            continue;
-
-        const char *import_path = stmt->as.import_stmt.module_name;
-        if (!import_path)
-            continue;
-
-        // Skip stdlib imports
-        if (import_path[0] != '.' && import_path[0] != '/')
-            continue;
-
-        // Resolve relative path
-        char full_path[XLSP_MAX_PATH];
-        if (import_path[0] == '/') {
-            strncpy(full_path, import_path, sizeof(full_path) - 1);
-        } else if (strncmp(import_path, "./", 2) == 0) {
-            snprintf(full_path, sizeof(full_path), "%s/%s", base_dir, import_path + 2);
-        } else if (strncmp(import_path, "../", 3) == 0) {
-            // Handle parent directory
-            char parent_dir[XLSP_MAX_PATH];
-            strncpy(parent_dir, base_dir, sizeof(parent_dir) - 1);
-            const char *rel = import_path;
-            while (strncmp(rel, "../", 3) == 0) {
-                char *slash = strrchr(parent_dir, '/');
-                if (slash)
-                    *slash = '\0';
-                rel += 3;
-            }
-            snprintf(full_path, sizeof(full_path), "%s/%s", parent_dir, rel);
-        } else {
-            continue;
-        }
-
-        // Build import URI
-        char import_uri[1100];
-        snprintf(import_uri, sizeof(import_uri), "file://%s", full_path);
-
-        // Check if document is already open
-        XrLspDocument *open_doc = xlsp_document_get(server, import_uri);
-        if (open_doc) {
-            // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
-            if (open_doc->dirty && open_doc->ast) {
-                lsp_log("import: %s is open and dirty, re-analyzing", full_path);
-                xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
-                                         (XrAstNode *) open_doc->ast, open_doc->content_hash);
-                open_doc->dirty = false;
-            } else {
-                lsp_log("import: %s already open (symbols up to date)", full_path);
-            }
-            continue;
-        }
-
-        // Document not open - read from disk
-        char *content = xr_file_read_all(full_path, "r", NULL);
-        if (!content) {
-            lsp_log("import: cannot open %s", full_path);
-            continue;
-        }
-
-        lsp_log("import: indexing from disk %s", full_path);
-
-        // Ensure type pool is set
-        XrTypePool *pool = lsp_compiler_analyzer_pool(server->isolate);
-        if (server->isolate && pool) {
-            xr_type_set_current_pool(pool, &pool->next_type_id);
-        }
-
-        // Parse the imported file using a temporary arena
-        XrArena temp_arena;
-        xr_arena_init(&temp_arena, 64 * 1024);  // 64KB initial size
-
-        XrCompilerSessionScope parse_scope;
-        if (!xr_compiler_session_push_arena(
-                xr_compiler_session_current_for_isolate(server->isolate), &temp_arena, import_uri,
-                &parse_scope)) {
-            lsp_log("import: failed to enter compiler session for %s", full_path);
-            xr_arena_destroy(&temp_arena);
-            xr_free(content);
-            continue;
-        }
-
-        Parser parser;
-        xr_parser_init(&parser, xr_compiler_session_current_for_isolate(server->isolate), content,
-                       import_uri, &temp_arena);
-
-        // Set max errors to avoid getting stuck on very broken files
-        parser.max_errors = 50;
-
-        AstNode *import_ast = xr_parse_recoverable(&parser);
-        xr_compiler_session_pop_arena(&parse_scope);
-
-        // Analyze even with parse errors to get partial symbols for completion
-        if (import_ast) {
-            XlspAnalysisIdentity import_identity;
-            lsp_analysis_identity_push(&import_identity,
-                                       xr_compiler_session_current_for_isolate(server->isolate),
-                                       server->module_graph, import_uri);
-            xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
-            lsp_analysis_identity_pop(&import_identity);
-            lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
-        } else {
-            lsp_log("import: failed to parse %s", full_path);
-        }
-
-        // Destroy temp arena - releases all AST memory at once
-        xr_arena_destroy(&temp_arena);
-
-        xr_free(content);
-    }
-}
-
 void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     if (!doc || !doc->content || !server)
         return;
@@ -606,11 +475,9 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     doc->parse_error = parser.had_error;
     doc->cached_diagnostics = error_ctx.diagnostics;
 
-    // Resolve this document's imports through a real module graph, then index
-    // whatever the graph could not cover.
+    // Resolve this document's imports through a module graph.
     if (ast) {
         lsp_rebuild_module_graph(server, doc);
-        index_imports_on_demand(server, ast, doc->uri);
     }
 
     // Run static analysis using workspace-level analyzer (incremental update)
