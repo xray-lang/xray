@@ -5,10 +5,10 @@
     "modules": 33,
     "production_modules": 31,
     "test_only_modules": 2,
-    "symbols": 2248,
-    "production_symbols": 2220,
+    "symbols": 2250,
+    "production_symbols": 2222,
     "xray_body_symbols": 1075,
-    "handwritten_c_semantic_owner": 965,
+    "handwritten_c_semantic_owner": 967,
     "native_leaf_symbols": 111,
     "production_native_leaf_symbols": 111,
     "unclassified_native_leaf": 111,
@@ -41,11 +41,11 @@
       "c_sources": [
         "stdlib/prelude/prelude.c"
       ],
-      "c_function_count": 8,
+      "c_function_count": 10,
       "enters_module_graph": false,
-      "symbol_count": 8,
+      "symbol_count": 9,
       "xray_body_symbols": 0,
-      "handwritten_c_symbols": 8,
+      "handwritten_c_symbols": 9,
       "native_leaf_symbols": 0,
       "queue": "establish-xray-source",
       "queue_reason": "native_primitive module declares stdlib/prelude/builtin_symbols.def as its semantic source, so an .xr body has to exist before any C owner can be deleted",
@@ -655,14 +655,14 @@
       "c_sources": [
         "stdlib/io/io.c"
       ],
-      "c_function_count": 76,
+      "c_function_count": 80,
       "enters_module_graph": true,
-      "symbol_count": 142,
+      "symbol_count": 143,
       "xray_body_symbols": 67,
-      "handwritten_c_symbols": 74,
+      "handwritten_c_symbols": 75,
       "native_leaf_symbols": 37,
       "queue": "deepen-existing-xray",
-      "queue_reason": "37 handwritten C functions remain behind the .xr surface",
+      "queue_reason": "38 handwritten C functions remain behind the .xr surface",
       "probe": {}
     },
     {
@@ -1062,6 +1062,16 @@
     {
       "module": "prelude",
       "symbol": "make_prelude_enum",
+      "kind": "c-function",
+      "audience": "production",
+      "semantic_source": "stdlib/prelude/prelude.c",
+      "handwritten_c_body": "stdlib/prelude/prelude.c",
+      "plan_coverage": "c_internal",
+      "covered_c_deletion": "stdlib/prelude/prelude.c"
+    },
+    {
+      "module": "prelude",
+      "symbol": "XR_BUILTIN_ENUM_VARIANT",
       "kind": "c-function",
       "audience": "production",
       "semantic_source": "stdlib/prelude/prelude.c",
@@ -10751,7 +10761,7 @@
     },
     {
       "module": "io",
-      "symbol": "XR_IO_CORE_ACQUIRE_HANDLE",
+      "symbol": "io_file_open_handle",
       "kind": "c-function",
       "audience": "production",
       "semantic_source": "stdlib/io/io.c",
@@ -10822,6 +10832,16 @@
     {
       "module": "io",
       "symbol": "file_io_try_uring",
+      "kind": "c-function",
+      "audience": "production",
+      "semantic_source": "stdlib/io/io.c",
+      "handwritten_c_body": "stdlib/io/io.c",
+      "plan_coverage": "c_internal",
+      "covered_c_deletion": "stdlib/io/io.c"
+    },
+    {
+      "module": "io",
+      "symbol": "defined",
       "kind": "c-function",
       "audience": "production",
       "semantic_source": "stdlib/io/io.c",

@@ -41,11 +41,58 @@ PRODUCTION_EXCEPT_NON_PUBLIC = {"prelude"}
 # a definition when they start a line.
 C_CONTROL_KEYWORDS = {"if", "for", "while", "switch", "return", "sizeof", "else", "do"}
 
-C_FUNC_RE = re.compile(
-    r"^(?P<decl>(?:[A-Za-z_][A-Za-z0-9_]*|\*)(?:[ \t\n]+(?:[A-Za-z_][A-Za-z0-9_]*|\*+))*[ \t\n*]+)"
-    r"(?P<name>[A-Za-z_][A-Za-z0-9_]*)[ \t]*\((?P<args>[^;{}]*?)\)[ \t\n]*\{",
-    re.MULTILINE | re.DOTALL,
+C_BODY_START_RE = re.compile(r"\)[ \t\n]*\{")
+
+C_IDENTIFIER_CHARS = set(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_"
 )
+
+
+def c_definition_names(text: str) -> list[tuple[str, int]]:
+    """Return the (name, offset) of every function defined in a C source.
+
+    A declaration can carry an attribute macro that is itself written as a
+    call -- `static intptr_t XR_ACQUIRE("tag") open_handle(const char *p) {` --
+    and a parameter can be a function pointer. Both put more than one
+    parenthesis group ahead of the body, so taking the first identifier
+    followed by `(` names the macro instead of the function and drops the
+    function entirely. Match the body brace first and walk left through
+    balanced parentheses instead, which names the group the body belongs to
+    whatever precedes it.
+    """
+    out: list[tuple[str, int]] = []
+    for match in C_BODY_START_RE.finditer(text):
+        depth = 0
+        index = match.start()
+        while index >= 0:
+            char = text[index]
+            if char == ")":
+                depth += 1
+            elif char == "(":
+                depth -= 1
+                if depth == 0:
+                    break
+            elif char in ";}":
+                # A statement or block boundary inside the scan means this
+                # brace closes something that is not a function definition.
+                index = -1
+                break
+            index -= 1
+        if index < 0:
+            continue
+        end = index
+        while end > 0 and text[end - 1] in " \t":
+            end -= 1
+        start = end
+        while start > 0 and text[start - 1] in C_IDENTIFIER_CHARS:
+            start -= 1
+        if start == end:
+            continue
+        name = text[start:end]
+        if name in C_CONTROL_KEYWORDS or name[0].isdigit():
+            continue
+        out.append((name, start))
+    return out
 
 XR_LEAF_CALL_RE = re.compile(r"\b(?P<name>__[A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
@@ -121,11 +168,7 @@ def c_functions(root: Path) -> dict[str, list[tuple[str, str]]]:
     out: dict[str, list[tuple[str, str]]] = {}
     for path in sorted((root / "stdlib").rglob("*.c")):
         owner = path.parent.name if path.parent != root / "stdlib" else "_stdlib"
-        text = read(path)
-        for match in C_FUNC_RE.finditer(text):
-            name = match.group("name")
-            if name in C_CONTROL_KEYWORDS:
-                continue
+        for name, _offset in c_definition_names(read(path)):
             out.setdefault(owner, []).append((name, rel(root, path)))
     return out
 
