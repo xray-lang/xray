@@ -113,7 +113,10 @@ def main(argv: list[str]) -> int:
             return fail("freestanding assertion provider executable failed",
                         execution.combined_text())
 
-        rejecting = ws.subdir("provider-rejects-report")
+        # The compiler burns the resolved source path into the generated C, so
+        # the expected failure bytes below must be built from the same spelling.
+        # A temporary directory reaches us through a symlinked prefix on macOS.
+        rejecting = ws.subdir("provider-rejects-report").resolve()
         rejecting_source = rejecting / REJECT_SOURCE.name
         rejecting_manifest = rejecting / "xray.toml"
         shutil.copy2(REJECT_SOURCE, rejecting_source)
