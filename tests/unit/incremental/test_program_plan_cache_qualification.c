@@ -992,6 +992,92 @@ TEST(crash_temp_residue_is_never_served_and_is_reclaimed) {
     xr_test_program_plan_store_remove(root);
 }
 
+/* An edit publishes a new program beside the old one while readers of the old
+ * one are still being served. The two must not cross: a reader may not be
+ * handed the edited plan, and the editor may not be handed the old one. */
+TEST(an_edit_publishing_beside_old_readers_never_crosses_them) {
+    char root[XR_PATH_MAX];
+    ASSERT_EQ_INT(xr_temp_dir_create("xray-plan-cache-edit", root, sizeof(root)), 0);
+    const uint32_t readers = PLAN_WORKERS - 1u;
+    XrSemanticPlan *semantics[PLAN_WORKERS] = {0};
+    XrTargetProfile *profiles[PLAN_WORKERS] = {0};
+    PlanWorker workers[PLAN_WORKERS] = {0};
+    for (uint32_t i = 0; i < PLAN_WORKERS; i++) {
+        /* Worker 0 names the edited program; the rest name the old one. */
+        semantics[i] = xr_test_program_plan_semantic(i == 0u ? 811u : 810u);
+        profiles[i] = xr_test_target_profile_build(false, XR_TARGET_RUNTIME_PROFILE_HOSTED);
+        ASSERT_NOT_NULL(semantics[i]);
+        ASSERT_NOT_NULL(profiles[i]);
+        workers[i].root = root;
+        workers[i].semantic = semantics[i];
+        workers[i].profile = profiles[i];
+    }
+
+    /* Only the old program is published, so the readers start warm and the
+     * editor starts cold: the publication races live reads. */
+    PlanSerialRequest old_request = {
+        .root = root,
+        .semantic = semantics[1],
+        .profile = profiles[1],
+        .quota = PLAN_QUOTA,
+        .max_entry = PLAN_MAX_ENTRY,
+    };
+    PlanSerialBuild old_canonical;
+    serial_build(&old_request, &old_canonical);
+    ASSERT_TRUE(old_canonical.ok);
+    ASSERT_TRUE(old_canonical.result.cache_published);
+
+    run_workers(workers, PLAN_WORKERS);
+
+    ASSERT_TRUE(workers[0].ok);
+    ASSERT_NOT_NULL(workers[0].bytes);
+    ASSERT_TRUE(workers[0].result.built);
+    ASSERT_FALSE(workers[0].result.cache_hit);
+    /* The editor's answer is a different program, or the two were never
+     * distinguishable and the case would prove nothing about crossing. */
+    ASSERT_TRUE(workers[0].size != old_canonical.size ||
+                memcmp(workers[0].bytes, old_canonical.bytes, old_canonical.size) != 0);
+    for (uint32_t i = 1; i < PLAN_WORKERS; i++) {
+        ASSERT_TRUE(workers[i].ok);
+        ASSERT_TRUE(workers[i].result.cache_hit);
+        ASSERT_FALSE(workers[i].result.built);
+        ASSERT_EQ_UINT(workers[i].size, old_canonical.size);
+        ASSERT_MEM_EQ(workers[i].bytes, old_canonical.bytes, old_canonical.size);
+    }
+    XrTestProgramPlanStoreInventory inventory;
+    xr_test_program_plan_store_inventory(root, &inventory);
+    ASSERT_EQ_UINT(inventory.objects, 2u);
+    ASSERT_EQ_UINT(inventory.temps, 0u);
+
+    /* Both programs remain independently serviceable afterwards. */
+    PlanSerialBuild old_after;
+    serial_build(&old_request, &old_after);
+    ASSERT_TRUE(old_after.ok);
+    ASSERT_TRUE(old_after.result.cache_hit);
+    ASSERT_EQ_UINT(old_after.size, old_canonical.size);
+    ASSERT_MEM_EQ(old_after.bytes, old_canonical.bytes, old_canonical.size);
+
+    PlanSerialRequest new_request = old_request;
+    new_request.semantic = semantics[0];
+    new_request.profile = profiles[0];
+    PlanSerialBuild new_after;
+    serial_build(&new_request, &new_after);
+    ASSERT_TRUE(new_after.ok);
+    ASSERT_TRUE(new_after.result.cache_hit);
+    ASSERT_EQ_UINT(new_after.size, workers[0].size);
+    ASSERT_MEM_EQ(new_after.bytes, workers[0].bytes, workers[0].size);
+
+    serial_build_release(&new_after);
+    serial_build_release(&old_after);
+    serial_build_release(&old_canonical);
+    workers_release(workers, PLAN_WORKERS);
+    for (uint32_t i = 0; i < PLAN_WORKERS; i++) {
+        xr_target_profile_free(profiles[i]);
+        xr_semantic_plan_free(semantics[i]);
+    }
+    xr_test_program_plan_store_remove(root);
+}
+
 TEST_MAIN_BEGIN()
 RUN_TEST(parallel_cold_builds_publish_one_canonical_plan);
 RUN_TEST(parallel_warm_builds_serve_one_canonical_plan);
@@ -1004,4 +1090,5 @@ RUN_TEST(over_budget_publication_is_refused_without_residue);
 RUN_TEST(equal_content_authorities_share_one_cache_identity);
 RUN_TEST(collection_racing_readers_still_serves_one_canonical_plan);
 RUN_TEST(crash_temp_residue_is_never_served_and_is_reclaimed);
+RUN_TEST(an_edit_publishing_beside_old_readers_never_crosses_them);
 TEST_MAIN_END()
