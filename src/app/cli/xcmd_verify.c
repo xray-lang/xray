@@ -43,10 +43,8 @@ typedef struct VerifyAnalysis {
     char *entry_authority_root;
 } VerifyAnalysis;
 
-static bool verify_native_target_profile(const char *target_name,
-                                         XaotBuildProfile profile,
-                                         const XaotTarget *aot_target,
-                                         XrTargetProfile **out) {
+static bool verify_native_target_profile(const char *target_name, XaotBuildProfile profile,
+                                         const XaotTarget *aot_target, XrTargetProfile **out) {
     if (out)
         *out = NULL;
     if (!out || profile != XAOT_BUILD_PROFILE_HOSTED)
@@ -55,10 +53,8 @@ static bool verify_native_target_profile(const char *target_name,
     XrToolchainTarget target;
     char error[256];
     return xaot_target_profile_codegen_facts(aot_target, &codegen) &&
-           xtc_target_parse(target_name ? target_name : "native", &target,
-                            error, sizeof(error)) &&
-           xtc_target_profile_build_native_hosted(
-               &target, &codegen, out, error, sizeof(error));
+           xtc_target_parse(target_name ? target_name : "native", &target, error, sizeof(error)) &&
+           xtc_target_profile_build_native_hosted(&target, &codegen, out, error, sizeof(error));
 }
 
 static bool verify_key_allowed(const char *key, const char *const *allowed, size_t count) {
@@ -280,12 +276,21 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
         return false;
     }
     state->entry = xr_path_join(root, state->project->main);
-    state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
-    if (!state->entry || !state->isolate ||
-        !xr_project_module_identity_authority(
-            state->project, &state->entry_authority,
-            &state->entry_authority_namespace, &state->entry_authority_root))
+    if (!state->entry) {
+        xr_cli_error("verify", "cannot resolve entry path for '%s'", state->project->main);
         return false;
+    }
+    state->isolate = xr_isolate_profile_new(XR_ISOLATE_PROFILE_ANALYZE);
+    if (!state->isolate) {
+        xr_cli_error("verify", "cannot create the analysis isolate");
+        return false;
+    }
+    if (!xr_project_module_identity_authority(state->project, &state->entry_authority,
+                                              &state->entry_authority_namespace,
+                                              &state->entry_authority_root)) {
+        xr_cli_error("verify", "failed to establish exact entry module identity authority");
+        return false;
+    }
     xr_module_system_init_with_script(state->isolate, state->entry);
     XrCompilerSession *session = xr_compiler_session_current_for_isolate(state->isolate);
     xr_compiler_session_set_native_package_plan(session, state->project->native_plan);
@@ -293,8 +298,8 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     XrModuleResolver *resolver = xr_module_registry_get_resolver(registry);
     state->graph = resolver ? xr_module_graph_new(session, resolver) : NULL;
     if (!state->graph ||
-        xr_module_graph_build(state->graph, state->entry,
-                              &state->entry_authority, &graph_error) != 0 ||
+        xr_module_graph_build(state->graph, state->entry, &state->entry_authority, &graph_error) !=
+            0 ||
         xr_module_graph_topological_sort(state->graph) != 0 || state->graph->has_cycle) {
         xr_cli_error("verify", "%s", graph_error ? graph_error : "module graph build failed");
         xr_free(graph_error);
@@ -302,8 +307,10 @@ static bool verify_analyze_project(const char *root, VerifyAnalysis *state) {
     }
     xr_free(graph_error);
     state->analyzer = xa_analyzer_new(session);
-    if (!state->analyzer)
+    if (!state->analyzer) {
+        xr_cli_error("verify", "cannot create the analyzer");
         return false;
+    }
     xa_analyzer_set_graph(state->analyzer, state->graph);
     for (int ti = 0; ti < state->graph->topo_count; ti++) {
         XrModuleSpec *spec = &state->graph->specs[state->graph->topo_order[ti]];
@@ -528,8 +535,7 @@ static bool verify_backend_contract(const VerifyAnalysis *state, XrTomlValue *it
     options.native_package_plan = state->project->native_plan;
     options.profile = strcmp(profile_name, "freestanding") == 0 ? XAOT_BUILD_PROFILE_FREESTANDING
                                                                 : XAOT_BUILD_PROFILE_HOSTED;
-    if (!verify_native_target_profile(target_name, options.profile, &target,
-                                      &target_profile)) {
+    if (!verify_native_target_profile(target_name, options.profile, &target, &target_profile)) {
         xr_cli_error("verify", "exact TargetProfile authority is unavailable for '%s'",
                      target_name);
         xaot_target_free(&target);
@@ -1173,8 +1179,7 @@ static bool verify_codegen_contracts(const XrCliInvocation *inv, const VerifyAna
     options.native_package_plan = state->project->native_plan;
     options.profile =
         wants_freestanding ? XAOT_BUILD_PROFILE_FREESTANDING : XAOT_BUILD_PROFILE_HOSTED;
-    if (!verify_native_target_profile("native", options.profile, &target,
-                                      &target_profile)) {
+    if (!verify_native_target_profile("native", options.profile, &target, &target_profile)) {
         xr_cli_error("verify", "exact native TargetProfile authority is unavailable");
         xaot_target_free(&target);
         (*failures)++;

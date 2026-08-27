@@ -35,7 +35,7 @@ my_project/
 
 ```toml
 [package]
-name = "my_project"
+name = "acme/my_project"
 version = "0.1.0"
 main = "src/main.xr"
 
@@ -216,7 +216,7 @@ my_project/
 
 ```toml
 [package]
-name = "my_project"
+name = "acme/my_project"
 version = "0.1.0"
 main = "src/main.xr"
 
