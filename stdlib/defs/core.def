@@ -3829,7 +3829,7 @@ module cluster {
     return_ownership: "fresh"
   }
 
-  fn send {
+  fn __send {
     signature: "(topic: string, envelope: move Buffer): ClusterDelivery"
     doc: "Hand one canonical opaque service envelope to local and connected transports"
     vm: "cluster_send_primitive"
