@@ -60,11 +60,6 @@ static XrTypePool *lsp_compiler_analyzer_pool(XrVMRuntime *isolate) {
  * life of the file.  Stability is required, not incidental: the owner is
  * baked into the recorded enum layout, so a value that changed per keystroke
  * would invalidate that layout on every edit. */
-typedef struct XlspAnalysisIdentity {
-    XrCompilerSession *session;
-    char *identity;
-} XlspAnalysisIdentity;
-
 /* Turn a document URI into a logical module path: relative, forward-slashed,
  * and free of empty or dot segments.  Returns false when no such path exists,
  * leaving the caller to analyse without an identity rather than inventing one. */
@@ -83,8 +78,8 @@ static bool lsp_logical_path_from_uri(const char *uri, char *buf, size_t cap) {
     return true;
 }
 
-static bool lsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
-                                       const char *uri) {
+bool xlsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
+                                 const char *uri) {
     scope->session = NULL;
     scope->identity = NULL;
     if (!session || !uri)
@@ -109,7 +104,7 @@ static bool lsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSe
     return true;
 }
 
-static void lsp_analysis_identity_pop(XlspAnalysisIdentity *scope) {
+void xlsp_analysis_identity_pop(XlspAnalysisIdentity *scope) {
     if (scope->session)
         xr_compiler_session_set_compile_unit_identity(scope->session, NULL);
     xr_free(scope->identity);
@@ -328,8 +323,13 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             // Document is open - check if it needs re-analysis (dirty = has unsaved changes)
             if (open_doc->dirty && open_doc->ast) {
                 lsp_log("import: %s is open and dirty, re-analyzing", full_path);
+                XlspAnalysisIdentity import_identity;
+                xlsp_analysis_identity_push(
+                    &import_identity, xr_compiler_session_current_for_isolate(server->isolate),
+                    import_uri);
                 xa_analyzer_refresh_file(server->workspace_analyzer, import_uri,
                                          (XrAstNode *) open_doc->ast, open_doc->content_hash);
+                xlsp_analysis_identity_pop(&import_identity);
                 open_doc->dirty = false;
             } else {
                 lsp_log("import: %s already open (symbols up to date)", full_path);
@@ -379,11 +379,11 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
         // Analyze even with parse errors to get partial symbols for completion
         if (import_ast) {
             XlspAnalysisIdentity import_identity;
-            lsp_analysis_identity_push(&import_identity,
-                                       xr_compiler_session_current_for_isolate(server->isolate),
-                                       import_uri);
+            xlsp_analysis_identity_push(&import_identity,
+                                        xr_compiler_session_current_for_isolate(server->isolate),
+                                        import_uri);
             xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
-            lsp_analysis_identity_pop(&import_identity);
+            xlsp_analysis_identity_pop(&import_identity);
             lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
         } else {
             lsp_log("import: failed to parse %s", full_path);
@@ -485,11 +485,11 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
                 doc->parse_error ? " (with parse errors)" : "");
         // Use incremental update with content hash for true change detection
         XlspAnalysisIdentity doc_identity;
-        lsp_analysis_identity_push(&doc_identity, xr_compiler_session_current_for_isolate(isolate),
-                                   doc->uri);
+        xlsp_analysis_identity_push(&doc_identity,
+                                    xr_compiler_session_current_for_isolate(isolate), doc->uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
                                  doc->content_hash);
-        lsp_analysis_identity_pop(&doc_identity);
+        xlsp_analysis_identity_pop(&doc_identity);
         lsp_log("parse_document: incremental update done");
 
         // Run coroutine sharing validation (emits E0363 diagnostics for

@@ -23,6 +23,8 @@
 #include "../../../src/app/lsp/xlsp_inlay_hints.h"
 #include "../../../src/app/lsp/xlsp_imports.h"
 #include "../../../src/app/lsp/xlsp_semantic_tokens.h"
+#include "../../../src/app/lsp/xlsp_workspace.h"
+#include "../../../src/frontend/analyzer/xanalyzer.h"
 #include "../../../src/base/xjson.h"
 #include "../test_win_compat.h"
 
@@ -105,6 +107,22 @@ static XrJsonValue *json_array_find_label_tooltip(XrJsonValue *items, const char
 static const char *hover_markdown_value(XrJsonValue *hover) {
     XrJsonValue *contents = xjson_get_object(hover, "contents");
     return contents ? xjson_get_string(contents, "value") : NULL;
+}
+
+static bool analyzer_file_enum_has_layout(XrLspServer *server, const char *uri,
+                                          const char *enum_name) {
+    if (!server || !server->workspace_analyzer || !uri || !enum_name)
+        return false;
+
+    XaAnalyzerFileScope file_scope;
+    if (!xa_analyzer_push_file_scope(server->workspace_analyzer, uri, &file_scope))
+        return false;
+    XaSymbol *symbol = xa_analyzer_lookup(server->workspace_analyzer, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(server->workspace_analyzer, symbol);
+    bool has_layout = symbol && symbol->kind == XA_SYM_ENUM && links && links->enum_info &&
+                      links->enum_info->nominal_owner && links->enum_info->layout;
+    xa_analyzer_pop_file_scope(server->workspace_analyzer, &file_scope);
+    return has_layout;
 }
 
 static bool content_position_of_nth(const char *content, const char *needle, int occurrence,
@@ -478,6 +496,54 @@ TEST(completion_enum_static_variants_descriptor) {
     ASSERT(strstr(detail, "EnumVariants<Color>") != NULL);
 
     xjson_free(items);
+    xlsp_server_free(server);
+}
+
+TEST(dirty_open_import_refresh_preserves_enum_identity) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    const char *import_uri = "file:///identity/dirty_dependency";
+    const char *import_content = "enum ImportedState { Ready, Busy }\n";
+    XrLspDocument *import_doc = xlsp_document_open(server, import_uri, import_content, 1);
+    ASSERT(import_doc != NULL);
+    xlsp_parse_document(import_doc, server);
+    ASSERT(analyzer_file_enum_has_layout(server, import_uri, "ImportedState"));
+
+    /* didChange leaves the previous AST installed until the next parse.  Parsing
+     * an importer refreshes that dirty open AST through the on-demand path. */
+    xlsp_document_change(import_doc, NULL, "enum ImportedState { Ready, Busy }\n\n");
+    ASSERT(import_doc->dirty);
+
+    const char *owner_uri = "file:///identity/main.xr";
+    XrLspDocument *owner_doc =
+        xlsp_document_open(server, owner_uri, "import \"./dirty_dependency\" as dep\n", 1);
+    ASSERT(owner_doc != NULL);
+    xlsp_parse_document(owner_doc, server);
+
+    ASSERT(!import_doc->dirty);
+    ASSERT(analyzer_file_enum_has_layout(server, import_uri, "ImportedState"));
+    xlsp_server_free(server);
+}
+
+TEST(watched_file_refresh_installs_enum_identity) {
+    XrLspServer *server = xlsp_server_new();
+    ASSERT(server != NULL);
+
+    char path[] = "xray-lsp-watched-XXXXXX.xr";
+    int fd = xr_test_mkstemps(path, 3);
+    ASSERT(fd >= 0);
+    FILE *file = xr_test_fdopen(fd, "wb");
+    ASSERT(file != NULL);
+    ASSERT(fputs("enum WatchedState { Ready, Busy }\n", file) >= 0);
+    ASSERT(fclose(file) == 0);
+
+    char uri[128];
+    ASSERT(snprintf(uri, sizeof(uri), "file://%s", path) > 0);
+    xlsp_workspace_index_file(server, uri, path);
+    ASSERT(analyzer_file_enum_has_layout(server, uri, "WatchedState"));
+
+    ASSERT(remove(path) == 0);
     xlsp_server_free(server);
 }
 
@@ -1568,6 +1634,8 @@ int main(int argc, char **argv) {
     RUN_TEST(completion_inferred_int_members);
     RUN_TEST(contextual_u32_literal_preserves_completion_and_hover_type);
     RUN_TEST(completion_enum_static_variants_descriptor);
+    RUN_TEST(dirty_open_import_refresh_preserves_enum_identity);
+    RUN_TEST(watched_file_refresh_installs_enum_identity);
     RUN_TEST(completion_enum_descriptor_properties);
     RUN_TEST(completion_enum_iteration_variable_is_descriptor);
     RUN_TEST(hover_enum_descriptor_keeps_precise_type);
