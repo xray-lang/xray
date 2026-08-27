@@ -5,6 +5,29 @@
 // and topic-pattern matching live here so the cluster control-plane rules have a
 // visible Xray semantic source.
 
+// Node identity, membership, discovery, status and delivery are published by
+// the Xray surface over private runtime leaves; the leaves carry no cluster
+// policy of their own.
+export fn self() -> string { return __self() }
+// A node that has not joined a cluster has no membership to report, which is
+// a different answer from an empty cluster and is reported as one.
+export fn nodes() -> Array<string>? { return __nodes() }
+export fn discover() { __discover() }
+export fn info() -> ClusterInfo? { return __info() }
+
+export fn send(topic: string, envelope: move Buffer) -> ClusterDelivery {
+    return __send(topic, move envelope)
+}
+
+// The monitor channel carries the node or coroutine name that ended, and the
+// termination reason for a remote coroutine; both are published as strings.
+// One argument monitors a node, two monitor a remote coroutine -- an arity
+// rule the native function encodes positionally and stated here instead.
+export fn monitor(name: string, coroName: string? = null) -> Channel<string> {
+    if (coroName == null) { return __monitor(name) }
+    return __monitor(name, coroName!)
+}
+
 export const HANDSHAKE_VERSION = 6
 export const TOPIC_DEFAULT_HOP_LIMIT = 3
 export const NODE_NAME_MAX = 63
