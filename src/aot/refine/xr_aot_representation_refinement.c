@@ -10,6 +10,7 @@
 
 #include "../../plan/semantic/xr_semantic_heap_literal_shape.h"
 #include "xr_aot_representation_refinement.h"
+#include "xr_aot_scalar_ref_v1.h"
 #include "xr_aot_scalar_value.h"
 #include "../xr_target_aggregate_c_projection.h"
 #include "../../base/xsha256.h"
@@ -8297,6 +8298,15 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
     if (oracle_value_aggregate_storage(ctx, semantic_value, out_storage, out_machine_kind))
         return true;
     if (ctx->parameter_by_value[semantic_value] != XR_SEMANTIC_INDEX_NONE) {
+        XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_parameter_status(
+            ctx->semantic, ctx->target_plan, semantic_value);
+        if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
+            return false;
+        if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
+            *out_storage = XR_REP_RAWPTR;
+            *out_machine_kind = XR_MACHINE_REP_RAW_PTR;
+            return true;
+        }
         /* A class instance bound on entry is a tagged instance, which has no
          * scalar machine storage to report; every other parameter keeps its
          * own. */
@@ -8429,6 +8439,18 @@ static bool oracle_definition_storage(const VerifyAuthority *ctx, uint32_t seman
                 return true;
             break;
         case XI_LOCAL_ADDR:
+            {
+                XrAotScalarRefV1Status scalar_ref =
+                    xr_aot_scalar_ref_v1_local_addr_status(
+                        ctx->semantic, ctx->target_plan, operation_index, NULL);
+                if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
+                    return false;
+                if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
+                    *out_storage = XR_REP_RAWPTR;
+                    *out_machine_kind = XR_MACHINE_REP_RAW_PTR;
+                    return true;
+                }
+            }
             if (oracle_direct_local_tagged_ref_place_storage(ctx, semantic_value, out_storage,
                                                              out_machine_kind))
                 return true;
@@ -9243,6 +9265,17 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
             if (operand_index != 0 || source_value >= ctx->value_count)
                 return false;
             {
+                XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_status(
+                    ctx->semantic, ctx->target_plan, operation_index, operand_index,
+                    source_value);
+                if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
+                    return false;
+                if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
+                    *out_storage = XR_REP_RAWPTR;
+                    return true;
+                }
+            }
+            {
                 uint32_t source_parameter_index = ctx->parameter_by_value[source_value];
                 uint32_t source_operation_index = ctx->operation_by_value[source_value];
                 const XrSemanticParameterRecord *source_parameter =
@@ -9284,6 +9317,15 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_PLACE_STORE: {
             const XrSemanticOperandRecord *place = NULL;
             const XrSemanticOperandRecord *stored = NULL;
+            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_place_use_status(
+                ctx->semantic, ctx->target_plan, operation_index, operand_index,
+                source_value);
+            if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
+                return false;
+            if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
+                *out_storage = operand_index == 0 ? XR_REP_RAWPTR : XR_REP_I64;
+                return true;
+            }
             if (operand_index > 1 ||
                 !oracle_raw_pointer_ref_place(ctx, operation_index, &place, &stored) ||
                 source_value != (operand_index == 0 ? place->value : stored->value))
@@ -9293,6 +9335,21 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
         case XI_LOCAL_ADDR:
             if (operand_index != 0)
                 return false;
+            {
+                uint32_t scalar_ref_source = XR_SEMANTIC_INDEX_NONE;
+                XrAotScalarRefV1Status scalar_ref =
+                    xr_aot_scalar_ref_v1_local_addr_status(
+                        ctx->semantic, ctx->target_plan, operation_index,
+                        &scalar_ref_source);
+                if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID ||
+                    (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT &&
+                     scalar_ref_source != source_value))
+                    return false;
+                if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
+                    *out_storage = XR_REP_I64;
+                    return true;
+                }
+            }
             if (oracle_direct_local_tagged_ref_place_use(ctx, operation_index, source_value)) {
                 *out_storage = XR_REP_TAGGED;
                 return true;
@@ -9509,6 +9566,16 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 return false;
             return oracle_machine_storage(ctx, operation->result_value, out_storage, &ignored_kind);
         case XI_CALL:
+        case XI_TAIL_CALL: {
+            XrAotScalarRefV1Status scalar_ref = xr_aot_scalar_ref_v1_call_use_status(
+                ctx->semantic, ctx->target_plan, operation_index, operand_index,
+                source_value);
+            if (scalar_ref == XR_AOT_SCALAR_REF_V1_INVALID)
+                return false;
+            if (scalar_ref == XR_AOT_SCALAR_REF_V1_EXACT) {
+                *out_storage = XR_REP_RAWPTR;
+                return true;
+            }
             if (operand_index != 0 && oracle_direct_local_tagged_ref_place_storage(
                                           ctx, source_value, out_storage, &ignored_kind))
                 return true;
@@ -9539,6 +9606,7 @@ static bool oracle_use_storage(const VerifyAuthority *ctx, uint32_t operation_in
                 oracle_string_tagged_carrier_storage(ctx, source_value, out_storage, &ignored_kind))
                 return true;
             return oracle_machine_storage(ctx, source_value, out_storage, &ignored_kind);
+        }
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
             if (operation->opcode == XI_CALL_METHOD &&

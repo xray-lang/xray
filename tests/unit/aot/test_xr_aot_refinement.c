@@ -180,6 +180,20 @@ typedef struct DirectLocalTaggedRefFixture {
     XrTargetPlan *target_plan;
 } DirectLocalTaggedRefFixture;
 
+typedef struct DirectLocalScalarRefFixture {
+    XiFunc *function;
+    XiFunc *child;
+    XiValue *parameter;
+    XiValue *caller_storage;
+    XiValue *place;
+    XiValue *call;
+    XiValue *load_before;
+    XiValue *store;
+    XiValue *load_after;
+    XrTargetProfile *target_profile;
+    XrTargetPlan *target_plan;
+} DirectLocalScalarRefFixture;
+
 typedef struct DirectLocalGoCalleeStorageFixture {
     XiFunc *function;
     XiFunc *child;
@@ -254,6 +268,24 @@ static XrType scalar_closure = {
     .frozen = true,
     .scalar_rep = XR_SCALAR_REP_NONE,
     .function = {
+        .return_type = &scalar_int,
+        .throw_effect = XR_FN_EFFECT_NO_THROW,
+    },
+};
+
+static XrFunctionParam scalar_ref_function_params[] = {
+    {.type = &scalar_int, .mode = XR_PARAM_REF},
+};
+
+static XrType scalar_ref_function = {
+    .kind = XR_KIND_FUNCTION,
+    .id = 51,
+    .frozen = true,
+    .scalar_rep = XR_SCALAR_REP_NONE,
+    .function = {
+        .params = scalar_ref_function_params,
+        .param_count = 1,
+        .min_params = 1,
         .return_type = &scalar_int,
         .throw_effect = XR_FN_EFFECT_NO_THROW,
     },
@@ -936,6 +968,127 @@ static DirectLocalTaggedRefFixture direct_local_tagged_ref_fixture_create(void) 
 
 static void direct_local_tagged_ref_fixture_free(
     DirectLocalTaggedRefFixture *fixture) {
+    xr_target_plan_free(fixture->target_plan);
+    xr_target_profile_free(fixture->target_profile);
+    xi_func_free(fixture->function);
+    memset(fixture, 0, sizeof(*fixture));
+}
+
+static DirectLocalScalarRefFixture direct_local_scalar_ref_fixture_create(void) {
+    DirectLocalScalarRefFixture fixture = {0};
+    fixture.function = xi_func_new("direct_local_scalar_ref_root", &scalar_int);
+    fixture.child = xi_func_new("direct_local_scalar_ref_target", &scalar_int);
+    REQUIRE(fixture.function && fixture.child);
+    XiBlock *root_entry = xi_block_new(fixture.function);
+    XiBlock *child_entry = xi_block_new(fixture.child);
+    REQUIRE(root_entry && child_entry);
+
+    fixture.child->nparams = fixture.child->min_params = 1;
+    fixture.child->params = (XiValue **) xr_calloc(1, sizeof(*fixture.child->params));
+    REQUIRE(fixture.child->params != NULL);
+    fixture.parameter = xi_param(fixture.child, child_entry, 0, &scalar_int);
+    REQUIRE(fixture.parameter != NULL);
+    fixture.child->params[0] = fixture.parameter;
+    REQUIRE(xi_func_set_param_passing_mode(fixture.child, 0, XR_PARAM_REF));
+    fixture.parameter->transfer_mode = XR_TRANSFER_SHARE;
+    fixture.child->arc_borrow_sig = (XiBorrowSig *) xi_func_arena_alloc(
+        fixture.child, (uint32_t) sizeof(*fixture.child->arc_borrow_sig));
+    REQUIRE(fixture.child->arc_borrow_sig != NULL);
+    fixture.child->arc_borrow_sig->nparams = 1;
+    fixture.child->arc_borrow_sig->param_own[0] = XI_OWN_NONE;
+    fixture.child->arc_borrow_sig->valid = true;
+
+    fixture.load_before =
+        xi_value_new(fixture.child, child_entry, XI_PLACE_LOAD, &scalar_int, 1);
+    XiValue *one = xi_const_int(fixture.child, child_entry, 1, &scalar_int);
+    XiValue *incremented = xi_value_new(fixture.child, child_entry, XI_ADD, &scalar_int, 2);
+    fixture.store = xi_value_new(fixture.child, child_entry, XI_PLACE_STORE, &scalar_unit, 2);
+    fixture.load_after =
+        xi_value_new(fixture.child, child_entry, XI_PLACE_LOAD, &scalar_int, 1);
+    REQUIRE(fixture.load_before && one && incremented && fixture.store && fixture.load_after);
+    fixture.load_before->args[0] = fixture.parameter;
+    incremented->args[0] = fixture.load_before;
+    incremented->args[1] = one;
+    fixture.store->args[0] = fixture.parameter;
+    fixture.store->args[1] = incremented;
+    fixture.load_after->args[0] = fixture.parameter;
+    xi_block_set_return(child_entry, fixture.load_after);
+
+    fixture.function->children = (XiFunc **) xr_calloc(1, sizeof(*fixture.function->children));
+    REQUIRE(fixture.function->children != NULL);
+    fixture.function->children[0] = fixture.child;
+    fixture.function->nchildren = fixture.function->children_cap = 1;
+    fixture.child->parent_func = fixture.function;
+
+    XiValue *closure =
+        xi_value_new(fixture.function, root_entry, XI_CLOSURE_NEW, &scalar_ref_function, 0);
+    XiValue *closure_store =
+        xi_value_new(fixture.function, root_entry, XI_SET_SHARED, &scalar_unit, 1);
+    XiValue *callable =
+        xi_value_new(fixture.function, root_entry, XI_GET_SHARED, &opaque_callable, 0);
+    fixture.caller_storage = xi_const_int(fixture.function, root_entry, 41, &scalar_int);
+    fixture.place = xi_value_new(fixture.function, root_entry, XI_LOCAL_ADDR, &scalar_int, 1);
+    fixture.call = xi_value_new(fixture.function, root_entry, XI_CALL, &scalar_int, 2);
+    REQUIRE(closure && closure_store && callable && fixture.caller_storage &&
+            fixture.place && fixture.call);
+    closure->aux = fixture.child;
+    closure_store->args[0] = closure;
+    closure_store->aux_int = 0;
+    callable->aux_int = 0;
+    fixture.place->args[0] = fixture.caller_storage;
+    fixture.call->args[0] = callable;
+    fixture.call->args[1] = fixture.place;
+
+    XiCallPlan *call_plan = (XiCallPlan *) xi_func_arena_alloc(
+        fixture.function, (uint32_t) sizeof(*call_plan));
+    XiCallArgPlan *argument_plan = (XiCallArgPlan *) xi_func_arena_alloc(
+        fixture.function, (uint32_t) sizeof(*argument_plan));
+    REQUIRE(call_plan && argument_plan);
+    memset(call_plan, 0, sizeof(*call_plan));
+    memset(argument_plan, 0, sizeof(*argument_plan));
+    argument_plan->param_mode = XR_PARAM_REF;
+    argument_plan->access = XR_CALL_ARG_REF;
+    argument_plan->origin = XI_PLACE_ORIGIN_STACK_LOCAL;
+    argument_plan->lifetime = XI_PLACE_LIFETIME_CALL_BOUND;
+    argument_plan->escape = XI_PLACE_ESCAPE_NONE;
+    argument_plan->addressable = true;
+    argument_plan->origin_var_id = 0;
+    argument_plan->place = fixture.place;
+    call_plan->args = argument_plan;
+    call_plan->nargs = 1;
+    call_plan->verified = true;
+    fixture.call->call_plan = call_plan;
+    xi_block_set_return(root_entry, fixture.call);
+    fixture.function->nshared = 1;
+    fixture.function->shared_slot_funcs = (XiFunc **) xi_func_arena_alloc(
+        fixture.function, sizeof(*fixture.function->shared_slot_funcs));
+    REQUIRE(fixture.function->shared_slot_funcs != NULL);
+    fixture.function->shared_slot_funcs[0] = fixture.child;
+    fixture.function->shared_slot_func_count = 1;
+    fixture.function->stage = fixture.child->stage = XI_STAGE_OPTIMIZED;
+
+    XiModule *module = xi_module_new("fixtures/direct_local_scalar_ref.xr",
+                                     "direct_local_scalar_ref", fixture.function);
+    REQUIRE(module != NULL);
+    REQUIRE(xi_module_set_identity(
+        module, "memory-module-v1:id=34:direct-local-scalar-ref-fixture-v1"));
+    fixture.function->module = module;
+
+    char error[512] = {0};
+    bool built = build_fixture_semantic_plan_and_attach(fixture.function, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local scalar ref SemanticPlan failed: %s\n", error);
+    REQUIRE(built && fixture.function->semantic_plan != NULL);
+    fixture.target_profile = build_target_profile();
+    built = xr_target_plan_build(fixture.function->semantic_plan, fixture.target_profile,
+                                 &fixture.target_plan, error, sizeof(error));
+    if (!built)
+        fprintf(stderr, "direct-local scalar ref TargetPlan failed: %s\n", error);
+    REQUIRE(built && fixture.target_plan != NULL);
+    return fixture;
+}
+
+static void direct_local_scalar_ref_fixture_free(DirectLocalScalarRefFixture *fixture) {
     xr_target_plan_free(fixture->target_plan);
     xr_target_profile_free(fixture->target_profile);
     xi_func_free(fixture->function);
@@ -2527,6 +2680,183 @@ static void test_direct_local_tagged_ref_argument_authority_is_exact(void) {
     xr_c_emission_plan_free(emission);
 
     direct_local_tagged_ref_fixture_free(&fixture);
+}
+
+static void expect_direct_local_scalar_ref_refinement_rejected(
+    const XrTargetPlan *target, const XiRepPolicy *policy) {
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *rejected = NULL;
+    REQUIRE(!xr_aot_representation_refinement_build_from_authority(
+        target, policy, &rejected, &diag));
+    REQUIRE(rejected == NULL && diag.issue != XR_AOT_REFINEMENT_OK);
+}
+
+static void test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed(void) {
+    DirectLocalScalarRefFixture fixture = direct_local_scalar_ref_fixture_create();
+    XrTargetPlan *target = fixture.target_plan;
+    const XrSemanticPlan *semantic = fixture.function->semantic_plan;
+    REQUIRE(target && semantic && target->calls_count == 1 &&
+            target->call_arguments_count == 1);
+    const XrTargetCallRecord *call = &target->calls[0];
+    XrTargetCallArgumentRecord *argument = &target->call_arguments[0];
+    const XrSemanticParameterRecord *parameter =
+        xr_semantic_plan_parameter(semantic, argument->callee_parameter);
+    const XrTargetValueRepRecord *caller = NULL;
+    const XrTargetValueRepRecord *callee =
+        parameter ? xr_target_plan_value_rep(target, parameter->value) : NULL;
+    const XrTargetValueRepRecord *place =
+        xr_target_plan_value_rep(target, argument->semantic_value);
+    for (uint32_t i = 0; i < target->value_reps_count; i++) {
+        const XrTargetValueRepRecord *candidate = &target->value_reps[i];
+        if (candidate->slot == argument->caller_slot)
+            caller = candidate;
+    }
+    REQUIRE(parameter && caller && callee && place);
+    REQUIRE(parameter->mode == XR_PARAM_REF);
+    REQUIRE(argument->call == call->id && argument->ordinal == 0);
+    REQUIRE(argument->mode == XR_TARGET_CALL_REFERENCE &&
+            argument->ownership == XR_TARGET_CALL_BORROW &&
+            argument->transfer_mode == XR_TRANSFER_SHARE &&
+            argument->flags == XR_TARGET_CALL_ARGUMENT_ADDRESSABLE &&
+            argument->array_element_storage == XR_TARGET_ARRAY_STORAGE_NONE);
+    REQUIRE(argument->caller_slot == caller->slot &&
+            argument->callee_slot == callee->slot);
+    REQUIRE(target->machine_reps[caller->register_rep].kind ==
+            XR_MACHINE_REP_I64);
+    REQUIRE(target->machine_reps[callee->register_rep].kind ==
+            XR_MACHINE_REP_I64);
+    REQUIRE(target->machine_reps[place->register_rep].kind ==
+            XR_MACHINE_REP_RAW_PTR);
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    XrAotRefinementDiagnostic diag = {0};
+    XrAotRefinementPlan *plan = NULL;
+    bool built = xr_aot_representation_refinement_build_from_authority(
+        target, &policy, &plan, &diag);
+    if (!built)
+        fprintf(stderr,
+                "scalar-ref refinement failed issue=%s value=%u operation=%u\n",
+                xr_aot_refinement_issue_name(diag.issue), diag.semantic_value,
+                diag.semantic_operation);
+    REQUIRE(built);
+    XrAotRefinementPlanView view = xr_aot_refinement_plan_view(plan);
+    REQUIRE(view.schema_version == XR_AOT_REFINEMENT_SCHEMA_VERSION &&
+            view.schema_version == 6 && view.frozen && view.verified &&
+            view.record_count == 0);
+
+    xi_opt_refresh_representations_with_policy(fixture.function, &policy);
+    REQUIRE(fixture.parameter->rep == XR_REP_RAWPTR &&
+            fixture.load_before->rep == XR_REP_I64 &&
+            fixture.store->args[0]->rep == XR_REP_RAWPTR &&
+            fixture.store->args[1]->rep == XR_REP_I64 &&
+            fixture.load_after->rep == XR_REP_I64 &&
+            fixture.caller_storage->rep == XR_REP_I64 &&
+            fixture.place->rep == XR_REP_RAWPTR &&
+            fixture.call->args[1] == fixture.place &&
+            fixture.call->args[1]->rep == XR_REP_RAWPTR &&
+             xr_aot_representation_materialization_verify(
+                 &view, fixture.function, target, &policy, &diag));
+
+    char error[512] = {0};
+    uint32_t caller_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t place_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, fixture.function, fixture.place,
+                                            &caller_function, &place_value, error,
+                                            sizeof(error)));
+    XrCEmissionPlan *emission = NULL;
+    XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(fixture.target_profile);
+    REQUIRE(xr_c_emission_plan_build(target, profile_fingerprint, &emission, error,
+                                     sizeof(error)));
+    XrCValueEmissionView place_view = {0};
+    bool place_view_found = xr_c_emission_plan_value_view(
+        emission, place_value, &place_view, error, sizeof(error));
+    REQUIRE(place_view_found &&
+            place_view.rep == XR_C_VALUE_REP_RAW_PTR &&
+            place_view.target_register_kind == XR_MACHINE_REP_RAW_PTR &&
+            place_view.target_memory_kind == XR_MACHINE_REP_RAW_PTR &&
+            place_view.materialization == XR_C_VALUE_MATERIALIZATION_LOCAL_ADDRESS &&
+            place_view.recipe_operand_value != UINT32_MAX && place_view.c_type &&
+            strcmp(place_view.c_type, "int64_t *") == 0);
+    uint32_t callee_function = XR_SEMANTIC_INDEX_NONE;
+    uint32_t parameter_value = XR_SEMANTIC_INDEX_NONE;
+    REQUIRE(xr_aot_scalar_semantic_value_id(target, fixture.child, fixture.parameter,
+                                            &callee_function, &parameter_value, error,
+                                            sizeof(error)));
+    XrCFunctionAbiEmissionView *parameter_abi = NULL;
+    for (uint32_t i = 0; i < emission->function_abi_count; i++) {
+        XrCFunctionAbiEmissionView *candidate = &emission->function_abis[i];
+        if (candidate->semantic_function != callee_function || candidate->ordinal != 1)
+            continue;
+        REQUIRE(parameter_abi == NULL);
+        parameter_abi = candidate;
+    }
+    REQUIRE(parameter_abi && parameter_abi->semantic_value == parameter_value &&
+            parameter_abi->slot_class == XR_C_ABI_SLOT_BORROWED_PLACE &&
+            parameter_abi->rep == XR_C_VALUE_REP_RAW_PTR &&
+            parameter_abi->pointee_rep == XR_C_VALUE_REP_I64 && parameter_abi->c_type &&
+            strcmp(parameter_abi->c_type, "int64_t *") == 0 &&
+            parameter_abi->pointee_c_type &&
+            strcmp(parameter_abi->pointee_c_type, "int64_t") == 0);
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                      sizeof(error)));
+
+    XrCValueEmissionView *place_row = NULL;
+    for (uint32_t i = 0; i < emission->value_count; i++)
+        if (emission->values[i].semantic_value == place_value) {
+            REQUIRE(place_row == NULL);
+            place_row = &emission->values[i];
+        }
+    REQUIRE(place_row != NULL && emission->call_argument_count == 1);
+    uint16_t saved_machine_kind = place_row->target_register_kind;
+    place_row->target_register_kind = XR_MACHINE_REP_U64;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                       sizeof(error)));
+    place_row->target_register_kind = saved_machine_kind;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                      sizeof(error)));
+
+    uint8_t saved_pointee_rep = parameter_abi->pointee_rep;
+    parameter_abi->pointee_rep = XR_C_VALUE_REP_U64;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                       sizeof(error)));
+    parameter_abi->pointee_rep = saved_pointee_rep;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                      sizeof(error)));
+
+    uint8_t saved_parameter_mode = emission->call_arguments[0].mode;
+    emission->call_arguments[0].mode = XR_TARGET_CALL_VALUE;
+    REQUIRE(!xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                       sizeof(error)));
+    emission->call_arguments[0].mode = saved_parameter_mode;
+    REQUIRE(xr_c_emission_plan_verify(emission, target, profile_fingerprint, error,
+                                      sizeof(error)));
+
+    XrTargetCallArgumentRecord saved_argument = *argument;
+    XrTargetCallRecord saved_call = target->calls[0];
+    XrFingerprint saved_target_fingerprint = target->fingerprint;
+    for (uint32_t mutation = 0; mutation < 4; mutation++) {
+        *argument = saved_argument;
+        switch (mutation) {
+            case 0: argument->identity.bytes[0] ^= 1u; break;
+            case 1: argument->caller_slot = argument->callee_slot; break;
+            case 2: argument->mode = XR_TARGET_CALL_VALUE; break;
+            case 3: argument->callee_register_rep = 0; break;
+            default: abort();
+        }
+        xr_target_call_compute_fingerprint(target, 0,
+                                           &target->calls[0].fingerprint);
+        xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+        expect_direct_local_scalar_ref_refinement_rejected(target, &policy);
+    }
+    *argument = saved_argument;
+    target->calls[0] = saved_call;
+    target->fingerprint = saved_target_fingerprint;
+    REQUIRE(xr_target_plan_verify(target, error, sizeof(error)) &&
+            xr_aot_representation_materialization_verify(
+                 &view, fixture.function, target, &policy, &diag));
+
+    xr_c_emission_plan_free(emission);
+    xr_aot_refinement_plan_free(plan);
+    direct_local_scalar_ref_fixture_free(&fixture);
 }
 
 static void test_direct_local_go_callee_storage_is_exact_and_fail_closed(void) {
@@ -5217,6 +5547,11 @@ int main(int argc, char **argv) {
         printf("TargetPlan tagged-ref AOT refinement tests passed\n");
         return 0;
     }
+    if (argc == 2 && strcmp(argv[1], "scalar-ref-v1") == 0) {
+        test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed();
+        puts("Direct-local scalar-ref-v1 AOT refinement tests passed");
+        return 0;
+    }
     if (argc == 2 && strcmp(argv[1], "assertion-materialization") == 0) {
         test_assertion_plan_and_native_condition_materialization_are_exact();
         puts("Assertion AOT refinement tests passed");
@@ -5238,6 +5573,7 @@ int main(int argc, char **argv) {
     test_exact_heap_closure_storage_is_tagged_and_fail_closed();
     test_direct_local_shared_callee_storage_is_exact_and_fail_closed();
     test_direct_local_tagged_ref_argument_authority_is_exact();
+    test_direct_local_scalar_ref_v1_refinement_is_exact_and_fail_closed();
     test_direct_local_go_callee_storage_is_exact_and_fail_closed();
     test_source_namespace_storage_is_exact_and_fail_closed();
     test_standalone_source_namespace_storage_is_exact_and_fail_closed();

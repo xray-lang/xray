@@ -103,7 +103,7 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
     /* One pointer-free six-field value product whose exact x64 layout is
      * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
-     * execute only after the complete schema-51 instruction groups prove the
+     * execute only after the complete schema-52 instruction groups prove the
      * layout, ordinal accesses, caller-owned result storage, and return. */
     XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
 } XrTargetExecutionFamily;

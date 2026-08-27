@@ -138,7 +138,7 @@ member, ordered operands, direct-local TargetPlan call, exact callee, and
 applied direct-call authority record. Missing, duplicate, reordered, stale, or
 ordinary-`XI_CALL` substitutions fail closed; prepare has no normalization or
 compatibility path. This changes no public ABI or plan schema.
-The C emission projection schema 30 preserves the exact materialization recipe
+The C emission projection schema 38 preserves the exact materialization recipe
 and immutable byte payload for every verified String literal row. CGen
 mechanically consumes that row and cannot recover literal bytes, a dynamic
 tag, field spelling, or ownership from mutable Xi values. Missing, extra,
@@ -423,7 +423,7 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-TargetPlan schema 51 additionally freezes one exact borrowed direct-local
+TargetPlan schema 52 freezes one exact borrowed direct-local
 `ref i64` boundary. The caller source and callee parameter retain scalar `I64`
 storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
 request to rewrite the parameter as a general raw-pointer value. The caller's
@@ -432,8 +432,16 @@ binds its stable v1 identity, caller/callee slots, representations, ownership,
 and transfer. C emission may project that verified boundary as `int64_t *`.
 This authority does not by itself grant representation-refinement, VM, CGen, or
 native execution coverage, and no generic ref or pointer inference is allowed.
+The AOT scalar-ref-v1 slice separately rejoins that exact SemanticPlan and
+schema-52 TargetPlan boundary. Refinement schema 6 records no adapter: it
+materializes caller storage, callee storage, call machine rows, and load/store
+pointees as `I64`, while the caller `LOCAL_ADDR` and callee function ABI are
+`RAW_PTR` with an `I64` pointee. C-emission schema 38 is the sole C spelling
+owner for `int64_t *`; prepare and independent AOT verification consume its
+immutable row, and covered CGen cannot recover a pointer level from mutable Xi
+types or a legacy value plan.
 
-The schema-51 source program graph is a distinct program-wide AOT cutover; it
+The schema-52 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
@@ -798,16 +806,20 @@ anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759e
 anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94fedf203659abda9c8ecca6d
 anchor-sha256: src/aot/xaot_prepare.h c044f0f4a1d066b60d33f952d7fbc72b374fad8feb368253210309a9dea8027c
 anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db3e8443bcb917f7eb24a78
-anchor-sha256: src/aot/xaot_verify.c 993d814044a131d6b6405bd06f621b7c74e37a0310c3db90677289244582701b
-anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c b8668a6fddcd781f7d8f37b354b90ca27ceaf1dce88910da8c53bfb3d89fd355
+anchor-sha256: src/aot/xaot_verify.c 77792254ac2246618a0eff6644fae9d6107bf5a4afcc1b1333f1275f45b4eb0e
+anchor-sha256: src/aot/refine/xr_aot_representation_refinement.c f554382fc5581bc22b2a7f938e00cdc2b4f4312ca17fe72add95be9fd5f373d3
+anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.h ff60dac943a74d84c08f125195c857431d97fffaf4e61d97d2e501a714afc38b
+anchor-sha256: src/aot/refine/xr_aot_scalar_ref_v1.c ef79278f61d49194f0f9cd3f170602f28a52bb282e8ff8e4fb3fde24fad47f16
 anchor-sha256: src/aot/refine/xr_aot_scalar_value.c 20143c8af944dcddf795b0b43ca2dad7fe52d097b60edaefa81c678b834a9a2f
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.h 4cbaa554291c41085a3e9b2d3372f21b9715630b9ecbb682de4392c0facc7739
 anchor-sha256: src/aot/refine/xr_aot_tail_call_conformance.c 5d2a94e1664e8e6fd2951880562c1259795dc51d46c4c60032d0d6097c3181be
-anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 7e748b287211ccbc2acb61ef01729d70e7d44473234490c03e065afba709c9e8
+anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 0557037401107d5909756ba673ef60149f5b3510ccd023a0805bc70d47ba65f5
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 7116d17b3c38fb432d60f1646c4f815496798c133a6ffd2a90b136d4352272ac
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h f3b7efab43d508b4a6926002d1ce2e1d9fde3fa2510181b5a61cb769a8d95e74
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 17353e09b9c5891e92c7df2bac284ca66092b4554bd8c2109a0b447d73c5fed0
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c bf30653312565cee03b237f7ea5239057bf4569f41e9b834124569d929bc6b43
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e281f8a9a8b1047182f5b52457fb91149daf1baad011088d92161b967a6a5e67
+anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
+anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c da0c4f905e6a4fd4ce3d685938c81c4c6fb1f91fe9a8ef18897f33b9d55ebcf5
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
 anchor-sha256: src/aot/xi_cgen_value_helpers.inc.c 3a1b50209d93f7e098b67a9b23b79175050b1bf4ad297060b93e7aad257ad950
@@ -825,13 +837,13 @@ anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_has_next_shape.h 5201
 anchor-sha256: src/plan/semantic/xr_semantic_iterator_rune_next_shape.h 4e4ac253f3837afde84345a2ea24a548f6c18378024ca9ac131ab3ad482433fd
 anchor-sha256: src/plan/semantic/xr_semantic_rune_to_uint32_shape.h a781d061082d479ea0483a8a77237bd77dd0f2c0aadc866de482012d6dda7cae
 anchor-sha256: src/plan/semantic/xr_semantic_rune_is_whitespace_shape.h 5ec6db5acd0d2c15ad5e6c292531b8dcfc9fdbde7addcb28c69a790586b57f5c
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c684556117c14fe6aa0a1fe4bfbf29d9d713dc65bfe0a638321d43ca15a7d117
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
 anchor-sha256: src/aot/xi_cgen_class_native_helpers.inc.c c053f25b71fb2a2df09b0519bd05e9d75a960d8b1354787b2e4fee9e612cf070
 anchor-sha256: src/aot/xi_cgen_array_helpers.inc.c be43babe746e19562268cc058732876f49476c73df71e66e53db42fadd97909a
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2686f615976867b7658f3f7976c8d73debe9d6444b55a32bc6a3a98b5bd5b35c
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 743a8a37bea8b103a494ab76ce15e3807208963819750bd9982ff044cec8be49
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: src/aot/xi_cgen.c 81807bdfd871505d3bea4dff48e79ba02e6514f17415e76f849c647e48974aed
+anchor-sha256: src/aot/xi_cgen.c 57bf5cd577126f6e9b2565e2e59873614ac7f4dc0b8b4418b684201c4b47ec9a
 anchor-sha256: src/ir/xi_opt.c 44fdacef3233931ba3e9f5b165a70d978b0cb365510bde8db2e00a84c9625b8f
 anchor-sha256: src/aot/xrt_coll.h 37e45c48a5f5a68e523a853ddf3d557d3ee6976337d7ab620df4d88d39228879
 anchor-sha256: src/aot/xrt_core_freestanding.h 5d4e9b2da067c44aa23d0b46b0ae133abeaae6e1b49a8efee617b384cb45cfb6

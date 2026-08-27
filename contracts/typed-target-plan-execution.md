@@ -1,6 +1,6 @@
 # Typed TargetPlan execution contract
 
-TargetPlan schema 51 may carry a canonical per-function instruction table and
+TargetPlan schema 52 may carry a canonical per-function instruction table and
 an exact per-call-site dynamic-entry expectation table.
 Instruction authority is separate from the production AOT family mask: a
 verified plan can remain a complete AOT plan while exposing no typed execution
@@ -14,7 +14,7 @@ below. Every other function emits zero rows; no partial group or fallback is
 allowed.
 
 The bounded leaf-value aggregate direct-call family is one exact executable
-family within schema 51, not a second aggregate-only plan. SemanticPlan 43
+family within schema 52, not a second aggregate-only plan. SemanticPlan 43
 program bindings project one target-profile-derived aggregate layout,
 caller/callee value and slot rows, one `VALUE/READ` argument, and a caller-storage
 result with no adapter or ownership transfer. The callee group is exactly
@@ -63,7 +63,7 @@ fail-closed because this family does not yet define one unique process entry.
 Managed tuple, tagged place/aggregate-reference, dynamic, boxed, name-derived,
 and legacy leaf-aggregate routes are forbidden for covered product functions.
 
-The bounded two-module scalar graph is one additional executable schema-51
+The bounded two-module scalar graph is one additional executable schema-52
 TargetPlan family. Its sole program-graph row and two
 canonical module partitions index global TargetPlan tables and bind the complete
 ordered SemanticPlan module set, aggregate semantic fingerprint, entry and
@@ -126,7 +126,7 @@ stable producer symbol directly and contains no module-name, shared-slot, or
 runtime import/export lookup.
 
 The graph XTP route preserves the same executable VM authority and AOT lower
-authority. Current schema 51 retains the exact graph and partition sections, mutually
+authority. Current schema 52 retains the exact graph and partition sections, mutually
 excludes ordinary and graph directory shapes, binds the header semantic
 fingerprint to the full canonical module set, and materializes only through that
 set plus the exact target profile.
@@ -278,7 +278,7 @@ executable family caps parameters at 64 so that density is proved without
 allocating.
 
 Instruction rows participate in the TargetPlan fingerprint as exact 32-byte
-canonical rows. XTP schema 51 preserves the bounded sequential compact stream
+canonical rows. XTP schema 52 preserves the bounded sequential compact stream
 introduced by v34; its directory entry carries the expanded row count, compact byte
 length, `COMPACT` flag, and zero row size. Canonical ULEB128 and signed ZigZag
 payloads plus the format-only superinstruction registry are the sole wire
@@ -413,16 +413,19 @@ budget exit releases exactly one generation pin. Token release is transactional:
 failure restores LIVE and preserves the lease for retry instead of orphaning a
 pin. Hard site and byte budgets bound both registry and cache storage.
 
-TargetPlan schema 51 is a hard cutover from v50 and every earlier TargetPlan
+TargetPlan schema 52 is a hard cutover from v51 and every earlier TargetPlan
 schema. It requires SemanticPlan schema 43, program-provenance schema 4, and
-its exact generated Xi operation registry. Schema 51 preserves the PSC6 leaf
+its exact generated Xi operation registry. Schema 52 preserves the PSC6 leaf
 value-product family whose canonical Xi construct/project proof
 has the exact x64 48-byte/8-byte layout and ordinal-bound target rows; it does
 not widen the existing 16-byte/8-byte Pair family. It also assigns the exact
 direct-local borrowed `ref i64` call row its scalar-ref v1 meaning, including
-stable identity, caller/callee slots, scalar storage, ownership, transfer, and
-addressability. Because schema 50 did not distinguish that interpretation, v50
-and every earlier artifact are rejected rather than reinterpreted.
+stable identity, caller/callee scalar slots, scalar call storage, ownership,
+transfer, and addressability. It additionally makes the caller's exact
+`LOCAL_ADDR` value a `RAW_PTR` row instead of accepting the schema-51 builder's
+incorrect subject-`I64` row. This changes the valid artifact set even though no
+wire row changes size, so v51 and every earlier artifact are rejected rather
+than reinterpreted.
 The generated builtin receiver registry and stable method-symbol registry are
 the sole authority for exact `Map<K,V>.entriesIterator()` calls and their
 bounded `Iterator<(K,V)>.hasNext()`/`next()` continuations; selector spelling
@@ -432,7 +435,7 @@ changed the instruction opcode carrier to an unsigned
 canonical instruction row remains exactly 32 bytes by shrinking its reserved
 tail to one byte. The generated target instruction registry is the only opcode
 authority consumed by the builder, verifier, artifact renderer, and dispatcher.
-XTP schema 51 preserves the compact instruction stream introduced by v34,
+XTP schema 52 preserves the compact instruction stream introduced by v34,
 appends the exact 144-byte entry-expectation section after all prior tables,
 widens each coroutine state with its function-local resume-instruction
 authority, and preserves the exact lifecycle root-map, root-slot, and cleanup
@@ -587,7 +590,7 @@ ownership, transfer, and machine representation. An exact `ref` row alone
 authorizes the C projection's additional pointer level. These rows grant no
 imported module object body, allocation, root, cleanup, guessed member lookup,
 dependency activation, unrelated argument ABI, or cross-module frame.
-The C emission projection schema 30 mechanically spells all verified dynamic
+The C emission projection schema 38 mechanically spells all verified dynamic
 families as exact `TAGGED`/`XrValue` rows. For an exact String literal it also
 owns the immutable literal bytes and the explicit String-view materialization
 recipe. For exact `XI_CHAN_NEW` it owns the helper spelling and capacity
@@ -600,9 +603,12 @@ reordered, wrong-kind, wrong-spelling, wrong-operand, wrong-recipe, profile, tar
 projection fingerprint mutations.
 It also projects an exact raw-pointer TargetPlan binding without consulting a
 live Xi type. When and only when the same semantic `LOCAL_ADDR` value is bound
-by a SOURCE_EXPORT `ref` argument row, the projection adds one C pointer level;
-the C consumer cannot infer that level from an import name, callee type, or
-legacy representation plan.
+by an exact SOURCE_EXPORT `ref` argument row or the schema-52 direct-local
+scalar-ref-v1 row, the projection adds one C pointer level. The latter freezes
+an `int64_t *` function ABI with an `I64` pointee while its caller storage,
+callee storage, and call argument machine rows remain `I64`. The C consumer
+cannot infer that level from an import name, callee type, or legacy
+representation plan.
 For the sealed `StringBuilder()` call it owns the zero-operand
 `xrt_strbuf_new` materialization recipe. Sync and coroutine CGen have no
 name-based fallback for that constructor. For the exact String byte-slice view,
@@ -767,7 +773,7 @@ Evidence:
   affected site, while ABI, layout, adapter, ownership, and suspend mutations
   are rejected before cache, callback, or generation-pin side effects.
 - `test_xa_program_semantic_closure` proves the bounded source graph builds one
-  verified schema-51 TargetPlan, uses global rows with exact module partitions
+  verified schema-52 TargetPlan, uses global rows with exact module partitions
   and a `PROGRAM_DIRECT`/`CALL_DIRECT_I64` edge, rejects independently mutated
   or re-signed inner authority, executes its graph-owned entry through both VM
   providers in cold and exact-generation-cache modes, rejects a wrong
@@ -788,15 +794,15 @@ Evidence:
   wrong shared slots, and the direct edge and requires fail-closed rejection
   with no per-module or legacy ABI fallback.
 
-anchor-sha256: src/plan/target/xr_target_plan.h 2f22d7c50d665884a1544c6037e033e54af845acba473db1ad682e11f3aa03c1
+anchor-sha256: src/plan/target/xr_target_plan.h 657482101ff9a675d6de4790ae1240479291d06c9a9a1a04ff555c5787c06381
 anchor-sha256: src/plan/target/xr_target_plan.c 863cc34f128bc05819fee19648ba3d71becd713628df26bffc82338b7326226c
 anchor-sha256: src/plan/target/xr_target_plan_internal.h 98b93650f62e5cfae811bbd8e357eccc5adbc316631a35de580358bfc11a038b
 anchor-sha256: src/plan/target/xr_target_builder.h 4d3d604216a064eb6be4a787afda9ee168f057dc640b5c6065f63f2829e6d05e
-anchor-sha256: src/plan/target/xr_target_builder.c a8dfd063b29786c648d718e20842b24038cf5b2946a92a91374b5e9b4bf52cb0
+anchor-sha256: src/plan/target/xr_target_builder.c 458764430ef1bf457dbc75a20dff1f784771e3cef9dbbe399d923f371e53d58b
 anchor-sha256: src/plan/target/xr_target_instruction_verify.h 1900ed05c513bd35071a58f2d31768ef74be09248b32e2c9e23d39fcc3db1c1a
 anchor-sha256: src/plan/target/xr_target_instruction_verify.c 654643cf477b27b7518d6cfbace38c19c0d1760a699f1020a153a88ee148368d
-anchor-sha256: src/plan/target/xr_target_verify.c 2b9f34d09a4c510d7bde16a6e2a1331ac3a615f78dbb2c645d0d5037206b8219
-anchor-sha256: src/plan/format/xr_xtp_schema.h 2455af4aa7f6fcbfb3326d86b2973b60bc7854854a6a36ff15761b887cd6fdd7
+anchor-sha256: src/plan/target/xr_target_verify.c ceec495fc3197b7f2622b5420695028aee02801830f75e86b67a6444ed825980
+anchor-sha256: src/plan/format/xr_xtp_schema.h f4e702190946300701eebc213774c668a1f731f22d4f87b446c00fb2cd48077f
 anchor-sha256: src/plan/format/xr_xtp_internal.h 35ac710feb01cabdd9de87b17a481aa73847984f8c4e26354d6902344879058f
 anchor-sha256: src/plan/format/xr_xtp_decode.c 9ccebe5d3887a58cdb8746861edeee2e6cc2128b028dccfc2d1387c0127bb014
 anchor-sha256: src/plan/format/xr_xtp_row_fields.h 4464709ecaf6f74067c2cc4ce58b3449c684960d88ed744ed803fb8c53a65474
@@ -808,14 +814,14 @@ anchor-sha256: src/plan/format/xr_xtp_text.h 63367e2a75cc5e1511d1980cd82f579863c
 anchor-sha256: src/plan/format/xr_xtp_text.c 794c85faec54254597eb2cc989b3d0a761e794988105d6bdc18aa19d82ac4162
 anchor-sha256: xisa/target/xtp_super_ops.def 20968dd05c20d4caa85172fb2fc8cc051b74a1c6dcf93534368ce3ca7e491f88
 anchor-sha256: src/plan/target/xr_xtp_materialize.c 6079934e95208abe3b7b7251b4c4b59275c61776f20de0d0873b70617899a62a
-anchor-sha256: src/vm/xr_typed_dispatch.h 278a9b90334d5c33544eb1d4907b500a8e9d938023209445e2eca56a417a6d3b
-anchor-sha256: src/vm/xr_typed_dispatch.c 58a890692c88974f7463f5fea8d202cd1072b4afecc5d46292f28c0c3b5ee90d
+anchor-sha256: src/vm/xr_typed_dispatch.h 61628237af987c3cf8784aa84ca6d1ad21965e0dc21c8e4271bd85d8625fec1c
+anchor-sha256: src/vm/xr_typed_dispatch.c af49be21d9bf33e76f968720ea59a4f02e39adae3f5c20f02354673045274556
 anchor-sha256: src/vm/xr_vm_decoded_cache.h 55ac6ffaab71ac0e77a3db5e10ad326057d0052f4ae3b9722029c8ea06c49cf0
 anchor-sha256: src/vm/xr_vm_decoded_cache.c f1f420b39d78f39e372b3378425809fb6c7049bad84aa02f84df5e542cfd83de
 anchor-sha256: src/vm/xr_typed_frame.c 749f45bf957f82be3142e9aa9565b7bf9020b0f29ff494709bb4c5a900edea53
 anchor-sha256: tests/unit/vm/test_typed_dispatch.c 3556b4e30fe1464e82b1fd8c4a23a3ba04530a1ca918ef055454cf84a531884e
 anchor-sha256: tests/unit/vm/test_vm_decoded_cache.c 576c9e443c711070aff3ab58efbaac42266f89be6be64d49f84889dc9668723c
-anchor-sha256: tests/unit/plan/test_xtp_format.c b8b17d7ffa63df8ad3b97f20cce0e45de9d3638659cbdfda4ef76257b661c411
+anchor-sha256: tests/unit/plan/test_xtp_format.c c85b9891b26f3ab4043df7e411ce605c16b6d4fb63a8bc5e14cb7bf87c1db352
 anchor-sha256: tests/unit/plan/test_xtp_resource_stress.c 48957cbd5b000fb267af4e5ac456223161afccc8c0e9a5b12102a75a236d7124
 anchor-sha256: tests/aot/run_module_summary_determinism.py dd5f9493c43dbe11e3ca4870df40d0859ee5575f1459a67e3d7a180a657fe50d
 anchor-sha256: tests/unit/frontend/test_xa_program_semantic_closure.c 570675d165cc6cdd58bd82ca089cbf73a7a8106cfc5d8c66087350d13b93864e
@@ -845,7 +851,7 @@ anchor-sha256: src/runtime/object/xarray.c 102a52b887e0e777a79da3c78be8e025e1b28
 anchor-sha256: src/vm/xvm_dispatch_collection.inc.c 522f67fa27199b54d2c20942ff344e0b1a657635e28a4e45084737d603a635eb
 anchor-sha256: src/vm/xvm_dispatch_struct.inc.c 903196c49a385fdec0d96f168c62fa86fabdfa079523ca4fd504bd5badb491ee
 anchor-sha256: tests/unit/object/test_xarray.c cfc4a90f4ee19215b036b488f054c9c0590acbb68f4a053d349cfc53c39e25cf
-anchor-sha256: tests/unit/plan/test_target_plan.c bcb9f7de021458e17838a572fc62cd2ef0e8dbda2eebfcfef1add747cc5211fb
+anchor-sha256: tests/unit/plan/test_target_plan.c cb80fcdc5bfbefdae5f9f10557e8c6979e426e51f1da14a7e7d87e9d3e4eecdb
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.h 84d4d2c4feacd955ec13ed949379c8a23ca1a966c37221a5e8ec04126c1c55dc
 anchor-sha256: src/runtime/xr_dynamic_entry_runtime.c 48ec9d693c6bc32c8d08933006363d1a530518c29950886fa2537c3f0a65b456
 anchor-sha256: tests/unit/runtime/test_dynamic_entry_runtime.c ad03d77d583441969756a1f2d1be2cde504624c0cd4ed26ddae96a50c8a79ed5
@@ -856,21 +862,23 @@ anchor-sha256: src/aot/xaot_bundle.c a0a7aa48ca258b12f08ff52060ce393e6a0de3f71db
 anchor-sha256: src/aot/xaot_callable.c 96f90380791063480f5bf26ffb7039946c16f759eb00fd65b40b648f0fc7c661
 anchor-sha256: src/aot/xaot_driver.c d92954960de17cc4bdab92fc6510e0512b1852c03c59a4f194598fcb7fd1c2bf
 anchor-sha256: src/aot/xaot_prepare.c 65cd2db85dbc6d78f87cae148281ceab8f8a98c94fedf203659abda9c8ecca6d
-anchor-sha256: src/aot/xaot_verify.c 993d814044a131d6b6405bd06f621b7c74e37a0310c3db90677289244582701b
+anchor-sha256: src/aot/xaot_verify.c 77792254ac2246618a0eff6644fae9d6107bf5a4afcc1b1333f1275f45b4eb0e
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.h 7d16dc053e4a544f8b9acf2e708d76c08e2022b82171b7d45d6950a9148aa779
 anchor-sha256: src/aot/xr_leaf_value_product_program_emission.c f87d8434d1c40dd948a4a9fcd64adfab03c177fd125f577686043223b601f524
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.h af24dca6237c439faebee2def632939985efe161c59578b4d4323c7e60441311
 anchor-sha256: src/aot/xr_target_aggregate_c_projection.c 8b195e252864f428ade7e800039df4c3d1205af552c1e6365a86c599cdad1942
 anchor-sha256: tests/target-machine/compiler_archive_link_probe.c 730c812aea11fd60d454f23e124316a89f5a2931c4bf65552e12cbe54c9acaf8
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c bf30653312565cee03b237f7ea5239057bf4569f41e9b834124569d929bc6b43
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e281f8a9a8b1047182f5b52457fb91149daf1baad011088d92161b967a6a5e67
+anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
+anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c da0c4f905e6a4fd4ce3d685938c81c4c6fb1f91fe9a8ef18897f33b9d55ebcf5
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.c 406c388a3379cb82e03f0ac5225222de57e530a636f9c15d87a2f6ab1fc1dfa0
-anchor-sha256: src/aot/xi_cgen.c 81807bdfd871505d3bea4dff48e79ba02e6514f17415e76f849c647e48974aed
+anchor-sha256: src/aot/xi_cgen.c 57bf5cd577126f6e9b2565e2e59873614ac7f4dc0b8b4418b684201c4b47ec9a
 anchor-sha256: src/aot/xi_cgen_call_resolve.inc.c 518a2f1e2ab3425448e95f5112920d7b20abda109827419f6c728a4dbe66de06
 anchor-sha256: src/aot/xi_cgen_import_helpers.inc.c 30076f1af20caef31c12ed09d9a7b99c81e9dbc0882090f4f043f306a8627bb3
-anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c c684556117c14fe6aa0a1fe4bfbf29d9d713dc65bfe0a638321d43ca15a7d117
-anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 2686f615976867b7658f3f7976c8d73debe9d6444b55a32bc6a3a98b5bd5b35c
+anchor-sha256: src/aot/xi_cgen_abi_helpers.inc.c baf0c91310142336dcdf012a4df2dc1c4db15470057b555f80953dfb63ef0e77
+anchor-sha256: src/aot/xi_cgen_dispatch_helpers.inc.c 743a8a37bea8b103a494ab76ce15e3807208963819750bd9982ff044cec8be49
 anchor-sha256: src/aot/xi_cgen_program_entry.inc.c 187dd4fd0f00f13d3cb46a5a76651334f47529d5f41629915497fa80fe1570e2
 anchor-sha256: src/aot/xi_cgen_struct_helpers.inc.c affab668a66bcba68f5a0fade570bfe78824f7cc1f4ed2f1b13042cf4c727d2d
-anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 3b901b00eccccdbf6444db9a78aa8225e539e4500b84c6cf2473c997e70872b3
+anchor-sha256: tests/unit/ir/test_xi_program_semantic.c 6e1093c46c9b44a456f0721f72205cf320920785aa989320719bffdc86dfb43f
 anchor-sha256: tests/unit/aot/test_xaot_driver.c a15fde17ee3a7f76ca13559ad0042fb4a2c81ef578ebf5fbf79def47c9319687

@@ -2294,7 +2294,7 @@ static void test_plan_snapshot_and_determinism(void) {
     char target_hex[XR_FINGERPRINT_BYTES * 2 + 1];
     xr_fingerprint_hex(xr_target_plan_fingerprint(first), target_hex);
     REQUIRE(strcmp(target_hex,
-                   "ef51709a302f5dfbc8a3789f1fa7b4da7e287e9804a812686f3cfd3ed81a5f83") == 0);
+                   "36a084e5eb32a8e1517450ee6ded4947e53b535ae50c6ace4b80d3150e0d8213") == 0);
 
     fixture.slots[0].offset = 64;
     uint32_t count = 0;
@@ -5239,10 +5239,26 @@ static void test_direct_local_scalar_ref_argument_authority(void) {
         xr_target_plan_value_rep(plan, caller_place->result_value);
     const XrTargetValueRepRecord *decoy_place_value =
         xr_target_plan_value_rep(plan, same_local_id_decoy->result_value);
+    const XrTargetSlotRecord *caller_place_slot =
+        caller_place_value && caller_place_value->slot < plan->slots_count
+            ? &plan->slots[caller_place_value->slot]
+            : NULL;
     REQUIRE(parameter && place_source && caller_value && callee_value &&
-            caller_place_value && decoy_place_value && caller_place_value != decoy_place_value &&
+            caller_place_value && decoy_place_value && caller_place_slot &&
+            caller_place_value != decoy_place_value &&
             caller_place_value->semantic_value == caller_place->result_value &&
             decoy_place_value->semantic_value == same_local_id_decoy->result_value &&
+            plan->machine_reps[caller_value->register_rep].kind == XR_MACHINE_REP_I64 &&
+            plan->machine_reps[callee_value->register_rep].kind == XR_MACHINE_REP_I64 &&
+            plan->machine_reps[caller_place_value->register_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[caller_place_value->memory_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[caller_place_slot->register_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[caller_place_slot->memory_rep].kind ==
+                XR_MACHINE_REP_RAW_PTR &&
+            plan->machine_reps[decoy_place_value->register_rep].kind == XR_MACHINE_REP_I64 &&
             argument->semantic_value == caller_place->result_value &&
             argument->caller_slot == caller_value->slot &&
             argument->callee_slot == callee_value->slot &&
@@ -5269,6 +5285,20 @@ static void test_direct_local_scalar_ref_argument_authority(void) {
     *argument = saved_argument;
     *call = saved_call;
     plan->fingerprint = saved_plan_fingerprint;
+    REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
+
+    XrTargetValueRepRecord *mutable_place =
+        &plan->value_reps[caller_place_value - plan->value_reps];
+    XrTargetSlotRecord *mutable_place_slot = &plan->slots[mutable_place->slot];
+    XrTargetValueRepRecord saved_place = *mutable_place;
+    XrTargetSlotRecord saved_place_slot = *mutable_place_slot;
+    mutable_place->register_rep = caller_value->register_rep;
+    mutable_place->memory_rep = caller_value->memory_rep;
+    mutable_place_slot->register_rep = caller_value->register_rep;
+    mutable_place_slot->memory_rep = caller_value->memory_rep;
+    expect_verify_failure(plan, "XR_TARGET_1001");
+    *mutable_place = saved_place;
+    *mutable_place_slot = saved_place_slot;
     REQUIRE(xr_target_plan_verify(plan, error, sizeof(error)));
 
     XrFingerprint profile_fingerprint = xr_target_profile_fingerprint(profile);
