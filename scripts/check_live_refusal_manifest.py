@@ -129,6 +129,9 @@ def expected_inputs(root: Path, diff: Any) -> dict[str, Any]:
         "cases": rows,
         "divergence_baseline": file_identity(root, divergence_path),
         "refusal_baseline": file_identity(root, refusal_path),
+        # The registry decides which refusals count as carrying a diagnostic, so a
+        # manifest is only replayable against the registry revision that produced it.
+        "diagnostic_registry": file_identity(root, root / DIAGNOSTIC_REGISTRY),
     }
 
 
