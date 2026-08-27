@@ -20,6 +20,7 @@ Replaces run_aot_incremental_cache.sh.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -436,11 +437,100 @@ def run_lto_cache(rec: Recorder, config: Config, ws: workspace.Workspace) -> Non
     expect_output(rec, config, d / "lapp2", "70\n10", "lto-warm")
 
 
+def digest_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def expect(rec: Recorder, condition: bool, name: str, detail: str = "") -> None:
+    if condition:
+        rec.ok(name)
+    else:
+        rec.bad(name, detail)
+
+
+def build_quiet(config: Config, cache: Path, entry: Path, out: Path) -> proc.ProcResult:
+    """One build on the product's default path.
+
+    Every other scenario passes --verbose to read the cache decisions, and
+    --verbose is exactly what disables the link output cache. Nothing reaches
+    that cache without a build that stays quiet.
+    """
+    return proc.run(
+        [config.xray, "build", "--native", "-O", config.opt_level,
+         "--cache-dir", cache, "-o", out, entry],
+        timeout=config.timeout,
+    )
+
+
+def code_signature_identifier(path: Path, timeout: float | None) -> str | None:
+    """The Mach-O ad-hoc signing identifier, or None where there is no signing."""
+    result = proc.run(["codesign", "-dv", str(path)], timeout=timeout)
+    match = re.search(r"(?m)^Identifier=(.+)$", result.combined_text())
+    return match.group(1).strip() if match else None
+
+
+def run_link_output_identity(rec: Recorder, config: Config,
+                             ws: workspace.Workspace) -> None:
+    """A warm build must not hand one output the binary built for another.
+
+    The link output cache is keyed by everything reaching the compiler and the
+    linker except the output the linker was asked to produce. Where the output
+    name reaches the artifact -- Mach-O ad-hoc signing takes its identifier
+    from it -- the second output is served the first one's bytes.
+    """
+    print("--- link-output-identity ---")
+    d = ws.subdir("link-output")
+    app = d / "app.xr"
+    app.write_text("fn main() -> i64 { return 42 }\n", encoding="utf-8")
+
+    first = d / "out" / platform.exe_name("first_program")
+    second = d / "out" / platform.exe_name("second_program")
+    first.parent.mkdir(parents=True, exist_ok=True)
+
+    # Two builds that share nothing establish whether this platform and this
+    # toolchain distinguish the two outputs at all.
+    cold_first = build_quiet(config, d / "cache-a", app, first)
+    cold_second = build_quiet(config, d / "cache-b", app, second)
+    if not require_build(rec, cold_first, "link-output-cold-first"):
+        return
+    if not require_build(rec, cold_second, "link-output-cold-second"):
+        return
+    distinguishable = digest_file(first) != digest_file(second)
+
+    shared = d / "cache-shared"
+    primed = build_quiet(config, shared, app, first)
+    served = build_quiet(config, shared, app, second)
+    if not require_build(rec, primed, "link-output-prime"):
+        return
+    if not require_build(rec, served, "link-output-warm"):
+        return
+    primed_digest = digest_file(first)
+    served_digest = digest_file(second)
+
+    if distinguishable:
+        expect(rec, served_digest != primed_digest,
+               "link-output: a warm output is not the previous output's binary",
+               f"primed={primed_digest}\nserved={served_digest}")
+    else:
+        rec.ok("link-output: outputs are indistinguishable on this toolchain")
+
+    # Where the platform signs, the identifier names the artifact directly and
+    # says which output the served bytes were actually built for.
+    identifier = code_signature_identifier(second, config.timeout)
+    if identifier is None:
+        rec.ok("link-output: no code signature to attribute on this platform")
+        return
+    expect(rec, identifier == second.name,
+           "link-output: the served binary is signed as the output it names",
+           f"want={second.name}\ngot={identifier}")
+
+
 SCENARIOS: dict[str, Callable] = {
     "basic": run_basic_modules,
     "evidence": run_evidence_manifest_cache,
     "class": run_class_symbols,
     "lto": run_lto_cache,
+    "link-output": run_link_output_identity,
 }
 
 
