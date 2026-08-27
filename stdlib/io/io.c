@@ -985,21 +985,19 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_object_instance_value(obj);
 }
 
-static bool io_touch_update(void *ctx, const char *path) {
-    (void) ctx;
-#ifdef XR_OS_WINDOWS
-    return _utime(path, NULL) == 0;
-#else
-    return utime(path, NULL) == 0;
-#endif
-}
+static XrValue io_utime_now(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) X;
+    if (argc < 1)
+        return xr_bool(false);
+    const char *path = xrs_path_arg(args[0], NULL);
+    if (!path)
+        return xr_bool(false);
 
-static bool io_touch_create(void *ctx, const char *path) {
-    (void) ctx;
-    FILE *f = fopen(path, "a");
-    if (!f)
-        return false;
-    return fclose(f) == 0;
+#ifdef XR_OS_WINDOWS
+    return xr_bool(_utime(path, NULL) == 0);
+#else
+    return xr_bool(utime(path, NULL) == 0);
+#endif
 }
 
 static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
@@ -1023,16 +1021,6 @@ static XrValue io_chmod(XrVMRuntime *X, XrValue *args, int argc) {
 }
 
 // touch(path) - Create empty file or update timestamp
-static XrValue io_touch(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_bool(false);
-    return xr_bool(xr_io_core_touch(path, io_touch_update, io_touch_create, NULL));
-}
-
 // symlink(target, path) - Create symbolic link
 static XrValue io_symlink(XrVMRuntime *X, XrValue *args, int argc) {
     (void) X;

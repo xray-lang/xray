@@ -302,7 +302,7 @@ static const XrStdlibDefEntry xr_stdlib_def_entries[] = {
     {"io", "__symlink", "(target: Path, link: Path): bool", "Create symbolic link", "io_symlink", "normal", "", "xrt_io_symlink", "pp", "value", "", "", "", "system", "method", 0, 2, true},
     {"io", "__tempDir", "(): string?", "Create temporary directory (raw string; io.xr wraps as Path)", "io_tempDir", "normal", "", "xrt_io_temp_dir", "", "value", "", "", "", "system", "method", 0, 0, true},
     {"io", "__tempFile", "(): string?", "Create temporary file (raw string; io.xr wraps as Path)", "io_tempFile", "normal", "", "xrt_io_temp_file", "", "value", "", "", "", "system", "method", 0, 0, true},
-    {"io", "__touch", "(path: Path): bool", "Create or update file timestamp", "io_touch", "normal", "", "xrt_io_touch", "p", "value", "", "", "", "system", "method", 0, 1, true},
+    {"io", "__utimeNow", "(path: Path): bool", "Set a path's access and modification times to now", "io_utime_now", "normal", "", "xrt_io_utime_now", "p", "value", "", "", "", "system", "method", 0, 1, true},
     {"io", "__writeFile", "(path: Path, data: string): bool", "Write string to file", "io_writeFile", "yieldable", "", "xrt_io_write_file", "ps", "value", "", "", "", "system", "method", 0, 2, true},
     {"io", "__writeFileBytes", "(path: Path, data: Array<u8>): bool", "Write byte array to file", "io_writeFileBytes", "yieldable", "", "xrt_io_write_file_bytes", "pv", "value", "", "", "", "system", "method", 0, 2, true},
     {"io", "__writeStderr", "(data: string): bool", "Write text to standard error without adding a newline", "io_writeStderr", "normal", "", "xrt_io_write_stderr", "s", "value", "", "", "", "system", "method", 0, 1, true},

@@ -264,7 +264,15 @@ export fn removeAll(path: Path) -> bool {
 }
 export fn rename(old: Path, newPath: Path) -> bool { return __rename(old, newPath) }
 export fn symlink(target: Path, link: Path) -> bool { return __symlink(target, link) }
-export fn touch(path: Path) -> bool { return __touch(path) }
+// Update the timestamps first and fall back to creating the file, in that
+// order: a directory accepts the timestamp update but cannot be created as a
+// file, so trying creation first would report failure for a path that touch
+// handles. Appending nothing creates a missing file without truncating an
+// existing one.
+export fn touch(path: Path) -> bool {
+    if (__utimeNow(path)) { return true }
+    return __appendFile(path, "")
+}
 export fn writeFile(path: Path, data: string) -> bool { return __writeFile(path, data) }
 export fn writeFileBytes(path: Path, data: Array<u8>) -> bool {
     return __writeFileBytes(path, data)

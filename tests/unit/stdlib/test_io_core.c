@@ -56,15 +56,6 @@ typedef struct IoWriteAllFake {
     size_t call_count;
 } IoWriteAllFake;
 
-typedef struct IoTouchFake {
-    bool update_ok;
-    bool create_ok;
-    size_t update_count;
-    size_t create_count;
-    char updated_path[32];
-    char created_path[32];
-} IoTouchFake;
-
 typedef struct IoRemoveAllNode {
     const char *path;
     XrIoCorePathKind kind;
@@ -133,20 +124,6 @@ static size_t io_write_all_fake_write(void *ctx, const void *buf, size_t len) {
 
 static bool io_write_all_fake_error(void *ctx) {
     return ((IoWriteAllFake *) ctx)->write_error;
-}
-
-static bool io_touch_fake_update(void *ctx, const char *path) {
-    IoTouchFake *fake = (IoTouchFake *) ctx;
-    fake->update_count++;
-    strcpy(fake->updated_path, path);
-    return fake->update_ok;
-}
-
-static bool io_touch_fake_create(void *ctx, const char *path) {
-    IoTouchFake *fake = (IoTouchFake *) ctx;
-    fake->create_count++;
-    strcpy(fake->created_path, path);
-    return fake->create_ok;
 }
 
 static const IoRemoveAllNode *io_remove_all_fake_find(const IoRemoveAllFake *fake,
@@ -446,33 +423,6 @@ TEST(io_core_write_all_rejects_no_progress_and_invalid_args) {
     ASSERT_FALSE(xr_io_core_write_all(&fake, NULL, io_write_all_fake_error, "abc", 3));
     ASSERT_FALSE(
         xr_io_core_write_all(&fake, io_write_all_fake_write, io_write_all_fake_error, NULL, 1));
-}
-
-TEST(io_core_touch_prefers_timestamp_update) {
-    IoTouchFake fake = {.update_ok = true, .create_ok = true};
-    ASSERT_TRUE(xr_io_core_touch("file.txt", io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_EQ_UINT(fake.update_count, 1);
-    ASSERT_EQ_UINT(fake.create_count, 0);
-    ASSERT_STR_EQ(fake.updated_path, "file.txt");
-}
-
-TEST(io_core_touch_creates_when_update_fails) {
-    IoTouchFake fake = {.update_ok = false, .create_ok = true};
-    ASSERT_TRUE(xr_io_core_touch("new.txt", io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_EQ_UINT(fake.update_count, 1);
-    ASSERT_EQ_UINT(fake.create_count, 1);
-    ASSERT_STR_EQ(fake.created_path, "new.txt");
-}
-
-TEST(io_core_touch_rejects_create_failure_and_invalid_args) {
-    IoTouchFake fake = {.update_ok = false, .create_ok = false};
-    ASSERT_FALSE(
-        xr_io_core_touch("blocked.txt", io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_EQ_UINT(fake.update_count, 1);
-    ASSERT_EQ_UINT(fake.create_count, 1);
-    ASSERT_FALSE(xr_io_core_touch(NULL, io_touch_fake_update, io_touch_fake_create, &fake));
-    ASSERT_FALSE(xr_io_core_touch("x", NULL, io_touch_fake_create, &fake));
-    ASSERT_FALSE(xr_io_core_touch("x", io_touch_fake_update, NULL, &fake));
 }
 
 TEST(io_core_read_dir_filters_dot_entries) {
@@ -847,11 +797,6 @@ RUN_TEST(io_core_write_all_retries_short_writes);
 RUN_TEST(io_core_write_all_accepts_zero_length_without_data);
 RUN_TEST(io_core_write_all_rejects_error_after_full_write);
 RUN_TEST(io_core_write_all_rejects_no_progress_and_invalid_args);
-
-RUN_TEST_SUITE("IO Core - touch");
-RUN_TEST(io_core_touch_prefers_timestamp_update);
-RUN_TEST(io_core_touch_creates_when_update_fails);
-RUN_TEST(io_core_touch_rejects_create_failure_and_invalid_args);
 
 RUN_TEST_SUITE("IO Core - read dir");
 RUN_TEST(io_core_read_dir_filters_dot_entries);

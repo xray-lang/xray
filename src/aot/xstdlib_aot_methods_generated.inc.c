@@ -158,7 +158,7 @@ static const CgAotStdlibMethod g_aot_stdlib_generated_methods[] = {
     {"io", "__symlink", 2, "xrt_io_symlink", "pp", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__tempDir", 0, "xrt_io_temp_dir", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__tempFile", 0, "xrt_io_temp_file", "", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
-    {"io", "__touch", 1, "xrt_io_touch", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
+    {"io", "__utimeNow", 1, "xrt_io_utime_now", "p", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__writeFile", 2, "xrt_io_write_file", "ps", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__writeFileBytes", 2, "xrt_io_write_file_bytes", "pv", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},
     {"io", "__writeStderr", 1, "xrt_io_write_stderr", "s", CG_AOT_RET_VALUE, NULL, UINT32_C(0), NULL, NULL, 0},

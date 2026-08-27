@@ -2560,11 +2560,11 @@ module io {
     return_ownership: "fresh"
   }
 
-  fn __touch {
+  fn __utimeNow {
     signature: "(path: Path): bool"
-    doc: "Create or update file timestamp"
-    vm: "io_touch"
-    aot: "xrt_io_touch"
+    doc: "Set a path's access and modification times to now"
+    vm: "io_utime_now"
+    aot: "xrt_io_utime_now"
     argc: 1
     arg_spec: "p"
     aot_direct: true

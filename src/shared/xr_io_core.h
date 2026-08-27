@@ -324,15 +324,6 @@ static inline bool xr_io_core_write_all(void *ctx, XrIoCoreWriteFn write_fn,
     return error_fn ? !error_fn(ctx) : true;
 }
 
-static inline bool xr_io_core_touch(const char *path, XrIoCorePathFn update_fn,
-                                    XrIoCorePathFn create_fn, void *ctx) {
-    if (!path || !update_fn || !create_fn)
-        return false;
-    if (update_fn(ctx, path))
-        return true;
-    return create_fn(ctx, path);
-}
-
 static inline bool xr_io_core_is_sep(char ch) {
     return ch == '/' || ch == '\\';
 }
