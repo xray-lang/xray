@@ -215,6 +215,16 @@ struct XrLspServer {
     // Workspace-level static analyzer (unified index for all cross-file features)
     XaAnalyzer *workspace_analyzer;
 
+    // Module graph of the most recently parsed document, with the authority
+    // context that governed it. The analyzer answers `import { X } from "./m"`
+    // by locating the importing module in this graph and resolving the
+    // specifier from it; with no graph every imported name degrades to an
+    // unknown-member error. It is rebuilt per parse and owned here so it
+    // outlives the parse that produced it — the analyzer keeps a borrowed
+    // pointer and reads it while serving completion and hover.
+    struct XrModuleGraph *module_graph;
+    struct XrCliGraphAuthority *module_graph_authority;
+
     // Server state — the LSP lifecycle is a strict state machine:
     //   (pre-init) -> initialized -> shutdown_received -> exit_received
     // After `shutdown` we must keep the process alive and only reply

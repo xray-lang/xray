@@ -38,6 +38,9 @@
 #include "../../runtime/value/xtype_pool.h"
 #include "../../toolchain/xcompiler_session.h"
 #include "../../module/xmodule_identity.h"
+#include "../../module/xmodule_graph.h"
+#include "../../runtime/xisolate_api.h"
+#include "../cli/xcli_graph_authority.h"
 
 // AST formatter (lives in frontend/format).
 #include "../../frontend/format/xfmt.h"
@@ -83,21 +86,45 @@ static bool lsp_logical_path_from_uri(const char *uri, char *buf, size_t cap) {
     return true;
 }
 
+/* The identity the graph recorded for this file, or NULL when the file is not
+ * in the graph. Import resolution matches the analyzer's current identity
+ * against the graph's canonical names, so a document that has a graph must be
+ * announced under the name the graph knows it by; anything else resolves to
+ * nothing. */
+static const char *lsp_graph_identity_for_uri(const XrModuleGraph *graph, const char *uri) {
+    if (!graph)
+        return NULL;
+    const char *path = xlsp_uri_to_path(uri);
+    if (!path)
+        return NULL;
+    int idx = xr_module_graph_find_source(graph, path);
+    return idx >= 0 ? graph->specs[idx].canonical : NULL;
+}
+
 static bool lsp_analysis_identity_push(XlspAnalysisIdentity *scope, XrCompilerSession *session,
-                                       const char *uri) {
+                                       const XrModuleGraph *graph, const char *uri) {
     scope->session = NULL;
     scope->identity = NULL;
     if (!session || !uri)
         return false;
 
-    char logical[XLSP_MAX_PATH];
-    if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
-        return false;
-
-    const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
     char *identity = NULL;
-    if (!xr_module_identity_from_logical(&authority, logical, &identity))
-        return false;
+    const char *from_graph = lsp_graph_identity_for_uri(graph, uri);
+    if (from_graph) {
+        identity = xr_strdup(from_graph);
+        if (!identity)
+            return false;
+    } else {
+        /* No graph entry: a buffer with no file behind it, or a graph that
+         * could not be built. Name it after the document itself so enum owners
+         * and other per-unit facts still exist. */
+        char logical[XLSP_MAX_PATH];
+        if (!lsp_logical_path_from_uri(uri, logical, sizeof(logical)))
+            return false;
+        const XrModuleIdentityAuthority authority = {.kind = XR_MODULE_IDENTITY_SCRIPT};
+        if (!xr_module_identity_from_logical(&authority, logical, &identity))
+            return false;
+    }
 
     const XrCompileUnitIdentity unit = {.kind = XR_COMPILE_UNIT_USER, .module_identity = identity};
     if (!xr_compiler_session_set_compile_unit_identity(session, &unit)) {
@@ -265,6 +292,113 @@ static void lsp_error_callback(void *user_data, int line, int column, int end_li
 
 // lsp_log declared in xlsp_server.h (included via xlsp_analysis.h)
 
+/* Drop the graph built for the previously parsed document.  The analyzer holds
+ * a borrowed pointer, so clear that first: a stale graph is a dangling read on
+ * the next completion. */
+static void lsp_release_module_graph(XrLspServer *server) {
+    if (server->workspace_analyzer)
+        xa_analyzer_set_graph(server->workspace_analyzer, NULL);
+    if (server->module_graph) {
+        xr_module_graph_free(server->module_graph);
+        server->module_graph = NULL;
+    }
+    if (server->module_graph_authority) {
+        xr_cli_graph_authority_close(server->module_graph_authority);
+        xr_free(server->module_graph_authority);
+        server->module_graph_authority = NULL;
+    }
+}
+
+/* Build the module graph rooted at this document and analyse its dependencies
+ * through it.
+ *
+ * The analyzer answers an import specifier by finding the importing module in
+ * the graph and asking the resolver where the specifier points.  Without a
+ * graph it cannot map `"./palette"` onto anything, so every name imported from
+ * a sibling file degrades to an unknown-member diagnostic on code the compiler
+ * accepts.  Going through the graph also means the editor discovers files the
+ * way the compiler does — the specifier carries no extension, and the
+ * resolver's probing is what supplies it.
+ *
+ * Dependencies are read from disk. An unsaved buffer is authoritative only for
+ * the document being parsed, which keeps its own analysis below. */
+static void lsp_rebuild_module_graph(XrLspServer *server, XrLspDocument *doc) {
+    lsp_release_module_graph(server);
+    if (!server->workspace_analyzer || !server->isolate || !doc || !doc->uri)
+        return;
+
+    const char *entry_path = xlsp_uri_to_path(doc->uri);
+    if (!entry_path || !entry_path[0])
+        return;
+
+    XrCliGraphAuthority *authority = (XrCliGraphAuthority *) xr_malloc(sizeof(*authority));
+    if (!authority)
+        return;
+
+    char authority_error[256] = {0};
+    XrModuleRegistry *registry = xr_isolate_get_module_registry(server->isolate);
+    if (!xr_cli_graph_authority_open(authority, registry, entry_path, authority_error,
+                                     sizeof(authority_error))) {
+        lsp_log("graph: no authority for %s: %s", entry_path, authority_error);
+        xr_free(authority);
+        return;
+    }
+
+    XrCompilerSession *session = xr_compiler_session_current_for_isolate(server->isolate);
+    XrModuleGraph *graph = xr_module_graph_new(session, authority->resolver);
+    char *build_error = NULL;
+    if (!graph ||
+        xr_module_graph_build(graph, entry_path, &authority->entry_authority, &build_error) != 0) {
+        lsp_log("graph: build failed for %s: %s", entry_path,
+                build_error ? build_error : "unknown");
+        xr_free(build_error);
+        if (graph)
+            xr_module_graph_free(graph);
+        xr_cli_graph_authority_close(authority);
+        xr_free(authority);
+        return;
+    }
+
+    /* A cycle is a diagnostic the analyzer reports on its own; the graph still
+     * describes every module, so keep it rather than losing all cross-file
+     * resolution over it. */
+    xr_module_graph_topological_sort(graph);
+
+    server->module_graph = graph;
+    server->module_graph_authority = authority;
+    xa_analyzer_set_graph(server->workspace_analyzer, graph);
+
+    /* Leaves first, so a module's exports exist before its importers ask. The
+     * entry itself is skipped: the open buffer, not the file on disk, is what
+     * the editor must analyse, and parse_document does that next.
+     *
+     * A dependency can also be open with unsaved edits. The graph read it from
+     * disk, so prefer the buffer's AST where there is one — otherwise the
+     * editor would answer from a version the user has already changed. */
+    for (int i = 0; i < graph->topo_count; i++) {
+        XrModuleSpec *spec = &graph->specs[graph->topo_order[i]];
+        if (!spec->source_path)
+            continue;
+        if (strcmp(spec->source_path, entry_path) == 0)
+            continue;
+
+        char spec_uri[XLSP_MAX_PATH + 8];
+        snprintf(spec_uri, sizeof(spec_uri), "file://%s", spec->source_path);
+        XrLspDocument *open_doc = xlsp_document_get(server, spec_uri);
+        XrAstNode *module_ast =
+            open_doc && open_doc->ast ? (XrAstNode *) open_doc->ast : (XrAstNode *) spec->ast;
+        if (!module_ast)
+            continue;
+
+        xa_analyzer_analyze(server->workspace_analyzer, spec->source_path, module_ast);
+        spec->export_symbols =
+            xa_analyzer_collect_export_symbols(server->workspace_analyzer, module_ast);
+        if (open_doc)
+            open_doc->dirty = false;
+    }
+    lsp_log("graph: %d module(s) for %s", graph->spec_count, entry_path);
+}
+
 // Parse and index imported files on demand
 static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const char *base_uri) {
     if (!server || !ast || !base_uri || !server->workspace_analyzer)
@@ -381,7 +515,7 @@ static void index_imports_on_demand(XrLspServer *server, AstNode *ast, const cha
             XlspAnalysisIdentity import_identity;
             lsp_analysis_identity_push(&import_identity,
                                        xr_compiler_session_current_for_isolate(server->isolate),
-                                       import_uri);
+                                       server->module_graph, import_uri);
             xa_analyzer_analyze(server->workspace_analyzer, import_uri, (XrAstNode *) import_ast);
             lsp_analysis_identity_pop(&import_identity);
             lsp_log("import: indexed %s%s", full_path, parser.had_error ? " (with errors)" : "");
@@ -472,9 +606,10 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
     doc->parse_error = parser.had_error;
     doc->cached_diagnostics = error_ctx.diagnostics;
 
-    // Index imported files on demand (before analyzing current file)
-    // Now safe after fixing parser infinite loop issues
+    // Resolve this document's imports through a real module graph, then index
+    // whatever the graph could not cover.
     if (ast) {
+        lsp_rebuild_module_graph(server, doc);
         index_imports_on_demand(server, ast, doc->uri);
     }
 
@@ -486,7 +621,7 @@ void xlsp_parse_document(XrLspDocument *doc, XrLspServer *server) {
         // Use incremental update with content hash for true change detection
         XlspAnalysisIdentity doc_identity;
         lsp_analysis_identity_push(&doc_identity, xr_compiler_session_current_for_isolate(isolate),
-                                   doc->uri);
+                                   server->module_graph, doc->uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, doc->uri, (XrAstNode *) ast,
                                  doc->content_hash);
         lsp_analysis_identity_pop(&doc_identity);

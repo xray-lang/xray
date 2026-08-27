@@ -1203,6 +1203,14 @@ if(XR_BUILD_LSP)
 
     file(GLOB LSP_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/app/lsp/*.c)
     list(REMOVE_ITEM LSP_SOURCES ${CMAKE_SOURCE_DIR}/src/app/lsp/xlsp_main.c)
+    # The server resolves imports through a module graph, and the authority
+    # context that governs one lives with the other source-graph consumers
+    # rather than in xray_core. The shipped binary links both already; the
+    # unit tests have to name it.
+    list(APPEND LSP_SOURCES
+        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_graph_authority.c
+        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_fs.c
+        ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_output.c)
 
     # The full-source LSP tests exercise the same Windows CRT-pipe adapters as
     # the production server; keep them enabled on every host.
