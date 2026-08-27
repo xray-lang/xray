@@ -56,6 +56,10 @@ PLAN_CACHE_RE = re.compile(r"\[target-plan-cache\] (hit|miss|rebuild) ")
 PRODUCER_V1 = "export fn add1(value: i64) -> i64 { return value + 1 }\n"
 PRODUCER_V2 = "export fn add1(value: i64) -> i64 { return value + 2 }\n"
 ENTRY = 'import { add1 } from "./producer"\nfn main() -> i64 { return add1(41) }\n'
+# The same program with its two top-level statements in the other order.
+ENTRY_REORDERED = 'fn main() -> i64 { return add1(41) }\nimport { add1 } from "./producer"\n'
+# The same program with the dependency under a different module name.
+ENTRY_RENAMED = 'import { add1 } from "./producer2"\nfn main() -> i64 { return add1(41) }\n'
 
 
 @dataclass(frozen=True)
@@ -267,6 +271,62 @@ def qualify_lifecycle(rec: report.Report, config: Config,
                                       objects(cache) == edited_objects)
                else report.Status.FAIL,
                f"cold={stages['cold'].identity}\nrevert={reverted.identity}")
+
+
+
+def qualify_reorder(rec: report.Report, config: Config,
+                    ws: workspace.Workspace) -> None:
+    """Rewriting the sources must move the identity, never silently reuse it.
+
+    Cache identity covers the normalized source text and the module set. Both
+    reorderings below leave the program's meaning alone, so a cache that
+    answered for them would be guessing rather than proving; a miss here is the
+    safe direction and the one the key is built to take.
+    """
+    d = ws.subdir("reorder")
+    cache = d / "cache"
+    source = d / "src"
+    entry = write_product(source, PRODUCER_V1)
+    base = parse(build(config, cache, entry, d / "out-base" / "app"))
+    if not base:
+        rec.record("reorder: the baseline build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    base_objects = objects(cache)
+
+    entry.write_text(ENTRY_REORDERED, encoding="utf-8")
+    reordered = parse(build(config, cache, entry, d / "out-reordered" / "app"))
+    if not reordered:
+        rec.record("reorder: the reordered build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    rec.record("reorder: reordering the entry's statements moves the identity",
+               report.Status.PASS if (reordered.identity != base.identity and
+                                      reordered.hits == 0 and
+                                      reordered.published == reordered.identity.modules)
+               else report.Status.FAIL,
+               f"base={base.identity}\nreordered={reordered.identity}\n{reordered}")
+
+    (source / "producer2.xr").write_text(PRODUCER_V1, encoding="utf-8")
+    entry.write_text(ENTRY_RENAMED, encoding="utf-8")
+    renamed = parse(build(config, cache, entry, d / "out-renamed" / "app"))
+    if not renamed:
+        rec.record("reorder: the renamed build reports its cache decisions",
+                   report.Status.FAIL, "no report")
+        return
+    rec.record("reorder: renaming the dependency module moves the identity",
+               report.Status.PASS if (renamed.identity != base.identity and
+                                      renamed.identity != reordered.identity and
+                                      renamed.hits == 0)
+               else report.Status.FAIL,
+               f"base={base.identity}\nrenamed={renamed.identity}\n{renamed}")
+    rec.record("reorder: neither rewrite disturbs the objects already published",
+               report.Status.PASS if all(objects(cache).get(name) == digest
+                                         for name, digest in base_objects.items())
+               and not residue(cache)
+               else report.Status.FAIL,
+               f"base={sorted(base_objects)}\nnow={sorted(objects(cache))}\n"
+               f"residue={residue(cache)}")
 
 
 def qualify_relocation(rec: report.Report, config: Config,
@@ -554,6 +614,7 @@ def main(argv: list[str]) -> int:
         qualify_determinism(rec, config, ws)
         qualify_lifecycle(rec, config, ws)
         qualify_relocation(rec, config, ws)
+        qualify_reorder(rec, config, ws)
         qualify_parallel(rec, config, ws, max(2, ns.workers))
         rec.write(verbose=True)
         if ns.measure:
