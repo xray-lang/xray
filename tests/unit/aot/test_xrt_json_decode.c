@@ -53,6 +53,13 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     abort();
 }
 
+static int32_t test_canonical_string_refcount(XrValue value) {
+    if (value.tag != XR_TAG_STR_ARC || !value.ptr)
+        abort();
+    XrString *string = (XrString *) value.ptr;
+    return atomic_load_explicit(&string->header.rc, memory_order_relaxed);
+}
+
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
@@ -195,17 +202,15 @@ static void test_json_encode_retains_borrowed_source_strings(void) {
     XrValue source = xrt_object_new_shape(test_static_shape(1, names));
     XrValue name = xr_box_str("Ada");
     xrt_object_set_field(source, 0, name);
-    XrObjHeader *name_header = XRT_ARC_HDR(name.ptr);
 
-    ASSERT_TRUE(atomic_load_explicit(&name_header->refcount, memory_order_relaxed) == XR_RC_INIT,
+    ASSERT_TRUE(test_canonical_string_refcount(name) == XR_RUNTIME_OBJECT_RC_INITIAL,
                 "the source structural object should initially be the string's sole owner");
     XrValue encoded = xrt_json_encode(source);
     ASSERT_TRUE(XR_IS_MAP(encoded), "JSON.value should encode a structural object as a Map");
-    ASSERT_TRUE(atomic_load_explicit(&name_header->refcount, memory_order_relaxed) ==
-                    XR_RC_INIT + 1,
+    ASSERT_TRUE(test_canonical_string_refcount(name) == XR_RUNTIME_OBJECT_RC_INITIAL + 1,
                 "the encoded Map should independently retain a borrowed source string");
     xrt_release(encoded);
-    ASSERT_TRUE(atomic_load_explicit(&name_header->refcount, memory_order_relaxed) == XR_RC_INIT,
+    ASSERT_TRUE(test_canonical_string_refcount(name) == XR_RUNTIME_OBJECT_RC_INITIAL,
                 "releasing the encoded Map should leave the source string alive");
     ASSERT_TRUE(strcmp(xr_str_data(xrt_object_get_field(source, 0)), "Ada") == 0,
                 "releasing the encoded Map must not corrupt the source object");

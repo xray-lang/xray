@@ -59,6 +59,13 @@ XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     abort();
 }
 
+static int32_t test_canonical_string_refcount(XrValue value) {
+    if (value.tag != XR_TAG_STR_ARC || !value.ptr)
+        abort();
+    XrString *string = (XrString *) value.ptr;
+    return atomic_load_explicit(&string->header.rc, memory_order_relaxed);
+}
+
 #define ASSERT_TRUE(cond, msg)                                                                     \
     do {                                                                                           \
         if (!(cond)) {                                                                             \
@@ -183,12 +190,10 @@ static void test_collection_materialization_promotes_reference_elements(void) {
 
     XrValue keys = xrt_map_keys(map);
     XrValue values = xrt_map_values(map);
-    ASSERT_EQ_INT(
-        atomic_load_explicit(&xrt_arc_value_header(map_key)->refcount, memory_order_relaxed), 1,
-        "Map.keys promotes a reference element");
-    ASSERT_EQ_INT(
-        atomic_load_explicit(&xrt_arc_value_header(map_value_item)->refcount, memory_order_relaxed),
-        1, "Map.values promotes a reference element");
+    ASSERT_EQ_INT(test_canonical_string_refcount(map_key), 2,
+                  "Map.keys retains a canonical string element");
+    ASSERT_EQ_INT(test_canonical_string_refcount(map_value_item), 2,
+                  "Map.values retains a canonical string element");
     xrt_release(keys);
     xrt_release(values);
     ASSERT_TRUE(strcmp(xr_str_data(map_key), "owned-key") == 0,
@@ -202,9 +207,8 @@ static void test_collection_materialization_promotes_reference_elements(void) {
     XrValue set_item = xr_box_str("owned-set-value");
     ASSERT_TRUE(xrt_set_add(set, set_item) == 1, "Set accepts the reference element");
     XrValue set_values = xrt_set_values(set);
-    ASSERT_EQ_INT(
-        atomic_load_explicit(&xrt_arc_value_header(set_item)->refcount, memory_order_relaxed), 1,
-        "Set.values promotes a reference element");
+    ASSERT_EQ_INT(test_canonical_string_refcount(set_item), 2,
+                  "Set.values retains a canonical string element");
     xrt_release(set_values);
     ASSERT_TRUE(strcmp(xr_str_data(set_item), "owned-set-value") == 0,
                 "releasing Set.values preserves the set's element owner");
@@ -213,16 +217,18 @@ static void test_collection_materialization_promotes_reference_elements(void) {
 
 static void test_shared_promotion_preserves_all_existing_owners(void) {
     XrValue value = xrt_str_from_cstr("abc");
-    XrObjHeader *header = xrt_arc_value_header(value);
+    XrString *string = (XrString *) value.ptr;
 
     xrt_retain(value);
     xrt_retain(value);
-    ASSERT_EQ_INT(atomic_load_explicit(&header->refcount, memory_order_relaxed), 2,
-                  "local RC encodes three owners as two");
+    ASSERT_EQ_INT(test_canonical_string_refcount(value), 3,
+                  "canonical string RC records all three owners");
 
     (void) xrt_value_set_storage(value, XR_OBJ_STORAGE_SHARED);
-    ASSERT_EQ_INT(atomic_load_explicit(&header->refcount, memory_order_relaxed), -3,
-                  "shared promotion preserves all three owners");
+    ASSERT_EQ_INT(string->header.domain_id, XR_RUNTIME_STRING_DOMAIN_CONST_SHARED,
+                  "shared promotion changes the canonical string domain");
+    ASSERT_EQ_INT(test_canonical_string_refcount(value), 3,
+                  "shared promotion preserves all three canonical owners");
 
     xrt_release(value);
     ASSERT_EQ_INT(xr_str_len(value), 3, "first shared release keeps the string alive");
