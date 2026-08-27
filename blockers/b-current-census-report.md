@@ -185,6 +185,12 @@ Not run: any other platform (this is macos-arm64 only), the sanitizer lanes, the
 CTest suite, Windows or MSVC, and any production qualification. This lane supplies
 current decision facts only and does not represent completion of the target-machine work.
 
+One gate is intermittently red for a reason unrelated to this lane's changes:
+`backend_diff_deterministic` fabricates refusals when a cold cache coincides with
+concurrent ctest load. Reproduced, root-caused, and verified fixable in
+`b-probe-timeout-fabricates-refusals.md`. The census evidence was checked against that
+failure mode and is clean.
+
 ## Baseline defects observed at the documented base
 
 Both predate this lane and are unmodified by it.
