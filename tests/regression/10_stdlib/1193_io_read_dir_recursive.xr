@@ -1,0 +1,72 @@
+// readDirRecursive reports entries relative to the listed directory with '/'
+// as the only separator. A symlinked directory is listed but not descended
+// into, so a link pointing outside the tree cannot pull unrelated entries in.
+
+import io
+import path
+import { Path } from path
+
+fn tree(name: string) -> Path {
+    var root = path.join(io.tempDir()!, path.from(name))
+    assert(io.mkdirp(path.join(root, path.from("a/b/c"))))
+    assert(io.writeFile(path.join(root, path.from("top")), "t"))
+    assert(io.writeFile(path.join(root, path.from("a/f1")), "1"))
+    assert(io.writeFile(path.join(root, path.from("a/b/f2")), "2"))
+    return root
+}
+
+fn sortedNames(entries: Array<Path>) -> Array<string> {
+    var out: Array<string> = []
+    for (var i = 0; i < len(entries); i++) { out.push(entries[i].toString()) }
+    out.sort()
+    return out
+}
+
+@test
+fn test_lists_every_level_relative_to_the_root() {
+    var root = tree("rdr_tree")
+    var names = sortedNames(io.readDirRecursive(root)!)
+    assertEqual(len(names), 6)
+    assertEqual(names[0], "a")
+    assertEqual(names[1], "a/b")
+    assertEqual(names[2], "a/b/c")
+    assertEqual(names[3], "a/b/f2")
+    assertEqual(names[4], "a/f1")
+    assertEqual(names[5], "top")
+    io.removeAll(root)
+}
+
+@test
+fn test_a_symlinked_directory_is_listed_but_not_entered() {
+    var outside = path.join(io.tempDir()!, path.from("rdr_outside"))
+    assert(io.mkdirp(outside))
+    assert(io.writeFile(path.join(outside, path.from("hidden")), "x"))
+
+    var root = tree("rdr_link")
+    assert(io.symlink(outside, path.join(root, path.from("link"))))
+
+    var names = sortedNames(io.readDirRecursive(root)!)
+    // The link itself appears; what it points at does not.
+    var sawLink = false
+    var sawHidden = false
+    for (var i = 0; i < len(names); i++) {
+        if (names[i] == "link") { sawLink = true }
+        if (names[i] == "link/hidden") { sawHidden = true }
+    }
+    assert(sawLink)
+    assertEqual(sawHidden, false)
+
+    io.removeAll(root)
+    io.removeAll(outside)
+}
+
+@test
+fn test_a_path_that_is_not_a_directory_answers_null() {
+    var file = path.join(io.tempDir()!, path.from("rdr_file"))
+    assert(io.writeFile(file, "x"))
+    assertEqual(io.readDirRecursive(file), null)
+    io.remove(file)
+
+    var missing = path.join(io.tempDir()!, path.from("rdr_absent"))
+    assertEqual(io.readDirRecursive(missing), null)
+}

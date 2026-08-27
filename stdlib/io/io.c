@@ -1287,36 +1287,6 @@ static XrValue io_tempDir(XrVMRuntime *X, XrValue *args, int argc) {
     return xrs_string_value_c(X, tpl);
 }
 
-// readDirRecursive helper struct
-// readDirRecursive(path) - Recursively read directory
-static XrValue io_readDirRecursive(XrVMRuntime *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
-    const char *path = xrs_path_arg(args[0], NULL);
-    if (!path)
-        return xr_null();
-
-    XrArray *arr = xr_array_new(xr_current_coro(X));
-    if (!arr)
-        return xr_null();
-
-    IoReadDirEmitCtx emit = {.X = X, .arr = arr};
-    XrIoCoreReadDirOps ops = {
-        .for_each_entry = io_dir_for_each_entry,
-        .kind = io_path_kind,
-        .alloc = io_core_alloc,
-        .free = io_core_free,
-        .alloc_ctx = NULL,
-        .sep = '/',
-        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
-    };
-    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, io_read_dir_emit, &emit)) {
-        io_release_array(arr);
-        return xr_null();
-    }
-    return xr_value_from_array(arr);
-}
-
 /* ========== Module Loading ========== */
 
 #define XR_STDLIB_VM_BIND_MODULE_IO 1

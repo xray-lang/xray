@@ -813,39 +813,6 @@ static inline XrValue xrt_io_read_dir(const char *path_data, int64_t path_len) {
     return arr;
 }
 
-static inline XrValue xrt_io_read_dir_recursive(const char *path_data, int64_t path_len) {
-    char stack_path[512];
-    char *owned = NULL;
-    char *path = xrt_io_copy_cstr_arg(path_data, path_len, stack_path, sizeof(stack_path), &owned);
-    if (!path) {
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-    XrValue arr = xrt_array_new(0);
-    XrtIoReadDirEmitCtx emit = {.arr = arr};
-    XrIoCoreReadDirOps ops = {
-        .for_each_entry = xrt_io_dir_for_each_entry,
-        .kind = xrt_io_path_kind,
-        .alloc = xrt_io_core_alloc,
-        .free = xrt_io_core_free,
-        .alloc_ctx = NULL,
-        .sep =
-#if defined(XR_OS_WINDOWS)
-            '\\',
-#else
-            '/',
-#endif
-        .max_depth = XR_IO_CORE_READ_DIR_MAX_DEPTH,
-    };
-    if (!xr_io_core_read_dir_recursive(path, &ops, NULL, xrt_io_read_dir_emit, &emit)) {
-        xrt_release(arr);
-        XRT_FREE(owned);
-        return XR_NULL_VAL;
-    }
-    XRT_FREE(owned);
-    return arr;
-}
-
 static inline XrValue xrt_io_read_stdin(void) {
     clearerr(stdin);
     size_t len = 0;
