@@ -172,7 +172,7 @@ def main() -> int:
         compile_result = run([str(core_xray), "compile", str(smoke), "-o", str(bytecode)])
         gate.record(
             compile_result.returncode != 0
-            and "XR_ARTIFACT_2000" in compile_result.stdout
+            and "canonical '.c' extension" in compile_result.stdout
             and not bytecode.exists(),
             "Core XRC compile route is absent",
             compile_result.stdout,

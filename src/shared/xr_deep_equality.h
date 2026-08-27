@@ -23,7 +23,7 @@
 #ifndef XR_DEEP_EQUALITY_H
 #define XR_DEEP_EQUALITY_H
 
-#include "../../include/xray_value_abi.h"
+#include "xray_value_abi.h"
 
 #include <stdbool.h>
 #include <stddef.h>
