@@ -130,6 +130,32 @@ def c_functions(root: Path) -> dict[str, list[tuple[str, str]]]:
     return out
 
 
+DEBUG_OUTPUT_RE = re.compile(
+    r"^(?![ \t]*(?://|\*)).*\b(?:fprintf[ \t]*\([ \t]*stderr|printf[ \t]*\()[^;]*\[DBG",
+    re.MULTILINE,
+)
+
+
+def debug_output_defects(root: Path) -> list[str]:
+    """Report standard-library C that writes debug output on a normal path.
+
+    Such a write is observable behaviour that no declaration accounts for: the
+    module's `.xr` surface does not describe it, no contract case covers it,
+    and every caller of the affected function pays for it. It is reported with
+    the unattributed items because it is one -- output belonging to no symbol's
+    stated meaning.
+    """
+    defects: list[str] = []
+    for path in sorted((root / "stdlib").rglob("*.[ch]")):
+        text = read(path)
+        for match in DEBUG_OUTPUT_RE.finditer(text):
+            line = text.count("\n", 0, match.start()) + 1
+            defects.append(
+                f"{rel(root, path)}:{line}: debug output on a normal execution path"
+            )
+    return defects
+
+
 def xr_sources(root: Path, module: str) -> list[Path]:
     directory = root / "stdlib" / module
     if not directory.is_dir():
@@ -239,7 +265,7 @@ def build_rows(root: Path) -> tuple[list[ModuleRow], list[SymbolRow], list[str]]
     defs = def_entries_by_module(root)
     xray_symbols = xray_public_symbols(root)
     cfuncs = c_functions(root)
-    defects: list[str] = []
+    defects: list[str] = debug_output_defects(root)
 
     modules: list[ModuleRow] = []
     rows: list[SymbolRow] = []
