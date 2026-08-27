@@ -382,6 +382,32 @@ def expect_product_native(rec: Recorder, config: Config, result: proc.ProcResult
            prototypes[0].start() < caller_definition,
            f"{label}: caller unit has one canonical callee prototype before the caller",
            f"prototype_count={len(prototypes)} caller_definition={caller_definition}")
+    # main() writes the ordered initializer sequence from the verified program
+    # binding, not through the cross-module name collector, so an initializer
+    # another unit defines is only declared if the entry unit states it from the
+    # same binding. A provider that merely warns on an implicit declaration
+    # still links a wrong return type, so assert the prototype on the text.
+    imported_initializers = [
+        symbol for symbol in initializer_symbols
+        if not re.search(
+            rf"\bXrValue\s+{re.escape(symbol)}\(xrt_closure_t \*_cl\)\s*\{{",
+            entry_text)
+    ]
+    main_at = entry_text.find("int main(int argc, char **argv) {")
+    imported_prototypes = {
+        symbol: [
+            match.start() for match in re.finditer(
+                rf"\bXrValue\s+{re.escape(symbol)}\(xrt_closure_t \*_cl\);",
+                entry_text)
+        ]
+        for symbol in imported_initializers
+    }
+    expect(rec, len(imported_initializers) == 1 and main_at >= 0 and
+           all(len(starts) == 1 and starts[0] < main_at
+               for starts in imported_prototypes.values()),
+           f"{label}: entry unit declares every imported initializer main() calls",
+           f"imported={imported_initializers} main_at={main_at} "
+           f"prototypes={imported_prototypes}")
     legacy_tokens = (
         "xrt_shared", "xrt_module", "xrt_import", "xrt_export",
         "get_shared", "load_module", "producer", "add1",

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -286,8 +287,44 @@ def member_source(member: str) -> str:
     return normalized.rsplit("/", 1)[-1]
 
 
+def member_defined_symbols(archive: Path, member: str) -> set[str]:
+    """Symbols one archive member defines.
+
+    A Unix archiver records members by basename alone, so the name cannot say
+    which of two same-named repository sources produced it. The member's own
+    symbol table can: it is the compiled output of exactly one of them.
+    """
+    tool = binlib.find_nm()
+    if not tool:
+        return set()
+    result = run([tool, "-g", str(archive)])
+    if result.returncode != 0:
+        return set()
+    defined: set[str] = set()
+    current = None
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.endswith(":"):
+            current = stripped[:-1].replace("\\", "/").rsplit("/", 1)[-1]
+            continue
+        if current != member:
+            continue
+        fields = stripped.split()
+        if len(fields) >= 2 and fields[-2] not in ("U", "u", "w", "W"):
+            defined.add(binlib.strip_underscore(fields[-1]))
+    return defined
+
+
+def source_defines_any(path: Path, symbols: set[str]) -> bool:
+    if not path.is_file():
+        return False
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return any(re.search(rf"\b{re.escape(symbol)}\s*\(", text) for symbol in symbols)
+
+
 def resolve_member_source(
-    member: str, owners: dict[str, set[str]], approved: set[str]
+    member: str, owners: dict[str, set[str]],
+    archive: Path | None = None, root: Path | None = None,
 ) -> tuple[str | None, list[str]]:
     source = member_source(member)
     if "/" in source:
@@ -295,14 +332,13 @@ def resolve_member_source(
     candidates = sorted(owners.get(source, set()))
     if len(candidates) == 1:
         return candidates[0], candidates
-    # Two repository files may share a basename while only one of them is a
-    # source this archive is allowed to contain. Naming that one narrows the
-    # answer rather than guessing at it: the member stays ambiguous whenever
-    # the approved set does not single out exactly one candidate, so a real
-    # collision between two approved sources still fails closed.
-    admitted = [candidate for candidate in candidates if candidate in approved]
-    if len(admitted) == 1:
-        return admitted[0], candidates
+    if len(candidates) > 1 and archive is not None and root is not None:
+        defined = member_defined_symbols(archive, member)
+        if defined:
+            matched = [name for name in candidates
+                       if source_defines_any(root / name, defined)]
+            if len(matched) == 1:
+                return matched[0], candidates
     return None, candidates
 
 
@@ -323,34 +359,20 @@ def verify_member_resolution_invariants() -> None:
         "collision.c": {"src/base/collision.c", "src/frontend/collision.c"},
         "unique.c": {"src/base/unique.c"},
     }
-    resolved, candidates = resolve_member_source("collision.c.o", owners, set())
+    resolved, candidates = resolve_member_source("collision.c.o", owners)
     if resolved is not None or len(candidates) != 2:
         raise AssertionError("basename-only archive member collisions must fail closed")
-    resolved, _ = resolve_member_source("unknown.c.o", owners, set())
+    resolved, _ = resolve_member_source("unknown.c.o", owners)
     if resolved is not None:
         raise AssertionError("unknown basename-only archive members must fail closed")
-    resolved, _ = resolve_member_source("unique.c.o", owners, set())
+    resolved, _ = resolve_member_source("unique.c.o", owners)
     if resolved != "src/base/unique.c":
         raise AssertionError("unique basename-only archive members must resolve exactly")
     resolved, _ = resolve_member_source(
-        "objects/src/base/collision.c.obj", owners, set()
+        "objects/src/base/collision.c.obj", owners
     )
     if resolved != "src/base/collision.c":
         raise AssertionError("path-qualified archive members must preserve exact ownership")
-    resolved, candidates = resolve_member_source(
-        "collision.c.o", owners, {"src/base/collision.c"}
-    )
-    if resolved != "src/base/collision.c" or len(candidates) != 2:
-        raise AssertionError(
-            "one approved candidate must name the colliding archive member")
-    resolved, _ = resolve_member_source(
-        "collision.c.o", owners, {"src/base/collision.c", "src/frontend/collision.c"}
-    )
-    if resolved is not None:
-        raise AssertionError(
-            "a collision between two approved sources must still fail closed")
-
-
 def inspect(archive: Path, root: Path, cc: Path) -> tuple[list[str], list[str]]:
     names = binlib.defined_symbol_names(archive)
     if names is None:
@@ -368,7 +390,8 @@ def inspect(archive: Path, root: Path, cc: Path) -> tuple[list[str], list[str]]:
     ambiguous_members = {}
     unexpected_members = []
     for member in members:
-        source, candidates = resolve_member_source(member, owners, approved)
+        source, candidates = resolve_member_source(
+            member, owners, archive, root)
         if source is None:
             ambiguous_members[member] = candidates
             continue
