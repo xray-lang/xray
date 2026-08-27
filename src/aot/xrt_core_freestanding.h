@@ -25,6 +25,20 @@
 #define _NO_CRT_STDIO_INLINE
 #endif
 
+/* The same hazard in the other direction: a hosted libc may define the mem*
+ * names as fortified macros that expand to __*_chk entry points, and the shared
+ * semantic cores below include <string.h> for their hosted build. Refuse
+ * fortification before any system header is read -- the rewrite happens where
+ * the name is written, so taking the names back afterwards cannot reach the
+ * calls already expanded inside those cores. */
+#if defined(_FORTIFY_SOURCE)
+#undef _FORTIFY_SOURCE
+#endif
+#define _FORTIFY_SOURCE 0
+#if !defined(__NO_FORTIFY)
+#define __NO_FORTIFY 1
+#endif
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -853,15 +867,14 @@ static inline int xrt_has_pending_error(void) {
     return !XR_IS_NULL(xrt_pending_error) || xrt_pending_enum_error_active;
 }
 
-static inline bool xrt_set_builtin_enum_error_by_id(int32_t builtin_index,
-                                                    uint32_t member_index) {
+static inline bool xrt_set_builtin_enum_error_by_id(int32_t builtin_index, uint32_t member_index) {
     const XrNumberParseErrorRegistryRow *row =
         builtin_index < 0 ? NULL : xr_number_parse_error_registry_row((uint32_t) builtin_index);
     if (xrt_has_pending_error() || !row || member_index >= XR_NUMBER_PARSE_ERROR_MEMBER_COUNT)
         return false;
-    xrt_pending_enum_error = xrt_enum_aggregate_make(
-        row->enum_layout_id, (int64_t) member_index, 0, row->enum_name,
-        row->members[member_index], NULL);
+    xrt_pending_enum_error =
+        xrt_enum_aggregate_make(row->enum_layout_id, (int64_t) member_index, 0, row->enum_name,
+                                row->members[member_index], NULL);
     xrt_pending_enum_error_active = 1;
     return true;
 }
@@ -1815,14 +1828,11 @@ static inline double xrt_math_number(XrValue v) {
 static inline XrValue xrt_i64_parse(XrValue v) {
     if (!XR_IS_STR(v))
         xrt_throw_error(XR_ERR_INTERNAL, "i64.parse received a non-string value");
-    XrStringParseIntResult parsed =
-        xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
+    XrStringParseIntResult parsed = xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
     if (parsed.failure != XR_NUMBER_PARSE_OK) {
-        if (!xrt_set_builtin_enum_error_by_id(
-                XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                xr_number_parse_failure_member_index(parsed.failure)))
-            xrt_throw_error(XR_ERR_INTERNAL,
-                            "failed to construct NumberParseError in i64.parse");
+        if (!xrt_set_builtin_enum_error_by_id(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                                              xr_number_parse_failure_member_index(parsed.failure)))
+            xrt_throw_error(XR_ERR_INTERNAL, "failed to construct NumberParseError in i64.parse");
         return XR_NULL_VAL;
     }
     return XR_FROM_INT(parsed.value);
@@ -1831,8 +1841,7 @@ static inline XrValue xrt_i64_parse(XrValue v) {
 static inline XrValue xrt_i64_try_parse(XrValue v) {
     if (!XR_IS_STR(v))
         xrt_throw_error(XR_ERR_INTERNAL, "i64.tryParse received a non-string value");
-    XrStringParseIntResult parsed =
-        xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
+    XrStringParseIntResult parsed = xr_string_parse_int64(xr_str_data(v), (size_t) xr_str_len(v));
     return parsed.failure == XR_NUMBER_PARSE_OK ? XR_FROM_INT(parsed.value) : XR_NULL_VAL;
 }
 
@@ -1842,11 +1851,9 @@ static inline XrValue xrt_f64_parse(XrValue v) {
     XrStringParseFloatResult parsed =
         xr_string_parse_float64(xr_str_data(v), (size_t) xr_str_len(v));
     if (parsed.failure != XR_NUMBER_PARSE_OK) {
-        if (!xrt_set_builtin_enum_error_by_id(
-                XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
-                xr_number_parse_failure_member_index(parsed.failure)))
-            xrt_throw_error(XR_ERR_INTERNAL,
-                            "failed to construct NumberParseError in f64.parse");
+        if (!xrt_set_builtin_enum_error_by_id(XR_GLOBAL_VAR_NUMBER_PARSE_ERROR,
+                                              xr_number_parse_failure_member_index(parsed.failure)))
+            xrt_throw_error(XR_ERR_INTERNAL, "failed to construct NumberParseError in f64.parse");
         return XR_NULL_VAL;
     }
     return XR_FROM_FLOAT(parsed.value);
@@ -2008,16 +2015,13 @@ enum {
 };
 
 static inline bool xrt_freestanding_assertion_value_text(
-    XrValue value,
-    char storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY],
-    const char **out) {
+    XrValue value, char storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY], const char **out) {
     if (!storage || !out)
         return false;
     *out = NULL;
     if (XR_IS_INT(value)) {
-        if (xr_numeric_core_format_i64(
-                storage, XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY,
-                value.i) < 0)
+        if (xr_numeric_core_format_i64(storage, XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY,
+                                       value.i) < 0)
             return false;
         *out = storage;
         return true;
@@ -2037,9 +2041,7 @@ static inline bool xrt_freestanding_assertion_value_text(
     return false;
 }
 
-static inline bool xrt_freestanding_assertion_values_equal(XrValue left,
-                                                            XrValue right,
-                                                            bool *out) {
+static inline bool xrt_freestanding_assertion_values_equal(XrValue left, XrValue right, bool *out) {
     if (!out)
         return false;
     uint32_t left_tag = left.tag == XR_TAG_STR_ARC ? XR_TAG_STR : left.tag;
@@ -2049,55 +2051,48 @@ static inline bool xrt_freestanding_assertion_values_equal(XrValue left,
     if (left_tag == XR_TAG_STR) {
         int64_t left_length = left.ptr ? xr_str_len(left) : -1;
         int64_t right_length = right.ptr ? xr_str_len(right) : -1;
-        if (left_length < 0 || right_length < 0 || !xr_str_data(left) ||
-            !xr_str_data(right))
+        if (left_length < 0 || right_length < 0 || !xr_str_data(left) || !xr_str_data(right))
             return false;
         *out = left_length == right_length &&
-               memcmp(xr_str_data(left), xr_str_data(right),
-                      (size_t) left_length) == 0;
+               memcmp(xr_str_data(left), xr_str_data(right), (size_t) left_length) == 0;
         return true;
     }
-    if (left_tag != XR_TAG_I64 && left_tag != XR_TAG_BOOL &&
-        left_tag != XR_TAG_NULL)
+    if (left_tag != XR_TAG_I64 && left_tag != XR_TAG_BOOL && left_tag != XR_TAG_NULL)
         return false;
     *out = xrt_compare_tagged_equal(XR_COMPARE_EQ, left, right) != 0;
     return true;
 }
 
-static inline bool xrt_freestanding_assertion_report(
-    const XrAssertionFailure *failure, char *scratch,
-    size_t scratch_capacity) {
+static inline bool xrt_freestanding_assertion_report(const XrAssertionFailure *failure,
+                                                     char *scratch, size_t scratch_capacity) {
     if (!scratch || scratch_capacity == 0)
         return false;
-    int rendered = xr_assertion_failure_render(scratch, scratch_capacity,
-                                               failure);
+    int rendered = xr_assertion_failure_render(scratch, scratch_capacity, failure);
     return rendered >= 0 && (size_t) rendered < scratch_capacity &&
            xr_hook_assertion_report(NULL, scratch, (size_t) rendered);
 }
 
-static inline XRT_COLD XRT_NORETURN void xrt_freestanding_assertion_fail(
-    const XrAssertionFailure *failure) {
+static inline XRT_COLD XRT_NORETURN void
+xrt_freestanding_assertion_fail(const XrAssertionFailure *failure) {
     XR_ASSERTION_OWNER_GUARD(XR_SEM_OWNER_ID_SHARED_ASSERTION_HI,
                              XR_SEM_OWNER_ID_SHARED_ASSERTION_LO);
     XR_ASSERTION_CONSUMER_GUARD(XR_SEM_CONSUMER_AOT_FREESTANDING);
     char scratch[XRT_FREESTANDING_ASSERTION_FAILURE_CAPACITY];
-    if (!xrt_freestanding_assertion_report(failure, scratch,
-                                           sizeof(scratch)))
-        xrt_freestanding_trap(
-            "freestanding assertion provider rejected failure bytes");
+    if (!xrt_freestanding_assertion_report(failure, scratch, sizeof(scratch)))
+        xrt_freestanding_trap("freestanding assertion provider rejected failure bytes");
     xrt_freestanding_trap("freestanding assertion failed");
 }
 
-static inline XrValue xrt_freestanding_assertion_condition(
-    int64_t condition, const char *file, uint32_t line, uint32_t column,
-    uint32_t end_line, uint32_t end_column, XrValue message) {
+static inline XrValue xrt_freestanding_assertion_condition(int64_t condition, const char *file,
+                                                           uint32_t line, uint32_t column,
+                                                           uint32_t end_line, uint32_t end_column,
+                                                           XrValue message) {
     if (condition)
         return XR_NULL_VAL;
     const char *message_text = NULL;
     if (!XR_IS_NULL(message)) {
         if (!XR_IS_STR(message) || !message.ptr || !xr_str_data(message))
-            xrt_freestanding_trap(
-                "typed assertion message is not a string");
+            xrt_freestanding_trap("typed assertion message is not a string");
         message_text = xr_str_data(message);
     }
     XrAssertionFailure failure = {
@@ -2108,33 +2103,28 @@ static inline XrValue xrt_freestanding_assertion_condition(
     xrt_freestanding_assertion_fail(&failure);
 }
 
-static inline XrValue xrt_freestanding_assertion_equal(
-    XrValue actual, XrValue expected, const char *file, uint32_t line,
-    uint32_t column, uint32_t end_line, uint32_t end_column,
-    XrValue message) {
+static inline XrValue xrt_freestanding_assertion_equal(XrValue actual, XrValue expected,
+                                                       const char *file, uint32_t line,
+                                                       uint32_t column, uint32_t end_line,
+                                                       uint32_t end_column, XrValue message) {
     bool equal = false;
     if (!xrt_freestanding_assertion_values_equal(actual, expected, &equal))
-        xrt_freestanding_trap(
-            "freestanding assertion equality operands violate TargetPlan");
+        xrt_freestanding_trap("freestanding assertion equality operands violate TargetPlan");
     if (equal)
         return XR_NULL_VAL;
     const char *message_text = NULL;
     if (!XR_IS_NULL(message)) {
         if (!XR_IS_STR(message) || !message.ptr || !xr_str_data(message))
-            xrt_freestanding_trap(
-                "typed assertion message is not a string");
+            xrt_freestanding_trap("typed assertion message is not a string");
         message_text = xr_str_data(message);
     }
     char actual_storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY];
     char expected_storage[XRT_FREESTANDING_ASSERTION_VALUE_TEXT_CAPACITY];
     const char *actual_text = NULL;
     const char *expected_text = NULL;
-    if (!xrt_freestanding_assertion_value_text(actual, actual_storage,
-                                               &actual_text) ||
-        !xrt_freestanding_assertion_value_text(expected, expected_storage,
-                                               &expected_text))
-        xrt_freestanding_trap(
-            "freestanding assertion renderer operands violate TargetPlan");
+    if (!xrt_freestanding_assertion_value_text(actual, actual_storage, &actual_text) ||
+        !xrt_freestanding_assertion_value_text(expected, expected_storage, &expected_text))
+        xrt_freestanding_trap("freestanding assertion renderer operands violate TargetPlan");
     XrAssertionFailure failure = {
         .kind = XR_ASSERTION_FAILURE_VALUES_NOT_EQUAL,
         .source = {file, line, column, end_line, end_column},
