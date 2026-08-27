@@ -423,7 +423,15 @@ repair a missing or mutated row. This cutover changes no public calling
 convention and grants no aggregate, coroutine, cross-module, dynamic-call, or
 whole-scalar ABI authority.
 
-TargetPlan schema 52 freezes one exact borrowed direct-local
+TargetPlan schema 53 freezes the closed `i64.addOverflows`,
+`i64.subOverflows`, and `i64.mulOverflows` family as two exact signed-`i64`
+inputs and one `I1` result slot. The ABI answer is the function-qualified
+predicate row plus its typed instruction; a method name, Xi body shape, or
+runtime method table is not an ABI owner. The typed VM consumes the verified
+row mechanically. AOT remains unavailable at this checkpoint unless and until
+the same row is projected into one independently verified C-emission recipe.
+
+TargetPlan schema 53 freezes one exact borrowed direct-local
 `ref i64` boundary. The caller source and callee parameter retain scalar `I64`
 storage; `REFERENCE`, `BORROW`, and `ADDRESSABLE` are call-boundary facts, not a
 request to rewrite the parameter as a general raw-pointer value. The caller's
@@ -433,7 +441,7 @@ and transfer. C emission may project that verified boundary as `int64_t *`.
 This authority does not by itself grant representation-refinement, VM, CGen, or
 native execution coverage, and no generic ref or pointer inference is allowed.
 The AOT scalar-ref-v1 slice separately rejoins that exact SemanticPlan and
-schema-52 TargetPlan boundary. Refinement schema 6 records no adapter: it
+schema-53 TargetPlan boundary. Refinement schema 6 records no adapter: it
 materializes caller storage, callee storage, call machine rows, and load/store
 pointees as `I64`, while the caller `LOCAL_ADDR` and callee function ABI are
 `RAW_PTR` with an `I64` pointee. C-emission schema 38 is the sole C spelling
@@ -441,7 +449,7 @@ owner for `int64_t *`; prepare and independent AOT verification consume its
 immutable row, and covered CGen cannot recover a pointer level from mutable Xi
 types or a legacy value plan.
 
-The schema-52 source program graph is a distinct program-wide AOT cutover; it
+The schema-53 source program graph is a distinct program-wide AOT cutover; it
 does not extend the legacy per-module AOT cutover. It owns one verified
 TargetPlan for the complete canonical SemanticPlan
 module set, with global function, slot, representation, instruction, call, and
@@ -817,7 +825,7 @@ anchor-sha256: tests/unit/aot/test_xr_aot_refinement.c 0557037401107d5909756ba67
 anchor-sha256: tests/unit/aot/test_xr_aot_scalar_plan.c 7116d17b3c38fb432d60f1646c4f815496798c133a6ffd2a90b136d4352272ac
 anchor-sha256: src/aot/emit_c/xr_c_emission_schema.h f3b7efab43d508b4a6926002d1ce2e1d9fde3fa2510181b5a61cb769a8d95e74
 anchor-sha256: src/aot/emit_c/xr_c_emission_plan_internal.h 17353e09b9c5891e92c7df2bac284ca66092b4554bd8c2109a0b447d73c5fed0
-anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c e281f8a9a8b1047182f5b52457fb91149daf1baad011088d92161b967a6a5e67
+anchor-sha256: src/aot/emit_c/xr_c_emission_plan.c 4019b8a52e35aa75ef324ad31e82dc376f74426a08a44c592f83ae07d69a971c
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.h 4e90e7ddc8536b8245b10e3219107cda157e37096f9f7a961e91ffbea78ea1fe
 anchor-sha256: src/aot/emit_c/xr_c_scalar_ref_projection.c da0c4f905e6a4fd4ce3d685938c81c4c6fb1f91fe9a8ef18897f33b9d55ebcf5
 anchor-sha256: src/aot/emit_c/xr_c_program_emission.h c2229b217b5a194dda58a149044d50407e16dd2a8d2250e85cac743def65f14c

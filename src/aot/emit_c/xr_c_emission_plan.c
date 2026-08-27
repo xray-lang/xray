@@ -4518,6 +4518,10 @@ bool xr_c_emission_plan_build(const XrTargetPlan *target_plan,
             XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL)
         return emission_error(error, error_size, "XR_TARGET_1001",
                               "leaf-value product forbids the legacy C emission plan");
+    if (provenance &&
+        provenance->program_family == XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE)
+        return emission_error(error, error_size, "XR_TARGET_1001",
+                              "i64 overflow predicates require a verified C recipe");
     const uint64_t required_value_families =
         XR_TARGET_FAMILY_SCALAR | XR_TARGET_FAMILY_CLOSURE_STORAGE |
         XR_TARGET_FAMILY_STRING_LITERAL_STORAGE | XR_TARGET_FAMILY_STRING_RUNES_RESULT_STORAGE |

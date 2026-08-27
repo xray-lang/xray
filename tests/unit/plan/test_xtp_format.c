@@ -1816,7 +1816,7 @@ static void test_runtime_load_materializes_only_verified_plan(void) {
 static void test_wire_row_inventory(void) {
     static const uint32_t expected[] = {
         0, 448, 58, 12, 24, 108, 28, 40, 24, 12,
-        48, 58, 32, 160, 58, 20, 4, 20, 44, 12, 48, 144, 132,
+        48, 58, 112, 32, 160, 58, 20, 4, 20, 44, 12, 48, 144, 132,
         208, 340,
     };
     REQUIRE(sizeof(expected) / sizeof(expected[0]) == XR_XTP_SECTION_COUNT);
@@ -2058,7 +2058,7 @@ static void test_header_and_directory_mutations(void) {
     expect_decode_failure(copy, fixture.size);
 
     memcpy(copy, fixture.bytes, fixture.size);
-    xr_xtp_put_u32(copy + 4, UINT32_C(50)); /* v50 is the exact hard-cutover negative. */
+    xr_xtp_put_u32(copy + 4, UINT32_C(52)); /* v52 is the exact hard-cutover negative. */
     resign_artifact(copy, fixture.size);
     expect_decode_failure(copy, fixture.size);
 
@@ -2332,9 +2332,9 @@ int main(int argc, char **argv) {
         return write_runtime_artifacts(argv[2], argv[3]);
     if (argc == 3 && strcmp(argv[1], "--write-runtime-header") == 0)
         return write_runtime_fixture_header(argv[2]);
-    if (argc == 2 && strcmp(argv[1], "schema-52-cutover") == 0) {
+    if (argc == 2 && strcmp(argv[1], "schema-53-cutover") == 0) {
         test_exact_roundtrip_and_owned_candidate();
-        puts("XTP schema 52 cutover tests passed");
+        puts("XTP schema 53 cutover tests passed");
         return 0;
     }
     test_artifact_classifier();

@@ -13,6 +13,7 @@
         "src/runtime/symbol/xsymbol_table.c",
         "src/runtime/symbol/xsymbol_table.h",
         "src/runtime/value/xi64_methods.h",
+        "src/vm/xr_typed_dispatch.c",
         "stdlib/mem/mem.c"
       ],
       "profiles": [

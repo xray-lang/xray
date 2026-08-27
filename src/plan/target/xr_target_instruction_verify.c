@@ -17,6 +17,7 @@
  */
 
 #include "xr_target_instruction_verify.h"
+#include "xr_i64_overflow_target_instruction.h"
 #include "../../base/xmalloc.h"
 #include "../../ir/xi.h"
 #include "../../ir/xi_own.h"
@@ -219,6 +220,7 @@ static bool row_immediate_is_exact(
         case XR_TARGET_INSTRUCTION_IMMEDIATE_ENTRY_EXPECTATION:
         case XR_TARGET_INSTRUCTION_IMMEDIATE_FIELD_RECORD:
         case XR_TARGET_INSTRUCTION_IMMEDIATE_LAYOUT_RECORD:
+        case XR_TARGET_INSTRUCTION_IMMEDIATE_OVERFLOW_PREDICATE_RECORD:
             return row->immediate_bits <= UINT32_MAX;
         case XR_TARGET_INSTRUCTION_IMMEDIATE_COROUTINE_STATE:
             return XR_TARGET_INSTRUCTION_SUSPEND_STATE(
@@ -2015,6 +2017,24 @@ static bool verify_function_group(const XrTargetPlan *plan, const XrTargetInstru
             suspend_invalid = true;
             break;
         }
+        if (contract->dispatch_kind == XR_TARGET_INSTRUCTION_DISPATCH_OVERFLOW) {
+            uint32_t predicate_count = 0;
+            const XrTargetI64OverflowPredicateRecord *predicates =
+                xr_target_plan_i64_overflow_predicates(plan, &predicate_count);
+            uint32_t predicate_index = (uint32_t) row->immediate_bits;
+            const XrTargetI64OverflowPredicateRecord *predicate =
+                predicates && predicate_index < predicate_count
+                    ? &predicates[predicate_index]
+                    : NULL;
+            if (!predicate || predicate->id != predicate_index ||
+                predicate->function != function_index ||
+                predicate->result_slot != row->result_slot ||
+                predicate->receiver_slot != row->operand_slots[0] ||
+                predicate->argument_slot != row->operand_slots[1]) {
+                valid = false;
+                break;
+            }
+        }
         tagged_push |= contract->dispatch_kind ==
                        XR_TARGET_INSTRUCTION_DISPATCH_ARRAY_PUSH;
         leaf_aggregate |= contract->result_rep == XR_TARGET_INSTRUCTION_REP_AGGREGATE ||
@@ -2132,6 +2152,9 @@ bool xr_target_instruction_program_verify(const XrTargetPlan *plan,
     bool requires_leaf_product =
         published && published->program_family ==
                          XR_PROGRAM_SEMANTIC_FAMILY_LEAF_VALUE_PRODUCT_DIRECT_CALL;
+    bool requires_overflow =
+        published && published->program_family ==
+                         XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE;
     uint32_t leaf_caller = XR_SEMANTIC_INDEX_NONE;
     uint32_t leaf_callee = XR_SEMANTIC_INDEX_NONE;
     if (requires_leaf_aggregate &&
@@ -2145,9 +2168,9 @@ bool xr_target_instruction_program_verify(const XrTargetPlan *plan,
         return report(error, error_size, "XR_TARGET_1003",
                       "leaf product instruction requirements lack exact program bindings");
     if (!instruction_count)
-        return (!requires_leaf_aggregate && !requires_leaf_product) ||
+        return (!requires_leaf_aggregate && !requires_leaf_product && !requires_overflow) ||
                report(error, error_size, "XR_TARGET_1003",
-                      "leaf product program has no typed instruction rows");
+                      "required program has no typed instruction rows");
     if (!instructions)
         return report(error, error_size, "XR_EXEC_5003",
                       "instruction table storage is missing");

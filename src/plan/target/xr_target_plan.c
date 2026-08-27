@@ -64,7 +64,9 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
           draft->layouts_count <= 1000000u && draft->fields_count <= 16000000u &&
           draft->storage_count <= 4000000u && draft->allocations_count <= 10000000u &&
           draft->extent_operands_count <= 40000000u && draft->functions_count <= 100000u &&
-          draft->slots_count <= 16000000u && draft->instructions_count <= 40000000u &&
+          draft->slots_count <= 16000000u &&
+          draft->i64_overflow_predicates_count <= XR_PROGRAM_SEMANTIC_CLOSURE_MAX_CALLS &&
+          draft->instructions_count <= 40000000u &&
           draft->calls_count <= 10000000u && draft->call_arguments_count <= 40000000u &&
           draft->root_maps_count <= 10000000u && draft->root_slots_count <= 40000000u &&
           draft->cleanups_count <= 40000000u && draft->adapters_count <= 1000000u &&
@@ -98,6 +100,7 @@ static bool draft_within_budget(const XrTargetPlanDraft *draft) {
     XR_ADD_DRAFT_BYTES(extent_operands);
     XR_ADD_DRAFT_BYTES(functions);
     XR_ADD_DRAFT_BYTES(slots);
+    XR_ADD_DRAFT_BYTES(i64_overflow_predicates);
     XR_ADD_DRAFT_BYTES(instructions);
     XR_ADD_DRAFT_BYTES(calls);
     XR_ADD_DRAFT_BYTES(call_arguments);
@@ -259,6 +262,26 @@ static void hash_instruction(XrSHA256Context *ctx, const XrTargetInstructionReco
     hash_u64(ctx, record->opcode);
     hash_u64(ctx, record->operand_count);
     hash_u64(ctx, record->reserved);
+}
+
+static void hash_i64_overflow_predicate(
+    XrSHA256Context *ctx, const XrTargetI64OverflowPredicateRecord *record) {
+    hash_id(ctx, record->identity);
+    hash_id(ctx, record->program_call);
+    hash_id(ctx, record->callsite);
+    hash_id(ctx, record->caller_identity);
+    hash_id(ctx, record->builtin_identity);
+    hash_u64(ctx, record->id);
+    hash_u64(ctx, record->function);
+    hash_u64(ctx, record->semantic_operation);
+    hash_u64(ctx, record->program_row);
+    hash_u64(ctx, record->result_slot);
+    hash_u64(ctx, record->receiver_slot);
+    hash_u64(ctx, record->argument_slot);
+    hash_u64(ctx, record->kind);
+    hash_u64(ctx, record->reserved[0]);
+    hash_u64(ctx, record->reserved[1]);
+    hash_u64(ctx, record->reserved[2]);
 }
 
 static void hash_call_argument(XrSHA256Context *ctx, const XrTargetCallArgumentRecord *record) {
@@ -807,7 +830,7 @@ void xr_target_call_compute_fingerprint(const XrTargetPlan *plan, uint32_t call_
 }
 
 void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint *out) {
-    static const uint8_t domain[] = "xray-target-plan-v23\0";
+    static const uint8_t domain[] = "xray-target-plan-v24\0";
     XrSHA256Context ctx;
     xr_sha256_init(&ctx);
     xr_sha256_update(&ctx, domain, sizeof(domain) - 1);
@@ -826,6 +849,7 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
     XR_HASH_TABLE_COUNT(extent_operands);
     XR_HASH_TABLE_COUNT(functions);
     XR_HASH_TABLE_COUNT(slots);
+    XR_HASH_TABLE_COUNT(i64_overflow_predicates);
     XR_HASH_TABLE_COUNT(instructions);
     XR_HASH_TABLE_COUNT(calls);
     XR_HASH_TABLE_COUNT(call_arguments);
@@ -862,6 +886,8 @@ void xr_target_plan_compute_fingerprint(const XrTargetPlan *plan, XrFingerprint 
         hash_function(&ctx, &plan->functions[i]);
     for (uint32_t i = 0; i < plan->slots_count; i++)
         hash_slot(&ctx, &plan->slots[i]);
+    for (uint32_t i = 0; i < plan->i64_overflow_predicates_count; i++)
+        hash_i64_overflow_predicate(&ctx, &plan->i64_overflow_predicates[i]);
     for (uint32_t i = 0; i < plan->instructions_count; i++)
         hash_instruction(&ctx, &plan->instructions[i]);
     for (uint32_t i = 0; i < plan->calls_count; i++) {
@@ -993,6 +1019,7 @@ bool xr_target_plan_freeze(const XrTargetPlanDraft *draft, XrTargetPlan **out, c
     XR_COPY_DRAFT_TABLE(extent_operands, XrTargetExtentOperandRecord);
     XR_COPY_DRAFT_TABLE(functions, XrTargetFunctionRecord);
     XR_COPY_DRAFT_TABLE(slots, XrTargetSlotRecord);
+    XR_COPY_DRAFT_TABLE(i64_overflow_predicates, XrTargetI64OverflowPredicateRecord);
     XR_COPY_DRAFT_TABLE(instructions, XrTargetInstructionRecord);
     XR_COPY_DRAFT_TABLE(calls, XrTargetCallRecord);
     XR_COPY_DRAFT_TABLE(call_arguments, XrTargetCallArgumentRecord);
@@ -1212,6 +1239,7 @@ void xr_target_plan_free(XrTargetPlan *plan) {
     XR_FREE_TARGET_TABLE(extent_operands);
     XR_FREE_TARGET_TABLE(functions);
     XR_FREE_TARGET_TABLE(slots);
+    XR_FREE_TARGET_TABLE(i64_overflow_predicates);
     XR_FREE_TARGET_TABLE(instructions);
     XR_FREE_TARGET_TABLE(calls);
     XR_FREE_TARGET_TABLE(call_arguments);
@@ -1523,6 +1551,24 @@ uint64_t xr_target_plan_function_execution_family_mask(const XrTargetPlan *plan,
         xr_target_plan_function_instructions(plan, function, &count);
     if (!rows || !count)
         return 0;
+    bool has_overflow = false;
+    for (uint32_t i = 0; i < count; i++)
+        has_overflow |= rows[i].opcode == XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE;
+    if (has_overflow) {
+        const XrSemanticProgramProvenance *program =
+            xr_semantic_plan_program_provenance(plan->semantic_plan);
+        uint32_t predicate_count = 0;
+        const XrTargetI64OverflowPredicateRecord *predicates =
+            xr_target_plan_i64_overflow_predicates(plan, &predicate_count);
+        if (!program ||
+            program->program_family != XR_PROGRAM_SEMANTIC_FAMILY_I64_OVERFLOW_PREDICATE ||
+            !predicates || predicate_count != program->call_count)
+            return 0;
+        for (uint32_t i = 0; i < predicate_count; i++)
+            if (predicates[i].function != function)
+                return 0;
+        return (uint64_t) XR_TARGET_EXECUTION_I64_OVERFLOW_PREDICATE;
+    }
     if (count == 4 && rows[0].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_BORROW &&
         rows[1].opcode == XR_TARGET_INSTRUCTION_PARAM_DYN_OWNED &&
         rows[2].opcode == XR_TARGET_INSTRUCTION_ARRAY_PUSH_TAGGED &&
@@ -1601,6 +1647,7 @@ XR_TARGET_TABLE_ACCESSOR(allocations, XrTargetAllocationRecord)
 XR_TARGET_TABLE_ACCESSOR(extent_operands, XrTargetExtentOperandRecord)
 XR_TARGET_TABLE_ACCESSOR(functions, XrTargetFunctionRecord)
 XR_TARGET_TABLE_ACCESSOR(slots, XrTargetSlotRecord)
+XR_TARGET_TABLE_ACCESSOR(i64_overflow_predicates, XrTargetI64OverflowPredicateRecord)
 XR_TARGET_TABLE_ACCESSOR(instructions, XrTargetInstructionRecord)
 XR_TARGET_TABLE_ACCESSOR(calls, XrTargetCallRecord)
 XR_TARGET_TABLE_ACCESSOR(call_arguments, XrTargetCallArgumentRecord)

@@ -126,6 +126,11 @@
     F(U32, semantic_operation) F(U32, logical_slot) F(U32, offset) F(U32, size)                  \
     F(U16, align) F(U16, register_rep) F(U16, memory_rep) F(U8, role) F(U8, root_kind)           \
     F(U8, ownership) F(U8, reserved) F(U32, debug_variable)
+#define XR_XTP_TEXT_I64_OVERFLOW_PREDICATE_FIELDS(F)                                             \
+    F(ID, identity) F(ID, program_call) F(ID, callsite) F(ID, caller_identity)                   \
+    F(ID, builtin_identity) F(U32, id) F(U32, function) F(U32, semantic_operation)              \
+    F(U32, program_row) F(U32, result_slot) F(U32, receiver_slot) F(U32, argument_slot)          \
+    F(U8, kind) F(U8, reserved[0]) F(U8, reserved[1]) F(U8, reserved[2])
 #define XR_XTP_TEXT_INSTRUCTION_FIELDS(F)                                                               \
     F(U32, id) F(U32, function) F(U32, result_slot) F(U32, operand_slots[0])                      \
     F(U32, operand_slots[1]) F(U64, immediate_bits) F(U16, opcode) F(U8, operand_count)           \
@@ -222,6 +227,8 @@
     F(EXTENT_OPERANDS, XrTargetExtentOperandRecord, XR_XTP_TEXT_EXTENT_OPERAND_FIELDS)                 \
     F(FUNCTIONS, XrTargetFunctionRecord, XR_XTP_TEXT_FUNCTION_FIELDS)                                 \
     F(SLOTS, XrTargetSlotRecord, XR_XTP_TEXT_SLOT_FIELDS)                                             \
+    F(I64_OVERFLOW_PREDICATES, XrTargetI64OverflowPredicateRecord,                               \
+      XR_XTP_TEXT_I64_OVERFLOW_PREDICATE_FIELDS)                                                 \
     F(INSTRUCTIONS, XrTargetInstructionRecord, XR_XTP_TEXT_INSTRUCTION_FIELDS)                         \
     F(CALLS, XrTargetCallRecord, XR_XTP_TEXT_CALL_FIELDS)                                             \
     F(CALL_ARGUMENTS, XrTargetCallArgumentRecord, XR_XTP_TEXT_CALL_ARGUMENT_FIELDS)                   \

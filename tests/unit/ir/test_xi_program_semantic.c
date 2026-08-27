@@ -40,6 +40,7 @@
 #include "plan/semantic/xr_semantic_verify.h"
 #include "plan/format/xr_xsm_schema.h"
 #include "plan/target/xr_target_builder.h"
+#include "plan/target/xr_i64_overflow_target_instruction.h"
 #include "plan/target/xr_target_instruction_verify.h"
 #include "plan/target/xr_target_plan_internal.h"
 #include "plan/target/xr_target_profile.h"
@@ -1073,7 +1074,7 @@ static void assert_leaf_aggregate_target_shape(XrSemanticPlan *semantic, XrTarge
     ASSERT_NOT_NULL(semantic);
     ASSERT_NOT_NULL(plan);
     ASSERT_EQ_UINT(xr_target_plan_schema_version(plan), XR_TARGET_PLAN_SCHEMA_VERSION);
-    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 52);
+    ASSERT_EQ_UINT(XR_TARGET_PLAN_SCHEMA_VERSION, 53);
     ASSERT_TRUE(xr_target_plan_verify(plan, NULL, 0));
     ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(plan));
     ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_semantic_fingerprint(plan),
@@ -2899,6 +2900,161 @@ TEST(i64_overflow_program_uses_only_sealed_decision_rows) {
     ASSERT_EQ_UINT(decoded->call_target_count, 0);
     xr_semantic_plan_free(decoded);
     xr_free(encoded);
+
+    XrTargetPlan *target = NULL;
+    ASSERT_MSG(xr_target_plan_build(semantic, profile, &target, error, sizeof(error)), error);
+    ASSERT_NOT_NULL(target);
+    ASSERT_EQ_UINT(xr_target_plan_schema_version(target), 53);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    ASSERT_TRUE(xr_target_plan_fingerprint_is_intact(target));
+    uint32_t predicate_count = 0;
+    const XrTargetI64OverflowPredicateRecord *predicates =
+        xr_target_plan_i64_overflow_predicates(target, &predicate_count);
+    ASSERT_NOT_NULL(predicates);
+    ASSERT_EQ_UINT(predicate_count, 3);
+    uint32_t target_function = XR_SEMANTIC_INDEX_NONE;
+    const XrSemanticProgramFunctionBinding *program_function =
+        xr_semantic_plan_program_function_binding(semantic, 0);
+    ASSERT_NOT_NULL(program_function);
+    ASSERT_TRUE(xr_target_plan_find_function(target, semantic,
+                                             program_function->semantic_function,
+                                             &target_function));
+    ASSERT_EQ_UINT(xr_target_plan_function_execution_family_mask(target, target_function),
+                   XR_TARGET_EXECUTION_I64_OVERFLOW_PREDICATE);
+    uint32_t instruction_count = 0;
+    const XrTargetInstructionRecord *target_instructions =
+        xr_target_plan_function_instructions(target, target_function, &instruction_count);
+    ASSERT_NOT_NULL(target_instructions);
+    uint32_t overflow_instruction_count = 0;
+    uint32_t predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_MUL + 1u] = {0};
+    for (uint32_t i = 0; i < instruction_count; i++) {
+        if (target_instructions[i].opcode != XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE)
+            continue;
+        ASSERT_TRUE(overflow_instruction_count < predicate_count);
+        ASSERT_TRUE(target_instructions[i].immediate_bits < predicate_count);
+        uint32_t predicate_index = (uint32_t) target_instructions[i].immediate_bits;
+        const XrTargetI64OverflowPredicateRecord *predicate =
+            &predicates[predicate_index];
+        ASSERT_EQ_UINT(target_instructions[i].function, target_function);
+        ASSERT_EQ_UINT(target_instructions[i].result_slot, predicate->result_slot);
+        ASSERT_EQ_UINT(target_instructions[i].operand_slots[0], predicate->receiver_slot);
+        ASSERT_EQ_UINT(target_instructions[i].operand_slots[1], predicate->argument_slot);
+        ASSERT_EQ_UINT(predicate->id, predicate_index);
+        ASSERT_EQ_UINT(predicate->program_row, predicate_index);
+        ASSERT_EQ_UINT(predicate->function, target_function);
+        ASSERT_TRUE(predicate->kind >= XR_TARGET_I64_OVERFLOW_PREDICATE_ADD &&
+                    predicate->kind <= XR_TARGET_I64_OVERFLOW_PREDICATE_MUL);
+        predicate_kind_counts[predicate->kind]++;
+        overflow_instruction_count++;
+    }
+    ASSERT_EQ_UINT(overflow_instruction_count, predicate_count);
+    ASSERT_EQ_UINT(predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_ADD], 1);
+    ASSERT_EQ_UINT(predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_SUB], 1);
+    ASSERT_EQ_UINT(predicate_kind_counts[XR_TARGET_I64_OVERFLOW_PREDICATE_MUL], 1);
+
+    uint32_t saved_function_flags = semantic->program_function_bindings[0].flags;
+    semantic->program_function_bindings[0].flags |= XR_PROGRAM_SEMANTIC_FUNCTION_EXPORTED;
+    ASSERT_FALSE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+    semantic->program_function_bindings[0].flags = saved_function_flags;
+    ASSERT_TRUE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+
+    uint32_t saved_program_row = target->i64_overflow_predicates[0].program_row;
+    target->i64_overflow_predicates[0].program_row = 1u;
+    ASSERT_FALSE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+    target->i64_overflow_predicates[0].program_row = saved_program_row;
+    ASSERT_TRUE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+
+    uint32_t saved_result_slot = target->i64_overflow_predicates[0].result_slot;
+    target->i64_overflow_predicates[0].result_slot =
+        target->i64_overflow_predicates[0].receiver_slot;
+    ASSERT_FALSE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+    target->i64_overflow_predicates[0].result_slot = saved_result_slot;
+    ASSERT_TRUE(xr_i64_overflow_target_program_verify(target, error, sizeof(error)));
+
+    static const XrTypedDispatchProvider providers[] = {
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_SWITCH,
+        XR_TYPED_DISPATCH_PROVIDER_GENERATED_FUNCTION_TABLE,
+    };
+    static const int64_t cases[][3] = {
+        {INT64_MAX, 1, 1},
+        {INT64_MIN, 1, 2},
+        {INT64_MAX / 2 + 1, 2, 3},
+        {1, 2, 0},
+    };
+    XrFingerprint target_fingerprint = xr_target_plan_fingerprint(target);
+    for (size_t provider = 0; provider < sizeof(providers) / sizeof(providers[0]); provider++) {
+        for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+            int64_t arguments[] = {cases[c][0], cases[c][1]};
+            int64_t result = -1;
+            XrTypedDispatchI64Request request = {
+                .verified_plan = target,
+                .required_plan_fingerprint = &target_fingerprint,
+                .arguments = arguments,
+                .result = &result,
+                .provider = providers[provider],
+                .function = target_function,
+                .argument_count = 2,
+            };
+            ASSERT_EQ_UINT(xr_typed_dispatch_execute_i64(&request), XR_TYPED_DISPATCH_OK);
+            ASSERT_EQ_INT(result, cases[c][2]);
+        }
+    }
+
+    XrTargetI64OverflowPredicateRecord *mutable_predicates =
+        target->i64_overflow_predicates;
+    uint8_t saved_kind = mutable_predicates[0].kind;
+    mutable_predicates[0].kind = XR_TARGET_I64_OVERFLOW_PREDICATE_MUL;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
+    mutable_predicates[0].kind = saved_kind;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(target->fingerprint, target_fingerprint));
+
+    uint32_t saved_semantic_function = target->functions[target_function].semantic_function;
+    target->functions[target_function].semantic_function =
+        target_function == 0 ? 1u : 0u;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
+    target->functions[target_function].semantic_function = saved_semantic_function;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+
+    XrTargetInstructionRecord *mutable_overflow_instruction = NULL;
+    for (uint32_t i = 0; i < target->instructions_count; i++)
+        if (target->instructions[i].opcode == XR_TARGET_INSTRUCTION_I64_OVERFLOW_PREDICATE) {
+            mutable_overflow_instruction = &target->instructions[i];
+            break;
+        }
+    ASSERT_NOT_NULL(mutable_overflow_instruction);
+    uint64_t saved_predicate_index = mutable_overflow_instruction->immediate_bits;
+    mutable_overflow_instruction->immediate_bits = UINT32_MAX;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_FALSE(xr_target_plan_verify(target, error, sizeof(error)));
+    mutable_overflow_instruction->immediate_bits = saved_predicate_index;
+    xr_target_plan_compute_fingerprint(target, &target->fingerprint);
+    ASSERT_TRUE(xr_target_plan_verify(target, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(target->fingerprint, target_fingerprint));
+
+    uint8_t *target_encoded = NULL;
+    size_t target_encoded_size = 0;
+    ASSERT_TRUE(xr_xtp_encode_plan(target, &target_encoded, &target_encoded_size,
+                                   error, sizeof(error)));
+    ASSERT_TRUE(target_encoded_size >= XR_XTP_HEADER_SIZE);
+    XrXtpCandidate *target_candidate = NULL;
+    ASSERT_TRUE(xr_xtp_decode_candidate(target_encoded, target_encoded_size, &target_candidate,
+                                        error, sizeof(error)));
+    XrTargetPlan *roundtrip_target = NULL;
+    ASSERT_TRUE(xr_xtp_materialize_target_plan(target_candidate, semantic, profile,
+                                               &roundtrip_target, error, sizeof(error)));
+    ASSERT_NOT_NULL(roundtrip_target);
+    ASSERT_TRUE(xr_target_plan_verify(roundtrip_target, error, sizeof(error)));
+    ASSERT_TRUE(xr_fingerprint_equal(xr_target_plan_fingerprint(roundtrip_target),
+                                     target_fingerprint));
+    xr_target_plan_free(roundtrip_target);
+    xr_xtp_candidate_release(target_candidate);
+    xr_xtp_encoded_free(target_encoded);
+    xr_target_plan_free(target);
     xr_semantic_plan_free(semantic);
     xi_func_free(root);
     xr_target_profile_free(profile);

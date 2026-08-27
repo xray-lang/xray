@@ -103,9 +103,12 @@ typedef enum XrTargetExecutionFamily {
     XR_TARGET_EXECUTION_LEAF_AGGREGATE_I64X2 = UINT64_C(1) << 4,
     /* One pointer-free six-field value product whose exact x64 layout is
      * i64/i64/u8/i64/i64/i64.  Both nullary callers and their common callee
-     * execute only after the complete schema-52 instruction groups prove the
+     * execute only after the complete schema-53 instruction groups prove the
      * layout, ordinal accesses, caller-owned result storage, and return. */
     XR_TARGET_EXECUTION_LEAF_VALUE_PRODUCT_TUPLE6 = UINT64_C(1) << 5,
+    /* One source-backed signed-i64 predicate program whose ADD/SUB/MUL answer
+     * lives only in its function-qualified predicate rows. */
+    XR_TARGET_EXECUTION_I64_OVERFLOW_PREDICATE = UINT64_C(1) << 6,
 } XrTargetExecutionFamily;
 
 #define XR_TARGET_INSTRUCTION_SLOT_NONE UINT32_MAX
@@ -668,6 +671,36 @@ typedef struct XrTargetInstructionRecord {
     uint64_t immediate_bits;
 } XrTargetInstructionRecord;
 
+typedef enum XrTargetI64OverflowPredicateKind {
+    XR_TARGET_I64_OVERFLOW_PREDICATE_INVALID = 0,
+    XR_TARGET_I64_OVERFLOW_PREDICATE_ADD = 1,
+    XR_TARGET_I64_OVERFLOW_PREDICATE_SUB = 2,
+    XR_TARGET_I64_OVERFLOW_PREDICATE_MUL = 3,
+} XrTargetI64OverflowPredicateKind;
+
+/* One function-qualified answer for one sealed signed-i64 overflow predicate.
+ * KIND is the only TargetPlan operation answer.  The instruction references
+ * this row by ID; it does not duplicate ADD/SUB/MUL in its opcode. */
+typedef struct XrTargetI64OverflowPredicateRecord {
+    XrStableId identity;
+    XrStableId program_call;
+    XrStableId callsite;
+    XrStableId caller_identity;
+    XrStableId builtin_identity;
+    uint32_t id;
+    uint32_t function;
+    uint32_t semantic_operation;
+    uint32_t program_row;
+    uint32_t result_slot;
+    uint32_t receiver_slot;
+    uint32_t argument_slot;
+    uint8_t kind;
+    uint8_t reserved[3];
+} XrTargetI64OverflowPredicateRecord;
+
+XR_STATIC_ASSERT(sizeof(XrTargetI64OverflowPredicateRecord) == 112u,
+                 "overflow predicate TargetPlan row must remain compact");
+
 XR_STATIC_ASSERT(XR_TARGET_INSTRUCTION_MAX_STABLE_ID <= UINT16_MAX,
                  "XTP instruction opcode carrier must fit the generated registry");
 XR_STATIC_ASSERT(sizeof(XrTargetInstructionRecord) == 32u,
@@ -997,6 +1030,7 @@ XR_TARGET_TABLE_ACCESSOR(allocations, XrTargetAllocationRecord);
 XR_TARGET_TABLE_ACCESSOR(extent_operands, XrTargetExtentOperandRecord);
 XR_TARGET_TABLE_ACCESSOR(functions, XrTargetFunctionRecord);
 XR_TARGET_TABLE_ACCESSOR(slots, XrTargetSlotRecord);
+XR_TARGET_TABLE_ACCESSOR(i64_overflow_predicates, XrTargetI64OverflowPredicateRecord);
 XR_TARGET_TABLE_ACCESSOR(instructions, XrTargetInstructionRecord);
 XR_TARGET_TABLE_ACCESSOR(calls, XrTargetCallRecord);
 XR_TARGET_TABLE_ACCESSOR(call_arguments, XrTargetCallArgumentRecord);

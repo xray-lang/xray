@@ -43,6 +43,8 @@ typedef struct XrTargetPlanDraft {
     uint32_t functions_count;
     const XrTargetSlotRecord *slots;
     uint32_t slots_count;
+    const XrTargetI64OverflowPredicateRecord *i64_overflow_predicates;
+    uint32_t i64_overflow_predicates_count;
     const XrTargetInstructionRecord *instructions;
     uint32_t instructions_count;
     const XrTargetCallRecord *calls;
@@ -101,6 +103,7 @@ struct XrTargetPlan {
     XR_TARGET_TABLE_FIELD(extent_operands, XrTargetExtentOperandRecord);
     XR_TARGET_TABLE_FIELD(functions, XrTargetFunctionRecord);
     XR_TARGET_TABLE_FIELD(slots, XrTargetSlotRecord);
+    XR_TARGET_TABLE_FIELD(i64_overflow_predicates, XrTargetI64OverflowPredicateRecord);
     XR_TARGET_TABLE_FIELD(instructions, XrTargetInstructionRecord);
     XR_TARGET_TABLE_FIELD(calls, XrTargetCallRecord);
     XR_TARGET_TABLE_FIELD(call_arguments, XrTargetCallArgumentRecord);

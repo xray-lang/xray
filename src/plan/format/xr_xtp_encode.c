@@ -59,6 +59,7 @@ static bool fill_section_inputs(const XrTargetPlan *plan, XrXtpSectionInput sect
     XR_XTP_FILL_SECTION(EXTENT_OPERANDS, extent_operands);
     XR_XTP_FILL_SECTION(FUNCTIONS, functions);
     XR_XTP_FILL_SECTION(SLOTS, slots);
+    XR_XTP_FILL_SECTION(I64_OVERFLOW_PREDICATES, i64_overflow_predicates);
     XR_XTP_FILL_SECTION(INSTRUCTIONS, instructions);
     XR_XTP_FILL_SECTION(CALLS, calls);
     XR_XTP_FILL_SECTION(CALL_ARGUMENTS, call_arguments);

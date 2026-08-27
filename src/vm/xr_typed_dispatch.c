@@ -28,6 +28,7 @@
 #include "../shared/xr_bits_core.h"
 #include "../shared/xr_compare_core.h"
 #include "../shared/xr_int_arith_core.h"
+#include "../shared/xr_arith_core.h"
 #include "../shared/xr_semantic_owner_ids_gen.h"
 #include "../base/xmalloc.h"
 #include <stddef.h>
@@ -50,7 +51,7 @@ _Static_assert(offsetof(XrTypedLeafValueProductTuple6, field0) == 0u &&
                    offsetof(XrTypedLeafValueProductTuple6, field3) == 24u &&
                    offsetof(XrTypedLeafValueProductTuple6, field4) == 32u &&
                    offsetof(XrTypedLeafValueProductTuple6, field5) == 40u,
-               "leaf value product carrier offsets must match schema-52 x64 layout");
+               "leaf value product carrier offsets must match schema-53 x64 layout");
 
 typedef union XrTypedAggregateValue {
     XrTypedLeafAggregateI64x2 pair;
@@ -1027,6 +1028,53 @@ static XrTypedDispatchStatus execute_compare(
         XR_SEM_CONSUMER_VM, kind, first, second);
     return store_bool_byte(frame, row->result_slot,
                            holds ? (uint8_t) 1u : (uint8_t) 0u);
+}
+
+static XrTypedDispatchStatus execute_overflow(
+    XrTypedFrame *frame, const XrTargetInstructionRecord *row,
+    const XrTargetInstructionContract *contract,
+    XrTypedDispatchRowContext *context) {
+    if (!context || !context->execution || !context->execution->plan ||
+        contract->dispatch_kind != XR_TARGET_INSTRUCTION_DISPATCH_OVERFLOW ||
+        contract->dispatch_argument != XR_TARGET_INSTRUCTION_DISPATCH_ARGUMENT_NONE ||
+        row->immediate_bits > UINT32_MAX)
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint32_t count = 0;
+    const XrTargetI64OverflowPredicateRecord *predicates =
+        xr_target_plan_i64_overflow_predicates(context->execution->plan, &count);
+    uint32_t predicate_index = (uint32_t) row->immediate_bits;
+    const XrTargetI64OverflowPredicateRecord *predicate =
+        predicates && predicate_index < count ? &predicates[predicate_index] : NULL;
+    if (!predicate || predicate->id != predicate_index ||
+        predicate->function != row->function || predicate->result_slot != row->result_slot ||
+        predicate->receiver_slot != row->operand_slots[0] ||
+        predicate->argument_slot != row->operand_slots[1])
+        return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    uint64_t receiver_bits = 0, argument_bits = 0;
+    XrTypedDispatchStatus status =
+        load_i64_bits(frame, predicate->receiver_slot, &receiver_bits);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    status = load_i64_bits(frame, predicate->argument_slot, &argument_bits);
+    if (status != XR_TYPED_DISPATCH_OK)
+        return status;
+    int64_t receiver = 0, argument = 0;
+    memcpy(&receiver, &receiver_bits, sizeof(receiver));
+    memcpy(&argument, &argument_bits, sizeof(argument));
+    int holds = 0;
+    switch ((XrTargetI64OverflowPredicateKind) predicate->kind) {
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_ADD:
+            holds = xr_arith_core_add_overflows(receiver, argument);
+            break;
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_SUB:
+            holds = xr_arith_core_sub_overflows(receiver, argument);
+            break;
+        case XR_TARGET_I64_OVERFLOW_PREDICATE_MUL:
+            holds = xr_arith_core_mul_overflows(receiver, argument);
+            break;
+        default: return XR_TYPED_DISPATCH_PROGRAM_INVALID;
+    }
+    return store_bool_byte(frame, predicate->result_slot, holds != 0);
 }
 
 static XrTypedDispatchStatus execute_return(
@@ -2161,7 +2209,8 @@ XrTypedDispatchStatus xr_typed_dispatch_execute_i64(
         xr_target_plan_function_execution_family_mask(
             verified_plan, request->function);
     if ((execution_family != XR_TARGET_EXECUTION_SCALAR_I64_CLOSED &&
-         execution_family != XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC) ||
+         execution_family != XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC &&
+         execution_family != XR_TARGET_EXECUTION_I64_OVERFLOW_PREDICATE) ||
         !function_has_zero_lifecycle(verified_plan, request->function) ||
         (execution_family == XR_TARGET_EXECUTION_SCALAR_I64_DYNAMIC &&
          (!request->generation_identity ||
