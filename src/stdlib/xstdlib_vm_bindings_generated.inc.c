@@ -237,16 +237,18 @@ static void xr_stdlib_vm_bind_net_generated(XrVMRuntime *isolate, XrModule *modu
 
 #ifdef XR_STDLIB_VM_BIND_MODULE_OS
 static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *module) {
+    XRS_EXPORT(module, isolate, "__platform", os_platform);
+    XRS_EXPORT(module, isolate, "__arch", os_arch);
     XRS_EXPORT(module, isolate, "__getenv", os_getenv);
     XRS_EXPORT(module, isolate, "__setenv", os_setenv);
     XRS_EXPORT(module, isolate, "__unsetenv", os_unsetenv);
-    XRS_EXPORT(module, isolate, "__environ", os_environ);
+    XRS_EXPORT(module, isolate, "__environBlock", os_environ_block);
     XRS_EXPORT(module, isolate, "__exit", os_exit);
     XRS_EXPORT(module, isolate, "__getpid", os_getpid);
     XRS_EXPORT(module, isolate, "__getcwd", os_getcwd);
     XRS_EXPORT(module, isolate, "__hostname", os_hostname);
     XRS_EXPORT(module, isolate, "__tmpdir", os_tmpdir);
-    XRS_EXPORT(module, isolate, "__username", os_username);
+    XRS_EXPORT(module, isolate, "__systemUsername", os_system_username);
     XRS_EXPORT(module, isolate, "__homedir", os_homedir);
     XRS_EXPORT(module, isolate, "__uid", os_uid);
     XRS_EXPORT(module, isolate, "__gid", os_gid);
@@ -261,10 +263,6 @@ static void xr_stdlib_vm_bind_os_generated(XrVMRuntime *isolate, XrModule *modul
     XRS_EXPORT_YIELDABLE(module, isolate, "__sleep", os_sleep);
     XRS_EXPORT(module, isolate, "__exec", os_exec);
     XRS_EXPORT(module, isolate, "__spawn", os_spawn);
-    xr_module_add_export(isolate, module, "platform", xrs_string_value_c(isolate, get_platform()));
-    xr_module_add_export(isolate, module, "arch", xrs_string_value_c(isolate, get_arch()));
-    xr_module_add_export(isolate, module, "sep", xrs_string_value_c(isolate, get_sep()));
-    xr_module_add_export(isolate, module, "eol", xrs_string_value_c(isolate, get_eol()));
 }
 #endif  /* XR_STDLIB_VM_BIND_MODULE_OS */
 

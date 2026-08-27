@@ -13076,7 +13076,7 @@ TEST(global_evidence_producer_marks_stdlib_link_dependencies) {
                          "import { sep as directSep, join } from path\n"
                          "import os\n"
                          "print(path.join(\"a\", \"b\"))\n"
-                         "print(os.sep)\n"
+                         "print(os.sep())\n"
                          "print(directSep)\n"
                          "print(join(\"c\", \"d\"))\n";
     AstNode *ast = xr_parse(g_session, source);

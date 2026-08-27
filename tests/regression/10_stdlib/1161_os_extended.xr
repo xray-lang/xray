@@ -113,7 +113,7 @@ fn test_exec_echo() {
 @test
 fn test_exec_stderr() {
     // Windows _popen cannot capture stderr separately
-    if (os.platform == "windows") {
+    if (os.platform() == "windows") {
         return
     }
     var result = os.exec("echo error_msg >&2")
@@ -131,7 +131,7 @@ fn test_exec_exit_code() {
 
 @test
 fn test_exec_command_output() {
-    if (os.platform == "windows") {
+    if (os.platform() == "windows") {
         // Windows echo adds \r\n; printf not available
         var result = os.exec("echo abc")
         assert(result != null)

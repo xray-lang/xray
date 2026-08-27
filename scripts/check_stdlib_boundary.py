@@ -236,7 +236,7 @@ def check_l2_thinning(root: Path) -> list[str]:
     errors: list[str] = []
     expected_native = {
         "io": set(),
-        "os": {"arch", "eol", "platform", "sep"},
+        "os": set(),
         "net": {
             "NetConn", "NetConn.close", "NetConn.fd", "NetConn.isClosed", "NetConn.isTLS",
             "NetError", "NetListener", "NetListener.close", "NetListener.fd",

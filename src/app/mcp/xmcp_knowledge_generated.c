@@ -3581,8 +3581,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "arch",
-        .signature = ": string",
-        .summary = "Current CPU architecture name",
+        .signature = "(): string",
+        .summary = "",
     },
     {
         .name = "clock",
@@ -3601,8 +3601,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "eol",
-        .signature = ": string",
-        .summary = "Platform end-of-line string",
+        .signature = "(): string",
+        .summary = "",
     },
     {
         .name = "exec",
@@ -3661,8 +3661,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "platform",
-        .signature = ": string",
-        .summary = "Current operating system name",
+        .signature = "(): string",
+        .summary = "",
     },
     {
         .name = "ppid",
@@ -3671,8 +3671,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "sep",
-        .signature = ": string",
-        .summary = "Platform path separator",
+        .signature = "(): string",
+        .summary = "",
     },
     {
         .name = "setenv",
@@ -6775,7 +6775,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "- `typeName(value)` \xe2\x80\x94 return the debug/logging type name\n"
             "- `x is T` \xe2\x80\x94 runtime type check with analyzer narrowing\n"
             "- `i64(value)` / `f64(value)` / `string(value)` / `bool(value)` \xe2\x80\x94 explicit conversions\n"
-            "- `assert(condition)` and `assert_*` helpers \xe2\x80\x94 testing assertions\n"
+            "- `assert(cond, msg?)` / `assertEqual(a, b, msg?)` / `assertThrows(action, msg?)` / `assertPanics(action, msg?)` \xe2\x80\x94 testing assertions\n"
             "\n"
             "### Printing and debugging\n"
             "```xray\n"
@@ -9440,11 +9440,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ExecResult.exitCode` | `: i64` |  |\n"
             "| `ExecResult.stderr` | `: string` |  |\n"
             "| `ExecResult.stdout` | `: string` |  |\n"
-            "| `os.arch` | `: string` | Current CPU architecture name |\n"
+            "| `os.arch` | `(): string` |  |\n"
             "| `os.clock` | `(): f64` |  |\n"
             "| `os.cpuCount` | `(): i64` |  |\n"
             "| `os.environ` | `(): Map<string, string>` |  |\n"
-            "| `os.eol` | `: string` | Platform end-of-line string |\n"
+            "| `os.eol` | `(): string` |  |\n"
             "| `os.exec` | `(command: string): ExecResult?` |  |\n"
             "| `os.exit` | `(code: i64 = 0): ()` |  |\n"
             "| `os.freeMemory` | `(): i64` |  |\n"
@@ -9456,9 +9456,9 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `os.hostname` | `(): string` |  |\n"
             "| `os.kill` | `(pid: i64, signal: i64 = 15): bool` |  |\n"
             "| `os.loadavg` | `(): Array<f64>` |  |\n"
-            "| `os.platform` | `: string` | Current operating system name |\n"
+            "| `os.platform` | `(): string` |  |\n"
             "| `os.ppid` | `(): i64` |  |\n"
-            "| `os.sep` | `: string` | Platform path separator |\n"
+            "| `os.sep` | `(): string` |  |\n"
             "| `os.setenv` | `(name: string, value: string): bool` |  |\n"
             "| `os.sleep` | `(ms: i64): ()` |  |\n"
             "| `os.spawn` | `(program: string, args: Array<string>): ExecResult?` |  |\n"

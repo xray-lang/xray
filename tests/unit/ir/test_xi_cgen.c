@@ -2852,32 +2852,6 @@ TEST(cgen_panicinfo_constructor_token_emits_no_local) {
     xi_func_free(ir);
 }
 
-TEST(cgen_static_os_module_namespace_fields_emit_no_shared_locals) {
-    const char *src = "import os\n"
-                      "fn describe() -> string { return os.platform + os.arch }\n"
-                      "print(describe())\n";
-    XiFunc *ir = compile_to_ir(src);
-    TEST_REQUIRE(ir != NULL, "static os module namespace fixture should compile");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    TEST_REQUIRE(code != NULL && !had_error,
-                 "static os module namespace fixture should generate");
-
-    const char *describe = find_static_function_definition(code, "test_describe_");
-    TEST_REQUIRE(describe != NULL, "static os namespace function should emit");
-    const char *describe_end = next_static_after(describe);
-    TEST_REQUIRE(count_between(describe, describe_end, " = xrt_shared_") == 0,
-                 "direct os field loads must not materialize their module namespace");
-    TEST_REQUIRE(contains_between(describe, describe_end, "xrt_os_platform()") &&
-                     contains_between(describe, describe_end, "xrt_os_arch()"),
-                 "os field helpers must remain emitted");
-
-    printf("  Generated direct os module namespace %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
 TEST(cgen_native_time_module_scalar_call_emits_no_shared_local) {
     const char *src = "import time\n"
                       "fn stamp() -> i64 { return time.nanos() }\n"
@@ -14919,7 +14893,6 @@ int main(int argc, char **argv) {
     run_cgen_native_unsigned_interpolation_consumes_inner_without_box_local();
     run_cgen_panicinfo_constructor_token_emits_no_local();
     run_cgen_native_time_module_scalar_call_emits_no_shared_local();
-    run_cgen_static_os_module_namespace_fields_emit_no_shared_locals();
     run_cgen_direct_stdlib_import_call_emits_no_function_token_local();
     run_cgen_native_target_leaf_consumes_numeric_target_authority();
     run_cgen_string_literal_runes_receiver_emits_immediate_without_local();

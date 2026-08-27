@@ -6359,10 +6359,10 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 |--|--|--|
 | `io` | file I/O + filesystem | `readFile` `writeFile` `readFileBytes` `writeFileBytes` `exists` `mkdir` `mkdirp` `remove` `readDir` `stat` `readStdin` |
 | `path` | path manipulation | `join` `dirname` `basename` `extname` `normalize` `isAbsolute` `resolve` `relative` `parse` `format` |
-| `os` | OS interface | `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec`; constants `platform` `arch` `sep` `eol` |
+| `os` | OS interface | `platform()` `arch()` `sep()` `eol()` `getenv` `setenv` `environ` `exit` `getpid` `getcwd` `chdir` `hostname` `tmpdir` `homedir` `cpuCount` `sleep` `exec` |
 
 > Xray has **no** standalone `fs` module; filesystem operations live in `io`. Process arguments / process information are exposed through the global `process` object (`process.args` / `process.file` / `process.dir`, see §16.5), not `os`.
-> `os.platform` / `os.arch` / `os.sep` / `os.eol` are **constant strings** (no parentheses); other `os.*` are function calls.
+> `os.platform()` / `os.arch()` query host facts; `os.sep()` / `os.eol()` are derived from the platform name in the Xray module.
 
 ### 15.2 Networking
 
@@ -6619,10 +6619,10 @@ os.getpid()               // process ID
 os.getcwd()               // current working directory
 os.hostname()             // host name
 os.tmpdir()               // temporary directory
-os.platform               // constant: "darwin" / "linux" / "windows"
-os.arch                   // constant: "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
-os.sep                    // constant: path separator
-os.eol                    // constant: end-of-line
+os.platform()             // "darwin" / "linux" / "windows"
+os.arch()                 // "arm64" / "x64" / "x86" / "ppc64" / "riscv64"
+os.sep()                  // path separator
+os.eol()                  // end-of-line
 os.sleep(100)             // sleep in milliseconds (equivalent to `time.sleep`)
 ```
 

@@ -25,7 +25,7 @@ RETAINED_STDLIB_MODULES = {"cluster", "http2", "compress", "crypto"}
 TERMINAL_STDLIB_MODULE_COUNT = 33
 L2_PUBLIC_NATIVE = {
     "io": set(),
-    "os": {"arch", "eol", "platform", "sep"},
+    "os": set(),
     "net": {
         "NetConn",
         "NetConn.close",

@@ -42,7 +42,7 @@ contract change.
 
 anchor-sha256: src/os/win/proc_win.c 9b80d5863a693d820cc384395255e2561d9f8ec05d3cb0ff892ad793d342962d
 anchor-sha256: src/aot/xrt_sys.h f75d6891e3a9b3b9be952237b233889cd07babbe6901b051d299fd759f8e1c13
-anchor-sha256: src/aot/xrt_os.h c226d0812c8cc65eafc9a11d208382ec4cca926f88fc385b7bb10cb2c37bc4a6
+anchor-sha256: src/aot/xrt_os.h a349c914dd054853731460abb435c1c34f78712c75f5c0140b4e6a18fd3ae0d4
 anchor-sha256: src/app/toolchain/xtc_process.h 767193396e0e59c7d35a2121f0a9fcd225987f039aa0d305a5b98d8ef28fd6dc
 anchor-sha256: src/app/toolchain/xtc_process.c a9fc712a024d642f2f90ed2ebd959fdd08845f26a3fba0fa020d51e3179b2d41
 anchor-sha256: scripts/check_subprocess_text_boundaries.py 5815773c084b6eecb845acc160b32a2841090e2bac6643fbe0708ec4897e2a81

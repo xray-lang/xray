@@ -68,9 +68,6 @@ static XrObjectInstance *os_exec_result_new(XrVMRuntime *X) {
 
 struct XrCoroutine;
 extern struct XrCoroutine *xr_current_coro(XrVMRuntime *X);
-extern XrMap *xr_map_new(struct XrCoroutine *coro);
-extern void xr_map_set(XrMap *map, XrValue key, XrValue value);
-extern XrValue xr_value_from_map(XrMap *map);
 extern XrArray *xr_array_new(struct XrCoroutine *coro);
 extern void xr_array_push(XrArray *arr, XrValue value);
 extern XrValue xr_value_from_array(XrArray *arr);
@@ -170,49 +167,29 @@ static XrValue os_unsetenv(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_bool(result == 0);
 }
 
-// environ() - Get all environment variables
-static XrValue os_environ(XrVMRuntime *X, XrValue *args, int argc) {
+/* Publish the host environment block as raw NAME=VALUE strings. Splitting the
+ * entries is module policy and lives in os.xr. */
+static XrValue os_environ_block(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
-    XrMap *map = xr_map_new(xr_current_coro(X));
-    if (!map)
+    XrArray *arr = xr_array_new(xr_current_coro(X));
+    if (!arr)
         return xr_null();
 
 #ifdef XR_OS_WINDOWS
     LPCH env_block = GetEnvironmentStringsA();
     if (!env_block)
-        return xr_value_from_map(map);
-    for (const char *p = env_block; *p; p += strlen(p) + 1) {
-        const char *eq = strchr(p, '=');
-        if (!eq || eq == p)
-            continue;
-        size_t name_len = eq - p;
-        const char *value = eq + 1;
-        XrString *key_str = xr_string_intern(X, p, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+        return xr_value_from_array(arr);
+    for (const char *p = env_block; *p; p += strlen(p) + 1)
+        xr_array_push(arr, xrs_string_value_c(X, p));
     FreeEnvironmentStringsA(env_block);
 #else
-    for (char **env = environ; *env != NULL; env++) {
-        char *eq = strchr(*env, '=');
-        if (!eq)
-            continue;
-
-        size_t name_len = eq - *env;
-        const char *value = eq + 1;
-
-        // Directly intern with length — no temporary allocation needed
-        XrString *key_str = xr_string_intern(X, *env, name_len, 0);
-        XrValue key = xr_string_value(key_str);
-        XrValue val = xrs_string_value_c(X, value);
-        xr_map_set(map, key, val);
-    }
+    for (char **env = environ; *env != NULL; env++)
+        xr_array_push(arr, xrs_string_value_c(X, *env));
 #endif
 
-    return xr_value_from_map(map);
+    return xr_value_from_array(arr);
 }
 
 /* ========== Process Control ========== */
@@ -285,8 +262,8 @@ static XrValue os_tmpdir(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== User Information (P1) ========== */
 
-// username() - Get current user name
-static XrValue os_username(XrVMRuntime *X, XrValue *args, int argc) {
+// The host answer only; fallback policy lives in os.xr.
+static XrValue os_system_username(XrVMRuntime *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
 
@@ -1094,9 +1071,9 @@ static XrValue os_spawn(XrVMRuntime *X, XrValue *args, int argc) {
 
 /* ========== Platform Information ========== */
 
-// Get operating system name
+// Report host facts used by the public Xray wrappers.
 static const char *get_platform(void) {
-#if defined(XR_OS_WINDOWS) || defined(_WIN64)
+#if defined(XR_OS_WINDOWS)
     return "windows";
 #elif defined(XR_OS_MACOS) && defined(__MACH__)
     return "darwin";
@@ -1104,42 +1081,41 @@ static const char *get_platform(void) {
     return "linux";
 #elif defined(XR_OS_BSD)
     return "freebsd";
-#elif defined(XR_OS_BSD)
-    return "openbsd";
 #else
     return "unknown";
 #endif
 }
 
-// Get processor architecture
 static const char *get_arch(void) {
-#if defined(__aarch64__) || defined(_M_ARM64)
+#if defined(XR_ARCH_ARM64) || defined(_M_ARM64)
     return "arm64";
-#elif defined(__x86_64__) || defined(_M_X64)
+#elif defined(XR_ARCH_X86_64) || defined(_M_X64)
     return "x64";
-#elif defined(__i386__) || defined(_M_IX86)
+#elif defined(XR_ARCH_X86) || defined(_M_IX86)
     return "x86";
-#elif defined(__arm__) || defined(_M_ARM)
+#elif defined(XR_ARCH_ARM) || defined(_M_ARM)
     return "arm";
+#elif defined(XR_ARCH_POWERPC64)
+    return "ppc64";
+#elif defined(XR_ARCH_LOONGARCH64)
+    return "loongarch64";
+#elif defined(XR_ARCH_RISCV64)
+    return "riscv64";
 #else
     return "unknown";
 #endif
 }
 
-static const char *get_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return "\\";
-#else
-    return "/";
-#endif
+static XrValue os_platform(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xrs_string_value_c(X, get_platform());
 }
 
-static const char *get_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return "\r\n";
-#else
-    return "\n";
-#endif
+static XrValue os_arch(XrVMRuntime *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+    return xrs_string_value_c(X, get_arch());
 }
 
 /* ========== Module Loading ========== */

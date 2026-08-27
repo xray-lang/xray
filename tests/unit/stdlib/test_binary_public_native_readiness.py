@@ -40,15 +40,18 @@ class BinaryPublicNativeReadinessTest(unittest.TestCase):
 
     def test_l2_public_native_surface_is_exact(self) -> None:
         modules = readiness.load_boundary_modules(ROOT)
+        self.assertEqual(set(), readiness.L2_PUBLIC_NATIVE["os"])
+        self.assertEqual([], modules["os"]["public_native"])
+
         mutated = {name: dict(entry) for name, entry in modules.items()}
-        mutated["net"]["public_native"] = [*mutated["net"]["public_native"], "dial"]
+        mutated["os"]["public_native"] = ["platform"]
         result = next(
             item
             for item in readiness.check_boundary(ROOT, stdlib_modules=mutated)
-            if item.category == "L2_THIN_PUBLIC_SURFACE" and item.subject == "net"
+            if item.category == "L2_THIN_PUBLIC_SURFACE" and item.subject == "os"
         )
         self.assertFalse(result.ok)
-        self.assertIn("dial", result.detail)
+        self.assertIn("platform", result.detail)
 
     def test_contract_and_perf_ownership(self) -> None:
         self.assertTrue(all(item.ok for item in readiness.check_contracts(ROOT)))

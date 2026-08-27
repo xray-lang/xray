@@ -13891,16 +13891,7 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         const char *helper = NULL;
         int64_t int_const = 0;
         bool has_int_const = false;
-        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "os")) {
-            if (strcmp(field, "platform") == 0)
-                helper = "xrt_os_platform";
-            else if (strcmp(field, "arch") == 0)
-                helper = "xrt_os_arch";
-            else if (strcmp(field, "sep") == 0)
-                helper = "xrt_os_sep";
-            else if (strcmp(field, "eol") == 0)
-                helper = "xrt_os_eol";
-        } else if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "log")) {
+        if (cg_value_is_module_import_ctx(ctx, f, v->args[0], "log")) {
             if (strcmp(field, "DEBUG") == 0) {
                 int_const = 10;
                 has_int_const = true;

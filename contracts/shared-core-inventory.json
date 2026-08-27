@@ -1134,8 +1134,7 @@
         "xr_os_core_seconds_from_nsec",
         "xr_os_core_sep",
         "xr_os_core_tmpdir",
-        "xr_os_core_uptime_from_boot_seconds",
-        "xr_os_core_username"
+        "xr_os_core_uptime_from_boot_seconds"
       ],
       "status": "production",
       "test_callers": [

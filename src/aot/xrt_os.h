@@ -111,31 +111,6 @@ static inline XrValue xrt_os_arch(void) {
     return xrt_str_from_cstr(xrt_os_arch_cstr());
 }
 
-static inline XrValue xrt_os_sep(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr("\\");
-#else
-    return xrt_str_from_cstr("/");
-#endif
-}
-
-static inline XrValue xrt_os_eol(void) {
-#ifdef XR_OS_WINDOWS
-    return xrt_str_from_cstr("\r\n");
-#else
-    return xrt_str_from_cstr("\n");
-#endif
-}
-
-static inline XrValue xrt_os_str_slice_value(const char *s, size_t len) {
-    if (!s)
-        return XR_NULL_VAL;
-    XrValue v = xrt_str_alloc(len);
-    if (len)
-        memcpy(xr_str_buf(v), s, len);
-    return v;
-}
-
 static inline char *xrt_os_copy_cstr_arg(const char *data, int64_t len, char *stack,
                                          size_t stack_cap, char **owned_out) {
     *owned_out = NULL;
@@ -206,22 +181,13 @@ static inline XrValue xrt_os_unsetenv(const char *name, int64_t len) {
     return XR_FROM_BOOL(ok);
 }
 
-static inline void xrt_os_environ_set_entry(xrt_map_t *map, const char *entry) {
-    const char *eq = entry ? strchr(entry, '=') : NULL;
-    if (!eq || eq == entry)
-        return;
-    XrValue key = xrt_os_str_slice_value(entry, (size_t) (eq - entry));
-    const char *value = eq + 1;
-    xrt_map_set(map, key, xrt_os_str_slice_value(value, strlen(value)));
-}
-
-static inline XrValue xrt_os_environ(void) {
-    XrValue map_value = xrt_map_new(64);
-    xrt_map_t *map = (xrt_map_t *) map_value.ptr;
-#ifdef _WIN32
+/* Publish raw host entries. The Xray module owns splitting and validation. */
+static inline XrValue xrt_os_environ_block(void) {
+    XrValue arr = xrt_array_new(0);
+#if defined(XR_OS_WINDOWS)
     LPWCH env_block = GetEnvironmentStringsW();
     if (!env_block)
-        return map_value;
+        return arr;
     for (const wchar_t *p = env_block; *p; p += wcslen(p) + 1) {
         size_t wide_len = wcslen(p);
         int required = xr_win_utf16_to_utf8_required(p, wide_len);
@@ -231,15 +197,15 @@ static inline XrValue xrt_os_environ(void) {
         if (!entry)
             break;
         if (xr_win_utf16_to_utf8(p, wide_len, entry, (size_t) required))
-            xrt_os_environ_set_entry(map, entry);
+            xrt_array_push(arr, xrt_str_from_cstr(entry));
         XRT_FREE(entry);
     }
     FreeEnvironmentStringsW(env_block);
 #else
     for (char **env = environ; env && *env; env++)
-        xrt_os_environ_set_entry(map, *env);
+        xrt_array_push(arr, xrt_str_from_cstr(*env));
 #endif
-    return map_value;
+    return arr;
 }
 
 static inline XrValue xrt_os_exit(XrValue code_value) {
@@ -311,22 +277,19 @@ static inline XrValue xrt_os_tmpdir(void) {
     return xrt_os_cstr_value(xr_os_core_tmpdir(xrt_os_core_getenv, NULL));
 }
 
-static inline XrValue xrt_os_username(void) {
-#ifdef _WIN32
-    const char *user = getenv("USERNAME");
-    if (!user)
-        user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
+/* The host answer only; fallback policy lives in os.xr. */
+static inline XrValue xrt_os_system_username(void) {
+#if defined(XR_OS_WINDOWS)
+    char buf[256];
+    DWORD size = sizeof(buf);
+    if (GetUserNameA(buf, &size))
+        return xrt_os_cstr_value(buf);
+    return XR_NULL_VAL;
 #else
     struct passwd *pw = getpwuid(getuid());
     if (pw && pw->pw_name)
         return xrt_os_cstr_value(pw->pw_name);
-    const char *user = getenv("USER");
-    if (!user)
-        user = getenv("LOGNAME");
-    return xrt_os_cstr_value(user);
+    return XR_NULL_VAL;
 #endif
 }
 

@@ -1,7 +1,7 @@
 import os
 
 fn xray_no_alloc_os_platform_const_ok() -> string {
-    return os.platform
+    return os.platform()
 }
 
 print(xray_no_alloc_os_platform_const_ok())

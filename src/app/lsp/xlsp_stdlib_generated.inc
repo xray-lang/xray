@@ -397,6 +397,10 @@ static const XlspSymbolInfo g_xlsp_stdlib_net_symbols[] = {
 
 // os module symbols
 static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
+    {"platform", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"arch", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"sep", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
+    {"eol", XLSP_SYM_FUNCTION, "fn(): string", "", NULL, 0},
     {"getenv", XLSP_SYM_FUNCTION, "fn(name: string): string?", "", NULL, 0},
     {"setenv", XLSP_SYM_FUNCTION, "fn(name: string, value: string): bool", "", NULL, 0},
     {"unsetenv", XLSP_SYM_FUNCTION, "fn(name: string): bool", "", NULL, 0},
@@ -421,10 +425,6 @@ static const XlspSymbolInfo g_xlsp_stdlib_os_symbols[] = {
     {"sleep", XLSP_SYM_FUNCTION, "fn(ms: i64): ()", "", NULL, 0},
     {"exec", XLSP_SYM_FUNCTION, "fn(command: string): ExecResult?", "", NULL, 0},
     {"spawn", XLSP_SYM_FUNCTION, "fn(program: string, args: Array<string>): ExecResult?", "", NULL, 0},
-    {"platform", XLSP_SYM_CONSTANT, "string", "Current operating system name", NULL, 0},
-    {"arch", XLSP_SYM_CONSTANT, "string", "Current CPU architecture name", NULL, 0},
-    {"sep", XLSP_SYM_CONSTANT, "string", "Platform path separator", NULL, 0},
-    {"eol", XLSP_SYM_CONSTANT, "string", "Platform end-of-line string", NULL, 0},
     {"__ExecResult", XLSP_SYM_CLASS, "type __ExecResult", "Native handle type", NULL, 0},
     {"ExecResult", XLSP_SYM_CLASS, "type ExecResult", "Class type", NULL, 0},
 };

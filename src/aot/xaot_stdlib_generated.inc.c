@@ -286,14 +286,6 @@ static bool xaot_stdlib_generated_symbol_is_constant(const char *symbol) {
         return true;
     if (strcmp(symbol, "math.NAN") == 0)
         return true;
-    if (strcmp(symbol, "os.platform") == 0)
-        return true;
-    if (strcmp(symbol, "os.arch") == 0)
-        return true;
-    if (strcmp(symbol, "os.sep") == 0)
-        return true;
-    if (strcmp(symbol, "os.eol") == 0)
-        return true;
     if (strcmp(symbol, "mem.PROT_NONE") == 0)
         return true;
     if (strcmp(symbol, "mem.PROT_READ") == 0)
