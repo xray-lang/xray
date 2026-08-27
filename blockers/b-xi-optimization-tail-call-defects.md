@@ -5,7 +5,8 @@
 - **Requested owner**: H (compiler / unified target machine)
 - **Severity**: highest of anything this lane found. One case produces a **silently wrong
   program** — correct exit status, missing output — rather than a refusal. Three of the
-  four affected cases are outside every gate's case list.
+  four affected cases are outside every gate's case list. On the native side the feature
+  has a **100% refusal rate**: no general tail call has ever passed its conformance gate.
 
 ## Exact source identity
 
@@ -88,6 +89,11 @@ The host C optimization level is irrelevant. The defect is entirely in the Xi pi
 and it presents differently on each side: the AOT side refuses to build, while the VM side
 builds and produces wrong output.
 
+More precisely, the optimizer's only role is to make `XI_TAIL_CALL` exist. Every
+`--xi-opt` pass runs before the SemanticPlan is frozen (`src/ir/xi_pipeline.c:839` versus
+`:892`); the graph is rewritten afterwards, by representation selection at `:915`. See the
+root cause below.
+
 The two `vm=full` differential failures:
 
 - `unit_enum_return_value.xr` — stdout mismatch, the silent truncation above.
@@ -106,6 +112,76 @@ Running the census's 142 comparable cases under `-O2` with `vm=full,aot=full`:
 | `semantics/recursion/self_recursion.xr` | `XR_AOT_TAIL_CALL_CONFORMANCE_SOURCE_IDENTITY` |
 | `semantics/unit_enum_return_value.xr` | `XR_AOT_TAIL_CALL_CONFORMANCE_SOURCE_IDENTITY` |
 | `semantics/functions/string_result_direct_call.xr` | `XR_OWN_3001`, `origin=TAIL_CALL` |
+
+## Root cause of the native-side refusal
+
+Independently traced and then re-verified here. The refusal is not specific to these
+cases: **no general tail call has ever passed this gate.**
+
+```
+fn g(n: i64) -> i64 { return n + 1 }
+fn f(n: i64) -> i64 { return g(n) }
+fn main() { print(f(1)) }
+```
+
+```
+build/xray build --native -O 0 --xi-opt aot=full-inline -c -o /tmp/t.c min.xr
+  -> XR_AOT_TAIL_CALL_CONFORMANCE_SOURCE_IDENTITY operation=13 target-call=1 function=2 value=15
+```
+
+Isolation shows exactly one trigger — the `tail_call` pass itself, at `full` level:
+
+| configuration | result |
+|---|---|
+| `--xi-opt aot=full` | refused |
+| `--xi-opt aot=full-tail_call` (that one pass off) | **passes** |
+| `--xi-opt aot=light` / `aot=none` | passes |
+| `-O 2` with no `--xi-opt` | passes |
+
+Self-recursion is not an exception that proves the gate works: the promotion pass rewrites
+a self tail call into a loop backedge, so no `XI_TAIL_CALL` node exists and the gate
+trivially passes over zero records.
+
+**The mechanism.** `XI_TAIL_CALL` is not modelled in Xi's representation-selection stage.
+`sr_def_rep` (`src/ir/xi_opt.c:3025`) and `sr_use_rep` (`:3453`) each handle `case XI_CALL`
+and nothing else, so a promoted tail call falls into `default: return XR_REP_TAGGED`
+(`:3136`). The argument is then boxed and the result unboxed:
+
+```
+frozen  :  v3 = TAIL_CALL v2 v0 ; RET v3
+live    :  v4 = BOX v0 ; v3 = TAIL_CALL v2 v4 ; v5 = UNBOX v3 ; RET v5
+```
+
+The conformance gate requires the return block's control value to still be the tail-call
+value itself (`find_live_operation_value`, `src/aot/refine/xr_aot_tail_call_conformance.c:74-114`,
+violated condition at `:110`, reported at `:188`). After representation selection the block's
+control is `v5`, the UNBOX.
+
+**The gate's verdict is semantically right.** An UNBOX sequenced after the call means the
+call is no longer in tail position, so frame reuse cannot hold. The defect is upstream:
+the representation stage was never taught about `XI_TAIL_CALL`, so the pipeline produces a
+"tail call" that is not one. Before this gate existed the same rewrite presumably shipped
+silently — that part is inferred from the code, not measured against an older build.
+
+**This is the two-layer predicate drift pattern.** The AOT refinement layer handles both
+opcodes together (`src/aot/refine/xr_aot_representation_refinement.c:9688-9689`:
+`case XI_CALL: case XI_TAIL_CALL:`), while the Xi layer's representation rules know only
+`XI_CALL`. One question, two implementations, one of them missing a case.
+
+**Why the gate's own tests never caught it.** Its only positive tests build synthetic Xi
+graphs (`tests/unit/aot/test_xr_aot_refinement.c:774`, `:1651-1696`). A synthetic graph
+does not go through `xi_program_select_reps`, so it never carries the BOX/UNBOX pair that
+the real pipeline always inserts. The gate was introduced by `febaad063` (2026-08-15),
+which touched 18 files and none of them `src/ir/xi_opt.c`.
+
+The diagnostic names here are also ungoverned: `xr_aot_tail_call_conformance_issue_name()`
+returns 12 `XR_AOT_TAIL_CALL_CONFORMANCE_*` strings, none registered in
+`contracts/target-machine/diagnostic-codes.toml`, so a refusal naming one still owes a
+stable diagnostic code.
+
+**Scope limit:** this traces the native-side refusal. Whether the VM-side miscompilation
+above shares this root cause is untested — it is the same feature and the same pass, but
+the silent-truncation failure was not traced to the representation stage.
 
 ## Why no gate catches three of the four
 
