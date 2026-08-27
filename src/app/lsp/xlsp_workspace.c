@@ -133,7 +133,8 @@ void xlsp_workspace_index_file(XrLspServer *server, const char *uri, const char 
         // 3. Propagate dirty flags to dependent files
         XlspAnalysisIdentity file_identity;
         xlsp_analysis_identity_push(&file_identity,
-                                    xr_compiler_session_current_for_isolate(server->isolate), uri);
+                                    xr_compiler_session_current_for_isolate(server->isolate),
+                                    server->module_graph, uri);
         xa_analyzer_refresh_file(server->workspace_analyzer, uri, (XrAstNode *) ast, content_hash);
         xlsp_analysis_identity_pop(&file_identity);
         lsp_log("Indexed file: %s (hash: %llx)", path, (unsigned long long) content_hash);
@@ -505,6 +506,7 @@ void xlsp_workspace_maybe_rebuild_analyzer(XrLspServer *server) {
         return;
     }
 
+    xlsp_analysis_release_module_graph(server);
     xa_analyzer_free(server->workspace_analyzer);
     server->workspace_analyzer = fresh;
 

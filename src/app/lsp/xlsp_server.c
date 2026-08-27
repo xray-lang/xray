@@ -405,6 +405,11 @@ void xlsp_server_free(XrLspServer *server) {
     if (!server)
         return;
 
+    /* Analyzer symbols borrow document URI storage, while graph dependency
+     * scopes borrow graph AST storage. Tear the graph/analyzer relationship
+     * down before either owner is released. */
+    xlsp_analysis_release_module_graph(server);
+
     // Free document hash table (frees all documents)
     if (server->doc_table) {
         doc_table_free(server->doc_table);
