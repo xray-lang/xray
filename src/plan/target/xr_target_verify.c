@@ -7910,6 +7910,18 @@ static bool verify_leaf_scalar_machine_rep(const XrTargetPlan *plan, uint16_t re
            rep->lane_count == 0 && rep->reserved == 0;
 }
 
+/* Both program projections below pin concrete aggregate sizes and field offsets
+ * rather than deriving them, so they hold only where the data layout produces
+ * those numbers. The admitted architectures are named for that reason: the
+ * sizes are the projection's own frozen facts, and an architecture is added
+ * here only once its layout has been verified against them end to end. */
+static bool verify_program_projection_machine(const XrTargetMachineFacts *machine) {
+    return machine &&
+           (machine->architecture == XR_TARGET_ARCH_X86_64 ||
+            machine->architecture == XR_TARGET_ARCH_AARCH64) &&
+           machine->data_layout.i64.size == 8 && machine->data_layout.i64.align == 8;
+}
+
 static bool verify_leaf_program_target_layout(const XrTargetPlan *plan,
                                               const XrVerifyLeafProgramShape *shape,
                                               uint32_t *out_layout, uint16_t *out_rep) {
@@ -7917,9 +7929,7 @@ static bool verify_leaf_program_target_layout(const XrTargetPlan *plan,
     int aggregate_index =
         target_plan_layout_for_type(plan, shape->aggregate_binding->semantic_type);
     int scalar_index = target_plan_layout_for_type(plan, shape->scalar_binding->semantic_type);
-    if (!machine || machine->architecture != XR_TARGET_ARCH_X86_64 ||
-        machine->data_layout.i64.size != 8 || machine->data_layout.i64.align != 8 ||
-        aggregate_index < 0 || scalar_index < 0)
+    if (!verify_program_projection_machine(machine) || aggregate_index < 0 || scalar_index < 0)
         return false;
     const XrTargetLayoutRecord *aggregate = &plan->layouts[aggregate_index];
     const XrTargetLayoutRecord *scalar = &plan->layouts[scalar_index];
@@ -8164,9 +8174,8 @@ static bool verify_product_target_layout(const XrTargetPlan *plan,
     int product_index = target_plan_layout_for_type(plan, shape->product->semantic_type);
     int i64_index = target_plan_layout_for_type(plan, shape->i64->semantic_type);
     int u8_index = target_plan_layout_for_type(plan, shape->u8->semantic_type);
-    if (!machine || machine->architecture != XR_TARGET_ARCH_X86_64 ||
-        machine->data_layout.i64.size != 8 || machine->data_layout.i64.align != 8 ||
-        product_index < 0 || i64_index < 0 || u8_index < 0)
+    if (!verify_program_projection_machine(machine) || product_index < 0 || i64_index < 0 ||
+        u8_index < 0)
         return false;
     const XrTargetLayoutRecord *product = &plan->layouts[product_index];
     const XrTargetLayoutRecord *i64 = &plan->layouts[i64_index];
