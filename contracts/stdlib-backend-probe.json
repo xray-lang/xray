@@ -1,0 +1,1532 @@
+{
+  "schema": 1,
+  "root": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369",
+  "xray": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+  "baseline_ok": true,
+  "baseline": {
+    "source": "fn main() -> i32 {\n    print(\"baseline\")\n    return 0\n}\n",
+    "vm": {
+      "argv": [
+        "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+        "run",
+        "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/_baseline/baseline.xr"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "stdout": "",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false
+    },
+    "aot": {
+      "argv": [
+        "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+        "build",
+        "--native",
+        "-c",
+        "-o",
+        "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/_baseline/baseline.c",
+        "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/_baseline/baseline.xr"
+      ],
+      "returncode": 0,
+      "timed_out": false,
+      "stdout": "[xi-native] Building: /var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/_baseline/baseline.xr\n[xi-native] Generated 2995 bytes of C (2 functions, 1 modules in 1 unit)\nGenerated: /var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/_baseline/baseline.c\n",
+      "stderr": "",
+      "stdout_truncated": false,
+      "stderr_truncated": false
+    },
+    "c_bytes": 2996,
+    "first_refusal": null
+  },
+  "counts": {
+    "modules": 33,
+    "probes_missing": 0,
+    "vm_ok": 26,
+    "vm_failed": 7,
+    "aot_ok": 1,
+    "aot_failed": 32,
+    "generated_c_compared": 1,
+    "generated_c_identical": 1,
+    "generated_c_divergent": 0
+  },
+  "refusal_clusters": {
+    "XR_TARGET_1000": {
+      "count": 19,
+      "modules": [
+        "cluster",
+        "codegen",
+        "csv",
+        "datetime",
+        "encoding",
+        "http",
+        "http2",
+        "io",
+        "log",
+        "os",
+        "parallel",
+        "path",
+        "simd",
+        "sys",
+        "text",
+        "toml",
+        "url",
+        "ws",
+        "yaml"
+      ]
+    },
+    "XR_TARGET_1003": {
+      "count": 7,
+      "modules": [
+        "compress",
+        "crypto",
+        "math",
+        "mem",
+        "prelude",
+        "regex",
+        "runtime"
+      ]
+    },
+    "<no-code>": {
+      "count": 5,
+      "modules": [
+        "_probe",
+        "base64",
+        "net",
+        "sync",
+        "test_yield"
+      ]
+    },
+    "XR_SEM_0019": {
+      "count": 1,
+      "modules": [
+        "xml"
+      ]
+    }
+  },
+  "modules": [
+    {
+      "module": "_probe",
+      "probe": "tests/stdlib/contracts/_probe/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/_probe/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "[xcompiler] Xi IR pipeline failed at ownership: coroutine lowering failed closed before publishing CoroLowered (func=<main>)\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/_probe/_probe.c",
+          "tests/stdlib/contracts/_probe/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/_probe/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/_probe/_probe.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/_probe/probes/current.xr (entry)\n",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/_probe/probes/current.xr:24:32: error: Parameter 'v' of anonymous function cannot be inferred; annotate this lambda parameter (`x: T`), annotate the binding (`var f: (T) -> R = x -> ...`), rely on the call-site signature, or use `fn(x: T) -> R { ... }`\nError: post-monomorphization analysis failed for '/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/_probe/probes/current.xr'\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/_probe/probes/current.xr:24:32: error: Parameter 'v' of anonymous function cannot be inferred; annotate this lambda parameter (`x: T`), annotate the binding (`var f: (T) -> R = x -> ...`), rely on the call-site signature, or use `fn(x: T) -> R { ... }`",
+        "code": "",
+        "stage": "semantic"
+      }
+    },
+    {
+      "module": "base64",
+      "probe": "tests/stdlib/contracts/base64/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/base64/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/base64/probes/current.xr:10:29: error: Argument: cannot assign 'Base64DecodeOptions?' to 'Base64DecodeOptions' without null check. Use '??' default or '!' unwrap\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/base64/base64.c",
+          "tests/stdlib/contracts/base64/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/base64/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/base64/base64.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/base64/probes/current.xr (entry)\n",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/base64/probes/current.xr:10:29: error: Argument: cannot assign 'Base64DecodeOptions?' to 'Base64DecodeOptions' without null check. Use '??' default or '!' unwrap\nError: semantic analysis failed for '/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/base64/probes/current.xr'\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/base64/probes/current.xr:10:29: error: Argument: cannot assign 'Base64DecodeOptions?' to 'Base64DecodeOptions' without null check. Use '??' default or '!' unwrap",
+        "code": "",
+        "stage": "semantic"
+      }
+    },
+    {
+      "module": "cluster",
+      "probe": "tests/stdlib/contracts/cluster/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/cluster/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"host-port-address\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/cluster/cluster.c",
+          "tests/stdlib/contracts/cluster/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/cluster/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/cluster/cluster.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/cluster/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "codegen",
+      "probe": "tests/stdlib/contracts/codegen/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/codegen/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"opaque-is-identity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"compiler-fence-is-semantically-empty\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"controls-are-allocation-free\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/codegen/codegen.c",
+          "tests/stdlib/contracts/codegen/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/codegen/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/codegen/codegen.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/codegen/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "compress",
+      "probe": "tests/stdlib/contracts/compress/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/compress/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"checksum-known-values\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"roundtrip-formats\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"truncated-input-classification\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/compress/compress.c",
+          "tests/stdlib/contracts/compress/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/compress/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call target has no consumable adapter authority target=6 kind=4 operation=149 opcode=116 selector= function=4294967295\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call target has no consumable adapter authority target=6 kind=4 operation=149 opcode=116 selector= function=4294967295",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "crypto",
+      "probe": "tests/stdlib/contracts/crypto/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/crypto/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"hash-and-hmac-kat\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"timing-safe-equal\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"random-shape\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/crypto/crypto.c",
+          "tests/stdlib/contracts/crypto/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/crypto/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=9 function=0 opcode=117 selector=md5 intrinsic=0 immediate=792 result=value:8,type:6,ownership:0,alias:-1 operands=2 receiver=value:6,type:1,role:2,flags:1 argument=value:7,type:6,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=9 function=0 opcode=117 selector=md5 intrinsic=0 immediate=792 result=value:8,type:6,ownership:0,alias:-1 operands=2 receiver=value:6,type:1,role:2,flags:1 argument=value:7,type:6,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "csv",
+      "probe": "tests/stdlib/contracts/csv/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/csv/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"dynamic-typing\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/csv/csv.c",
+          "tests/stdlib/contracts/csv/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/csv/probes/current.xr\n[xi-native] 3 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/csv/csv.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/csv/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "datetime",
+      "probe": "tests/stdlib/contracts/datetime/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/datetime/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "[xcompiler] Xi IR pipeline failed at ownership: coroutine lowering failed closed before publishing CoroLowered (func=<main>)\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/datetime/datetime.c",
+          "tests/stdlib/contracts/datetime/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/datetime/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/datetime/datetime.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/datetime/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "encoding",
+      "probe": "tests/stdlib/contracts/encoding/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/encoding/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"hex-byte-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"strict-utf8-validation\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"utf16-endian-bom-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"utf16-typed-errors\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/encoding/encoding.c",
+          "tests/stdlib/contracts/encoding/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/encoding/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/encoding/encoding.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/encoding/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "http",
+      "probe": "tests/stdlib/contracts/http/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/http/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"header-order-and-duplicates\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"request-body-framing\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"response-body-framing\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/http/http.c",
+          "tests/stdlib/contracts/http/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/http/probes/current.xr\n[xi-native] 8 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/url/url.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [5] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/net/net.xr\n  [6] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/http/http.xr\n  [7] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/http/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "http2",
+      "probe": "tests/stdlib/contracts/http2/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/http2/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"http2-availability\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/http2/http2.c",
+          "tests/stdlib/contracts/http2/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/http2/probes/current.xr\n[xi-native] 8 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/url/url.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [5] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/net/net.xr\n  [6] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/http/http.xr\n  [7] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/http2/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "io",
+      "probe": "tests/stdlib/contracts/io/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/io/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"text-binary-file-split\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"filesystem\":\"temp\"}}\n{\"case\":\"byte-file-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"filesystem\":\"temp\"}}\n{\"case\":\"all-byte-file-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"filesystem\":\"temp\"}}\n{\"case\":\"path-owner-boundary\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"filesystem\":\"temp\"}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/io/io.c",
+          "tests/stdlib/contracts/io/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/io/probes/current.xr\n[xi-native] 4 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/io/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "log",
+      "probe": "tests/stdlib/contracts/log/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/log/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"typed-level-format\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"level-ordering\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/log/log.c",
+          "tests/stdlib/contracts/log/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/log/probes/current.xr\n[xi-native] 6 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/log/log.xr\n  [5] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/log/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "math",
+      "probe": "tests/stdlib/contracts/math/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/math/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"numeric-type-preservation\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"transcendental-parity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/math/math.c",
+          "tests/stdlib/contracts/math/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/math/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=5 function=0 opcode=117 selector=abs intrinsic=0 immediate=122 result=value:6,type:1,ownership:3,alias:-1 operands=2 receiver=value:3,type:1,role:2,flags:1 argument=value:5,type:3,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=5 function=0 opcode=117 selector=abs intrinsic=0 immediate=122 result=value:6,type:1,ownership:3,alias:-1 operands=2 receiver=value:3,type:1,role:2,flags:1 argument=value:5,type:3,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "mem",
+      "probe": "tests/stdlib/contracts/mem/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/mem/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"alloc-bulk-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"bytes\":\"copied-and-moved\"}}\n{\"case\":\"buffer-raii\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"ownership\":\"scoped\"}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/mem/mem.c",
+          "tests/stdlib/contracts/mem/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/mem/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=10 function=1 opcode=117 selector=allocZeroed intrinsic=0 immediate=792 result=value:12,type:4,ownership:0,alias:-1 operands=2 receiver=value:10,type:0,role:2,flags:1 argument=value:11,type:6,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=10 function=1 opcode=117 selector=allocZeroed intrinsic=0 immediate=792 result=value:12,type:4,ownership:0,alias:-1 operands=2 receiver=value:10,type:0,role:2,flags:1 argument=value:11,type:6,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "net",
+      "probe": "tests/stdlib/contracts/net/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/net/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:45:40: error: go argument transfer of type 'NetListener' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:46:53: error: go argument transfer of type '<error>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:53:40: error: go argument transfer of type 'NetListener' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:54:53: error: go argument transfer of type '<error>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/net/net.c",
+          "tests/stdlib/contracts/net/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/net/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/net/net.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr (entry)\n",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:45:40: error: go argument transfer of type 'NetListener' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:46:53: error: go argument transfer of type '<error>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:53:40: error: go argument transfer of type 'NetListener' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:54:53: error: go argument transfer of type '<error>' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value\nError: semantic analysis failed for '/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr'\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/net/probes/current.xr:45:40: error: go argument transfer of type 'NetListener' requires explicit copy(...), move of a proven unique root, or a const/synchronized shared value",
+        "code": "",
+        "stage": "semantic"
+      }
+    },
+    {
+      "module": "os",
+      "probe": "tests/stdlib/contracts/os/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/os/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"query-parity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"exec-result\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"process\":\"exit-0\"}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/os/os.c",
+          "tests/stdlib/contracts/os/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/os/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/os/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "parallel",
+      "probe": "tests/stdlib/contracts/parallel/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/parallel/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "\n[Uncaught Panic] E0000: AssertionFailure[condition-false] at tests/stdlib/contracts/parallel/probes/current.xr:9:1\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/parallel/parallel.c",
+          "tests/stdlib/contracts/parallel/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/parallel/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/parallel/parallel.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/parallel/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "path",
+      "probe": "tests/stdlib/contracts/path/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/path/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"platform-separator\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/path/path.c",
+          "tests/stdlib/contracts/path/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/path/probes/current.xr\n[xi-native] 3 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/path/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "prelude",
+      "probe": "tests/stdlib/contracts/prelude/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/prelude/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"core-container-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"string-core-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/prelude/prelude.c",
+          "tests/stdlib/contracts/prelude/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/prelude/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=77 function=0 opcode=117 selector=slice intrinsic=0 immediate=32 result=value:82,type:4,ownership:0,alias:-1 operands=3 receiver=value:79,type:4,role:2,flags:1 argument=value:80,type:2,role:3,flags:1 receiver-type=type-v3:2:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=77 function=0 opcode=117 selector=slice intrinsic=0 immediate=32 result=value:82,type:4,ownership:0,alias:-1 operands=3 receiver=value:79,type:4,role:2,flags:1 argument=value:80,type:2,role:3,flags:1 receiver-type=type-v3:2:0:0:0:0:0:0:0:0:255:0:",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "regex",
+      "probe": "tests/stdlib/contracts/regex/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/regex/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"match-semantics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"escape-safety\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/regex/regex.c",
+          "tests/stdlib/contracts/regex/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/regex/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=5 function=0 opcode=117 selector=compile intrinsic=0 immediate=792 result=value:5,type:5,ownership:0,alias:-1 operands=2 receiver=value:3,type:0,role:2,flags:1 argument=value:4,type:4,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=5 function=0 opcode=117 selector=compile intrinsic=0 immediate=792 result=value:5,type:5,ownership:0,alias:-1 operands=2 receiver=value:3,type:0,role:2,flags:1 argument=value:4,type:4,role:3,flags:1 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "runtime",
+      "probe": "tests/stdlib/contracts/runtime/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/runtime/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"heap-counters\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/runtime/runtime.c",
+          "tests/stdlib/contracts/runtime/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/runtime/probes/current.xr\n",
+        "stderr": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=4 function=0 opcode=117 selector=liveBytes intrinsic=0 immediate=792 result=value:3,type:3,ownership:3,alias:-1 operands=1 receiver=value:2,type:1,role:2,flags:1 argument=value:4294967295,type:4294967295,role:0,flags:0 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:\nError: product Program TargetPlan build failed: XR_TARGET_1000: program TargetPlan build did not produce verified authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: program TargetPlan build failed for 'current_c455dca8eeec2539': XR_TARGET_1003: call-shaped operation has no exact target authority operation=4 function=0 opcode=117 selector=liveBytes intrinsic=0 immediate=792 result=value:3,type:3,ownership:3,alias:-1 operands=1 receiver=value:2,type:1,role:2,flags:1 argument=value:4294967295,type:4294967295,role:0,flags:0 receiver-type=type-v3:14:0:0:0:0:0:0:0:0:255:0:",
+        "code": "XR_TARGET_1003",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "simd",
+      "probe": "tests/stdlib/contracts/simd/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/simd/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"portable-lane-ops\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"intrinsic-identity\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/simd/simd.c",
+          "tests/stdlib/contracts/simd/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/simd/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/simd/simd.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/simd/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "sync",
+      "probe": "tests/stdlib/contracts/sync/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/sync/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr:5:18: error: Argument 1: type 'i64' is not assignable to parameter type 'bool'\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr:12:14: error: Argument 1: type 'i64' is not assignable to parameter type 'bool'\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/sync/sync.c",
+          "tests/stdlib/contracts/sync/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/sync/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/sync/sync.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr (entry)\n",
+        "stderr": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr:5:18: error: Argument 1: type 'i64' is not assignable to parameter type 'bool'\n/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr:12:14: error: Argument 1: type 'i64' is not assignable to parameter type 'bool'\nError: semantic analysis failed for '/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr'\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sync/probes/current.xr:5:18: error: Argument 1: type 'i64' is not assignable to parameter type 'bool'",
+        "code": "",
+        "stage": "semantic"
+      }
+    },
+    {
+      "module": "sys",
+      "probe": "tests/stdlib/contracts/sys/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/sys/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"lock-primitives\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{\"once-count\":1}}\n{\"case\":\"os-lock-naming\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/sys/sys.c",
+          "tests/stdlib/contracts/sys/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/sys/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/sys/sys.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/sys/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "test_yield",
+      "probe": "tests/stdlib/contracts/test_yield/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/test_yield/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "",
+        "stderr": "Error: module 'test_yield' not found in stdlib\nError: failed to build authoritative module graph\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/test_yield/test_yield.c",
+          "tests/stdlib/contracts/test_yield/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/test_yield/probes/current.xr\n",
+        "stderr": "Error: module graph build failed: module 'test_yield' not found in stdlib\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: module graph build failed: module 'test_yield' not found in stdlib",
+        "code": "",
+        "stage": "parse"
+      }
+    },
+    {
+      "module": "text",
+      "probe": "tests/stdlib/contracts/text/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/text/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"case-trim-pad\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"rune-aware\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/text/text.c",
+          "tests/stdlib/contracts/text/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/text/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/text/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "time",
+      "probe": "tests/stdlib/contracts/time/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/time/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"monotonic-ordering\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"local-offset-range\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/time/time.c",
+          "tests/stdlib/contracts/time/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/time/probes/current.xr\n[xi-native] Generated 11321 bytes of C (1 functions, 1 modules in 1 unit)\nGenerated: /var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/time/time.c\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": 11340,
+      "c_sha256": "38c65a59f57aaf98204cea2b51fbb31f4734f050217094686127df926f6db58a",
+      "generated_c": {
+        "checked": true,
+        "identical": true,
+        "first_sha256": "38c65a59f57aaf98204cea2b51fbb31f4734f050217094686127df926f6db58a",
+        "second_sha256": "38c65a59f57aaf98204cea2b51fbb31f4734f050217094686127df926f6db58a",
+        "first_bytes": 11340,
+        "second_bytes": 11340,
+        "second_returncode": 0,
+        "note": ""
+      },
+      "first_refusal": null
+    },
+    {
+      "module": "toml",
+      "probe": "tests/stdlib/contracts/toml/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/toml/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"toml-value-domain\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"typed-parse-diagnostics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"stringify-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/toml/toml.c",
+          "tests/stdlib/contracts/toml/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/toml/probes/current.xr\n[xi-native] 6 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/toml/toml.xr\n  [5] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/toml/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "url",
+      "probe": "tests/stdlib/contracts/url/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/url/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"form-percent-encoding\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/url/url.c",
+          "tests/stdlib/contracts/url/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/url/probes/current.xr\n[xi-native] 2 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/url/url.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/url/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "ws",
+      "probe": "tests/stdlib/contracts/ws/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/ws/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"rfc6455-accept-key\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"upgrade-handshake\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"close-payload-utf8\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"close-reason-array-render\",\"outcome\":\"value\",\"value\":false,\"error\":null,\"effects\":{}}\n{\"case\":\"frame-byte-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"connection-layer-pure-xray\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/ws/ws.c",
+          "tests/stdlib/contracts/ws/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/ws/probes/current.xr\n[xi-native] 5 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/base64/base64.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/net/net.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/ws/ws.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/ws/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    },
+    {
+      "module": "xml",
+      "probe": "tests/stdlib/contracts/xml/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/xml/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"xmlnode-adt\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"typed-parse-diagnostics\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"stringify-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/xml/xml.c",
+          "tests/stdlib/contracts/xml/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/xml/probes/current.xr\n[xi-native] 5 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/xml/xml.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/xml/probes/current.xr (entry)\n",
+        "stderr": "Error: Xi pipeline failed for '/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/xml/probes/current.xr' at semantic-plan: XR_SEM_0019: source export call argument disagrees with frozen dependency target=0 operation=12 ordinal=1 dependency=0 export=13 failed=argument-type caller_mode=0 callee_mode=0 caller_transfer=0 callee_transfer=0 access=0 addressable=0 ownership=1 flags=1 caller_key=type-v3:25:0:0:0:1:0:0:0:0:255:0:object:4:10:XmlOptions;16:validateEntities:0:type-v3:3:0:0:0:0:0:0:0:0:255:0:;18:preserveWhitespace:0:type-v3:3:0:0:0:0:0:0:0:0:255:0:;13:preserveCData:0:type-v3:3:0:0:0:0:0:0:0:0:255:0:;16:preserveComments:0:t\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: Xi pipeline failed for '/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/xml/probes/current.xr' at semantic-plan: XR_SEM_0019: source export call argument disagrees with frozen dependency target=0 operation=12 ordinal=1 dependency=0 export=13 failed=argument-type caller_mode=0 callee_mode=0 caller_transfer=0 callee_transfer=0 access=0 addressable=0 ownership=1 flags=1 caller_key=type-v3:25:0:0:0:1:0:0:0:0:255:0:object:4:10:XmlOptions;16:validateEntities:0:type-v3:3:0:0:0:0:0:0:0:0:255:0:;18:preserveWhitespace:0:type-v3:3:0:0:0:0:0:0:0:0:255:0:;13:preserveCData:0:type-v3:3:0:0:0:0:0:0:0:0:255:0:;16:preserveComments:0:t",
+        "code": "XR_SEM_0019",
+        "stage": "semantic"
+      }
+    },
+    {
+      "module": "yaml",
+      "probe": "tests/stdlib/contracts/yaml/probes/current.xr",
+      "probe_present": true,
+      "vm": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "run",
+          "tests/stdlib/contracts/yaml/probes/current.xr"
+        ],
+        "returncode": 0,
+        "timed_out": false,
+        "stdout": "{\"case\":\"yaml-value-domain\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"typed-parse-errors\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n{\"case\":\"stringify-roundtrip\",\"outcome\":\"value\",\"value\":true,\"error\":null,\"effects\":{}}\n",
+        "stderr": "",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "aot": {
+        "argv": [
+          "/Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/build/xray",
+          "build",
+          "--native",
+          "-c",
+          "-o",
+          "/var/folders/w6/mjbvv925695fw7cfqg8j9bgr0000gn/T/xray-backend-probe-xoh_r3s5/yaml/yaml.c",
+          "tests/stdlib/contracts/yaml/probes/current.xr"
+        ],
+        "returncode": 1,
+        "timed_out": false,
+        "stdout": "[xi-native] Building: tests/stdlib/contracts/yaml/probes/current.xr\n[xi-native] 6 modules (topo order):\n  [0] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/text/text.xr\n  [1] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/os/os.xr\n  [2] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/path/path.xr\n  [3] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/io/io.xr\n  [4] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/stdlib/yaml/yaml.xr\n  [5] /Users/xuxinglei/workspace/xray-lang/worktrees/a-stdlib-selfhost-w0-inventory-bb6eac777369/tests/stdlib/contracts/yaml/probes/current.xr (entry)\n",
+        "stderr": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority\n",
+        "stdout_truncated": false,
+        "stderr_truncated": false
+      },
+      "c_bytes": null,
+      "c_sha256": "",
+      "generated_c": null,
+      "first_refusal": {
+        "diagnostic": "Error: product Program TargetPlan build failed: XR_TARGET_1000: product TargetPlan requires one canonical program authority",
+        "code": "XR_TARGET_1000",
+        "stage": "target_plan"
+      }
+    }
+  ]
+}
