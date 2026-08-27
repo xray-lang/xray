@@ -19,6 +19,7 @@
 #include "xray_runtime_api.h"
 
 #include "os/os_thread.h"
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -224,7 +225,7 @@ static void test_concurrent_execution_agrees(const ProgramFixture *fixture) {
 
 typedef struct RacingWorker {
     const XrProgram *program;
-    volatile uint32_t *stop;
+    atomic_uint *stop;
     uint32_t executed;
     uint32_t refused;
     bool wrong_result;
@@ -232,7 +233,9 @@ typedef struct RacingWorker {
 
 static void *racing_execute_worker(void *opaque) {
     RacingWorker *worker = (RacingWorker *) opaque;
-    for (uint32_t round = 0; round < EXECUTE_ROUNDS && !*worker->stop; round++) {
+    for (uint32_t round = 0; round < EXECUTE_ROUNDS &&
+                             !atomic_load_explicit(worker->stop, memory_order_acquire);
+         round++) {
         int64_t result = 0;
         char diagnostic[256] = {0};
         if (xr_program_execute_direct_i64(worker->program, &result, diagnostic,
@@ -252,7 +255,7 @@ static void test_unload_is_quiescence_gated(const ProgramFixture *fixture) {
     XrRuntime *runtime = make_runtime();
     XrProgram *program = load_program(runtime, fixture, false);
 
-    volatile uint32_t stop = 0;
+    atomic_uint stop = 0;
     RacingWorker workers[EXECUTE_THREADS] = {0};
     xr_thread_t threads[EXECUTE_THREADS];
     for (uint32_t i = 0; i < EXECUTE_THREADS; i++) {
@@ -267,7 +270,7 @@ static void test_unload_is_quiescence_gated(const ProgramFixture *fixture) {
         char attempt_diagnostic[256] = {0};
         if (xr_program_unload(&program, attempt_diagnostic, sizeof(attempt_diagnostic))) {
             unloaded = true;
-            stop = 1;
+            atomic_store_explicit(&stop, 1u, memory_order_release);
             break;
         }
         refused_unloads++;
@@ -275,7 +278,7 @@ static void test_unload_is_quiescence_gated(const ProgramFixture *fixture) {
         REQUIRE(strstr(attempt_diagnostic, "XR_EXEC_5006") != NULL);
         REQUIRE(program != NULL);
     }
-    stop = 1;
+    atomic_store_explicit(&stop, 1u, memory_order_release);
     for (uint32_t i = 0; i < EXECUTE_THREADS; i++) {
         REQUIRE(xr_thread_join(threads[i], NULL) == 0);
         REQUIRE(!workers[i].wrong_result);
