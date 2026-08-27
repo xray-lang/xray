@@ -2375,18 +2375,6 @@ module io {
     layer: "system"
   }
 
-  fn __mkdirp {
-    signature: "(path: Path): bool"
-    doc: "Create directory recursively"
-    vm: "io_mkdirp"
-    aot: "xrt_io_mkdirp"
-    argc: 1
-    arg_spec: "p"
-    aot_direct: true
-    link_object: false
-    layer: "system"
-  }
-
   fn __readDir {
     signature: "(path: Path): Array<string>?"
     doc: "List directory entries (raw strings; io.xr wraps as Path)"

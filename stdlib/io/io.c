@@ -977,40 +977,6 @@ static XrValue io_stat(XrVMRuntime *X, XrValue *args, int argc) {
     return xr_object_instance_value(obj);
 }
 
-static int io_mkdirp_mkdir(void *ctx, const char *path) {
-    (void) ctx;
-    return xr_fs_mkdir(path, 0755);
-}
-
-static bool io_mkdirp_is_dir(void *ctx, const char *path) {
-    (void) ctx;
-    return xr_fs_is_dir(path);
-}
-
-// mkdirp(path) - Recursively create directory.
-// Reject empty paths up-front: the previous implementation wrote to
-// tmp[-1] when handed "".
-static XrValue io_mkdirp(XrVMRuntime *X, XrValue *args, int argc) {
-    (void) X;
-    if (argc < 1)
-        return xr_bool(false);
-    const char *path = xrs_path_arg(args[0], NULL);
-    // Catch truncation before we copy into a XR_PATH_MAX buffer.
-    if (path && strnlen(path, XR_PATH_MAX) >= XR_PATH_MAX)
-        return xr_bool(false);
-    if (!path || path[0] == '\0')
-        return xr_bool(false);
-
-    char tmp[XR_PATH_MAX];
-    size_t len = strnlen(path, sizeof(tmp));
-    if (len == 0 || len >= sizeof(tmp))
-        return xr_bool(false);
-    memcpy(tmp, path, len);
-    tmp[len] = '\0';
-
-    return xr_bool(xr_io_core_mkdirp(tmp, io_mkdirp_mkdir, io_mkdirp_is_dir, NULL));
-}
-
 static bool io_touch_update(void *ctx, const char *path) {
     (void) ctx;
 #ifdef XR_OS_WINDOWS
