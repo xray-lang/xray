@@ -446,35 +446,56 @@ XR_FUNC bool xtc_command_emit_define(XrToolchainProviderId provider, const char 
     return joined(sink, provider == XR_TOOLCHAIN_PROVIDER_MSVC ? "/D" : "-D", value, err, err_size);
 }
 
+typedef struct XtcWindowsMsvcSystemLibrary {
+    const char *logical;
+    const char *msvc_argument;
+    const char *gnu_link_name;
+} XtcWindowsMsvcSystemLibrary;
+
+static const XtcWindowsMsvcSystemLibrary *windows_msvc_system_library(const char *name) {
+    static const XtcWindowsMsvcSystemLibrary mappings[] = {
+        {"ws2_32", "ws2_32.lib", "ws2_32"},
+        {"bcrypt", "bcrypt.lib", "bcrypt"},
+        {"api-ms-win-core-synch-l1-2-0", "synchronization.lib", "synchronization"},
+        /* The Universal CRT owns the C math entry points for the MSVC ABI;
+         * Windows does not ship a separate libm import library. */
+        {"m", "libucrt.lib", "libucrt"},
+    };
+    for (size_t i = 0; i < sizeof(mappings) / sizeof(mappings[0]); i++)
+        if (name && strcmp(name, mappings[i].logical) == 0)
+            return &mappings[i];
+    return NULL;
+}
+
 XR_FUNC bool xtc_command_emit_system_library(XrToolchainProviderId provider,
                                              const XrToolchainTarget *target, const char *name,
                                              XrToolchainArgSink *sink, char *err, size_t err_size) {
     if (provider == XR_TOOLCHAIN_PROVIDER_MSVC) {
-        static const struct {
-            const char *logical;
-            const char *library;
-        } mappings[] = {{"ws2_32", "ws2_32.lib"},
-                        {"bcrypt", "bcrypt.lib"},
-                        {"api-ms-win-core-synch-l1-2-0", "synchronization.lib"}};
+        if (!target || target->os != XR_TOOLCHAIN_TARGET_OS_WINDOWS ||
+            target->abi != XR_TOOLCHAIN_TARGET_ABI_MSVC)
+            return command_error(err, err_size,
+                                 "MSVC system-library mapping requires a windows-msvc target ABI");
         size_t len = name ? strlen(name) : 0;
         if (len >= 4 && strcmp(name + len - 4, ".lib") == 0)
             return add(sink, name, err, err_size);
-        for (size_t i = 0; i < sizeof(mappings) / sizeof(mappings[0]); i++)
-            if (name && strcmp(name, mappings[i].logical) == 0)
-                return add(sink, mappings[i].library, err, err_size);
+        const XtcWindowsMsvcSystemLibrary *mapping = windows_msvc_system_library(name);
+        if (mapping)
+            return add(sink, mapping->msvc_argument, err, err_size);
         return command_error(err, err_size,
                              "MSVC system-library logical name has no explicit .lib mapping");
     }
-    /* GNU-style drivers targeting the MSVC ABI consume the installed Windows
-     * SDK import libraries, where this API-set is exposed by
-     * synchronization.lib. Keep the mapping target-specific so GNU ABI
-     * providers retain their canonical API-set spelling. */
+    /* GNU-style drivers targeting the MSVC ABI consume the same verified
+     * Windows SDK and CRT library identities through -l spelling. Keep that
+     * mapping target-specific so GNU ABI providers retain their own logical
+     * system-library spelling. */
     bool uses_msvc_sdk =
-        target && target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC &&
+        target && target->os == XR_TOOLCHAIN_TARGET_OS_WINDOWS &&
+        target->abi == XR_TOOLCHAIN_TARGET_ABI_MSVC &&
         (provider == XR_TOOLCHAIN_PROVIDER_LLVM_CLANG || provider == XR_TOOLCHAIN_PROVIDER_ZIG);
-    if (uses_msvc_sdk && name &&
-        strcmp(name, "api-ms-win-core-synch-l1-2-0") == 0)
-        return joined(sink, "-l", "synchronization", err, err_size);
+    const XtcWindowsMsvcSystemLibrary *mapping =
+        uses_msvc_sdk ? windows_msvc_system_library(name) : NULL;
+    if (mapping)
+        return joined(sink, "-l", mapping->gnu_link_name, err, err_size);
     return joined(sink, "-l", name, err, err_size);
 }
 

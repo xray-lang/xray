@@ -129,6 +129,8 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target,
                                                 "api-ms-win-core-synch-l1-2-0", &sink, err,
                                                 sizeof(err)));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "m",
+                                                &sink, err, sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "/O2"));
     ASSERT_TRUE(command_capture_has(&capture, "/utf-8"));
     ASSERT_TRUE(command_capture_has(&capture, "/fp:strict"));
@@ -143,7 +145,21 @@ TEST(semantic_command_plan_maps_gnu_and_msvc_dialects) {
     ASSERT_TRUE(command_capture_has(&capture, "ws2_32.lib"));
     ASSERT_TRUE(command_capture_has(&capture, "bcrypt.lib"));
     ASSERT_TRUE(command_capture_has(&capture, "synchronization.lib"));
+    ASSERT_TRUE(command_capture_has(&capture, "libucrt.lib"));
     ASSERT_FALSE(command_capture_has(&capture, "-O2"));
+}
+
+TEST(msvc_system_library_rejects_non_msvc_target_without_emission) {
+    XrToolchainTarget target = {0};
+    CommandCapture capture = {0};
+    XrToolchainArgSink sink = {&capture, command_capture_add, command_capture_joined};
+    char err[256] = {0};
+
+    ASSERT_TRUE(xtc_target_parse("x86_64-linux-gnu", &target, err, sizeof(err)));
+    ASSERT_FALSE(xtc_command_emit_system_library(XR_TOOLCHAIN_PROVIDER_MSVC, &target, "m",
+                                                 &sink, err, sizeof(err)));
+    ASSERT_TRUE(strstr(err, "requires a windows-msvc target ABI") != NULL);
+    ASSERT_EQ_INT(capture.count, 0);
 }
 
 TEST(hosted_fragment_link_resolves_runtime_from_darwin_host) {
@@ -496,6 +512,10 @@ TEST(zig_native_windows_msvc_keeps_exact_abi_target) {
                                                 "api-ms-win-core-synch-l1-2-0", &sink, err,
                                                 sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "m",
+                                                &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-llibucrt"));
+    ASSERT_FALSE(command_capture_has(&capture, "-lm"));
 }
 
 TEST(llvm_clang_windows_msvc_uses_sdk_synchronization_import_library) {
@@ -511,6 +531,10 @@ TEST(llvm_clang_windows_msvc_uses_sdk_synchronization_import_library) {
                                                 sizeof(err)));
     ASSERT_TRUE(command_capture_has(&capture, "-lsynchronization"));
     ASSERT_FALSE(command_capture_has(&capture, "-lapi-ms-win-core-synch-l1-2-0"));
+    ASSERT_TRUE(xtc_command_emit_system_library(selection.provider, &selection.target, "m",
+                                                &sink, err, sizeof(err)));
+    ASSERT_TRUE(command_capture_has(&capture, "-llibucrt"));
+    ASSERT_FALSE(command_capture_has(&capture, "-lm"));
 }
 
 TEST(version_parser_reads_ascii_token_from_arbitrary_bytes) {
@@ -994,6 +1018,7 @@ RUN_TEST(parse_freestanding_targets);
 RUN_TEST(reject_retired_target_aliases);
 RUN_TEST(selector_and_provider_names_are_stable);
 RUN_TEST(semantic_command_plan_maps_gnu_and_msvc_dialects);
+RUN_TEST(msvc_system_library_rejects_non_msvc_target_without_emission);
 RUN_TEST(hosted_fragment_link_resolves_runtime_from_darwin_host);
 RUN_TEST(msvc_command_plan_fails_closed_for_gnu_only_intent);
 RUN_TEST(assembly_oracle_io_maps_provider_dialects);
