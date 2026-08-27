@@ -4,6 +4,6 @@ main = "main.xr"
 
 [target.native]
 profile = "freestanding"
-runtime_provider = "test-kernel-executor-v1"
+runtime_provider = "xray-freestanding-hooks-v1"
 runtime_capabilities = ["allocator", "panic", "coroutine", "objects", "task"]
 runtime_hooks = ["alloc", "free", "panic", "task_alloc", "submit", "park_wake", "executor_pump"]

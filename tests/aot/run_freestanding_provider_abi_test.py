@@ -52,6 +52,21 @@ ALLOWED_UNDEFINED = (
     "xrt_closure_new",
 )
 
+# The provider hooks this case must still reach. Membership in ALLOWED_UNDEFINED
+# alone cannot carry that: several hooks are referenced only when the lowered
+# program needs them -- a frame with no traced root never mentions the trace
+# hook -- so requiring the whole list would fail on a legal lowering. Checking a
+# core set instead keeps a case that stops reaching the provider from passing
+# the escape test by referencing almost nothing.
+REQUIRED_UNDEFINED = (
+    "xr_aot_await_task",
+    "xr_aot_frame_alloc",
+    "xr_aot_frame_free",
+    "xr_aot_run_main",
+    "xr_aot_spawn",
+    "xrt_closure_new",
+)
+
 HOSTED_SYMBOL_RE = re.compile(
     r"^(pthread|malloc$|free$|epoll|kqueue|netpoll|xray_rt_coro|xray_core)",
     re.IGNORECASE,
@@ -115,12 +130,17 @@ def main(argv: list[str]) -> int:
             print("SKIP: nm not available")
             return SKIP_EXIT
 
-        expected = sorted(ALLOWED_UNDEFINED)
-        if undefined != expected:
+        escaped = sorted(set(undefined) - set(ALLOWED_UNDEFINED))
+        if escaped:
             sys.stderr.write("freestanding provider object escaped its declared ABI\n")
-            for name in sorted(set(undefined) - set(expected)):
+            for name in escaped:
                 sys.stderr.write(f"  + {name}\n")
-            for name in sorted(set(expected) - set(undefined)):
+            return 1
+
+        unreached = sorted(set(REQUIRED_UNDEFINED) - set(undefined))
+        if unreached:
+            sys.stderr.write("freestanding provider object no longer reaches its provider ABI\n")
+            for name in unreached:
                 sys.stderr.write(f"  - {name}\n")
             return 1
 
