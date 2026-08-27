@@ -811,8 +811,11 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
     }
     int ret = fcopyfile(src_fd, dst_fd, NULL, COPYFILE_DATA);
     close(src_fd);
-    close(dst_fd);
-    return xr_bool(ret == 0);
+    /* A deferred write can fail at close, so the copy is complete only when
+     * the destination also closes cleanly. The buffered fallback below has
+     * always checked this; the fast paths did not. */
+    int closed = close(dst_fd);
+    return xr_bool(ret == 0 && closed == 0);
 #elif defined(XR_OS_LINUX)
     // Linux: use sendfile for zero-copy
     int src_fd = open(src, O_RDONLY);
@@ -846,8 +849,9 @@ static XrValue io_copyFile(XrVMRuntime *X, XrValue *args, int argc) {
         remaining -= sent;
     }
     close(src_fd);
-    close(dst_fd);
-    return xr_bool(sendfile_ok && remaining == 0);
+    /* A deferred write can fail at close; see the note on the macOS path. */
+    int closed = close(dst_fd);
+    return xr_bool(sendfile_ok && remaining == 0 && closed == 0);
 #else
     FILE *fsrc = fopen(src, "rb");
     if (!fsrc)

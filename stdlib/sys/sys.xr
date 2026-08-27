@@ -20,7 +20,12 @@ fn _signalCode(signal: Signal) -> i64 {
     }
 }
 
+// KILL cannot be caught: the kernel terminates the process without delivering
+// it to a handler. Refusing it here says so at the boundary, rather than
+// leaving the request to fail further down for a reason the caller cannot see.
+// It stays in the enum because sending it is both legal and common.
 export fn onSignal(signal: Signal, handler: fn()) -> bool {
+    if (signal == Signal.KILL) { return false }
     return __onSignal(_signalCode(signal), handler)
 }
 
@@ -126,12 +131,7 @@ export class Process {
 
     kill(signal: Signal = Signal.TERM) -> bool {
         if (!this._open) { return false }
-        var sig = match (signal) {
-            Signal.TERM -> 15
-            Signal.KILL -> 9
-            Signal.INT -> 2
-        }
-        return __processKill(this._id, sig)
+        return __processKill(this._id, _signalCode(signal))
     }
 
     static spawn(program: string, args: Array<string> = Array<string>(0), options: ProcessOptions? = null) -> Process? {
