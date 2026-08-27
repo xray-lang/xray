@@ -312,7 +312,7 @@ projection defined below; they never imply TargetPlan admission on their own.
 
 ## Digest anchors
 
-anchor-sha256: CMakeLists.txt ccc86c785cfd01d22d15c1cfe689729e93be61661e8a85028aad81cc8ba07ff8
+anchor-sha256: CMakeLists.txt c92240e54c4d4f88fc1e2c63dae23f70956d43c90b82c161db2e6233959284c3
 anchor-sha256: src/module/xmodule_graph.h feb99f1e6afea7a84a38379fe7ebddeec4338998ade7753489d2313dff2fc0d2
 anchor-sha256: src/module/xmodule_graph.c 1e6cd17cde6de2031f99308217f02c6c43a0f0df0ba4d3f461b83c87e1d3d6ed
 anchor-sha256: src/frontend/parser/xparse.c f3a9f5e4699fa00ef5653399e17754f71dac3cb2ca27e6029f89f62da75f0365

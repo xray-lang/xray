@@ -435,7 +435,7 @@ roots, or general product activation.
     carries no legacy bytecode or native-module ABI version fields; schema 1
     is rejected rather than reinterpreted.
 
-anchor-sha256: CMakeLists.txt ccc86c785cfd01d22d15c1cfe689729e93be61661e8a85028aad81cc8ba07ff8
+anchor-sha256: CMakeLists.txt c92240e54c4d4f88fc1e2c63dae23f70956d43c90b82c161db2e6233959284c3
 anchor-sha256: include/xray_runtime_api.h 07d75f03ee3baea4301bf30ac67c15b77d74feaec28322fb818c247970a1ce44
 anchor-sha256: include/xray_target_plan_load.h cd91018657a5c4af0ff07b2a56ec189a679ccf8b4551aaaa444e5ba6214df581
 anchor-sha256: src/plan/format/xr_artifact_kind.h cfd9c31f2e84040413d9b42889371867fad1a5a7f61e7d2066a69e687463318d
