@@ -1,9 +1,11 @@
 # Blocker: a loaded machine turns toolchain probe timeouts into fabricated refusals
 
 - **Lane**: B (current census / refusal evidence)
-- **Status**: `BLOCKED` on a change outside this lane's file ownership
-- **Requested owner**: H (build and gate configuration)
-- **Severity**: evidence integrity. Under load, whole batches of cases are reported
+- **Status**: `FIXED` in this branch
+- **Owner of the changed file**: H (build and gate configuration) — see the ownership
+  note at the end; this fix was made on explicit instruction, outside lane B's normal
+  file ownership.
+- **Severity**: evidence integrity. Under load, whole batches of cases were reported
   `REFUSED (aot did not build)` for a reason that has nothing to do with the compiler.
 
 ## What happens
@@ -57,17 +59,30 @@ budget sized for an idle one.
 Scaling the budget also makes the run *faster* when it would otherwise fail (27.7 s versus
 160 s), because the lane no longer spends 10 s per case timing out before failing.
 
-## Suggested fix, verified but not applied
+## Fix
 
-Set `XRAY_TOOLCHAIN_PROBE_SCALE` in the `add_test` environment of the `backend_diff*`
-lanes, next to `XRAY_CORO_DETERMINISTIC` and `XRAY_TEST_CACHE_ROOT`, the same way those
-lanes already pin their other environment. A scale of 6 was sufficient here.
+All four `backend_diff*` lanes now set `XRAY_TOOLCHAIN_PROBE_SCALE=4` in their `add_test`
+environment, beside the other environment those lanes already pin.
 
-This lane did not apply it: `CMakeLists.txt` is outside lane B's file ownership, and lane
-B is explicitly forbidden from modifying timeouts. The value is recorded here as measured
-evidence, not as an approved setting — H owns whether the right answer is a scaled probe
-budget, a lower lane concurrency, or `PROCESSORS` accounting that keeps these lanes from
-overlapping.
+The scale value follows the existing precedent in
+`tests/target_machine/comparison/run_comparison.py:741`, which already defaults the same
+variable to 4 for the same reason. A scale of 6 was tried first and also works; 4 was
+measured sufficient under the reproduction conditions above and matches what the tree
+already chose, so it is not a new magic number.
+
+Verified in the exact failing conditions — cold cache, `-j 2`, with no
+`XRAY_TOOLCHAIN_PROBE_SCALE` in the caller's environment — where the lane now passes in
+15.7 s instead of failing in 160 s.
+
+`CMakeLists.txt` is anchored by five contracts (`ownership-audit-foundation.md`,
+`program-semantic-closure.md`, `runtime-target-plan-load.md`,
+`typed-target-plan-debug.md`, `typed-target-plan-execution.md`); all five anchors were
+refreshed in the same commit and `contract_freeze` passes.
+
+This does not close the underlying question. Scaling the budget makes the lanes stop
+fabricating refusals, but the probe still competes for cores with whatever else CTest is
+running. Whether the durable answer is a scaled budget, lower lane concurrency, or
+`PROCESSORS` accounting that keeps these lanes from overlapping is still H's call.
 
 ## This lane's own evidence is unaffected
 
@@ -83,7 +98,17 @@ ready provider, rather than re-probing per case. That is why the census is immun
 failure mode described here, and it is worth preserving if the diff runner's probing is
 reworked.
 
-## Files deliberately not modified
+## Ownership note
 
-`CMakeLists.txt`, `src/app/toolchain/xtc_probe.c`, and every timeout, baseline, and
-allowlist.
+`CMakeLists.txt` is outside lane B's declared file ownership, and lane B is otherwise
+forbidden from touching timeouts. This change was made on explicit instruction rather than
+by this lane's own judgement, and is called out here so the reviewer sees the boundary
+that was crossed rather than discovering it in the diff.
+
+What the change does *not* do is relax any measurement threshold: the probe budget governs
+how long a toolchain probe may take before the toolchain is declared unusable, not how long
+a case may take to build or how many cases may fail. No baseline, allowlist, coverage
+ratchet, or case timeout was touched.
+
+`src/app/toolchain/xtc_probe.c` was not modified; the fix uses the scaling hook that helper
+already provides.
